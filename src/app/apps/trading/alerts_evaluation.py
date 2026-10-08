@@ -264,7 +264,7 @@ class _BarValues:
     def _compute_indicator(self, source: IndicatorSource, anchor_time: str | None) -> dict[int, float]:
         try:
             outputs = compute_indicator(source.indicator_id, self.series(), source.inputs.registry_inputs(anchor_time))
-        except (KeyError, ValueError, TypeError, ZeroDivisionError):
+        except Exception:  # an indicator that cannot compute these bars has no value: the condition is false
             return {}
         chosen = next((output for output in outputs if output.key == source.output), None)
         if chosen is None and anchor_time is not None:
@@ -390,7 +390,7 @@ def _source_lookback(source: Any) -> int:
         # The first bar this output has a value on, measured on a synthetic series,
         # covers indicators whose warm-up is not a simple function of the period.
         first_valid = dict(indicator_output_profile(source)).get(source.output)
-    except (KeyError, ValueError, TypeError, ZeroDivisionError):
+    except Exception:  # validated at write time; a failure here only loses the measured warm-up
         first_valid = None
     if first_valid is not None:
         required = max(required, first_valid + 1)

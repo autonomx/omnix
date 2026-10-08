@@ -277,7 +277,7 @@ def validate_indicator_source(source: IndicatorSource) -> None:
         raise ValueError(f"indicator {source.indicator_id!r} is not available on the server")
     try:
         profile = indicator_output_profile(source)
-    except (ValueError, TypeError, ZeroDivisionError) as exc:
+    except Exception as exc:  # any failure of the indicator on these inputs is the caller's input error
         raise ValueError(f"invalid inputs for indicator {source.indicator_id!r}: {exc}") from exc
     keys = [key for key, _ in profile]
     if source.output not in keys:
