@@ -369,7 +369,7 @@ function fairValueGapPoints(bars: readonly MarketBar[]): { upper: IndicatorPoint
   return { upper, lower };
 }
 
-function volumeProfileData(bars: readonly MarketBar[], period: number): VolumeProfileData | null {
+export function volumeProfileData(bars: readonly MarketBar[], period: number): VolumeProfileData | null {
   validatePeriod(period);
   const window = bars.slice(Math.max(0, bars.length - period));
   if (!window.length) return null;

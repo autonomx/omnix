@@ -15,6 +15,9 @@ const DRAWING_TOOLS = [
   // TVP-3.1 lines and channels
   'info-line', 'extended-line', 'trend-angle', 'parallel-channel', 'regression-trend', 'flat-top-bottom',
   'disjoint-channel', 'anchored-vwap',
+  // TVP-3.6 positions and measurement
+  'date-range', 'date-price-range', 'long-position', 'short-position', 'position-forecast', 'bars-pattern',
+  'ghost-feed', 'sector', 'fixed-range-volume-profile',
 ] as const satisfies readonly Exclude<DrawingTool, 'cursor' | 'alert' | 'eraser'>[];
 
 describe('drawing tool registry', () => {

@@ -134,16 +134,18 @@ describe('drawing tool geometry and hit tests', () => {
     expect(hit(100, 140)).toBeNull();
   });
 
-  it('measurement keeps its area, guides, arrow and price/percent/bars label', () => {
+  it('measurement (price range) keeps its area, guides and arrow, with a price/percent/ticks label', () => {
     const { shapes, hit } = runTool('measurement', [[100, 300], [220, 200]], { interval: '1m' });
     expect(shapes.map((shape) => shape.kind)).toEqual(['rect', 'segment', 'segment', 'segment', 'polyline', 'rect', 'text']);
     expect(shapes[0]).toMatchObject({ x: 100, y: 200, width: 120, height: 100, fill: chartPalette.drawingBlue, fillOpacity: 0.14 });
     const label = only(shapes, 'text')[0];
-    // 700 -> 800 is +100 (+14.29%) over 120 one-minute bars.
-    expect(label.text).toBe('100 (14.29%) 120');
+    // 700 -> 800 is +100 (+14.29%); no tick size, so no tick count.
+    expect(label.text).toBe('100 (14.29%)');
+    const withTicks = runTool('measurement', [[100, 300], [220, 200]], { access: { instrument: { tickSize: 0.5, pointValue: 1 } } });
+    expect(only(withTicks.shapes, 'text')[0].text).toBe('100 (14.29%) 200');
     expect(label).toMatchObject({ x: 160, y: 179, align: 'middle' });
     // The label box is at least 126px wide, 7.2px per character plus padding.
-    expect(shapes[5]).toMatchObject({ x: 160 - 133.2 / 2, y: 160, width: 133.2, height: 30 });
+    expect(shapes[5]).toMatchObject({ x: 160 - 126 / 2, y: 160, width: 126, height: 30 });
     expect(shapes.slice(1, 5).every((shape) => shape.hit === 'none')).toBe(true);
     expect(drawingToolDefinition('measurement')).toMatchObject({ draftPreview: 'shapes', handleClassName: 'trading-measurement-handle' });
     expect(hit(150, 250)).not.toBeNull();

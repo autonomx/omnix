@@ -169,7 +169,7 @@ describe('TradingDrawingOverlay', () => {
     expect(svg.querySelector('g[data-drawing-id="box"]')).toHaveAttribute('data-locked', 'true');
     const measure = svg.querySelector('g[data-drawing-id="measure"]')!;
     expect(measure).toHaveAttribute('data-selected', 'true');
-    expect(measure.querySelector('.trading-measurement-label-text')?.textContent).toBe('100 (14.29%) 100');
+    expect(measure.querySelector('.trading-measurement-label-text')?.textContent).toBe('100.00 (14.29%)');
     expect([...measure.querySelectorAll('[data-drawing-point-index]')].map((handle) => handle.getAttribute('class'))).toEqual([
       'trading-measurement-handle', 'trading-measurement-handle',
     ]);
@@ -213,7 +213,7 @@ describe('TradingDrawingOverlay', () => {
     const { svg } = renderOverlay({ tool: 'measurement' });
     fireEvent.pointerDown(svg, { clientX: 100, clientY: 300, pointerId: 1 });
     fireEvent.pointerMove(svg, { clientX: 220, clientY: 200, pointerId: 1 });
-    expect(svg.querySelector('[data-drawing-draft] .trading-measurement-label-text')?.textContent).toBe('100 (14.29%) 120');
+    expect(svg.querySelector('[data-drawing-draft] .trading-measurement-label-text')?.textContent).toBe('100.00 (14.29%)');
   });
 
   it('passes trend line anchors to the context menu, and none for other tools', () => {

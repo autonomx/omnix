@@ -6,6 +6,7 @@ import { tradingApi, type TradingQuote } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
 import { createReplaySnapshot } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
+import { applyPaperTicketPrefill, usePaperTicketPrefill } from './paperTicketRequests';
 import { useTradingStore } from './tradingStore';
 import './TradingPaper.css';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
@@ -98,6 +99,11 @@ export function TradingPaperPanel({
   const [quote, setQuote] = useState<TradingQuote | null>(null);
   const [notice, setNotice] = useState<PaperNotice | null>(null);
   const [confirmation, setConfirmation] = useState<PaperConfirmation | null>(null);
+
+  // A long or short position drawing's "Create order" fills the ticket (TVP-3.6); the user still confirms it.
+  usePaperTicketPrefill((prefill) => setNotice(applyPaperTicketPrefill(prefill, instrumentId, {
+    setTicketTab, setSide, setOrderType, setLimitPrice, setStopLossEnabled, setStopLoss, setTakeProfitEnabled, setTakeProfit, setQuantity,
+  }, displaySymbol)));
   const replayMode = useTradingStore((state) => state.replayMode);
   const replaySessionId = useTradingStore((state) => state.replaySessionId);
   const replayBar = useTradingReplayStore((state) => state.bar);
