@@ -5,7 +5,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { PaperAccountSnapshot, PaperOrder } from './paperTypes';
 
-export type PaperNotificationKind = 'fill' | 'partial' | 'reject' | 'cancel' | 'expire' | 'closed';
+export type PaperNotificationKind = 'fill' | 'partial' | 'reject' | 'cancel' | 'modify' | 'expire' | 'closed';
 export type PaperNotification = { id: string; at: string; kind: PaperNotificationKind; orderId: string; message: string };
 
 const LOG_LIMIT = 200;
@@ -44,15 +44,26 @@ function symbolOf(instrumentId: string): string {
   return instrumentId.split(':').at(-1)?.replace('-', '/') ?? instrumentId;
 }
 
-function describe(order: PaperOrder): Omit<PaperNotification, 'id' | 'at' | 'orderId'> | null {
+/** An order moved on the chart is replaced by one whose id extends it (`paperOrderLines.ts`). */
+export const MOVED_ORDER_MARKER = '-moved-';
+
+function movedPrice(order: PaperOrder, current: readonly PaperOrder[]): string | null {
+  const replacement = current.find((item) => item.order_id.startsWith(`${order.order_id.slice(0, 120)}${MOVED_ORDER_MARKER}`));
+  if (!replacement) return null;
+  return String(replacement.order_type === 'limit' ? replacement.limit_price : replacement.stop_price ?? replacement.limit_price ?? '');
+}
+
+function describe(order: PaperOrder, current: readonly PaperOrder[] = []): Omit<PaperNotification, 'id' | 'at' | 'orderId'> | null {
   const what = `${order.side === 'buy' ? 'Buy' : 'Sell'} ${order.quantity} ${symbolOf(order.instrument_id)} ${order.order_type.replace('_', ' ').toUpperCase()}`;
   switch (order.status) {
     case 'filled':
       return { kind: 'fill', message: `${what} filled${order.average_fill_price ? ` at ${order.average_fill_price}` : ''}` };
     case 'rejected':
       return { kind: 'reject', message: `${what} rejected${order.rejection_reason ? `: ${order.rejection_reason.replace(/_/g, ' ')}` : ''}` };
-    case 'cancelled':
-      return { kind: 'cancel', message: `${what} cancelled` };
+    case 'cancelled': {
+      const moved = movedPrice(order, current);
+      return moved !== null ? { kind: 'modify', message: `${what} moved to ${moved}` } : { kind: 'cancel', message: `${what} cancelled` };
+    }
     case 'expired':
       return { kind: 'expire', message: `${what} expired` };
     default:
@@ -85,7 +96,7 @@ export function orderNotifications(before: PaperAccountSnapshot, after: PaperAcc
       return [];
     }
     if (prior?.status === order.status) return [];
-    const described = describe(order);
+    const described = describe(order, current);
     return described ? [{ id: `${order.order_id}:${order.status}`, at: order.updated_at ?? now, orderId: order.order_id, ...described }] : [];
   });
   const present = new Set(current.map((order) => order.order_id));

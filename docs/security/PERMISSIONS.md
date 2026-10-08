@@ -164,6 +164,7 @@ role to permission list; `owner` cannot be changed).
 | DELETE | `/api/trading/paper/accounts/{account_id}/orders/{order_id}` | `trading:paper:order` |
 | POST | `/api/trading/paper/accounts/{account_id}/orders/{order_id}/replace` | `trading:paper:order` |
 | POST | `/api/trading/paper/accounts/{account_id}/risk-orders` | `trading:paper:order` |
+| POST | `/api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move` | `trading:paper:order` |
 | POST | `/api/trading/replay/execution/orders` | `trading:paper:order` |
 | POST | `/api/trading/strategies` | `trading:strategies:admin` |
 | DELETE | `/api/trading/strategies/{strategy_id}` | `trading:strategies:admin` |

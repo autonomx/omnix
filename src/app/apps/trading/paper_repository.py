@@ -224,6 +224,48 @@ class TradingPaperRepository:
             uow.commit()
             return cancelled, placed
 
+    def replace_entry(
+        self,
+        account_id: str,
+        order_id: str,
+        replacement: PaperOrderRequest,
+        *,
+        authority: OrderAuthority,
+    ) -> tuple[PaperOrder, PaperOrder]:
+        """Move a working entry (TVP-7.3): cancel it, place ``replacement`` and point its pending protection at
+        the new order, in one transaction. Without a pending protection for ``order_id`` nothing changes, so an
+        entry never ends up without its stop and a stop never points at a cancelled entry.
+        """
+        with self.uow_factory() as uow:
+            account, allow_short = self._lock_account(uow, account_id)
+            used = uow.connection.execute(
+                """
+                SELECT 1 FROM omnix_trading_paper_orders
+                 WHERE workspace_id = %s AND account_id = %s AND (order_id = %s OR idempotency_key = %s)
+                 LIMIT 1
+                """,
+                (self.context.workspace_id, account.account_id, replacement.order_id, replacement.idempotency_key),
+            ).fetchone()
+            if used is not None:
+                # A moved entry is always a new order: an old one returned by its key would carry the stop to a dead order.
+                raise ValueError("paper_order_id_not_new")
+            cancelled = self._cancel_locked(uow, account, order_id)
+            placed = self._place_locked(uow, account, allow_short, replacement, authority)
+            moved = uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_protections
+                   SET entry_order_id = %s, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s
+                   AND entry_order_id = %s AND status = 'pending_entry'
+                RETURNING instrument_id
+                """,
+                (placed.order_id, self.context.workspace_id, account.account_id, order_id),
+            ).fetchone()
+            if moved is None or placed.order_id == order_id:
+                raise ValueError("paper_risk_entry_not_movable")
+            uow.commit()
+            return cancelled, placed
+
     def _lock_account(self, uow: PostgresUnitOfWork, account_id: str) -> tuple[PaperAccount, bool]:
         row = uow.connection.execute(
             """

@@ -9,15 +9,16 @@ import { onDrawingActionRequest } from './drawings/drawingActions';
 export type PaperTicketPrefill = {
   instrumentId: string;
   side: 'buy' | 'sell';
-  /** A limit order at `entry` (position drawings, limit hotkeys) or a market order (TVP-7.4 hotkeys). */
-  orderType: 'market' | 'limit';
-  /** The limit price; null for a market order. */
+  /** A limit order at `entry` (position drawings, limit hotkeys), a stop order at `entry` (the chart's price-scale
+   * menu, TVP-7.3) or a market order (TVP-7.4 hotkeys, the chart's buy/sell buttons). */
+  orderType: 'market' | 'limit' | 'stop';
+  /** The limit or stop price; null for a market order. */
   entry: number | null;
   stop: number | null;
   target: number | null;
   quantity: number | null;
   /** Where it came from, for the notice; a drawing's request when absent. */
-  source?: 'drawing' | 'hotkey';
+  source?: 'drawing' | 'hotkey' | 'chart';
 };
 
 const positive = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
@@ -27,9 +28,9 @@ export function parsePaperTicketRequest(payload: unknown): PaperTicketPrefill | 
   if (!payload || typeof payload !== 'object') return null;
   const value = payload as Record<string, unknown>;
   const entry = positive(value.entry);
-  const orderType = value.orderType === 'market' ? 'market' : 'limit';
+  const orderType = value.orderType === 'market' || value.orderType === 'stop' ? value.orderType : 'limit';
   if (typeof value.instrumentId !== 'string' || !value.instrumentId || (value.side !== 'buy' && value.side !== 'sell')) return null;
-  if (orderType === 'limit' && entry === null) return null;
+  if (orderType !== 'market' && entry === null) return null;
   return {
     instrumentId: value.instrumentId, side: value.side, orderType, entry: orderType === 'market' ? null : entry,
     stop: positive(value.stop), target: positive(value.target), quantity: positive(value.quantity),
@@ -101,8 +102,8 @@ export function usePaperTicketRequests(openPaperPanel: () => void): void {
 export type PaperTicketForm = {
   setTicketTab: (tab: 'order') => void;
   setSide: (side: 'buy' | 'sell') => void;
-  setOrderType: (type: 'limit' | 'market') => void;
-  /** A limit order's price (the panel's "Limit price" field). */
+  setOrderType: (type: 'limit' | 'market' | 'stop') => void;
+  /** A limit or stop order's price (the panel's "Limit price" or "Stop price" field). */
   setTriggerPrice: (value: string) => void;
   /** Only a stop-limit's second price; cleared. */
   setLimitPrice: (value: string) => void;
@@ -152,7 +153,8 @@ export function applyPaperTicketPrefill(
     : prefill.stop === null
       ? `Set a stop loss: the account's ${mode.riskPercent}% risk rule sizes the quantity from it.`
       : `The account's ${mode.riskPercent}% risk rule sizes the quantity.`;
-  const from = prefill.source === 'hotkey' ? 'Ticket filled from the trading hotkey.' : 'Ticket filled from the position drawing.';
+  const from = prefill.source === 'hotkey' ? 'Ticket filled from the trading hotkey.'
+    : prefill.source === 'chart' ? 'Ticket filled from the chart.' : 'Ticket filled from the position drawing.';
   return { kind: 'success', message: `${from} ${detail} Check it, then place the order.` };
 }
 

@@ -2,6 +2,7 @@ import { downloadUrl } from '../../shared/download';
 import { convertedPrice, intervalLabel } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { chartPalette } from './chartPalette';
+import { ChartTradeButtons } from './ChartTradeButtons';
 import { DrawingPropertiesButton } from './drawings/DrawingPropertiesButton';
 import { DrawingStyleControls } from './drawings/DrawingStyleControls';
 import { drawingToolDefinition } from './drawings/tools/registry';
@@ -11,7 +12,7 @@ import { ChartCopyImageButton, ChartMarketStatusBadges } from './TradingChartWor
 export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapterRef, change, changePercent, chartFocusMode, chartId, chartNumber, chartQuery, direction, drawings,
-    instrumentId, interval, latest, onOpenSymbolSearch, priceScaleMultiplier, provenance, resolvedBinding,
+    instrumentId, interval, latest, latestClose, onOpenSymbolSearch, priceScaleMultiplier, provenance, replayMode, resolvedBinding,
     selectedDrawing, setCompareDialogOpen, streamStatus, toggleFullscreen,
   } = ws;
   return (
@@ -49,6 +50,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
               <span>L <b>{convertedPrice(latest.low, priceScaleMultiplier)}</b></span>
               <span>C <b>{convertedPrice(latest.close, priceScaleMultiplier)}</b></span>
               <span className={direction}>{change >= 0 ? '+' : ''}{convertedPrice(change, priceScaleMultiplier)} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+              <ChartTradeButtons instrumentId={instrumentId} bindingId={resolvedBinding?.binding_id ?? null} lastPrice={latestClose > 0 ? latestClose : null} replayMode={replayMode} />
             </div>
           ) : null}
         </div>

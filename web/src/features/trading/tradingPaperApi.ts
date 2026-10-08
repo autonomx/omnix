@@ -6,6 +6,8 @@ import type {
   PaperOrderInput,
   PaperPositionProtection,
   PaperProtectionInput,
+  PaperRiskEntryMoveInput,
+  PaperRiskEntryMoveResult,
   PaperRiskOrderInput,
   PaperRiskOrderResult,
   PaperRiskPreview,
@@ -40,6 +42,12 @@ export const tradingPaperApi = {
     paper(api.POST('/api/trading/paper/accounts/{account_id}/orders/{order_id}/replace', {
       params: { path: { account_id: accountId, order_id: orderId }, header: orderManagement },
       body: { replacement },
+    })),
+  /** Re-prices a working risk entry: the server sizes it again and replaces it atomically (TVP-7.3). */
+  moveRiskEntry: (accountId: string, orderId: string, input: PaperRiskEntryMoveInput): Promise<PaperRiskEntryMoveResult> =>
+    paper(api.POST('/api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move', {
+      params: { path: { account_id: accountId, order_id: orderId }, header: orderManagement },
+      body: input,
     })),
   protections: async (accountId: string): Promise<PaperPositionProtection[]> =>
     (await paper(api.GET('/api/trading/paper/accounts/{account_id}/protections', {

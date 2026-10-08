@@ -1000,6 +1000,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Risk Entry
+         * @description Re-price a working risk entry (dragged on the chart): re-sized by the server, replaced atomically.
+         */
+        post: operations["move_risk_entry_api_trading_paper_accounts__account_id__risk_orders__order_id__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/paper/accounts/{account_id}/risk-preview": {
         parameters: {
             query?: never;
@@ -7186,6 +7206,27 @@ export interface components {
              * @default 100000
              */
             initial_cash?: number | string;
+        };
+        /**
+         * PaperRiskEntryMoveRequest
+         * @description The moved entry's price and its new order id; everything else comes from the working order.
+         */
+        PaperRiskEntryMoveRequest: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Limit Price */
+            limit_price?: number | string | null;
+            /** Order Id */
+            order_id: string;
+            /** Trigger Price */
+            trigger_price: number | string;
+        };
+        /** PaperRiskEntryMoveResult */
+        PaperRiskEntryMoveResult: {
+            cancelled: components["schemas"]["PaperOrder-Output"];
+            order: components["schemas"]["PaperOrder-Output"];
+            preview: components["schemas"]["PaperRiskPreview"];
+            protection: components["schemas"]["PaperPositionProtection"];
         };
         /**
          * PaperRiskOrderRequest
@@ -14503,6 +14544,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaperRiskOrderResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_risk_entry_api_trading_paper_accounts__account_id__risk_orders__order_id__move_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Omnix-Paper-Order-Management"?: string | null;
+            };
+            path: {
+                account_id: string;
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperRiskEntryMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperRiskEntryMoveResult"];
                 };
             };
             /** @description Validation Error */

@@ -32,6 +32,17 @@ describe('paper order notifications (TVP-7.4)', () => {
     ]);
   });
 
+  it('reports an order moved on the chart as modified, not cancelled (TVP-7.3)', () => {
+    const before = snapshot('a', [order('entry', 'open', { order_type: 'limit', limit_price: '10' })]);
+    const after = snapshot('a', [
+      order('entry', 'cancelled', { order_type: 'limit', limit_price: '10' }),
+      order('entry-moved-k1', 'open', { order_type: 'limit', limit_price: '9.5' }),
+    ]);
+    expect(orderNotifications(before, after).map((item) => [item.kind, item.message])).toEqual([
+      ['modify', 'Buy 2 BTC/USDT LIMIT moved to 9.5'],
+    ]);
+  });
+
   it('reports partial fills and open orders that left the snapshot', () => {
     const before = snapshot('a', [order('1', 'open', { filled_quantity: '0' }), order('old', 'open')]);
     const after = snapshot('a', [order('1', 'open', { filled_quantity: '1' })]);

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { dispatchDrawingActionRequest } from './drawings/drawingActions';
-import { PREFILL_LIFETIME_MS, applyPaperTicketPrefill, requestPaperTicket, takePaperTicketPrefill, type PaperTicketForm } from './paperTicketRequests';
+import { PREFILL_LIFETIME_MS, applyPaperTicketPrefill, parsePaperTicketRequest, requestPaperTicket, takePaperTicketPrefill, type PaperTicketForm } from './paperTicketRequests';
 import { renderHook } from '@testing-library/react';
 import { usePaperTicketRequests } from './paperTicketRequests';
 
@@ -36,6 +36,17 @@ describe('order ticket from a position drawing (TVP-3.6)', () => {
     expect(applyPaperTicketPrefill(prefill, 'crypto:ETH', other, { riskManaged: false, riskPercent: '1' }, () => 'BTC'))
       .toEqual({ kind: 'error', message: 'The order is for BTC; open that chart to trade it.' });
     expect(other.setSide).not.toHaveBeenCalled();
+  });
+
+  it('a stop order from the chart fills the stop price (TVP-7.3)', () => {
+    const fields = form();
+    const prefill = parsePaperTicketRequest({ instrumentId: 'crypto:BTC', side: 'buy', orderType: 'stop', entry: 120 });
+    expect(prefill).toMatchObject({ orderType: 'stop', entry: 120 });
+    expect(parsePaperTicketRequest({ instrumentId: 'crypto:BTC', side: 'buy', orderType: 'stop' })).toBeNull();
+    const result = applyPaperTicketPrefill({ ...prefill!, source: 'chart' }, 'crypto:BTC', fields, { riskManaged: true, riskPercent: '0.35' });
+    expect(result.message).toContain('Ticket filled from the chart.');
+    expect(fields.setOrderType).toHaveBeenCalledWith('stop');
+    expect(fields.setTriggerPrice).toHaveBeenCalledWith('120');
   });
 
   it('drops a pre-fill nobody took in time', () => {

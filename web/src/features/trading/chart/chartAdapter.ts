@@ -68,7 +68,8 @@ export const TRADING_CHART_TYPE_OPTIONS = [
 ] as const;
 export type TradingChartType = typeof TRADING_CHART_TYPE_OPTIONS[number]['value'];
 export type TradingChartAppearance = 'light' | 'dark';
-export type TradingCrosshairPoint = { time: Time; price: number };
+/** `pointer`: the price is the pointer's, in the main pane (otherwise the bar's close under it). */
+export type TradingCrosshairPoint = { time: Time; price: number; pointer?: boolean };
 export type TradingVisibleRange = { from: Time; to: Time };
 export type DrawingCoordinate = { x: number; y: number };
 export type TradingIndicatorPaneGeometry = {
@@ -1666,6 +1667,14 @@ export class TradingChartAdapter {
     return { y, color: last.color, side: this.priceScaleSide, scaleWidth, paneHeight };
   }
 
+  /** The main price scale's side and width and the main pane's height, for controls beside the scale (TVP-7.3). */
+  mainPriceScaleBox(): { side: 'left' | 'right'; scaleWidth: number; paneHeight: number } | null {
+    this.assertActive();
+    const scaleWidth = this.chart.priceScale(this.priceScaleSide).width();
+    const paneHeight = this.chart.panes()[0]?.getHeight() ?? 0;
+    return scaleWidth > 0 && paneHeight > 0 ? { side: this.priceScaleSide, scaleWidth, paneHeight } : null;
+  }
+
   /** A labelled price line, such as the latest pre/post-market price; null removes it (TVP-2.5). */
   setSessionPriceLine(line: TradingSessionPriceLine | null): void {
     this.assertActive();
@@ -1720,7 +1729,7 @@ export class TradingChartAdapter {
       // The y is measured within the pane under the pointer: it is a price only in the main pane.
       const pointerPrice = (parameter.paneIndex ?? 0) === 0 ? this.priceSeries.coordinateToPrice(parameter.point.y) : null;
       if (typeof pointerPrice === 'number' && Number.isFinite(pointerPrice)) {
-        listener({ time: parameter.time, price: pointerPrice / this.priceScaleMultiplier });
+        listener({ time: parameter.time, price: pointerPrice / this.priceScaleMultiplier, pointer: true });
         return;
       }
       const datum = parameter.seriesData.get(this.priceSeries) as { close?: number; value?: number } | undefined;

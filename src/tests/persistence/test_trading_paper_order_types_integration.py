@@ -459,3 +459,58 @@ def test_any_stop_edit_on_an_active_leg_is_stamped(paper) -> None:
         PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("9.6"), trail_amount=Decimal("0.5")),
     )
     assert retrailed.trail_water_mark is None and retrailed.trail_moved_at == trailing.trail_moved_at
+
+
+def _working_entry(state, key: str, *, armed: bool = True):
+    repository = state.repository_factory()
+    entry = OrderGateway(repository).place_manual_entry(
+        state.account_id,
+        _request(state.instrument_id, "buy", "limit", key, limit_price=Decimal("9"), time_in_force="day"),
+    )
+    if armed:
+        state.protections.arm_pending_entry(
+            state.account_id,
+            PaperProtectionUpsert(instrument_id=state.instrument_id, entry_order_id=entry.order_id, stop_loss=Decimal("8"), trail_percent=Decimal("2")),
+        )
+    return entry
+
+
+def _moved(state, key: str, price: str = "8.5") -> PaperOrderRequest:
+    return _request(state.instrument_id, "buy", "limit", key, limit_price=Decimal(price), quantity=Decimal("12"), time_in_force="day")
+
+
+def test_moving_an_entry_repoints_its_stop_in_the_same_transaction(paper) -> None:
+    entry = _working_entry(paper, "move-a")
+    gateway = OrderGateway(paper.repository_factory())
+    cancelled, moved = gateway.replace_manual_entry(paper.account_id, entry.order_id, _moved(paper, "move-b"))
+    assert (cancelled.status, moved.status, moved.limit_price) == ("cancelled", "open", Decimal("8.5"))
+    protection = paper.protections.get(paper.account_id, paper.instrument_id)
+    assert (protection.entry_order_id, protection.status, protection.stop_loss, protection.trail_percent) == (
+        moved.order_id, "pending_entry", Decimal("8"), Decimal("2"),
+    )
+    # A second move of the same (now cancelled) order changes nothing: the stop stays on the live entry.
+    with pytest.raises(ValueError, match="not_open"):
+        gateway.replace_manual_entry(paper.account_id, entry.order_id, _moved(paper, "move-c", "8.6"))
+    assert paper.protections.get(paper.account_id, paper.instrument_id).entry_order_id == moved.order_id
+    assert _order(paper, moved.order_id).status == "open"
+
+
+def test_a_moved_entry_cannot_reuse_an_old_order(paper) -> None:
+    entry = _working_entry(paper, "reuse-a")
+    old = _working_entry(paper, "reuse-old", armed=False)
+    OrderGateway(paper.repository_factory()).cancel(paper.account_id, old.order_id)
+    with pytest.raises(ValueError, match="paper_order_id_not_new"):
+        OrderGateway(paper.repository_factory()).replace_manual_entry(paper.account_id, entry.order_id, _moved(paper, "reuse-old"))
+    assert _order(paper, entry.order_id).status == "open"
+    assert paper.protections.get(paper.account_id, paper.instrument_id).entry_order_id == entry.order_id
+
+
+def test_an_entry_without_a_pending_stop_does_not_move(paper) -> None:
+    entry = _working_entry(paper, "bare-a", armed=False)
+    available, reserved = _cash(paper)
+    with pytest.raises(ValueError, match="paper_risk_entry_not_movable"):
+        OrderGateway(paper.repository_factory()).replace_manual_entry(paper.account_id, entry.order_id, _moved(paper, "bare-b"))
+    # Rolled back: the entry is still working with its reservation, and no replacement exists.
+    assert _order(paper, entry.order_id).status == "open"
+    assert _cash(paper) == (available, reserved)
+    assert all(item.order_id != "order-bare-b" for item in paper.repository_factory().snapshot(paper.account_id).order_history)
