@@ -183,6 +183,36 @@ def test_weekly_and_monthly_from_daily_bars_are_calendar_periods_between_session
     assert november[0].start_time.astimezone(ET) == datetime(2026, 11, 2, 9, 30, tzinfo=ET)
 
 
+def test_equity_multi_day_buckets_count_trading_days_and_skip_holidays() -> None:
+    days = [date(2026, 11, 16) + timedelta(days=offset) for offset in range(21)]
+    holiday = date(2026, 11, 26)  # Thanksgiving
+    trading = [day for day in days if day.weekday() < 5 and day != holiday]
+    daily = [_daily(day) for day in trading]
+    two_day = clock(daily, "2d", "1d", equity=True, complete=True)
+
+    def trading_days(first: date, last: date) -> int:
+        span = [first + timedelta(days=offset) for offset in range((last - first).days + 1)]
+        return sum(1 for day in span if day.weekday() < 5 and day != holiday)
+
+    spans = [(item.start_time.astimezone(ET).date(), item.end_time.astimezone(ET).date()) for item in two_day]
+    # Every bucket spans exactly two trading days, across weekends and the holiday.
+    assert all(trading_days(first, last) == 2 for first, last in spans)
+    assert spans[0] == (date(2026, 11, 13), date(2026, 11, 16))  # Fri + Mon, though only Mon is loaded
+    assert (date(2026, 11, 25), date(2026, 11, 27)) in spans  # Wed + Fri around Thanksgiving
+    # Edges don't depend on which day the loaded window starts on.
+    later = clock(daily[3:], "2d", "1d", equity=True, complete=True)
+    assert {(item.start_time, item.end_time) for item in later} <= {(item.start_time, item.end_time) for item in two_day}
+
+
+def test_a_bucket_is_not_final_while_its_last_base_bar_is_still_forming() -> None:
+    first = datetime(2026, 10, 7, 0, 0, tzinfo=UTC)
+    bars = minute_bars(first, 7, now=first + timedelta(hours=1))
+    bars[-1] = bars[-1].model_copy(update={"is_final": False})
+    assert clock(bars, "7m", complete=True)[0].is_final is False
+    bars[-1] = bars[-1].model_copy(update={"is_final": True})
+    assert clock(bars, "7m", complete=True)[0].is_final is True
+
+
 def test_crypto_days_weeks_and_months_use_fixed_epochs() -> None:
     daily = [bar(datetime(2026, 10, 1, tzinfo=UTC) + timedelta(days=offset), 1440, index=offset) for offset in range(30)]
     two_day = clock(daily, "2d", "1d", complete=True)

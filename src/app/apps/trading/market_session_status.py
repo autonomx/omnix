@@ -18,7 +18,8 @@ MarketSessionStatus = Literal["open", "pre_market", "post_market", "closed", "un
 US_EQUITY_CALENDARS = frozenset({"XNYS", "XNAS", "XASE", "ARCX", "BATS", "US_EQUITY"})
 # Listed U.S. venues those rules cover. Restored or discovered equities on other
 # venues (LSE, TSX, OTC...) can carry XNYS as a placeholder calendar; their hours differ.
-US_EQUITY_VENUES = frozenset({"NASDAQ", "NYSE", "ARCA", "AMEX", "BATS", "IEX", "NYSEARCA", "NYSEAMERICAN"})
+# "US" is the venue of the gap-universe equities (`equity:US:<SYM>`, finviz discovery and the prospective gap runtime).
+US_EQUITY_VENUES = frozenset({"US", "NASDAQ", "NYSE", "ARCA", "AMEX", "BATS", "IEX", "NYSEARCA", "NYSEAMERICAN"})
 ALWAYS_OPEN_CALENDARS = frozenset({"24x7"})
 
 _US_EQUITY_STATUS: dict[str, MarketSessionStatus] = {

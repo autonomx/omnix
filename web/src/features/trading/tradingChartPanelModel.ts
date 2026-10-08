@@ -252,16 +252,19 @@ export function firstBarTime(response: BarsResponse): number {
   return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
 }
 
+/** Comparison bars on the same clock-aligned buckets as the main chart, so derived intervals (7m, 2h) line up. */
 export async function comparisonBars(
   instrumentId: string,
   interval: string,
   limit: number,
+  extendedHours = true,
 ): Promise<ComparisonBars> {
-  const selected = await tradingApi.bars(instrumentId, interval, limit);
+  const options = { alignment: 'clock', extendedHours } as const;
+  const selected = await tradingApi.bars(instrumentId, interval, limit, undefined, options);
   const equivalent = longHistoryEquivalent(instrumentId, interval);
   if (!equivalent || equivalent === instrumentId) return selected;
   try {
-    const candidate = await tradingApi.bars(equivalent, interval, limit);
+    const candidate = await tradingApi.bars(equivalent, interval, limit, undefined, options);
     if (candidate.bars.length > selected.bars.length && firstBarTime(candidate) < firstBarTime(selected)) {
       return { ...selected, bars: candidate.bars, historySourceInstrumentId: candidate.instrument.instrument_id };
     }

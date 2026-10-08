@@ -12,7 +12,8 @@ chart keeps the same candle edges however much history is fetched:
   at 04:00 with extended hours or 09:30 without, and are cut at the pre-market,
   regular and post-market boundaries (early closes included), so each bucket
   carries one session. Daily and longer buckets hold regular-session bars and run
-  from the first session open to the last session close of their period.
+  from the first session open to the last session close of their period; N-day
+  buckets count trading days from a fixed epoch, so they skip weekends and holidays.
 - Partial buckets end at their boundary (clipped at the session close). A partial
   first bucket is dropped unless the provider says history is complete; the last
   bucket is kept and is not final until its end has passed.
@@ -24,6 +25,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from app.apps.trading.cache import TradingMarketDataCache
@@ -123,8 +125,42 @@ def _bucket_24x7(bar: MarketBar, shape: _Shape) -> _Bucket:
     return _Bucket(key, _utc_midnight(first), _utc_midnight(after), bar.session)
 
 
+@lru_cache(maxsize=256)
+def _weekday_holidays(year: int) -> frozenset[date]:
+    return frozenset(day for day in regular_holidays(year) if day.weekday() < 5)
+
+
 def _is_trading_day(day: date) -> bool:
-    return day.weekday() < 5 and day not in regular_holidays(day.year)
+    return day.weekday() < 5 and day not in _weekday_holidays(day.year)
+
+
+_TRADING_EPOCH = date(2000, 1, 3)
+
+
+def _trading_day_ordinal(day: date) -> int:
+    """Trading days from a fixed epoch to `day`, so multi-day equity buckets count sessions, not calendar days."""
+    weeks, extra = divmod((day - _TRADING_EPOCH).days, 7)
+    ordinal = weeks * 5 + sum(1 for offset in range(extra) if (_TRADING_EPOCH.weekday() + offset) % 7 < 5)
+    for year in range(_TRADING_EPOCH.year, day.year + 1):
+        ordinal -= sum(1 for holiday in _weekday_holidays(year) if _TRADING_EPOCH <= holiday < day)
+    return ordinal
+
+
+def _trading_days_bucket(day: date, count: int) -> tuple[int, date, date]:
+    """The N-trading-day bucket holding a trading day: its index and its first and last trading days."""
+    ordinal = _trading_day_ordinal(day)
+    index = ordinal // count
+    first = day
+    for _ in range(ordinal - index * count):
+        first -= timedelta(days=1)
+        while not _is_trading_day(first):
+            first -= timedelta(days=1)
+    last = day
+    for _ in range((index + 1) * count - 1 - ordinal):
+        last += timedelta(days=1)
+        while not _is_trading_day(last):
+            last += timedelta(days=1)
+    return index, first, last
 
 
 def _local(day: date, clock: time, zone: ZoneInfo) -> datetime:
@@ -159,6 +195,16 @@ class _EquityBuckets:
         if self.base_intraday and us_equity_session(start) != "regular":
             return None
         day = start.astimezone(self.zone).date()
+        if self.shape.kind == "days" and self.shape.count > 1:
+            if not _is_trading_day(day):
+                return None
+            index, first_day, last_day = _trading_days_bucket(day, self.shape.count)
+            return _Bucket(
+                ("trading_days", index),
+                _local(first_day, _REGULAR_OPEN, self.zone),
+                _local(last_day, regular_close_time(last_day), self.zone),
+                "regular",
+            )
         key, first, after = _period(day, self.shape)
         bounds = self._period_bounds(key, first, after)
         if bounds is None:
@@ -245,7 +291,7 @@ def aggregate_market_bars_clock(
                 low=min(bar.low for bar in group),
                 close=last.close,
                 volume=sum((bar.volume for bar in group), Decimal("0")),
-                is_final=bucket.end <= received_at,
+                is_final=bucket.end <= received_at and last.is_final,
                 adjustment_mode=first.adjustment_mode,
                 session=bucket.session,
                 provider=first.provider,

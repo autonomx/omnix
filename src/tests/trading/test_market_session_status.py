@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.apps.trading.api import create_trading_router
 from app.apps.trading.catalog import INSTRUMENTS
-from app.apps.trading.market_session_status import is_always_open, market_session_status
+from app.apps.trading.market_session_status import us_equity_rules_apply, is_always_open, market_session_status
 
 ET = ZoneInfo("America/New_York")
 
@@ -48,6 +48,12 @@ def test_crypto_is_always_open_and_unknown_calendars_say_so() -> None:
     assert market_session_status("24x7", "equity", weekend) == "unknown"
     assert not is_always_open("24x7", "equity")
     assert market_session_status("XLON", "equity", weekend) == "unknown"
+
+
+def test_gap_universe_equities_on_the_us_venue_use_us_rules() -> None:
+    regular = datetime(2026, 10, 7, 15, 0, tzinfo=timezone.utc)
+    assert market_session_status("XNAS", "equity", regular, "US") == "open"
+    assert us_equity_rules_apply("XNAS", "US")
 
 
 def test_market_session_status_requires_an_aware_moment() -> None:

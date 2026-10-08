@@ -118,8 +118,8 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     queries: comparisons.map((comparison) => {
       const comparisonLimit = chartHistoryLimit(comparison.instrumentId, interval, []);
       return {
-        queryKey: ['trading', 'comparison-bars-v2', comparison.instrumentId, interval, comparisonLimit, comparison.placement],
-        queryFn: () => comparisonBars(comparison.instrumentId, interval, comparisonLimit),
+        queryKey: ['trading', 'comparison-bars-v2', comparison.instrumentId, interval, comparisonLimit, comparison.placement, 'clock', showExtendedHours],
+        queryFn: () => comparisonBars(comparison.instrumentId, interval, comparisonLimit, showExtendedHours),
         enabled: Boolean(comparison.instrumentId),
         staleTime: 15_000,
       };
