@@ -83,7 +83,7 @@ describe('chart typing shortcuts (TVP-2.1)', () => {
     expect(box).toHaveFocus();
     fireEvent.change(box, { target: { value: '5s' } });
     fireEvent.keyDown(box, { key: 'Enter' });
-    expect(within(screen.getByRole('dialog', { name: 'Change interval' })).getByRole('alert')).toHaveTextContent("doesn't support 5s");
+    expect(within(screen.getByRole('dialog', { name: 'Change interval' })).getByRole('alert')).toHaveTextContent('trade-level data');
     fireEvent.change(box, { target: { value: '4h' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     expect(screen.queryByRole('textbox', { name: 'Interval' })).not.toBeInTheDocument();
@@ -243,7 +243,7 @@ describe('dialog focus (TVP-2.4 review)', () => {
 
   it('keeps Tab in the interval box, points its description at the error, and Escape returns focus', () => {
     setup();
-    press({ key: '7' });
+    press({ key: '0' });
     const box = screen.getByRole('textbox', { name: 'Interval' });
     expect(box).toHaveAttribute('aria-describedby', 'trading-interval-box-hint');
     fireEvent.keyDown(box, { key: 'Tab', shiftKey: true });
@@ -255,10 +255,10 @@ describe('dialog focus (TVP-2.4 review)', () => {
     expect(document.body).toHaveFocus();
   });
 
-  it('marks planned commands as not available yet in the palette', () => {
+  it('marks commands no mounted chart can run as not available in the palette', () => {
     setup();
     press({ key: 'k', ctrlKey: true });
-    expect(screen.getByRole('option', { name: /Go to date.*not available yet/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('option', { name: /Go to date.*not available now/ })).toHaveAttribute('aria-disabled', 'true');
   });
 });
 

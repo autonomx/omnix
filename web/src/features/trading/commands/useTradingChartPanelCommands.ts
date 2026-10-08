@@ -34,12 +34,15 @@ const MODE_VALUES: Record<TradingPriceScaleMode, PriceScaleMode> = {
 
 type ChartCommandModel = Pick<
   TradingChartPanelModel,
-  'active' | 'adapter' | 'chartId' | 'priceScaleSettings' | 'setPriceScaleSettings' | 'selectedRangeRef' | 'setSelectedRangeLabel'
+  | 'active' | 'adapter' | 'chartId' | 'priceScaleSettings' | 'setPriceScaleSettings' | 'selectedRangeRef' | 'setSelectedRangeLabel'
+  | 'openGoToDate' | 'replayMode'
 >;
 
-/** The active chart's keyboard commands (TVP-2.1): move, zoom, reset, price scale and snapshot. */
+/** The active chart's keyboard commands (TVP-2.1): move, zoom, reset, price scale, snapshot and go to date (TVP-2.5). */
 export function useTradingChartPanelCommands(ws: ChartCommandModel): void {
-  const { active, adapter, chartId, priceScaleSettings, setPriceScaleSettings, selectedRangeRef, setSelectedRangeLabel } = ws;
+  const {
+    active, adapter, chartId, openGoToDate, priceScaleSettings, replayMode, setPriceScaleSettings, selectedRangeRef, setSelectedRangeLabel,
+  } = ws;
   const ready = () => active && adapter !== null;
   const withAdapter = (action: (target: TradingChartAdapter) => void) => () => {
     if (adapter) action(adapter);
@@ -71,4 +74,6 @@ export function useTradingChartPanelCommands(ws: ChartCommandModel): void {
   useTradingCommand('chart.logScale', toggleMode('logarithmic'), ready);
   useTradingCommand('chart.percentScale', toggleMode('percentage'), ready);
   useTradingCommand('chart.snapshot', withAdapter((target) => downloadUrl(target.snapshotDataUrl(), `${chartId}.png`)), ready);
+  // Like the toolbar button, go to date is off during replay.
+  useTradingCommand('chart.goToDate', openGoToDate, () => ready() && !replayMode);
 }

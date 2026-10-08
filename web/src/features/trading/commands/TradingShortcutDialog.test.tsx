@@ -116,14 +116,12 @@ describe('TradingShortcutDialog review fixes', () => {
     expect(within(row('Save layout (workspace)')).getByText('Same key, other context: Reset chart view')).toBeInTheDocument();
   });
 
-  it('keeps the installed-app keys visible after a rebind and lists planned commands as not available yet', () => {
+  it('keeps the installed-app keys visible after a rebind', () => {
     render(<TradingShortcutDialog open onClose={() => undefined} />);
     capture('New tab, copying this one (browser Alt+Shift+T, app Ctrl+T)', { key: 'N', code: 'KeyN', altKey: true, shiftKey: true });
     expect(within(row('New tab')).getByText('Alt+Shift+N')).toBeInTheDocument();
     expect(within(row('New tab')).getByText('Ctrl+T · app')).toBeInTheDocument();
-    const goToDate = row('Go to date');
-    expect(within(goToDate).getAllByText('Not available yet')).toHaveLength(2);
-    expect(within(goToDate).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(row('Go to date')).getByText('Alt+G')).toBeInTheDocument();
   });
 
   it('keeps Tab inside the dialog, closes with Escape from any control and returns focus', () => {

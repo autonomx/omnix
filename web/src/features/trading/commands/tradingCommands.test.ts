@@ -480,8 +480,10 @@ describe('chart key context for plain keys', () => {
   });
 
   it('never dispatches planned commands', () => {
+    const planned = command({ ...tradingCommandDefinition('chart.goToDate')!, planned: true });
+    expect(resolveCommand([planned], key({ key: 'g', code: 'KeyG', altKey: true }))).toBeNull();
     const goToDate = command(tradingCommandDefinition('chart.goToDate')!);
-    expect(resolveCommand([goToDate], key({ key: 'g', code: 'KeyG', altKey: true }))).toBeNull();
+    expect(resolveCommand([goToDate], key({ key: 'g', code: 'KeyG', altKey: true }))?.definition.id).toBe('chart.goToDate');
   });
 });
 
@@ -509,7 +511,7 @@ describe('rebinding rules (TVP-2.4)', () => {
 
   it('refuses fixed and planned commands', () => {
     expect(rebindProblem(definition('chart.symbolSearch'), 'mod+q')).toMatch(/can't be rebound/);
-    expect(rebindProblem(definition('chart.goToDate'), 'mod+q')).toMatch(/can't be rebound/);
+    expect(rebindProblem({ ...definition('chart.goToDate'), planned: true }, 'mod+q')).toMatch(/can't be rebound/);
   });
 });
 

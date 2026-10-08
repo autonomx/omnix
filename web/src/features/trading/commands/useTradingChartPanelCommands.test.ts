@@ -29,8 +29,9 @@ function fakeAdapter() {
   return { adapter, timeScale, range: () => range };
 }
 
-function mount(active: boolean) {
+function mount(active: boolean, replayMode = false) {
   const fake = fakeAdapter();
+  const openGoToDate = vi.fn();
   const selectedRangeRef = { current: 30 as number | undefined | null };
   const setSelectedRangeLabel = vi.fn();
   const hook = renderHook(() => {
@@ -44,10 +45,12 @@ function mount(active: boolean) {
       setPriceScaleSettings,
       selectedRangeRef: selectedRangeRef as never,
       setSelectedRangeLabel,
+      openGoToDate,
+      replayMode,
     });
     return priceScaleSettings;
   });
-  return { ...fake, hook, selectedRangeRef, setSelectedRangeLabel };
+  return { ...fake, hook, openGoToDate, selectedRangeRef, setSelectedRangeLabel };
 }
 
 const press = (init: KeyboardEventInit) => act(() => { fireEvent.keyDown(document.body, init); });
@@ -103,14 +106,27 @@ describe('chart panel shortcuts (TVP-2.1)', () => {
     chart.hook.unmount();
   });
 
+  it('opens go to date with Alt+G, except during replay (TVP-2.5)', () => {
+    const chart = mount(true);
+    press({ key: 'g', code: 'KeyG', altKey: true });
+    expect(chart.openGoToDate).toHaveBeenCalledTimes(1);
+    chart.hook.unmount();
+    const replaying = mount(true, true);
+    press({ key: 'g', code: 'KeyG', altKey: true });
+    expect(replaying.openGoToDate).not.toHaveBeenCalled();
+    replaying.hook.unmount();
+  });
+
   it('leaves inactive charts alone', () => {
     const chart = mount(false);
     press({ key: 'ArrowLeft' });
     press({ key: 'r', code: 'KeyR', altKey: true });
     press({ key: 's', code: 'KeyS', altKey: true });
+    press({ key: 'g', code: 'KeyG', altKey: true });
     expect(chart.timeScale.setVisibleLogicalRange).not.toHaveBeenCalled();
     expect(chart.adapter.fitContent).not.toHaveBeenCalled();
     expect(download.downloadUrl).not.toHaveBeenCalled();
+    expect(chart.openGoToDate).not.toHaveBeenCalled();
     chart.hook.unmount();
   });
 });
