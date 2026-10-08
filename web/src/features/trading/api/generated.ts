@@ -2067,19 +2067,19 @@ export interface components {
          * AlertDeliverySettings
          * @description Per-alert channel settings (TVP-1.2 schema; delivery itself is TVP-0.5a-c / TVP-1.5).
          */
-        AlertDeliverySettings: {
-            email: components["schemas"]["AlertEmailSettings"] | null;
-            sound: components["schemas"]["AlertSoundSettings"] | null;
-            webhook: components["schemas"]["AlertWebhookSettings"] | null;
+        "AlertDeliverySettings-Input": {
+            email?: components["schemas"]["AlertEmailSettings"] | null;
+            sound?: components["schemas"]["AlertSoundSettings"] | null;
+            webhook?: components["schemas"]["AlertWebhookSettings-Input"] | null;
         };
         /**
          * AlertDeliverySettings
          * @description Per-alert channel settings (TVP-1.2 schema; delivery itself is TVP-0.5a-c / TVP-1.5).
          */
-        "AlertDeliverySettings-Input": {
-            email?: components["schemas"]["AlertEmailSettings"] | null;
-            sound?: components["schemas"]["AlertSoundSettings"] | null;
-            webhook?: components["schemas"]["AlertWebhookSettings-Input"] | null;
+        "AlertDeliverySettings-Output": {
+            email: components["schemas"]["AlertEmailSettings"] | null;
+            sound: components["schemas"]["AlertSoundSettings"] | null;
+            webhook: components["schemas"]["AlertWebhookSettings-Output"] | null;
         };
         /** AlertEmailSettings */
         AlertEmailSettings: {
@@ -2092,24 +2092,26 @@ export interface components {
             name: string;
         };
         /** AlertWebhookSettings */
-        AlertWebhookSettings: {
-            /**
-             * Has Secret
-             * @default false
-             */
-            has_secret: boolean;
-            /** Url */
-            url: string;
-        };
-        /** AlertWebhookSettings */
         "AlertWebhookSettings-Input": {
+            /** Display Url */
+            display_url?: string | null;
             /**
              * Has Secret
              * @default false
              */
             has_secret?: boolean;
             /** Url */
-            url: string;
+            url?: string | null;
+        };
+        /** AlertWebhookSettings */
+        "AlertWebhookSettings-Output": {
+            /** Display Url */
+            display_url: string | null;
+            /**
+             * Has Secret
+             * @default false
+             */
+            has_secret: boolean;
         };
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: {
@@ -3207,7 +3209,6 @@ export interface components {
         ChangePercentSource: {
             /**
              * Kind
-             * @default change_percent
              * @constant
              */
             kind: "change_percent";
@@ -3224,10 +3225,9 @@ export interface components {
         "ChangePercentSource-Input": {
             /**
              * Kind
-             * @default change_percent
              * @constant
              */
-            kind?: "change_percent";
+            kind: "change_percent";
             /**
              * Lookback Bars
              * @default 1
@@ -3238,10 +3238,9 @@ export interface components {
         "ChannelTarget-Input": {
             /**
              * Kind
-             * @default channel
              * @constant
              */
-            kind?: "channel";
+            kind: "channel";
             /** Lower */
             lower: components["schemas"]["ValueTarget-Input"] | components["schemas"]["SourceTarget-Input"];
             /** Upper */
@@ -3251,7 +3250,6 @@ export interface components {
         "ChannelTarget-Output": {
             /**
              * Kind
-             * @default channel
              * @constant
              */
             kind: "channel";
@@ -5365,7 +5363,6 @@ export interface components {
             inputs: components["schemas"]["IndicatorSourceInputs"];
             /**
              * Kind
-             * @default indicator
              * @constant
              */
             kind: "indicator";
@@ -5379,10 +5376,9 @@ export interface components {
             inputs?: components["schemas"]["IndicatorSourceInputs-Input"];
             /**
              * Kind
-             * @default indicator
              * @constant
              */
-            kind?: "indicator";
+            kind: "indicator";
             /** Output */
             output: string;
         };
@@ -7841,7 +7837,6 @@ export interface components {
             field: "close" | "open" | "high" | "low" | "hl2" | "hlc3" | "ohlc4" | "volume";
             /**
              * Kind
-             * @default price
              * @constant
              */
             kind: "price";
@@ -7856,10 +7851,9 @@ export interface components {
             field?: "close" | "open" | "high" | "low" | "hl2" | "hlc3" | "ohlc4" | "volume";
             /**
              * Kind
-             * @default price
              * @constant
              */
-            kind?: "price";
+            kind: "price";
         };
         /** PromptRenderRequest */
         PromptRenderRequest: core["schemas"]["PromptRenderRequest"];
@@ -8936,10 +8930,9 @@ export interface components {
         "SourceTarget-Input": {
             /**
              * Kind
-             * @default source
              * @constant
              */
-            kind?: "source";
+            kind: "source";
             /** Source */
             source: components["schemas"]["PriceSource-Input"] | components["schemas"]["ChangePercentSource-Input"] | components["schemas"]["IndicatorSource-Input"] | components["schemas"]["TrendlineSource-Input"];
         };
@@ -8947,7 +8940,6 @@ export interface components {
         "SourceTarget-Output": {
             /**
              * Kind
-             * @default source
              * @constant
              */
             kind: "source";
@@ -10269,6 +10261,11 @@ export interface components {
             /** Created At */
             created_at: string | null;
             /**
+             * Definition Revision
+             * @default 1
+             */
+            definition_revision: number;
+            /**
              * Enabled
              * @default true
              */
@@ -10429,6 +10426,11 @@ export interface components {
         TradingAlertListResponse: {
             /** Alerts */
             alerts: components["schemas"]["TradingAlert"][];
+            /**
+             * Unreadable
+             * @default []
+             */
+            unreadable: components["schemas"]["TradingAlertUnreadable"][];
         };
         /** TradingAlertParameters */
         "TradingAlertParameters-Input": {
@@ -10502,7 +10504,7 @@ export interface components {
              * @enum {string}
              */
             component: "value" | "line" | "signal" | "histogram" | "upper" | "middle" | "lower";
-            delivery: components["schemas"]["AlertDeliverySettings"];
+            delivery: components["schemas"]["AlertDeliverySettings-Output"];
             /**
              * Fast Period
              * @default 12
@@ -10592,6 +10594,20 @@ export interface components {
         TradingAlertTriggerListResponse: {
             /** Triggers */
             triggers: components["schemas"]["TradingAlertTrigger"][];
+        };
+        /**
+         * TradingAlertUnreadable
+         * @description A stored alert that no longer reads; archive it with its revision.
+         */
+        TradingAlertUnreadable: {
+            /** Alert Id */
+            alert_id: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Reason */
+            reason: string;
+            /** Revision */
+            revision: number;
         };
         /** TradingAlertUpdate */
         TradingAlertUpdate: {
@@ -11479,10 +11495,9 @@ export interface components {
         "TrendlineSource-Input": {
             /**
              * Kind
-             * @default trendline
              * @constant
              */
-            kind?: "trendline";
+            kind: "trendline";
             /** Points */
             points: components["schemas"]["TrendlineAlertPoint-Input"][];
         };
@@ -11493,7 +11508,6 @@ export interface components {
         "TrendlineSource-Output": {
             /**
              * Kind
-             * @default trendline
              * @constant
              */
             kind: "trendline";
@@ -11945,10 +11959,9 @@ export interface components {
         "ValueTarget-Input": {
             /**
              * Kind
-             * @default value
              * @constant
              */
-            kind?: "value";
+            kind: "value";
             /** Value */
             value: number | string;
         };
@@ -11956,7 +11969,6 @@ export interface components {
         "ValueTarget-Output": {
             /**
              * Kind
-             * @default value
              * @constant
              */
             kind: "value";

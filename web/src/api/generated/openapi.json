@@ -1710,49 +1710,6 @@
         "title": "AlertConditionSpec",
         "type": "object"
       },
-      "AlertDeliverySettings": {
-        "additionalProperties": false,
-        "description": "Per-alert channel settings (TVP-1.2 schema; delivery itself is TVP-0.5a-c / TVP-1.5).",
-        "properties": {
-          "email": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AlertEmailSettings"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "sound": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AlertSoundSettings"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "webhook": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AlertWebhookSettings"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "webhook",
-          "email",
-          "sound"
-        ],
-        "title": "AlertDeliverySettings",
-        "type": "object"
-      },
       "AlertDeliverySettings-Input": {
         "additionalProperties": false,
         "description": "Per-alert channel settings (TVP-1.2 schema; delivery itself is TVP-0.5a-c / TVP-1.5).",
@@ -1791,6 +1748,49 @@
         "title": "AlertDeliverySettings",
         "type": "object"
       },
+      "AlertDeliverySettings-Output": {
+        "additionalProperties": false,
+        "description": "Per-alert channel settings (TVP-1.2 schema; delivery itself is TVP-0.5a-c / TVP-1.5).",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertEmailSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sound": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertSoundSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "webhook": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertWebhookSettings-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "webhook",
+          "email",
+          "sound"
+        ],
+        "title": "AlertDeliverySettings",
+        "type": "object"
+      },
       "AlertEmailSettings": {
         "additionalProperties": false,
         "properties": {
@@ -1824,45 +1824,65 @@
         "title": "AlertSoundSettings",
         "type": "object"
       },
-      "AlertWebhookSettings": {
-        "additionalProperties": false,
-        "properties": {
-          "has_secret": {
-            "default": false,
-            "title": "Has Secret",
-            "type": "boolean"
-          },
-          "url": {
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "url",
-          "has_secret"
-        ],
-        "title": "AlertWebhookSettings",
-        "type": "object"
-      },
       "AlertWebhookSettings-Input": {
         "additionalProperties": false,
         "properties": {
+          "display_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Url"
+          },
           "has_secret": {
             "default": false,
             "title": "Has Secret",
             "type": "boolean"
           },
           "url": {
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "AlertWebhookSettings",
+        "type": "object"
+      },
+      "AlertWebhookSettings-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "display_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Url"
+          },
+          "has_secret": {
+            "default": false,
+            "title": "Has Secret",
+            "type": "boolean"
           }
         },
         "required": [
-          "url"
+          "display_url",
+          "has_secret"
         ],
         "title": "AlertWebhookSettings",
         "type": "object"
@@ -7224,7 +7244,6 @@
         "properties": {
           "kind": {
             "const": "change_percent",
-            "default": "change_percent",
             "title": "Kind",
             "type": "string"
           },
@@ -7249,7 +7268,6 @@
         "properties": {
           "kind": {
             "const": "change_percent",
-            "default": "change_percent",
             "title": "Kind",
             "type": "string"
           },
@@ -7261,6 +7279,9 @@
             "type": "integer"
           }
         },
+        "required": [
+          "kind"
+        ],
         "title": "ChangePercentSource",
         "type": "object"
       },
@@ -7269,7 +7290,6 @@
         "properties": {
           "kind": {
             "const": "channel",
-            "default": "channel",
             "title": "Kind",
             "type": "string"
           },
@@ -7297,6 +7317,7 @@
           }
         },
         "required": [
+          "kind",
           "upper",
           "lower"
         ],
@@ -7308,7 +7329,6 @@
         "properties": {
           "kind": {
             "const": "channel",
-            "default": "channel",
             "title": "Kind",
             "type": "string"
           },
@@ -7336,9 +7356,9 @@
           }
         },
         "required": [
+          "kind",
           "upper",
-          "lower",
-          "kind"
+          "lower"
         ],
         "title": "ChannelTarget",
         "type": "object"
@@ -20361,7 +20381,6 @@
           },
           "kind": {
             "const": "indicator",
-            "default": "indicator",
             "title": "Kind",
             "type": "string"
           },
@@ -20373,9 +20392,9 @@
           }
         },
         "required": [
+          "kind",
           "indicator_id",
           "output",
-          "kind",
           "inputs"
         ],
         "title": "IndicatorSource",
@@ -20395,7 +20414,6 @@
           },
           "kind": {
             "const": "indicator",
-            "default": "indicator",
             "title": "Kind",
             "type": "string"
           },
@@ -20407,6 +20425,7 @@
           }
         },
         "required": [
+          "kind",
           "indicator_id",
           "output"
         ],
@@ -32910,7 +32929,6 @@
           },
           "kind": {
             "const": "price",
-            "default": "price",
             "title": "Kind",
             "type": "string"
           }
@@ -32942,11 +32960,13 @@
           },
           "kind": {
             "const": "price",
-            "default": "price",
             "title": "Kind",
             "type": "string"
           }
         },
+        "required": [
+          "kind"
+        ],
         "title": "PriceSource",
         "type": "object"
       },
@@ -41308,7 +41328,6 @@
         "properties": {
           "kind": {
             "const": "source",
-            "default": "source",
             "title": "Kind",
             "type": "string"
           },
@@ -41331,6 +41350,7 @@
           }
         },
         "required": [
+          "kind",
           "source"
         ],
         "title": "SourceTarget",
@@ -41341,7 +41361,6 @@
         "properties": {
           "kind": {
             "const": "source",
-            "default": "source",
             "title": "Kind",
             "type": "string"
           },
@@ -41364,8 +41383,8 @@
           }
         },
         "required": [
-          "source",
-          "kind"
+          "kind",
+          "source"
         ],
         "title": "SourceTarget",
         "type": "object"
@@ -46157,6 +46176,12 @@
             ],
             "title": "Created At"
           },
+          "definition_revision": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Definition Revision",
+            "type": "integer"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",
@@ -46276,6 +46301,7 @@
           "last_observed_value",
           "last_triggered_at",
           "revision",
+          "definition_revision",
           "created_at",
           "updated_at"
         ],
@@ -46599,10 +46625,19 @@
             },
             "title": "Alerts",
             "type": "array"
+          },
+          "unreadable": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TradingAlertUnreadable"
+            },
+            "title": "Unreadable",
+            "type": "array"
           }
         },
         "required": [
-          "alerts"
+          "alerts",
+          "unreadable"
         ],
         "title": "TradingAlertListResponse",
         "type": "object"
@@ -46787,7 +46822,7 @@
             "type": "string"
           },
           "delivery": {
-            "$ref": "#/components/schemas/AlertDeliverySettings"
+            "$ref": "#/components/schemas/AlertDeliverySettings-Output"
           },
           "fast_period": {
             "default": 12,
@@ -47059,6 +47094,35 @@
           "triggers"
         ],
         "title": "TradingAlertTriggerListResponse",
+        "type": "object"
+      },
+      "TradingAlertUnreadable": {
+        "description": "A stored alert that no longer reads; archive it with its revision.",
+        "properties": {
+          "alert_id": {
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "alert_id",
+          "instrument_id",
+          "revision",
+          "reason"
+        ],
+        "title": "TradingAlertUnreadable",
         "type": "object"
       },
       "TradingAlertUpdate": {
@@ -49294,7 +49358,6 @@
         "properties": {
           "kind": {
             "const": "trendline",
-            "default": "trendline",
             "title": "Kind",
             "type": "string"
           },
@@ -49309,6 +49372,7 @@
           }
         },
         "required": [
+          "kind",
           "points"
         ],
         "title": "TrendlineSource",
@@ -49320,7 +49384,6 @@
         "properties": {
           "kind": {
             "const": "trendline",
-            "default": "trendline",
             "title": "Kind",
             "type": "string"
           },
@@ -49335,8 +49398,8 @@
           }
         },
         "required": [
-          "points",
-          "kind"
+          "kind",
+          "points"
         ],
         "title": "TrendlineSource",
         "type": "object"
@@ -51449,7 +51512,6 @@
         "properties": {
           "kind": {
             "const": "value",
-            "default": "value",
             "title": "Kind",
             "type": "string"
           },
@@ -51467,6 +51529,7 @@
           }
         },
         "required": [
+          "kind",
           "value"
         ],
         "title": "ValueTarget",
@@ -51477,7 +51540,6 @@
         "properties": {
           "kind": {
             "const": "value",
-            "default": "value",
             "title": "Kind",
             "type": "string"
           },
@@ -51488,8 +51550,8 @@
           }
         },
         "required": [
-          "value",
-          "kind"
+          "kind",
+          "value"
         ],
         "title": "ValueTarget",
         "type": "object"
