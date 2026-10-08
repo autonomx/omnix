@@ -425,4 +425,37 @@ def test_keeping_the_stop_and_trail_keeps_the_water_mark(paper) -> None:
         paper.account_id,
         PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("10"), trail_percent=Decimal("5")),
     )
-    assert (retrailed.trail_water_mark, retrailed.trail_moved_at) == (None, None)
+    # A different trail starts a fresh water mark; the unchanged stop keeps its stamp.
+    assert (retrailed.trail_water_mark, retrailed.trail_moved_at) == (None, stop_move.trail_moved_at)
+
+
+def test_any_stop_edit_on_an_active_leg_is_stamped(paper) -> None:
+    _open_long(paper)
+    protections = paper.protections
+    before = datetime.now(timezone.utc)
+    plain = protections.upsert(
+        paper.account_id, PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("9")),
+    )
+    assert plain.status == "active" and plain.trail_moved_at is not None and plain.trail_moved_at >= before
+    same = protections.upsert(
+        paper.account_id,
+        PaperProtectionUpsert(instrument_id=paper.instrument_id, take_profit=Decimal("12"), stop_loss=Decimal("9")),
+    )
+    assert same.trail_moved_at == plain.trail_moved_at
+    tighter = protections.upsert(
+        paper.account_id, PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("9.5")),
+    )
+    assert tighter.trail_moved_at > plain.trail_moved_at
+
+    # Turning trailing on with a new stop starts a fresh trail, stamped too.
+    trailing = protections.upsert(
+        paper.account_id,
+        PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("9.6"), trail_percent=Decimal("5")),
+    )
+    assert trailing.trail_water_mark is None and trailing.trail_moved_at > tighter.trail_moved_at
+    # Changing only the trail keeps the stop's stamp.
+    retrailed = protections.upsert(
+        paper.account_id,
+        PaperProtectionUpsert(instrument_id=paper.instrument_id, stop_loss=Decimal("9.6"), trail_amount=Decimal("0.5")),
+    )
+    assert retrailed.trail_water_mark is None and retrailed.trail_moved_at == trailing.trail_moved_at

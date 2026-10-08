@@ -503,23 +503,25 @@ def paper_protection_trigger(
     A live minute bar may contain trades that happened before an entry filled in
     that same minute. In that case only the current executable price is used; a
     whole-bar high/low is trusted only when the bar started at or after activation.
-    A trailing stop's range check also needs the bar to start at or after the
-    stop last moved (``stop_moved_at``): an earlier bar's low may predate the
-    high that moved it.
+    The stop's range check also needs the bar to start strictly after the stop
+    last moved (``stop_moved_at``, see ``paper_observation_moment``): an
+    earlier or the same bar may hold a low from before the move.
     """
 
-    def window(since: datetime | None) -> tuple[Decimal, Decimal]:
+    def window(since: datetime | None, *, strict: bool) -> tuple[Decimal, Decimal]:
         use_range = observation.high is not None and observation.low is not None
         if since is not None:
-            use_range = use_range and _bar_evidence_is_after(observation, since)
+            use_range = use_range and (
+                _bar_starts_after(observation, since) if strict else _bar_evidence_is_after(observation, since)
+            )
         high = observation.high if use_range and observation.high is not None else observation.price
         low = observation.low if use_range and observation.low is not None else observation.price
         return high, low
 
-    high, low = window(activated_at)
+    high, low = window(activated_at, strict=False)
     stop_high, stop_low = high, low
-    if stop_moved_at is not None and (activated_at is None or stop_moved_at > activated_at):
-        stop_high, stop_low = window(stop_moved_at)
+    if stop_moved_at is not None and (activated_at is None or stop_moved_at >= activated_at):
+        stop_high, stop_low = window(stop_moved_at, strict=True)
     if is_long:
         if stop_price is not None and stop_low <= stop_price:
             return "stop"
@@ -565,6 +567,24 @@ def _bar_evidence_is_after(observation: PaperMarketObservation, moment: datetime
     return observation.bar_start_time.astimezone(timezone.utc) >= moment.astimezone(timezone.utc)
 
 
+def _bar_starts_after(observation: PaperMarketObservation, moment: datetime) -> bool:
+    if observation.bar_start_time is None:
+        return False
+    return observation.bar_start_time.astimezone(timezone.utc) > moment.astimezone(timezone.utc)
+
+
+def paper_observation_moment(observation: PaperMarketObservation) -> datetime:
+    """The moment a stop moved or triggered on this observation, for later range checks.
+
+    The quote's ``source_time`` can be a few seconds older than the forming
+    bar it arrives with, so the later of the two is used; only a bar that
+    starts strictly after this moment is known to hold no earlier prices.
+    """
+    if observation.bar_start_time is not None and observation.bar_start_time > observation.source_time:
+        return observation.bar_start_time
+    return observation.source_time
+
+
 def _price_window(
     order: PaperOrder,
     observation: PaperMarketObservation,
@@ -575,13 +595,14 @@ def _price_window(
     """Return (market side, current, high, low, used bar range) for a resting order.
 
     The bar's range is used only when the whole bar happened after the order
-    became executable and, with ``since``, after that moment too.
+    became executable and, with ``since`` (a trigger or a stop move), when
+    the bar started strictly after that moment.
     """
     use_range = (
         observation.high is not None
         and observation.low is not None
         and _bar_evidence_is_causal(order, observation, policy)
-        and (since is None or _bar_evidence_is_after(observation, since))
+        and (since is None or _bar_starts_after(observation, since))
     )
     market_side = observation.ask if order.side == "buy" else observation.bid
     current_price = market_side if market_side is not None else observation.price
@@ -613,8 +634,8 @@ def _stop_limit_decision(
     current executable price), and only when that is within the limit: a bar's
     range does not say whether its extreme came before or after the stop. A
     gap through both the stop and the limit leaves a resting limit order.
-    After the trigger, a bar's range counts only when the whole bar started at
-    or after the trigger.
+    After the trigger, a bar's range counts only when the bar started strictly
+    after the trigger.
     """
     assert order.stop_price is not None and order.limit_price is not None
     if order.stop_triggered_at is None:
@@ -686,7 +707,7 @@ def paper_order_state_update(
         return PaperOrderStateUpdate(
             stop_price=order.stop_price,
             trail_water_mark=None,
-            stop_triggered_at=observation.source_time,
+            stop_triggered_at=paper_observation_moment(observation),
         )
 
     _, current_price, high, low, _ = _price_window(order, observation, active)
@@ -709,7 +730,7 @@ def paper_order_state_update(
         stop_price=stop_price,
         trail_water_mark=water_mark,
         stop_triggered_at=None,
-        trail_moved_at=observation.source_time,
+        trail_moved_at=paper_observation_moment(observation),
     )
 
 

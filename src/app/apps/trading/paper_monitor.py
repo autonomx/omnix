@@ -19,6 +19,7 @@ from .providers.request_budget import in_provider_lane
 from .paper import (
     PaperMarketObservation,
     PaperOrderRequest,
+    paper_observation_moment,
     paper_order_is_expired,
     paper_price_tick,
     paper_protection_trigger,
@@ -171,7 +172,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             water_mark=water_mark,
             stop_loss=stop_loss,
             expected_revision=protection.revision,
-            moved_at=observation.source_time if stop_loss != protection.stop_loss else None,
+            moved_at=paper_observation_moment(observation) if stop_loss != protection.stop_loss else None,
         )
 
     @in_provider_lane("protective")
@@ -292,7 +293,8 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             target_price=protection.take_profit,
             observation=observation,
             activated_at=activated_at,
-            stop_moved_at=protection.trail_moved_at if protection.trailing else None,
+            # Any stop that moved (trailed or edited) is checked from its move.
+            stop_moved_at=protection.trail_moved_at,
         )
         if conflicting or trigger_kind is None:
             await self._trail_protection(

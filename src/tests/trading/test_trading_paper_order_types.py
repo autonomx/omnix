@@ -27,6 +27,7 @@ from app.apps.trading.paper import (
     paper_fill_decision,
     paper_order_expiry,
     paper_order_request_matches,
+    paper_observation_moment,
     paper_order_state_update,
     paper_protection_trigger,
     paper_trailing_protection_update,
@@ -196,7 +197,10 @@ def test_triggered_stop_limit_uses_a_bar_range_only_after_the_trigger() -> None:
         source_time=later, evaluated_at=later,
     )
     assert not paper_fill_decision(triggered, early_bar, POLICY).should_fill
-    after_bar = early_bar.model_copy(update={"bar_start_time": NOW})
+    # The bar that starts at the trigger moment may still hold earlier prices.
+    same_moment = early_bar.model_copy(update={"bar_start_time": NOW})
+    assert not paper_fill_decision(triggered, same_moment, POLICY).should_fill
+    after_bar = early_bar.model_copy(update={"bar_start_time": NOW + timedelta(seconds=1)})
     filled = paper_fill_decision(triggered, after_bar, POLICY)
     assert filled.should_fill and filled.fill_price == Decimal("101")
     assert filled.reason == "stop_limit_range_reached"
@@ -670,3 +674,67 @@ def test_trailing_stops_and_fills_round_to_the_tick_against_the_trader() -> None
         water_mark=None, observation=observation("104.37"), tick_size=tick,
     )
     assert leg == (Decimal("104.37"), Decimal("101.76"))
+
+
+def test_a_stale_quote_time_cannot_reopen_the_bar_that_moved_the_stop() -> None:
+    """The quote can be older than the forming bar it arrives with (probe_trailing2)."""
+    created = NOW - timedelta(minutes=5)
+    trailing = order("trailing_stop", "sell", trail_amount=Decimal("2"), created_at=created)
+    armed_at = created + timedelta(seconds=5)
+    state = paper_order_state_update(trailing, observation("100", source_time=armed_at, evaluated_at=armed_at), POLICY)
+    assert state is not None
+    armed = trailing.model_copy(update=state.model_dump())
+
+    bar = created + timedelta(minutes=1)
+    quote = bar - timedelta(seconds=2)  # quote time before the bar start, still fresh
+    tick1 = observation("104", high="105", low="99", bar_start_time=bar,
+                        source_time=quote, evaluated_at=bar + timedelta(seconds=3))
+    assert paper_observation_moment(tick1) == bar
+    state = paper_order_state_update(armed, tick1, POLICY)
+    assert state is not None and (state.stop_price, state.trail_moved_at) == (Decimal("103"), bar)
+    raised = armed.model_copy(update=state.model_dump())
+    tick2 = tick1.model_copy(update={"source_time": quote + timedelta(milliseconds=1)})
+    assert not paper_fill_decision(raised, tick2, POLICY).should_fill
+
+    # The bracket leg: the monitor stamps the same moment, and the re-polled bar cannot trigger it.
+    update = paper_trailing_protection_update(
+        is_long=True, stop_loss=Decimal("98"), trail_amount=Decimal("2"), trail_percent=None,
+        water_mark=None, observation=tick1, activated_at=created,
+    )
+    assert update == (Decimal("105"), Decimal("103"))
+    assert paper_protection_trigger(
+        is_long=True, stop_price=Decimal("103"), target_price=None, observation=tick2,
+        activated_at=created, stop_moved_at=paper_observation_moment(tick1),
+    ) is None
+    next_bar = tick2.model_copy(update={"bar_start_time": bar + timedelta(minutes=1), "low": Decimal("102.5")})
+    assert paper_protection_trigger(
+        is_long=True, stop_price=Decimal("103"), target_price=None, observation=next_bar,
+        activated_at=created, stop_moved_at=paper_observation_moment(tick1),
+    ) == "stop"
+
+
+def test_monitor_stamps_the_bar_start_when_a_stale_quote_moves_a_leg() -> None:
+    position = PaperPosition(instrument_id=CRYPTO, quantity=Decimal("2"), average_cost=Decimal("100"), realized_pnl=Decimal("0"))
+    leg = PaperPositionProtection(
+        account_id="paper-1", instrument_id=CRYPTO, stop_loss=Decimal("95"), trail_amount=Decimal("2"),
+        trail_water_mark=Decimal("100"), status="active", revision=2,
+        created_at=NOW - timedelta(days=1), updated_at=NOW - timedelta(days=1),
+    )
+    protections = _Protections(leg)
+    future_bar = datetime.now(timezone.utc) + timedelta(seconds=2)
+    asyncio.run(_monitor(_MonitorRepository([], [position]), protections, _Market("104", high="105", low="101", bar_start=future_bar)).run_once())
+    assert protections.trails[0]["moved_at"] == future_bar
+
+
+def test_monitor_checks_an_edited_plain_stop_from_its_edit() -> None:
+    position = PaperPosition(instrument_id=CRYPTO, quantity=Decimal("2"), average_cost=Decimal("100"), realized_pnl=Decimal("0"))
+    bar = datetime.now(timezone.utc) - timedelta(seconds=30)
+    plain = PaperPositionProtection(
+        account_id="paper-1", instrument_id=CRYPTO, stop_loss=Decimal("103"), status="active", revision=5,
+        trail_moved_at=bar + timedelta(seconds=10),
+        created_at=bar - timedelta(minutes=10), updated_at=bar - timedelta(minutes=10),
+    )
+    protections = _Protections(plain)
+    repository = _MonitorRepository([], [position])
+    asyncio.run(_monitor(repository, protections, _Market("104", high="105", low="99", bar_start=bar)).run_once())
+    assert repository.placed == [] and protections.trails == []

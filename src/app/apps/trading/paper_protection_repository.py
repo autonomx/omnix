@@ -18,6 +18,21 @@ _COLUMNS = """
 """
 
 
+# When an active leg's stop last moved (``trail_moved_at``; for any leg, not
+# only a trailing one). Saving an active leg with a new stop, or making a leg
+# active, stamps the database's wall clock (``clock_timestamp()``, not the
+# transaction start), so a bar that began before the edit cannot trigger the
+# new stop by its range. An unchanged stop on an active leg keeps its stamp.
+_STOP_MOVED_AT = """
+    CASE
+        WHEN EXCLUDED.status <> 'active' THEN NULL
+        WHEN omnix_trading_paper_protections.status <> 'active'
+            OR omnix_trading_paper_protections.stop_loss IS DISTINCT FROM EXCLUDED.stop_loss
+            THEN clock_timestamp()
+        ELSE omnix_trading_paper_protections.trail_moved_at
+    END
+"""
+
 # An edit of an active trailing leg that keeps its trail (a take-profit move,
 # or the chart sending the levels back) keeps its water mark. A changed stop
 # counts as a move of the trailed stop now; a stop looser than the trail
@@ -282,8 +297,11 @@ class TradingPaperProtectionRepository:
                     workspace_id, account_id, instrument_id, binding_id, binding_purpose,
                     entry_order_id, take_profit, stop_loss, status,
                     exit_order_id, trigger_reason, trail_amount, trail_percent,
-                    trail_water_mark
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, NULL)
+                    trail_water_mark, trail_moved_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, NULL,
+                    CASE WHEN %s::text = 'active' THEN clock_timestamp() END
+                )
                 ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                    SET binding_id = EXCLUDED.binding_id,
                        binding_purpose = EXCLUDED.binding_purpose,
@@ -294,11 +312,7 @@ class TradingPaperProtectionRepository:
                        trail_percent = EXCLUDED.trail_percent,
                        trail_water_mark = CASE WHEN {_KEEP_TRAIL}
                            THEN omnix_trading_paper_protections.trail_water_mark END,
-                       trail_moved_at = CASE WHEN {_KEEP_TRAIL} THEN
-                           CASE WHEN omnix_trading_paper_protections.stop_loss IS DISTINCT FROM EXCLUDED.stop_loss
-                                THEN CURRENT_TIMESTAMP
-                                ELSE omnix_trading_paper_protections.trail_moved_at END
-                           END,
+                       trail_moved_at = {_STOP_MOVED_AT},
                        status = EXCLUDED.status,
                        exit_order_id = NULL,
                        trigger_reason = NULL,
@@ -318,6 +332,7 @@ class TradingPaperProtectionRepository:
                     status,
                     request.trail_amount,
                     request.trail_percent,
+                    status,
                 ),
             ).fetchone()
             uow.commit()
