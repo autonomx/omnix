@@ -29,6 +29,7 @@ from .alert_conditions import (
     legacy_conditions,
     validate_conditions_against_registry,
 )
+from .alerts_delivery import enqueue_alert_deliveries
 from .alerts_evaluation import AlertConditionOutcome, ConditionObservation, operator_met, validate_conditions_can_fire
 from .indicators.engine import CORE_INDICATOR_FORMULA_VERSION
 
@@ -229,7 +230,9 @@ class _AlertWrite(_AlertContract):
         webhook = self.parameters.delivery.webhook
         if webhook is not None and webhook.url is not None:
             try:
-                webhook.url = check_outbound_url(webhook.url.strip())
+                # HTTPS only; loopback and private hosts only where OMNIX_ALLOWED_PRIVATE_NETWORKS allows them.
+                # Hostnames are resolved and checked again before every delivery (TVP-0.5a).
+                webhook.url = check_outbound_url(webhook.url.strip(), strict=True, https_only=True)
             except UrlPolicyError as exc:
                 raise ValueError(f"webhook url is not allowed: {exc}") from exc
         if self.condition_type == "conditions":
@@ -1017,6 +1020,8 @@ class TradingAlertRepository:
             ).fetchone()
             if inserted is not None:
                 inserted_trigger = _trigger(inserted)
+                # The outbox rows commit with the trigger: no trigger is lost or delivered twice by the outbox.
+                enqueue_alert_deliveries(connection, self.context.workspace_id, alert, inserted_trigger)
                 triggered_at = evaluated_at
                 if alert.frequency == "once":
                     enabled = False

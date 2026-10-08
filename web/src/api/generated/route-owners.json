@@ -445,6 +445,7 @@
     "GET /api/task-graph-runs/{run_id}/optimization": "agent-runtime",
     "GET /api/trading/alerts": "trading",
     "POST /api/trading/alerts": "trading",
+    "GET /api/trading/alerts/deliveries": "trading",
     "POST /api/trading/alerts/evaluate": "trading",
     "GET /api/trading/alerts/triggers": "trading",
     "DELETE /api/trading/alerts/{alert_id}": "trading",

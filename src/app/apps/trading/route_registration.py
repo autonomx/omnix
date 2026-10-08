@@ -65,6 +65,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
 
 def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
     """Each monitor is a task on the shared scheduler (WP-8.3); enablement stays with its module."""
+    from app.apps.trading.alerts_delivery import create_notification_delivery_monitor_task
     from app.apps.trading.alerts_monitor import create_trading_alert_monitor_task
     from app.apps.trading.execution_observation_monitor import create_trading_execution_observation_monitor_task
     from app.apps.trading.ibkr_market_data_monitor import create_trading_ibkr_market_data_monitor_task
@@ -91,6 +92,7 @@ def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
 
     monitor_tasks = (
         create_trading_alert_monitor_task,
+        create_notification_delivery_monitor_task,
         create_trading_execution_observation_monitor_task,
         create_trading_ibkr_market_data_monitor_task,
         create_trading_metric_monitor_task,

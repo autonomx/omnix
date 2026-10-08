@@ -26388,6 +26388,130 @@
         "title": "NonverbalEligibility",
         "type": "object"
       },
+      "NotificationDelivery": {
+        "description": "A delivery as the API shows it: status only, never a destination.",
+        "properties": {
+          "alert_id": {
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "channel": {
+            "enum": [
+              "webhook",
+              "email",
+              "push"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_id": {
+            "title": "Delivery Id",
+            "type": "string"
+          },
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status Code"
+          },
+          "max_attempts": {
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sending",
+              "delivered",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger_id": {
+            "title": "Trigger Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_id",
+          "trigger_id",
+          "alert_id",
+          "channel",
+          "status",
+          "attempts",
+          "max_attempts",
+          "next_attempt_at",
+          "last_attempt_at",
+          "last_error",
+          "last_status_code",
+          "delivered_at",
+          "created_at"
+        ],
+        "title": "NotificationDelivery",
+        "type": "object"
+      },
       "NoveltyShadowAnnotation": {
         "additionalProperties": false,
         "properties": {
@@ -46862,6 +46986,22 @@
           "alert_id"
         ],
         "title": "TradingAlertCreate",
+        "type": "object"
+      },
+      "TradingAlertDeliveryListResponse": {
+        "properties": {
+          "deliveries": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationDelivery"
+            },
+            "title": "Deliveries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deliveries"
+        ],
+        "title": "TradingAlertDeliveryListResponse",
         "type": "object"
       },
       "TradingAlertEvaluation": {
@@ -74546,6 +74686,70 @@
           }
         },
         "summary": "Create Alert",
+        "tags": [
+          "trading-alerts"
+        ]
+      }
+    },
+    "/api/trading/alerts/deliveries": {
+      "get": {
+        "description": "Webhook (and later email and push) deliveries, newest first: status, attempts and the last error code.",
+        "operationId": "list_deliveries_api_trading_alerts_deliveries_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "alert_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Alert Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlertDeliveryListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Deliveries",
         "tags": [
           "trading-alerts"
         ]
