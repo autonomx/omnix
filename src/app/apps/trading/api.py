@@ -228,9 +228,21 @@ def create_trading_router(
         interval: str = Query(default="1m", max_length=16),
         limit: int = Query(default=500, ge=1, le=5_000),
         binding_id: str | None = Query(default=None, max_length=240),
+        alignment: Literal["count", "clock"] = Query(default="count"),
+        extended_hours: bool = Query(default=True),
     ) -> BarsResponse:
         try:
             service = market_service_factory()
+            if alignment == "clock":
+                # Charts ask for clock-aligned derived intervals (TVP-2.5).
+                return service.bars(
+                    instrument_id,
+                    interval,
+                    limit,
+                    binding_id,
+                    alignment="clock",
+                    include_extended_hours=extended_hours,
+                )
             if binding_id is None:
                 return service.bars(instrument_id, interval, limit)
             return service.bars(instrument_id, interval, limit, binding_id)
@@ -257,7 +269,7 @@ def create_trading_router(
             instrument_id=instrument.instrument_id,
             session_calendar=instrument.session_calendar,
             exchange_timezone=instrument.exchange_timezone,
-            status=market_session_status(instrument.session_calendar, asset_class, now),
+            status=market_session_status(instrument.session_calendar, asset_class, now, instrument.venue),
             always_open=is_always_open(instrument.session_calendar, asset_class),
             as_of=now,
         )
@@ -344,8 +356,20 @@ def create_trading_router(
 
     def register_documents(path: str, record_type: str) -> None:
         @router.get(path, response_model=TradingDocumentListResponse, name=f"list_trading_{record_type}s")
-        def list_documents(limit: int = Query(default=100, ge=1, le=500)) -> TradingDocumentListResponse:
-            records = repository_factory().list(record_type, limit=limit)
+        def list_documents(
+            limit: int = Query(default=100, ge=1, le=500),
+            after_updated_at: str | None = Query(default=None, max_length=64),
+            after_record_id: str | None = Query(default=None, max_length=200),
+        ) -> TradingDocumentListResponse:
+            # Pages run newest first; a page's last (updated_at, record_id) asks for the next one.
+            if after_updated_at is not None and after_record_id is not None:
+                records = repository_factory().list(
+                    record_type,
+                    limit=limit,
+                    after=(after_updated_at, after_record_id),
+                )
+            else:
+                records = repository_factory().list(record_type, limit=limit)
             return TradingDocumentListResponse(records=[_document_response(record) for record in records])
 
         @router.post(path, response_model=TradingDocumentResponse, status_code=201, name=f"create_trading_{record_type}")

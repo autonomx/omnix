@@ -73615,6 +73615,30 @@
               ],
               "title": "Binding Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "alignment",
+            "required": false,
+            "schema": {
+              "default": "count",
+              "enum": [
+                "count",
+                "clock"
+              ],
+              "title": "Alignment",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "extended_hours",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Extended Hours",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -73871,6 +73895,40 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_updated_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Updated At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_record_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Record Id"
             }
           }
         ],
@@ -74650,6 +74708,40 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_updated_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Updated At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_record_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Record Id"
             }
           }
         ],
@@ -79296,6 +79388,40 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "after_updated_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Updated At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_record_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Record Id"
+            }
           }
         ],
         "responses": {
@@ -79532,6 +79658,40 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "after_updated_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Updated At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_record_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Record Id"
+            }
           }
         ],
         "responses": {
@@ -79767,6 +79927,40 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_updated_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Updated At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_record_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Record Id"
             }
           }
         ],

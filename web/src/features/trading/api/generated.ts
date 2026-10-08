@@ -12027,6 +12027,8 @@ export interface operations {
                 interval?: string;
                 limit?: number;
                 binding_id?: string | null;
+                alignment?: "count" | "clock";
+                extended_hours?: boolean;
             };
             header?: never;
             path?: never;
@@ -12209,6 +12211,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -12720,6 +12724,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -15888,6 +15894,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -16053,6 +16061,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -16218,6 +16228,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
             };
             header?: never;
             path?: never;

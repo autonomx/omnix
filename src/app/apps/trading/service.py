@@ -5,7 +5,7 @@ import threading
 from collections.abc import AsyncIterator
 from datetime import date, datetime, time, timedelta, timezone
 from threading import Lock
-from typing import Any
+from typing import Any, Literal
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
@@ -89,13 +89,20 @@ class TradingMarketDataService:
         limit: int = 500,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
+        *,
+        alignment: Literal["count", "clock"] = "count",
+        include_extended_hours: bool = True,
     ):
+        # Only the chart's /bars request asks for clock alignment (TVP-2.5);
+        # strategy and evidence callers keep count-mode aggregation.
         return self.registry.bars(
             instrument_id,
             interval,
             limit,
             binding_id,
             cancellation,
+            alignment=alignment,
+            include_extended_hours=include_extended_hours,
         )
 
     def recovered_bars(

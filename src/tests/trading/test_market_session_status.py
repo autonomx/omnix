@@ -77,3 +77,32 @@ def test_market_status_endpoint_reports_the_instrument_session() -> None:
 
     missing = client.get("/api/trading/market-status", params={"instrument_id": "unknown:instrument"})
     assert missing.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("moment", "expected"),
+    [
+        (datetime(2026, 12, 2, 15, 0, tzinfo=timezone.utc), "open"),  # 10:00 EST
+        (datetime(2026, 12, 2, 14, 15, tzinfo=timezone.utc), "pre_market"),  # 09:15 EST
+        (datetime(2026, 3, 9, 13, 45, tzinfo=timezone.utc), "open"),  # 09:45 EDT, first day after DST starts
+        (datetime(2026, 11, 2, 14, 15, tzinfo=timezone.utc), "pre_market"),  # 09:15 EST, first day after DST ends
+    ],
+)
+def test_market_status_endpoint_uses_the_exchange_clock_in_winter_and_after_dst(moment: datetime, expected: str) -> None:
+    equity = next(item for item in INSTRUMENTS if item.session_calendar == "XNYS")
+    app = FastAPI()
+    app.include_router(create_trading_router(clock=lambda: moment))
+    body = TestClient(app).get("/api/trading/market-status", params={"instrument_id": equity.instrument_id}).json()
+    assert body["status"] == expected
+
+
+def test_non_us_venues_report_unknown_even_with_a_placeholder_us_calendar() -> None:
+    moment = datetime(2026, 10, 7, 15, 0, tzinfo=timezone.utc)
+    assert market_session_status("XNYS", "equity", moment, "NASDAQ") == "open"
+    assert market_session_status("XNYS", "equity", moment, "LSE") == "unknown"
+    assert market_session_status("XNYS", "equity", moment, "TSX") == "unknown"
+    app = FastAPI()
+    app.include_router(create_trading_router(clock=lambda: moment))
+    body = TestClient(app).get("/api/trading/market-status", params={"instrument_id": "equity:LSE:VOD"}).json()
+    assert body["session_calendar"] == "XNYS"
+    assert body["status"] == "unknown"

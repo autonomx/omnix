@@ -5,7 +5,7 @@ import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from app.apps.trading.binding_authority import MarketDataAuthorityDecision, MarketDataCapability
 from app.apps.trading.cache import TradingMarketDataCache
@@ -24,6 +24,9 @@ from .aggregation import (
     aggregated_dataset_fingerprint,
     aggregation_plan,
 )
+from app.apps.trading.market_session_status import us_equity_rules_apply
+
+from .clock_aggregation import aggregate_market_bars_clock, clock_aggregated_dataset_fingerprint
 from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .base import MarketDataProvider
 from .binance import BinanceMarketDataProvider
@@ -312,6 +315,9 @@ class ProviderRegistry:
         interval: str,
         limit: int,
         cancellation: threading.Event | None,
+        *,
+        alignment: Literal["count", "clock"] = "count",
+        include_extended_hours: bool = True,
     ) -> BarsResponse:
         plan = aggregation_plan(interval, binding.supported_intervals)
         if plan is None:
@@ -326,6 +332,8 @@ class ProviderRegistry:
             base_limit,
             cancellation,
         )
+        if alignment == "clock":
+            return self._clock_aggregated(base_response, interval, base_interval, include_extended_hours)
         bars = aggregate_market_bars(
             base_response.bars,
             target_interval=interval,
@@ -352,6 +360,42 @@ class ProviderRegistry:
             }
         )
 
+    @staticmethod
+    def _clock_aggregated(
+        base_response: BarsResponse,
+        interval: str,
+        base_interval: str,
+        include_extended_hours: bool,
+    ) -> BarsResponse:
+        """Chart-only clock-aligned aggregation (TVP-2.5); count mode is what strategies read."""
+        instrument = base_response.instrument
+        calendar = (
+            instrument.session_calendar
+            if us_equity_rules_apply(instrument.session_calendar, instrument.venue)
+            else "24x7"
+        )
+        bars = aggregate_market_bars_clock(
+            list(base_response.bars),
+            target_interval=interval,
+            base_interval=base_interval,
+            calendar=calendar,
+            exchange_tz=instrument.exchange_timezone,
+            include_extended=include_extended_hours,
+            history_complete=base_response.provenance.history_complete,
+        )
+        provenance = base_response.provenance.model_copy(
+            update={
+                "as_of": bars[-1].end_time if bars else base_response.provenance.as_of,
+                "dataset_fingerprint": clock_aggregated_dataset_fingerprint(
+                    base_response.provenance.dataset_fingerprint,
+                    target_interval=interval,
+                    base_interval=base_interval,
+                    include_extended=include_extended_hours,
+                ),
+            }
+        )
+        return base_response.model_copy(update={"interval": interval, "bars": bars, "provenance": provenance})
+
     def bars(
         self,
         instrument_id: str,
@@ -359,6 +403,9 @@ class ProviderRegistry:
         limit: int,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
+        *,
+        alignment: Literal["count", "clock"] = "count",
+        include_extended_hours: bool = True,
     ) -> BarsResponse:
         requested = self.resolve_binding(instrument_id, binding_id)
         try:
@@ -369,6 +416,8 @@ class ProviderRegistry:
                 interval,
                 limit,
                 cancellation,
+                alignment=alignment,
+                include_extended_hours=include_extended_hours,
             )
         except ProviderFallbackEligibleError as primary_error:
             if requested.provider != "yahoo" or interval != "1d":
@@ -390,6 +439,8 @@ class ProviderRegistry:
                 interval,
                 limit,
                 cancellation,
+                alignment=alignment,
+                include_extended_hours=include_extended_hours,
             )
             result.provenance = result.provenance.model_copy(
                 update={
