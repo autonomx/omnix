@@ -19,7 +19,7 @@ function listed(label: string, tokens: readonly string[]): string {
 function importNotice(result: WatchlistImportResult): string {
   const count = watchlistSymbolIds(result.payload).length;
   const imported = `Imported ${count} ${count === 1 ? 'symbol' : 'symbols'}`;
-  return `${imported}${listed('not found', result.notFound)}${listed('on several exchanges, add the exchange', result.ambiguous)}.`;
+  return `${imported}${listed('not found', result.notFound)}${listed('ambiguous, add the exchange', result.ambiguous)}${listed('not searched (search limit reached)', result.notSearched)}.`;
 }
 
 /**
@@ -58,7 +58,7 @@ export function useTradingWatchlistImport({
       );
       onInstrumentsFound(result.instruments);
       if (!importHasSymbols(result)) {
-        setNotice(`No symbols in ${file.name} could be found, so no watchlist was created${listed('not found', result.notFound)}${listed('ambiguous', result.ambiguous)}.`);
+        setNotice(`No symbols in ${file.name} could be found, so no watchlist was created${listed('not found', result.notFound)}${listed('ambiguous', result.ambiguous)}${listed('not searched (search limit reached)', result.notSearched)}.`);
         return;
       }
       const created = await create(result.payload);

@@ -103,6 +103,25 @@ describe('watchlist text files', () => {
     expect(result.notFound).toEqual([]);
   });
 
+  it('prefers an exact spelling and reports a same-venue collision as ambiguous', async () => {
+    const classB = instrument('equity:NYSE:BRK-B', 'NYSE', 'BRK-B');
+    const otherTicker = instrument('equity:NYSE:BRKB', 'NYSE', 'BRKB');
+    const result = await importWatchlistText('Exact', 'NYSE:BRKB,NYSE:BRK-B,NYSE:BRK.B', [classB, otherTicker], vi.fn(async () => []));
+    expect(result.payload.items).toEqual([
+      { type: 'symbol', instrumentId: otherTicker.instrument_id },
+      { type: 'symbol', instrumentId: classB.instrument_id },
+    ]);
+    expect(result.ambiguous).toEqual(['NYSE:BRK.B']);
+  });
+
+  it('reports symbols beyond the search limit as not searched', async () => {
+    const search = vi.fn(async () => []);
+    const result = await importWatchlistText('Limit', 'LSE:ONE,LSE:TWO,LSE:THREE', [], search, { maxSearches: 1 });
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(result.notFound).toEqual(['LSE:ONE']);
+    expect(result.notSearched).toEqual(['LSE:TWO', 'LSE:THREE']);
+  });
+
   it('searches for a missing share class with the Omnix dash spelling', async () => {
     const search = vi.fn(async () => []);
     await importWatchlistText('Classes', 'NYSE:BF.B', [], search);

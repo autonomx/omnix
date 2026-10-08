@@ -116,22 +116,30 @@ function spotFirst(instruments: readonly CanonicalInstrument[]): CanonicalInstru
   return instruments.find((instrument) => instrument.instrument_type !== 'perpetual') ?? instruments[0];
 }
 
+function spelledExactly(instrument: CanonicalInstrument, symbol: string): boolean {
+  return instrument.display_symbol.toUpperCase() === symbol || instrument.venue_symbol.toUpperCase() === symbol;
+}
+
 /**
- * A full instrument id, else a symbol on its venue. A bare symbol listed on
- * several venues takes the one already in the user's watchlists, and is
- * reported as ambiguous when none is.
+ * A full instrument id, else a symbol (on its venue when one is given).
+ * An exact spelling wins over a match that only agrees once `.`, `-`, `_`
+ * and `/` are ignored. Several candidates resolve only when one is already
+ * in the user's watchlists, or when they are the spot and perpetual of one
+ * venue (spot wins); anything else is ambiguous.
  */
 function resolveEntry(index: InstrumentIndex, entry: SymbolEntry, preferredIds: ReadonlySet<string>): Resolution {
   const exact = index.get(entry.token);
   if (exact) return { instrument: exact };
   const matches = index.matches(entry);
-  if (matches.length === 0) return null;
-  if (!entry.exchange) {
-    const preferred = matches.filter((instrument) => preferredIds.has(binanceInstrumentIdFor(instrument.instrument_id)));
-    if (preferred.length) return { instrument: spotFirst(preferred) };
-    if (new Set(matches.map((instrument) => instrument.venue)).size > 1) return 'ambiguous';
-  }
-  return { instrument: spotFirst(matches) };
+  const spelled = matches.filter((instrument) => spelledExactly(instrument, entry.symbol));
+  const candidates = spelled.length ? spelled : matches;
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return { instrument: candidates[0] };
+  const preferred = candidates.filter((instrument) => preferredIds.has(binanceInstrumentIdFor(instrument.instrument_id)));
+  if (preferred.length) return { instrument: spotFirst(preferred) };
+  const oneVenue = new Set(candidates.map((instrument) => instrument.venue)).size === 1;
+  const nonPerpetual = candidates.filter((instrument) => instrument.instrument_type !== 'perpetual');
+  return oneVenue && nonPerpetual.length === 1 ? { instrument: nonPerpetual[0] } : 'ambiguous';
 }
 
 export type WatchlistImportResult = {
@@ -139,8 +147,10 @@ export type WatchlistImportResult = {
   /** Instruments found through search, for the caller's catalog. */
   instruments: CanonicalInstrument[];
   notFound: string[];
-  /** Bare symbols listed on several venues, none of them in the user's lists. */
+  /** Symbols matching several instruments, none of them in the user's lists. */
   ambiguous: string[];
+  /** Symbols beyond the search limit, never looked up. */
+  notSearched: string[];
 };
 
 const SEARCH_BATCH = 5;
@@ -168,9 +178,12 @@ export async function importWatchlistText(
   }
   const index = new InstrumentIndex(catalog);
   const found = new Set<CanonicalInstrument>();
-  const missing = [...new Map(symbols
+  const unresolved = [...new Map(symbols
     .filter((entry) => resolveEntry(index, entry, preferredIds) === null)
-    .map((entry) => [symbolKey(entry.symbol), entry])).values()].slice(0, options.maxSearches ?? 50);
+    .map((entry) => [symbolKey(entry.symbol), entry])).values()];
+  const maxSearches = options.maxSearches ?? 50;
+  const missing = unresolved.slice(0, maxSearches);
+  const skippedKeys = new Set(unresolved.slice(maxSearches).map((entry) => symbolKey(entry.symbol)));
   for (let start = 0; start < missing.length; start += SEARCH_BATCH) {
     const results = await Promise.all(missing.slice(start, start + SEARCH_BATCH)
       // Omnix symbols spell share classes with a dash.
@@ -185,6 +198,7 @@ export async function importWatchlistText(
   const used = new Set<CanonicalInstrument>();
   const notFound: string[] = [];
   const ambiguous: string[] = [];
+  const notSearched: string[] = [];
   for (const entry of entries) {
     if (entry.type === 'section') {
       items.push({ type: 'section', id: newWatchlistSectionId(), name: entry.name, collapsed: false });
@@ -192,13 +206,13 @@ export async function importWatchlistText(
     }
     const resolution = resolveEntry(index, entry, preferredIds);
     if (resolution === 'ambiguous') ambiguous.push(entry.token);
-    else if (!resolution) notFound.push(entry.token);
+    else if (!resolution) (skippedKeys.has(symbolKey(entry.symbol)) ? notSearched : notFound).push(entry.token);
     else {
       if (found.has(resolution.instrument)) used.add(resolution.instrument);
       items.push({ type: 'symbol', instrumentId: binanceInstrumentIdFor(resolution.instrument.instrument_id) });
     }
   }
-  return { payload: watchlistPayloadFromItems(name, items), instruments: [...used], notFound, ambiguous };
+  return { payload: watchlistPayloadFromItems(name, items), instruments: [...used], notFound, ambiguous, notSearched };
 }
 
 /** True when the import found at least one symbol worth a new watchlist. */
