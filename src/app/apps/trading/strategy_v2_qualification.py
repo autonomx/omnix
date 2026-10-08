@@ -162,6 +162,8 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
             "intraday_llm_interval_minutes",
             "universe_discovery_source",
             "research_score_adjustment_enabled",
+            # Which task runs the pass is operational, not strategy semantics.
+            "execution_owner",
         },
     )
     # Added after profiles were qualified (WP-8.3): only an enabled opt-in is

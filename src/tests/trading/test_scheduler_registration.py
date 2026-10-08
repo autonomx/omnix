@@ -31,9 +31,10 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     )
 
     *monitor_factories, runner_factory, handoff_import_factory = FEATURE.scheduled_tasks
-    # No runner strategy is registered yet, so the runner has no task; the
-    # prospective-gap input import runs by default.
-    assert runner_factory(context) is None
+    # The runner always has a task: a gap pullback configuration can move to
+    # it at any time (strategy runner WP). The prospective-gap input import
+    # runs by default.
+    assert runner_factory(context).task_id == "trading.strategy_runner"
     assert handoff_import_factory(context).task_id == "trading.prospective_gap_handoff_import"
     tasks = [factory(context) for factory in monitor_factories]
 

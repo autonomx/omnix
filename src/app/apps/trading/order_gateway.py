@@ -141,16 +141,14 @@ class StrategyPaperAccess:
 
 def strategy_paper_access(repository, *, monitor, config, strategy_repository, market_service) -> StrategyPaperAccess:
     """The paper account a strategy monitor runs one configuration against."""
-    import sys
-
-    from . import strategy_v2_qualification
+    from . import strategy_monitor, strategy_v2_qualification
 
     authorizer = StrategyEntryAuthorizer(
         monitor=monitor,
         config=config,
         strategy_repository=strategy_repository,
         market_service=market_service,
-        monitor_module=sys.modules[type(monitor).__module__],
+        monitor_module=strategy_monitor,
         qualification_module=strategy_v2_qualification,
     )
     gateway = OrderGateway(repository, entry_authorizer=authorizer)

@@ -277,6 +277,8 @@ async def run_config(
         market_service,
         universe,
     )
+    if not await monitor._proposals_evaluated(config, strategy_repository, proposals):
+        return
     if config.mode == "shadow" and proposals:
         for proposal in proposals:
             candidate = proposal.candidate

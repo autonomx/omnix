@@ -475,6 +475,23 @@ class StrategyRunHost:
 
         return await record_diagnostic_v2_candidates(self, config, strategy_repository, market_service, universe)
 
+    async def _proposals_evaluated(
+        self,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        proposals: list[_EntryProposal],
+    ) -> bool:
+        """See the pass's proposals before shadow observation or entry; False ends the pass.
+
+        While the strategy runner shadows the configuration, the owner records
+        its proposals as parity evidence.
+        """
+        from .strategy_runner_parity import record_parity_proposals, runner_shadowed
+
+        if proposals and runner_shadowed(config):
+            await record_parity_proposals(self, config, strategy_repository, proposals, source="monitor")
+        return True
+
 
     async def _run_stoch_rsi_5m_config(
         self,
@@ -607,6 +624,8 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
         self.managed_finviz_shadow_provision_error: str | None = None
 
     async def run_once(self) -> int:
+        from .strategy_runner_parity import runner_owned
+
         strategy_repository = self.strategy_repository_factory()
         paper_repository = self.paper_repository_factory()
         market_service = self.market_service_factory()
@@ -638,6 +657,9 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
             )
         try:
             for config in configs:
+                # The strategy runner runs these instead (strategy runner WP).
+                if runner_owned(config):
+                    continue
                 try:
                     await self._run_config(config, strategy_repository, paper_repository, market_service)
                 except Exception as exc:

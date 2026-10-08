@@ -4208,6 +4208,12 @@ export interface components {
              */
             execution_interval?: "1m" | "5m";
             /**
+             * Execution Owner
+             * @default monitor
+             * @enum {string}
+             */
+            execution_owner?: "monitor" | "runner_shadow" | "runner";
+            /**
              * Exit Rsi Period
              * @default 14
              */
@@ -4506,6 +4512,12 @@ export interface components {
              * @enum {string}
              */
             execution_interval: "1m" | "5m";
+            /**
+             * Execution Owner
+             * @default monitor
+             * @enum {string}
+             */
+            execution_owner: "monitor" | "runner_shadow" | "runner";
             /**
              * Exit Rsi Period
              * @default 14

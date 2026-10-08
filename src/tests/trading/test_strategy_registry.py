@@ -162,13 +162,15 @@ def test_the_registry_rejects_ambiguous_or_authority_widening_entries() -> None:
         STRATEGY_REGISTRY.get("unregistered_v1")
 
 
-def test_a_registered_runner_strategy_gets_the_scheduled_task(monkeypatch) -> None:
-    from app.runtime.scheduler import ScheduledTaskSpec
+def test_the_runner_task_always_runs_on_the_monitor_cadence(monkeypatch) -> None:
+    from app.runtime.scheduler import ScheduledTaskSpec, TaskExecutor
     from app.apps.trading.strategies import runner
 
-    assert runner.strategy_runner_task(None) is None
-    monkeypatch.setattr(runner, "STRATEGY_REGISTRY", STRATEGY_REGISTRY.with_entries(FakeBreakoutStrategy()))
+    # A gap pullback configuration can move to the runner at any time, so the
+    # task exists even with no registered runner strategy.
+    monkeypatch.setenv("OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS", "30")
     task = runner.strategy_runner_task(None)
     assert isinstance(task, ScheduledTaskSpec)
     assert task.task_id == "trading.strategy_runner"
-    assert task.interval_seconds == 60.0
+    assert task.interval_seconds == 30.0
+    assert task.executor == TaskExecutor.ASYNC

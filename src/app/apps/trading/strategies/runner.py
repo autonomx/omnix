@@ -5,18 +5,27 @@ kind is a registered ``Strategy``: it fetches the finalized bars the strategy
 declares, calls ``evaluate`` once, and records each proposal as a
 ``proposal`` strategy event. Runner strategies are shadow-only: proposals are
 evidence and never reach the order gateway from here.
+
+The runner also runs the gap pullback configurations whose
+``execution_owner`` names it (strategy runner WP, ``strategy_runner_pass``):
+those go through the monitor's own pass and entry path, so the order gateway's
+authorization, kill switches and protection arming apply unchanged.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .contract import Proposal, Strategy, StrategyContext
 from .registrations import STRATEGY_REGISTRY
 from .registry import StrategyRegistry
+
+if TYPE_CHECKING:
+    from ..strategy_runner_pass import RunnerOwnedConfigs
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +42,51 @@ class StrategyRunner:
         *,
         strategy_repository_factory: Callable[[], Any],
         market_service_factory: Callable[[], Any],
+        paper_repository_factory: Callable[[], Any] | None = None,
         registry: StrategyRegistry = STRATEGY_REGISTRY,
         clock: Callable[[], datetime] = _now,
+        owned_configs_enabled: Callable[[], bool] | None = None,
     ) -> None:
         self.strategy_repository_factory = strategy_repository_factory
         self.market_service_factory = market_service_factory
         self.registry = registry
         self.clock = clock
+        self.paper_repository_factory = paper_repository_factory
+        self.owned_configs_enabled = owned_configs_enabled
+        # Built on the first cycle, so booting the runner imports none of the
+        # monitor's pass.
+        self.owned_configs: RunnerOwnedConfigs | None = None
+
+    def _owned_configs(self) -> RunnerOwnedConfigs | None:
+        if self.owned_configs is None and self.paper_repository_factory is not None:
+            from ..strategy_runner_pass import RunnerOwnedConfigs
+
+            options: dict[str, Any] = {}
+            if self.owned_configs_enabled is not None:
+                options["enabled"] = self.owned_configs_enabled
+            self.owned_configs = RunnerOwnedConfigs(
+                strategy_repository_factory=self.strategy_repository_factory,
+                paper_repository_factory=self.paper_repository_factory,
+                market_service_factory=self.market_service_factory,
+                clock=self.clock,
+                **options,
+            )
+        return self.owned_configs
+
+    async def run_cycle(self) -> int:
+        """One scheduled cycle: the registered strategies, then the gap pullback
+        configurations the runner owns or shadows. Returns the proposals recorded
+        plus the paper orders placed."""
+        recorded = await asyncio.to_thread(self.run_once)
+        owned_configs = self._owned_configs()
+        if owned_configs is not None:
+            recorded += await owned_configs.run_once()
+        return recorded
+
+    async def close(self) -> None:
+        """Stop the intraday LLM annotations a runner-owned pass started."""
+        if self.owned_configs is not None:
+            await self.owned_configs.host.intraday_llm_annotations.close()
 
     def run_once(self) -> int:
         """Evaluate every runnable configuration; return the proposals recorded."""
@@ -116,23 +163,35 @@ def _proposal_event(strategy: Strategy, config, proposal: Proposal, observed_at:
 
 
 def strategy_runner_task(context) -> Any:
-    """The runner's scheduled task, or None while no runner strategy is registered."""
-    if not STRATEGY_REGISTRY.runner_strategies():
-        return None
+    """The runner's scheduled task.
+
+    It always runs: a gap pullback configuration can move to the runner at
+    any time. Its cadence is the strategy monitor's, so a runner-owned
+    configuration sees every finalized bar the monitor would.
+    """
     from app.runtime.scheduler import ScheduledTaskSpec
 
+    from ..paper_runtime_repository import default_runtime_paper_repository
     from ..service import default_market_data_service
+    from ..strategy_monitor import _interval_seconds
     from ..strategy_repository import default_strategy_repository
 
     runner = StrategyRunner(
         strategy_repository_factory=default_strategy_repository,
         market_service_factory=default_market_data_service,
+        paper_repository_factory=default_runtime_paper_repository,
     )
+    interval_seconds = _interval_seconds()
+
+    async def run(_task_context) -> int:
+        return await runner.run_cycle()
+
     return ScheduledTaskSpec(
         task_id=TASK_ID,
-        run=lambda _task_context: runner.run_once(),
-        interval_seconds=60.0,
-        jitter_seconds=3.0,
-        timeout_seconds=120.0,
-        executor="thread",
+        run=run,
+        interval_seconds=interval_seconds,
+        jitter_seconds=min(1.0, interval_seconds * 0.05),
+        timeout_seconds=max(120.0, interval_seconds),
+        executor="async",
+        on_shutdown=(runner.close,),
     )

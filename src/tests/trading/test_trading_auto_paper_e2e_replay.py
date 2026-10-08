@@ -53,6 +53,13 @@ from app.apps.trading.strategies import evaluate_gap_pullback
 from app.apps.trading.strategies.models import StrategyRiskProfile
 from app.apps.trading.strategy_data_integrity import finviz_atomic_source_locator
 from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+from app.apps.trading.strategies.runner import StrategyRunner
+from app.apps.trading.strategy_runner_parity import (
+    MONITOR_PARITY_EVENT,
+    PARITY_EVENT_TYPES,
+    RUNNER_PARITY_EVENT,
+    parity_report,
+)
 from app.apps.trading.strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -485,14 +492,16 @@ def _seed_reviewed_qualification(repository: InMemoryStrategyRepository, config:
     assert evaluate_v2_prospective_qualification(config, repository.events).auto_paper_authorized is True
 
 
-def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatch) -> None:
+def _replay_session(monkeypatch, *, execution_owner: str = "monitor") -> SimpleNamespace:
+    """The Sep 3 TLYS replay at 09:41 ET: one configuration, its frozen universe,
+    reviewed qualification, an empty paper account and the monitor."""
     fixture = _load_fixture()
     selected = fixture["selected"]
     assumptions = fixture["execution_assumptions"]
     assert isinstance(selected, dict)
     assert isinstance(assumptions, dict)
 
-    value = managed_finviz_v2_config()
+    value = managed_finviz_v2_config().model_copy(update={"execution_owner": execution_owner})
     config = TradingStrategyConfigDocument(
         strategy_id="sep3-tlys-auto-paper-e2e",
         account_id="paper-sep3-e2e",
@@ -594,6 +603,45 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatc
         market_service_factory=lambda: market_service,
         interval_seconds=5,
     )
+    return SimpleNamespace(
+        selected=selected,
+        config=config,
+        candidate=candidate,
+        strategy_repository=strategy_repository,
+        paper_repository=paper_repository,
+        market_service=market_service,
+        monitor=monitor,
+        clock=lambda: REPLAY_RUNTIME_NOW,
+    )
+
+
+def _fill_observation(session: SimpleNamespace) -> PaperMarketObservation:
+    return PaperMarketObservation(
+        instrument_id=session.candidate.instrument_id,
+        binding_id=session.candidate.binding_id,
+        provider="alpaca_iex",
+        price=session.market_service.execution.last,
+        bid=session.market_service.execution.bid,
+        ask=session.market_service.execution.ask,
+        bid_size=session.market_service.execution.bid_size,
+        ask_size=session.market_service.execution.ask_size,
+        high=session.market_service.execution.high,
+        low=session.market_service.execution.low,
+        volume=session.market_service.execution.bar_volume,
+        bar_start_time=session.market_service.execution.bar_start_time,
+        source_time=REPLAY_RUNTIME_NOW + timedelta(seconds=1),
+        evaluated_at=REPLAY_RUNTIME_NOW + timedelta(seconds=1),
+        execution_eligible=True,
+        freshness_mode="live",
+        halted=False,
+    )
+
+
+def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatch) -> None:
+    session = _replay_session(monkeypatch)
+    selected, config = session.selected, session.config
+    strategy_repository, paper_repository = session.strategy_repository, session.paper_repository
+    monitor = session.monitor
     submitted = asyncio.run(monitor.run_once())
     assert submitted == 1
     assert monitor.paper_order_count == 1
@@ -611,25 +659,7 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatc
     snapshot = paper_repository.snapshot(config.account_id)
     assert len(snapshot.open_orders) == 1
     order = snapshot.open_orders[0]
-    observation = PaperMarketObservation(
-        instrument_id=candidate.instrument_id,
-        binding_id=candidate.binding_id,
-        provider="alpaca_iex",
-        price=market_service.execution.last,
-        bid=market_service.execution.bid,
-        ask=market_service.execution.ask,
-        bid_size=market_service.execution.bid_size,
-        ask_size=market_service.execution.ask_size,
-        high=market_service.execution.high,
-        low=market_service.execution.low,
-        volume=market_service.execution.bar_volume,
-        bar_start_time=market_service.execution.bar_start_time,
-        source_time=REPLAY_RUNTIME_NOW + timedelta(seconds=1),
-        evaluated_at=REPLAY_RUNTIME_NOW + timedelta(seconds=1),
-        execution_eligible=True,
-        freshness_mode="live",
-        halted=False,
-    )
+    observation = _fill_observation(session)
     fills = paper_repository.process_observation(config.account_id, observation)
     assert len(fills) == 1
 
@@ -649,3 +679,122 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatc
         f"symbol={selected['symbol']} order={order.order_id} qty={fills[0].quantity} "
         f"fill={fills[0].price} authorization={authorization.state} protection={protections[0].status}"
     )
+
+
+def _without_run_ids(value):
+    if isinstance(value, dict):
+        return {key: _without_run_ids(item) for key, item in value.items() if key != "run_id"}
+    if isinstance(value, list):
+        return [_without_run_ids(item) for item in value]
+    return value
+
+
+def _trade_record(session: SimpleNamespace, *, ignore_event_types: tuple[str, ...] = ()) -> dict[str, object]:
+    """Everything the session's trade left behind, minus the run that made it."""
+    config = session.config
+    return {
+        "orders": [order.model_dump(mode="json") for order in session.paper_repository.orders.values()],
+        "protections": [
+            protection.model_dump(mode="json")
+            for protection in session.strategy_repository.list_protections(config.strategy_id, active_only=False)
+        ],
+        "events": [
+            _without_run_ids(event.model_dump(mode="json"))
+            for event in session.strategy_repository.events
+            if event.event_type not in ignore_event_types
+        ],
+    }
+
+
+def _runner(session: SimpleNamespace) -> StrategyRunner:
+    return StrategyRunner(
+        strategy_repository_factory=lambda: session.strategy_repository,
+        market_service_factory=lambda: session.market_service,
+        paper_repository_factory=lambda: session.paper_repository,
+        clock=session.clock,
+        owned_configs_enabled=lambda: True,
+    )
+
+
+def _monitor_owned_trade(monkeypatch) -> dict[str, object]:
+    session = _replay_session(monkeypatch)
+    assert asyncio.run(session.monitor.run_once()) == 1
+    session.paper_repository.process_observation(session.config.account_id, _fill_observation(session))
+    assert asyncio.run(session.monitor.run_once()) == 0
+    return _trade_record(session)
+
+
+def test_the_runner_as_owner_places_the_identical_auto_paper_trade(monkeypatch) -> None:
+    expected = _monitor_owned_trade(monkeypatch)
+    assert len(expected["orders"]) == len(expected["protections"]) == 1
+    assert {"trade_authorization", "risk_decision", "entry_order_submitted"} <= {
+        event["event_type"] for event in expected["events"]
+    }
+
+    session = _replay_session(monkeypatch, execution_owner="runner")
+    runner = _runner(session)
+    # The monitor leaves a runner-owned configuration alone.
+    seeded = list(session.strategy_repository.events)
+    assert asyncio.run(session.monitor.run_once()) == 0
+    assert session.strategy_repository.events == seeded
+    assert session.paper_repository.orders == {}
+
+    assert asyncio.run(runner.run_cycle()) == 1
+    fills = session.paper_repository.process_observation(session.config.account_id, _fill_observation(session))
+    assert len(fills) == 1
+    assert asyncio.run(runner.run_cycle()) == 0
+    assert asyncio.run(session.monitor.run_once()) == 0
+
+    record = _trade_record(session)
+    assert len(record["orders"]) == 1
+    [protection] = session.strategy_repository.list_protections(session.config.strategy_id, active_only=True)
+    assert protection.status == "active"
+    assert [event.event_type for event in session.strategy_repository.events].count("trade_authorization") == 1
+    assert all(event.run_id.startswith("runner-") for event in session.strategy_repository.events if event.run_id)
+    # Same order, protection and strategy events as the monitor's trade.
+    assert record == expected
+
+
+def test_a_runner_shadow_records_parity_without_touching_the_trade(monkeypatch) -> None:
+    expected = _monitor_owned_trade(monkeypatch)
+
+    session = _replay_session(monkeypatch, execution_owner="runner_shadow")
+    runner = _runner(session)
+    assert asyncio.run(session.monitor.run_once()) == 1
+    before = _trade_record(session)
+
+    # The runner's pass ends at its proposals: no order, no protection, no other event.
+    assert asyncio.run(runner.run_cycle()) == 0
+    after = _trade_record(session, ignore_event_types=(RUNNER_PARITY_EVENT,))
+    assert after == before
+
+    report = parity_report(session.strategy_repository.events)
+    assert report["parity"] is True
+    assert report["matched"] == report["monitor_proposals"] == report["runner_proposals"] == 1
+
+    session.paper_repository.process_observation(session.config.account_id, _fill_observation(session))
+    assert asyncio.run(session.monitor.run_once()) == 0
+    assert asyncio.run(runner.run_cycle()) == 0
+    # Apart from the parity evidence, the monitor's trade is the one it places alone.
+    assert _trade_record(session, ignore_event_types=PARITY_EVENT_TYPES) == expected
+
+
+def test_parity_reports_proposals_only_one_side_made() -> None:
+    def proposal(event_type: str, attempt: str, signal: dict[str, str]) -> StrategyEvent:
+        return StrategyEvent(
+            strategy_id="s", event_id=attempt + event_type[:1], instrument_id="i", event_type=event_type,
+            state="entry_ready", observed_at=REPLAY_RUNTIME_NOW, idempotency_key=attempt + event_type,
+            payload={"trade_attempt_id": attempt, "signal": signal},
+        )
+
+    report = parity_report([
+        proposal(MONITOR_PARITY_EVENT, "a", {"entry": "1"}),
+        proposal(RUNNER_PARITY_EVENT, "a", {"entry": "1"}),
+        proposal(MONITOR_PARITY_EVENT, "b", {"entry": "1"}),
+        proposal(RUNNER_PARITY_EVENT, "c", {"entry": "1"}),
+        proposal(MONITOR_PARITY_EVENT, "d", {"entry": "1"}),
+        proposal(RUNNER_PARITY_EVENT, "d", {"entry": "2"}),
+    ])
+    assert report["parity"] is False
+    assert report["matched"] == 1
+    assert (report["monitor_only"], report["runner_only"], report["signal_mismatch"]) == (["b"], ["c"], ["d"])

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 StrategyMode = Literal["off", "shadow", "auto_paper"]
+StrategyExecutionOwner = Literal["monitor", "runner_shadow", "runner"]
 GapPullbackState = Literal[
     "discovered",
     "qualified_gap",
@@ -141,6 +142,14 @@ class GapPullbackConfig(BaseModel):
     intraday_llm_top_n: int = Field(default=5, ge=1, le=20)
     # Heartbeat for top active names; material events can invoke the LLM sooner.
     intraday_llm_interval_minutes: int = Field(default=10, ge=5, le=60)
+
+    # Which scheduled task runs this configuration (strategy runner WP). The
+    # monitor by default; ``runner_shadow`` keeps the monitor as owner while the
+    # strategy runner records its own proposals as parity evidence; ``runner``
+    # moves the whole pass to the strategy runner. Both run the same pass and
+    # entry path through the same order gateway, so the owner never changes
+    # what may be traded.
+    execution_owner: StrategyExecutionOwner = "monitor"
 
     @model_validator(mode="after")
     def validate_range(self):

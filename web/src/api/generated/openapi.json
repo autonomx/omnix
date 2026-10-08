@@ -16031,6 +16031,16 @@
             "title": "Execution Interval",
             "type": "string"
           },
+          "execution_owner": {
+            "default": "monitor",
+            "enum": [
+              "monitor",
+              "runner_shadow",
+              "runner"
+            ],
+            "title": "Execution Owner",
+            "type": "string"
+          },
           "exit_rsi_period": {
             "default": 14,
             "maximum": 100,
@@ -16567,6 +16577,16 @@
             "title": "Execution Interval",
             "type": "string"
           },
+          "execution_owner": {
+            "default": "monitor",
+            "enum": [
+              "monitor",
+              "runner_shadow",
+              "runner"
+            ],
+            "title": "Execution Owner",
+            "type": "string"
+          },
           "exit_rsi_period": {
             "default": 14,
             "maximum": 100,
@@ -16934,7 +16954,8 @@
           "stoch_trend_capture_enabled",
           "intraday_llm_enabled",
           "intraday_llm_top_n",
-          "intraday_llm_interval_minutes"
+          "intraday_llm_interval_minutes",
+          "execution_owner"
         ],
         "title": "GapPullbackConfig",
         "type": "object"
