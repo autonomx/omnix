@@ -57,7 +57,7 @@ export function TradingPinePanel({
         <span>{selected.id.toUpperCase()} · {selected.period} · Pine v6</span>
       </div>
       <div className="trading-pine-notice"><span aria-hidden="true">!</span><strong>This script is read-only.</strong><span>Use Copy script to create an editable version.</span></div>
-      <div className="trading-pine-code" role="textbox" aria-label="Pine Script source" aria-readonly="true" tabIndex={0}>
+      <div className="trading-pine-code" role="textbox" aria-label="Script source (Pine-compatible)" aria-readonly="true" tabIndex={0}>
         {lines.map((line, index) => (
           <div className="trading-pine-code-line" key={`${index}-${line}`}>
             <span aria-hidden="true">{index + 1}</span>
