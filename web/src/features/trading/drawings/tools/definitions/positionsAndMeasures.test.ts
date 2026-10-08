@@ -91,7 +91,7 @@ describe('long and short position (TVP-3.6)', () => {
       services(series(flat(5))),
     );
     expect(request).toEqual({ type: 'order-ticket', payload: { instrumentId: 'crypto:BTC', side: 'buy', entry: 100, stop: 95, target: 110, quantity: 4 } });
-    expect(parsePaperTicketRequest(request.payload)).toEqual({ instrumentId: 'crypto:BTC', side: 'buy', entry: 100, stop: 95, target: 110, quantity: 4 });
+    expect(parsePaperTicketRequest(request.payload)).toEqual({ instrumentId: 'crypto:BTC', side: 'buy', orderType: 'limit', entry: 100, stop: 95, target: 110, quantity: 4 });
     expect(parsePaperTicketRequest({ side: 'buy', entry: 100 })).toBeNull();
   });
 });

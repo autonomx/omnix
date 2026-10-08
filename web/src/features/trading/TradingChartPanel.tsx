@@ -14,12 +14,14 @@ import { ChartPanelOverlays, ChartPanelContextMenu } from './TradingChartPanelOv
 import { ChartPanelFooter } from './TradingChartPanelFooter';
 import { useTradingChartPanelCommands } from './commands/useTradingChartPanelCommands';
 import { useTradingDrawingCommands } from './commands/useTradingDrawingCommands';
+import { useTradingOrderHotkeys } from './commands/useTradingOrderHotkeys';
 import { TradingBarCountdown } from './TradingChartWorkflowControls';
 
 export function TradingChartPanel(props: TradingChartPanelProps) {
   const ws = useTradingChartPanel(props);
   useTradingChartPanelCommands(ws);
   useTradingDrawingCommands(ws);
+  useTradingOrderHotkeys({ active: ws.active, adapter: ws.adapter, instrumentId: ws.instrumentId, lastPrice: () => { const close = Number(ws.latest?.close); return Number.isFinite(close) ? close : null; } });
   const {
     active, adapter, chartFocusMode, chartId, chartPanning, chartQuery, compareDialogOpen, comparisons,
     barCountdownVisible, drawingTool, handleReplayStageClick, handleStageContextMenu, handleStageDoubleClick,
