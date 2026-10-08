@@ -6,12 +6,14 @@ import { binanceInstrumentIdFor } from '../cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
   MAX_TRADING_TABS,
+  type TradingChartSettings,
   type TradingChartState,
   type TradingLayout,
   type TradingLinkState,
   type TradingPanelState,
 } from '../tradingStore';
 import type { TradingComparison, TradingComparisonPlacement } from '../tradingComparisons';
+import { normalizeFavoriteIntervals } from '../tradingIntervals';
 
 export type TradingWorkspacePayload = {
   schemaVersion: 3;
@@ -22,6 +24,8 @@ export type TradingWorkspacePayload = {
   links: TradingLinkState;
   panels: TradingPanelState;
   favoriteInstrumentIds: string[];
+  /** Interval favourites (TVP-2.5); absent in documents saved before them. */
+  favoriteIntervals?: string[];
   activeTabId?: string;
   tabs?: TradingTabPayload[];
 };
@@ -36,10 +40,11 @@ export type TradingTabPayload = {
   panels: TradingPanelState;
 };
 
-type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId' | 'comparisons'> & {
+type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId' | 'comparisons' | 'settings'> & {
   indicators?: CoreIndicatorInstance[];
   bindingId?: string | null;
   comparisons?: TradingComparison[];
+  settings?: TradingChartSettings;
 };
 
 type LegacyLayout = 'one' | 'two-horizontal' | 'two-vertical' | 'four';
@@ -59,6 +64,7 @@ export function serializeTradingWorkspace(input: {
   links: TradingLinkState;
   panels?: TradingPanelState;
   favoriteInstrumentIds?: string[];
+  favoriteIntervals?: string[];
   activeTabId?: string;
   tabs?: TradingTabPayload[];
 }): TradingWorkspacePayload {
@@ -67,31 +73,56 @@ export function serializeTradingWorkspace(input: {
     name: input.name?.trim() || 'Main Workspace',
     layout: input.layout,
     activeChartId: input.activeChartId,
-    charts: input.charts.map((chart) => ({
-      ...chart,
-      bindingId: chart.bindingId ?? null,
-      indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
-      comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
-    })),
+    charts: input.charts.map(serializeChart),
     links: { ...input.links },
     panels: { ...(input.panels ?? { right: true, bottom: true }) },
     favoriteInstrumentIds: [...new Set(input.favoriteInstrumentIds ?? [])],
   };
+  if (input.favoriteIntervals) payload.favoriteIntervals = [...input.favoriteIntervals];
   if (input.activeTabId && input.tabs?.length) {
     payload.activeTabId = input.activeTabId;
     payload.tabs = input.tabs.map((tab) => ({
       ...tab,
-      charts: tab.charts.map((chart) => ({
-        ...chart,
-        bindingId: chart.bindingId ?? null,
-        indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
-        comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
-      })),
+      charts: tab.charts.map(serializeChart),
       links: { ...tab.links },
       panels: { ...tab.panels },
     }));
   }
   return payload;
+}
+
+function serializeChart(chart: PersistableChart): TradingChartState {
+  const { settings, ...rest } = chart;
+  return {
+    ...rest,
+    bindingId: chart.bindingId ?? null,
+    indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
+    comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
+    ...(settings && Object.keys(settings).length > 0 ? { settings: { ...settings } } : {}),
+  };
+}
+
+const CHART_SETTING_KEYS = ['barCountdown', 'extendedHours', 'extendedPriceLine'] as const;
+
+/** The chart settings a document may carry; unknown keys are dropped and wrong types reject it. */
+export function parseChartSettings(value: unknown): TradingChartSettings | null {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const settings: TradingChartSettings = {};
+  for (const key of CHART_SETTING_KEYS) {
+    if (raw[key] === undefined) continue;
+    if (typeof raw[key] !== 'boolean') return null;
+    settings[key] = raw[key] as boolean;
+  }
+  return settings;
+}
+
+/** Validated indicator instances, or null when any entry is malformed. */
+export function parseIndicatorInstances(value: unknown): CoreIndicatorInstance[] | null {
+  if (!Array.isArray(value)) return null;
+  const indicators = value.filter(indicator);
+  return indicators.length === value.length ? indicators.map((item) => ({ ...item })) : null;
 }
 
 function indicator(value: unknown): value is CoreIndicatorInstance {
@@ -160,6 +191,8 @@ function parseCharts(value: unknown): TradingChartState[] | null {
     if (Array.isArray(chart.indicators) && indicators.length !== chart.indicators.length) return null;
     const comparisons = Array.isArray(chart.comparisons) ? chart.comparisons.filter(comparison) : [];
     if (Array.isArray(chart.comparisons) && comparisons.length !== chart.comparisons.length) return null;
+    const settings = parseChartSettings(chart.settings);
+    if (settings === null) return null;
     charts.push({
       chartId: chart.chartId,
       instrumentId: chart.instrumentId,
@@ -168,6 +201,7 @@ function parseCharts(value: unknown): TradingChartState[] | null {
       chartType: chart.chartType,
       indicators,
       comparisons,
+      ...(Object.keys(settings).length > 0 ? { settings } : {}),
     });
   }
   if (new Set(charts.map((chart) => chart.chartId)).size !== charts.length) return null;
@@ -295,6 +329,8 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
     panels: parsePanels(payload.panels),
     favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
   };
+  const favoriteIntervals = normalizeFavoriteIntervals(payload.favoriteIntervals);
+  if (favoriteIntervals) result.favoriteIntervals = favoriteIntervals;
   if (parsedTabs) {
     const migratedTabs = parsedTabs.map((tab) => ({
       ...tab,

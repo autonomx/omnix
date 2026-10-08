@@ -110,6 +110,32 @@ describe('Trading workspace document', () => {
     })).toBeNull();
   });
 
+  it('round trips interval favourites and per-chart settings (TVP-2.5)', () => {
+    const serialized = serializeTradingWorkspace({
+      ...state,
+      favoriteIntervals: ['7m', '4h'],
+      charts: [{ ...state.charts[0], interval: '7m', settings: { barCountdown: false, extendedHours: false } }],
+      activeChartId: 'chart-1',
+    });
+    expect(serialized.favoriteIntervals).toEqual(['7m', '4h']);
+    expect(serialized.charts[0].settings).toEqual({ barCountdown: false, extendedHours: false });
+    expect(parseTradingWorkspace(serialized)).toEqual(serialized);
+  });
+
+  it('drops malformed favourites, keeps documents without them, and rejects malformed chart settings', () => {
+    const legacy = serializeTradingWorkspace(state);
+    expect(parseTradingWorkspace(legacy)?.favoriteIntervals).toBeUndefined();
+    expect(parseTradingWorkspace({ ...legacy, favoriteIntervals: ['7m', 'nonsense', 3] })?.favoriteIntervals).toEqual(['7m']);
+    expect(parseTradingWorkspace({
+      ...legacy,
+      charts: [{ ...legacy.charts[0], settings: { extendedHours: 'no' } }],
+    })).toBeNull();
+    expect(parseTradingWorkspace({
+      ...legacy,
+      charts: [{ ...legacy.charts[0], settings: { extendedHours: true, unknown: 1 } }],
+    })?.charts[0].settings).toEqual({ extendedHours: true });
+  });
+
   it('does not persist runtime functions or provider payloads', () => {
     const serialized = serializeTradingWorkspace(state);
     const text = JSON.stringify(serialized);

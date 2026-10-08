@@ -3,6 +3,7 @@ import { tradingApi } from '../tradingApi';
 import { useTradingStore } from '../tradingStore';
 import type { TradingDocument } from '../tradingTypes';
 import { tradingDraftRecovery } from './draftRecovery';
+import { DEFAULT_FAVORITE_INTERVALS } from '../tradingIntervals';
 import {
   parseTradingWorkspace,
   serializeTradingWorkspace,
@@ -25,7 +26,8 @@ export type TradingWorkspacePersistence = {
   activeWorkspaceName: string;
   hasConflict: boolean;
   selectWorkspace: (workspaceId: string) => Promise<void>;
-  createWorkspace: (name: string) => Promise<void>;
+  /** `prepare` runs after the new workspace document exists and before it becomes active (TVP-2.5 duplicates drawings there). */
+  createWorkspace: (name: string, prepare?: (workspaceId: string) => Promise<void>) => Promise<void>;
   renameWorkspace: (name: string) => Promise<void>;
   deleteWorkspace: () => Promise<void>;
   resolveConflict: (resolution: 'reload' | 'overwrite') => Promise<void>;
@@ -89,6 +91,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       links: state.links,
       panels: state.panels,
       favoriteInstrumentIds: state.favoriteInstrumentIds,
+      favoriteIntervals: state.favoriteIntervals,
       activeTabId: state.activeTabId,
       tabs: state.tabs,
     });
@@ -121,6 +124,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       links: activeTab.links,
       panels: activeTab.panels,
       favoriteInstrumentIds: payload.favoriteInstrumentIds,
+      favoriteIntervals: payload.favoriteIntervals ?? [...DEFAULT_FAVORITE_INTERVALS],
     });
     applyingRef.current = false;
     return true;
@@ -253,7 +257,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     setStatus('saved');
   }, [hydrate, saveActive]);
 
-  const createWorkspace = useCallback(async (name: string) => {
+  const createWorkspace = useCallback(async (name: string, prepare?: (workspaceId: string) => Promise<void>) => {
     const cleanName = name.trim();
     if (!cleanName) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -261,11 +265,9 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     setStatus('saving');
     try {
       const id = workspaceId(cleanName);
-      const created = await tradingApi.createDocument(
-        'workspaces',
-        id,
-        currentPayload(cleanName) as unknown as Record<string, unknown>,
-      );
+      const payload = currentPayload(cleanName) as unknown as Record<string, unknown>;
+      const created = await tradingApi.createDocument('workspaces', id, payload);
+      await prepare?.(id).catch(() => undefined);
       recordsRef.current.set(id, created);
       activeIdRef.current = id;
       setTradingWorkspaceScopeId(id);

@@ -20,14 +20,11 @@ import type { DrawingSnapMode } from './drawings/drawingCommands';
 import { TradingChartTypeMenu } from './TradingChartTypeMenu';
 import { TradingChartLayoutPicker } from './TradingChartLayoutPicker';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
+import { duplicateTradingWorkspace } from './persistence/duplicateWorkspace';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
 import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
-import {
-  aggregationBaseInterval,
-  isIntervalAvailable,
-  intervalCompactLabel,
-  TRADING_VIEW_INTERVAL_GROUPS,
-} from './tradingIntervals';
+import { isIntervalAvailable } from './tradingIntervals';
+import { TradingIntervalMenu } from './TradingIntervalMenu';
 import {
   MAX_TRADING_CHARTS,
   MAX_TRADING_TABS,
@@ -68,8 +65,6 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'columns-4', label: '4 columns' },
 ];
 
-const quickIntervalPriority = ['1h', '2h', '4h'];
-
 type ToolPanel = 'scanner' | 'replay' | 'strategies';
 type FormulaResolution = TradingFormulaSearchPreview & { operands: Record<string, string> };
 
@@ -81,10 +76,6 @@ function preferredInterval(binding: ProviderBinding, current: string): string {
     if (binding.supported_intervals.includes(candidate)) return candidate;
   }
   return binding.supported_intervals[0] ?? current;
-}
-
-function intervalLabel(interval: string): string {
-  return intervalCompactLabel(interval);
 }
 
 function preferredInstrument(
@@ -101,7 +92,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
-  const [intervalMenuOpen, setIntervalMenuOpen] = useState(false);
   const [symbolSearchChartId, setSymbolSearchChartId] = useState<string | null>(null);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [formulaResolution, setFormulaResolution] = useState<FormulaResolution | null>(null);
@@ -168,7 +158,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     [activeChart.instrumentId, instruments.data],
   );
   const supportedIntervals = selectedBinding?.supported_intervals ?? [];
-  const quickIntervals = quickIntervalPriority.filter((interval) => isIntervalAvailable(interval, supportedIntervals));
   const favorite = favoriteInstrumentIds.includes(activeChart.instrumentId);
 
   useEffect(() => {
@@ -387,6 +376,14 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (name) void persistence.renameWorkspace(name);
   };
 
+  const duplicateWorkspace = () => {
+    const name = window.prompt('Duplicate layout as', `${persistence.activeWorkspaceName} copy`);
+    if (!name?.trim()) return;
+    void duplicateTradingWorkspace(persistence, name).catch(() => {
+      window.alert('The layout was duplicated, but its drawings could not be copied.');
+    });
+  };
+
   const deleteWorkspace = () => {
     if (persistence.workspaces.length <= 1) return;
     if (window.confirm(`Delete ${persistence.activeWorkspaceName}?`)) void persistence.deleteWorkspace();
@@ -467,6 +464,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </select>
           <button type="button" aria-label="Create workspace" onClick={createWorkspace} disabled={!workspaceHydrated}>+</button>
           <button type="button" aria-label="Rename workspace" onClick={renameWorkspace} disabled={!workspaceHydrated}>Rename</button>
+          <button type="button" aria-label="Duplicate workspace" onClick={duplicateWorkspace} disabled={!workspaceHydrated}>Duplicate</button>
           <button type="button" aria-label="Delete workspace" onClick={deleteWorkspace} disabled={!workspaceHydrated || persistence.workspaces.length <= 1}>Delete</button>
         </div>
 
@@ -546,62 +544,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </select>
         </div>
 
-          <div className="trading-timeframe-buttons" role="group" aria-label="Trading timeframe">
-          {quickIntervals.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={activeChart.interval === item ? 'active' : undefined}
-              aria-pressed={activeChart.interval === item}
-              onClick={() => updateChart(activeChartId, { interval: item })}
-            >
-              {intervalLabel(item)}
-            </button>
-          ))}
-          <details className="trading-interval-manager" onToggle={(event) => setIntervalMenuOpen(event.currentTarget.open)}>
-            <summary
-              role="combobox"
-              aria-label="All supported Trading intervals"
-              aria-haspopup="listbox"
-              aria-expanded={intervalMenuOpen}
-            >
-              <span>{intervalLabel(activeChart.interval)}</span>
-              <span className="trading-menu-caret" aria-hidden="true">⌄</span>
-            </summary>
-            <div className="trading-interval-menu" role="listbox" aria-label="TradingView intervals">
-              {TRADING_VIEW_INTERVAL_GROUPS.map((group) => (
-                <section key={group.label} className="trading-interval-group" role="group" aria-label={group.label}>
-                  <header>{group.label}<span aria-hidden="true">⌃</span></header>
-                  {group.options.map((option) => {
-                    const baseInterval = aggregationBaseInterval(option.value, supportedIntervals);
-                    const supported = baseInterval !== null;
-                    const derived = baseInterval !== null && baseInterval !== option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        aria-selected={activeChart.interval === option.value}
-                        disabled={!supported}
-                        title={supported
-                          ? derived
-                            ? `${option.label} · calculated from ${intervalLabel(baseInterval)}`
-                            : option.label
-                          : `${option.label} is not supported by ${selectedBinding?.provider ?? 'the selected feed'}`}
-                        onClick={(event) => {
-                          updateChart(activeChartId, { interval: option.value });
-                          event.currentTarget.closest('details')?.removeAttribute('open');
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </section>
-              ))}
-            </div>
-          </details>
-          </div>
+          <TradingIntervalMenu
+            interval={activeChart.interval}
+            supportedIntervals={supportedIntervals}
+            feedName={selectedBinding?.provider}
+            onSelect={(interval) => updateChart(activeChartId, { interval })}
+          />
 
           <TradingChartTypeMenu value={activeChart.chartType} onChange={(chartType) => updateChart(activeChartId, { chartType })} />
 
@@ -747,6 +695,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 onRemoveChart={() => removeChart()}
                 onSetLink={setLink}
                 onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
+                onDuplicateLayout={workspaceHydrated ? duplicateWorkspace : undefined}
               />
             ) : null}
             <TradingSideRail

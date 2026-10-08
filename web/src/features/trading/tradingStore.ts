@@ -9,6 +9,7 @@ import {
   tradingViewBuiltInUsesSeparatePane,
 } from './indicators/tradingViewBuiltIns';
 import type { TradingComparison } from './tradingComparisons';
+import { DEFAULT_FAVORITE_INTERVALS, MAX_FAVORITE_INTERVALS, sortTradingIntervals } from './tradingIntervals';
 
 export type TradingLayout =
   | 'auto'
@@ -27,6 +28,16 @@ export const MIN_TRADING_CHARTS = 1;
 export const MAX_TRADING_CHARTS = 16;
 export const MAX_TRADING_TABS = 12;
 
+/** Per-chart display settings (TVP-2.5). An unset value takes its default. */
+export type TradingChartSettings = {
+  /** Countdown to bar close under the last-price label; defaults on for intraday intervals. */
+  barCountdown?: boolean;
+  /** Pre- and post-market bars; defaults to shown. */
+  extendedHours?: boolean;
+  /** A price line at the latest pre/post-market price; defaults on. */
+  extendedPriceLine?: boolean;
+};
+
 export type TradingChartState = {
   chartId: string;
   instrumentId: string;
@@ -35,6 +46,7 @@ export type TradingChartState = {
   chartType: TradingChartType;
   indicators: CoreIndicatorInstance[];
   comparisons?: TradingComparison[];
+  settings?: TradingChartSettings;
 };
 export type TradingIndicatorMove = 'up' | 'down';
 export type TradingLinkState = {
@@ -71,6 +83,7 @@ type TradingWorkspaceState = {
   links: TradingLinkState;
   panels: TradingPanelState;
   favoriteInstrumentIds: string[];
+  favoriteIntervals: string[];
   setLayout: (layout: TradingLayout) => void;
   setActiveTab: (tabId: string) => void;
   addTab: (name?: string) => string | null;
@@ -93,6 +106,8 @@ type TradingWorkspaceState = {
   setLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   setPanel: (key: keyof TradingPanelState, open: boolean) => void;
   toggleFavoriteInstrument: (instrumentId: string) => void;
+  toggleFavoriteInterval: (interval: string) => void;
+  addFavoriteInterval: (interval: string) => void;
 };
 
 const defaultInstrument = 'crypto:BINANCE:spot:BTC-USDT';
@@ -166,6 +181,7 @@ function copyChart(source: TradingChartState, chartId: string): TradingChartStat
     chartId,
     indicators: source.indicators.map((indicator) => ({ ...indicator })),
     comparisons: (source.comparisons ?? []).map((comparison) => ({ ...comparison })),
+    ...(source.settings ? { settings: { ...source.settings } } : {}),
   };
 }
 
@@ -243,6 +259,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: true, bottom: true },
   favoriteInstrumentIds: [],
+  favoriteIntervals: [...DEFAULT_FAVORITE_INTERVALS],
   setLayout: (layout) => set((state) => syncActiveTab(state, { layout })),
   setActiveTab: (activeTabId) => set((state) => {
     if (activeTabId === state.activeTabId) return state;
@@ -450,4 +467,14 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
       ? state.favoriteInstrumentIds.filter((item) => item !== instrumentId)
       : [...state.favoriteInstrumentIds, instrumentId],
   })),
+  toggleFavoriteInterval: (interval) => set((state) => ({
+    favoriteIntervals: state.favoriteIntervals.includes(interval)
+      ? state.favoriteIntervals.filter((item) => item !== interval)
+      : sortTradingIntervals([...state.favoriteIntervals, interval]).slice(0, MAX_FAVORITE_INTERVALS),
+  })),
+  addFavoriteInterval: (interval) => set((state) => (
+    state.favoriteIntervals.includes(interval)
+      ? state
+      : { favoriteIntervals: sortTradingIntervals([...state.favoriteIntervals, interval]).slice(0, MAX_FAVORITE_INTERVALS) }
+  )),
 }));
