@@ -7,6 +7,7 @@ import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
 import type { useChartLifecycle } from './useTradingChartPanelLifecycle';
+import { useTradingCommand } from './commands/useTradingCommands';
 
 /** A replay step that reveals more bars than this resets the series instead of appending. */
 const MAX_APPENDED_REPLAY_BARS = 50;
@@ -105,27 +106,9 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     scheduleIndicators();
   }, [indicators, scheduleIndicators, indicatorsRef]);
 
-  useEffect(() => {
-    if (!active) return;
-    const handleDrawingKeyboard = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
-      const key = event.key.toLowerCase();
-      if ((event.metaKey || event.ctrlKey) && !event.altKey && key === 'z') {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.shiftKey) drawings.redo();
-        else drawings.undo();
-        return;
-      }
-      if (!selectedDrawing || (event.key !== 'Delete' && event.key !== 'Backspace')) return;
-      event.preventDefault();
-      event.stopPropagation();
-      drawings.removeSelected();
-    };
-    window.addEventListener('keydown', handleDrawingKeyboard);
-    return () => window.removeEventListener('keydown', handleDrawingKeyboard);
-  }, [active, drawings, selectedDrawing]);
+  useTradingCommand('drawing.undo', () => drawings.undo(), () => active);
+  useTradingCommand('drawing.redo', () => drawings.redo(), () => active);
+  useTradingCommand('drawing.delete', () => drawings.removeSelected(), () => active && Boolean(selectedDrawing));
 
   useEffect(() => {
     const targetAdapter = adapterRef.current;
