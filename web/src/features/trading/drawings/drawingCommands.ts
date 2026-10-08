@@ -1,5 +1,5 @@
 import { drawingPropertiesWithDefaults, type DrawingToolId } from './tools/registry';
-import { DEFAULT_DRAWING_STYLE, type DrawingPoint, type DrawingProperties, type DrawingStyle } from './tools/types';
+import { DEFAULT_DRAWING_STYLE, type DrawingEditPatch, type DrawingPoint, type DrawingProperties, type DrawingStyle } from './tools/types';
 
 export { DEFAULT_DRAWING_STYLE };
 export type { DrawingPoint, DrawingProperties, DrawingStyle };
@@ -27,6 +27,8 @@ export type DrawingState = {
   selectedId: string | null;
   history: TradingDrawing[][];
   future: TradingDrawing[][];
+  /** The merge key of the last edit; another edit with the same key joins its undo step. */
+  lastEditKey?: string | null;
 };
 
 export const emptyDrawingState = (): DrawingState => ({ drawings: [], selectedId: null, history: [], future: [] });
@@ -47,8 +49,9 @@ function cloneDrawings(drawings: TradingDrawing[]): TradingDrawing[] {
   return drawings.map(normalizeDrawing);
 }
 
-function snapshot(state: DrawingState): DrawingState {
-  return { ...state, history: [...state.history, cloneDrawings(state.drawings)], future: [] };
+function snapshot(state: DrawingState, mergeKey?: string): DrawingState {
+  if (mergeKey !== undefined && state.lastEditKey === mergeKey) return { ...state, future: [] };
+  return { ...state, history: [...state.history, cloneDrawings(state.drawings)], future: [], lastEditKey: mergeKey ?? null };
 }
 
 export function replaceDrawings(drawings: TradingDrawing[]): DrawingState {
@@ -62,6 +65,24 @@ export function addDrawing(state: DrawingState, drawing: TradingDrawing): Drawin
 
 export function selectDrawing(state: DrawingState, drawingId: string | null): DrawingState {
   return { ...state, selectedId: drawingId, drawings: state.drawings.map((drawing) => ({ ...drawing, selected: drawing.drawingId === drawingId })) };
+}
+
+/** Applies a tool handle's edit (anchors and/or properties) as one undo step. */
+export function editDrawing(state: DrawingState, drawingId: string, patch: DrawingEditPatch): DrawingState {
+  const target = state.drawings.find((drawing) => drawing.drawingId === drawingId);
+  if (!target || target.locked || (!patch.points && !patch.properties)) return state;
+  const next = snapshot(state);
+  return {
+    ...next,
+    drawings: next.drawings.map((drawing) => drawing.drawingId !== drawingId ? drawing : {
+      ...drawing,
+      revision: drawing.revision + 1,
+      points: patch.points ? patch.points.map((point) => ({ ...point })) : drawing.points,
+      properties: patch.properties
+        ? drawingPropertiesWithDefaults(drawing.toolType, { ...drawing.properties, ...patch.properties })
+        : drawing.properties,
+    }),
+  };
 }
 
 export function moveDrawingPoint(state: DrawingState, drawingId: string, pointIndex: number, point: DrawingPoint): DrawingState {
@@ -113,9 +134,11 @@ export function translateDrawing(
 export function updateSelectedDrawing(
   state: DrawingState,
   patch: Partial<Pick<TradingDrawing, 'style' | 'locked' | 'hidden' | 'text' | 'properties'>>,
+  /** Edits with the same key in a row are one undo step (e.g. one settings field while it is edited). */
+  mergeKey?: string,
 ): DrawingState {
   if (!state.selectedId) return state;
-  const next = snapshot(state);
+  const next = snapshot(state, mergeKey === undefined ? undefined : `${state.selectedId}:${mergeKey}`);
   return {
     ...next,
     drawings: next.drawings.map((drawing) => drawing.drawingId !== state.selectedId ? drawing : {

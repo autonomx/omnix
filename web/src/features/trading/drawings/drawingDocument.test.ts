@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DRAWING_DOCUMENT_SCHEMA_VERSION, drawingDocumentPayload, upgradeDrawingDocument } from './drawingDocument';
+import { DRAWING_DOCUMENT_SCHEMA_VERSION, drawingDocumentPayload, mergePreserved, upgradeDrawingDocument } from './drawingDocument';
 import v1Payload from './fixtures/drawing-document-v1.json';
 
 const instrumentId = 'crypto:BINANCE:spot:BTC-USDT';
@@ -72,5 +72,25 @@ describe('drawing document upgrade', () => {
     }, instrumentId);
     expect(upgraded.readOnly).toBe(true);
     expect(upgraded.drawings).toHaveLength(1);
+  });
+
+  it('opens a document whose schemaVersion is not a number read-only', () => {
+    expect(upgradeDrawingDocument({ schemaVersion: '3', instrumentId, drawings: [] }, instrumentId).readOnly).toBe(true);
+    expect(upgradeDrawingDocument({ schemaVersion: null, instrumentId, drawings: [] }, instrumentId).readOnly).toBe(true);
+    expect(upgradeDrawingDocument({ instrumentId, drawings: [] }, instrumentId).readOnly).toBe(false);
+  });
+
+  it('keeps a drawing whose properties are not an object verbatim', () => {
+    const odd = {
+      drawingId: 'p', instrumentId, toolType: 'trend-line', revision: 1, properties: ['bad'],
+      points: [{ time: '2026-10-05T13:30:00.000Z', price: 1 }, { time: '2026-10-05T13:31:00.000Z', price: 2 }],
+    };
+    const upgraded = upgradeDrawingDocument({ schemaVersion: 2, instrumentId, drawings: [odd] }, instrumentId);
+    expect(upgraded.drawings).toEqual([]);
+    expect(drawingDocumentPayload(instrumentId, upgraded.drawings, upgraded.preserved).drawings).toEqual([odd]);
+  });
+
+  it('merges two loads of preserved entries without duplicates', () => {
+    expect(mergePreserved([{ a: 1 }, 'x'], [{ a: 1 }, { b: 2 }])).toEqual([{ a: 1 }, 'x', { b: 2 }]);
   });
 });

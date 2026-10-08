@@ -2,6 +2,7 @@ import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TRADING_CHART_TYPE_OPTIONS, type TradingChartType } from './chart/chartAdapter';
+import { drawingInstrumentOf } from './drawings/drawingInstrument';
 import { TradingDrawingOverlay } from './drawings/TradingDrawingOverlay';
 import { convertedPrice, indicatorContextLabel, isAlertIndicatorId, price, rightOffsetOptions } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
@@ -29,6 +30,8 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         onAdd={drawings.add}
         onSelect={(id) => { onActivate(); drawings.select(id); }}
         onMovePoint={drawings.movePoint}
+        onEditDrawing={drawings.edit}
+        instrument={drawingInstrumentOf(chartQuery.data?.instrument)}
         onTranslateDrawing={drawings.translate}
         onRemove={drawings.remove}
         onToolComplete={() => setDrawingTool('cursor')}
@@ -93,7 +96,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
 /** The chart's context menu. */
 export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    adapterRef, applyChartTemplate, chartQuery, contextIndicator, contextMenu, contextMenuAlert, copyContextPrice,
+    adapterRef, applyChartTemplate, chartId, chartQuery, contextIndicator, contextMenu, contextMenuAlert, copyContextPrice,
     cursorLocked, drawings, indicators, instrumentId, onClearIndicators, pasteContextPrice, resetIndicatorPaneView,
     selectedRangeRef, setContextMenu, setCursorLocked, setObjectTreeVisible, setPriceScaleSettings,
     setSelectedRangeLabel, setSettingsIndicator, setSettingsVisible, setTableVisible, tableVisible,
@@ -113,6 +116,7 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
           />
           <TradingChartContextMenu
             point={contextMenu}
+            chartId={chartId}
             symbol={contextIndicator
               ? indicatorContextLabel(contextIndicator)
               : contextMenu?.trendlinePoints?.length === 2

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, DrawingTimeIndex, heikinAshiBars, indicatorLineData, indicatorMarkers, lineData, normalizeChartBars, renkoBars, TRADING_CHART_TYPE_OPTIONS, upsertChartBar, volumeData } from './chartAdapter';
+import { alignIndicatorPoints, alignSeriesToTimes, candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, DrawingTimeIndex, heikinAshiBars, indicatorLineData, indicatorMarkers, lineData, normalizeChartBars, renkoBars, TradingChartAdapter, TRADING_CHART_TYPE_OPTIONS, upsertChartBar, volumeData } from './chartAdapter';
 import type { IndicatorOutput } from '../indicators/coreIndicators';
 import type { UTCTimestamp } from 'lightweight-charts';
 import type { MarketBar } from '../tradingTypes';
@@ -140,7 +140,7 @@ describe('Trading chart adapter normalization', () => {
     expect(index.logicalIndexForTime('2026-08-05T12:05:00.000Z')).toBe(5);
     expect(index.logicalIndexForTime('2026-08-05T11:58:00.000Z')).toBe(-2);
     expect(index.logicalIndexForTime('not-a-date')).toBeNull();
-    expect(index.timeForLogicalIndex(1)).toBe(secondBar.start_time);
+    expect(index.timeForLogicalIndex(1)).toBe('2026-08-05T12:01:00.000Z');
     expect(index.timeForLogicalIndex(1.2)).toBe('2026-08-05T12:01:12.000Z');
     expect(index.timeForLogicalIndex(6)).toBe('2026-08-05T12:06:00.000Z');
     expect(index.timeAfterBars('2026-08-05T12:01:00.000Z', 3)).toBe('2026-08-05T12:04:00.000Z');
@@ -151,6 +151,7 @@ describe('Trading chart adapter normalization', () => {
     // Two 5m sessions, 13:30-19:55 UTC, with an overnight gap between them.
     const sessions = ['2026-10-05', '2026-10-06'].flatMap((day) => Array.from({ length: 78 }, (_, minute) => ({
       ...bar,
+      interval: '5m',
       start_time: new Date(Date.parse(`${day}T13:30:00.000Z`) + minute * 300_000).toISOString(),
     })));
     const index = new DrawingTimeIndex(sessions);
@@ -178,10 +179,134 @@ describe('Trading chart adapter normalization', () => {
       // A 1m anchor on a 5m chart.
       expect(index.logicalIndexForTime('2026-10-05T13:41:00.000Z')).toBeCloseTo(2.2, 9);
       // A 1h anchor on a 1D chart, over a weekend.
-      const daily = ['2026-10-02', '2026-10-05', '2026-10-06'].map((day) => ({ ...bar, start_time: `${day}T00:00:00.000Z` }));
+      const daily = ['2026-10-02', '2026-10-05', '2026-10-06'].map((day) => ({ ...bar, interval: '1d', start_time: `${day}T00:00:00.000Z` }));
       const days = new DrawingTimeIndex(daily);
       expect(days.logicalIndexForTime('2026-10-05T15:00:00.000Z')).toBeCloseTo(1 + 15 / 24, 9);
-      expect(days.logicalIndexForTime('2026-10-07T12:00:00.000Z')).toBeCloseTo(2.5, 9);
+      // Past the data it steps by the interval's duration (a day), not an estimate from the gaps.
+      expect(days.logicalIndexForTime('2026-10-07T12:00:00.000Z')).toBeCloseTo(3.5, 9);
+      expect(days.timeForLogicalIndex(3)).toBe('2026-10-07T00:00:00.000Z');
+      expect(days.timeForLogicalIndex(-1)).toBe('2026-10-01T00:00:00.000Z');
+      expect(new DrawingTimeIndex([daily[0]]).timeForLogicalIndex(1)).toBe('2026-10-03T00:00:00.000Z');
+    });
+  });
+
+  describe("drawing anchors on the chart's own time scale", () => {
+    // Lightweight Charts indexes the union of every series' times. This fake time
+    // scale does the same; like the real one, it puts fractional logical indices at 0.
+    function chartWith(seriesTimes: number[][], bars: MarketBar[]) {
+      const union = [...new Set(seriesTimes.flat())].sort((left, right) => left - right);
+      const series = seriesTimes.map((times) => ({
+        data: () => times.map((time) => ({ time })),
+        priceToCoordinate: (price: number) => 500 - price,
+        coordinateToPrice: (y: number) => 500 - y,
+      }));
+      const timeScale = {
+        timeToCoordinate: (time: number) => (union.includes(time) ? union.indexOf(time) * 10 : null),
+        logicalToCoordinate: (logical: number) => (Number.isInteger(logical) ? logical * 10 : 0),
+        coordinateToLogical: (x: number) => x / 10,
+        coordinateToTime: () => null,
+        getVisibleLogicalRange: () => ({ from: 0, to: union.length - 1 }),
+      };
+      const adapter = Object.create(TradingChartAdapter.prototype) as TradingChartAdapter;
+      Object.assign(adapter, {
+        chart: { timeScale: () => timeScale },
+        priceSeries: series[0],
+        volumeSeries: series[1] ?? series[0],
+        indicatorSeries: new Map(),
+        comparisonSeries: new Map(series.slice(2).map((item, index) => [`comparison-${index}`, item])),
+        bars,
+        priceTimes: seriesTimes[0] ?? [],
+        priceScaleMultiplier: 1,
+        destroyed: false,
+        chartTimeIndex: null,
+        seriesTimes: new Map(seriesTimes.map((times, index) => [`series-${index}`, times])),
+        rawBarIndex: null,
+        barSeries: null,
+        barSeriesCache: [],
+      });
+      return { adapter, union };
+    }
+    const seconds = (time: string) => Date.parse(time) / 1_000;
+
+    it('counts every time any series plots, as the chart does', () => {
+      // 1h equity bars at :30 for two sessions and a series plotting every hour on the hour. Comparisons no longer add
+      // times (alignSeriesToTimes), but the index must still follow whatever times the chart plots.
+      const equity = ['2026-10-05', '2026-10-06'].flatMap((day) => Array.from({ length: 7 }, (_, hour) => ({
+        ...bar, interval: '1h', start_time: new Date(Date.parse(`${day}T13:30:00.000Z`) + hour * 3_600_000).toISOString(),
+      })));
+      const crypto = Array.from({ length: 48 }, (_, hour) => seconds('2026-10-05T00:00:00.000Z') + hour * 3_600);
+      const equityTimes = equity.map((item) => seconds(item.start_time));
+      const { adapter, union } = chartWith([equityTimes, equityTimes, crypto], equity);
+      const before = union.indexOf(seconds('2026-10-06T14:30:00.000Z'));
+      // 14:45 lies halfway between the equity bar at 14:30 and the comparison point at 15:00.
+      expect(adapter.drawingBarIndexForTime('2026-10-06T14:45:00.000Z')).toBeCloseTo(before + 0.5, 9);
+      expect(adapter.projectDrawingPoint({ time: '2026-10-06T14:45:00.000Z', price: 100 })).toEqual({ x: (before + 0.5) * 10, y: 400 });
+      // From a coordinate back to a time snaps to the chart's own point there.
+      expect(adapter.drawingPointFromCoordinate((before + 1) * 10, 400)?.time).toBe('2026-10-06T15:00:00.000Z');
+      expect(adapter.drawingPointFromCoordinate((before + 0.25) * 10, 400, { exactTime: true })?.time).toBe('2026-10-06T14:37:30.000Z');
+      // The whole chart is in view: every loaded bar is visible.
+      expect(adapter.drawingVisibleBars()).toEqual({ from: 0, to: equity.length - 1 });
+    });
+
+    it('maps anchors on a Renko chart by the bricks it plots', () => {
+      const raw = Array.from({ length: 6 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
+      // Two bricks from the same source bar (one second apart), none for the next three bars.
+      const bricks = [seconds(raw[0].start_time), seconds(raw[1].start_time), seconds(raw[1].start_time) + 1, seconds(raw[5].start_time)];
+      const { adapter, union } = chartWith([bricks, raw.map((item) => seconds(item.start_time))], raw);
+      expect(union).toHaveLength(7);
+      expect(adapter.drawingBarIndexForTime(raw[5].start_time)).toBe(6);
+      expect(adapter.drawingBarIndexForTime(new Date(Date.parse(raw[1].start_time) + 500).toISOString())).toBeCloseTo(1.5, 9);
+      // Past the data, anchors step by the interval (1m) from the last plotted point.
+      expect(adapter.drawingBarIndexForTime('2026-10-05T13:37:00.000Z')).toBe(8);
+    });
+
+    it('rebuilds the chart time index when a time in the middle of a series changes', () => {
+      const raw = Array.from({ length: 3 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
+      const times = raw.map((item) => seconds(item.start_time));
+      const { adapter } = chartWith([times], raw);
+      const note = (next: number[]) => (adapter as unknown as { noteSeriesTimes: (key: string, data: { time: number }[]) => void })
+        .noteSeriesTimes('series-0', next.map((time) => ({ time })));
+      expect(adapter.drawingBarIndexForTime('2026-10-05T13:31:00.000Z')).toBe(1);
+      note(times);
+      expect(adapter.drawingBarIndexForTime('2026-10-05T13:31:00.000Z')).toBe(1);
+      // Same length, first and last time; the middle point moves 30 s later.
+      note([times[0], times[1] + 30, times[2]]);
+      expect(adapter.drawingBarIndexForTime('2026-10-05T13:31:00.000Z')).toBeCloseTo(2 / 3, 9);
+    });
+
+    it('checks that the chart index is the bars index before offering sloped alerts', () => {
+      const raw = Array.from({ length: 3 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
+      const times = raw.map((item) => seconds(item.start_time));
+      expect(chartWith([times, times], raw).adapter.drawingBarIndexMatchesBars()).toBe(true);
+      // A series plotting between the bars (data on its own clock) breaks the match.
+      expect(chartWith([times, [times[0] + 30]], raw).adapter.drawingBarIndexMatchesBars()).toBe(false);
+      // Points after the last bar don't.
+      expect(chartWith([times, [times[2] + 60, times[2] + 120]], raw).adapter.drawingBarIndexMatchesBars()).toBe(true);
+    });
+
+    it('has no visible bars when the view is past the loaded bars', () => {
+      const raw = Array.from({ length: 3 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
+      const { adapter } = chartWith([raw.map((item) => seconds(item.start_time))], raw);
+      const timeScale = (adapter as unknown as { chart: { timeScale: () => { getVisibleLogicalRange: () => unknown } } }).chart.timeScale();
+      timeScale.getVisibleLogicalRange = () => ({ from: 5.2, to: 12 });
+      expect(adapter.drawingVisibleBars()).toBeNull();
+      timeScale.getVisibleLogicalRange = () => ({ from: 1.4, to: 12 });
+      expect(adapter.drawingVisibleBars()).toEqual({ from: 1, to: 2 });
+    });
+
+    it('rebuilds the drawing time index only when times change, not on in-place ticks', () => {
+      const raw = Array.from({ length: 3 }, (_, minute) => ({ ...bar, interval: '1m', start_time: new Date(Date.parse('2026-10-05T13:30:00.000Z') + minute * 60_000).toISOString() }));
+      const { adapter } = chartWith([raw.map((item) => seconds(item.start_time))], raw);
+      Object.assign(adapter, { revisions: new Map(), updatePriceData: () => undefined, volumeSeries: { update: () => undefined, data: () => [] } });
+      const first = adapter.drawingBars();
+      expect(first.indexAtOrBefore('2026-10-05T13:20:00.000Z')).toBe(-1);
+      expect(first.at(2)?.close).toBe(102.75);
+      adapter.updateBar({ ...raw[2], close: '110', ingestion_revision: 2 });
+      expect(adapter.drawingBars()).toBe(first);
+      expect(first.at(2)?.close).toBe(110);
+      adapter.updateBar({ ...raw[2], start_time: '2026-10-05T13:33:00.000Z', ingestion_revision: 1 });
+      expect(adapter.drawingBars()).not.toBe(first);
+      expect(adapter.drawingBars().length).toBe(4);
     });
   });
 
@@ -207,5 +332,54 @@ describe('Trading chart adapter normalization', () => {
       const signals: IndicatorOutput = { ...levels, key: 'tv-rob-booker-reversal:bullish', render: 'markers', marker: 'arrowUp', color: '#20c997' };
       expect(indicatorMarkers(signals, 2)[2]).toEqual({ time: times[3], position: 'atPriceMiddle', price: 24, shape: 'arrowUp', color: '#20c997', size: 1 });
     });
+  });
+});
+
+describe('comparison series on the main series times (TVP-0.4 decision)', () => {
+  const t = (value: number) => value as UTCTimestamp;
+
+  it('drops times only the comparison has and carries its value over times it lacks', () => {
+    const crypto = [1, 2, 3, 4, 5, 6].map((time) => ({ time: t(time * 100), value: time }));
+    expect(alignSeriesToTimes(crypto, [t(200), t(500)])).toEqual([{ time: 200, value: 2 }, { time: 500, value: 5 }]);
+    const equity = [{ time: t(100), value: 1 }, { time: t(400), value: 4 }];
+    expect(alignSeriesToTimes(equity, [t(100), t(200), t(300), t(400)])).toEqual([
+      { time: 100, value: 1 }, { time: 200, value: 1 }, { time: 300, value: 1 }, { time: 400, value: 4 },
+    ]);
+  });
+
+  it('plots nothing before the comparison starts or after it ends', () => {
+    const points = [{ time: t(200), value: 2 }, { time: t(300), value: 3 }];
+    expect(alignSeriesToTimes(points, [t(100), t(200), t(250), t(300), t(400)])).toEqual([
+      { time: 200, value: 2 }, { time: 250, value: 2 }, { time: 300, value: 3 },
+    ]);
+    expect(alignSeriesToTimes([], [t(100)])).toEqual([]);
+  });
+
+  it('maps onto brick times on Renko-type charts', () => {
+    const points = [{ time: t(100), value: 10 }, { time: t(160), value: 16 }, { time: t(220), value: 22 }];
+    expect(alignSeriesToTimes(points, [t(100), t(190), t(220)])).toEqual([{ time: 100, value: 10 }, { time: 190, value: 16 }, { time: 220, value: 22 }]);
+  });
+});
+
+describe('indicator points on the chart bars', () => {
+  const t = (value: number) => value as UTCTimestamp;
+  const day = 86_400;
+  const bars = [t(0), t(day), t(2 * day)];
+
+  it('shows the latest value during each bar for data on its own clock', () => {
+    // Funding every 8 hours, through the forming last bar.
+    const funding = Array.from({ length: 8 }, (_, index) => ({ time: t(index * 28_800), value: index }));
+    expect(alignIndicatorPoints(funding, bars, day)).toEqual([{ time: 0, value: 2 }, { time: day, value: 5 }, { time: 2 * day, value: 7 }]);
+    // Data that starts late and stops early covers only its own bars.
+    expect(alignIndicatorPoints([{ time: t(day + 3_600), value: 9 }], bars, day)).toEqual([{ time: day, value: 9 }]);
+  });
+
+  it('keeps bar-time outputs and points beyond the last bar', () => {
+    const onBars = bars.map((time, index) => ({ time, value: index }));
+    expect(alignIndicatorPoints(onBars, bars, day)).toEqual(onBars);
+    const ahead = [{ time: t(day), value: 1 }, { time: t(3 * day), value: 3 }];
+    expect(alignIndicatorPoints(ahead, bars, day)).toEqual(ahead);
+    expect(alignIndicatorPoints([{ time: t(3_600), value: 1 }, { time: t(4 * day), value: 4 }], bars, day))
+      .toEqual([{ time: 0, value: 1 }, { time: 4 * day, value: 4 }]);
   });
 });

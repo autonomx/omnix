@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { dispatchDrawingActionRequest, hasDrawingActionHandler } from './drawings/drawingActions';
 import type { ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './TradingChartContextMenu.css';
 
@@ -10,6 +11,7 @@ function displayPrice(value: number): string {
 
 export function TradingChartContextMenu({
   point,
+  chartId = null,
   symbol,
   indicatorContext,
   drawingCount,
@@ -28,9 +30,10 @@ export function TradingChartContextMenu({
   onRemoveDrawings,
   onRemoveIndicators,
   onSettings,
-  onDrawingAction,
 }: {
   point: ChartAlertPlacement;
+  /** The chart the menu belongs to; drawing action requests carry it to the action bus. */
+  chartId?: string | null;
   symbol: string;
   indicatorContext: boolean;
   drawingCount: number;
@@ -49,8 +52,6 @@ export function TradingChartContextMenu({
   onRemoveDrawings: () => void;
   onRemoveIndicators: () => void;
   onSettings: () => void;
-  /** Runs a context-menu action the clicked drawing's tool offers (`point.drawingActions`). */
-  onDrawingAction?: (drawingId: string, actionId: string) => void;
 }) {
   const [templateOpen, setTemplateOpen] = useState(false);
 
@@ -88,11 +89,17 @@ export function TradingChartContextMenu({
       <button type="button" role="menuitem" onClick={action(onReset)}>↻ <span>Reset {indicatorContext ? `${symbol} pane` : 'chart'} view</span><kbd>Alt + R</kbd></button>
       <button type="button" role="menuitem" onClick={action(onCopyPrice)}>⧉ <span>Copy {indicatorContext ? 'value' : 'price'} {displayPrice(point.price)}</span></button>
       <button type="button" role="menuitem" onClick={action(onPastePrice)}>▣ <span>Paste</span><kbd>Ctrl + V</kbd></button>
-      {onDrawingAction && point.drawingId && point.drawingActions?.length ? (
+      {point.drawingActions?.length ? (
         <>
           <div className="trading-context-menu-separator" />
           {point.drawingActions.map((drawingAction) => (
-            <button key={drawingAction.id} type="button" role="menuitem" onClick={action(() => onDrawingAction(point.drawingId!, drawingAction.id))}>
+            <button
+              key={drawingAction.id}
+              type="button"
+              role="menuitem"
+              disabled={!hasDrawingActionHandler(drawingAction.request.type)}
+              onClick={action(() => dispatchDrawingActionRequest(drawingAction.request, { chartId, drawingId: point.drawingId ?? null }))}
+            >
               ▸ <span>{drawingAction.label}</span>
             </button>
           ))}

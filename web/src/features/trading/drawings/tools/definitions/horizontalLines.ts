@@ -16,7 +16,7 @@ export const horizontalLineTool = defineDrawingTool({
     const [point] = context.points;
     return [{ kind: 'segment', x1: 0, y1: point.y, x2: context.viewport.width, y2: point.y, ...lineStroke(context) }];
   },
-  alertLevels: ([point]) => (point ? [horizontalAlertLevel('line', 'Horizontal line', point, true)] : []),
+  alertLevels: ([point], _properties, services) => (point ? [horizontalAlertLevel('line', 'Horizontal line', point, 'both', services)].filter((level) => level !== null) : []),
 });
 
 export const horizontalRayTool = defineDrawingTool({
@@ -31,5 +31,5 @@ export const horizontalRayTool = defineDrawingTool({
     const [point] = context.points;
     return [{ kind: 'segment', x1: point.x, y1: point.y, x2: context.viewport.width, y2: point.y, ...lineStroke(context) }];
   },
-  alertLevels: ([point]) => (point ? [horizontalAlertLevel('ray', 'Horizontal ray', point, false)] : []),
+  alertLevels: ([point], _properties, services) => (point ? [horizontalAlertLevel('ray', 'Horizontal ray', point, 'right', services)].filter((level) => level !== null) : []),
 });

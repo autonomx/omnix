@@ -5,6 +5,7 @@ import type { RefObject } from 'react';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
 import { snapDrawingPoint, type DrawingSnapMode } from './drawingCommands';
 import { svgViewport } from './drawingFrame';
+import { guardToolCall } from './tools/guard';
 import { drawingToolDefinition } from './tools/registry';
 import { anchorProjector } from './tools/scene';
 import { creationSnaps, type DrawingModifiers, type DrawingToolDefinition, type ScreenPoint } from './tools/types';
@@ -46,7 +47,9 @@ export function drawingPointLocator(svgRef: RefObject<SVGSVGElement | null>, ada
       snapMode,
       snap: tool ? creationSnaps(tool.creation) : true,
       screen: tool?.anchoring === 'screen',
-      constrain: anchorIndex !== undefined && tool?.constrain ? (candidate) => tool.constrain!(candidate, others(), modifiers) : undefined,
+      constrain: anchorIndex !== undefined && tool?.constrain
+        ? (candidate) => guardToolCall(tool.id, 'constrain', () => tool.constrain!(candidate, others(), modifiers), candidate)
+        : undefined,
     });
     return point && { time: point.time, price: point.price, ...(point.screen ? { screen: point.screen } : {}) };
   };
@@ -71,7 +74,7 @@ export function creationPointLocator(
       snap: creationSnaps(definition.creation),
       screen: definition.anchoring === 'screen',
       constrain: definition.constrain && definition.creation.gesture !== 'freehand'
-        ? (candidate) => definition.constrain!(candidate, anchors, modifiers)
+        ? (candidate) => guardToolCall(definition.id, 'constrain', () => definition.constrain!(candidate, anchors, modifiers), candidate)
         : undefined,
     });
   };

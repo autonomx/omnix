@@ -27,6 +27,7 @@ import {
   type WhitespaceData,
 } from 'lightweight-charts';
 import type { DrawingPoint } from '../drawings/drawingCommands';
+import { barIndexAtOrBefore, barIndexForTime, createBarTimeline, intervalStepMs, timeForBarIndex, type BarTimeline } from '../drawings/tools/barTimeline';
 import type { DrawingBar, DrawingBarSeries } from '../drawings/tools/types';
 import { indicatorOutputs, indicatorPaneScale, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
@@ -163,16 +164,6 @@ export function upsertChartBar(bars: readonly MarketBar[], bar: MarketBar): Mark
   return [...bars.slice(0, left), bar, ...bars.slice(left + (sameTime ? 1 : 0))];
 }
 
-function barCadenceMilliseconds(bars: readonly MarketBar[]): number | null {
-  const intervals = bars
-    .slice(1)
-    .map((bar, index) => Date.parse(bar.start_time) - Date.parse(bars[index].start_time))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .sort((left, right) => left - right);
-  if (intervals.length === 0) return null;
-  return intervals[Math.floor(intervals.length / 2)] ?? null;
-}
-
 function closeAtOrBefore(bars: readonly MarketBar[], targetTime: string | null): number {
   if (bars.length === 0) return 0;
   const target = targetTime === null ? Number.POSITIVE_INFINITY : Date.parse(targetTime);
@@ -184,6 +175,60 @@ function closeAtOrBefore(bars: readonly MarketBar[], targetTime: string | null):
     if (Number.isFinite(close)) candidate = close;
   }
   return candidate;
+}
+
+/**
+ * A comparison series on the main series' bar times, as TradingView plots compare symbols: at each main bar
+ * time from the comparison's first point to its last, the comparison's latest value at or before that time.
+ * Times only the comparison has are dropped, so comparisons never add points to the chart's time scale and a
+ * drawing's line and its alert share one bar index. `points` and `times` are ascending.
+ */
+export function alignSeriesToTimes(
+  points: readonly { time: UTCTimestamp; value: number }[],
+  times: readonly UTCTimestamp[],
+): { time: UTCTimestamp; value: number }[] {
+  if (points.length === 0) return [];
+  const first = points[0].time;
+  const last = points[points.length - 1].time;
+  const aligned: { time: UTCTimestamp; value: number }[] = [];
+  let next = 0;
+  for (const time of times) {
+    if (time < first) continue;
+    if (time > last) break;
+    while (next + 1 < points.length && points[next + 1].time <= time) next += 1;
+    aligned.push({ time, value: points[next].value });
+  }
+  return aligned;
+}
+
+/**
+ * An indicator's points on the chart's bars, so data on its own clock (Binance funding every 8 h, open interest
+ * periods) adds no time points: each bar shows the latest value during it (before the next bar starts; the last bar
+ * runs one interval, `stepSeconds`), from the first bar with data to the bar of the last point. Points beyond the
+ * last bar's interval (indicators that plot ahead) are kept. Outputs already on bar times are unchanged.
+ */
+export function alignIndicatorPoints(
+  points: readonly { time: UTCTimestamp; value: number }[],
+  times: readonly UTCTimestamp[],
+  stepSeconds: number | null,
+): { time: UTCTimestamp; value: number }[] {
+  const last = times.at(-1);
+  if (last === undefined || points.length === 0) return [...points];
+  const end = stepSeconds === null ? Number.POSITIVE_INFINITY : last + stepSeconds;
+  const inBars = points.filter((point) => point.time < end);
+  const ahead = points.filter((point) => point.time >= end);
+  const known = new Set<number>(times);
+  if (inBars.every((point) => known.has(point.time))) return [...points];
+  const latest = inBars.at(-1)?.time ?? Number.NEGATIVE_INFINITY;
+  const aligned: { time: UTCTimestamp; value: number }[] = [];
+  let next = 0;
+  let value: number | null = null;
+  for (const [index, time] of times.entries()) {
+    const windowEnd = times[index + 1] ?? end;
+    while (next < inBars.length && inBars[next].time < windowEnd) value = inBars[next++].value;
+    if (value !== null && latest >= time) aligned.push({ time, value });
+  }
+  return [...aligned, ...ahead];
 }
 
 function visiblePrimaryPriceRange(
@@ -211,69 +256,46 @@ function visiblePrimaryPriceRange(
 }
 
 /**
- * Time <-> logical bar index for drawing anchors over one sorted bar array.
- * A time between two bars interpolates between them, so gaps (overnight,
- * weekends) never shift later anchors; a time before the first or after the
- * last bar extrapolates from that bar at the bar interval. The two lookups are
- * exact inverses. Bar times and the interval are computed once per bar array.
+ * Time <-> bar index over one bar sequence, by the `barTimeline.ts` spec:
+ * times between bars interpolate between them, past the data they step by
+ * the interval's duration; the two lookups are exact inverses.
  */
 export class DrawingTimeIndex {
-  private readonly times: Float64Array;
-  private cadence: number | null | undefined;
+  readonly timeline: BarTimeline;
 
-  constructor(private readonly bars: readonly MarketBar[]) {
-    this.times = Float64Array.from(bars, (bar) => Date.parse(bar.start_time));
+  /** `step` defaults to the bars' interval duration (`bars[0].interval`). */
+  constructor(bars: readonly Pick<MarketBar, 'start_time'>[], step?: number | null) {
+    const interval = (bars[0] as Partial<MarketBar> | undefined)?.interval;
+    this.timeline = createBarTimeline(
+      bars.map((bar) => Date.parse(bar.start_time)),
+      step !== undefined ? step : interval ? intervalStepMs(interval) : null,
+    );
   }
 
-  private barCadence(): number | null {
-    if (this.cadence === undefined) this.cadence = barCadenceMilliseconds(this.bars);
-    return this.cadence;
+  /** A time index over raw time points (UTC milliseconds), e.g. every point the chart plots. */
+  static fromTimes(times: Iterable<number>, step: number | null): DrawingTimeIndex {
+    const index = new DrawingTimeIndex([], step);
+    (index as { timeline: BarTimeline }).timeline = createBarTimeline(times, step);
+    return index;
   }
 
-  /** Index of the last bar at or before `milliseconds` (-1 before the first bar). */
-  private floorIndex(milliseconds: number): number {
-    let low = 0;
-    let high = this.times.length - 1;
-    let found = -1;
-    while (low <= high) {
-      const middle = (low + high) >> 1;
-      if (this.times[middle] <= milliseconds) {
-        found = middle;
-        low = middle + 1;
-      } else {
-        high = middle - 1;
-      }
-    }
-    return found;
+  get length(): number {
+    return this.timeline.times.length;
   }
 
   timeForLogicalIndex(logical: number): string | null {
-    const { bars, times } = this;
-    if (!Number.isFinite(logical) || bars.length === 0) return null;
-    const last = bars.length - 1;
-    if (Number.isInteger(logical) && logical >= 0 && logical <= last) return bars[logical].start_time;
-    if (logical > 0 && logical < last) {
-      const lower = Math.floor(logical);
-      return new Date(Math.round(times[lower] + (times[lower + 1] - times[lower]) * (logical - lower))).toISOString();
-    }
-    const cadence = this.barCadence();
-    if (cadence === null) return null;
-    const [edge, edgeTime] = logical < 0 ? [0, times[0]] : [last, times[last]];
-    return Number.isFinite(edgeTime) ? new Date(Math.round(edgeTime + (logical - edge) * cadence)).toISOString() : null;
+    const time = timeForBarIndex(this.timeline, logical);
+    return time === null ? null : new Date(time).toISOString();
   }
 
   logicalIndexForTime(value: string): number | null {
-    const { times } = this;
-    if (times.length === 0) return null;
-    const milliseconds = Date.parse(value);
-    if (!Number.isFinite(milliseconds)) return null;
-    const last = times.length - 1;
-    const lower = this.floorIndex(milliseconds);
-    if (lower >= 0 && times[lower] === milliseconds) return lower;
-    if (lower >= 0 && lower < last) return lower + (milliseconds - times[lower]) / (times[lower + 1] - times[lower]);
-    const cadence = this.barCadence();
-    if (cadence === null) return null;
-    return lower < 0 ? (milliseconds - times[0]) / cadence : last + (milliseconds - times[last]) / cadence;
+    return barIndexForTime(this.timeline, Date.parse(value));
+  }
+
+  /** Index of the last bar at or before `value`; -1 before the first bar or for invalid times. */
+  indexAtOrBefore(value: string): number {
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? barIndexAtOrBefore(this.timeline, time) : -1;
   }
 
   /** The time `count` bars after `value` (negative counts go back). */
@@ -315,6 +337,9 @@ function volumeCandleData(bar: MarketBar, bars: readonly MarketBar[], multiplier
 export function volumeData(bar: MarketBar): HistogramData<UTCTimestamp> {
   return { time: timestamp(bar.start_time), value: Number(bar.volume), color: Number(bar.close) >= Number(bar.open) ? 'rgba(32,201,151,.45)' : 'rgba(255,107,107,.42)' };
 }
+
+/** Chart types whose bars are built from price moves, not time (each plots its own bar times). */
+const SYNTHETIC_BAR_CHART_TYPES: ReadonlySet<TradingChartType> = new Set(['renko', 'range', 'line-break', 'kagi', 'point-figure']);
 
 function isCandlestickType(type: TradingChartType): boolean {
   return type === 'candlestick'
@@ -522,6 +547,17 @@ function indicatorLineStyle(value: IndicatorOutput['lineStyle']): LineStyle | un
  * Chart data of a line output. Level outputs (pivots, boxes) get whitespace on the chart's bars that have no value between their
  * first and last point, so separate levels are not joined by a diagonal; marker outputs are drawn by `indicatorMarkers` instead.
  */
+/**
+ * An indicator output on the chart's bars (`alignIndicatorPoints`), the same output when its points are already
+ * on bar times. Raw bar times, not the plotted times: indicators compute on the bars on every chart type.
+ */
+export function indicatorOutputOnBars(output: IndicatorOutput, barTimes: readonly UTCTimestamp[], stepSeconds: number | null): IndicatorOutput {
+  const points = output.points.map((point) => ({ time: timestamp(point.time), value: point.value }));
+  const aligned = alignIndicatorPoints(points, barTimes, stepSeconds);
+  if (aligned.length === points.length && aligned.every((point, index) => point.time === points[index].time)) return output;
+  return { ...output, points: aligned.map((point) => ({ time: new Date(point.time * 1_000).toISOString(), value: point.value })) };
+}
+
 export function indicatorLineData(
   output: IndicatorOutput,
   barTimes: readonly UTCTimestamp[],
@@ -587,8 +623,16 @@ export class TradingChartAdapter {
   private comparisonRenderInProgress = false;
   private comparisonRenderPending = false;
   private bars: MarketBar[] = [];
-  private barTimeIndex: DrawingTimeIndex | null = null;
+  /** The price series' plotted times (bar times, or brick times on Renko-type charts); comparisons align to them. */
+  private priceTimes: UTCTimestamp[] = [];
+  /** Every time point the chart plots (all series), as Lightweight Charts indexes them; null = rebuild. */
+  private chartTimeIndex: DrawingTimeIndex | null = null;
+  /** Per series, the times (UTC seconds) it was given, whitespace items included, as Lightweight Charts indexes them. */
+  private readonly seriesTimes = new Map<string, readonly number[]>();
+  /** The loaded bars' own time index (for `drawingBars`); null = rebuild. */
+  private rawBarIndex: DrawingTimeIndex | null = null;
   private barSeries: DrawingBarSeries | null = null;
+  private barSeriesCache: (DrawingBar | undefined)[] = [];
   private indicatorOutputs: IndicatorOutput[] = [];
   private comparisonData: TradingComparisonData[] = [];
   private priceScaleMultiplier = 1;
@@ -671,6 +715,9 @@ export class TradingChartAdapter {
 
   private setPriceData(bars: readonly MarketBar[]): void {
     const visibleBars = displayBars(bars, this.chartType);
+    // Synthetic bars (Renko, range, line break, Kagi, P&F) plot their own times.
+    this.priceTimes = visibleBars.map((bar) => timestamp(bar.start_time));
+    this.noteSeriesTimes('price', this.priceTimes.map((time) => ({ time })));
     if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).setData(visibleBars.map((bar) => this.chartType === 'volume-candles' ? volumeCandleData(bar, visibleBars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier)));
     else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).setData(visibleBars.map((bar) => candlestickData(bar, this.priceScaleMultiplier)));
     else if (isColumnType(this.chartType)) (this.priceSeries as ISeriesApi<'Histogram'>).setData(visibleBars.map((bar) => isVolumeColumnType(this.chartType) ? volumeData(bar) : columnData(bar, this.priceScaleMultiplier)));
@@ -680,7 +727,7 @@ export class TradingChartAdapter {
   }
 
   private updatePriceData(bar: MarketBar): void {
-    if (this.chartType === 'heikin-ashi' || this.chartType === 'renko' || this.chartType === 'range' || this.chartType === 'line-break' || this.chartType === 'kagi' || this.chartType === 'point-figure') {
+    if (this.chartType === 'heikin-ashi' || SYNTHETIC_BAR_CHART_TYPES.has(this.chartType)) {
       this.setPriceData(this.bars);
       return;
     }
@@ -737,12 +784,13 @@ export class TradingChartAdapter {
     this.assertActive();
     const visibleRange = fit ? null : this.chart.timeScale().getVisibleLogicalRange();
     this.bars = normalizeChartBars(bars);
-    this.barTimeIndex = null;
-    this.barSeries = null;
+    this.invalidateDrawingTimes();
     this.revisions.clear();
     for (const bar of this.bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
     this.setPriceData(this.bars);
-    this.volumeSeries.setData(this.bars.map(volumeData));
+    const volume = this.bars.map(volumeData);
+    this.volumeSeries.setData(volume);
+    this.noteSeriesTimes('volume', volume);
     this.renderComparisonSeries();
     if (fit) this.fitContent();
     else if (visibleRange) this.chart.timeScale().setVisibleLogicalRange(visibleRange);
@@ -845,7 +893,7 @@ export class TradingChartAdapter {
           series.priceScale().applyOptions({ visible: true, borderVisible: true, ticksVisible: true, minimumWidth: 58, scaleMargins: { top: 0.1, bottom: 0.1 } });
         }
       }
-      const values = item.visible ? item.bars.flatMap((bar) => {
+      const values = item.visible ? alignSeriesToTimes(item.bars.flatMap((bar) => {
         const close = Number(bar.close);
         if (!Number.isFinite(close) || !Number.isFinite(Date.parse(bar.start_time))) return [];
         const percentChange = comparisonAnchorClose > 0 ? (close / comparisonAnchorClose - 1) * 100 : 0;
@@ -853,8 +901,9 @@ export class TradingChartAdapter {
           ? primaryRange.min + ((percentChange - percentMin) / percentSpan) * priceSpan
           : close;
         return [{ time: timestamp(bar.start_time), value }];
-      }) : [];
+      }), this.priceTimes) : [];
       series.setData(values);
+      this.noteSeriesTimes(`comparison:${item.instrumentId}`, values);
     }
 
     const lastComparisonPane = this.indicatorPaneIds.length + paneItems.length;
@@ -868,6 +917,7 @@ export class TradingChartAdapter {
     this.comparisonSeries.delete(instrumentId);
     this.comparisonSeriesPanes.delete(instrumentId);
     this.comparisonSeriesOptions.delete(instrumentId);
+    this.forgetSeriesTimes(`comparison:${instrumentId}`);
     try {
       this.chart.removeSeries(series);
     } catch (error) {
@@ -890,6 +940,7 @@ export class TradingChartAdapter {
         this.indicatorMarkerPlugins.get(key)?.detach();
         this.indicatorMarkerPlugins.delete(key);
         this.chart.removeSeries(series);
+        this.forgetSeriesTimes(`indicator:${key}`);
         this.indicatorSeries.delete(key);
         this.indicatorSeriesPanes.delete(key);
       }
@@ -946,11 +997,13 @@ export class TradingChartAdapter {
           ...indicatorPriceFormat(output.precision),
         });
       }
+      const data = indicatorLineData(indicatorOutputOnBars(output, barTimes, this.intervalStepSeconds()), barTimes, this.priceScaleMultiplier);
+      this.noteSeriesTimes(`indicator:${output.key}`, data);
       if (output.kind === 'histogram') {
-        (series as ISeriesApi<'Histogram'>).setData(indicatorLineData(output, barTimes, this.priceScaleMultiplier));
+        (series as ISeriesApi<'Histogram'>).setData(data);
         continue;
       }
-      (series as ISeriesApi<'Line'>).setData(indicatorLineData(output, barTimes, this.priceScaleMultiplier));
+      (series as ISeriesApi<'Line'>).setData(data);
       const markers = output.render === 'markers' ? indicatorMarkers(output, this.priceScaleMultiplier) : null;
       const plugin = this.indicatorMarkerPlugins.get(output.key);
       if (markers && plugin) plugin.setMarkers(markers);
@@ -1150,10 +1203,17 @@ export class TradingChartAdapter {
     if (bar.ingestion_revision < previousRevision) return false;
     this.revisions.set(time, bar.ingestion_revision);
     const existingIndex = this.bars.findIndex((item) => timestamp(item.start_time) === time);
-    if (existingIndex >= 0) this.bars[existingIndex] = bar;
-    else this.bars.push(bar);
-    this.barTimeIndex = null;
-    this.barSeries = null;
+    if (existingIndex >= 0) {
+      // An in-place tick keeps every time point; only the cached numbers of this bar change.
+      this.bars[existingIndex] = bar;
+      this.barSeriesCache[existingIndex] = undefined;
+    } else {
+      this.bars.push(bar);
+      this.priceTimes.push(time);
+      this.appendSeriesTime('price', time);
+      this.appendSeriesTime('volume', time);
+      this.invalidateDrawingTimes();
+    }
     this.updatePriceData(bar);
     this.volumeSeries.update(volumeData(bar));
     return true;
@@ -1235,14 +1295,13 @@ export class TradingChartAdapter {
     this.assertActive();
     if (!this.barSeries) {
       const bars = this.bars;
-      const index = this.timeIndex();
-      const cache: (DrawingBar | undefined)[] = [];
+      const index = this.rawBarTimeIndex();
       this.barSeries = {
         length: bars.length,
         at: (position) => {
           const bar = bars[position];
           if (!bar) return undefined;
-          cache[position] ??= {
+          this.barSeriesCache[position] ??= {
             time: bar.start_time,
             open: Number(bar.open),
             high: Number(bar.high),
@@ -1250,15 +1309,55 @@ export class TradingChartAdapter {
             close: Number(bar.close),
             volume: Number(bar.volume),
           };
-          return cache[position];
+          return this.barSeriesCache[position];
         },
-        indexAtOrBefore: (time) => {
-          const logical = index.logicalIndexForTime(time);
-          return logical === null ? -1 : Math.min(bars.length - 1, Math.floor(logical + 1e-9));
-        },
+        indexAtOrBefore: (time) => index.indexAtOrBefore(time),
       };
     }
     return this.barSeries;
+  }
+
+  /**
+   * The `drawingBars()` positions currently visible (partly visible bars at the edges included), or null before the chart
+   * has a range or when no loaded bar is in view (scrolled into the empty space past either end).
+   */
+  drawingVisibleBars(): { from: number; to: number } | null {
+    this.assertActive();
+    const range = this.chart.timeScale().getVisibleLogicalRange();
+    if (!range || this.bars.length === 0) return null;
+    const chart = this.timeIndex();
+    const fromTime = chart.timeForLogicalIndex(Math.max(0, Math.floor(range.from)));
+    const toTime = chart.timeForLogicalIndex(Math.max(0, Math.ceil(range.to)));
+    const bars = this.rawBarTimeIndex();
+    const atOrBefore = fromTime ? bars.indexAtOrBefore(fromTime) : -1;
+    // The first bar starting at or after the left edge.
+    const from = fromTime && atOrBefore >= 0 && Date.parse(this.bars[atOrBefore].start_time) < Date.parse(fromTime) ? atOrBefore + 1 : Math.max(0, atOrBefore);
+    const to = toTime ? bars.indexAtOrBefore(toTime) : this.bars.length - 1;
+    return to < 0 || from > to ? null : { from, to };
+  }
+
+  /**
+   * Whether the chart's bar index is the loaded bars' own index, as the server evaluates drawing alerts. Brick-type
+   * charts (Renko, range, line break, Kagi, P&F) plot synthetic bars, so a sloped line's bar index differs there.
+   */
+  drawingBarIndexMatchesBars(): boolean {
+    if (SYNTHETIC_BAR_CHART_TYPES.has(this.chartType) || this.bars.length === 0) return false;
+    // Checked, not assumed: up to the last bar the chart plots exactly the bars' times, so any future source of extra
+    // time points falls back to flat levels instead of a sloped alert that crosses other prices on the server.
+    const lastBar = this.bars[this.bars.length - 1].start_time;
+    return this.timeIndex().indexAtOrBefore(lastBar) === this.bars.length - 1;
+  }
+
+  /** The chart bar index of a time (fractional between bars), on the chart's own time scale. */
+  drawingBarIndexForTime(time: string): number | null {
+    this.assertActive();
+    return this.timeIndex().logicalIndexForTime(time);
+  }
+
+  /** The time at a chart bar index (inverse of drawingBarIndexForTime). */
+  drawingTimeForBarIndex(index: number): string | null {
+    this.assertActive();
+    return this.timeIndex().timeForLogicalIndex(index);
   }
 
   /** The time `count` bars after `time`, across gaps; beyond the data at the bar interval. */
@@ -1706,7 +1805,7 @@ export class TradingChartAdapter {
     };
   }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.barTimeIndex = null; this.barSeries = null; this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.indicatorMarkerPlugins.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.priceTimes = []; this.seriesTimes.clear(); this.invalidateDrawingTimes(); this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.indicatorMarkerPlugins.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
   /**
    * The x coordinate of a logical index. Lightweight Charts returns 0 for a
    * fractional logical index, so a time between bars (another interval's
@@ -1720,9 +1819,54 @@ export class TradingChartAdapter {
     const to = timeScale.logicalToCoordinate((lower + 1) as Logical);
     return to === null ? null : from + (to - from) * (logical - lower);
   }
+  /** The chart's own time scale: every time any series plots, indexed as Lightweight Charts does. */
   private timeIndex(): DrawingTimeIndex {
-    this.barTimeIndex ??= new DrawingTimeIndex(this.bars);
-    return this.barTimeIndex;
+    if (!this.chartTimeIndex) {
+      const times: number[] = [];
+      for (const seriesTimes of this.seriesTimes.values()) {
+        for (const time of seriesTimes) {
+          if (Number.isFinite(time)) times.push(time * 1_000);
+        }
+      }
+      this.chartTimeIndex = DrawingTimeIndex.fromTimes(times, this.intervalStep());
+    }
+    return this.chartTimeIndex;
+  }
+  private intervalStepSeconds(): number | null {
+    const step = this.intervalStep();
+    return step === null ? null : step / 1_000;
+  }
+  private intervalStep(): number | null {
+    const interval = this.bars[0]?.interval;
+    return interval ? intervalStepMs(interval) : null;
+  }
+  private rawBarTimeIndex(): DrawingTimeIndex {
+    this.rawBarIndex ??= new DrawingTimeIndex(this.bars, this.intervalStep());
+    return this.rawBarIndex;
+  }
+  private invalidateDrawingTimes(): void {
+    this.chartTimeIndex = null;
+    this.rawBarIndex = null;
+    this.barSeries = null;
+    this.barSeriesCache = [];
+  }
+  /** Notes the times a series was given; the chart timeline is rebuilt only when they changed. */
+  private noteSeriesTimes(key: string, data: readonly { time: Time }[]): void {
+    const times = data.map((item) => (typeof item.time === 'number' ? item.time : Number.NaN));
+    const previous = this.seriesTimes.get(key);
+    if (previous && previous.length === times.length && previous.every((time, index) => Object.is(time, times[index]))) return;
+    this.seriesTimes.set(key, times);
+    this.chartTimeIndex = null;
+  }
+  /** Notes a bar a series appended by `update` (a new time after its last one). */
+  private appendSeriesTime(key: string, time: number): void {
+    const previous = this.seriesTimes.get(key) ?? [];
+    if (previous.length > 0 && previous[previous.length - 1] >= time) return;
+    this.seriesTimes.set(key, [...previous, time]);
+    this.chartTimeIndex = null;
+  }
+  private forgetSeriesTimes(key: string): void {
+    if (this.seriesTimes.delete(key)) this.chartTimeIndex = null;
   }
   private notifyViewportChange(): void { for (const listener of this.viewportListeners) listener(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }

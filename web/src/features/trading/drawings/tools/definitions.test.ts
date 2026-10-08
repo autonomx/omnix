@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { chartPalette } from '../../chartPalette';
-import { alertLevelPriceAtBar } from './alertLevels';
-import { drawingToolDefinition } from './registry';
-import { pointAt, runTool } from './testing';
-import type { DrawingShape } from './types';
+import { alertLevelPriceAt, lineThroughPoint } from './alertLevels';
+import { drawingPropertiesWithDefaults, drawingToolDefinition } from './registry';
+import { pointAt, runTool, testServices } from './testing';
+import type { DrawingAlertLevel, DrawingPoint, DrawingShape } from './types';
 
 function only<K extends DrawingShape['kind']>(shapes: DrawingShape[], kind: K): Extract<DrawingShape, { kind: K }>[] {
   return shapes.filter((shape): shape is Extract<DrawingShape, { kind: K }> => shape.kind === kind);
@@ -157,55 +157,55 @@ describe('drawing tool geometry and hit tests', () => {
 });
 
 describe('drawing alert levels', () => {
-  // Bar index of a time on the test projector: one bar per pixel/minute.
-  const barIndex = (time: string) => (Date.parse(time) - Date.parse(pointAt(0, 0).time)) / 60_000;
-  const priceAt = (level: Parameters<typeof alertLevelPriceAtBar>[0], index: number) => alertLevelPriceAtBar(level, index, barIndex);
+  // On the test services one bar is one minute from pointAt(0, ...).
+  const priceAt = (level: DrawingAlertLevel, index: number) => alertLevelPriceAt(level, index, testServices.barIndexForTime);
+  const levelsOf = (tool: string, points: DrawingPoint[], properties = {}) => (
+    drawingToolDefinition(tool)!.alertLevels!(points, drawingPropertiesWithDefaults(tool, properties), testServices)
+  );
 
-  it('horizontal line and ray alert at their price, the ray only from its anchor', () => {
+  it('horizontal line and ray are two anchors at one price; the ray only from its anchor', () => {
     const anchor = pointAt(100, 200);
-    const [line] = drawingToolDefinition('horizontal-line')!.alertLevels!([anchor], {});
-    expect(line).toEqual({ key: 'line', label: 'Horizontal line', anchors: [anchor], extend: { left: true, right: true }, interpolation: 'bars' });
+    const [line] = levelsOf('horizontal-line', [anchor]);
+    expect(line).toEqual({ key: 'line', label: 'Horizontal line', anchors: [anchor, pointAt(101, 200)], extend: 'both', interpolation: 'bars' });
     expect(priceAt(line, 0)).toBe(800);
     expect(priceAt(line, 900)).toBe(800);
-    const [ray] = drawingToolDefinition('horizontal-ray')!.alertLevels!([anchor], {});
-    expect(ray.extend).toEqual({ left: false, right: true });
+    const [ray] = levelsOf('horizontal-ray', [anchor]);
+    expect(ray.extend).toBe('right');
     expect(priceAt(ray, 50)).toBeNull();
     expect(priceAt(ray, 900)).toBe(800);
   });
 
   it('trend line alerts between its anchors in bar space unless extended', () => {
     const points = [pointAt(200, 200), pointAt(100, 300)];
-    const definition = drawingToolDefinition('trend-line')!;
-    const [level] = definition.alertLevels!(points, { extendLeft: false, extendRight: false });
+    const [level] = levelsOf('trend-line', points);
     // Anchors come back ordered by time.
     expect(level.anchors).toEqual([pointAt(100, 300), pointAt(200, 200)]);
-    expect(level.interpolation).toBe('bars');
+    expect(level.extend).toBe('none');
     expect(priceAt(level, 150)).toBeCloseTo(750);
     expect(priceAt(level, 250)).toBeNull();
-    const [extended] = definition.alertLevels!(points, { extendLeft: false, extendRight: true });
+    expect(levelsOf('trend-line', points, { extendLeft: true, extendRight: true })[0].extend).toBe('both');
+    const [extended] = levelsOf('trend-line', points, { extendRight: true });
     expect(priceAt(extended, 300)).toBeCloseTo(900);
     expect(priceAt(extended, 50)).toBeNull();
   });
 
-  it('ray alerts from its first anchor in the direction of the second', () => {
-    const definition = drawingToolDefinition('ray')!;
-    const [right] = definition.alertLevels!([pointAt(100, 300), pointAt(200, 200)], {});
+  it('a ray alerts only in its own direction', () => {
+    const [right] = levelsOf('ray', [pointAt(100, 300), pointAt(200, 200)]);
+    expect(right.extend).toBe('right');
     expect(priceAt(right, 50)).toBeNull();
     expect(priceAt(right, 400)).toBeCloseTo(1000);
-    const [left] = definition.alertLevels!([pointAt(200, 300), pointAt(100, 200)], {});
+    const [left] = levelsOf('ray', [pointAt(200, 300), pointAt(100, 200)]);
+    expect(left.extend).toBe('left');
     expect(priceAt(left, 250)).toBeNull();
     expect(priceAt(left, 0)).toBeCloseTo(900);
-    expect(definition.alertLevels!([pointAt(100, 300), pointAt(100, 200)], {})).toEqual([]);
+    expect(levelsOf('ray', [pointAt(100, 300), pointAt(100, 200)])).toEqual([]);
   });
 
-  it('interpolates by bar index, not by time, across gaps', () => {
-    // An overnight gap: bar 1 is a day after bar 0, so time and bar index disagree.
-    const times = ['2026-10-05T19:55:00.000Z', '2026-10-06T13:30:00.000Z', '2026-10-06T13:35:00.000Z'];
-    const indexOf = (time: string) => times.indexOf(time);
-    const [level] = drawingToolDefinition('trend-line')!.alertLevels!(
-      [{ time: times[0], price: 100 }, { time: times[2], price: 110 }],
-      { extendLeft: false, extendRight: false },
-    );
-    expect(alertLevelPriceAtBar(level, 1, indexOf)).toBe(105);
+  it('expresses a derived line by its own two anchors (through-point form)', () => {
+    const [main] = levelsOf('trend-line', [pointAt(100, 300), pointAt(200, 200)]);
+    const parallel = lineThroughPoint('lower', 'Parallel', main, pointAt(150, 330), testServices)!;
+    // The main line is at 750 at bar 150; the point is 80 lower, so the parallel is shifted by -80.
+    expect(parallel.anchors).toEqual([pointAt(100, 380), pointAt(200, 280)]);
+    expect(priceAt(parallel, 150)).toBeCloseTo(670);
   });
 });

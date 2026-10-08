@@ -3,6 +3,7 @@ import { drawingToolGroups, drawingToolItemTool } from '../../TradingDrawingTool
 import type { DrawingTool } from '../drawingCommands';
 import { hitTestShapes } from './hitTest';
 import { DRAWING_TOOL_DEFINITIONS, drawingDisplayName, drawingPropertiesWithDefaults, drawingToolDefinition, isDrawingToolId } from './registry';
+import { clampToField, propertyValueReadable } from './properties';
 import { constrainTo45Degrees, shapeSignature, simplifyPolyline } from './shapes';
 import { anchorCount } from './types';
 
@@ -68,6 +69,18 @@ describe('drawing tool registry', () => {
     expect(drawingDisplayName({ toolType: 'text', text: '' })).toBe('Text note');
     expect(drawingDisplayName({ toolType: 'text', text: 'Breakout' })).toBe('Breakout');
     expect(drawingDisplayName({ toolType: 'pitchfork' })).toBe('pitchfork (unsupported)');
+  });
+});
+
+describe('property helpers', () => {
+  it('tells which stored values the settings dialog can edit, and clamps numbers', () => {
+    const levels = { key: 'levels', label: 'Levels', type: 'records', fields: [], newRecord: {} } as const;
+    expect(propertyValueReadable(levels, [{ value: 1 }])).toBe(true);
+    expect(propertyValueReadable(levels, [0, 1])).toBe(false);
+    expect(propertyValueReadable({ key: 'a', label: 'A', type: 'select', options: [{ value: 'x', label: 'X' }] }, 'y')).toBe(false);
+    expect(clampToField(5, { min: 0, max: 1 })).toBe(1);
+    expect(clampToField(-5, { min: 0 })).toBe(0);
+    expect(clampToField(0.5, {})).toBe(0.5);
   });
 });
 

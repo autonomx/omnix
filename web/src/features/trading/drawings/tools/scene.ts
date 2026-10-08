@@ -1,3 +1,4 @@
+import { guardToolCall } from './guard';
 import { DRAWING_HIT_TOLERANCE, hitTestShapes } from './hitTest';
 import {
   anchorCount,
@@ -8,7 +9,9 @@ import {
   type DrawingPoint,
   type DrawingShape,
   type DrawingToolDefinition,
+  type DrawingToolServices,
   type ScreenPoint,
+  UNKNOWN_DRAWING_INSTRUMENT,
 } from './types';
 
 export type DrawingProjector = (point: DrawingPoint) => ScreenPoint | null;
@@ -20,12 +23,17 @@ export type DrawingShapeInput = Omit<DrawingGeometryContext, 'points'> & {
 };
 
 /** Chart access for code without a chart (tests, previews before the chart exists). */
-export function staticChartAccess(project: DrawingProjector): DrawingChartAccess {
+export function staticChartAccess(project: DrawingProjector, services: Partial<DrawingToolServices> = {}): DrawingChartAccess {
   return {
     project,
-    bars: EMPTY_DRAWING_BARS,
+    barIndexForTime: () => null,
+    timeForBarIndex: () => null,
     timeAfterBars: () => null,
+    bars: EMPTY_DRAWING_BARS,
+    visibleBars: () => null,
     formatPrice: (price) => price.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+    instrument: UNKNOWN_DRAWING_INSTRUMENT,
+    ...services,
   };
 }
 
@@ -51,7 +59,7 @@ export function drawingGeometry(input: DrawingShapeInput): { shapes: DrawingShap
     points.push(projected);
   }
   const context: DrawingGeometryContext = { ...rest, points };
-  return { shapes: definition.geometry(context), context };
+  return { shapes: guardToolCall(definition.id, 'geometry', () => definition.geometry(context), []), context };
 }
 
 /** Hit-tests one drawing's shapes, through the tool's override when it has one. */
@@ -62,7 +70,8 @@ export function hitTestDrawing(
   point: ScreenPoint,
   tolerance = DRAWING_HIT_TOLERANCE,
 ): DrawingHit | null {
-  return definition.hitTest
-    ? definition.hitTest(shapes, point, tolerance, context)
+  const { hitTest } = definition;
+  return hitTest
+    ? guardToolCall(definition.id, 'hitTest', () => hitTest(shapes, point, tolerance, context), null)
     : hitTestShapes(shapes, point, tolerance);
 }
