@@ -1120,17 +1120,17 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 
 ## 9. Progress
 
-**Status on 2026-10-08.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4, 0.5a, 1.1, 1.2, 2.1, 2.3, 2.4, 2.5, 3.1, 5.1–5.3, 6.1, 7.1 and 8.1 (wave 1). TVP-0.4 is done and the TVP-3 drawing tools have started (3.1 merged). TVP-0.5a (webhook delivery) is done. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **109**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
+**Status on 2026-10-08.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4, 0.5a, 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 5.1–5.3, 6.1, 7.1 and 8.1 (wave 1). TVP-0.4 is done and the TVP-3 drawing tools have started (3.1 merged). TVP-0.5a (webhook delivery) is done. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **109**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
 
 **Completion.**
 
 <!-- parity-completion:start -->
 | Measure | Done |
 |---|---|
-| TradingView parity, all features in scope | 63% |
-| TradingView parity, daily + weekly features | 70% |
-| Roadmap work packages merged in full | 25% (17 of 67) |
-| Daily + weekly gap closed since the first count | 33% (50 of 150) |
+| TradingView parity, all features in scope | 66% |
+| TradingView parity, daily + weekly features | 75% |
+| Roadmap work packages merged in full | 27% (18 of 67) |
+| Daily + weekly gap closed since the first count | 45% (67 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1141,28 +1141,28 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
 |---|---|---|---|---|---|---|
 | Charts and layouts | 27 | 3 | 2 / 0 / 1 | 0 | 0 | 86% |
-| Drawing tools | 25 | 4 | 11 / 14 / 47 | 0 | 0 | 27% |
+| Drawing tools | 29 | 4 | 7 / 14 / 47 | 0 | 0 | 31% |
 | Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 | 86% |
 | User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
 | Alerts | 16 | 3 | 3 / 2 / 0 | 0 | 0 | 73% |
-| Shortcuts | 25 | 7 | 18 / 0 / 0 | 0 | 0 | 57% |
+| Shortcuts | 38 | 7 | 5 / 0 / 0 | 0 | 0 | 83% |
 | Watchlists | 9 | 1 | 1 / 0 / 0 | 0 | 0 | 86% |
 | Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 | 21% |
 | Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 | 82% |
 | Paper and chart trading | 11 | 2 | 5 / 4 / 0 | 0 | 0 | 55% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 | 21% |
-| **Total** | 262 | 24 | 45 / 55 / 52 | 55 | 0 | 63% |
+| **Total** | 279 | 24 | 28 / 55 / 52 | 55 | 0 | 66% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
-| Daily | 103 | 15 | 45 | 0 | 0 | 163 | 68% |
+| Daily | 120 | 15 | 28 | 0 | 0 | 163 | 78% |
 | Weekly | 146 | 9 | 55 | 0 | 0 | 210 | 72% |
 | Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
-Missing daily + weekly features: **100**
+Missing daily + weekly features: **83**
 
-Done (have counts 1, partial 0.5, of the features in scope): **63%** overall, **70%** of daily + weekly.
+Done (have counts 1, partial 0.5, of the features in scope): **66%** overall, **75%** of daily + weekly.
 <!-- parity-report:end -->
 
 **How the work runs.**
@@ -1179,6 +1179,7 @@ Done (have counts 1, partial 0.5, of the features in scope): **63%** overall, **
 | TVP-0.3 | **Done** | `41d5410a3`, `14af59bf62` | Command catalogue and dispatcher (text fields ignored, most specific scope wins, Alt by physical key, exact modifiers), key overrides, conflict detection; drawing undo/redo/delete moved onto it. Finding: `TradingCommandCenter` is a strategy operations panel, not a command palette, so TVP-2.1's Ctrl+K needs a new palette. Override persistence is decided in TVP-2.4 |
 | TVP-0.1 | **Done** | merged `6996ba5832` | Ledger of 493 features (`docs/trading/tradingview-parity.json`) with evidence for every have/partial entry, a report script that fails on stale or missing evidence, verification of every *verify* row by code, "Omnix Scripts" naming (D-1), §2 corrected. The ledger caught 16 entries made stale by the TVP-0.4 merge |
 | TVP-2.1 + 2.3 + 2.4 | **Done** | merged `d7e84f2f5d` | Chart shortcuts (type-to-search, interval box, `/`, Ctrl+K palette, Ctrl+S, `.`, arrows, zoom, Alt+R/I/L/P/S, Ctrl+Y), layout shortcuts (Tab between charts, Alt+Enter, Alt+W), tab shortcuts (Alt-based in the browser, TradingView's Ctrl keys for the installed app), closed-tab stack, shortcut dialog with rebinding and conflict checks. Own hotkey matcher for keyboard layouts (decision TVP-0.3 rev). Three review rounds. Alt+G bound with the TVP-2.5 merge. Follow-up: Alt+A (add alert) |
+| TVP-2.2 | **Done** | merged (this commit) | Multi-select (Ctrl+click; group move and delete; locked drawings stay), Ctrl+drag clone with a ghost preview, Ctrl+C/V copy and paste (also onto another chart or symbol), arrow-key nudge (shadows the chart's arrows only while a movable drawing is selected), Alt+T/H/V/C/F and Alt+Shift+R tool keys, Ctrl+Alt+H hide all, Shift constrain (45 degrees, square, circle). One review round: undo left stale selection flags, no drag threshold, canvas mode ignored hide-all; all fixed. Decision TVP-2.2 (keys) |
 | TVP-2.5 | **Done** | merged `a4275fd16c` | Custom intervals with favourites (the keyboard interval box uses the same parser), countdown, go to date (Alt+G), copy image, duplicate layout, double-click maximise/collapse, extended-hours toggle and price line, chart templates, market status and delay badges (new `/api/trading/market-status`). Review fixes: **clock-aligned chart aggregation** (`providers/clock_aggregation.py`; the strategy runner's count mode is unchanged and pinned by goldens), multi-day equity buckets count trading days, a bucket is final only when its last base bar is, comparison series and the data window use the chart's alignment and extended-hours setting. Two review rounds. Remaining: snapshot links (need a hosted snapshot service) |
 | TVP-6.1 | **Done** | merged `fe21951c71` | 9 indicators in browser and server, bit-exact: Rob Booker ADX Breakout, Knoxville Divergence, Intraday Pivot Points, Missed Pivot Points, Reversal, Ziv Ghost Pivots; Relative Volume at Time; 24-hour Volume; Correlation Coefficient with a second series. Review fixes: definitions aligned with TradingView's help pages, sessions in the exchange timezone (futures roll at 18:00 ET despite the catalog's 24x7 tag), levels and markers rendering, compare-symbol loading. Two review rounds. Follow-ups: alerts pass `params`/session/compare bars (TVP-1.x); Intraday Pivot Points period as a 1/4/8 select; unlabelled US-equity bars count as regular |
 | TVP-0.4 | **Done** | first part `e1a0dae44a`; readiness round merged (this commit) | Registry with renderer-agnostic geometry, creation gestures, generic properties dialog, gap-aware time index, safe document upgrades; SVG host pixel-identical; canvas behind a switch. Readiness round: bar-index alert-level contract shared with the server (`barTimeline.ts`, shared cases), handles that edit any anchor or property, `onCreate`, an action bus with source and error isolation, guarded tool callbacks. Decision TVP-0.4 (alerts): comparisons and indicator data on their own clock are plotted on the main series' bars, so a drawing and its alert share one bar index; brick charts and lines starting before the loaded bars offer only flat levels. Three review rounds. **The TVP-3 drawing tools can start** |

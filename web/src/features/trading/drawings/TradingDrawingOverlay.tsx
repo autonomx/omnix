@@ -43,7 +43,7 @@ import {
 } from './tools/types';
 import { useCanvasDrawingHost } from './useCanvasDrawingHost';
 import { useDrawingCreation, type PointerPoint } from './useDrawingCreation';
-import { useDrawingEditing } from './useDrawingEditing';
+import { CLONE_GHOST_SUFFIX, cloneGhosts, useDrawingEditing, type TranslationPreview } from './useDrawingEditing';
 import { useProjectionSync } from './useProjectionSync';
 import './TradingDrawingMeasurement.css';
 
@@ -234,6 +234,12 @@ export type TradingDrawingOverlayProps = {
   selectedId: string | null;
   onAdd: (drawing: TradingDrawing) => void;
   onSelect: (id: string | null) => void;
+  /** Ctrl+click on a drawing: add it to the selection or remove it (TVP-2.2). */
+  onToggleSelect?: (id: string) => void;
+  /** Ctrl+drag on a drawing: copies of it (or of the selection it is part of), moved. */
+  onCloneDrawings?: (ids: readonly string[], from: DrawingPoint, to: DrawingPoint) => void;
+  /** Ctrl+Alt+H: every drawing hidden (they stay stored and selectable from the object tree). */
+  allHidden?: boolean;
   onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
   /** A handle's edit of anchors and/or properties; without it, single-anchor edits fall back to onMovePoint. */
   onEditDrawing?: (id: string, patch: DrawingEditPatch) => void;
@@ -247,6 +253,21 @@ export type TradingDrawingOverlayProps = {
   /** Overrides the stored renderer switch (`drawingRenderer.ts`). */
   renderer?: DrawingRendererMode;
 };
+
+/** The drawings a drag of `id` moves: the whole selection when `id` is part of a multi-selection. */
+function selectionGroup(drawings: readonly TradingDrawing[], id: string): readonly string[] {
+  // Locked drawings stay put, also in the preview.
+  const selection = drawings.filter((drawing) => drawing.selected && (!drawing.locked || drawing.drawingId === id)).map((drawing) => drawing.drawingId);
+  return selection.length > 1 && selection.includes(id) ? selection : [id];
+}
+
+/** The drawings the SVG draws: all visible ones (only the selected one when the canvas draws the rest), plus clone ghosts. */
+function svgDrawings(drawings: readonly TradingDrawing[], selectedId: string | null, canvas: boolean, translation: TranslationPreview | null): TradingDrawing[] {
+  return [
+    ...drawings.filter((drawing) => !drawing.hidden && (!canvas || drawing.drawingId === selectedId)),
+    ...cloneGhosts(drawings, translation),
+  ];
+}
 
 /** onEditDrawing, or onMovePoint for an edit that moves exactly one anchor. */
 function editFallback(drawings: TradingDrawing[], onMovePoint: TradingDrawingOverlayProps['onMovePoint']) {
@@ -268,6 +289,7 @@ export function TradingDrawingOverlay({
   selectedId,
   onAdd,
   onSelect,
+  onToggleSelect, onCloneDrawings, allHidden = false,
   onMovePoint,
   onEditDrawing,
   onTranslateDrawing,
@@ -294,7 +316,8 @@ export function TradingDrawingOverlay({
     pointFor: drawingPointLocator(svgRef, adapter, snapMode),
     screenFor: (clientX, clientY) => screenPoint(svgRef.current, clientX, clientY),
     services: () => access,
-    onSelect,
+    groupOf: (id) => selectionGroup(drawings, id),
+    onSelect, onToggleSelect, onCloneDrawings,
     onEdit: onEditDrawing ?? editFallback(drawings, onMovePoint),
     onTranslateDrawing,
     onRemove,
@@ -315,7 +338,7 @@ export function TradingDrawingOverlay({
   ));
 
   const frame: DrawingFrame = {
-    drawings,
+    drawings: allHidden ? [] : drawings,
     selectedId,
     interval,
     handlePreview: editing.handlePreview,
@@ -390,10 +413,8 @@ export function TradingDrawingOverlay({
   void viewport.revision;
   // Measure like the imperative refresh does, so both always agree on shape structure.
   const size = svgRef.current ? svgViewport(svgRef.current) : { width: viewport.width, height: viewport.height };
-  const rendered = drawings
-    .filter((drawing) => !drawing.hidden && (!canvas || drawing.drawingId === selectedId))
-    .map((drawing) => renderDrawing(drawing, frame, access, size))
-    .filter((item): item is RenderedDrawing => item !== null);
+  const rendered = (allHidden ? [] : svgDrawings(drawings, selectedId, canvas, editing.translationPreview))
+    .map((drawing) => renderDrawing(drawing, frame, access, size)).filter((item): item is RenderedDrawing => item !== null);
 
   return (
     <svg
@@ -411,7 +432,7 @@ export function TradingDrawingOverlay({
         <DrawingGroup
           key={item.drawing.drawingId}
           item={item}
-          withShapes={!canvas}
+          withShapes={!canvas || item.drawing.drawingId.endsWith(CLONE_GHOST_SUFFIX)}
           onPressDrawing={editing.dragDrawing(item.drawing)}
           onPressHandle={(handle) => editing.dragHandle(item.drawing, handle)}
         />

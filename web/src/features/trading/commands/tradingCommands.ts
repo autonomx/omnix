@@ -38,6 +38,11 @@ export type TradingCommandDefinition = {
   handledLocally?: boolean;
   /** Fires again while the key is held (moving and zooming the chart); other commands run once per press. */
   repeatable?: boolean;
+  /**
+   * Commands of a less specific scope this one deliberately takes a key from while it is active, as TradingView
+   * does (the arrow keys move a selected drawing instead of the chart). Not reported as shadowing.
+   */
+  shadows?: readonly string[];
   /** Catalogued ahead of its action (it arrives with another work package): listed as not available yet, never dispatched or rebound. */
   planned?: boolean;
 };
@@ -70,7 +75,22 @@ export const TRADING_COMMANDS = [
   // Drawings
   { id: 'drawing.undo', label: 'Undo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+z'] },
   { id: 'drawing.redo', label: 'Redo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+shift+z', 'mod+y'] },
-  { id: 'drawing.delete', label: 'Delete selected drawing', group: 'Drawings', scope: 'drawing', defaultKeys: ['delete', 'backspace'], keyContext: 'chart' },
+  { id: 'drawing.delete', label: 'Delete selected drawings', group: 'Drawings', scope: 'drawing', defaultKeys: ['delete', 'backspace'], keyContext: 'chart' },
+  // TVP-2.2: drawing tools, clipboard, nudge and hide-all.
+  { id: 'drawing.trendLine', label: 'Trend line tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+t'] },
+  { id: 'drawing.horizontalLine', label: 'Horizontal line tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+h'] },
+  { id: 'drawing.verticalLine', label: 'Vertical line tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+v'] },
+  { id: 'drawing.crossLine', label: 'Cross line tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+c'] },
+  { id: 'drawing.fibRetracement', label: 'Fib retracement tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+f'] },
+  { id: 'drawing.rectangle', label: 'Rectangle tool', group: 'Drawings', scope: 'chart', defaultKeys: ['alt+shift+r'] },
+  { id: 'drawing.copy', label: 'Copy selected drawings', group: 'Drawings', scope: 'drawing', defaultKeys: ['mod+c'], keyContext: 'chart' },
+  { id: 'drawing.paste', label: 'Paste drawings', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+v'], keyContext: 'chart' },
+  // TradingView's Ctrl+Alt+H (Ctrl on macOS too, where ⌘⌥H hides other apps); see decision TVP-2.2 (keys).
+  { id: 'drawing.hideAll', label: 'Hide or show all drawings', group: 'Drawings', scope: 'chart', defaultKeys: ['ctrl+alt+h'] },
+  { id: 'drawing.nudgeLeft', label: 'Move selected drawings one bar left', group: 'Drawings', scope: 'drawing', defaultKeys: ['arrowleft'], keyContext: 'chart', repeatable: true, shadows: ['chart.moveLeft'] },
+  { id: 'drawing.nudgeRight', label: 'Move selected drawings one bar right', group: 'Drawings', scope: 'drawing', defaultKeys: ['arrowright'], keyContext: 'chart', repeatable: true, shadows: ['chart.moveRight'] },
+  { id: 'drawing.nudgeUp', label: 'Move selected drawings up', group: 'Drawings', scope: 'drawing', defaultKeys: ['arrowup'], keyContext: 'chart', repeatable: true },
+  { id: 'drawing.nudgeDown', label: 'Move selected drawings down', group: 'Drawings', scope: 'drawing', defaultKeys: ['arrowdown'], keyContext: 'chart', repeatable: true },
   // General and layouts. Omnix calls a saved TradingView layout a workspace.
   { id: 'workspace.commandPalette', label: 'Open command palette', group: 'General', scope: 'workspace', defaultKeys: ['mod+k'] },
   { id: 'workspace.shortcuts', label: 'Keyboard shortcuts', group: 'General', scope: 'workspace', defaultKeys: ['mod+/'] },
@@ -220,6 +240,9 @@ export function rebindProblem(
   const parsed = parseHotkey(hotkey);
   const { key } = parsed;
   if (!key) return 'Press a key.';
+  // A command's own default (reviewed with the catalogue: Tab between charts, TradingView's Ctrl+Alt+H) can always be restored.
+  const isDefault = definition.defaultKeys.some((key) => normalizeHotkey(key) === normalizeHotkey(hotkey));
+  if (isDefault) return null;
   if (plain && FOCUS_KEYS.has(key)) return 'Enter, Space, Tab and Escape need Ctrl, Alt or ⌘: on their own they work buttons, focus and dialogs.';
   if (plain && !definition.keyContext) return 'Keys without Ctrl, Alt or ⌘ are only for commands that act on the chart. Add a modifier.';
   if ((parsed.mod || parsed.ctrl) && parsed.alt) return 'Ctrl+Alt is AltGr on many keyboards, which types characters such as @ or {. Use Ctrl or Alt, not both.';
@@ -277,8 +300,12 @@ export function findKeyClashes(
       if (typed) clashes.push({ hotkey: normalized, ids: [definition.id, typed], kind: 'typing' });
     }
   }
+  const intended = (left: TradingCommandDefinition, right: TradingCommandDefinition) => (
+    left.scope === right.scope || Boolean(left.shadows?.includes(right.id) || right.shadows?.includes(left.id))
+  );
   for (const [hotkey, sharing] of users) {
-    if (new Set(sharing.map((definition) => definition.scope)).size > 1) {
+    const unintended = sharing.some((left) => sharing.some((right) => !intended(left, right)));
+    if (new Set(sharing.map((definition) => definition.scope)).size > 1 && unintended) {
       clashes.push({ hotkey, ids: [...new Set(sharing.map((definition) => definition.id))], kind: 'shadowed' });
     }
   }

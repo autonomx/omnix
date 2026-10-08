@@ -388,3 +388,72 @@ function click(element: Element, x: number, y: number) {
   fireEvent.pointerDown(element, { clientX: x, clientY: y, pointerId: 1 });
   fireEvent.pointerUp(element, { clientX: x, clientY: y, pointerId: 1 });
 }
+
+describe('selection gestures (TVP-2.2)', () => {
+  const lineOf = (svg: SVGSVGElement, id: string) => svg.querySelector(`g[data-drawing-id="${id}"] line`)!;
+
+  it('Ctrl+click adds to the selection without selecting alone', () => {
+    const onToggleSelect = vi.fn();
+    const { svg, handlers } = renderOverlay({ drawings: [drawing('trend-line', [[100, 300], [300, 100]])], onToggleSelect });
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, ctrlKey: true, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 200, ctrlKey: true });
+    expect(onToggleSelect).toHaveBeenCalledWith('trend-line-1');
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+drag shows a ghost copy and clones on release, leaving the original', () => {
+    const onCloneDrawings = vi.fn();
+    const { svg, handlers } = renderOverlay({ drawings: [drawing('trend-line', [[100, 300], [300, 100]])], onCloneDrawings, onToggleSelect: vi.fn() });
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, ctrlKey: true, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 250, clientY: 200, ctrlKey: true });
+    expect(svg.querySelector('g[data-drawing-id="trend-line-1#clone"]')).not.toBeNull();
+    expect(lineOf(svg, 'trend-line-1')).toHaveAttribute('x1', '100');
+    fireEvent.pointerUp(window, { clientX: 250, clientY: 200, ctrlKey: true });
+    expect(onCloneDrawings).toHaveBeenCalledWith(['trend-line-1'], pointAt(200, 200), pointAt(250, 200));
+    expect(handlers.onTranslateDrawing).not.toHaveBeenCalled();
+    expect(svg.querySelector('g[data-drawing-id="trend-line-1#clone"]')).toBeNull();
+  });
+
+  it('a drag of a selected drawing moves the selection; a click on it selects it alone', () => {
+    const first = { ...drawing('trend-line', [[100, 300], [300, 100]]), selected: true };
+    const second = { ...drawing('trend-line', [[100, 500], [300, 400]], { drawingId: 'second' }), selected: true };
+    const { svg, handlers } = renderOverlay({ drawings: [first, second], selectedId: 'second' });
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 230, clientY: 200 });
+    // Both selected drawings preview the move.
+    expect(lineOf(svg, 'second')).toHaveAttribute('x1', '130');
+    fireEvent.pointerUp(window, { clientX: 230, clientY: 200 });
+    expect(handlers.onTranslateDrawing).toHaveBeenCalledWith('trend-line-1', pointAt(200, 200), pointAt(230, 200));
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 200 });
+    expect(handlers.onSelect).toHaveBeenCalledWith('trend-line-1');
+  });
+
+  it('a press that moves less than the drag threshold is still a click', () => {
+    const onToggleSelect = vi.fn();
+    const onCloneDrawings = vi.fn();
+    const { svg } = renderOverlay({ drawings: [drawing('trend-line', [[100, 300], [300, 100]])], onToggleSelect, onCloneDrawings });
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, ctrlKey: true, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 202, clientY: 201, ctrlKey: true });
+    expect(svg.querySelector('g[data-drawing-id="trend-line-1#clone"]')).toBeNull();
+    fireEvent.pointerUp(window, { clientX: 202, clientY: 201, ctrlKey: true });
+    expect(onToggleSelect).toHaveBeenCalledWith('trend-line-1');
+    expect(onCloneDrawings).not.toHaveBeenCalled();
+  });
+
+  it('a locked drawing in the selection stays put in the drag preview', () => {
+    const first = { ...drawing('trend-line', [[100, 300], [300, 100]]), selected: true };
+    const locked = { ...drawing('trend-line', [[100, 500], [300, 400]], { drawingId: 'locked', locked: true }), selected: true };
+    const { svg } = renderOverlay({ drawings: [first, locked], selectedId: 'trend-line-1' });
+    fireEvent.pointerDown(lineOf(svg, 'trend-line-1'), { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 230, clientY: 200 });
+    expect(lineOf(svg, 'locked')).toHaveAttribute('x1', '100');
+    fireEvent.pointerUp(window, { clientX: 230, clientY: 200 });
+  });
+
+  it('hides every drawing while all drawings are hidden', () => {
+    const { svg } = renderOverlay({ drawings: [drawing('trend-line', [[100, 300], [300, 100]])], allHidden: true });
+    expect(svg.querySelector('[data-drawing-id]')).toBeNull();
+  });
+});

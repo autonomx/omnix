@@ -85,6 +85,8 @@ type TradingWorkspaceState = {
   replaySessionId: number;
   drawingTool: DrawingTool;
   drawingSnapMode: DrawingSnapMode;
+  /** Ctrl+Alt+H hides every drawing on every chart (TVP-2.2); they stay stored. */
+  drawingsHidden: boolean;
   charts: TradingChartState[];
   links: TradingLinkState;
   panels: TradingPanelState;
@@ -104,6 +106,7 @@ type TradingWorkspaceState = {
   removeChart: (chartId?: string) => void;
   setChartCount: (count: number) => void;
   setDrawingTool: (tool: DrawingTool) => void;
+  toggleDrawingsHidden: () => void;
   setDrawingSnapMode: (mode: DrawingSnapMode) => void;
   updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) => void;
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
@@ -295,6 +298,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   replaySessionId: 0,
   drawingTool: 'cursor',
   drawingSnapMode: 'ohlc',
+  drawingsHidden: false,
   charts: [initialChart()],
   links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: true, bottom: true },
@@ -445,6 +449,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
     return syncActiveTab(state, { charts });
   }),
   setDrawingTool: (drawingTool) => set({ drawingTool }),
+  toggleDrawingsHidden: () => set((state) => ({ drawingsHidden: !state.drawingsHidden })),
   setDrawingSnapMode: (drawingSnapMode) => set({ drawingSnapMode }),
   updateChart: (chartId, patch) => set((state) => {
     const instrumentChanged = patch.instrumentId !== undefined;

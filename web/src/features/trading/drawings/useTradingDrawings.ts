@@ -4,15 +4,19 @@ import { tradingApi } from '../tradingApi';
 import type { TradingDocument } from '../tradingTypes';
 import {
   addDrawing,
+  cloneDrawings,
   deleteDrawing,
   deleteAllDrawings,
   deleteSelectedDrawing,
   editDrawing,
   emptyDrawingState,
   moveDrawingPoint,
+  pasteDrawings,
   redoDrawing,
   replaceDrawings,
   selectDrawing,
+  selectedDrawingIds,
+  toggleDrawingSelection,
   translateDrawing,
   undoDrawing,
   updateSelectedDrawing,
@@ -248,6 +252,19 @@ export function useTradingDrawings(instrumentId: string, tabScopeId?: string) {
       entry.state = selectDrawing(entry.state, id);
       emit(entry);
     },
+    /** Ctrl+click: adds the drawing to the selection or removes it. */
+    toggleSelect: (id: string) => {
+      entry.state = toggleDrawingSelection(entry.state, id);
+      emit(entry);
+    },
+    /** The selected drawings, primary last. */
+    selected: () => {
+      const ids = selectedDrawingIds(entry.state);
+      return ids.map((id) => entry.state.drawings.find((drawing) => drawing.drawingId === id)).filter((drawing): drawing is TradingDrawing => Boolean(drawing));
+    },
+    /** Ctrl+drag: copies of the drawings moved by `from` -> `to`. */
+    clone: (ids: readonly string[], from: DrawingPoint, to: DrawingPoint) => persist(entry, cloneDrawings(entry.state, ids, from, to)),
+    paste: (copied: readonly TradingDrawing[]) => persist(entry, pasteDrawings(entry.state, copied, instrumentId)),
     movePoint: (id: string, index: number, point: DrawingPoint) => persist(entry, moveDrawingPoint(entry.state, id, index, point)),
     translate: (id: string, from: DrawingPoint, to: DrawingPoint) => persist(entry, translateDrawing(entry.state, id, from, to)),
     updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string; properties?: DrawingProperties }, mergeKey?: string) => (

@@ -60,6 +60,8 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
   const setDrawingTool = useTradingStore((state) => state.setDrawingTool);
 
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
+  const drawingsHidden = useTradingStore((state) => state.drawingsHidden);
+  const toggleDrawingsHidden = useTradingStore((state) => state.toggleDrawingsHidden);
 
   const replayMode = useTradingStore((state) => state.replayMode);
 
@@ -170,7 +172,7 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
     hostRef, panelRef, adapterRef, onActivateRef, barsRef, allBarsRef, replayWasVisibleRef, fittedBarsKeyRef,
     streamDataKeyRef, streamRevisionRef, previousIntervalRef, pendingIntervalScrollRef, forceLiveRender,
     selectedRangeRef, pendingRangeIntervalRef, indicatorsRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, drawingTool,
-    setDrawingTool, drawingSnapMode, replayMode, replaySessionId, setReplayMode, restartReplaySession, drawings,
+    setDrawingTool, drawingSnapMode, drawingsHidden, toggleDrawingsHidden, replayMode, replaySessionId, setReplayMode, restartReplaySession, drawings,
     selectedDrawing, adapter, setAdapter, streamStatus, setStreamStatus, streamError,
     setStreamError, indicatorError, setIndicatorError, alertPlacement, setAlertPlacement, contextMenu,
     setContextMenu, priceScaleMenuOpen, setPriceScaleMenuOpen, priceScaleSettings, setPriceScaleSettings,

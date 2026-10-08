@@ -1,4 +1,4 @@
-import { areaFill, lineStroke } from '../shapes';
+import { areaFill, constrainToSquare, lineStroke } from '../shapes';
 import { defineDrawingTool } from '../types';
 
 export const rectangleTool = defineDrawingTool({
@@ -6,6 +6,7 @@ export const rectangleTool = defineDrawingTool({
   label: 'Rectangle',
   group: 'shapes',
   creation: { gesture: 'drag' },
+  constrain: constrainToSquare,
   defaultProperties: {},
   propertySchema: [],
   geometry: (context) => {
@@ -49,6 +50,7 @@ export const ellipseTool = defineDrawingTool({
   label: 'Ellipse',
   group: 'shapes',
   creation: { gesture: 'drag' },
+  constrain: constrainToSquare,
   defaultProperties: {},
   propertySchema: [],
   geometry: (context) => {

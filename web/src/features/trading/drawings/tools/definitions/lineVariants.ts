@@ -1,7 +1,7 @@
 // Trend line variants (TVP-3.1): info line, extended line and trend angle.
 import { lineAlertLevel } from '../alertLevels';
 import { booleanProperty } from '../properties';
-import { extendedSegment, lineStroke } from '../shapes';
+import { constrainTo45Degrees, extendedSegment, lineStroke } from '../shapes';
 import { defineDrawingTool, type DrawingPoint, type DrawingShape, type DrawingToolServices, type ScreenPoint } from '../types';
 
 /** The screen angle of `first` -> `second` in degrees, counter-clockwise from the horizontal, -180 to 180. */
@@ -41,6 +41,7 @@ export const infoLineTool = defineDrawingTool({
   label: 'Info line',
   group: 'lines',
   creation: { gesture: 'drag' },
+  constrain: constrainTo45Degrees,
   defaultProperties: { showLabel: true },
   propertySchema: [{ key: 'showLabel', label: 'Show info', type: 'boolean' }],
   draftPreview: 'shapes',
@@ -64,6 +65,7 @@ export const extendedLineTool = defineDrawingTool({
   label: 'Extended line',
   group: 'lines',
   creation: { gesture: 'drag' },
+  constrain: constrainTo45Degrees,
   defaultProperties: {},
   propertySchema: [],
   geometry: (context) => {
@@ -88,6 +90,7 @@ export const trendAngleTool = defineDrawingTool({
   label: 'Trend angle',
   group: 'lines',
   creation: { gesture: 'drag' },
+  constrain: constrainTo45Degrees,
   defaultProperties: {},
   propertySchema: [],
   draftPreview: 'shapes',

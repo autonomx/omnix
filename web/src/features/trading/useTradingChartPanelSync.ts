@@ -20,7 +20,7 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     forceLiveRender, fullscreenIndicator, fullscreenMainPane, historyLimit, hostRef, indicators, indicatorSessionRef, indicatorsRef,
     interval, loadedBars, minimizedIndicators, pendingIntervalScrollRef, pendingRangeIntervalRef,
     refreshIndicatorPanes, replayMode, replayVisible, replayVisibleBarCount, replayWasVisibleRef, rightOffset,
-    scheduleIndicators, selectedDrawing, selectedRangeRef, selectedTimezone, setSelectedRangeLabel, streamDataKeyRef,
+    scheduleIndicators, selectedDrawing, drawingsHidden, selectedRangeRef, selectedTimezone, setSelectedRangeLabel, streamDataKeyRef,
     streamRevisionRef, timezoneId,
   } = ws;
 
@@ -110,7 +110,7 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
 
   useTradingCommand('drawing.undo', () => drawings.undo(), () => active);
   useTradingCommand('drawing.redo', () => drawings.redo(), () => active);
-  useTradingCommand('drawing.delete', () => drawings.removeSelected(), () => active && Boolean(selectedDrawing));
+  useTradingCommand('drawing.delete', () => drawings.removeSelected(), () => active && Boolean(selectedDrawing) && !drawingsHidden);
 
   useEffect(() => {
     const targetAdapter = adapterRef.current;
