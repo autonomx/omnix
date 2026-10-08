@@ -159,6 +159,25 @@ describe('chart-native Trading alerts', () => {
     expect(chartAlertUpdateInput(hooked, { enabled: false }).parameters.delivery).toEqual(hooked.parameters.delivery);
   });
 
+  it('sends a name and a webhook only with its channel; a stored webhook is kept unless replaced (TVP-1.5)', () => {
+    const base = { alertId: 'w', instrumentId: baseAlert.instrument_id, bindingId: null, interval: '1m', threshold: 1, latestPrice: 2, expiration: 'never' as const };
+    const hooked = chartAlertCreateInput({ ...base, notificationChannels: ['app', 'webhook'], name: 'Breakout', webhookUrl: 'https://hooks.example/x', webhookSecret: 's3' });
+    expect(hooked.parameters.name).toBe('Breakout');
+    expect(hooked.parameters.delivery).toEqual({ webhook: { url: 'https://hooks.example/x' } });
+    expect(hooked.webhook_secret).toBe('s3');
+    const unhooked = chartAlertCreateInput({ ...base, notificationChannels: ['app'], webhookUrl: 'https://hooks.example/x', webhookSecret: 's3' });
+    expect(unhooked.parameters.delivery).toBeUndefined();
+    expect(unhooked.webhook_secret).toBeUndefined();
+    const stored = fixture<TradingAlert>({
+      ...baseAlert,
+      parameters: { ...baseAlert.parameters, delivery: { webhook: { display_url: 'https://hooks.example', has_secret: false } } },
+    });
+    expect(chartAlertUpdateInput(stored, { name: 'x' }).parameters.delivery).toEqual(stored.parameters.delivery);
+    expect(chartAlertUpdateInput(stored, { webhook_url: 'https://other.example/y' }).parameters.delivery).toEqual({ webhook: { url: 'https://other.example/y' } });
+    expect(chartAlertUpdateInput(stored, { webhook_secret: 'new' }).webhook_secret).toBe('new');
+    expect(chartAlertUpdateInput(baseAlert, { webhook_secret: 'orphan' }).webhook_secret).toBeUndefined();
+  });
+
   it('formats alert values to two decimal places', () => {
     expect(formatAlertThreshold(73.16472733528584)).toBe('73.16');
     expect(formatAlertThreshold('73')).toBe('73.00');

@@ -10687,6 +10687,11 @@ export interface components {
              * @default
              */
             message?: string;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
             /** Notification Channels */
             notification_channels?: ("app" | "toast" | "sound" | "webhook" | "email" | "push")[];
             /**
@@ -10746,6 +10751,11 @@ export interface components {
              * @default
              */
             message: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
             /** Notification Channels */
             notification_channels: ("app" | "toast" | "sound" | "webhook" | "email" | "push")[];
             /**

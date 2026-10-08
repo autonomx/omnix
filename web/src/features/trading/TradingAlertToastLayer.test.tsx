@@ -45,6 +45,13 @@ describe('TradingAlertToastLayer sounds', () => {
     expect(screen.getByRole('status').textContent).toContain('quiet fired');
   });
 
+  it('shows the message the server rendered for the trigger (TVP-1.5)', () => {
+    const view = render(<TradingAlertToastLayer />);
+    state.triggers = [{ ...trigger('d', 'quiet'), payload: { message: 'BTCUSDT closed at 101.5' } }, ...state.triggers];
+    act(() => view.rerender(<TradingAlertToastLayer />));
+    expect(screen.getByRole('status').textContent).toContain('BTCUSDT closed at 101.5');
+  });
+
   it('stays silent for alerts without the Sound channel', () => {
     const view = render(<TradingAlertToastLayer />);
     state.triggers = [trigger('c', 'quiet'), ...state.triggers];

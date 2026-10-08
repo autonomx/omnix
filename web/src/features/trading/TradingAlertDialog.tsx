@@ -6,10 +6,11 @@ import type {
   TradingAlertTriggerPolicy,
 } from './tradingTypes';
 import { formatAlertThreshold } from './tradingChartAlerts';
-import { ALERT_SOUNDS, playAlertSound, type AlertSoundName } from './alertSounds';
+import { MESSAGE_PLACEHOLDERS, type AlertDeliveryEditor } from './alertDelivery';
+import { AlertDeliveryFields } from './AlertDeliveryFields';
 import './TradingChartAlertOpaque.css';
 
-export type TradingAlertEditorState = {
+export type TradingAlertEditorState = AlertDeliveryEditor & {
   mode: 'create' | 'edit';
   alertId: string | null;
   x: number;
@@ -21,10 +22,6 @@ export type TradingAlertEditorState = {
   triggerPolicy: TradingAlertTriggerPolicy;
   message: string;
   notifications: TradingAlertNotificationChannel[];
-  /** The Sound channel's sound (chime when unset). */
-  sound?: AlertSoundName;
-  /** The sound name the alert has stored, which may be one this client doesn't know. */
-  storedSound?: string;
   indicator: TradingAlertIndicatorId;
   period: string;
   lookback: string;
@@ -54,12 +51,6 @@ const triggerOptions: Array<{ value: TradingAlertTriggerPolicy; label: string }>
   { value: 'once_per_bar_close', label: 'Once per bar close' },
   { value: 'once_per_minute', label: 'Once per minute' },
   { value: 'every_time', label: 'Every time' },
-];
-
-const notificationOptions: Array<{ value: TradingAlertNotificationChannel; label: string }> = [
-  { value: 'app', label: 'App' },
-  { value: 'toast', label: 'Toasts' },
-  { value: 'sound', label: 'Sound' },
 ];
 
 function conditionFamily(condition: TradingAlertCondition): TradingAlertCondition {
@@ -117,13 +108,6 @@ export function TradingAlertDialog({
   const isTrendline = editor.condition.startsWith('trendline_');
   const isIndicator = family === 'indicator_above';
   const isPercent = family === 'percent_change_above';
-
-  const toggleNotification = (channel: TradingAlertNotificationChannel) => {
-    const next = editor.notifications.includes(channel)
-      ? editor.notifications.filter((item) => item !== channel)
-      : [...editor.notifications, channel];
-    onChange({ notifications: next });
-  };
 
   return (
     <form
@@ -216,18 +200,20 @@ export function TradingAlertDialog({
             </dd>
           </div>
           <div>
+            <dt>Name</dt>
+            <dd><input aria-label="Alert name" value={editor.name ?? ''} placeholder="Optional" maxLength={120} onChange={(event) => onChange({ name: event.target.value })} /></dd>
+          </div>
+          <div>
             <dt>Message</dt>
-            <dd><input aria-label="Alert message" value={editor.message} placeholder={isTrendline ? `${symbol} crossing trendline` : `${symbol} crossing ${editor.threshold || 'value'}`} maxLength={500} onChange={(event) => onChange({ message: event.target.value })} /></dd>
+            <dd>
+              <textarea aria-label="Alert message" rows={2} value={editor.message} placeholder={isTrendline ? `${symbol} crossing trendline` : `${symbol} crossing ${editor.threshold || 'value'}`} maxLength={500} onChange={(event) => onChange({ message: event.target.value })} />
+              <small className="trading-alert-placeholders" title="Filled in when the alert triggers; unknown ones stay as written">Placeholders: {MESSAGE_PLACEHOLDERS.join(' ')}</small>
+            </dd>
           </div>
           <div>
             <dt>Notifications</dt>
             <dd className="trading-alert-notifications">
-              {notificationOptions.map((option) => <label key={option.value}><input type="checkbox" checked={editor.notifications.includes(option.value)} onChange={() => toggleNotification(option.value)} />{option.label}</label>)}
-              {editor.notifications.includes('sound') ? (
-                <select aria-label="Alert sound" value={editor.sound ?? 'chime'} onChange={(event) => { const sound = event.target.value as AlertSoundName; playAlertSound(sound); onChange({ sound }); }}>
-                  {ALERT_SOUNDS.map((sound) => <option key={sound} value={sound}>{sound[0].toUpperCase() + sound.slice(1)}</option>)}
-                </select>
-              ) : null}
+              <AlertDeliveryFields editor={editor} onChange={onChange} />
             </dd>
           </div>
         </dl>

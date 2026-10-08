@@ -103,6 +103,11 @@ export function alertConditionsSummary(alert: Pick<TradingAlert, 'conditions'>):
   }).join(' and ');
 }
 
+/** The delivery settings, only when there are some (an alert without any sends none). */
+function withDelivery(delivery: NonNullable<TradingAlertParameters['delivery']>): { delivery?: TradingAlertParameters['delivery'] } {
+  return Object.keys(delivery).length > 0 ? { delivery } : {};
+}
+
 export function chartAlertCreateInput(input: {
   alertId: string;
   instrumentId: string;
@@ -117,6 +122,11 @@ export function chartAlertCreateInput(input: {
   notificationChannels?: TradingAlertNotificationChannel[];
   /** The sound the Sound channel plays (sent only with that channel). */
   soundName?: string;
+  /** The alert's name ({{alert_name}}). */
+  name?: string;
+  /** The webhook (sent only with the Webhook channel); the URL and secret are write-only. */
+  webhookUrl?: string;
+  webhookSecret?: string;
   now?: number;
 }): TradingAlertCreateInput {
   const triggerPolicy = input.triggerPolicy ?? 'every_time';
@@ -138,8 +148,13 @@ export function chartAlertCreateInput(input: {
       message: input.message ?? '',
       notification_channels: input.notificationChannels ?? ['app', 'toast'],
       trigger_policy: triggerPolicy,
-      ...(input.soundName && input.notificationChannels?.includes('sound') ? { delivery: { sound: { name: input.soundName } } } : {}),
+      ...(input.name ? { name: input.name } : {}),
+      ...withDelivery({
+        ...(input.soundName && input.notificationChannels?.includes('sound') ? { sound: { name: input.soundName } } : {}),
+        ...(input.webhookUrl && input.notificationChannels?.includes('webhook') ? { webhook: { url: input.webhookUrl } } : {}),
+      }),
     },
+    ...(input.webhookSecret && input.webhookUrl && input.notificationChannels?.includes('webhook') ? { webhook_secret: input.webhookSecret } : {}),
     evaluation_policy: {
       interval: input.interval,
       // Mirrors the server, which derives it: only "once per bar close" waits for closed bars.
@@ -163,6 +178,10 @@ export function chartAlertUpdateInput(
     notification_channels?: TradingAlertNotificationChannel[];
     /** The sound the Sound channel plays; the other delivery settings are kept. */
     sound_name?: string;
+    name?: string;
+    /** A new webhook URL or secret; without them the stored webhook is kept. */
+    webhook_url?: string;
+    webhook_secret?: string;
   },
 ): TradingAlertUpdateInput {
   const triggerPolicy = patch.trigger_policy ?? alertFrequency(alert);
@@ -188,10 +207,17 @@ export function chartAlertUpdateInput(
       ...(patch.trigger_policy !== undefined || alert.parameters.trigger_policy !== undefined
         ? { trigger_policy: triggerPolicy }
         : {}),
-      ...(patch.sound_name !== undefined
-        ? { delivery: { ...alert.parameters.delivery, sound: { name: patch.sound_name } } }
-        : {}),
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...withDelivery({
+        ...alert.parameters.delivery,
+        ...(patch.sound_name !== undefined ? { sound: { name: patch.sound_name } } : {}),
+        ...(patch.webhook_url !== undefined ? { webhook: { url: patch.webhook_url } } : {}),
+      }),
     },
+    // A secret alone updates the stored webhook's secret (the server keeps its URL).
+    ...(patch.webhook_secret !== undefined && (patch.webhook_url !== undefined || alert.parameters.delivery?.webhook)
+      ? { webhook_secret: patch.webhook_secret }
+      : {}),
     evaluation_policy: { ...alert.evaluation_policy, allow_partial_bars: triggerPolicy !== 'once_per_bar_close' },
     enabled: patch.enabled ?? alert.enabled,
     frequency: triggerPolicy,

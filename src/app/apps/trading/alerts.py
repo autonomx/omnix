@@ -30,6 +30,7 @@ from .alert_conditions import (
     validate_conditions_against_registry,
 )
 from .alerts_delivery import enqueue_alert_deliveries
+from .alerts_message import message_values, render_alert_message
 from .alerts_evaluation import AlertConditionOutcome, ConditionObservation, operator_met, validate_conditions_can_fire
 from .indicators.engine import CORE_INDICATOR_FORMULA_VERSION
 
@@ -123,6 +124,8 @@ class TradingAlertParameters(BaseModel):
     ] = "value"
     anchor_bars_ago: int = Field(default=0, ge=0, le=499)
     message: str = Field(default="", max_length=500)
+    # The alert's name, for the list and the {{alert_name}} placeholder (TVP-1.5).
+    name: str = Field(default="", max_length=120)
     notification_channels: list[AlertNotificationChannel] = Field(
         default_factory=lambda: list[AlertNotificationChannel](["app", "toast"]),
         max_length=6,
@@ -986,7 +989,11 @@ class TradingAlertRepository:
                 "observed_value": str(primary_value),
                 "threshold": str(alert.threshold),
                 "expires_at": alert.expires_at.isoformat() if alert.expires_at else None,
+                "interval": context.interval,
             }
+            # The message with its placeholders filled in, as every channel shows it (TVP-1.5).
+            names, plots = message_values(alert, outcome, interval=context.interval, evaluated_at=evaluated_at)
+            payload["message"] = render_alert_message(alert.parameters.message.strip(), names, plots)
             inserted = connection.execute(
                 f"""
                 INSERT INTO omnix_trading_alert_triggers (
