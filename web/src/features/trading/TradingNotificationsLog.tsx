@@ -1,7 +1,6 @@
-import { clearPaperNotifications, usePaperNotifications, usePaperOrderNotifications } from './paperNotifications';
-import type { PaperAccountSnapshot } from './paperTypes';
+import { clearPaperNotifications, usePaperNotifications } from './paperNotifications';
 
-const KIND_LABELS = { fill: 'Filled', reject: 'Rejected', cancel: 'Cancelled', expire: 'Expired' } as const;
+const KIND_LABELS = { fill: 'Filled', partial: 'Partly filled', reject: 'Rejected', cancel: 'Cancelled', expire: 'Expired', closed: 'Closed' } as const;
 
 /** The terminal dock's Notifications tab (TVP-7.4): paper order fills, rejections, cancellations and expiries. */
 export function TradingNotificationsLog() {
@@ -26,10 +25,4 @@ export function TradingNotificationsLog() {
       <button type="button" onClick={clearPaperNotifications}>Clear notifications</button>
     </div>
   );
-}
-
-/** Renders nothing; notices what changed between the dock's account snapshots (it is always mounted). */
-export function PaperOrderNotificationsWatch({ snapshot }: { snapshot: PaperAccountSnapshot | null }) {
-  usePaperOrderNotifications(snapshot);
-  return null;
 }

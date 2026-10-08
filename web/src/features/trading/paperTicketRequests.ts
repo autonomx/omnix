@@ -54,6 +54,28 @@ export function takePaperTicketPrefill(now = Date.now()): PaperTicketPrefill | n
   return taken && now - taken.at <= PREFILL_LIFETIME_MS ? taken.prefill : null;
 }
 
+let openPanels = 0;
+
+/** Whether a paper order ticket is on screen (the trading hotkeys act only then, TVP-7.4). */
+export function paperTicketOpen(): boolean {
+  return openPanels > 0;
+}
+
+/** The paper panel calls this while it is mounted. */
+export function usePaperTicketPresence(): void {
+  useEffect(() => {
+    openPanels += 1;
+    return () => {
+      openPanels -= 1;
+    };
+  }, []);
+}
+
+/** The pending pre-fill's source, without taking it. */
+function pendingSource(): PaperTicketPrefill['source'] {
+  return pending?.prefill.source;
+}
+
 export function onPaperTicketRequest(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -69,8 +91,10 @@ export function usePaperTicketRequests(openPaperPanel: () => void): void {
     const prefill = parsePaperTicketRequest(payload);
     if (prefill) requestPaperTicket(prefill);
   }), []);
-  // Every ticket request (drawings, trading hotkeys) opens the paper panel.
-  useEffect(() => onPaperTicketRequest(() => open.current()), []);
+  // A drawing's request opens the paper panel; hotkeys only act while it is open, so they rearrange nothing.
+  useEffect(() => onPaperTicketRequest(() => {
+    if (pendingSource() !== 'hotkey') open.current();
+  }), []);
 }
 
 /** The ticket fields a pre-fill sets. */
@@ -90,7 +114,7 @@ export type PaperTicketForm = {
 };
 
 /** How the panel will place this order: a risk-managed entry carries stop and target and sizes the quantity itself. */
-export type PaperTicketMode = { riskManaged: boolean; riskPercent: string };
+export type PaperTicketMode = { riskManaged: boolean; riskPercent: string; /** The open long position's quantity, if any. */ longQuantity?: number | null };
 
 /**
  * Fills the ticket from a pre-fill: a limit order at the entry. A risk-managed entry (a buy outside replay) also
@@ -106,7 +130,7 @@ export function applyPaperTicketPrefill(
   symbolOf: (instrumentId: string) => string = (id) => id,
 ): { kind: 'success' | 'error'; message: string } {
   if (prefill.instrumentId !== instrumentId) {
-    return { kind: 'error', message: `The drawing is on ${symbolOf(prefill.instrumentId)}; open that chart to trade it.` };
+    return { kind: 'error', message: `The order is for ${symbolOf(prefill.instrumentId)}; open that chart to trade it.` };
   }
   form.setTicketTab('order');
   form.setSide(prefill.side);
@@ -118,9 +142,13 @@ export function applyPaperTicketPrefill(
   form.setStopLoss(protect && prefill.stop !== null ? String(prefill.stop) : '');
   form.setTakeProfitEnabled(protect && prefill.target !== null);
   form.setTakeProfit(protect && prefill.target !== null ? String(prefill.target) : '');
-  if (!protect && prefill.quantity !== null) form.setQuantity(String(Number(prefill.quantity.toPrecision(6))));
+  // A sell's default quantity is the long position it closes (TradingView's default quantity for a reducing order).
+  const quantity = prefill.quantity ?? (prefill.side === 'sell' ? mode.longQuantity ?? null : null);
+  if (!protect && quantity !== null) form.setQuantity(String(Number(quantity.toPrecision(6))));
   const detail = !protect
-    ? 'This order can\'t carry a stop and target: add them after it fills.'
+    ? prefill.side === 'sell'
+      ? 'A sell closes or reduces a long position (opening a short is not available yet).'
+      : 'This order can\'t carry a stop and target: add them after it fills.'
     : prefill.stop === null
       ? `Set a stop loss: the account's ${mode.riskPercent}% risk rule sizes the quantity from it.`
       : `The account's ${mode.riskPercent}% risk rule sizes the quantity.`;
@@ -130,6 +158,8 @@ export function applyPaperTicketPrefill(
 
 /** Panel side: calls `apply` with each pre-fill, also one left before the panel mounted. */
 export function usePaperTicketPrefill(apply: (prefill: PaperTicketPrefill) => void): void {
+  // The ticket that takes pre-fills is on screen while this is mounted.
+  usePaperTicketPresence();
   const handler = useRef(apply);
   useEffect(() => {
     handler.current = apply;

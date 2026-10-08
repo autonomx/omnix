@@ -39,8 +39,9 @@ export type TradingCommandDefinition = {
   /** Fires again while the key is held (moving and zooming the chart); other commands run once per press. */
   repeatable?: boolean;
   /**
-   * Commands of a less specific scope this one deliberately takes a key from while it is active, as TradingView
-   * does (the arrow keys move a selected drawing instead of the chart). Not reported as shadowing.
+   * Commands this one deliberately takes a key from while it is active, as TradingView does: the arrow keys move a
+   * selected drawing instead of the chart; Shift+B/S trade instead of typing a symbol while the paper ticket is open.
+   * Not reported as a clash for the default keys.
    */
   shadows?: readonly string[];
   /** Catalogued ahead of its action (it arrives with another work package): listed as not available yet, never dispatched or rebound. */
@@ -302,7 +303,8 @@ export function findKeyClashes(
       const typed = !isPlainHotkey(normalized) ? null
         : /^[a-z]$/.test(parsed.key) ? patterns.get('letter')
           : /^[0-9,]$/.test(parsed.key) ? patterns.get('interval') : null;
-      if (typed && !definition.shadows?.includes(typed)) clashes.push({ hotkey: normalized, ids: [definition.id, typed], kind: 'typing' });
+      const intended = definition.shadows?.includes(typed ?? '') && definition.defaultKeys.some((key) => normalizeHotkey(key) === normalized);
+      if (typed && !intended) clashes.push({ hotkey: normalized, ids: [definition.id, typed], kind: 'typing' });
     }
   }
   const intended = (left: TradingCommandDefinition, right: TradingCommandDefinition) => (

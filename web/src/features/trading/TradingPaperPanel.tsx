@@ -103,7 +103,7 @@ export function TradingPaperPanel({
   // A long or short position drawing's "Create order" fills the ticket (TVP-3.6); the user still confirms it.
   usePaperTicketPrefill((prefill) => setNotice(applyPaperTicketPrefill(prefill, instrumentId, {
     setTicketTab, setSide, setOrderType, setTriggerPrice, setLimitPrice, setStopLossEnabled, setStopLoss, setTakeProfitEnabled, setTakeProfit, setQuantity,
-  }, { riskManaged: !replayMode && prefill.side === 'buy', riskPercent: riskPct }, displaySymbol)));
+  }, { riskManaged: !replayMode && prefill.side === 'buy', riskPercent: riskPct, longQuantity: Number(position?.quantity) > 0 ? Number(position?.quantity) : null }, displaySymbol)));
   const replayMode = useTradingStore((state) => state.replayMode);
   const replaySessionId = useTradingStore((state) => state.replaySessionId);
   const replayBar = useTradingReplayStore((state) => state.bar);

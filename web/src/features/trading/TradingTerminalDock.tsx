@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
-import { PaperOrderNotificationsWatch, TradingNotificationsLog } from './TradingNotificationsLog';
+import { TradingNotificationsLog } from './TradingNotificationsLog';
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
@@ -420,7 +420,7 @@ export function TradingTerminalDock({
           {tab === 'orders' || tab === 'history' ? <nav className="trading-order-filters" role="tablist" aria-label="Order status filters">{(tab === 'orders' ? orderFilters : historyFilters).map((filter) => <button key={filter.id} type="button" role="tab" aria-selected={orderFilter === filter.id} onClick={() => setOrderFilter(filter.id)}>{filter.label}<small>{orderCounts[filter.id]}</small></button>)}</nav> : null}
           <div className={`trading-dock-content${tab === 'history' ? ' trading-dock-content-history' : ''}${tab === 'dashboard' ? ' trading-dock-content-dashboard' : ''}`} role="tabpanel" tabIndex={0}>
             {tab !== 'dashboard' && tab !== 'notifications' && !displayedSnapshot ? <div className="trading-dock-empty"><strong>No paper account</strong><span>Select an account above or create one to begin simulation.</span><button type="button" onClick={() => { setCreateDraft(defaultCreateDraft()); setModal('create'); }}>Create account</button></div> : null}
-            {tab === 'dashboard' ? <TradingPaperDashboard /> : null}{tab === 'notifications' ? <TradingNotificationsLog /> : null}<PaperOrderNotificationsWatch snapshot={displayedSnapshot} />
+            {tab === 'dashboard' ? <TradingPaperDashboard /> : null}{tab === 'notifications' ? <TradingNotificationsLog /> : null}
             {displayedSnapshot && tab === 'positions' ? (
               <div className="trading-dock-table-scroll">
                 <table className="trading-positions-table"><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Avg fill price</th><th>Take profit</th><th>Stop loss</th><th>Last price</th><th>Unrealized PnL ↑</th><th>Unrealized PnL %</th><th aria-label="Actions" /></tr></thead><tbody>

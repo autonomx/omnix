@@ -5,7 +5,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { PaperAccountSnapshot, PaperOrder } from './paperTypes';
 
-export type PaperNotificationKind = 'fill' | 'reject' | 'cancel' | 'expire';
+export type PaperNotificationKind = 'fill' | 'partial' | 'reject' | 'cancel' | 'expire' | 'closed';
 export type PaperNotification = { id: string; at: string; kind: PaperNotificationKind; orderId: string; message: string };
 
 const LOG_LIMIT = 200;
@@ -16,9 +16,12 @@ function emit(): void {
   for (const listener of listeners) listener();
 }
 
+/** Adds notifications, newest first; ones already logged (same id) are not added again. */
 export function pushPaperNotifications(items: readonly PaperNotification[]): void {
-  if (items.length === 0) return;
-  log = [...items.slice().reverse(), ...log].slice(0, LOG_LIMIT);
+  const known = new Set(log.map((item) => item.id));
+  const fresh = items.filter((item) => !known.has(item.id)).sort((left, right) => Date.parse(right.at) - Date.parse(left.at));
+  if (fresh.length === 0) return;
+  log = [...fresh, ...log].slice(0, LOG_LIMIT);
   emit();
 }
 
@@ -64,26 +67,48 @@ function ordersOf(snapshot: PaperAccountSnapshot): PaperOrder[] {
 }
 
 /**
- * The notifications for orders whose status changed from `before` to `after` (or that appear already closed in
- * `after`). Orders that stay open, or keep their status, notify nothing.
+ * The notifications for what changed from `before` to `after`: orders whose status changed (or that appear already
+ * closed), open orders that filled part of their quantity, and open orders that left the snapshot altogether (an old
+ * order outside the history window that closed). Orders that keep their state notify nothing.
  */
 export function orderNotifications(before: PaperAccountSnapshot, after: PaperAccountSnapshot, now = new Date().toISOString()): PaperNotification[] {
-  const previous = new Map(ordersOf(before).map((order) => [order.order_id, order.status]));
-  return ordersOf(after).flatMap((order) => {
-    if (previous.get(order.order_id) === order.status) return [];
+  const previous = new Map(ordersOf(before).map((order) => [order.order_id, order]));
+  const current = ordersOf(after);
+  const notes = current.flatMap((order): PaperNotification[] => {
+    const prior = previous.get(order.order_id);
+    if (order.status === 'open') {
+      const filled = Number(order.filled_quantity ?? 0);
+      if (filled > 0 && filled !== Number(prior?.filled_quantity ?? 0)) {
+        const what = `${order.side === 'buy' ? 'Buy' : 'Sell'} ${order.quantity} ${symbolOf(order.instrument_id)} ${order.order_type.replace('_', ' ').toUpperCase()}`;
+        return [{ id: `${order.order_id}:partial:${filled}`, at: order.updated_at ?? now, orderId: order.order_id, kind: 'partial', message: `${what} partly filled: ${filled} of ${order.quantity}` }];
+      }
+      return [];
+    }
+    if (prior?.status === order.status) return [];
     const described = describe(order);
     return described ? [{ id: `${order.order_id}:${order.status}`, at: order.updated_at ?? now, orderId: order.order_id, ...described }] : [];
   });
+  const present = new Set(current.map((order) => order.order_id));
+  for (const order of before.open_orders ?? []) {
+    if (present.has(order.order_id)) continue;
+    const what = `${order.side === 'buy' ? 'Buy' : 'Sell'} ${order.quantity} ${symbolOf(order.instrument_id)} ${order.order_type.replace('_', ' ').toUpperCase()}`;
+    notes.push({ id: `${order.order_id}:closed`, at: now, orderId: order.order_id, kind: 'closed', message: `${what} is no longer open` });
+  }
+  return notes;
 }
 
-/** Watches an account's snapshots and logs what changed; a new account starts a new baseline. */
-export function usePaperOrderNotifications(snapshot: PaperAccountSnapshot | null): void {
-  const previous = useRef<PaperAccountSnapshot | null>(null);
+/**
+ * Watches snapshots and logs what changed. `mode` names the order book being watched (`live`, or a replay session):
+ * a new account or mode starts a new baseline, so switching between live and replay reports nothing.
+ */
+export function usePaperOrderNotifications(snapshot: PaperAccountSnapshot | null, mode = 'live'): void {
+  const previous = useRef<{ key: string; snapshot: PaperAccountSnapshot } | null>(null);
   useEffect(() => {
     if (!snapshot) return;
+    const key = `${snapshot.account.account_id}:${mode}`;
     const before = previous.current;
-    previous.current = snapshot;
-    if (!before || before.account.account_id !== snapshot.account.account_id) return;
-    pushPaperNotifications(orderNotifications(before, snapshot));
-  }, [snapshot]);
+    previous.current = { key, snapshot };
+    if (!before || before.key !== key) return;
+    pushPaperNotifications(orderNotifications(before.snapshot, snapshot));
+  }, [snapshot, mode]);
 }

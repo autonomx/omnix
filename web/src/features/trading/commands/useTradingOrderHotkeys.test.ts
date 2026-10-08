@@ -1,15 +1,16 @@
 import { act, fireEvent, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
-import { takePaperTicketPrefill } from '../paperTicketRequests';
+import { takePaperTicketPrefill, usePaperTicketPresence } from '../paperTicketRequests';
 import { useTradingCommandDispatcher } from './useTradingCommands';
 import { hotkeyPrefill, useTradingOrderHotkeys } from './useTradingOrderHotkeys';
 
-function mount(crosshairPrice: number | null) {
+function mount(crosshairPrice: number | null, ticketOpen = true) {
   let listener: ((point: { time: number; price: number } | null) => void) | null = null;
   const adapter = { onCrosshair: (next: typeof listener) => { listener = next; return () => undefined; } } as unknown as TradingChartAdapter;
   const hook = renderHook(() => {
     useTradingCommandDispatcher();
+    if (ticketOpen) usePaperTicketPresence();
     useTradingOrderHotkeys({ active: true, adapter, instrumentId: 'crypto:BTC', lastPrice: () => 100 });
   });
   if (crosshairPrice !== null) act(() => listener?.({ time: 0, price: crosshairPrice }));
@@ -39,6 +40,13 @@ describe('trading hotkeys (TVP-7.4)', () => {
     press({ key: 'S', code: 'KeyS', shiftKey: true, altKey: true });
     expect(takePaperTicketPrefill()).toMatchObject({ side: 'sell', orderType: 'limit', entry: 100 });
     atLast.unmount();
+  });
+
+  it('leaves Shift+letters to symbol typing while no paper ticket is open', () => {
+    const hook = mount(null, false);
+    press({ key: 'B', code: 'KeyB', shiftKey: true });
+    expect(takePaperTicketPrefill()).toBeNull();
+    hook.unmount();
   });
 
   it('never asks for a limit without a price', () => {

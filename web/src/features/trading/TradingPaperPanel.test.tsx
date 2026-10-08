@@ -141,7 +141,7 @@ describe('TradingPaperPanel', () => {
     expect(await screen.findByRole('textbox', { name: 'Limit price' })).toHaveValue('80');
     expect(screen.getByRole('textbox', { name: 'Order quantity' })).toHaveValue('2');
     expect(screen.queryByRole('textbox', { name: 'Stop loss price' })).toBeNull();
-    expect(screen.getByText(/add them after it fills/)).toBeInTheDocument();
+    expect(screen.getByText(/opening a short is not available yet/)).toBeInTheDocument();
   });
 
   it('a market buy hotkey fills the ticket and asks for the stop the risk rule needs (TVP-7.4)', async () => {

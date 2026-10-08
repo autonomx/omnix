@@ -32,6 +32,33 @@ describe('paper order notifications (TVP-7.4)', () => {
     ]);
   });
 
+  it('reports partial fills and open orders that left the snapshot', () => {
+    const before = snapshot('a', [order('1', 'open', { filled_quantity: '0' }), order('old', 'open')]);
+    const after = snapshot('a', [order('1', 'open', { filled_quantity: '1' })]);
+    expect(orderNotifications(before, after, '2026-10-08T15:00:00Z').map((item) => [item.kind, item.message])).toEqual([
+      ['partial', 'Buy 2 BTC/USDT MARKET partly filled: 1 of 2'],
+      ['closed', 'Buy 2 BTC/USDT MARKET is no longer open'],
+    ]);
+  });
+
+  it('switching between live and replay starts a new baseline', () => {
+    const live = snapshot('a', [order('h1', 'filled')]);
+    const { rerender } = renderHook(({ value, mode }) => usePaperOrderNotifications(value, mode), { initialProps: { value: live, mode: 'live' } });
+    rerender({ value: snapshot('a', []), mode: 'replay:1' });
+    rerender({ value: live, mode: 'live' });
+    expect(renderHook(() => usePaperNotifications()).result.current).toEqual([]);
+  });
+
+  it('logs the newest first and never twice', () => {
+    const before = snapshot('a', [order('old', 'open'), order('new', 'open')]);
+    const after = snapshot('a', [order('new', 'filled', { updated_at: '2026-10-08T14:05:00Z' }), order('old', 'filled', { updated_at: '2026-10-08T14:01:00Z' })]);
+    const { rerender } = renderHook(({ value }) => usePaperOrderNotifications(value), { initialProps: { value: before } });
+    rerender({ value: after });
+    rerender({ value: before });
+    rerender({ value: after });
+    expect(renderHook(() => usePaperNotifications()).result.current.map((item) => item.orderId)).toEqual(['new', 'old']);
+  });
+
   it('starts from the first snapshot of an account, logs, toasts and clears', () => {
     const { rerender } = renderHook(({ value }) => usePaperOrderNotifications(value), { initialProps: { value: snapshot('a', [order('1', 'filled')]) } });
     const log = renderHook(() => usePaperNotifications());

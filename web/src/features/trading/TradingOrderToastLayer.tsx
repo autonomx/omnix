@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { usePaperNotifications, type PaperNotification } from './paperNotifications';
 import './TradingAlertToastLayer.css';
 
-const TITLES: Record<PaperNotification['kind'], string> = { fill: 'Order filled', reject: 'Order rejected', cancel: 'Order cancelled', expire: 'Order expired' };
+const TITLES: Record<PaperNotification['kind'], string> = {
+  fill: 'Order filled', partial: 'Order partly filled', reject: 'Order rejected', cancel: 'Order cancelled', expire: 'Order expired', closed: 'Order closed',
+};
 
 /** The newest paper trading notification over the chart for a few seconds (TVP-7.4); the dock keeps the log. */
 export function TradingOrderToastLayer() {

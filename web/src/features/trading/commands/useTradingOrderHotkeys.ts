@@ -5,7 +5,7 @@
 // the server's risk rules decide what the ticket may place.
 import { useEffect, useRef } from 'react';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
-import { requestPaperTicket, type PaperTicketPrefill } from '../paperTicketRequests';
+import { paperTicketOpen, requestPaperTicket, type PaperTicketPrefill } from '../paperTicketRequests';
 import { useTradingCommand } from './useTradingCommands';
 
 export type OrderHotkeyModel = {
@@ -35,7 +35,8 @@ export function useTradingOrderHotkeys({ active, adapter, instrumentId, lastPric
     const prefill = hotkeyPrefill(instrumentId, side, orderType, crosshair.current ?? lastPrice());
     if (prefill) requestPaperTicket(prefill);
   };
-  const isActive = () => active;
+  // Only with the paper ticket on screen, so Shift+letters keep typing symbols otherwise.
+  const isActive = () => active && paperTicketOpen();
   useTradingCommand('trading.buyMarket', order('buy', 'market'), isActive);
   useTradingCommand('trading.sellMarket', order('sell', 'market'), isActive);
   useTradingCommand('trading.buyLimit', order('buy', 'limit'), isActive);
