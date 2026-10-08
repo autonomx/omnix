@@ -42,7 +42,7 @@ from app.apps.rpg.world.social import (
     ReputationGraph,
     RumorSystem,
 )
-from app.apps.rpg.world.contracts import NO_CONVERSATION_HOOKS, ConversationHooks
+from app.apps.rpg.world.contracts import ConversationHooks
 from app.apps.rpg.world.social.conversation_engine import (
     run_conversation_tick,
     try_start_party_reaction_conversation,
@@ -464,7 +464,8 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
 def step_simulation_state(
     setup_payload: dict[str, Any],
     *,
-    conversation_hooks: ConversationHooks = NO_CONVERSATION_HOOKS,
+    # Required: a caller without narration passes NO_CONVERSATION_HOOKS explicitly.
+    conversation_hooks: ConversationHooks,
 ) -> dict[str, Any]:
     """Advance the simulation by one tick.
 

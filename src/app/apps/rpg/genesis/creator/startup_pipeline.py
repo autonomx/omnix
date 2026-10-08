@@ -147,7 +147,7 @@ class StartupGenerationPipeline:
         for fact in creator_facts:
             self.creator_canon_state.add_fact(fact)
         self.creator_canon_state.setup_id = world_frame["setup_id"]
-        # Canon application is owned by GameLoop.start_new_adventure().
+        # Canon application is owned by whatever starts the adventure.
         # This pipeline populates canonical creator state only.
 
         for faction in generated["seed_factions"]:

@@ -36,7 +36,7 @@ class ReplayValidator:
         assert result["match"], "Replay state does not match live state!"
 
     Attributes:
-        engine_factory: Callable that returns a fresh GameLoop instance.
+        engine_factory: Callable that returns a fresh game loop instance.
     """
 
     def __init__(
@@ -47,7 +47,7 @@ class ReplayValidator:
         """Initialize with a factory for creating fresh game loops.
 
         Args:
-            engine_factory: Callable that returns a complete GameLoop
+            engine_factory: Callable that returns a complete game loop
                            with all subsystems initialized.
             config: Optional replay configuration. Defaults to
                     ReplayConfig(dispatch_to_systems=True, advance_ticks=True).

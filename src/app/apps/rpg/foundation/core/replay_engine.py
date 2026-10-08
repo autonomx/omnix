@@ -87,12 +87,12 @@ class ReplayEngine:
     - Foundation for branching timelines
 
     PHASE 2 FIX #2: Requires a factory that returns a COMPLETELY FRESH
-    GameLoop with new system instances. Reusing systems (world, npc_system,
+    game loop with new system instances. Reusing systems (world, npc_system,
     etc.) causes state leaks and breaks determinism.
 
     Example:
         def fresh_loop_factory():
-            return GameLoop(
+            return make_game_loop(
                 intent_parser=IntentParser(),    # NEW instance
                 world=World(),                   # NEW instance
                 npc_system=NPCSystem(),          # NEW instance
@@ -114,7 +114,7 @@ class ReplayEngine:
         """Initialize the ReplayEngine.
 
         Args:
-            game_loop_factory: Callable that returns a FRESH GameLoop instance with
+            game_loop_factory: Callable that returns a FRESH game loop instance with
                               NEW system instances. Reusing systems breaks determinism.
             config: Optional replay configuration. Defaults to dispatching to
                    systems and advancing ticks.
@@ -179,7 +179,7 @@ class ReplayEngine:
                  recorded outputs for pure deterministic replay.
 
         Returns:
-            Reconstructed GameLoop with state replayed from events.
+            Reconstructed game loop with state replayed from events.
 
         Raises:
             ValueError: If events list is empty.

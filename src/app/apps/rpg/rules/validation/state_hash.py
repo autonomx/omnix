@@ -140,7 +140,7 @@ def _extract_world_state(loop: Any) -> Dict[str, Any]:
     - Goal engine state
 
     Args:
-        loop: GameLoop instance with optional subsystem attributes.
+        loop: game loop instance with optional subsystem attributes.
 
     Returns:
         Dictionary containing extracted world state from all subsystems.
@@ -212,7 +212,7 @@ def compute_state_hash(loop: Any) -> str:
     Two loops with logically equivalent state will produce the same hash.
 
     Args:
-        loop: GameLoop instance with tick_count and event_bus attributes.
+        loop: game loop instance with tick_count and event_bus attributes.
 
     Returns:
         SHA-256 hex digest (64 character string).

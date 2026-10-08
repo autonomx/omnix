@@ -83,7 +83,7 @@ class EventContext:
     Instead of using a global _last_event_id, this class provides explicit
     causal context for each system's event emission.
 
-    Usage in GameLoop:
+    Usage in a game loop:
         ctx = EventContext(parent_id=player_event.event_id)
         npc_system.update(ctx)
         world_system.tick(ctx)
@@ -417,7 +417,7 @@ class EventBus:
     def collect(self) -> List[Event]:
         """Collect and clear all pending events.
 
-        This should be called once per game tick by the GameLoop.
+        This should be called once per game tick by the game loop.
         Returns a snapshot of events, then clears the internal queue.
 
         Returns:
@@ -548,7 +548,7 @@ class EventBus:
         """Reset the bus state (clears queue, log, and history).
 
         Fix #6: Don't touch context vars here - that breaks nested contexts.
-        Context var management is handled by GameLoop.
+        Context var management is handled by the game loop.
 
         PHASE 2.5 FIX: Also clear seen event IDs to allow fresh replay.
         PHASE 5.2: Also reset sequence counter for clean deterministic replay.

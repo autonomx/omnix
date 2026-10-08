@@ -6,7 +6,7 @@ for reproducibility in tests, replay, and simulation.
 
 Usage:
     clock = DeterministicClock()
-    loop = GameLoop(..., event_bus=EventBus(clock=clock))
+    loop = make_game_loop(..., event_bus=EventBus(clock=clock))
 """
 
 

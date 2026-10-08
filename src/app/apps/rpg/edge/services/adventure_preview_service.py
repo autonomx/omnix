@@ -24,13 +24,13 @@ ADVENTURE_PREVIEW_RESPONSE_VERSION = 1
 
 
 def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
-    """Convert the internal ``GameLoop.prepare_new_adventure()`` output to a
+    """Convert the internal the new-adventure preparation output to a
     deterministic preview response shape.
 
     Parameters
     ----------
     prepared:
-        The dict returned by ``GameLoop.prepare_new_adventure()``.
+        The dict returned by the new-adventure preparation.
         Expected keys: ``ok``, ``validation``, ``preview``, ``resolved_context``.
 
     Returns

@@ -51,7 +51,7 @@ from .npc_conversations import (
     upsert_conversation,
 )
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
-from app.apps.rpg.world.contracts import NO_CONVERSATION_HOOKS, ConversationHooks, ConversationLineWriter
+from app.apps.rpg.world.contracts import ConversationHooks, ConversationLineWriter
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +263,7 @@ def advance_active_conversations(
     simulation_state: dict[str, Any],
     runtime_state: dict[str, Any],
     tick: int,
-    hooks: ConversationHooks = NO_CONVERSATION_HOOKS,
+    hooks: ConversationHooks,
 ) -> dict[str, Any]:
     ensure_beats_state(simulation_state)
     ensure_signal_state(runtime_state)
@@ -387,7 +387,7 @@ def run_conversation_tick(
     simulation_state: dict[str, Any],
     runtime_state: dict[str, Any],
     tick: int,
-    hooks: ConversationHooks = NO_CONVERSATION_HOOKS,
+    hooks: ConversationHooks,
 ) -> dict[str, Any]:
     """Sole authoritative conversation lifecycle entrypoint.
 

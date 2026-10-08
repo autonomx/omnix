@@ -131,7 +131,9 @@ an import rewrite (`scripts/rewrite_imports.py`), then a baseline shrink.
    ports.
 3. **Then rules, world, narration, session and edge**, each under
    `app/apps/rpg/<context>/` with a `contracts` module. Cross-context imports
-   then go through contracts only.
+   then go through contracts only. (As built: contexts are packages and AL017
+   is 0, but only `world` and `genesis` have a `contracts` module, for their
+   ports; contract-only imports are not enforced. See "Not done" above.)
 
 Acceptance (from the roadmap): RPG has 15 or fewer top-level entries, the
 `rpg-production-turn` golden and the 50-turn replay are unchanged, and the

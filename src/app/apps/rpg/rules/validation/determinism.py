@@ -42,14 +42,14 @@ class DeterminismValidator:
         assert result["match"], "Non-deterministic behavior detected!"
 
     Attributes:
-        engine_factory: Callable that returns a fresh GameLoop instance.
+        engine_factory: Callable that returns a fresh game loop instance.
     """
 
     def __init__(self, engine_factory: Callable[[], Any]):
         """Initialize with a factory for creating fresh game loops.
 
         Args:
-            engine_factory: Callable that returns a complete GameLoop
+            engine_factory: Callable that returns a complete game loop
                            with all subsystems initialized.
         """
         self.engine_factory = engine_factory

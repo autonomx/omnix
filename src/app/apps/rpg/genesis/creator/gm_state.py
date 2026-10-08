@@ -140,7 +140,7 @@ class GMDirectiveState:
     def get_pending_injected_events(self) -> list[dict]:
         """Return deterministic event payloads for active inject-event directives.
 
-        The GameLoop is responsible for actually emitting these into the EventBus.
+        The game loop is responsible for actually emitting these into the EventBus.
         Returned items include directive identity and scope so the loop can
         clear only successfully emitted scene-scoped directives.
         """

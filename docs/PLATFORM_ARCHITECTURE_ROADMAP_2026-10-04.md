@@ -854,7 +854,7 @@ Track R (RPG bounded contexts): after WP-8.6; runs on its own schedule; gates no
 | PA-6.1 | ready | — | — | — | Every dependency (PA-1 to PA-4 including PA-3.2, PA-5.1, PA-5.2) landed on `main` by 2026-10-05. The add and retire drills need someone who did not build the scaffold (human gate) |
 | R-1 | proposed | — | 2026-10-06 | — | [RPG_CONTEXTS.md](architecture/RPG_CONTEXTS.md): seven contexts from the import graph (foundation, rules, world, narration, genesis, session, edge), every top-level entry placed; the World Forge (`session/genesis/`, `worlds/`) is genesis. Started ahead of WP-8.6 at the owner's request because it moves no file. Awaits the owner's approval (human gate) |
 | R-2 | done | — | 2026-10-06 | AL017 baseline 60 | `[rpg_contexts]` in `layers.toml` and lint rule AL017 (a context imports only lower contexts, at any scope; every entry has a context). `[rpg_core]` stays: it still scopes AL013's determinism rule |
-| R-3 | blocked | — | — | — | Waits for WP-8.6: moving files would collide with the RPG work still landing. Plan in RPG_CONTEXTS.md (genesis first) |
+| R-3 | done | — | 2026-10-08 | AL017 60 -> 0; RPG top-level entries 129 -> 9 | Each context is a package under `app/apps/rpg`; upward imports inverted by moves to the owning context and two ports (`world.contracts.ConversationHooks`, `genesis.contracts.CampaignSessions`); 117 unreachable legacy modules deleted. Contract-only imports between contexts are not enforced. See RPG_CONTEXTS.md |
 
 ---
 
