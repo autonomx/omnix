@@ -29,7 +29,7 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
   const [autoRefresh, setAutoRefresh] = useState<AutoRefresh | null>(null);
   const [changes, setChanges] = useState<ReturnType<typeof resultChanges>>({ added: new Set(), removed: [] });
   // The results shown before the latest run, and which run they came from, to say what changed.
-  const shown = useRef<{ runId: string | null; results: TradingScannerResult[] | null }>({ runId: null, results: null });
+  const shown = useRef<{ runId: string | null; scannerId: string | null; results: TradingScannerResult[] | null }>({ runId: null, scannerId: null, results: null });
 
   const refresh = async () => {
     try {
@@ -42,9 +42,13 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
       setStatus('ready');
       const latest = nextRuns[0];
       if (latest?.status === 'completed' && latest.run_id !== shown.current.runId) {
+        // Claimed before the await: an overlapping refresh does not diff the run against itself.
+        const previous = shown.current;
+        shown.current = { ...previous, runId: latest.run_id };
         const next = await tradingScannerApi.results(latest.run_id);
-        setChanges(resultChanges(shown.current.results, next));
-        shown.current = { runId: latest.run_id, results: next };
+        // Changes only compare runs of the same screen.
+        setChanges(previous.scannerId === latest.scanner_id ? resultChanges(previous.results, next) : resultChanges(null, next));
+        shown.current = { runId: latest.run_id, scannerId: latest.scanner_id, results: next };
         setResults(next);
       }
     } catch {
@@ -59,14 +63,14 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
   }, [runs]);
 
   // Auto-refresh (TVP-9.2): a new run only when none of the screen's runs is still working.
-  useScannerAutoRefresh(
-    autoRefresh,
-    (scannerId) => runs.some((run) => run.scanner_id === scannerId && !terminalStatuses.has(run.status)),
-    async (scannerId) => {
-      await tradingScannerApi.start(scannerId);
-      await refresh();
-    },
-  );
+  const working = (scannerId: string) => runs.some((run) => run.scanner_id === scannerId && !terminalStatuses.has(run.status));
+  useScannerAutoRefresh(autoRefresh, working, async (scannerId) => {
+    await tradingScannerApi.start(scannerId);
+    await refresh();
+  }, () => {
+    setAutoRefresh(null);
+    setStatus('error');
+  });
 
   const available = useMemo(() => instruments.slice(0, 200), [instruments]);
   const create = async () => {
@@ -151,14 +155,14 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
         {definitions.map((definition) => (
           <li key={definition.scanner_id}>
             <div><strong>{definition.name}</strong><small>{definition.instrument_ids.length} instruments · {definition.interval} · revision {definition.revision}</small></div>
-            <button type="button" onClick={() => void start(definition.scanner_id)}>Run</button>
+            <button type="button" disabled={working(definition.scanner_id)} onClick={() => void start(definition.scanner_id)}>Run</button>
             <select
               aria-label={`Auto-refresh ${definition.name}`}
               value={autoRefresh?.scannerId === definition.scanner_id ? autoRefresh.everyMs : 0}
               onChange={(event) => {
                 const everyMs = Number(event.target.value);
                 setAutoRefresh(everyMs > 0 ? { scannerId: definition.scanner_id, everyMs } : null);
-                if (everyMs > 0) void start(definition.scanner_id);
+                if (everyMs > 0 && !working(definition.scanner_id)) void start(definition.scanner_id);
               }}
             >
               {AUTO_REFRESH_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

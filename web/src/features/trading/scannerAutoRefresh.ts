@@ -26,18 +26,43 @@ export function resultChanges(previous: readonly TradingScannerResult[] | null, 
   };
 }
 
-/** Starts the screen's runs on its cadence while mounted; `busy` says whether one of its runs is still working. */
-export function useScannerAutoRefresh(auto: AutoRefresh | null, busy: (scannerId: string) => boolean, start: (scannerId: string) => Promise<unknown>): void {
-  const latest = useRef({ busy, start });
+/** Failed starts in a row (a deleted or disabled screen, an outage) after which auto-refresh turns itself off. */
+export const MAX_AUTO_REFRESH_FAILURES = 3;
+
+/**
+ * Starts the screen's runs on its cadence while mounted. A tick does nothing while a start is still in flight or
+ * `busy` says one of its runs is working; the server also refuses a second run (409), which counts as busy.
+ * After MAX_AUTO_REFRESH_FAILURES failed starts in a row, `onGiveUp` is told why.
+ */
+export function useScannerAutoRefresh(
+  auto: AutoRefresh | null,
+  busy: (scannerId: string) => boolean,
+  start: (scannerId: string) => Promise<unknown>,
+  onGiveUp: (error: unknown) => void = () => undefined,
+): void {
+  const latest = useRef({ busy, start, onGiveUp });
   useEffect(() => {
-    latest.current = { busy, start };
+    latest.current = { busy, start, onGiveUp };
   });
   const scannerId = auto?.scannerId;
   const everyMs = auto?.everyMs ?? 0;
   useEffect(() => {
     if (!scannerId || everyMs <= 0) return;
-    return startPolling(() => {
-      if (!latest.current.busy(scannerId)) void latest.current.start(scannerId).catch(() => undefined);
+    let inFlight = false;
+    let failures = 0;
+    return startPolling(async () => {
+      if (inFlight || latest.current.busy(scannerId)) return;
+      inFlight = true;
+      try {
+        await latest.current.start(scannerId);
+        failures = 0;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('(409)')) return;
+        failures += 1;
+        if (failures >= MAX_AUTO_REFRESH_FAILURES) latest.current.onGiveUp(error);
+      } finally {
+        inFlight = false;
+      }
     }, everyMs);
   }, [scannerId, everyMs]);
 }

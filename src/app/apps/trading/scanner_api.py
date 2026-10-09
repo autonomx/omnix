@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.persistence.errors import RevisionConflict
 
+from .scanner_repository import ScannerRunActive
 from .scanner import TradingScannerDefinition, TradingScannerResult, TradingScannerRun
 from .scanner_manager import TradingScannerManager, default_scanner_manager
 from .scanner_repository import TradingScannerRepository, default_scanner_repository
@@ -78,6 +79,9 @@ def create_trading_scanner_router(
     async def start_run(scanner_id: str):
         try:
             return await manager_factory().start_run(scanner_id)
+        except ScannerRunActive as exc:
+            # One run at a time per scanner (TVP-9.2): the caller waits for the working one.
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -24,20 +24,33 @@ describe('screener auto-refresh (TVP-9.2)', () => {
     expect(changes.removed).toEqual(['a']);
   });
 
-  it('starts a run on its cadence, never while one is still working', () => {
+  it('starts a run on its cadence, never while one is still working', async () => {
     vi.useFakeTimers();
     let busy = false;
     const start = vi.fn(async () => undefined);
     const hook = renderHook(() => useScannerAutoRefresh({ scannerId: 's', everyMs: 10_000 }, () => busy, start));
-    act(() => { vi.advanceTimersByTime(10_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(start).toHaveBeenCalledTimes(1);
     busy = true;
-    act(() => { vi.advanceTimersByTime(10_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(start).toHaveBeenCalledTimes(1);
     hook.unmount();
     busy = false;
-    act(() => { vi.advanceTimersByTime(30_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a refused second run as busy, and gives up after repeated failures', async () => {
+    vi.useFakeTimers();
+    const onGiveUp = vi.fn();
+    const start = vi.fn(async () => { throw new Error('Scanner request failed (409): scanner_run_active'); });
+    const hook = renderHook(() => useScannerAutoRefresh({ scannerId: 's', everyMs: 10_000 }, () => false, start, onGiveUp));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
+    expect(onGiveUp).not.toHaveBeenCalled();
+    start.mockImplementation(async () => { throw new Error('Scanner request failed (404): scanner_not_found'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(onGiveUp).toHaveBeenCalledTimes(1);
+    hook.unmount();
   });
 
   it('turns auto-refresh on from a saved screen and highlights new results', async () => {
@@ -53,5 +66,20 @@ describe('screener auto-refresh (TVP-9.2)', () => {
     await waitFor(() => expect(api.start).toHaveBeenCalledWith('s1'));
     expect(await screen.findByRole('status')).toHaveTextContent('1 new, 1 dropped (a)');
     expect(screen.getByText('c').closest('tr')).toHaveClass('is-new');
+  });
+
+  it('never compares results of different screens', async () => {
+    api.definitions.mockResolvedValue([{ scanner_id: 's1', name: 'Movers', instrument_ids: ['a'], interval: '1d', revision: 1 }, { scanner_id: 's2', name: 'Gaps', instrument_ids: ['x'], interval: '1d', revision: 1 }]);
+    api.runs.mockResolvedValue([{ run_id: 'run-1', scanner_id: 's1', status: 'completed', completed_count: 2, universe_count: 2, matched_count: 2 }]);
+    api.results.mockResolvedValueOnce([result('a'), result('b')]);
+    api.start.mockResolvedValue({});
+    render(<TradingScannerPanel instruments={[]} />);
+    await screen.findByLabelText('Auto-refresh Gaps');
+    api.runs.mockResolvedValue([{ run_id: 'run-9', scanner_id: 's2', status: 'completed', completed_count: 1, universe_count: 1, matched_count: 1 }]);
+    api.results.mockResolvedValueOnce([result('x', 'run-9')]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Run' })[1]);
+    expect(await screen.findByText('x')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByText('x').closest('tr')).not.toHaveClass('is-new');
   });
 });

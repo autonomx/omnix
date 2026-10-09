@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, Protocol
 
