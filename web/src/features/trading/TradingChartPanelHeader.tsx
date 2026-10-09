@@ -7,6 +7,8 @@ import { DrawingPropertiesButton } from './drawings/DrawingPropertiesButton';
 import { DrawingStyleControls } from './drawings/DrawingStyleControls';
 import { drawingToolDefinition } from './drawings/tools/registry';
 import { ChartCopyImageButton, ChartMarketStatusBadges } from './TradingChartWorkflowControls';
+import { ChartLinkGroupButton } from './ChartLinkGroupButton';
+import { useTradingStore } from './tradingStore';
 
 /** The chart's header: symbol, quote, interval and chart controls. */
 export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
@@ -15,6 +17,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
     instrumentId, interval, latest, latestClose, onOpenSymbolSearch, priceScaleMultiplier, provenance, replayMode, resolvedBinding,
     selectedDrawing, setCompareDialogOpen, streamStatus, toggleFullscreen,
   } = ws;
+  const linkGroup = useTradingStore((state) => state.charts.find((chart) => chart.chartId === chartId)?.linkGroup);
   return (
     <>
       <header className="trading-chart-header">
@@ -42,6 +45,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
             <i className={`trading-stream-dot ${streamStatus}`} role="img" aria-label={`Feed ${streamStatus}`} />
             <ChartMarketStatusBadges ws={ws} />
+            <ChartLinkGroupButton chartId={chartId} group={linkGroup} />
           </div>
           {latest ? (
             <div className="trading-chart-ohlc">

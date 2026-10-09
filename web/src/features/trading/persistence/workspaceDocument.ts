@@ -1,3 +1,4 @@
+import { isChartLinkGroup } from '../chartLinkGroups';
 import type { CoreIndicatorInstance, CoreIndicatorStyle } from '../indicators/coreIndicators';
 import { isAutoChartPatternId } from '../indicators/autoPatterns';
 import { isTradingViewBuiltInId } from '../indicators/tradingViewBuiltIns';
@@ -217,6 +218,8 @@ function parseCharts(value: unknown): TradingChartState[] | null {
       indicators,
       comparisons,
       ...(Object.keys(settings).length > 0 ? { settings } : {}),
+      // An unknown group (a newer colour) is dropped rather than failing the document.
+      ...(isChartLinkGroup(chart.linkGroup) ? { linkGroup: chart.linkGroup } : {}),
     });
   }
   if (new Set(charts.map((chart) => chart.chartId)).size !== charts.length) return null;

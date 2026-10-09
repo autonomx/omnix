@@ -1,3 +1,4 @@
+import { groupSymbol, tabsWithGroupSymbol, withGroupSymbol, type ChartLinkGroup } from './chartLinkGroups';
 import { loadDrawingToolSettings, saveDrawingToolSettings, type DrawingToolSettings } from './drawings/drawingToolSettings';
 import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
@@ -50,6 +51,8 @@ export type TradingChartState = {
   indicators: CoreIndicatorInstance[];
   comparisons?: TradingComparison[];
   settings?: TradingChartSettings;
+  /** The colour link group the chart shares its symbol with, across tabs (TVP-4.1); none when unset. */
+  linkGroup?: ChartLinkGroup;
 };
 export type TradingIndicatorMove = 'up' | 'down';
 export type TradingLinkState = {
@@ -113,6 +116,8 @@ type TradingWorkspaceState = {
   setDrawingToolSetting: <K extends keyof DrawingToolSettings>(key: K, value: DrawingToolSettings[K]) => void;
   setDrawingSnapMode: (mode: DrawingSnapMode) => void;
   updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) => void;
+  /** Puts a chart in a colour link group (it takes the group's symbol) or, with null, takes it out. */
+  setChartLinkGroup: (chartId: string, group: ChartLinkGroup | null) => void;
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
   toggleIndicatorVisibility: (chartId: string, id: CoreIndicatorId) => void;
   updateIndicator: (chartId: string, id: CoreIndicatorId, patch: Partial<CoreIndicatorInstance>) => void;
@@ -465,7 +470,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
     const instrumentChanged = patch.instrumentId !== undefined;
     const linkedInstrument = instrumentChanged && state.links.instrument;
     const linkedInterval = patch.interval !== undefined && state.links.interval;
-    return syncActiveTab(state, { charts: state.charts.map((chart) => {
+    const charts = state.charts.map((chart) => {
         if (chart.chartId === chartId) {
           return {
             ...chart,
@@ -478,7 +483,24 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
           ...(linkedInstrument ? { instrumentId: patch.instrumentId, bindingId: null } : {}),
           ...(linkedInterval ? { interval: patch.interval } : {}),
         };
-      }) });
+      });
+    // A chart in a colour group carries its new symbol to the group's charts in every tab (TVP-4.1).
+    const group = state.charts.find((chart) => chart.chartId === chartId)?.linkGroup;
+    if (!instrumentChanged || !group || patch.instrumentId === undefined) return syncActiveTab(state, { charts });
+    const symbol = { instrumentId: patch.instrumentId, bindingId: null };
+    const next = syncActiveTab(state, { charts: withGroupSymbol(charts, group, symbol, chartId) });
+    return { ...next, tabs: tabsWithGroupSymbol(next.tabs, state.activeTabId, group, symbol) };
+  }),
+  setChartLinkGroup: (chartId, group) => set((state) => {
+    const symbol = group ? groupSymbol(state.charts, state.tabs, state.activeTabId, group, chartId) : null;
+    return syncActiveTab(state, { charts: state.charts.map((chart) => {
+      if (chart.chartId !== chartId) return chart;
+      const { linkGroup: _previous, ...rest } = chart;
+      if (!group) return rest;
+      return symbol && symbol.instrumentId !== chart.instrumentId
+        ? { ...rest, linkGroup: group, instrumentId: symbol.instrumentId, bindingId: null }
+        : { ...rest, linkGroup: group };
+    }) });
   }),
   toggleIndicator: (chartId, id, period) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => {
       if (chart.chartId !== chartId) return chart;
