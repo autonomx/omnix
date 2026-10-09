@@ -1122,17 +1122,17 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 
 ## 9. Progress
 
-**Status on 2026-10-08.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4, 0.5a, 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.6, 5.1–5.3, 6.1, 7.1, 7.4, TVP-7.3, TVP-1.5, TVP-4.5, TVP-7.2a, TVP-4.1, TVP-1.3, TVP-9.1, TVP-9.2, TVP-1.4, TVP-11.0 and 8.1 (wave 1). TVP-0.4 is done and the TVP-3 drawing tools have started (3.1 merged). TVP-0.5a (webhook delivery) is done. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **109**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
+**Status on 2026-10-08.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4, 0.5a, 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.6, 5.1–5.3, 6.1, 7.1, 7.4, TVP-7.3, TVP-1.5, TVP-4.5, TVP-7.2a, TVP-4.1, TVP-1.3, TVP-9.1, TVP-9.2, TVP-1.4, TVP-11.0, TVP-3.2, TVP-3.3 and 8.1 (wave 1). TVP-0.4 is done and the TVP-3 drawing tools have started (3.1 merged). TVP-0.5a (webhook delivery) is done. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **109**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
 
 **Completion.**
 
 <!-- parity-completion:start -->
 | Measure | Done |
 |---|---|
-| TradingView parity, all features in scope | 75% |
-| TradingView parity, daily + weekly features | 85% |
+| TradingView parity, all features in scope | 79% |
+| TradingView parity, daily + weekly features | 86% |
 | Roadmap work packages merged in full | 46% (31 of 67) |
-| Daily + weekly gap closed since the first count | 65% (98 of 150) |
+| Daily + weekly gap closed since the first count | 67% (101 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1143,7 +1143,7 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
 |---|---|---|---|---|---|---|
 | Charts and layouts | 30 | 2 | 0 / 0 / 1 | 0 | 0 | 94% |
-| Drawing tools | 45 | 0 | 0 / 9 / 47 | 0 | 0 | 45% |
+| Drawing tools | 62 | 0 | 0 / 6 / 33 | 0 | 0 | 61% |
 | Indicators | 134 | 1 | 0 / 21 / 0 | 54 | 0 | 86% |
 | User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
 | Alerts | 20 | 1 | 1 / 2 / 0 | 0 | 0 | 85% |
@@ -1154,17 +1154,17 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Paper and chart trading | 19 | 0 | 0 / 3 / 0 | 0 | 0 | 86% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 2 | 0 / 3 / 1 | 0 | 0 | 29% |
-| **Total** | 324 | 10 | 4 / 48 / 52 | 55 | 0 | 75% |
+| **Total** | 341 | 10 | 4 / 45 / 38 | 55 | 0 | 79% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
 | Daily | 157 | 2 | 4 | 0 | 0 | 163 | 97% |
-| Weekly | 154 | 8 | 48 | 0 | 0 | 210 | 75% |
-| Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
+| Weekly | 157 | 8 | 45 | 0 | 0 | 210 | 77% |
+| Rare | 27 | 0 | 38 | 55 | 0 | 120 | 42% |
 
-Missing daily + weekly features: **52**
+Missing daily + weekly features: **49**
 
-Done (have counts 1, partial 0.5, of the features in scope): **75%** overall, **85%** of daily + weekly.
+Done (have counts 1, partial 0.5, of the features in scope): **79%** overall, **86%** of daily + weekly.
 <!-- parity-report:end -->
 
 **How the work runs.**
@@ -1200,6 +1200,7 @@ Done (have counts 1, partial 0.5, of the features in scope): **75%** overall, **
 | TVP-9.1 | **Done** | merged `47c15d23af` | Screener rules can be filters or columns, and every rule is a sortable result column. New metrics: any server registry indicator and line, relative volume (against the N prior bars), gap %, and distance from the N-bar high or low; plus price, change %, volume, SMA, EMA, RSI, ATR. Indicator rules share one cached bar series per instrument and are evaluated off the event loop. A run's results show the columns of that run's own snapshot. Saved screens load into the editor and save back at their revision; a conflict keeps the edits and takes the new revision. A result opens on the active chart and its link group; results can be added to the open watchlist. Two review rounds. Follow-ups: fundamentals wait for TVP-10.2; tests for skipping an unreadable stored screen |
 | TVP-1.4 | **Done** | merged `d2d32e8baf` | Line alerts from horizontal lines and rays, trend lines and rays, channels, rectangles (top and bottom) and fib levels; the dialog picks the level, and the server stores the drawing and level with the alert. An alert follows its drawing: once a moved drawing settles on the active live chart (not in replay, and only once the chart has bars), it takes the level's new line, compared as the server evaluates it so charts on other intervals agree. A failing update retries when the drawing moves again. Deleting the drawing, or a level that goes away (fib levels are keyed by value), asks on the active chart whether to disable its alerts; each is disabled at its current revision, and Keep is remembered on every chart until the page reloads. Three review rounds (sync loops, level identity, no-bars false orphans; fixed). Follow-ups: choosing the level in edit mode, and the editor writing back the line it opened with |
 | TVP-11.0 | **Done** | merged (this commit) | Omnix Scripts spike: a Pine v5/v6 subset interpreted on the server (`src/app/apps/trading/scripts`: indentation-aware lexer, parser, compiler to closures, per-call-site series, incremental `ta.*` following the registry's order of operations). Every Pine template matches its chart indicator on the golden datasets within 1e-11 (one documented exception: Stochastic RSI on a flat window); ten `ta.*` functions match TradingView's reference implementations run through the interpreter; 17 of 20 community-idiom scripts run (the 3 others use request.security, strategy() and a user-defined type). Limits bound time, ints, strings, collections, alerts and nesting; every failure is a ScriptError with a line. Cost on 5,000 bars: median 52 ms per full run, 0.017 ms per new bar. D-9 confirmed with conditions (separate worker process with rlimits). Spec: `OMNIX_SCRIPTS_SPEC.md`. Two review rounds. Follow-ups: request.security, realtime rollback, const folding for v5 division, history only for referenced series, a real community-script corpus (owner-approved list) |
+| TVP-3.2 + 3.3 | **Done** (inside pitchfork open) | merged (this commit) | Seventeen tools: trend-based fib extension and time, fib time zone, channel, speed resistance fan and arcs, circles, spiral, wedge; Andrews, Schiff and modified Schiff pitchforks, pitchfan; Gann box, square, square fixed (a fixed price-per-bar scale) and fan. Extension, channel and pitchfork lines are built in bar index/price, so drawings and their alerts agree on any scale (alertable: extension levels, channel levels, median and tines). Retracement gains reverse, labels left or right, and levels, percents or prices. Two review rounds. Open: inside pitchfork (TradingView's construction to confirm), pitchfan level convention to verify; small follow-ups (Gann fixed handle at the corner, left labels with Extend left, adaptive spiral sampling) go with TVP-3.4/3.5/3.7 |
 | TVP-8.1 (wave 1 part) | **Merged** (wave 1 part) | merged `421e588670` | One speed control (9 speeds) and one replay clock for all charts; jump to bar during playback; one "Real time" exit; bars streamed during replay backfilled; charts redraw only when their visible bar count changes. Replay paper trading runs through a sequential per-session queue: every bar once and in order, flat bars without server calls, orders at the clock's bar on the session feed. Fixed older bugs: replay orders with a feed binding never filled; replay bars marked positions in other instruments. Three review rounds. Remaining: sub-bar playback (needs TVP-0.6) and replay shortcuts (TVP-2) |
 | TVP-0.5a | **Done** | merged (this commit) | Outbox table (migration `0142_trading_notification_deliveries.sql`) written in the trigger's transaction; delivery monitor across workspaces (system operation `notifications.delivery`) with leases, fencing and backoff (30 s to 1 h, 8 attempts); webhook sender: HTTPS only, strict URL policy after DNS with the connection pinned to the checked address, one deadline per send, no redirects, proxies or body reads, URL never logged, HMAC-SHA256 signature; `GET /api/trading/alerts/deliveries` (status only). Two review rounds (the first found token logging, unbounded sends and CGNAT addresses; all fixed). Follow-ups: webhook editor and message placeholders (TVP-1.5); throughput is about 24 sends a minute |
 | TVP-3.1 | **Done** | merged (this commit) | Eight tools: info line (price change, percent, bars, angle), extended line, trend angle, parallel channel (middle line, fill, width-keeping handles), flat top/bottom, disjoint channel, regression trend (least squares of closes on bar index, deviation bands), anchored VWAP (the indicator's formula). Channel lines are built in time/price and both drawn and alerted on, so drawings and alerts agree on a log scale too; alert levels on every line. One review round. Follow-ups: regression deviation is the population one (TradingView may use n-1); info line shows no time span or distance |

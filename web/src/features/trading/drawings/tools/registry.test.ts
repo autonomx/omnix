@@ -18,6 +18,9 @@ const DRAWING_TOOLS = [
   // TVP-3.6 positions and measurement
   'date-range', 'date-price-range', 'long-position', 'short-position', 'position-forecast', 'bars-pattern',
   'ghost-feed', 'sector', 'fixed-range-volume-profile',
+  // TVP-3.2 Fibonacci, TVP-3.3 pitchforks and Gann
+  'fib-extension', 'fib-time-zone', 'fib-time', 'fib-channel', 'fib-speed-fan', 'fib-arcs', 'fib-circles', 'fib-spiral', 'fib-wedge',
+  'pitchfork', 'schiff-pitchfork', 'modified-schiff-pitchfork', 'pitchfan', 'gann-box', 'gann-square-fixed', 'gann-square', 'gann-fan',
 ] as const satisfies readonly Exclude<DrawingTool, 'cursor' | 'alert' | 'eraser'>[];
 
 describe('drawing tool registry', () => {
@@ -62,9 +65,9 @@ describe('drawing tool registry', () => {
 
   it('fills missing properties and keeps stored ones, even of an unexpected shape', () => {
     const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1].map((value) => ({ value, color: '', visible: true }));
-    expect(drawingPropertiesWithDefaults('fibonacci', undefined)).toEqual({ levels, showLabels: true, extendLeft: false, extendRight: false });
+    expect(drawingPropertiesWithDefaults('fibonacci', undefined)).toEqual({ levels, showLabels: true, labelContent: 'levels', labelSide: 'right', reverse: false, extendLeft: false, extendRight: false });
     expect(drawingPropertiesWithDefaults('fibonacci', { levels: [0.5, 1], showLabels: false, future: 'kept' })).toEqual({
-      levels: [0.5, 1], showLabels: false, future: 'kept', extendLeft: false, extendRight: false,
+      levels: [0.5, 1], showLabels: false, future: 'kept', labelContent: 'levels', labelSide: 'right', reverse: false, extendLeft: false, extendRight: false,
     });
     expect(drawingPropertiesWithDefaults('unknown-tool', { a: 1 })).toEqual({ a: 1 });
   });
@@ -74,7 +77,8 @@ describe('drawing tool registry', () => {
     expect(drawingDisplayName({ toolType: 'ray' })).toBe('Ray');
     expect(drawingDisplayName({ toolType: 'text', text: '' })).toBe('Text note');
     expect(drawingDisplayName({ toolType: 'text', text: 'Breakout' })).toBe('Breakout');
-    expect(drawingDisplayName({ toolType: 'pitchfork' })).toBe('pitchfork (unsupported)');
+    expect(drawingDisplayName({ toolType: 'pitchfork' })).toBe('Pitchfork');
+    expect(drawingDisplayName({ toolType: 'warp-drive' })).toBe('warp-drive (unsupported)');
   });
 });
 

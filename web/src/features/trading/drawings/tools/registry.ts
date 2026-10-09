@@ -6,9 +6,15 @@ import { circleTool, ellipseTool, rectangleTool } from './definitions/boxShapes'
 import { disjointChannelTool, flatTopBottomTool, parallelChannelTool } from './definitions/channels';
 import { dotTool } from './definitions/dot';
 import { fibonacciTool } from './definitions/fibonacci';
+import {
+  fibArcsTool, fibChannelTool, fibCirclesTool, fibExtensionTool, fibSpeedFanTool, fibSpiralTool, fibTimeTool, fibTimeZoneTool, fibWedgeTool,
+} from './definitions/fibExtras';
 import { horizontalLineTool, horizontalRayTool } from './definitions/horizontalLines';
 import { extendedLineTool, infoLineTool, trendAngleTool } from './definitions/lineVariants';
 import { measurementTool } from './definitions/measurement';
+import {
+  gannBoxTool, gannFanTool, gannSquareFixedTool, gannSquareTool, modifiedSchiffPitchforkTool, pitchfanTool, pitchforkTool, schiffPitchforkTool,
+} from './definitions/pitchforks';
 import { longPositionTool, shortPositionTool } from './definitions/positions';
 import { barsPatternTool, ghostFeedTool, positionForecastTool, sectorTool } from './definitions/projections';
 import { datePriceRangeTool, dateRangeTool } from './definitions/ranges';
@@ -50,6 +56,25 @@ export const DRAWING_TOOL_DEFINITIONS = [
   ghostFeedTool,
   sectorTool,
   fixedRangeVolumeProfileTool,
+  // TVP-3.2 Fibonacci
+  fibExtensionTool,
+  fibTimeZoneTool,
+  fibTimeTool,
+  fibChannelTool,
+  fibSpeedFanTool,
+  fibArcsTool,
+  fibCirclesTool,
+  fibSpiralTool,
+  fibWedgeTool,
+  // TVP-3.3 pitchforks and Gann
+  pitchforkTool,
+  schiffPitchforkTool,
+  modifiedSchiffPitchforkTool,
+  pitchfanTool,
+  gannBoxTool,
+  gannSquareFixedTool,
+  gannSquareTool,
+  gannFanTool,
 ] as const;
 
 /** Every tool that creates a drawing; the toolbar adds `cursor`, `alert` and `eraser`. */

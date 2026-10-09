@@ -16,7 +16,7 @@ describe('drawing document upgrade', () => {
       { time: '2026-10-07T09:00:00.000Z', price: 63980.5 },
     ]);
     expect(trend.properties).toEqual({ extendLeft: false, extendRight: false });
-    expect(fibonacci.properties).toEqual({ levels: FIB_LEVELS, showLabels: true, extendLeft: false, extendRight: false });
+    expect(fibonacci.properties).toEqual({ levels: FIB_LEVELS, showLabels: true, labelContent: 'levels', labelSide: 'right', reverse: false, extendLeft: false, extendRight: false });
     expect(fibonacci).toMatchObject({ revision: 1, locked: true, style: { color: '#ffd43b', lineWidth: 1, lineStyle: 'dashed' } });
     expect(text).toMatchObject({ hidden: true, text: 'Breakout retest', properties: {} });
     // The other instrument's drawing is kept verbatim, not dropped.
