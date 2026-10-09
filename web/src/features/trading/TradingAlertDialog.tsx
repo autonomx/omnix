@@ -10,6 +10,8 @@ import { MESSAGE_PLACEHOLDERS, type AlertDeliveryEditor } from './alertDelivery'
 import { AlertDeliveryFields } from './AlertDeliveryFields';
 import { AlertIndicatorPicker } from './AlertIndicatorPicker';
 import { resolveIndicatorSelection, type AlertIndicatorChoice, type AlertIndicatorSelection } from './alertIndicatorSources';
+import { AlertConditionRows } from './AlertConditionRows';
+import { MAX_ALERT_CONDITIONS, acceptsExtraConditions, newConditionDraft, type ConditionDraft } from './alertConditionDrafts';
 import './TradingChartAlertOpaque.css';
 
 export type TradingAlertEditorState = AlertDeliveryEditor & {
@@ -36,8 +38,27 @@ export type TradingAlertEditorState = AlertDeliveryEditor & {
   drawingId?: string;
   drawingLevels?: ReadonlyArray<{ key: string; label: string; anchors: readonly [{ time: string; price: number }, { time: string; price: number }] }>;
   drawingLevel?: string;
-  // Alerts described by conditions (condition 'conditions') show them read-only until the condition editor ships.
+  /** A conditions alert's summary, shown when its conditions can't all be edited here (a trendline among them). */
   conditionsSummary?: string;
+  /**
+   * Multi-condition alerts (TVP-1.6): for a conditions alert, all its conditions; otherwise the conditions added after
+   * the alert's own one. Combined with AND.
+   */
+  conditionDrafts?: ConditionDraft[];
+  /** False when a conditions alert holds one the dialog can't edit: it is shown as its summary and kept. */
+  conditionsEditable?: boolean;
+}
+
+/** Whether "Add condition" can add one, or why not. */
+function addConditionBlock(editor: TradingAlertEditorState, usesChartIndicators: boolean): string | null {
+  const drafts = editor.conditionDrafts ?? [];
+  const isConditions = editor.condition === 'conditions';
+  if (editor.condition.startsWith('trendline_')) return 'Drawing alerts follow their drawing and take one condition: add other conditions in a separate alert.';
+  if (isConditions && editor.conditionsEditable === false) return "This alert has a condition the dialog can't edit, so its conditions are kept as they are.";
+  if (!acceptsExtraConditions(editor.condition) || (editor.condition.startsWith('indicator_') && !usesChartIndicators)) {
+    return 'This alert takes one condition: add the others in a separate alert.';
+  }
+  return (isConditions ? drafts.length : drafts.length + 1) >= MAX_ALERT_CONDITIONS ? `An alert takes at most ${MAX_ALERT_CONDITIONS} conditions.` : null;
 }
 
 const priceConditionOptions: Array<{ value: TradingAlertCondition; label: string }> = [
@@ -119,7 +140,8 @@ export function TradingAlertDialog({
   const chartIndicators = indicatorChoices && usesChartIndicators
     ? resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId)
     : undefined;
-  const [showConditionNote, setShowConditionNote] = useState(false);
+  const [conditionNote, setConditionNote] = useState<string | null>(null);
+  const drafts = editor.conditionDrafts ?? [];
   const family = conditionFamily(editor.condition);
   const direction = conditionDirection(editor.condition);
   const isConditions = editor.condition === 'conditions';
@@ -150,7 +172,9 @@ export function TradingAlertDialog({
       <div className="trading-alert-dialog-body">
         <section className="trading-alert-condition-section" aria-label="Alert condition">
           <div className="trading-alert-section-heading"><strong>Condition</strong><span>Price, indicator, or volume</span></div>
-          {isConditions ? (
+          {isConditions && editor.conditionsEditable !== false && drafts.length > 0 ? (
+            <AlertConditionRows drafts={drafts} firstNumber={1} minimum={1} choices={indicatorChoices ?? []} onChange={(conditionDrafts) => onChange({ conditionDrafts })} />
+          ) : isConditions ? (
             <div className="trading-alert-value-row"><span>Conditions</span><strong>{editor.conditionsSummary || 'Conditions'}</strong></div>
           ) : (<>
           <div className="trading-alert-condition-row">
@@ -218,9 +242,21 @@ export function TradingAlertDialog({
               <input aria-label="Alert indicator period" inputMode="numeric" value={editor.period} onChange={(event) => onChange({ period: event.target.value })} />
             </div>
           ) : null}
+          <AlertConditionRows drafts={drafts} firstNumber={2} minimum={0} choices={indicatorChoices ?? []} onChange={(conditionDrafts) => onChange({ conditionDrafts })} />
           </>)}
-          <button type="button" className="trading-alert-add-condition" onClick={() => setShowConditionNote((value) => !value)} aria-expanded={showConditionNote}>＋ Add condition</button>
-          {showConditionNote ? <small className="trading-alert-condition-note">Server alerts currently evaluate one condition per alert. Use separate alerts for additional conditions.</small> : null}
+          <button
+            type="button"
+            className="trading-alert-add-condition"
+            onClick={() => {
+              const blocked = addConditionBlock(editor, usesChartIndicators);
+              setConditionNote(blocked);
+              if (!blocked) onChange({ conditionDrafts: [...drafts, newConditionDraft(Number.isFinite(latestPrice) ? String(latestPrice) : '')] });
+            }}
+          >
+            ＋ Add condition
+          </button>
+          {conditionNote ? <small className="trading-alert-condition-note" role="status">{conditionNote}</small> : null}
+          {drafts.length > 0 && !isConditions ? <small className="trading-alert-condition-note">All conditions must hold together (AND); one frequency and message.</small> : null}
         </section>
 
         <dl className="trading-alert-dialog-settings">

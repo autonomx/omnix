@@ -11,6 +11,7 @@ import {
   notifyTradingAlertsChanged,
 } from './tradingChartAlerts';
 import { deliveryCreateFields, deliveryEditorOf, deliveryUpdatePatch } from './alertDelivery';
+import { applyConditionDrafts, conditionEditorFields } from './alertConditionDrafts';
 import { tradingApi } from './tradingApi';
 import type {
   TradingAlert,
@@ -171,6 +172,7 @@ function editorForAlert(alert: TradingAlert): TradingAlertEditorState {
     period: String(alert.parameters.period ?? 14),
     lookback: String(alert.parameters.lookback_bars ?? 1),
     conditionsSummary: alertConditionsSummary(alert),
+    ...conditionEditorFields(alert),
   };
 }
 
@@ -302,7 +304,7 @@ export function TradingAlertsPanel({
       setStatus('error');
       return;
     }
-    // The dialog cannot edit conditions yet (TVP-1.3/1.6): those alerts keep them.
+    // A conditions alert's conditions come from the dialog's rows (TVP-1.6), applied below.
     const conditionPatch = alert.condition_type === 'conditions' ? {} : {
       threshold: formatAlertThreshold(threshold),
       condition_type: editor.condition,
@@ -310,13 +312,12 @@ export function TradingAlertsPanel({
       period: Number(editor.period) || 14,
       lookback_bars: Number(editor.lookback) || 1,
     };
-    await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
+    const input = chartAlertUpdateInput(alert, {
       ...conditionPatch,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
-      trigger_policy: editor.triggerPolicy,
-      message: editor.message, notification_channels: editor.notifications,
-      ...deliveryUpdatePatch(editor),
-    })));
+      trigger_policy: editor.triggerPolicy, message: editor.message, notification_channels: editor.notifications, ...deliveryUpdatePatch(editor),
+    });
+    if (applyConditionDrafts(input, editor)) return void setStatus('error'); await runMutation(() => tradingApi.updateAlert(alert, input));
   };
 
   const createAlert = async () => {
@@ -345,7 +346,7 @@ export function TradingAlertsPanel({
       lookback_bars: Number(editor.lookback) || 1,
     };
     input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at;
-    await runMutation(() => tradingApi.createAlert(input));
+    if (applyConditionDrafts(input, editor)) return void setStatus('error'); await runMutation(() => tradingApi.createAlert(input));
   };
 
   const activeAlert = alerts.find((alert) => alert.instrument_id === instrumentId);

@@ -199,6 +199,22 @@ def test_conditions_are_combined_with_and() -> None:
     assert [observation.met for observation in outcome.observations] == [True, False, True]
 
 
+def test_bar_close_evaluates_every_condition_on_the_closed_bar() -> None:
+    """Once per bar close (TVP-1.6): all the conditions are read on the last closed bar, none on the forming one."""
+    crossing = spec(source=CLOSE, operator="crossing_up", target=value(100))
+    volume = spec(source={"kind": "price", "field": "volume"}, operator="greater_than", target=value(500))
+    # The closed bar crosses but its volume is low; the forming bar would satisfy both.
+    bars = bars_from([99, 101, 102], volumes=[100, 200, 900], final=[True, True, False])
+    assert evaluate_conditions([crossing, volume], bars, final_only=False) is not None
+    closed = evaluate_conditions([crossing, volume], bars, final_only=True)
+    assert closed is not None and not closed.met
+    assert [observation.met for observation in closed.observations] == [True, False]
+    # Both hold on the closed bar: it fires.
+    bars = bars_from([99, 101, 102], volumes=[100, 900, 100], final=[True, True, False])
+    closed = evaluate_conditions([crossing, volume], bars, final_only=True)
+    assert closed is not None and closed.met and closed.bar_start == bars[1].start_time
+
+
 def test_price_fields_and_change_percent() -> None:
     bars = bars_from([100, 110], highs=[101, 120], lows=[99, 100])
     outcome = evaluate_conditions(

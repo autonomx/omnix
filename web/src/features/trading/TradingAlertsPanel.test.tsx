@@ -50,7 +50,7 @@ const trigger = {
 };
 
 describe('TradingAlertsPanel with alerts described by conditions', () => {
-  it('lists, describes and edits them without touching their conditions', async () => {
+  it('lists, describes and edits them, keeping conditions the user did not change', async () => {
     tradingApi.alerts.mockResolvedValue([conditionsAlert]);
     tradingApi.alertTriggers.mockResolvedValue([trigger]);
     tradingApi.updateAlert.mockResolvedValue(conditionsAlert);
@@ -63,7 +63,11 @@ describe('TradingAlertsPanel with alerts described by conditions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: `Options for ${title}` }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit alert' }));
-    expect(screen.getByText('Price crossing up 100.00 and rsi:14 greater than 70.00')).toBeTruthy();
+    // Each condition is an editable row (TVP-1.6).
+    expect((screen.getByLabelText('Condition 1 operator') as HTMLSelectElement).value).toBe('crossing_up');
+    expect((screen.getByLabelText('Condition 1 value') as HTMLInputElement).value).toBe('100');
+    expect((screen.getByLabelText('Condition 2 source') as HTMLSelectElement).value).toBe('indicator');
+    expect((screen.getByLabelText('Condition 2 line') as HTMLSelectElement).value).toBe('rsi:14');
     expect(screen.queryByLabelText('Alert value')).toBeNull();
     const triggerSelect = screen.getByLabelText('Alert trigger') as HTMLSelectElement;
     expect(triggerSelect.value).toBe('once_per_bar_close');
@@ -79,5 +83,35 @@ describe('TradingAlertsPanel with alerts described by conditions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Log/ }));
     expect(await screen.findByTitle('ETHUSDT conditions met 0.00')).toBeTruthy();
+  });
+});
+
+describe('TradingAlertsPanel multi-condition editing (TVP-1.6)', () => {
+  it('saves an edited condition and a removed one', async () => {
+    tradingApi.alerts.mockResolvedValue([conditionsAlert]);
+    tradingApi.alertTriggers.mockResolvedValue([]);
+    tradingApi.updateAlert.mockResolvedValue(conditionsAlert);
+    render(<TradingAlertsPanel instrumentId={conditionsAlert.instrument_id} bindingId={null} />);
+    const title = 'BTCUSDT Price crossing up 100.00 and rsi:14 greater than 70.00';
+    fireEvent.click(await screen.findByRole('button', { name: `Options for ${title}` }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit alert' }));
+    fireEvent.change(screen.getByLabelText('Condition 2 value'), { target: { value: '75' } });
+    fireEvent.change(screen.getByLabelText('Condition 1 operator'), { target: { value: 'inside_channel' } });
+    fireEvent.change(screen.getByLabelText('Condition 1 upper'), { target: { value: '110' } });
+    fireEvent.change(screen.getByLabelText('Condition 1 lower'), { target: { value: '90' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(tradingApi.updateAlert).toHaveBeenCalled());
+    const input = tradingApi.updateAlert.mock.calls.at(-1)![1];
+    expect(input.conditions).toEqual([
+      { source: { kind: 'price', field: 'close' }, operator: 'inside_channel', target: { kind: 'channel', upper: { kind: 'value', value: '110' }, lower: { kind: 'value', value: '90' } } },
+      { source: { kind: 'indicator', indicator_id: 'rsi', inputs: { period: 14 }, output: 'rsi:14' }, operator: 'greater_than', target: { kind: 'value', value: '75' } },
+    ]);
+    // Remove the second: one condition stays (it can't be removed).
+    fireEvent.click(screen.getByRole('button', { name: `Options for ${title}` }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit alert' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove condition 2' }));
+    expect(screen.queryByRole('button', { name: 'Remove condition 1' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(tradingApi.updateAlert.mock.calls.at(-1)![1].conditions).toHaveLength(1));
   });
 });
