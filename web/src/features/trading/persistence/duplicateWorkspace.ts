@@ -1,6 +1,6 @@
-import { flushTradingDrawingSaves, tradingDrawingRecordId } from '../drawings/useTradingDrawings';
+import { flushTradingDrawingSaves, safeRecordPart, tradingDrawingRecordId } from '../drawings/useTradingDrawings';
 import { tradingApi } from '../tradingApi';
-import { useTradingStore } from '../tradingStore';
+import { duplicatedChartId, newTradingTabId, useTradingStore } from '../tradingStore';
 import type { TradingDocument } from '../tradingTypes';
 import { currentTradingWorkspaceScopeId, type TradingWorkspacePersistence } from './useTradingWorkspacePersistence';
 
@@ -40,6 +40,59 @@ export function workspaceDrawingCopies(
     }
   }
   return copies;
+}
+
+/**
+ * The drawing documents to create so a duplicated tab (TVP-4.4) starts with the source tab's drawings: the tab's
+ * shared ones, and each chart's own (`chart-<id>-...`) under the copy's chart id.
+ */
+export function tabDrawingCopies(
+  records: readonly TradingDocument[],
+  workspaceId: string,
+  sourceTabId: string,
+  targetTabId: string,
+  chartIds: ReadonlyMap<string, string>,
+): Array<{ recordId: string; payload: Record<string, unknown> }> {
+  const sourcePrefix = drawingScopePrefix(workspaceId, sourceTabId);
+  const targetPrefix = drawingScopePrefix(workspaceId, targetTabId);
+  const copies: Array<{ recordId: string; payload: Record<string, unknown> }> = [];
+  for (const record of records) {
+    if (record.status !== 'active' || !record.record_id.startsWith(sourcePrefix)) continue;
+    const drawings = (record.payload as { drawings?: unknown }).drawings;
+    if (!Array.isArray(drawings) || drawings.length === 0) continue;
+    const rest = record.record_id.slice(sourcePrefix.length);
+    let mapped: string | null = rest.startsWith(INSTRUMENT_MARKER) ? rest : null;
+    for (const [from, to] of chartIds) {
+      const chartPart = `chart-${safeRecordPart(from)}-`;
+      if (!mapped && rest.startsWith(`${chartPart}${INSTRUMENT_MARKER}`)) mapped = `chart-${safeRecordPart(to)}-${rest.slice(chartPart.length)}`;
+    }
+    const recordId = mapped ? `${targetPrefix}${mapped}` : null;
+    if (recordId && recordId.length <= 200) copies.push({ recordId, payload: { ...record.payload } });
+  }
+  return copies;
+}
+
+/**
+ * Duplicates a tab with its drawings (TVP-4.4): the drawings are copied to the copy's id first, so its charts load
+ * them when they mount. A failed drawing copy still duplicates the tab (without them). Resolves to the new tab's id.
+ */
+export async function duplicateTradingTab(tabId: string): Promise<string | null> {
+  const state = useTradingStore.getState();
+  const source = state.tabs.find((tab) => tab.tabId === tabId);
+  if (!source) return null;
+  const targetId = newTradingTabId();
+  const charts = tabId === state.activeTabId ? state.charts : source.charts;
+  const chartIds = new Map(charts.map((chart) => [chart.chartId, duplicatedChartId(targetId, chart.chartId)]));
+  try {
+    await flushTradingDrawingSaves();
+    const records = await tradingApi.allDocuments('drawings');
+    const existing = new Set(records.map((record) => record.record_id));
+    const copies = tabDrawingCopies(records, currentTradingWorkspaceScopeId(), tabId, targetId, chartIds).filter((copy) => !existing.has(copy.recordId));
+    await Promise.all(copies.map((copy) => tradingApi.createDocument('drawings', copy.recordId, copy.payload)));
+  } catch {
+    // The tab is still duplicated; its drawings stay on the original.
+  }
+  return useTradingStore.getState().duplicateTab(tabId, targetId);
 }
 
 /** Copies a workspace's drawing documents to a duplicate of it. */

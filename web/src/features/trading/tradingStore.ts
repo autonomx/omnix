@@ -103,8 +103,11 @@ type TradingWorkspaceState = {
   setLayout: (layout: TradingLayout) => void;
   setActiveTab: (tabId: string) => void;
   addTab: (name?: string) => string | null;
-  /** A copy of a tab, its charts and settings, placed after it (TVP-4.4); returns its id. */
-  duplicateTab: (tabId: string) => string | null;
+  /**
+   * A copy of a tab, its charts and settings, placed after it (TVP-4.4); returns its id. `newTabId` names the copy
+   * (its drawings are copied to that id first, see `duplicateTradingTab`).
+   */
+  duplicateTab: (tabId: string, newTabId?: string) => string | null;
   /** A new tab with one default chart (TVP-4.4); returns its id. */
   addBlankTab: () => string | null;
   renameTab: (tabId: string, name: string) => void;
@@ -243,11 +246,12 @@ function stateWithNewTab(
   state: TradingWorkspaceState,
   build: (tabId: string, tabs: readonly TradingTabState[]) => TradingTabState,
   index?: number,
+  tabId?: string,
 ): Partial<TradingWorkspaceState> | null {
   if (state.tabs.length >= MAX_TRADING_TABS) return null;
   const current = state.tabs.find((tab) => tab.tabId === state.activeTabId);
   const tabs = current ? state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab) : state.tabs;
-  const tab = build(nextTabId(tabs), tabs);
+  const tab = build(tabId && !tabs.some((item) => item.tabId === tabId) ? tabId : nextTabId(tabs), tabs);
   const at = index === undefined ? tabs.length : Math.max(0, Math.min(index, tabs.length));
   return {
     activeTabId: tab.tabId,
@@ -264,7 +268,7 @@ function stateWithNewTab(
 
 /** A copy of `source` with new chart ids, named "<name> copy". */
 function duplicatedTab(source: TradingTabState, tabId: string): TradingTabState {
-  const charts = copySessionCharts(source.charts, tabId);
+  const charts = source.charts.map((chart) => copyChart(chart, duplicatedChartId(tabId, chart.chartId)));
   const activeIndex = Math.max(0, source.charts.findIndex((chart) => chart.chartId === source.activeChartId));
   return {
     tabId,
@@ -288,6 +292,16 @@ function applyNewTab(set: (state: Partial<TradingWorkspaceState>) => void, next:
   if (!next) return null;
   set(next);
   return next.activeTabId ?? null;
+}
+
+/** A fresh tab id for the workspace's tabs (a duplicate's, chosen before its drawings are copied). */
+export function newTradingTabId(): string {
+  return nextTabId(useTradingStore.getState().tabs);
+}
+
+/** A duplicate tab's chart ids: the source's, under the new tab (as `duplicatedTab` names them). */
+export function duplicatedChartId(newTabId: string, chartId: string): string {
+  return `${newTabId}-${chartId}`;
 }
 
 let fallbackTabSequence = 0;
@@ -456,12 +470,12 @@ export const useTradingStore = create<TradingWorkspaceState>((set, get) => ({
     });
     return createdId;
   },
-  duplicateTab: (tabId) => {
+  duplicateTab: (tabId, newTabId) => {
     const state = get();
     const index = state.tabs.findIndex((tab) => tab.tabId === tabId);
     if (index < 0) return null;
     const source = tabId === state.activeTabId ? sessionFromState(state, state.tabs[index]) : state.tabs[index];
-    return applyNewTab(set, stateWithNewTab(state, (newId) => duplicatedTab(source, newId), index + 1));
+    return applyNewTab(set, stateWithNewTab(state, (newId) => duplicatedTab(source, newId), index + 1, newTabId));
   },
   addBlankTab: () => applyNewTab(set, stateWithNewTab(get(), (tabId, tabs) => blankTab(tabId, tabs, get().panels))),
   renameTab: (tabId, name) => set((state) => {

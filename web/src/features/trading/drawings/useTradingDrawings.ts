@@ -57,7 +57,7 @@ type DrawingEntry = DrawingSnapshot & {
 
 const entries = new Map<string, DrawingEntry>();
 
-function safeRecordPart(value: string): string {
+export function safeRecordPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
 }
 

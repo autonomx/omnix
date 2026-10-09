@@ -42,7 +42,8 @@ export function useTradingTabCommands(onCloseTab: (tab: TradingTabState) => void
 
   useTradingCommand('layout.nextChart', switchChart(1), () => neighbourChart(1) !== null);
   useTradingCommand('layout.previousChart', switchChart(-1), () => neighbourChart(-1) !== null);
-  useTradingCommand('tab.new', () => { store().addTab(); }, () => store().tabs.length < MAX_TRADING_TABS);
+  // A new tab starts with one default chart, as the + launcher's "New chart tab" (TVP-4.4); duplicating copies one.
+  useTradingCommand('tab.new', () => { store().addBlankTab(); }, () => store().tabs.length < MAX_TRADING_TABS);
   useTradingCommand('tab.close', () => {
     const { tabs, activeTabId } = store();
     const tab = tabs.find((item) => item.tabId === activeTabId);

@@ -1,11 +1,13 @@
 /**
  * Trading windows (TVP-4.3): each open Trading page says on a BroadcastChannel when it is focused and when it saved a
  * document.
- * - Alert sounds and toasts play only in the most recently focused window (`isAlertWindow`), so several open windows
- *   don't all ring.
+ * - Alert sounds and toasts play only in the most recently focused Trading window (`isAlertWindow`), so several open
+ *   windows don't all ring. A window takes part while its Trading workspace is mounted (`useTradingWindowPresence`):
+ *   one that navigated to another module, crashed or froze stops counting (goodbye, or no heartbeat for a while).
  * - A window that saved a workspace or watchlist tells the others, which reload it when they have no edits of their own.
  * Without BroadcastChannel (old browsers, tests) the page behaves as the only window.
  */
+import { useEffect } from 'react';
 
 export type SavedDocumentKind = 'workspace' | 'watchlist';
 
@@ -15,6 +17,9 @@ type PresenceMessage =
   | { type: 'saved'; windowId: string; kind: SavedDocumentKind; id: string; revision: number };
 
 const CHANNEL_NAME = 'omnix-trading-windows';
+/** A window that hasn't spoken for this long is gone (it heartbeats every HEARTBEAT_MS while open). */
+export const HEARTBEAT_MS = 15_000;
+export const PRESENCE_TTL_MS = 45_000;
 
 function newWindowId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -30,45 +35,61 @@ function defaultChannel(): BroadcastChannel | null {
 }
 
 type SavedListener = (kind: SavedDocumentKind, id: string, revision: number) => void;
+type Peer = { focusedAt: number; seenAt: number };
 
 export class TradingWindowPresence {
   readonly windowId = newWindowId();
-  /** When each known window (this one included) was last focused. */
-  private readonly focusedAt = new Map<string, number>();
+  /** The other open Trading windows: when each was last focused, and last heard from. */
+  private readonly peers = new Map<string, Peer>();
   private readonly savedListeners = new Set<SavedListener>();
-  private channel: BroadcastChannel | null = null;
+  private readonly channel: BroadcastChannel | null;
+  private focusedAt = 0;
+  private joined = false;
 
-  constructor(channel?: BroadcastChannel | null) {
+  constructor(channel?: BroadcastChannel | null, private readonly now: () => number = Date.now) {
     this.channel = channel === undefined ? defaultChannel() : channel;
-    const focused = typeof document !== 'undefined' && typeof document.hasFocus === 'function' && document.hasFocus();
-    this.focusedAt.set(this.windowId, focused ? Date.now() : 0);
     if (this.channel) this.channel.onmessage = (event: MessageEvent<PresenceMessage>) => this.receive(event.data);
-    this.post({ type: 'hello', windowId: this.windowId, focusedAt: this.focusedAt.get(this.windowId) ?? 0 });
   }
 
-  /** This window was focused now. */
-  focus(at = Date.now()): void {
-    this.focusedAt.set(this.windowId, at);
-    this.post({ type: 'focus', windowId: this.windowId, focusedAt: at });
+  /** Takes part: says hello (the others answer), focused now when the page has focus. */
+  join(): void {
+    this.joined = true;
+    const focused = typeof document !== 'undefined' && typeof document.hasFocus === 'function' && document.hasFocus();
+    if (focused) this.focusedAt = this.now();
+    this.post({ type: 'hello', windowId: this.windowId, focusedAt: this.focusedAt });
   }
 
-  /** This window is closing. */
+  /** Stops taking part (its Trading workspace unmounted, or the page is going). */
   leave(): void {
+    if (!this.joined) return;
+    this.joined = false;
     this.post({ type: 'bye', windowId: this.windowId });
   }
 
-  /** Whether this window plays alert sounds and toasts: the most recently focused of the open windows. */
-  isAlertWindow(): boolean {
-    let best: [string, number] = [this.windowId, this.focusedAt.get(this.windowId) ?? 0];
-    for (const [windowId, at] of this.focusedAt) {
-      // Ties go to the smaller id, so exactly one window wins.
-      if (at > best[1] || (at === best[1] && windowId < best[0])) best = [windowId, at];
-    }
-    return best[0] === this.windowId;
+  /** This window was focused now. */
+  focus(at = this.now()): void {
+    this.focusedAt = at;
+    if (this.joined) this.post({ type: 'focus', windowId: this.windowId, focusedAt: at });
   }
 
-  get openWindows(): number {
-    return this.focusedAt.size;
+  /** Tells the others this window is still here. */
+  heartbeat(): void {
+    if (this.joined) this.post({ type: 'here', windowId: this.windowId, focusedAt: this.focusedAt });
+  }
+
+  /** Whether this window plays alert sounds and toasts: the most recently focused of the open Trading windows. */
+  isAlertWindow(): boolean {
+    const now = this.now();
+    let best: [string, number] = [this.windowId, this.focusedAt];
+    for (const [windowId, peer] of this.peers) {
+      if (now - peer.seenAt > PRESENCE_TTL_MS) {
+        this.peers.delete(windowId);
+        continue;
+      }
+      // Ties go to the smaller id, so exactly one window wins.
+      if (peer.focusedAt > best[1] || (peer.focusedAt === best[1] && windowId < best[0])) best = [windowId, peer.focusedAt];
+    }
+    return best[0] === this.windowId;
   }
 
   announceSaved(kind: SavedDocumentKind, id: string, revision: number): void {
@@ -83,15 +104,15 @@ export class TradingWindowPresence {
   receive(message: PresenceMessage): void {
     if (!message || message.windowId === this.windowId) return;
     if (message.type === 'bye') {
-      this.focusedAt.delete(message.windowId);
+      this.peers.delete(message.windowId);
       return;
     }
     if (message.type === 'saved') {
       this.savedListeners.forEach((listener) => listener(message.kind, message.id, message.revision));
       return;
     }
-    this.focusedAt.set(message.windowId, message.focusedAt);
-    if (message.type === 'hello') this.post({ type: 'here', windowId: this.windowId, focusedAt: this.focusedAt.get(this.windowId) ?? 0 });
+    this.peers.set(message.windowId, { focusedAt: message.focusedAt, seenAt: this.now() });
+    if (message.type === 'hello' && this.joined) this.post({ type: 'here', windowId: this.windowId, focusedAt: this.focusedAt });
   }
 
   private post(message: PresenceMessage): void {
@@ -105,16 +126,37 @@ export class TradingWindowPresence {
 
 let shared: TradingWindowPresence | null = null;
 
-/** The page's presence, created on first use; it follows the window's focus and says goodbye when the page goes. */
+/** The page's presence (one per page). */
 export function tradingWindowPresence(): TradingWindowPresence {
-  if (shared) return shared;
-  const presence = new TradingWindowPresence();
-  shared = presence;
-  if (typeof window !== 'undefined') {
-    window.addEventListener('focus', () => presence.focus());
-    window.addEventListener('pagehide', () => presence.leave());
-  }
-  return presence;
+  shared ??= new TradingWindowPresence();
+  return shared;
+}
+
+/**
+ * Takes part in the Trading windows while mounted (the Trading workspace): follows focus, heartbeats, says goodbye on
+ * unmount or when the page goes, and hello again when a page comes back from the back/forward cache.
+ */
+export function useTradingWindowPresence(): void {
+  useEffect(() => {
+    const presence = tradingWindowPresence();
+    presence.join();
+    const onFocus = () => presence.focus();
+    const onHide = () => presence.leave();
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) presence.join();
+    };
+    const timer = window.setInterval(() => presence.heartbeat(), HEARTBEAT_MS);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('pageshow', onShow);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('pageshow', onShow);
+      presence.leave();
+    };
+  }, []);
 }
 
 /** The URL that opens a workspace (and optionally one of its tabs) in a new Trading window. */
@@ -125,13 +167,23 @@ export function tradingWindowUrl(workspaceId: string, tabId?: string, base: Pick
   return url.toString();
 }
 
-/** Opens a workspace in a new Trading window (TVP-4.3). */
+/** Opens a workspace in a new browser window (a popup-style window, not a tab) (TVP-4.3). */
 export function openTradingWindow(workspaceId: string, tabId?: string): void {
-  window.open(tradingWindowUrl(workspaceId, tabId), '_blank', 'noopener');
+  window.open(tradingWindowUrl(workspaceId, tabId), '_blank', 'noopener,popup,width=1400,height=900');
 }
 
 /** The workspace and tab a window was opened on (`?workspace=...&tab=...`), if any. */
 export function requestedTradingWindow(search: string = typeof window === 'undefined' ? '' : window.location.search): { workspaceId: string | null; tabId: string | null } {
   const params = new URLSearchParams(search);
   return { workspaceId: params.get('workspace'), tabId: params.get('tab') };
+}
+
+/** Drops `?workspace=` and `?tab=` once used, so a later reload follows the workspace chosen since. */
+export function forgetRequestedTradingWindow(): void {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('workspace') && !url.searchParams.has('tab')) return;
+  url.searchParams.delete('workspace');
+  url.searchParams.delete('tab');
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }

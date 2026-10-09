@@ -9,7 +9,9 @@ import { tradingApi } from './tradingApi';
 import { TradingSessionTabs } from './TradingSessionTabs';
 import { useTradingStore } from './tradingStore';
 import type { TradingDocument } from './tradingTypes';
-import { TradingWindowPresence, requestedTradingWindow, tradingWindowPresence, tradingWindowUrl } from './windowPresence';
+import {
+  HEARTBEAT_MS, PRESENCE_TTL_MS, TradingWindowPresence, requestedTradingWindow, tradingWindowPresence, tradingWindowUrl, useTradingWindowPresence,
+} from './windowPresence';
 
 const initialStore = useTradingStore.getState();
 
@@ -20,15 +22,16 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-/** Two presences joined by an in-memory channel. */
-function pairedWindows() {
+/** Two presences on an in-memory channel, with a shared clock; both joined. */
+function pairedWindows(clock = { now: 1_000 }) {
   const peers: TradingWindowPresence[] = [];
   const channel = (index: number) => ({
     postMessage: (message: unknown) => peers.forEach((peer, at) => at !== index && peer.receive(message as never)),
     onmessage: null,
   }) as unknown as BroadcastChannel;
-  peers.push(new TradingWindowPresence(channel(0)));
-  peers.push(new TradingWindowPresence(channel(1)));
+  peers.push(new TradingWindowPresence(channel(0), () => clock.now));
+  peers.push(new TradingWindowPresence(channel(1), () => clock.now));
+  peers.forEach((peer) => peer.join());
   return peers;
 }
 
@@ -43,6 +46,30 @@ describe('trading windows (TVP-4.3)', () => {
     first.leave();
     expect(second.isAlertWindow()).toBe(true);
     expect(new TradingWindowPresence(null).isAlertWindow()).toBe(true);
+  });
+
+  it('forgets a window that stopped speaking (crashed or frozen), and keeps one that heartbeats', () => {
+    const clock = { now: 1_000 };
+    const [first, second] = pairedWindows(clock);
+    first.focus(2_000);
+    expect(second.isAlertWindow()).toBe(false);
+    clock.now += HEARTBEAT_MS;
+    first.heartbeat();
+    clock.now += HEARTBEAT_MS;
+    expect(second.isAlertWindow()).toBe(false);
+    // No heartbeat for longer than the time-to-live: gone.
+    clock.now += PRESENCE_TTL_MS + 1;
+    expect(second.isAlertWindow()).toBe(true);
+  });
+
+  it('takes part while the Trading workspace is mounted', () => {
+    const presence = tradingWindowPresence();
+    const join = vi.spyOn(presence, 'join');
+    const leave = vi.spyOn(presence, 'leave');
+    const view = renderHook(() => useTradingWindowPresence());
+    expect(join).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(leave).toHaveBeenCalledTimes(1);
   });
 
   it('tells the other windows when a document was saved', () => {
@@ -83,8 +110,9 @@ describe('tab management (TVP-4.4)', () => {
     expect(blank.charts[0].interval).toBe('1h');
   });
 
-  it('offers new, duplicate, reopen, a new window, saved layouts and tools from +', () => {
+  it('offers new, duplicate, reopen, a new window, saved layouts and tools from +', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    vi.spyOn(tradingApi, 'allDocuments').mockResolvedValue([]);
     const onSelectWorkspace = vi.fn();
     const onOpenTool = vi.fn();
     const ui = () => {
@@ -106,10 +134,10 @@ describe('tab management (TVP-4.4)', () => {
     };
     const view = render(ui());
     fireEvent.click(screen.getByRole('button', { name: 'Create chart session tab' }));
-    const launcher = screen.getByRole('menu', { name: 'New tab' });
-    expect(within(launcher).getByRole('menuitem', { name: 'Reopen closed tab' })).toBeDisabled();
-    expect(within(launcher).getByRole('menuitem', { name: 'Main (open)' })).toBeDisabled();
-    fireEvent.click(within(launcher).getByRole('menuitem', { name: 'New chart tab' }));
+    const menu = screen.getByRole('menu', { name: 'New tab' });
+    expect(within(menu).getByRole('menuitem', { name: 'Reopen closed tab' })).toBeDisabled();
+    expect(within(menu).getByRole('menuitem', { name: 'Main (open)' })).toBeDisabled();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'New chart tab' }));
     expect(useTradingStore.getState().tabs).toHaveLength(2);
     view.rerender(ui());
     fireEvent.click(screen.getByRole('button', { name: 'Create chart session tab' }));
@@ -120,16 +148,24 @@ describe('tab management (TVP-4.4)', () => {
     expect(onOpenTool).toHaveBeenCalledWith('scanner');
     fireEvent.click(screen.getByRole('button', { name: 'Create chart session tab' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Open this tab in a new window' }));
-    expect(open).toHaveBeenCalledWith(expect.stringContaining(`workspace=main&tab=${useTradingStore.getState().activeTabId}`), '_blank', 'noopener');
-    // Right-click a tab: duplicate it.
+    expect(open).toHaveBeenCalledWith(expect.stringContaining(`workspace=main&tab=${useTradingStore.getState().activeTabId}`), '_blank', expect.stringContaining('popup'));
+    // Right-click a tab: duplicate it (after its drawings are copied).
     const firstTab = screen.getAllByRole('button', { name: /^Open .* chart session$/ })[0].parentElement!;
     fireEvent.contextMenu(firstTab);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
-    expect(useTradingStore.getState().tabs).toHaveLength(3);
-    // Escape closes a menu.
+    await waitFor(() => expect(useTradingStore.getState().tabs).toHaveLength(3));
+    // Escape closes a menu and gives focus back to its trigger; a second press on the trigger closes it too.
     view.rerender(ui());
-    fireEvent.click(screen.getByRole('button', { name: 'Create chart session tab' }));
+    const launcher = () => screen.getByRole('button', { name: 'Create chart session tab' });
+    fireEvent.click(launcher());
+    expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(launcher());
+    fireEvent.click(launcher());
+    fireEvent.pointerDown(launcher());
+    fireEvent.click(launcher());
     expect(screen.queryByRole('menu')).toBeNull();
   });
 });
@@ -220,5 +256,64 @@ describe('workspace persistence across windows', () => {
     const dirty = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(dirty);
     expect(dirty.defaultPrevented).toBe(true);
+  });
+});
+
+describe('duplicating a tab with its drawings (TVP-4.4)', () => {
+  it('copies the tab\u2019s shared and per-chart drawing documents to the copy', async () => {
+    const { tabDrawingCopies } = await import('./persistence/duplicateWorkspace');
+    const doc = (recordId: string) => ({ record_id: recordId, record_type: 'drawing', revision: 1, status: 'active', updated_at: null, payload: { drawings: [{ drawingId: 'd' }] } }) as TradingDocument;
+    const copies = tabDrawingCopies(
+      [doc('ws-tab-1-instrument-btc'), doc('ws-tab-1-chart-chart-1-instrument-btc'), doc('ws-tab-2-instrument-btc'), { ...doc('ws-tab-1-instrument-eth'), payload: { drawings: [] } }],
+      'ws', 'tab-1', 'tab-9', new Map([['chart-1', 'tab-9-chart-1']]),
+    );
+    expect(copies.map((copy) => copy.recordId)).toEqual(['ws-tab-9-instrument-btc', 'ws-tab-9-chart-tab-9-chart-1-instrument-btc']);
+  });
+});
+
+describe('workspace saves across windows (TVP-4.3 review)', () => {
+  it('saves nothing for a change that leaves the workspace as saved, such as replay', async () => {
+    vi.spyOn(tradingDraftRecovery, 'load').mockResolvedValue(null);
+    vi.spyOn(tradingDraftRecovery, 'save').mockResolvedValue(undefined);
+    vi.spyOn(tradingDraftRecovery, 'clear').mockResolvedValue(undefined);
+    const state = useTradingStore.getState();
+    const record = {
+      record_id: 'main', record_type: 'workspace', revision: 1, status: 'active', updated_at: null,
+      payload: serializeTradingWorkspace({
+        name: 'Main', layout: state.layout, activeChartId: state.activeChartId, charts: state.charts, links: state.links,
+        panels: state.panels, favoriteInstrumentIds: [], favoriteIntervals: [], activeTabId: state.activeTabId, tabs: state.tabs,
+      }) as unknown as Record<string, unknown>,
+    } as TradingDocument;
+    vi.spyOn(tradingApi, 'documents').mockResolvedValue([record]);
+    const update = vi.spyOn(tradingApi, 'updateDocument');
+    const { result } = renderHook(() => useTradingWorkspacePersistence());
+    await waitFor(() => expect(result.current.status).toBe('saved'));
+    act(() => useTradingStore.getState().setReplayMode(true));
+    expect(result.current.status).toBe('saved');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('keeps an edit made while another window\u2019s save loads, so it meets the revision conflict', async () => {
+    vi.spyOn(tradingDraftRecovery, 'load').mockResolvedValue(null);
+    vi.spyOn(tradingDraftRecovery, 'save').mockResolvedValue(undefined);
+    vi.spyOn(tradingDraftRecovery, 'clear').mockResolvedValue(undefined);
+    const state = useTradingStore.getState();
+    const payload = (name: string) => serializeTradingWorkspace({
+      name, layout: state.layout, activeChartId: state.activeChartId, charts: state.charts, links: state.links,
+      panels: state.panels, favoriteInstrumentIds: [], favoriteIntervals: [], activeTabId: state.activeTabId, tabs: state.tabs,
+    }) as unknown as Record<string, unknown>;
+    const record = (revision: number, name: string) => ({ record_id: 'main', record_type: 'workspace', revision, status: 'active', updated_at: null, payload: payload(name) }) as TradingDocument;
+    let release: (records: TradingDocument[]) => void = () => undefined;
+    const documents = vi.spyOn(tradingApi, 'documents').mockResolvedValueOnce([record(1, 'Main')]);
+    const update = vi.spyOn(tradingApi, 'updateDocument').mockResolvedValue(record(3, 'Main'));
+    const { result } = renderHook(() => useTradingWorkspacePersistence());
+    await waitFor(() => expect(result.current.status).toBe('saved'));
+    documents.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    act(() => tradingWindowPresence().receive({ type: 'saved', windowId: 'other', kind: 'workspace', id: 'main', revision: 2 }));
+    act(() => useTradingStore.getState().renameTab(useTradingStore.getState().activeTabId, 'Edited here'));
+    await act(async () => { release([record(2, 'Main')]); });
+    // The edit saves on the revision this window loaded (1): the server answers with a conflict, nothing is lost.
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update.mock.calls[0][1].revision).toBe(1);
   });
 });

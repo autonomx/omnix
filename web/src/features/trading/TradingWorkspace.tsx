@@ -19,7 +19,7 @@ import { TradingOrderToastLayer } from './TradingOrderToastLayer';
 import { PaperOrderNotificationsWatch } from './PaperOrderNotificationsWatch';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { TradingSessionTabs } from './TradingSessionTabs';
-import { openTradingWindow } from './windowPresence';
+import { openTradingWindow, useTradingWindowPresence } from './windowPresence';
 import { tradingApi } from './tradingApi';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import { TradingChartTypeMenu } from './TradingChartTypeMenu';
@@ -92,6 +92,7 @@ function preferredInstrument(
 }
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  useTradingWindowPresence();
   useTradingCommandDispatcher();
   useInstalledAppCommandKeys();
   const navigate = useNavigate();

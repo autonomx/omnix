@@ -117,7 +117,10 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     if (kind !== 'watchlist' || (serverById.current.get(id)?.revision ?? -1) >= revision) return;
     void tradingApi.documents('watchlists').then((loaded) => {
       const latest = loaded.find((record) => record.record_id === id);
-      if (!latest) return;
+      // Archived in the other window: the lists as they are now.
+      if (!latest) return void (serverById.current.has(id) && setAllServerRecords(loaded));
+      // Never back to an older revision (this window may have saved a newer one meanwhile).
+      if ((serverById.current.get(id)?.revision ?? -1) >= latest.revision) return;
       if (serverById.current.has(id)) setServerRecord(latest);
       else setAllServerRecords(loaded);
     }).catch(() => undefined);
@@ -191,6 +194,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
       serverById.current.set(record.record_id, record);
       setServerRecords((items) => [...items, record]);
       setSelectedListId(record.record_id);
+      tradingWindowPresence().announceSaved('watchlist', record.record_id, record.revision);
       setStatus('saved');
       return true;
     } catch {
@@ -204,6 +208,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     setStatus('saving');
     try {
       await tradingApi.archiveDocument('watchlists', selected);
+      tradingWindowPresence().announceSaved('watchlist', selected.record_id, selected.revision + 1);
       const next = serverRecords.filter((item) => item.record_id !== selected.record_id);
       setAllServerRecords(next);
       setSelectedListId(next[0]?.record_id ?? '');

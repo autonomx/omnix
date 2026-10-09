@@ -4,7 +4,7 @@ import { freshTradingSessionState, useTradingStore } from '../tradingStore';
 import type { TradingDocument } from '../tradingTypes';
 import { tradingDraftRecovery } from './draftRecovery';
 import { DEFAULT_FAVORITE_INTERVALS } from '../tradingIntervals';
-import { requestedTradingWindow, tradingWindowPresence } from '../windowPresence';
+import { forgetRequestedTradingWindow, requestedTradingWindow, tradingWindowPresence } from '../windowPresence';
 import {
   parseTradingWorkspace,
   serializeTradingWorkspace,
@@ -64,6 +64,41 @@ function workspaceId(name: string): string {
   return `${slug}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+/**
+ * Puts a stored workspace into the store (without saving for it). `keepSession` keeps this window's session-only
+ * state, replay and closed tabs (a reload of what another window saved).
+ */
+function applyWorkspace(value: unknown, applyingRef: { current: boolean }, keepSession: boolean): boolean {
+  const payload = parseTradingWorkspace(value);
+  if (!payload) return false;
+  const tabs = payload.tabs ?? [{
+    tabId: 'tab-1',
+    name: 'Main Session',
+    layout: payload.layout,
+    activeChartId: payload.activeChartId,
+    charts: payload.charts,
+    links: payload.links,
+    panels: payload.panels,
+  }];
+  const activeTabId = payload.activeTabId && tabs.some((tab) => tab.tabId === payload.activeTabId) ? payload.activeTabId : tabs[0].tabId;
+  const activeTab = tabs.find((tab) => tab.tabId === activeTabId) ?? tabs[0];
+  applyingRef.current = true;
+  useTradingStore.setState({
+    activeTabId,
+    tabs,
+    layout: activeTab.layout,
+    activeChartId: activeTab.activeChartId,
+    ...(keepSession ? {} : freshTradingSessionState()),
+    charts: activeTab.charts,
+    links: activeTab.links,
+    panels: activeTab.panels,
+    favoriteInstrumentIds: payload.favoriteInstrumentIds,
+    favoriteIntervals: payload.favoriteIntervals ?? [...DEFAULT_FAVORITE_INTERVALS],
+  });
+  applyingRef.current = false;
+  return true;
+}
+
 /** The workspace a window starts on: the one it was opened on (`?workspace=`, TVP-4.3), else the main one. */
 function initialRecord(records: readonly TradingDocument[]): TradingDocument | null {
   const requested = requestedTradingWindow().workspaceId;
@@ -85,8 +120,7 @@ type WindowSyncInput = {
   recordsRef: { current: Map<string, TradingDocument> };
   cancelledRef: { current: boolean };
   applyingRef: { current: boolean };
-  hydrate: (value: unknown) => boolean;
-  loadLatestRecord: (id: string) => Promise<TradingDocument | null>;
+  hydrate: (value: unknown, keepSession?: boolean) => boolean;
 };
 
 /**
@@ -95,7 +129,7 @@ type WindowSyncInput = {
  *   meets the usual revision conflict instead), keeping the tab this window shows;
  * - leaving with edits not yet saved asks first (the draft is also kept for recovery).
  */
-function useWorkspaceWindowSync({ status, activeIdRef, recordsRef, cancelledRef, applyingRef, hydrate, loadLatestRecord }: WindowSyncInput): void {
+function useWorkspaceWindowSync({ status, activeIdRef, recordsRef, cancelledRef, applyingRef, hydrate }: WindowSyncInput): void {
   const statusRef = useRef<WorkspacePersistenceStatus>(status);
   useEffect(() => {
     statusRef.current = status;
@@ -104,12 +138,17 @@ function useWorkspaceWindowSync({ status, activeIdRef, recordsRef, cancelledRef,
   useEffect(() => tradingWindowPresence().onOtherWindowSaved((kind, id, revision) => {
     if (kind !== 'workspace' || id !== activeIdRef.current || statusRef.current !== 'saved') return;
     if ((recordsRef.current.get(id)?.revision ?? -1) >= revision) return;
-    void loadLatestRecord(id).then((latest) => {
+    // Fetched without touching the known revision: only a reload takes it, so an edit made here meanwhile saves on
+    // the old revision and meets the revision conflict instead of overwriting the other window's save.
+    void tradingApi.documents('workspaces').then((records) => {
+      const latest = records.find((record) => record.record_id === id);
       if (!latest || cancelledRef.current || id !== activeIdRef.current || statusRef.current !== 'saved') return;
+      if ((recordsRef.current.get(id)?.revision ?? -1) >= latest.revision) return;
+      recordsRef.current.set(id, latest);
       const shownTab = useTradingStore.getState().activeTabId;
-      if (hydrate(latest.payload)) showTab(shownTab, applyingRef);
-    });
-  }), [activeIdRef, applyingRef, cancelledRef, hydrate, loadLatestRecord, recordsRef, statusRef]);
+      if (hydrate(latest.payload, true)) showTab(shownTab, applyingRef);
+    }, () => undefined);
+  }), [activeIdRef, applyingRef, cancelledRef, hydrate, recordsRef, statusRef]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -132,6 +171,8 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const applyingRef = useRef(false);
   const cancelledRef = useRef(false);
+  // The payload last saved or loaded: a store change that leaves it as it is saves nothing (TVP-4.3).
+  const lastPayloadRef = useRef('');
 
   const refreshSummaries = useCallback(() => {
     setWorkspaces([...recordsRef.current.values()].map(summary).sort((left, right) => left.name.localeCompare(right.name)));
@@ -158,36 +199,11 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     });
   }, [activeName]);
 
-  const hydrate = useCallback((value: unknown): boolean => {
-    const payload = parseTradingWorkspace(value);
-    if (!payload) return false;
-    const tabs = payload.tabs ?? [{
-      tabId: 'tab-1',
-      name: 'Main Session',
-      layout: payload.layout,
-      activeChartId: payload.activeChartId,
-      charts: payload.charts,
-      links: payload.links,
-      panels: payload.panels,
-    }];
-    const activeTabId = payload.activeTabId && tabs.some((tab) => tab.tabId === payload.activeTabId) ? payload.activeTabId : tabs[0].tabId;
-    const activeTab = tabs.find((tab) => tab.tabId === activeTabId) ?? tabs[0];
-    applyingRef.current = true;
-    useTradingStore.setState({
-      activeTabId,
-      tabs,
-      layout: activeTab.layout,
-      activeChartId: activeTab.activeChartId,
-      ...freshTradingSessionState(),
-      charts: activeTab.charts,
-      links: activeTab.links,
-      panels: activeTab.panels,
-      favoriteInstrumentIds: payload.favoriteInstrumentIds,
-      favoriteIntervals: payload.favoriteIntervals ?? [...DEFAULT_FAVORITE_INTERVALS],
-    });
-    applyingRef.current = false;
+  const hydrate = useCallback((value: unknown, keepSession = false): boolean => {
+    if (!applyWorkspace(value, applyingRef, keepSession)) return false;
+    lastPayloadRef.current = JSON.stringify(currentPayload());
     return true;
-  }, []);
+  }, [currentPayload]);
 
   const loadLatestRecord = useCallback(async (id: string): Promise<TradingDocument | null> => {
     const records = await tradingApi.documents('workspaces').catch(() => []);
@@ -206,6 +222,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       if (cancelledRef.current) return null;
       recordsRef.current.set(saved.record_id, saved);
       conflictRef.current = null;
+      lastPayloadRef.current = JSON.stringify(payload);
       tradingWindowPresence().announceSaved('workspace', saved.record_id, saved.revision); // other windows reload it (TVP-4.3)
       await tradingDraftRecovery.clear();
       refreshSummaries();
@@ -278,12 +295,18 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
         setActiveWorkspaceId(record.record_id);
         if (!hydrate(record.payload) && draft) hydrate(draft);
         showTab(requestedTradingWindow().tabId, applyingRef);
+        forgetRequestedTradingWindow();
         refreshSummaries();
         setStatus('saved');
 
         unsubscribe = useTradingStore.subscribe(() => {
           if (applyingRef.current || cancelledRef.current) return;
           const payload = currentPayload();
+          if (JSON.stringify(payload) === lastPayloadRef.current && !conflictRef.current) {
+            // Back to what is saved (session-only changes, such as replay or the drawing tool): nothing to save.
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            return setStatus((current) => (current === 'draft' ? 'saved' : current));
+          }
           void tradingDraftRecovery.save(payload).catch(() => undefined);
           if (conflictRef.current) {
             conflictRef.current.localPayload = payload;
@@ -308,7 +331,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     };
   }, [currentPayload, hydrate, refreshSummaries, saveActive]);
 
-  useWorkspaceWindowSync({ status, activeIdRef, recordsRef, cancelledRef, applyingRef, hydrate, loadLatestRecord });
+  useWorkspaceWindowSync({ status, activeIdRef, recordsRef, cancelledRef, applyingRef, hydrate });
   const selectWorkspace = useCallback(async (id: string) => {
     if (id === activeIdRef.current || !recordsRef.current.has(id)) return;
     await saveNow();
