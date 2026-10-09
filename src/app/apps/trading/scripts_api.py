@@ -20,6 +20,7 @@ from app.security.tenant_context import current_tenant
 from .scripts.builtins import _NAMED_CONSTANTS, COLORS, FUNCTIONS
 from .scripts.runtime import SERIES_NAMES
 from .repositories import RepositoryFactory, default_trading_repository
+from .scripts_screener import SCREEN_MAX_INSTRUMENTS, ScriptScreenOutput, ScriptScreenRow, screen_script
 from .scripts_service import BACKTEST_LIMITS, ScriptRunService, ScriptServiceError, bars_for_script, check_script, default_script_service
 from .service import TradingMarketDataService, default_market_data_service
 
@@ -123,6 +124,21 @@ class ScriptRunResponse(BaseModel):
     error: ScriptDiagnostic | None = None
 
 
+class ScriptScreenRequest(BaseModel):
+    source: str = Field(max_length=MAX_SOURCE_LENGTH)
+    instrument_ids: list[str] = Field(min_length=1, max_length=SCREEN_MAX_INSTRUMENTS)
+    interval: str = Field(default="1d", min_length=1, max_length=16)
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    limit: int = Field(default=500, ge=50, le=2_000)
+
+
+class ScriptScreenResponse(BaseModel):
+    outputs: list[ScriptScreenOutput]
+    rows: list[ScriptScreenRow]
+    # The script's own problem (it doesn't compile): nothing was screened.
+    error: ScriptDiagnostic | None = None
+
+
 class ScriptVersionSummary(BaseModel):
     revision: int
     name: str
@@ -186,6 +202,19 @@ def create_trading_scripts_router(
         except ScriptServiceError as error:
             return ScriptRunResponse(times=times, error=ScriptDiagnostic(**error.payload()))
         return ScriptRunResponse(times=times, result=result)
+
+    @router.post("/screen", response_model=ScriptScreenResponse)
+    async def screen(request: ScriptScreenRequest) -> ScriptScreenResponse:
+        """Run a script on each listed symbol's latest ``limit`` bars (TVP-11.6): every output's last two values per symbol."""
+        checked = await asyncio.to_thread(check_script, request.source)
+        if checked["diagnostics"]:
+            return ScriptScreenResponse(outputs=[], rows=[], error=ScriptDiagnostic(**checked["diagnostics"][0]))
+        user_id = str(getattr(current_tenant(), "user_id", "") or "")
+        outputs, rows = await asyncio.to_thread(
+            screen_script, request.source, list(dict.fromkeys(request.instrument_ids)), interval=request.interval, limit=request.limit,
+            inputs=request.inputs, user_id=user_id, script_service=service_factory(), market_service=market_service_factory(),
+        )
+        return ScriptScreenResponse(outputs=outputs, rows=rows)
 
     @router.post("/backtest", response_model=ScriptRunResponse)
     async def backtest(request: ScriptBacktestRequest) -> ScriptRunResponse:

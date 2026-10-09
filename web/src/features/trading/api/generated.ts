@@ -1836,6 +1836,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/scripts/screen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Screen
+         * @description Run a script on each listed symbol's latest ``limit`` bars (TVP-11.6): every output's last two values per symbol.
+         */
+        post: operations["screen_api_trading_scripts_screen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/scripts/{record_id}": {
         parameters: {
             query?: never;
@@ -10253,6 +10273,61 @@ export interface components {
             /** Times */
             times: string[];
         };
+        /** ScriptScreenOutput */
+        ScriptScreenOutput: {
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+        };
+        /** ScriptScreenRequest */
+        ScriptScreenRequest: {
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Instrument Ids */
+            instrument_ids: string[];
+            /**
+             * Interval
+             * @default 1d
+             */
+            interval?: string;
+            /**
+             * Limit
+             * @default 500
+             */
+            limit?: number;
+            /** Source */
+            source: string;
+        };
+        /** ScriptScreenResponse */
+        ScriptScreenResponse: {
+            error: components["schemas"]["ScriptDiagnostic"] | null;
+            /** Outputs */
+            outputs: components["schemas"]["ScriptScreenOutput"][];
+            /** Rows */
+            rows: components["schemas"]["ScriptScreenRow"][];
+        };
+        /** ScriptScreenRow */
+        ScriptScreenRow: {
+            /** Bar Time */
+            bar_time: string | null;
+            /** Error */
+            error: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Last */
+            last: {
+                [key: string]: number | null;
+            };
+            /** Previous */
+            previous: {
+                [key: string]: number | null;
+            };
+        };
         /**
          * ScriptSource
          * @description An Omnix Script's output (TVP-11.4), from the script as saved at ``revision`` (its later edits don't change the alert).
@@ -17615,6 +17690,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScriptRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screen_api_trading_scripts_screen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScriptScreenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptScreenResponse"];
                 };
             };
             /** @description Validation Error */
