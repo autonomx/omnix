@@ -33,6 +33,43 @@ KEYWORDS = (
     "if", "else", "for", "to", "by", "in", "while", "switch", "var", "varip", "true", "false", "na", "and", "or", "not",
     "break", "continue", "import", "export", "method", "type", "int", "float", "bool", "string", "color", "series", "simple", "const",
 )
+# Parameters of functions the interpreter binds by hand, for the editor's hover (as Pine documents them).
+_INPUT_COMMON = "tooltip, inline, group, confirm"
+EXTRA_SIGNATURES = {
+    "indicator": "title, shorttitle, overlay, format, precision, scale, max_bars_back, max_lines_count, max_labels_count, max_boxes_count",
+    "strategy": "title, shorttitle, overlay, format, precision, pyramiding, initial_capital, default_qty_type, default_qty_value",
+    "hline": "price, title, color, linestyle, linewidth, editable, display",
+    "fill": "plot1, plot2, color, title, editable, show_last, fillgaps, display",
+    "alert": "message, freq",
+    "input": "defval, title, tooltip, inline, group",
+    "input.int": f"defval, title, minval, maxval, step, {_INPUT_COMMON}",
+    "input.float": f"defval, title, minval, maxval, step, {_INPUT_COMMON}",
+    "input.bool": f"defval, title, {_INPUT_COMMON}",
+    "input.string": f"defval, title, options, {_INPUT_COMMON}",
+    "input.color": f"defval, title, {_INPUT_COMMON}",
+    "input.source": "defval, title, tooltip, inline, group",
+    "input.timeframe": f"defval, title, options, {_INPUT_COMMON}",
+    "input.symbol": f"defval, title, {_INPUT_COMMON}",
+    "input.session": f"defval, title, options, {_INPUT_COMMON}",
+    "input.price": f"defval, title, {_INPUT_COMMON}",
+    "input.time": f"defval, title, {_INPUT_COMMON}",
+    "input.text_area": f"defval, title, {_INPUT_COMMON}",
+    "math.max": "number0, number1, ...",
+    "math.min": "number0, number1, ...",
+    "math.avg": "number0, number1, ...",
+    "str.format": "formatString, arg0, arg1, ...",
+    "array.from": "arg0, arg1, ...",
+    "array.push": "id, value",
+    "array.pop": "id",
+    "array.get": "id, index",
+    "array.set": "id, index, value",
+    "array.size": "id",
+    "array.clear": "id",
+    "array.sum": "id",
+    "array.avg": "id",
+    "array.max": "id",
+    "array.min": "id",
+}
 VARIABLES = (
     "bar_index", "last_bar_index", "barstate.isfirst", "barstate.islast", "barstate.isconfirmed", "barstate.isnew", "barstate.isrealtime",
     "barstate.ishistory", "syminfo.ticker", "syminfo.tickerid", "syminfo.mintick", "syminfo.timezone", "timeframe.period",
@@ -100,6 +137,8 @@ class ScriptReferenceResponse(BaseModel):
     constants: list[str]
     variables: list[str]
     keywords: list[str]
+    # Each function's parameters (``"source, length"``), where the interpreter declares them.
+    signatures: dict[str, str] = Field(default_factory=dict)
 
 
 def create_trading_scripts_router(
@@ -146,6 +185,10 @@ def create_trading_scripts_router(
             constants=sorted({*_NAMED_CONSTANTS, *(f"color.{name}" for name in COLORS)}),
             variables=sorted({*SERIES_NAMES, *VARIABLES}),
             keywords=list(KEYWORDS),
+            signatures={
+                **{name: spec for name, spec in EXTRA_SIGNATURES.items() if name in FUNCTIONS},
+                **{name: str(signature) for name, factory in FUNCTIONS.items() if (signature := getattr(factory, "signature", None))},
+            },
         )
 
     @router.get("/{record_id}/versions", response_model=ScriptVersionListResponse)

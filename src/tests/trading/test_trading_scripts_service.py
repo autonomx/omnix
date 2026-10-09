@@ -106,6 +106,7 @@ def test_the_api_runs_on_the_charts_bars_and_lists_names_for_completion(service)
     assert broken["result"] is None and broken["error"]["line"] == 3
     reference = client.get("/api/trading/scripts/reference").json()
     assert "ta.sma" in reference["functions"] and "close" in reference["variables"] and "color.blue" in reference["constants"]
+    assert reference["signatures"]["ta.sma"] == "source, length" and "series" in reference["signatures"]["plot"]
     assert client.post("/api/trading/scripts/check", json={"source": SMA}).json()["diagnostics"] == []
 
 

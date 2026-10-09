@@ -96,6 +96,8 @@ def pure(spec: str, function: Callable[..., Any]) -> Factory:
             return lambda ctx: function(a(ctx), b(ctx))
         return lambda ctx: function(*[closure(ctx) for closure in closures])
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 
@@ -134,6 +136,8 @@ def site(spec: str, step: ta.Step, bar: BarInputs | None = None) -> Factory:
     def factory(c: Any, node: Call) -> Closure:
         return _site_closure(node.id, step, _bind(c, node, params, defaults), bar)
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 
@@ -149,6 +153,8 @@ def site_with_optional_source(spec: str, step: ta.Step, source: str) -> Factory:
             return _site_closure(node.id, step, closures, lambda run, t: (run.series(source, t),))
         return _site_closure(node.id, step, _bind(c, node, full_params, defaults), None)
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 
@@ -691,6 +697,8 @@ def _drawing_factory(kind: str) -> Factory:
 
         return create
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = DRAWING_FIELDS[kind]  # type: ignore[attr-defined]
     return factory
 
 
@@ -891,6 +899,8 @@ def _output(kind: str, spec: str) -> Factory:
 
         return emit
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 

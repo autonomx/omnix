@@ -127,6 +127,10 @@ export function TradingSidePanel({
           indicators={indicators}
           activeIndicatorId={pineIndicatorId}
           onActiveIndicatorChange={onPineIndicatorChange}
+          instrumentId={activeInstrumentId}
+          bindingId={bindingId}
+          interval={interval}
+          onSetIndicators={onSetIndicators}
         />
         </Suspense>
       </aside>

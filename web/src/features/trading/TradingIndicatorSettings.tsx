@@ -18,6 +18,8 @@ import {
   tradingViewBuiltInUsesSeparatePane,
 } from './indicators/tradingViewBuiltIns';
 import { TradingBuiltInInputs } from './TradingBuiltInInputs';
+import { ScriptIndicatorInputs } from './scripts/ScriptIndicatorInputs';
+import { isScriptIndicatorId, scriptIndicatorName } from './scripts/scriptIndicators';
 import './TradingIndicatorSettings.css';
 import { chartPalette } from './chartPalette';
 
@@ -67,6 +69,7 @@ function supportsBackground(id: CoreIndicatorId, plotCount: number): boolean {
 
 function titleFor(indicator: CoreIndicatorInstance): string {
   const id = String(indicator.id);
+  if (isScriptIndicatorId(id)) return scriptIndicatorName(indicator) ?? id;
   if (isTradingViewBuiltInId(id)) {
     return tradingViewBuiltInDefinition(id)?.name ?? id.toUpperCase();
   }
@@ -223,6 +226,7 @@ export function TradingIndicatorSettings({
   };
 
   const inputContent = (() => {
+    if (isScriptIndicatorId(draftId)) return <ScriptIndicatorInputs draft={draft} setDraft={setDraft} />;
     if (draft.id === 'bull-market-band') {
       return (
         <>

@@ -1492,6 +1492,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/scripts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Trading Scripts */
+        get: operations["list_trading_scripts_api_trading_scripts_get"];
+        put?: never;
+        /** Create Trading Script */
+        post: operations["create_trading_script_api_trading_scripts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/scripts/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check
+         * @description Compile a script: its problems with their line and column, its declaration and inputs.
+         */
+        post: operations["check_api_trading_scripts_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/scripts/reference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reference
+         * @description The names the editor completes: functions, named constants, built-in series and variables, keywords.
+         */
+        get: operations["reference_api_trading_scripts_reference_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/scripts/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run
+         * @description Run a script on the latest ``limit`` bars of a chart (as the chart reads them, clock-aligned).
+         */
+        post: operations["run_api_trading_scripts_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/scripts/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Trading Script */
+        get: operations["get_trading_script_api_trading_scripts__record_id__get"];
+        /** Update Trading Script */
+        put: operations["update_trading_script_api_trading_scripts__record_id__put"];
+        post?: never;
+        /** Archive Trading Script */
+        delete: operations["archive_trading_script_api_trading_scripts__record_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/scripts/{record_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Versions
+         * @description A script's saved versions, newest first (TVP-11.3); restoring one saves it again as a new version.
+         */
+        get: operations["versions_api_trading_scripts__record_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/scripts/{record_id}/versions/{revision}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Version */
+        get: operations["version_api_trading_scripts__record_id__versions__revision__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/solana-ai/decisions": {
         parameters: {
             query?: never;
@@ -9258,6 +9392,114 @@ export interface components {
             /** Runs */
             runs: components["schemas"]["TradingScannerRun"][];
         };
+        /** ScriptCheckRequest */
+        ScriptCheckRequest: {
+            /** Source */
+            source: string;
+        };
+        /** ScriptCheckResponse */
+        ScriptCheckResponse: {
+            /** Declaration */
+            declaration: {
+                [key: string]: unknown;
+            } | null;
+            /** Diagnostics */
+            diagnostics: components["schemas"]["ScriptDiagnostic"][];
+            /** Inputs */
+            inputs: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** ScriptDiagnostic */
+        ScriptDiagnostic: {
+            /** Column */
+            column: number;
+            /** Kind */
+            kind: string;
+            /** Line */
+            line: number;
+            /** Message */
+            message: string;
+        };
+        /** ScriptReferenceResponse */
+        ScriptReferenceResponse: {
+            /** Constants */
+            constants: string[];
+            /** Functions */
+            functions: string[];
+            /** Keywords */
+            keywords: string[];
+            /** Signatures */
+            signatures: {
+                [key: string]: string;
+            };
+            /** Variables */
+            variables: string[];
+        };
+        /** ScriptRunRequest */
+        ScriptRunRequest: {
+            /** Binding Id */
+            binding_id?: string | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Instrument Id */
+            instrument_id: string;
+            /** Interval */
+            interval: string;
+            /**
+             * Limit
+             * @default 1000
+             */
+            limit?: number;
+            /**
+             * Profile
+             * @default false
+             */
+            profile?: boolean;
+            /** Source */
+            source: string;
+        };
+        /** ScriptRunResponse */
+        ScriptRunResponse: {
+            error: components["schemas"]["ScriptDiagnostic"] | null;
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            } | null;
+            /** Times */
+            times: string[];
+        };
+        /** ScriptVersion */
+        ScriptVersion: {
+            /** Name */
+            name: string;
+            /** Revision */
+            revision: number;
+            /** Saved At */
+            saved_at: string;
+            /** Source */
+            source: string;
+        };
+        /** ScriptVersionListResponse */
+        ScriptVersionListResponse: {
+            /** Versions */
+            versions: components["schemas"]["ScriptVersionSummary"][];
+        };
+        /** ScriptVersionSummary */
+        ScriptVersionSummary: {
+            /** Characters */
+            characters: number;
+            /** Lines */
+            lines: number;
+            /** Name */
+            name: string;
+            /** Revision */
+            revision: number;
+            /** Saved At */
+            saved_at: string;
+        };
         /** SelectedPriceEvent */
         SelectedPriceEvent: {
             /** Eligibility Policy Version */
@@ -15847,6 +16089,322 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingScannerRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_trading_scripts_api_trading_scripts_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                after_updated_at?: string | null;
+                after_record_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_trading_script_api_trading_scripts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradingDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_api_trading_scripts_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScriptCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reference_api_trading_scripts_reference_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptReferenceResponse"];
+                };
+            };
+        };
+    };
+    run_api_trading_scripts_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScriptRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_trading_script_api_trading_scripts__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_trading_script_api_trading_scripts__record_id__put: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradingDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_trading_script_api_trading_scripts__record_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    versions_api_trading_scripts__record_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptVersionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    version_api_trading_scripts__record_id__versions__revision__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptVersion"];
                 };
             };
             /** @description Validation Error */
