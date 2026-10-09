@@ -516,6 +516,8 @@
     "POST /api/trading/notifications/push/subscriptions": "trading",
     "DELETE /api/trading/notifications/push/subscriptions/{subscription_id}": "trading",
     "POST /api/trading/notifications/push/test": "trading",
+    "GET /api/trading/options/chain": "trading",
+    "GET /api/trading/options/expirations": "trading",
     "GET /api/trading/paper-analytics/epochs": "trading",
     "GET /api/trading/paper-analytics/journal": "trading",
     "GET /api/trading/paper-analytics/overview": "trading",
