@@ -19,6 +19,7 @@ from app.security.tenant_context import current_tenant
 
 from .scripts.builtins import _NAMED_CONSTANTS, COLORS, FUNCTIONS
 from .scripts.runtime import SERIES_NAMES
+from .repositories import RepositoryFactory, default_trading_repository
 from .scripts_service import ScriptRunService, ScriptServiceError, bars_for_script, check_script, default_script_service
 from .service import TradingMarketDataService, default_market_data_service
 
@@ -75,6 +76,25 @@ class ScriptRunResponse(BaseModel):
     error: ScriptDiagnostic | None = None
 
 
+class ScriptVersionSummary(BaseModel):
+    revision: int
+    name: str
+    saved_at: str
+    characters: int
+    lines: int
+
+
+class ScriptVersionListResponse(BaseModel):
+    versions: list[ScriptVersionSummary]
+
+
+class ScriptVersion(BaseModel):
+    revision: int
+    name: str
+    saved_at: str
+    source: str
+
+
 class ScriptReferenceResponse(BaseModel):
     functions: list[str]
     constants: list[str]
@@ -85,6 +105,7 @@ class ScriptReferenceResponse(BaseModel):
 def create_trading_scripts_router(
     service_factory: Callable[[], ScriptRunService] = default_script_service,
     market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
+    repository_factory: RepositoryFactory = default_trading_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/scripts", tags=["trading-scripts"])
 
@@ -126,5 +147,17 @@ def create_trading_scripts_router(
             variables=sorted({*SERIES_NAMES, *VARIABLES}),
             keywords=list(KEYWORDS),
         )
+
+    @router.get("/{record_id}/versions", response_model=ScriptVersionListResponse)
+    def versions(record_id: str) -> ScriptVersionListResponse:
+        """A script's saved versions, newest first (TVP-11.3); restoring one saves it again as a new version."""
+        return ScriptVersionListResponse.model_validate({"versions": repository_factory().script_versions(record_id)})
+
+    @router.get("/{record_id}/versions/{revision}", response_model=ScriptVersion)
+    def version(record_id: str, revision: int) -> ScriptVersion:
+        found = repository_factory().script_version(record_id, revision)
+        if found is None:
+            raise HTTPException(status_code=404, detail=f"script {record_id} has no version {revision}")
+        return ScriptVersion.model_validate(found)
 
     return router

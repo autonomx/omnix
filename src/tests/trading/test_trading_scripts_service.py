@@ -107,3 +107,18 @@ def test_the_api_runs_on_the_charts_bars_and_lists_names_for_completion(service)
     reference = client.get("/api/trading/scripts/reference").json()
     assert "ta.sma" in reference["functions"] and "close" in reference["variables"] and "color.blue" in reference["constants"]
     assert client.post("/api/trading/scripts/check", json={"source": SMA}).json()["diagnostics"] == []
+
+
+def test_script_routes_come_before_the_script_documents() -> None:
+    from app.apps.trading.api import create_trading_router as create_base_router
+
+    app = FastAPI()
+    app.include_router(create_trading_scripts_router(service_factory=lambda: None))
+    app.include_router(create_base_router())
+    client = TestClient(app)
+    # /reference is the scripts router's, not a script document named "reference".
+    assert "ta.sma" in client.get("/api/trading/scripts/reference").json()["functions"]
+    from app.apps.trading import route_registration
+
+    source = open(route_registration.__file__, encoding="utf-8").read()
+    assert source.index("        create_trading_scripts_router,") < source.index("        create_trading_base_router,")

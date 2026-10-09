@@ -35,12 +35,13 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
 
     router = APIRouter()
     for factory in (
+        # Before the base router: its script documents' GET /scripts/{record_id} would take /scripts/reference.
+        create_trading_scripts_router,
         create_trading_base_router,
         create_trading_metric_router,
         create_trading_execution_router,
         create_trading_alert_router,
         create_trading_scanner_router,
-        create_trading_scripts_router,
         create_trading_replay_router,
         create_trading_paper_router,
         create_trading_kill_switch_router,
