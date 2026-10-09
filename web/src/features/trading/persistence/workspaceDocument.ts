@@ -103,7 +103,7 @@ function serializeChart(chart: PersistableChart): TradingChartState {
   };
 }
 
-const CHART_SETTING_KEYS = ['barCountdown', 'extendedHours', 'extendedPriceLine'] as const;
+const CHART_SETTING_KEYS = ['barCountdown', 'extendedHours', 'extendedPriceLine', 'events'] as const;
 
 /**
  * The chart settings a document may carry. A malformed setting falls back to its default

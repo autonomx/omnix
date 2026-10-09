@@ -457,6 +457,8 @@
     "POST /api/trading/catalysts/classify-shadow": "trading",
     "POST /api/trading/catalysts/evidence": "trading",
     "GET /api/trading/catalysts/evidence/{instrument_id}": "trading",
+    "GET /api/trading/corporate-events": "trading",
+    "GET /api/trading/corporate-events/calendar": "trading",
     "GET /api/trading/currency-rates": "trading",
     "GET /api/trading/diagnostics": "trading",
     "GET /api/trading/drawings": "trading",

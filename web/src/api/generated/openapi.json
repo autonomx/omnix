@@ -9891,6 +9891,57 @@
         "title": "CompanionMemoryMetrics",
         "type": "object"
       },
+      "CompanyEvents": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CorporateEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "sources": {
+            "default": [
+              "SEC 8-K item 2.02 filings",
+              "Alpaca corporate actions"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "ticker",
+          "events",
+          "fetched_at",
+          "sources"
+        ],
+        "title": "CompanyEvents",
+        "type": "object"
+      },
       "CompatibilityHandoffPayload": {
         "properties": {
           "domain_logic_policy": {
@@ -10129,6 +10180,330 @@
           "portfolio_e"
         ],
         "title": "ConfirmationRunResult",
+        "type": "object"
+      },
+      "CorporateCalendarEvent": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "estimated": {
+            "default": false,
+            "title": "Estimated",
+            "type": "boolean"
+          },
+          "fiscal_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Period"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "earnings",
+              "dividend",
+              "split"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "payable_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payable Date"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "special": {
+            "default": false,
+            "title": "Special",
+            "type": "boolean"
+          },
+          "split_from": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split From"
+          },
+          "split_to": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split To"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "before_open",
+                  "during_market",
+                  "after_close"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing"
+          }
+        },
+        "required": [
+          "kind",
+          "date",
+          "instrument_id",
+          "ticker",
+          "estimated",
+          "timing",
+          "fiscal_period",
+          "link",
+          "amount",
+          "special",
+          "record_date",
+          "payable_date",
+          "split_from",
+          "split_to"
+        ],
+        "title": "CorporateCalendarEvent",
+        "type": "object"
+      },
+      "CorporateEvent": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "estimated": {
+            "default": false,
+            "title": "Estimated",
+            "type": "boolean"
+          },
+          "fiscal_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Period"
+          },
+          "kind": {
+            "enum": [
+              "earnings",
+              "dividend",
+              "split"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "payable_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payable Date"
+          },
+          "record_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Date"
+          },
+          "special": {
+            "default": false,
+            "title": "Special",
+            "type": "boolean"
+          },
+          "split_from": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split From"
+          },
+          "split_to": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split To"
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "before_open",
+                  "during_market",
+                  "after_close"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing"
+          }
+        },
+        "required": [
+          "kind",
+          "date",
+          "estimated",
+          "timing",
+          "fiscal_period",
+          "link",
+          "amount",
+          "special",
+          "record_date",
+          "payable_date",
+          "split_from",
+          "split_to"
+        ],
+        "title": "CorporateEvent",
+        "type": "object"
+      },
+      "CorporateEventCalendar": {
+        "properties": {
+          "end": {
+            "format": "date",
+            "title": "End",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CorporateCalendarEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "pending": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending",
+            "type": "array"
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "events",
+          "pending"
+        ],
+        "title": "CorporateEventCalendar",
         "type": "object"
       },
       "CreateAudiobookProject": {
@@ -77502,6 +77877,146 @@
         "summary": "List Evidence",
         "tags": [
           "trading-catalysts"
+        ]
+      }
+    },
+    "/api/trading/corporate-events": {
+      "get": {
+        "operationId": "company_api_trading_corporate_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyEvents"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Company",
+        "tags": [
+          "trading-corporate-events"
+        ]
+      }
+    },
+    "/api/trading/corporate-events/calendar": {
+      "get": {
+        "operationId": "calendar_api_trading_corporate_events_calendar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instrument Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "earnings",
+                      "dividend",
+                      "split"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorporateEventCalendar"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Calendar",
+        "tags": [
+          "trading-corporate-events"
         ]
       }
     },

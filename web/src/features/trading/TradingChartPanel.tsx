@@ -16,6 +16,7 @@ import { useTradingChartPanelCommands } from './commands/useTradingChartPanelCom
 import { useTradingDrawingCommands } from './commands/useTradingDrawingCommands';
 import { useTradingOrderHotkeys } from './commands/useTradingOrderHotkeys';
 import { TradingBarCountdown } from './TradingChartWorkflowControls';
+import { TradingChartEventMarkers } from './TradingChartEventMarkers';
 
 export function TradingChartPanel(props: TradingChartPanelProps) {
   const ws = useTradingChartPanel(props);
@@ -24,7 +25,7 @@ export function TradingChartPanel(props: TradingChartPanelProps) {
   useTradingOrderHotkeys({ active: ws.active, adapter: ws.adapter, instrumentId: ws.instrumentId, lastPrice: () => { const close = Number(ws.latest?.close); return Number.isFinite(close) ? close : null; } });
   const {
     active, adapter, chartFocusMode, chartId, chartPanning, chartQuery, compareDialogOpen, comparisons,
-    barCountdownVisible, drawingTool, handleReplayStageClick, handleStageContextMenu, handleStageDoubleClick,
+    barCountdownVisible, drawingTool, eventMarkersOn, handleReplayStageClick, handleStageContextMenu, handleStageDoubleClick,
     handleStagePointerLeave, handleStagePointerMove, hostRef, indicatorError, instrumentId, interval, latest,
     onActivate, onOpenMarketDataSettings, onUpdateComparisons,
     panelRef, panningIndicatorPane, replayMode, setCompareDialogOpen, streamError, streamStatus,
@@ -52,6 +53,7 @@ export function TradingChartPanel(props: TradingChartPanelProps) {
         {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {adapter ? <TradingVolumeProfileOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {adapter && barCountdownVisible ? <TradingBarCountdown adapter={adapter} bar={latest} interval={interval} /> : null}
+        {adapter && eventMarkersOn ? <TradingChartEventMarkers adapter={adapter} instrumentId={instrumentId} interval={interval} replayMode={replayMode} barsRevision={chartQuery.data} /> : null}
         <ChartPanelIndicatorPanes ws={ws} />
         <ChartPanelReplayMarkers ws={ws} />
         <ChartPanelScaleControls ws={ws} />

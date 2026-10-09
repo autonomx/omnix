@@ -97,6 +97,7 @@ describe('chart workflow controls (TVP-2.5)', () => {
     render(<ChartWorkflowSettings ws={model({
       applyChartTemplateRecord, barCountdownAvailable: true, barCountdownOn: true, chartSettings: undefined,
       chartId: 'chart-1', chartTemplateStatus: 'idle', chartTemplates: [template], deleteChartTemplate: vi.fn(), extendedHoursAvailable: true,
+      eventMarkersAvailable: true, eventMarkersOn: true,
       loadChartTemplates: vi.fn(), saveChartTemplate, sessionTaggedBars: true, showExtendedHours: true, updateChartSettings,
     })} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Countdown to bar close' }));
@@ -105,6 +106,8 @@ describe('chart workflow controls (TVP-2.5)', () => {
     expect(updateChartSettings).toHaveBeenLastCalledWith({ extendedHours: false });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pre/post-market price line' }));
     expect(updateChartSettings).toHaveBeenLastCalledWith({ extendedPriceLine: false });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Earnings, dividends and splits' }));
+    expect(updateChartSettings).toHaveBeenLastCalledWith({ events: false });
     fireEvent.change(screen.getByRole('textbox', { name: 'Template name' }), { target: { value: 'Swing' } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
     expect(saveChartTemplate).toHaveBeenCalledWith('Swing');

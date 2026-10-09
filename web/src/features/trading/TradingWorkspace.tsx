@@ -63,6 +63,7 @@ const TradingReplayPanel = lazy(() => import('./TradingReplayPanel').then((modul
 const TradingScannerPanel = lazy(() => import('./TradingScannerPanel').then((module) => ({ default: module.TradingScannerPanel })));
 const TradingStrategiesPanel = lazy(() => import('./TradingStrategiesPanel').then((module) => ({ default: module.TradingStrategiesPanel })));
 const TradingEconomicCalendar = lazy(() => import('./TradingEconomicCalendar').then((module) => ({ default: module.TradingEconomicCalendar })));
+const TradingEventsCalendar = lazy(() => import('./TradingEventsCalendar').then((module) => ({ default: module.TradingEventsCalendar })));
 const TradingFinancials = lazy(() => import('./TradingFinancials').then((module) => ({ default: module.TradingFinancials })));
 const TradingHeatmap = lazy(() => import('./TradingHeatmap').then((module) => ({ default: module.TradingHeatmap })));
 const TradingSeasonals = lazy(() => import('./TradingSeasonals').then((module) => ({ default: module.TradingSeasonals })));
@@ -77,7 +78,18 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'columns-4', label: '4 columns' },
 ];
 
-type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'tester' | 'seasonals' | 'heatmap' | 'financials' | 'calendar';
+type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'tester' | 'seasonals' | 'heatmap' | 'financials' | 'calendar' | 'events';
+
+const TOOL_PANEL_TITLES: Record<ToolPanel, string> = {
+  scanner: 'Market scanner', replay: 'Replay & backtest', strategies: 'Automated strategies', tester: 'Strategy tester', seasonals: 'Seasonals',
+  heatmap: 'Heatmap', financials: 'Financials', calendar: 'Economic calendar', events: 'Earnings & dividends',
+};
+
+/** The tool drawer's title; tools on one symbol name it. */
+function toolPanelTitle(panel: ToolPanel, instrumentId: string): string {
+  return panel === 'seasonals' || panel === 'financials' ? `${TOOL_PANEL_TITLES[panel]} · ${instrumentId}` : TOOL_PANEL_TITLES[panel];
+}
+
 type FormulaResolution = TradingFormulaSearchPreview & { operands: Record<string, string> };
 
 // TradingSidePanel mounts TradingPaperPanel in the dedicated Trade tab.
@@ -600,6 +612,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={toolPanel === 'heatmap'} onClick={() => toggleToolPanel('heatmap')}>Heatmap</button>
           <button type="button" aria-pressed={toolPanel === 'financials'} onClick={() => toggleToolPanel('financials')}>Financials</button>
           <button type="button" aria-pressed={toolPanel === 'calendar'} onClick={() => toggleToolPanel('calendar')}>Calendar</button>
+          <button type="button" aria-pressed={toolPanel === 'events'} onClick={() => toggleToolPanel('events')}>Earnings</button>
           <button type="button" aria-pressed={sidePanelTab === 'paper' && panels.right} onClick={openPaperTrading}>Trade</button>
           <button type="button" aria-pressed={sidePanelTab === 'research' && panels.right} onClick={openResearchPanel}>AI Research</button>
         </div>
@@ -663,13 +676,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           {toolPanel ? (
             <section className={`trading-tool-drawer${toolPanelFullscreen ? ' is-fullscreen' : ''}`} aria-label="Trading analysis tool">
               <header>
-                <strong>{toolPanel === 'scanner'
-                  ? 'Market scanner'
-                  : toolPanel === 'replay'
-                    ? 'Replay & backtest'
-                    : toolPanel === 'tester'
-                      ? 'Strategy tester'
-                      : toolPanel === 'seasonals' ? `Seasonals · ${activeChart.instrumentId}` : toolPanel === 'heatmap' ? 'Heatmap' : toolPanel === 'financials' ? `Financials · ${activeChart.instrumentId}` : toolPanel === 'calendar' ? 'Economic calendar' : 'Automated strategies'}</strong>
+                <strong>{toolPanelTitle(toolPanel, activeChart.instrumentId)}</strong>
                 <div className="trading-tool-drawer-actions">
                   <button type="button" onClick={() => setToolPanelFullscreen((value) => !value)} aria-pressed={toolPanelFullscreen} aria-label={toolPanelFullscreen ? 'Restore analysis tool' : 'Fullscreen analysis tool'}>{toolPanelFullscreen ? 'Restore' : 'Fullscreen'}</button>
                   <button type="button" onClick={() => { setToolPanelFullscreen(false); setToolPanel(null); }} aria-label="Close analysis tool">×</button>
@@ -681,6 +688,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 {toolPanel === 'heatmap' ? <TradingHeatmap onShowInstrument={showInstrumentOnChart} /> : null}
                 {toolPanel === 'financials' ? <TradingFinancials instrumentId={activeChart.instrumentId} /> : null}
                 {toolPanel === 'calendar' ? <TradingEconomicCalendar onOpenSettings={() => { void navigate({ to: '/settings', search: { category: 'trading-market-data' } }); }} /> : null}
+                {toolPanel === 'events' ? <TradingEventsCalendar chartInstrumentIds={charts.map((chart) => chart.instrumentId)} onShowInstrument={showInstrumentOnChart} /> : null}
                 {toolPanel === 'replay' ? (
                   <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
                 ) : null}

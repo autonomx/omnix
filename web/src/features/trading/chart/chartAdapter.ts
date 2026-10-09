@@ -1188,6 +1188,13 @@ export class TradingChartAdapter {
     });
   }
 
+  /** The main (price) pane's height in pixels from the chart's top, or null before layout. */
+  mainPaneHeight(): number | null {
+    this.assertActive();
+    const height = this.chart.panes()[0]?.getHTMLElement()?.getBoundingClientRect().height;
+    return height ? height : null;
+  }
+
   setIndicatorPaneMinimized(id: string, minimized: boolean): void {
     this.assertActive();
     if (this.fullscreenIndicatorId !== null) return;
