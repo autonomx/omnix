@@ -38,6 +38,30 @@ class PaperExecutionPolicy(BaseModel):
     reject_halted: bool = True
 
 
+# The asset classes margin is set for (TVP-7.2b); an instrument's class is its id's prefix (``equity:NASDAQ:AAPL``).
+PAPER_ASSET_CLASSES: tuple[str, ...] = ("equity", "crypto", "forex", "commodity")
+CommissionType = Literal["percent", "fixed_per_order"]
+
+
+class PaperMargin(BaseModel):
+    """Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).
+
+    The part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1, 0.2% is 500:1.
+    The same percentage is the maintenance requirement; equity below it triggers a margin call.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    long_pct: Decimal = Field(default=Decimal("100"), ge=Decimal("0.1"), le=100)
+    short_pct: Decimal = Field(default=Decimal("100"), ge=Decimal("0.1"), le=100)
+
+
+def _check_margin_classes(margin: dict[str, PaperMargin] | None) -> None:
+    unknown = sorted(set(margin or {}) - set(PAPER_ASSET_CLASSES))
+    if unknown:
+        raise ValueError(f"margin is set per asset class ({', '.join(PAPER_ASSET_CLASSES)}), not {', '.join(unknown)}")
+
+
 class PaperAccountCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,14 +73,35 @@ class PaperAccountCreate(BaseModel):
     # Off unless asked for: strategies create accounts through this model too.
     # The account form sends it on, as TradingView's paper accounts are (TVP-7.2a).
     allow_short: bool = False
+    # TVP-7.2b: margin by asset class (none set: 100%, no leverage) and a fixed commission per order instead of bps.
+    margin: dict[str, PaperMargin] = Field(default_factory=dict)
+    commission_type: CommissionType = "percent"
+    commission_fixed: Decimal = Field(default=Decimal("0"), ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def validate_margin(self) -> PaperAccountCreate:
+        _check_margin_classes(self.margin)
+        return self
 
 
 class PaperAccountSettings(BaseModel):
-    """Account settings a person changes after creating the account (TVP-7.2a)."""
+    """Account settings a person changes after creating the account (TVP-7.2a, TVP-7.2b).
+
+    Fields left out keep their value.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     allow_short: bool
+    margin: dict[str, PaperMargin] | None = None
+    commission_type: CommissionType | None = None
+    commission_bps: Decimal | None = Field(default=None, ge=0, le=1000)
+    commission_fixed: Decimal | None = Field(default=None, ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def validate_margin(self) -> PaperAccountSettings:
+        _check_margin_classes(self.margin)
+        return self
 
 
 class PaperAccount(BaseModel):
@@ -72,6 +117,9 @@ class PaperAccount(BaseModel):
     updated_at: datetime | None = None
     # Whether a sell may open a short position (still an entry needing risk authority).
     allow_short: bool = False
+    margin: dict[str, PaperMargin] = Field(default_factory=dict)
+    commission_type: CommissionType = "percent"
+    commission_fixed: Decimal = Decimal("0")
 
 
 class PaperBalance(BaseModel):
@@ -313,6 +361,115 @@ class PaperAccountSnapshot(BaseModel):
     order_history: list[PaperOrder] = Field(default_factory=list)
     recent_fills: list[PaperFill]
     recent_ledger: list[PaperLedgerEntry]
+    # TVP-7.2b: equity against the margin the positions need, at their last prices.
+    margin_status: PaperMarginStatus | None = None
+
+
+class PaperMarginStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    equity: Decimal
+    # The margin the open positions need (the maintenance requirement).
+    maintenance: Decimal
+    # Equity beyond what positions and working entries hold: what a new entry can use.
+    buying_power: Decimal
+    margin_call: bool
+
+
+PaperAccountSnapshot.model_rebuild()
+
+
+def paper_asset_class(instrument_id: str) -> str:
+    """An instrument's asset class: its id's prefix, ``other`` when it isn't one margin is set for."""
+    prefix = instrument_id.split(":", 1)[0].lower()
+    return prefix if prefix in PAPER_ASSET_CLASSES else "other"
+
+
+def paper_margin_fraction(account: PaperAccount, instrument_id: str, *, short: bool) -> Decimal:
+    """The part of a position's value the account holds (1 is no leverage)."""
+    margin = account.margin.get(paper_asset_class(instrument_id))
+    if margin is None:
+        return Decimal("1")
+    return (margin.short_pct if short else margin.long_pct) / Decimal("100")
+
+
+def paper_order_commission(account: PaperAccount, notional: Decimal, *, first_fill: bool) -> Decimal:
+    """An order fill's commission: bps of its notional, or the fixed amount once per order (on its first fill)."""
+    if account.commission_type == "fixed_per_order":
+        return account.commission_fixed if first_fill else Decimal("0")
+    return paper_commission(notional, account.commission_bps)
+
+
+@dataclass(frozen=True)
+class PaperMarginPosition:
+    instrument_id: str
+    quantity: Decimal
+    average_cost: Decimal
+    last_price: Decimal | None = None
+
+
+def paper_buying_power(account: PaperAccount, available_cash: Decimal, positions: list[PaperMarginPosition]) -> Decimal:
+    """Cash a new entry can hold (TVP-7.2b): the available cash, less what shorts hold, plus what leveraged longs free.
+
+    A short holds its sale's proceeds (in the cash) and its margin; a long holds its margin share of the cost, the rest
+    borrowed (it left the cash when bought). At 100% margin this is the cash less twice the short liability, as before.
+    """
+    excess = available_cash
+    for position in positions:
+        if position.quantity < 0:
+            liability = -position.quantity * position.average_cost
+            excess -= liability * (1 + paper_margin_fraction(account, position.instrument_id, short=True))
+        elif position.quantity > 0:
+            excess += position.quantity * position.average_cost * (1 - paper_margin_fraction(account, position.instrument_id, short=False))
+    return excess
+
+
+def paper_margin_status(
+    account: PaperAccount, available_cash: Decimal, reserved_cash: Decimal, positions: list[PaperMarginPosition]
+) -> PaperMarginStatus:
+    """Equity (cash plus longs less shorts at their last prices) against the maintenance the positions need."""
+    equity = available_cash + reserved_cash
+    maintenance = Decimal("0")
+    for position in positions:
+        price = position.last_price if position.last_price is not None else position.average_cost
+        equity += position.quantity * price
+        maintenance += abs(position.quantity) * price * paper_margin_fraction(account, position.instrument_id, short=position.quantity < 0)
+    return PaperMarginStatus(
+        equity=equity,
+        maintenance=maintenance,
+        buying_power=paper_buying_power(account, available_cash, positions),
+        margin_call=equity < maintenance,
+    )
+
+
+def paper_margin_call_closes(account: PaperAccount, status: PaperMarginStatus, positions: list[PaperMarginPosition]) -> list[tuple[str, Decimal]]:
+    """What a margin call closes (TVP-7.2b): the positions using the most margin first, each only as far as needed.
+
+    Closing part of a position frees its margin share; quantities are whole units where the position is whole.
+    Returns (instrument, quantity to close) pairs; empty when equity covers the maintenance.
+    """
+    shortfall = status.maintenance - status.equity
+    if shortfall <= 0:
+        return []
+    uses: list[tuple[Decimal, PaperMarginPosition, Decimal]] = []
+    for position in positions:
+        if position.quantity == 0:
+            continue
+        price = position.last_price if position.last_price is not None else position.average_cost
+        per_unit = price * paper_margin_fraction(account, position.instrument_id, short=position.quantity < 0)
+        uses.append((abs(position.quantity) * per_unit, position, per_unit))
+    closes: list[tuple[str, Decimal]] = []
+    for _, position, per_unit in sorted(uses, key=lambda item: (-item[0], item[1].instrument_id)):
+        if shortfall <= 0:
+            break
+        size = abs(position.quantity)
+        needed = shortfall / per_unit if per_unit > 0 else size
+        if size == size.to_integral_value():
+            needed = needed.to_integral_value(rounding=ROUND_CEILING)
+        quantity = min(size, needed)
+        closes.append((position.instrument_id, quantity))
+        shortfall -= quantity * per_unit
+    return closes
 
 
 def paper_order_request_matches(order: PaperOrder, request: PaperOrderRequest) -> bool:
@@ -883,18 +1040,24 @@ def paper_buy_reservation(
     *,
     available_cash: Decimal,
     commission_bps: Decimal,
+    margin: Decimal = Decimal("1"),
+    fixed_commission: Decimal | None = None,
 ) -> Decimal:
-    """Compute the cash hold for an open buy order.
+    """Compute the cash hold for an open buy order: its margin share of the notional and its commission.
 
     reference_price is reservation-only evidence. It never authorizes a fill.
     """
+
+    def hold(notional: Decimal) -> Decimal:
+        commission = fixed_commission if fixed_commission is not None else paper_commission(notional, commission_bps)
+        return notional * margin + commission
+
     if request.side != "buy":
         return Decimal("0")
     if request.order_type == "market":
         if request.reference_price is None:
             return available_cash
-        notional = request.quantity * request.reference_price
-        return notional + paper_commission(notional, commission_bps)
+        return hold(request.quantity * request.reference_price)
     reference_price: Decimal | None
     if request.order_type == "trailing_stop":
         # Held at the stop the trail implies from the reference price; the
@@ -912,8 +1075,7 @@ def paper_buy_reservation(
     else:
         reference_price = request.stop_price
     assert reference_price is not None
-    notional = request.quantity * reference_price
-    return notional + paper_commission(notional, commission_bps)
+    return hold(request.quantity * reference_price)
 
 
 def paper_fill_is_fundable(

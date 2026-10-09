@@ -6338,6 +6338,17 @@ export interface components {
             base_currency: string;
             /** Commission Bps */
             commission_bps: number | string;
+            /**
+             * Commission Fixed
+             * @default 0
+             */
+            commission_fixed?: number | string;
+            /**
+             * Commission Type
+             * @default percent
+             * @enum {string}
+             */
+            commission_type?: "percent" | "fixed_per_order";
             /** Created At */
             created_at?: string | null;
             /**
@@ -6345,6 +6356,10 @@ export interface components {
              * @default true
              */
             enabled?: boolean;
+            /** Margin */
+            margin?: {
+                [key: string]: components["schemas"]["PaperMargin-Input"];
+            };
             /** Name */
             name: string;
             /**
@@ -6368,6 +6383,17 @@ export interface components {
             base_currency: string;
             /** Commission Bps */
             commission_bps: string;
+            /**
+             * Commission Fixed
+             * @default 0
+             */
+            commission_fixed: string;
+            /**
+             * Commission Type
+             * @default percent
+             * @enum {string}
+             */
+            commission_type: "percent" | "fixed_per_order";
             /** Created At */
             created_at: string | null;
             /**
@@ -6375,6 +6401,10 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /** Margin */
+            margin: {
+                [key: string]: components["schemas"]["PaperMargin-Output"];
+            };
             /** Name */
             name: string;
             /**
@@ -6405,10 +6435,25 @@ export interface components {
              */
             commission_bps?: number | string;
             /**
+             * Commission Fixed
+             * @default 0
+             */
+            commission_fixed?: number | string;
+            /**
+             * Commission Type
+             * @default percent
+             * @enum {string}
+             */
+            commission_type?: "percent" | "fixed_per_order";
+            /**
              * Initial Cash
              * @default 100000
              */
             initial_cash?: number | string;
+            /** Margin */
+            margin?: {
+                [key: string]: components["schemas"]["PaperMargin-Input"];
+            };
             /** Name */
             name: string;
         };
@@ -6419,17 +6464,30 @@ export interface components {
         };
         /**
          * PaperAccountSettings
-         * @description Account settings a person changes after creating the account (TVP-7.2a).
+         * @description Account settings a person changes after creating the account (TVP-7.2a, TVP-7.2b).
+         *
+         *     Fields left out keep their value.
          */
         PaperAccountSettings: {
             /** Allow Short */
             allow_short: boolean;
+            /** Commission Bps */
+            commission_bps?: number | string | null;
+            /** Commission Fixed */
+            commission_fixed?: number | string | null;
+            /** Commission Type */
+            commission_type?: ("percent" | "fixed_per_order") | null;
+            /** Margin */
+            margin?: {
+                [key: string]: components["schemas"]["PaperMargin-Input"];
+            } | null;
         };
         /** PaperAccountSnapshot */
         "PaperAccountSnapshot-Input": {
             account: components["schemas"]["PaperAccount-Input"];
             /** Balances */
             balances: components["schemas"]["PaperBalance-Input"][];
+            margin_status?: components["schemas"]["PaperMarginStatus-Input"] | null;
             /** Open Orders */
             open_orders: components["schemas"]["PaperOrder-Input"][];
             /** Order History */
@@ -6446,6 +6504,7 @@ export interface components {
             account: components["schemas"]["PaperAccount-Output"];
             /** Balances */
             balances: components["schemas"]["PaperBalance-Output"][];
+            margin_status: components["schemas"]["PaperMarginStatus-Output"] | null;
             /** Open Orders */
             open_orders: components["schemas"]["PaperOrder-Output"][];
             /** Order History */
@@ -6888,6 +6947,66 @@ export interface components {
             session_date: string;
             /** Trade Id */
             trade_id: string;
+        };
+        /**
+         * PaperMargin
+         * @description Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).
+         *
+         *     The part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.
+         *     The same percentage is the maintenance requirement; equity below it triggers a margin call.
+         */
+        "PaperMargin-Input": {
+            /**
+             * Long Pct
+             * @default 100
+             */
+            long_pct?: number | string;
+            /**
+             * Short Pct
+             * @default 100
+             */
+            short_pct?: number | string;
+        };
+        /**
+         * PaperMargin
+         * @description Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).
+         *
+         *     The part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.
+         *     The same percentage is the maintenance requirement; equity below it triggers a margin call.
+         */
+        "PaperMargin-Output": {
+            /**
+             * Long Pct
+             * @default 100
+             */
+            long_pct: string;
+            /**
+             * Short Pct
+             * @default 100
+             */
+            short_pct: string;
+        };
+        /** PaperMarginStatus */
+        "PaperMarginStatus-Input": {
+            /** Buying Power */
+            buying_power: number | string;
+            /** Equity */
+            equity: number | string;
+            /** Maintenance */
+            maintenance: number | string;
+            /** Margin Call */
+            margin_call: boolean;
+        };
+        /** PaperMarginStatus */
+        "PaperMarginStatus-Output": {
+            /** Buying Power */
+            buying_power: string;
+            /** Equity */
+            equity: string;
+            /** Maintenance */
+            maintenance: string;
+            /** Margin Call */
+            margin_call: boolean;
         };
         /** PaperMarketObservation */
         PaperMarketObservation: {

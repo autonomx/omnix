@@ -21,6 +21,8 @@ from .paper import (
     PaperBalance,
     PaperFill,
     PaperLedgerEntry,
+    PaperMargin,
+    PaperMarginPosition,
     PaperMarketObservation,
     PaperOrder,
     PaperOrderRequest,
@@ -28,12 +30,15 @@ from .paper import (
     PaperPosition,
     TIME_IN_FORCE_EXPIRED,
     paper_buy_reservation,
-    paper_commission,
+    paper_buying_power,
     paper_fill_is_fundable,
     paper_fill_decision,
     paper_fill_key,
     paper_liquidity_allocation,
+    paper_margin_fraction,
+    paper_margin_status,
     paper_observation_key,
+    paper_order_commission,
     paper_order_expiry,
     paper_order_request_matches,
     paper_order_state_update,
@@ -58,7 +63,20 @@ def _account(row) -> PaperAccount:
         created_at=row[6],
         updated_at=row[7],
         allow_short=bool(row[8]) if len(row) > 8 else False,
+        margin=_margin_settings(row[9]) if len(row) > 9 else {},
+        commission_type=str(row[10]) if len(row) > 10 and row[10] else "percent",
+        commission_fixed=Decimal(row[11]) if len(row) > 11 and row[11] is not None else Decimal("0"),
     )
+
+
+def _margin_settings(raw: Any) -> dict[str, PaperMargin]:
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    return {str(key): PaperMargin.model_validate(value) for key, value in dict(raw or {}).items()}
+
+
+def _margin_json(margin: dict[str, PaperMargin]) -> str:
+    return json.dumps({key: {"long_pct": str(value.long_pct), "short_pct": str(value.short_pct)} for key, value in sorted(margin.items())})
 
 
 def _order(row) -> PaperOrder:
@@ -123,10 +141,12 @@ class TradingPaperRepository:
                 """
                 INSERT INTO omnix_trading_paper_accounts (
                     workspace_id, account_id, owner_user_id, name,
-                    base_currency, commission_bps, allow_short
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    base_currency, commission_bps, allow_short,
+                    margin_settings, commission_type, commission_fixed
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
                 RETURNING account_id, name, base_currency, commission_bps,
-                          enabled, revision, created_at, updated_at, allow_short
+                          enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed
                 """,
                 (
                     self.context.workspace_id,
@@ -136,6 +156,9 @@ class TradingPaperRepository:
                     request.base_currency,
                     request.commission_bps,
                     request.allow_short,
+                    _margin_json(request.margin),
+                    request.commission_type,
+                    request.commission_fixed,
                 ),
             ).fetchone()
             uow.connection.execute(
@@ -175,7 +198,7 @@ class TradingPaperRepository:
     def update_account_settings(
         self, account_id: str, settings: PaperAccountSettings, *, expected_revision: int
     ) -> PaperAccountSnapshot:
-        """Change an account's settings (shorting, TVP-7.2a) at the revision the person saw.
+        """Change an account's settings (shorting, TVP-7.2a; margin and commission, TVP-7.2b) at the revision the person saw.
 
         Turning shorting off cancels working short entries (their holds are released and their pending
         stops follow) and leaves open shorts and their exits as they are.
@@ -188,12 +211,27 @@ class TradingPaperRepository:
             row = uow.connection.execute(
                 """
                 UPDATE omnix_trading_paper_accounts
-                   SET allow_short = %s, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                   SET allow_short = %s,
+                       margin_settings = COALESCE(%s::jsonb, margin_settings),
+                       commission_type = COALESCE(%s, commission_type),
+                       commission_bps = COALESCE(%s, commission_bps),
+                       commission_fixed = COALESCE(%s, commission_fixed),
+                       revision = revision + 1, updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND account_id = %s AND revision = %s
                 RETURNING account_id, name, base_currency, commission_bps,
-                          enabled, revision, created_at, updated_at, allow_short
+                          enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed
                 """,
-                (settings.allow_short, self.context.workspace_id, account_id, expected_revision),
+                (
+                    settings.allow_short,
+                    _margin_json(settings.margin) if settings.margin is not None else None,
+                    settings.commission_type,
+                    settings.commission_bps,
+                    settings.commission_fixed,
+                    self.context.workspace_id,
+                    account_id,
+                    expected_revision,
+                ),
             ).fetchone()
             if row is None:
                 exists = uow.connection.execute(
@@ -229,7 +267,8 @@ class TradingPaperRepository:
             rows = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at, allow_short
+                       enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s
                  ORDER BY created_at DESC LIMIT %s
@@ -326,7 +365,8 @@ class TradingPaperRepository:
         row = uow.connection.execute(
             """
             SELECT account_id, name, base_currency, commission_bps,
-                   enabled, revision, created_at, updated_at, allow_short
+                   enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed
               FROM omnix_trading_paper_accounts
              WHERE workspace_id = %s AND account_id = %s
              FOR UPDATE
@@ -404,8 +444,10 @@ class TradingPaperRepository:
             request.model_copy(update={"side": "buy"}),
             available_cash=available,
             commission_bps=account.commission_bps,
+            margin=paper_margin_fraction(account, request.instrument_id, short=True),
+            fixed_commission=account.commission_fixed if account.commission_type == "fixed_per_order" else None,
         )
-        if hold <= 0 or available - 2 * self._short_liability(uow, account.account_id) < hold:
+        if hold <= 0 or paper_buying_power(account, available, self._margin_positions(uow, account.account_id)) < hold:
             raise ValueError("insufficient_paper_cash")
         uow.connection.execute(
             """
@@ -417,21 +459,22 @@ class TradingPaperRepository:
         )
         return hold
 
-    def _short_liability(self, uow: PostgresUnitOfWork, account_id: str) -> Decimal:
-        """What open shorts cost to buy back at their average price (TVP-7.2a).
-
-        Buying power holds twice this: the short sale's proceeds, which sit in
-        the cash balance, and an equal margin (no leverage until TVP-7.2b).
-        """
-        row = uow.connection.execute(
+    def _margin_positions(self, uow: PostgresUnitOfWork, account_id: str) -> list[PaperMarginPosition]:
+        """The open positions, for buying power and margin (TVP-7.2b): a short holds its proceeds and its margin,
+        a leveraged long only its margin share."""
+        rows = uow.connection.execute(
             """
-            SELECT COALESCE(SUM(-quantity * average_cost), 0)
+            SELECT instrument_id, quantity, average_cost, last_price
               FROM omnix_trading_paper_positions
-             WHERE workspace_id = %s AND account_id = %s AND quantity < 0
+             WHERE workspace_id = %s AND account_id = %s AND quantity <> 0
+             ORDER BY instrument_id
             """,
             (self.context.workspace_id, account_id),
-        ).fetchone()
-        return Decimal(row[0] if row else 0)
+        ).fetchall()
+        return [
+            PaperMarginPosition(str(row[0]), Decimal(row[1]), Decimal(row[2]), Decimal(row[3]) if row[3] is not None else None)
+            for row in rows
+        ]
 
     def _require_entry_authority(
         self,
@@ -521,12 +564,15 @@ class TradingPaperRepository:
                 request,
                 available_cash=available,
                 commission_bps=account.commission_bps,
+                # A long holds its margin share; buying back a short holds its whole cost, as before.
+                margin=Decimal("1") if covers else paper_margin_fraction(account, request.instrument_id, short=False),
+                fixed_commission=account.commission_fixed if account.commission_type == "fixed_per_order" else None,
             )
             if covers:
                 # Buying back a short is never refused for cash: it holds what there is, and a loss can
-                # leave the balance below zero until margin calls exist (TVP-7.2b).
+                # leave the balance below zero (margin calls close shorts before that, TVP-7.2b).
                 reserved_cash = max(Decimal("0"), min(reserved_cash, available))
-            elif reserved_cash <= 0 or available - 2 * self._short_liability(uow, account_id) < reserved_cash:
+            elif reserved_cash <= 0 or paper_buying_power(account, available, self._margin_positions(uow, account_id)) < reserved_cash:
                 raise ValueError("insufficient_paper_cash")
             uow.connection.execute(
                 """
@@ -771,7 +817,8 @@ class TradingPaperRepository:
             account_row = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at, allow_short
+                       enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s AND account_id = %s
                  FOR UPDATE
@@ -873,14 +920,17 @@ class TradingPaperRepository:
                 if fill_quantity <= 0:
                     continue
                 notional = fill_quantity * decision.fill_price
-                commission = paper_commission(notional, account.commission_bps)
+                # A fixed commission is charged once per order, on its first fill (TVP-7.2b).
+                commission = paper_order_commission(account, notional, first_fill=order.filled_quantity == 0)
                 total_cost = notional + commission
                 rejection = None
                 # Buying back a short is never refused for cash (TVP-7.2a): a stop must be able to close it.
                 covers_short = order.side == "buy" and position_quantity < 0 and fill_quantity <= -position_quantity
+                # A long needs its margin share in cash; the rest is borrowed and leaves the cash below zero.
+                margin_cost = notional * paper_margin_fraction(account, order.instrument_id, short=False) + commission
                 if not covers_short and not paper_fill_is_fundable(
                     order,
-                    total_cost=total_cost,
+                    total_cost=margin_cost,
                     available_cash=cash_available,
                 ):
                     rejection = "insufficient_paper_cash"
@@ -1191,7 +1241,8 @@ class TradingPaperRepository:
                 row = uow.connection.execute(
                     """
                     SELECT account_id, name, base_currency, commission_bps,
-                           enabled, revision, created_at, updated_at, allow_short
+                           enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed
                       FROM omnix_trading_paper_accounts
                      WHERE workspace_id = %s AND account_id = %s
                     """,
@@ -1275,6 +1326,12 @@ class TradingPaperRepository:
                     (self.context.workspace_id, account_id),
                 ).fetchall()
             ]
+            base = next((balance for balance in balances if balance.currency == account.base_currency), None)
+            margin_positions = [
+                PaperMarginPosition(position.instrument_id, position.quantity, position.average_cost, position.last_price)
+                for position in positions
+                if position.quantity != 0
+            ]
             return PaperAccountSnapshot(
                 account=account,
                 balances=balances,
@@ -1283,6 +1340,12 @@ class TradingPaperRepository:
                 order_history=order_history,
                 recent_fills=fills,
                 recent_ledger=ledger,
+                margin_status=paper_margin_status(
+                    account,
+                    base.available if base else Decimal("0"),
+                    base.reserved if base else Decimal("0"),
+                    margin_positions,
+                ),
             )
 
 

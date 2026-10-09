@@ -16,7 +16,7 @@ from .paper import (
     PaperOrderRequest,
     PaperPosition,
     paper_buy_reservation,
-    paper_commission,
+    paper_order_commission,
     paper_fill_decision,
     paper_realized_pnl,
     paper_unrealized_pnl,
@@ -231,7 +231,8 @@ def _apply_fill(
 
     fill_price = decision.fill_price
     notional = fill_quantity * fill_price
-    commission = paper_commission(notional, snapshot.account.commission_bps)
+    # The account's commission: bps, or its fixed amount once per order (TVP-7.2b).
+    commission = paper_order_commission(snapshot.account, notional, first_fill=order.filled_quantity == 0)
     balance = _balance(snapshot)
     position = _position(snapshot, order.instrument_id)
     if balance is None:

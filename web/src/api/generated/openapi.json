@@ -27300,6 +27300,28 @@
             ],
             "title": "Commission Bps"
           },
+          "commission_fixed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Commission Fixed"
+          },
+          "commission_type": {
+            "default": "percent",
+            "enum": [
+              "percent",
+              "fixed_per_order"
+            ],
+            "title": "Commission Type",
+            "type": "string"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -27316,6 +27338,13 @@
             "default": true,
             "title": "Enabled",
             "type": "boolean"
+          },
+          "margin": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PaperMargin-Input"
+            },
+            "title": "Margin",
+            "type": "object"
           },
           "name": {
             "title": "Name",
@@ -27369,6 +27398,21 @@
             "title": "Commission Bps",
             "type": "string"
           },
+          "commission_fixed": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Commission Fixed",
+            "type": "string"
+          },
+          "commission_type": {
+            "default": "percent",
+            "enum": [
+              "percent",
+              "fixed_per_order"
+            ],
+            "title": "Commission Type",
+            "type": "string"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -27385,6 +27429,13 @@
             "default": true,
             "title": "Enabled",
             "type": "boolean"
+          },
+          "margin": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PaperMargin-Output"
+            },
+            "title": "Margin",
+            "type": "object"
           },
           "name": {
             "title": "Name",
@@ -27417,7 +27468,10 @@
           "revision",
           "created_at",
           "updated_at",
-          "allow_short"
+          "allow_short",
+          "margin",
+          "commission_type",
+          "commission_fixed"
         ],
         "title": "PaperAccount",
         "type": "object"
@@ -27458,6 +27512,30 @@
             "default": "0",
             "title": "Commission Bps"
           },
+          "commission_fixed": {
+            "anyOf": [
+              {
+                "maximum": 10000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Commission Fixed"
+          },
+          "commission_type": {
+            "default": "percent",
+            "enum": [
+              "percent",
+              "fixed_per_order"
+            ],
+            "title": "Commission Type",
+            "type": "string"
+          },
           "initial_cash": {
             "anyOf": [
               {
@@ -27471,6 +27549,13 @@
             ],
             "default": "100000",
             "title": "Initial Cash"
+          },
+          "margin": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PaperMargin-Input"
+            },
+            "title": "Margin",
+            "type": "object"
           },
           "name": {
             "maxLength": 200,
@@ -27504,11 +27589,74 @@
       },
       "PaperAccountSettings": {
         "additionalProperties": false,
-        "description": "Account settings a person changes after creating the account (TVP-7.2a).",
+        "description": "Account settings a person changes after creating the account (TVP-7.2a, TVP-7.2b).\n\nFields left out keep their value.",
         "properties": {
           "allow_short": {
             "title": "Allow Short",
             "type": "boolean"
+          },
+          "commission_bps": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commission Bps"
+          },
+          "commission_fixed": {
+            "anyOf": [
+              {
+                "maximum": 10000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commission Fixed"
+          },
+          "commission_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "percent",
+                  "fixed_per_order"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commission Type"
+          },
+          "margin": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/PaperMargin-Input"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin"
           }
         },
         "required": [
@@ -27529,6 +27677,16 @@
             },
             "title": "Balances",
             "type": "array"
+          },
+          "margin_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaperMarginStatus-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "open_orders": {
             "items": {
@@ -27590,6 +27748,16 @@
             "title": "Balances",
             "type": "array"
           },
+          "margin_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaperMarginStatus-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "open_orders": {
             "items": {
               "$ref": "#/components/schemas/PaperOrder-Output"
@@ -27633,7 +27801,8 @@
           "open_orders",
           "recent_fills",
           "recent_ledger",
-          "order_history"
+          "order_history",
+          "margin_status"
         ],
         "title": "PaperAccountSnapshot",
         "type": "object"
@@ -28913,6 +29082,153 @@
           "exit_reason"
         ],
         "title": "PaperMaeMfePoint",
+        "type": "object"
+      },
+      "PaperMargin-Input": {
+        "additionalProperties": false,
+        "description": "Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).\n\nThe part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.\nThe same percentage is the maintenance requirement; equity below it triggers a margin call.",
+        "properties": {
+          "long_pct": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "100",
+            "title": "Long Pct"
+          },
+          "short_pct": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "100",
+            "title": "Short Pct"
+          }
+        },
+        "title": "PaperMargin",
+        "type": "object"
+      },
+      "PaperMargin-Output": {
+        "additionalProperties": false,
+        "description": "Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).\n\nThe part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.\nThe same percentage is the maintenance requirement; equity below it triggers a margin call.",
+        "properties": {
+          "long_pct": {
+            "default": "100",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Long Pct",
+            "type": "string"
+          },
+          "short_pct": {
+            "default": "100",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Short Pct",
+            "type": "string"
+          }
+        },
+        "required": [
+          "long_pct",
+          "short_pct"
+        ],
+        "title": "PaperMargin",
+        "type": "object"
+      },
+      "PaperMarginStatus-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "buying_power": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Buying Power"
+          },
+          "equity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Equity"
+          },
+          "maintenance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Maintenance"
+          },
+          "margin_call": {
+            "title": "Margin Call",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "equity",
+          "maintenance",
+          "buying_power",
+          "margin_call"
+        ],
+        "title": "PaperMarginStatus",
+        "type": "object"
+      },
+      "PaperMarginStatus-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "buying_power": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Buying Power",
+            "type": "string"
+          },
+          "equity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Equity",
+            "type": "string"
+          },
+          "maintenance": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maintenance",
+            "type": "string"
+          },
+          "margin_call": {
+            "title": "Margin Call",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "equity",
+          "maintenance",
+          "buying_power",
+          "margin_call"
+        ],
+        "title": "PaperMarginStatus",
         "type": "object"
       },
       "PaperMarketObservation": {

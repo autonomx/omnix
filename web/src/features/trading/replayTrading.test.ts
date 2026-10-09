@@ -37,6 +37,7 @@ const snapshot = (): PaperAccountSnapshot => ({
     enabled: true, revision: 1,
   }),
   balances: [{ currency: 'USD', available: '1000', reserved: '25' }],
+  margin_status: null,
   positions: [],
   open_orders: [],
   order_history: [fixture({
