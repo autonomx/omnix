@@ -8,12 +8,14 @@ from decimal import Decimal
 from typing import Any, Protocol, cast
 
 from app.security.tenant_context import RequestTenant, TenantContext
+from app.persistence.errors import RevisionConflict
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 from app.apps.trading.us_equity_calendar import EASTERN
 
 from .paper import (
     PaperAccount,
     PaperAccountCreate,
+    PaperAccountSettings,
     OrderAuthority,
     PaperAccountSnapshot,
     PaperBalance,
@@ -55,6 +57,7 @@ def _account(row) -> PaperAccount:
         revision=int(row[5]),
         created_at=row[6],
         updated_at=row[7],
+        allow_short=bool(row[8]) if len(row) > 8 else False,
     )
 
 
@@ -120,10 +123,10 @@ class TradingPaperRepository:
                 """
                 INSERT INTO omnix_trading_paper_accounts (
                     workspace_id, account_id, owner_user_id, name,
-                    base_currency, commission_bps
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                    base_currency, commission_bps, allow_short
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING account_id, name, base_currency, commission_bps,
-                          enabled, revision, created_at, updated_at
+                          enabled, revision, created_at, updated_at, allow_short
                 """,
                 (
                     self.context.workspace_id,
@@ -132,6 +135,7 @@ class TradingPaperRepository:
                     request.name,
                     request.base_currency,
                     request.commission_bps,
+                    request.allow_short,
                 ),
             ).fetchone()
             uow.connection.execute(
@@ -168,12 +172,41 @@ class TradingPaperRepository:
             uow.commit()
         return self.snapshot(request.account_id, account=_account(account_row))
 
+    def update_account_settings(
+        self, account_id: str, settings: PaperAccountSettings, *, expected_revision: int
+    ) -> PaperAccountSnapshot:
+        """Change an account's settings (shorting, TVP-7.2a) at the revision the person saw.
+
+        Turning shorting off leaves open shorts and their orders as they are: it only stops new short entries.
+        """
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_accounts
+                   SET allow_short = %s, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND revision = %s
+                RETURNING account_id, name, base_currency, commission_bps,
+                          enabled, revision, created_at, updated_at, allow_short
+                """,
+                (settings.allow_short, self.context.workspace_id, account_id, expected_revision),
+            ).fetchone()
+            if row is None:
+                exists = uow.connection.execute(
+                    "SELECT 1 FROM omnix_trading_paper_accounts WHERE workspace_id = %s AND account_id = %s",
+                    (self.context.workspace_id, account_id),
+                ).fetchone()
+                if exists is None:
+                    raise ValueError(f"paper_account_not_found: {account_id}")
+                raise RevisionConflict(f"Paper account expected revision {expected_revision}: {account_id}")
+            uow.commit()
+        return self.snapshot(account_id, account=_account(row))
+
     def list_accounts(self, limit: int = 100) -> list[PaperAccount]:
         with self.uow_factory() as uow:
             rows = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
+                       enabled, revision, created_at, updated_at, allow_short
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s
                  ORDER BY created_at DESC LIMIT %s
@@ -648,7 +681,7 @@ class TradingPaperRepository:
             account_row = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
+                       enabled, revision, created_at, updated_at, allow_short
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s AND account_id = %s
                  FOR UPDATE
@@ -1058,7 +1091,7 @@ class TradingPaperRepository:
                 row = uow.connection.execute(
                     """
                     SELECT account_id, name, base_currency, commission_bps,
-                           enabled, revision, created_at, updated_at
+                           enabled, revision, created_at, updated_at, allow_short
                       FROM omnix_trading_paper_accounts
                      WHERE workspace_id = %s AND account_id = %s
                     """,

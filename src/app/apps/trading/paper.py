@@ -46,6 +46,17 @@ class PaperAccountCreate(BaseModel):
     base_currency: str = Field(default="USD", min_length=3, max_length=12)
     initial_cash: Decimal = Field(default=Decimal("100000"), ge=0)
     commission_bps: Decimal = Field(default=Decimal("0"), ge=0, le=1000)
+    # Off unless asked for: strategies create accounts through this model too.
+    # The account form sends it on, as TradingView's paper accounts are (TVP-7.2a).
+    allow_short: bool = False
+
+
+class PaperAccountSettings(BaseModel):
+    """Account settings a person changes after creating the account (TVP-7.2a)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allow_short: bool
 
 
 class PaperAccount(BaseModel):
@@ -59,6 +70,8 @@ class PaperAccount(BaseModel):
     revision: int = 1
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # Whether a sell may open a short position (still an entry needing risk authority).
+    allow_short: bool = False
 
 
 class PaperBalance(BaseModel):
