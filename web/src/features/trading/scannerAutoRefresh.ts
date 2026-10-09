@@ -15,6 +15,9 @@ export const AUTO_REFRESH_OPTIONS = [
 
 export type AutoRefresh = { scannerId: string; everyMs: number };
 
+/** A run still queued or running after this was abandoned (scanner_repository.STALE_RUN_SECONDS). */
+export const STALE_RUN_MS = 600_000;
+
 /** What changed between two runs' results: the instruments that are new, and those that dropped out. */
 export function resultChanges(previous: readonly TradingScannerResult[] | null, next: readonly TradingScannerResult[]): { added: ReadonlySet<string>; removed: string[] } {
   if (previous === null) return { added: new Set(), removed: [] };

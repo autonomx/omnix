@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AUTO_REFRESH_OPTIONS, resultChanges, useScannerAutoRefresh, type AutoRefresh } from './scannerAutoRefresh';
+import { AUTO_REFRESH_OPTIONS, resultChanges, STALE_RUN_MS, useScannerAutoRefresh, type AutoRefresh } from './scannerAutoRefresh';
 import type { CanonicalInstrument } from './tradingTypes';
 import type {
   TradingScannerDefinition,
@@ -45,7 +45,10 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
         // Claimed before the await: an overlapping refresh does not diff the run against itself.
         const previous = shown.current;
         shown.current = { ...previous, runId: latest.run_id };
-        const next = await tradingScannerApi.results(latest.run_id);
+        const next = await tradingScannerApi.results(latest.run_id).catch((error: unknown) => {
+          shown.current = previous; // load it again on the next refresh
+          throw error;
+        });
         // Changes only compare runs of the same screen.
         setChanges(previous.scannerId === latest.scanner_id ? resultChanges(previous.results, next) : resultChanges(null, next));
         shown.current = { runId: latest.run_id, scannerId: latest.scanner_id, results: next };
@@ -63,7 +66,9 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
   }, [runs]);
 
   // Auto-refresh (TVP-9.2): a new run only when none of the screen's runs is still working.
-  const working = (scannerId: string) => runs.some((run) => run.scanner_id === scannerId && !terminalStatuses.has(run.status));
+  // A run left queued or running past any run's limit was abandoned (the server no longer counts it either).
+  const working = (scannerId: string) => runs.some((run) => run.scanner_id === scannerId && !terminalStatuses.has(run.status)
+    && (!run.created_at || Date.now() - Date.parse(run.created_at) < STALE_RUN_MS));
   useScannerAutoRefresh(autoRefresh, working, async (scannerId) => {
     await tradingScannerApi.start(scannerId);
     await refresh();

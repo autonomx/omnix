@@ -231,14 +231,23 @@ class TradingScannerRepository:
                 """
                 DELETE FROM omnix_trading_scanner_runs
                  WHERE workspace_id = %s AND scanner_id = %s
-                   AND status NOT IN ('queued', 'running')
-                   AND run_id NOT IN (
-                       SELECT run_id FROM omnix_trading_scanner_runs
-                        WHERE workspace_id = %s AND scanner_id = %s AND status NOT IN ('queued', 'running')
-                        ORDER BY created_at DESC LIMIT %s
+                   AND (
+                       -- Abandoned runs (a process stopped mid-run) go too.
+                       (status IN ('queued', 'running') AND created_at <= CURRENT_TIMESTAMP - make_interval(secs => %s))
+                       OR (
+                           status NOT IN ('queued', 'running')
+                           AND run_id NOT IN (
+                               SELECT run_id FROM omnix_trading_scanner_runs
+                                WHERE workspace_id = %s AND scanner_id = %s AND status NOT IN ('queued', 'running')
+                                ORDER BY created_at DESC LIMIT %s
+                           )
+                       )
                    )
                 """,
-                (self.context.workspace_id, run.scanner_id, self.context.workspace_id, run.scanner_id, RUNS_KEPT_PER_SCANNER - 1),
+                (
+                    self.context.workspace_id, run.scanner_id, STALE_RUN_SECONDS,
+                    self.context.workspace_id, run.scanner_id, RUNS_KEPT_PER_SCANNER - 1,
+                ),
             )
             row = uow.connection.execute(
                 f"""

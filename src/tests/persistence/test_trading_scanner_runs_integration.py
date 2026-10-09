@@ -64,6 +64,8 @@ def test_an_abandoned_run_does_not_block_forever(scanners) -> None:
         )
         uow.commit()
     repository.create_run(_run(scanner_id))
+    # The abandoned run is cleaned up with the old finished ones.
+    assert all(item.run_id != stuck.run_id for item in repository.list_runs(scanner_id, limit=500))
 
 
 def test_only_the_latest_finished_runs_are_kept(scanners) -> None:
