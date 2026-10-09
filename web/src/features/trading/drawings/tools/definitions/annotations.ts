@@ -326,9 +326,12 @@ export const emojiTool = defineDrawingTool({
     const [anchor] = context.points;
     const size = numberProperty(context.properties, 'size', 24);
     return [
-      // An invisible box so the emoji can be selected and dragged anywhere on it.
-      { kind: 'rect', x: anchor.x - size / 2, y: anchor.y - size / 2, width: size, height: size, fill: '#000000', fillOpacity: 0, className: context.selected ? 'selected' : undefined },
-      { kind: 'text', x: anchor.x, y: anchor.y + size * 0.35, text: stringProperty(context.properties, 'emoji', '🚀'), align: 'middle', fontSize: size, hit: 'none' },
+      // An invisible box so the emoji can be selected and dragged anywhere on it; outlined when selected.
+      {
+        kind: 'rect', x: anchor.x - size / 2, y: anchor.y - size / 2, width: size, height: size, fill: '#000000', fillOpacity: 0,
+        ...(context.selected ? { stroke: context.style.color, strokeWidth: 1, dash: [3, 3] } : {}),
+      },
+      { kind: 'text', x: anchor.x, y: anchor.y + size * 0.35, text: stringProperty(context.properties, 'emoji', '🚀'), align: 'middle', fontSize: size, stroke: 'none', hit: 'none' },
     ];
   },
 });

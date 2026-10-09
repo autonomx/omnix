@@ -55,6 +55,15 @@ function geometryAttributes(shape: DrawingShape): Record<string, number | string
   }
 }
 
+/** Inline style for what a text shape sets itself, so the overlay stylesheet's text defaults don't override it. */
+function textStyle(shape: Extract<DrawingShape, { kind: 'text' }>): CSSProperties | undefined {
+  const style: CSSProperties = {};
+  if (shape.fontSize !== undefined) style.fontSize = shape.fontSize;
+  if (shape.fill !== undefined) style.fill = shape.fill;
+  if (shape.stroke !== undefined) style.stroke = shape.stroke;
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
 export function ShapeElement({ shape, index }: { shape: DrawingShape; index: number }) {
   const paint: SVGProps<SVGElement> = {
     className: shape.className,
@@ -90,6 +99,7 @@ export function ShapeElement({ shape, index }: { shape: DrawingShape; index: num
           textAnchor={shape.align ? textAnchor[shape.align] : undefined}
           fontSize={shape.fontSize}
           fontWeight={shape.fontWeight}
+          style={textStyle(shape)}
         >
           {shape.text}
         </text>

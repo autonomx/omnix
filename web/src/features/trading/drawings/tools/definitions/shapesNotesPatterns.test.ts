@@ -117,7 +117,8 @@ describe('patterns, waves and cycles (TVP-3.7)', () => {
   it('head and shoulders draws its neckline through the troughs', () => {
     const { shapes } = runTool('head-and-shoulders', [[0, 400], [50, 250], [100, 320], [150, 150], [200, 320], [250, 250], [300, 400]]);
     expect(texts(shapes)).toContain('Neckline');
-    expect(shapes.some((shape) => shape.kind === 'segment' && shape.y1 === 320 && shape.y2 === 320 && shape.x2 === 800)).toBe(true);
+    // From the pattern's first point to its last.
+    expect(shapes.some((shape) => shape.kind === 'segment' && shape.x1 === 0 && shape.y1 === 320 && shape.x2 === 300 && shape.y2 === 320)).toBe(true);
   });
 
   it('triangle pattern meets at its apex', () => {
@@ -130,9 +131,42 @@ describe('patterns, waves and cycles (TVP-3.7)', () => {
     const lines = runTool('cyclic-lines', [[100, 300], [150, 300]]).shapes;
     expect(lines.map((shape) => (shape.kind === 'segment' ? round(shape.x1) : -1))).toEqual([0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800]);
     const cycles = runTool('time-cycles', [[100, 300], [150, 300]]).shapes;
-    expect(cycles).toHaveLength(16);
+    // 16 in the view plus one crossing each edge.
+    expect(cycles).toHaveLength(18);
     const sine = runTool('sine-line', [[100, 200], [150, 300]]).shapes[0];
     expect(sine.kind === 'polyline' && sine.points[0].x).toBe(0);
     expect(sine.kind === 'polyline' && Math.min(...sine.points.map((point) => point.y))).toBeCloseTo(200, 0);
+  });
+});
+
+describe('TVP-3.4/3.5/3.7 review fixes', () => {
+  it('cycles continue however far the view is from A', () => {
+    // A at bar -5000: the lines are still drawn every 50 bars across the view.
+    const lines = runTool('cyclic-lines', [[-5000, 300], [-4950, 300]]).shapes;
+    expect(lines.map((shape) => (shape.kind === 'segment' ? round(shape.x1) : -1))).toEqual([0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800]);
+    // Without a width, time cycles still leave something to select.
+    expect(runTool('time-cycles', [[100, 300], [100, 200]]).shapes).toHaveLength(1);
+  });
+
+  it('hiding labels keeps the pattern lines and fills', () => {
+    const points: [number, number][] = [[0, 400], [50, 250], [100, 320], [150, 150], [200, 320], [250, 250], [300, 400]];
+    const hidden = runTool('head-and-shoulders', points, { properties: { showLabels: false } }).shapes;
+    expect(texts(hidden)).toEqual([]);
+    expect(hidden.some((shape) => shape.kind === 'segment' && shape.y1 === 320 && shape.y2 === 320)).toBe(true);
+    const xabcd = runTool('xabcd-pattern', [[0, 400], [100, 200], [200, 323.6], [300, 250], [400, 360]], { properties: { showLabels: false } }).shapes;
+    expect(xabcd.filter((shape) => shape.kind === 'polygon')).toHaveLength(2);
+  });
+
+  it('three drives puts each ratio on the line joining the legs it compares', () => {
+    const { shapes } = runTool('three-drives-pattern', [[0, 400], [50, 300], [100, 350], [150, 250], [200, 300], [250, 200], [300, 250]]);
+    const ratios = shapes.filter((shape): shape is Extract<DrawingShape, { kind: 'segment' }> => shape.kind === 'segment' && shape.strokeWidth === 1);
+    expect(ratios.map((shape) => [shape.x1, shape.x2])).toEqual([[0, 100], [50, 150], [100, 200], [150, 250]]);
+    // Correction A against drive 1: 50 / 100.
+    expect(texts(shapes)).toContain('0.500');
+  });
+
+  it('emojis show a selection outline', () => {
+    const selected = runTool('emoji', [[200, 200]], { selected: true }).shapes[0];
+    expect(selected).toMatchObject({ kind: 'rect', dash: [3, 3] });
   });
 });

@@ -71,11 +71,13 @@ function patternTool<const Id extends string>(id: Id, label: string, displayName
     defaultProperties: { showLabels: true },
     propertySchema: [{ key: 'showLabels', label: 'Labels and ratios', type: 'boolean' }],
     geometry: (context) => {
-      const labels = booleanProperty(context.properties, 'showLabels', true) ? spec.labels : [];
+      const showLabels = booleanProperty(context.properties, 'showLabels', true);
       const complete = context.points.length >= spec.anchors;
-      const extras = complete && spec.extras && labels.length ? spec.extras(context) : [];
+      const all = complete && spec.extras ? spec.extras(context) : [];
+      // Hiding labels and ratios hides their text and the dashed ratio lines, not the pattern's own lines and fills.
+      const extras = showLabels ? all : all.filter((shape) => shape.kind !== 'text' && !(shape.kind === 'segment' && shape.strokeWidth === 1 && shape.dash));
       const fills = extras.filter((shape) => shape.kind === 'polygon');
-      return [...fills, ...labelledPolyline(context, labels), ...extras.filter((shape) => shape.kind !== 'polygon')];
+      return [...fills, ...labelledPolyline(context, showLabels ? spec.labels : []), ...extras.filter((shape) => shape.kind !== 'polygon')];
     },
   });
 }
@@ -156,12 +158,13 @@ export const threeDrivesPatternTool = patternTool('three-drives-pattern', 'Three
   labels: ['', '1', '', '2', '', '3', ''],
   extras: (context) => {
     const p = raw(context);
-    // Each correction against its drive, and each drive against the one before.
+    // Each ratio on the line joining the outer ends of the two legs it compares (as XABCD's): correction A against
+    // drive 1, drive 2 against correction A, correction B against drive 2, drive 3 against correction B.
     return [
-      ...ratioLine(context, 1, 3, moveRatio(p[0], p[1], p[1], p[2])),
-      ...ratioLine(context, 3, 5, moveRatio(p[2], p[3], p[3], p[4])),
-      ...ratioLine(context, 2, 4, moveRatio(p[1], p[2], p[2], p[3])),
-      ...ratioLine(context, 4, 6, moveRatio(p[3], p[4], p[4], p[5])),
+      ...ratioLine(context, 0, 2, moveRatio(p[0], p[1], p[1], p[2])),
+      ...ratioLine(context, 1, 3, moveRatio(p[1], p[2], p[2], p[3])),
+      ...ratioLine(context, 2, 4, moveRatio(p[2], p[3], p[3], p[4])),
+      ...ratioLine(context, 3, 5, moveRatio(p[3], p[4], p[4], p[5])),
     ];
   },
 });
@@ -170,9 +173,11 @@ export const headAndShouldersTool = patternTool('head-and-shoulders', 'Head and 
   anchors: 7,
   labels: ['', 'Left shoulder', '', 'Head', '', 'Right shoulder', ''],
   extras: (context) => {
-    // The neckline through the two troughs (anchors 3 and 5), across the pattern and beyond.
-    const [, , left, , right] = context.points;
-    const [start, end] = extendedSegment(left, right, context.viewport, false, true);
+    // The neckline through the two troughs (anchors 3 and 5), across the pattern from its first to its last point.
+    const [first, , left, , right, , last] = context.points;
+    const slope = right.x === left.x ? 0 : (right.y - left.y) / (right.x - left.x);
+    const start = { x: first.x, y: left.y + slope * (first.x - left.x) };
+    const end = { x: last.x, y: left.y + slope * (last.x - left.x) };
     return [
       { kind: 'segment', x1: start.x, y1: start.y, x2: end.x, y2: end.y, ...lineStroke(context), dash: [6, 4] },
       { kind: 'text', x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 + 16, text: 'Neckline', align: 'middle', fontSize: 11, fill: context.style.color, hit: 'none' },
@@ -207,18 +212,33 @@ export const elliottTripleComboTool = patternTool('elliott-triple-combo-wave', '
 
 // Cycles.
 
-/** The x of each multiple of the A-B bar distance from A across the viewport (both ways), at most `limit`. */
-function cycleXs(context: DrawingGeometryContext, limit = 200): number[] {
+/** The bar index at the pane's x, from two projected anchors (x is linear in bar index on the chart). */
+function indexAtX(context: DrawingGeometryContext, x: number, start: number, end: number): number | null {
+  const [a, b] = context.points;
+  if (Math.abs(b.x - a.x) < 1e-9) return null;
+  return start + (end - start) * (x - a.x) / (b.x - a.x);
+}
+
+/**
+ * The x of each multiple of the A-B bar distance from A that falls in the view, plus one beyond each edge (so arcs
+ * crossing an edge are drawn), at most `limit`. Counted from the view, so the cycles continue however far it is from A.
+ */
+export function cycleXs(context: DrawingGeometryContext, limit = 200): number[] {
   const [first, second] = context.rawPoints;
   const start = context.barIndexForTime(first.time);
   const end = context.barIndexForTime(second.time);
   if (start === null || end === null || end === start) return [context.points[0].x];
   const step = Math.abs(end - start);
+  const left = indexAtX(context, 0, start, end);
+  const right = indexAtX(context, context.viewport.width, start, end);
+  if (left === null || right === null) return [context.points[0].x];
+  const fromN = Math.floor((Math.min(left, right) - start) / step) - 1;
+  const toN = Math.ceil((Math.max(left, right) - start) / step) + 1;
   const xs: number[] = [];
-  for (let n = -limit; n <= limit && xs.length < limit; n += 1) {
+  for (let n = fromN; n <= toN && xs.length < limit; n += 1) {
     const time = context.timeForBarIndex(start + step * n);
     const at = time ? context.project({ time, price: first.price }) : null;
-    if (at && at.x >= -1 && at.x <= context.viewport.width + 1) xs.push(at.x);
+    if (at) xs.push(at.x);
   }
   return xs;
 }
@@ -231,7 +251,10 @@ export const cyclicLinesTool = defineDrawingTool({
   creation: { gesture: 'drag' },
   defaultProperties: {},
   propertySchema: [],
-  geometry: (context) => cycleXs(context).map((x): DrawingShape => ({ kind: 'segment', x1: x, y1: 0, x2: x, y2: context.viewport.height, ...lineStroke(context) })),
+  draftPreview: 'shapes',
+  geometry: (context) => cycleXs(context)
+    .filter((x) => x >= -1 && x <= context.viewport.width + 1)
+    .map((x): DrawingShape => ({ kind: 'segment', x1: x, y1: 0, x2: x, y2: context.viewport.height, ...lineStroke(context) })),
 });
 
 export const timeCyclesTool = defineDrawingTool({
@@ -240,13 +263,16 @@ export const timeCyclesTool = defineDrawingTool({
   displayName: 'Time Cycles',
   group: 'cycles',
   creation: { gesture: 'drag' },
+  draftPreview: 'shapes',
   defaultProperties: { fill: true },
   propertySchema: [{ key: 'fill', label: 'Background', type: 'boolean' }],
   geometry: (context) => {
     // Half circles on A's level, each one A-B wide, repeating across the chart.
-    const [first] = context.points;
+    const [first, second] = context.points;
     const xs = cycleXs(context).sort((x, y) => x - y);
     const fill = booleanProperty(context.properties, 'fill', true) ? areaFill(context.style.color) : {};
+    // Without a width (A and B on one bar, or no bars), a marker line between the anchors stays to select.
+    if (xs.length < 2) return [{ kind: 'segment', x1: first.x, y1: first.y, x2: second.x, y2: second.y, ...lineStroke(context) }];
     const shapes: DrawingShape[] = [];
     for (let index = 0; index < xs.length - 1; index += 1) {
       const radius = (xs[index + 1] - xs[index]) / 2;
@@ -267,6 +293,7 @@ export const sineLineTool = defineDrawingTool({
   displayName: 'Sine Line',
   group: 'cycles',
   creation: { gesture: 'drag' },
+  draftPreview: 'shapes',
   defaultProperties: {},
   propertySchema: [],
   geometry: (context) => {
