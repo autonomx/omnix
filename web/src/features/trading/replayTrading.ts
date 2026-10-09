@@ -36,6 +36,8 @@ export function createReplaySnapshot(source: PaperAccountSnapshot): PaperAccount
     order_history: [],
     recent_fills: [],
     recent_ledger: [],
+    // Replay trades on cash alone (no leverage or margin calls), so it carries no margin status.
+    margin_status: null,
   };
 }
 

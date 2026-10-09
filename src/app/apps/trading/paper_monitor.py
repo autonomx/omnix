@@ -7,6 +7,7 @@ import hashlib
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, cast
 
 from app.runtime.features import FeatureContext
@@ -17,8 +18,12 @@ from .execution import ExecutionObservation
 from .order_gateway import OrderGateway
 from .providers.request_budget import in_provider_lane
 from .paper import (
+    PaperAccountSnapshot,
+    PaperMarginPosition,
     PaperMarketObservation,
     PaperOrderRequest,
+    paper_margin_call_closes,
+    paper_margin_status,
     paper_observation_moment,
     paper_order_is_expired,
     paper_price_tick,
@@ -36,6 +41,14 @@ from .service import TradingMarketDataService, default_market_data_service
 
 
 _MONITOR_STATE_KEY = "_omnix_trading_paper_monitor"
+# Orders a margin call places (TVP-7.2b) carry this prefix, so the account shows them as margin calls.
+MARGIN_CALL_ORDER_PREFIX = "paper-margin-call-"
+
+
+def _uses_margin(snapshot: PaperAccountSnapshot) -> bool:
+    """Whether equity can fall below the margin the positions need: leverage, or any short."""
+    leveraged = any(margin.long_pct < 100 or margin.short_pct < 100 for margin in snapshot.account.margin.values())
+    return leveraged or any(position.quantity < 0 for position in snapshot.positions)
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
@@ -133,6 +146,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
         self.active_target_count = 0
         self.active_order_count = 0
         self.active_protection_count = 0
+        self.margin_call_count = 0
 
     def tick_seconds(self) -> float:
         return min(self.interval_seconds, self.active_interval_seconds)
@@ -343,11 +357,78 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
         self.protection_trigger_count += 1
         self.wake()
 
+    async def _margin_call(self, account_id: str, prices: dict[str, Any], repository: TradingPaperRepository) -> None:
+        """Close positions while equity is below the margin they need (TVP-7.2b): most margin first, only as far as needed.
+
+        Each close is a reducing market order whose id and idempotency key follow from the position it closes, so a
+        restart or a second tick places it once; while one is working for an instrument, no other is placed for it.
+        """
+        snapshot = await asyncio.to_thread(repository.snapshot, account_id)
+        base = next((balance for balance in snapshot.balances if balance.currency == snapshot.account.base_currency), None)
+        if base is None:
+            return
+        open_positions = {position.instrument_id: position for position in snapshot.positions if position.quantity != 0}
+        margin_positions = [
+            PaperMarginPosition(item.instrument_id, item.quantity, item.average_cost, prices.get(item.instrument_id, item.last_price))
+            for item in open_positions.values()
+        ]
+        status = paper_margin_status(snapshot.account, base.available, base.reserved, margin_positions)
+        for instrument_id, quantity in paper_margin_call_closes(snapshot.account, status, margin_positions):
+            position = open_positions[instrument_id]
+            if any(order.instrument_id == instrument_id and order.order_id.startswith(MARGIN_CALL_ORDER_PREFIX) for order in snapshot.open_orders):
+                continue
+            close_side = "sell" if position.quantity > 0 else "buy"
+            # Working orders on the closing side hold the position (sells reserve a long; buys count against a short):
+            # cancel the newest of them until the close fits, the margin call taking their place.
+            same_side = sorted(
+                (order for order in snapshot.open_orders if order.instrument_id == instrument_id and order.side == close_side),
+                key=lambda order: (order.created_at or datetime.min.replace(tzinfo=timezone.utc), order.order_id),
+                reverse=True,
+            )
+            working = sum((order.quantity - order.filled_quantity for order in same_side), Decimal("0"))
+            free = abs(position.quantity) - (position.reserved_quantity if close_side == "sell" else working)
+            for order in same_side:
+                if free >= quantity:
+                    break
+                try:
+                    await asyncio.to_thread(OrderGateway(repository).cancel, account_id, order.order_id)
+                except ValueError:
+                    continue  # filled or cancelled meanwhile
+                free += order.quantity - order.filled_quantity
+            # Earlier margin calls on the instrument (cancelled, rejected or filled) are part of the key, so a new
+            # shortfall after one of them places a new order rather than finding the old one.
+            earlier = sum(1 for order in snapshot.order_history if order.instrument_id == instrument_id and order.order_id.startswith(MARGIN_CALL_ORDER_PREFIX))
+            key = hashlib.sha256(
+                f"margin-call|{account_id}|{instrument_id}|{position.quantity}|{position.average_cost}|{quantity}|{earlier}".encode()
+            ).hexdigest()
+            price = prices.get(instrument_id) or position.last_price or position.average_cost
+            try:
+                await asyncio.to_thread(
+                    OrderGateway(repository).place_reducing,
+                    account_id,
+                    PaperOrderRequest(
+                        order_id=f"{MARGIN_CALL_ORDER_PREFIX}{key[:32]}",
+                        instrument_id=instrument_id,
+                        side=cast(Any, close_side),
+                        order_type="market",
+                        quantity=quantity,
+                        reference_price=price,
+                        idempotency_key=key,
+                    ),
+                )
+            except ValueError as exc:
+                self.last_error = f"paper_margin_call_order: {exc}"
+                continue
+            self.margin_call_count += 1
+            self.wake()
+
     async def run_once(self) -> int:
         repository = self.repository_factory()
         protections = self.protection_repository_factory()
         accounts = await asyncio.to_thread(repository.list_accounts, 100)
         targets: dict[tuple[str, str | None], set[str]] = defaultdict(set)
+        # Accounts whose equity can fall below their margin: their positions are priced every run (TVP-7.2b).
+        margin_accounts: list[str] = []
         active_orders = 0
         active_protections = 0
         for account in accounts:
@@ -363,6 +444,11 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             active_orders += len(snapshot.open_orders)
             for order in snapshot.open_orders:
                 targets[(order.instrument_id, order.binding_id)].add(account.account_id)
+            if _uses_margin(snapshot):
+                margin_accounts.append(account.account_id)
+                for position in snapshot.positions:
+                    if position.quantity != 0:
+                        targets[(position.instrument_id, None)].add(account.account_id)
             try:
                 account_protections = await asyncio.to_thread(
                     protections.list,
@@ -381,6 +467,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
 
         service = self.market_service_factory()
         filled = 0
+        prices: dict[str, Any] = {}
         for (instrument_id, requested_binding), account_ids in sorted(
             targets.items(), key=lambda item: (item[0][0], item[0][1] or "")
         ):
@@ -406,6 +493,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
                     )
                     continue
                 observation = _paper_observation(execution)
+                prices[instrument_id] = observation.price
                 for account_id in sorted(account_ids):
                     fills = await asyncio.to_thread(
                         repository.process_observation,
@@ -423,6 +511,11 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             except Exception as exc:
                 self.last_error = f"{type(exc).__name__}: {exc}"
                 continue
+        for account_id in margin_accounts:
+            try:
+                await self._margin_call(account_id, prices, repository)
+            except Exception as exc:
+                self.last_error = f"paper_margin_call: {type(exc).__name__}: {exc}"
         self.fill_count += filled
         self.last_run_at = datetime.now(timezone.utc)
         return filled
@@ -452,6 +545,7 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             "rejected_quote_count": self.rejected_quote_count,
             "fill_count": self.fill_count,
             "protection_trigger_count": self.protection_trigger_count,
+            "margin_call_count": self.margin_call_count,
             "fail_closed": True,
             "reference_price_fallback": False,
             "server_authoritative_protection": True,

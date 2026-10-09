@@ -16,6 +16,7 @@ import './TradingTerminalDockData.css';
 import { downloadBlob } from '../../shared/download';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 import { PaperShortingField } from './PaperShortingField';
+import { commissionFromAccount, commissionInput, isMarginCallOrder, leverageFromAccount, longMarginFraction, marginFromLeverage } from './paperAccountMargin';
 
 type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal' | 'notifications';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected' | 'expired';
@@ -111,7 +112,8 @@ function rejectionMessage(reason?: string | null): string {
 
 function OrderType({ order }: { order: PaperOrder }) {
   const plain = (order.time_in_force ?? 'gtc') === 'gtc' && order.order_type !== 'trailing_stop';
-  return <>{paperOrderTypeLabel(order.order_type)}{plain ? null : <small> {paperOrderTerms(order)}</small>}</>;
+  const marginCall = isMarginCallOrder(order.order_id) ? <small className="negative"> margin call</small> : null;
+  return <>{paperOrderTypeLabel(order.order_type)}{plain ? null : <small> {paperOrderTerms(order)}</small>}{marginCall}</>;
 }
 
 function OrderStatus({ order }: { order: PaperOrder }) {
@@ -132,14 +134,14 @@ function OrderStatus({ order }: { order: PaperOrder }) {
   </span>;
 }
 
-function defaultSettings(account?: PaperAccount | null): PaperAccountSettings {
-  const commission = account ? Number(account.commission_bps) / 100 : 0.005;
-  return {
+function defaultSettings(account?: PaperAccount | null, stored?: PaperAccountSettings): PaperAccountSettings {
+  const base: PaperAccountSettings = stored ?? {
     marginControl: false,
     leverage: { stocks: '500:1', futures: '500:1', forex: '500:1', crypto: '500:1', others: '500:1' },
-    futuresOptions: false, commissionPerContract: '0.01', othersCommission: true,
-    commission: Number.isFinite(commission) && commission > 0 ? String(commission) : '0.005', commissionType: 'Percent',
+    futuresOptions: false, commissionPerContract: '0.01', othersCommission: true, commission: '0.005', commissionType: 'Percent',
   };
+  // The server holds the leverage and commission (TVP-7.2b); the rest of the dialog is kept in this browser.
+  return account ? { ...base, ...leverageFromAccount(account, base.leverage), ...commissionFromAccount(account) } : base;
 }
 
 /** A fill in the journal: a fill that realized P&L closed a position (TVP-7.2a: shorts too). */
@@ -154,6 +156,13 @@ function defaultCreateDraft(): CreateAccountDraft {
     leverage: { stocks: '1:1', futures: '20:1', forex: '50:1', crypto: '10:1', others: '50:1' },
     othersCommission: false,
   };
+}
+
+/** Saves the dialog's leverage and commission to the account (TVP-7.2b): the server applies them to orders and margin calls. */
+function saveServerSettings(account: PaperAccount, settings: PaperAccountSettings) {
+  return tradingPaperApi.updateAccountSettings(account, {
+    allow_short: account.allow_short ?? false, margin: marginFromLeverage(settings.marginControl, settings.leverage), ...commissionInput(settings),
+  });
 }
 
 function readStoredSettings(): Record<string, PaperAccountSettings> {
@@ -220,18 +229,14 @@ export function TradingTerminalDock({
     }
     return actualPositions;
   }, [displayedSnapshot?.open_orders, positions]);
-  const activeSettings = activeAccount ? settingsByAccount[activeAccount.account_id] ?? defaultSettings(activeAccount) : defaultSettings();
+  const activeSettings = activeAccount ? defaultSettings(activeAccount, settingsByAccount[activeAccount.account_id]) : defaultSettings();
   const baseBalance = useMemo(() => displayedSnapshot?.balances.find((balance) => balance.currency === activeAccount?.base_currency) ?? displayedSnapshot?.balances[0] ?? null, [activeAccount?.base_currency, displayedSnapshot?.balances]);
   const realizedPnl = useMemo(() => (displayedSnapshot?.positions ?? []).reduce((total, position) => total + Number(position.realized_pnl), 0), [displayedSnapshot?.positions]);
   const unrealizedPnl = useMemo(() => (displayedSnapshot?.positions ?? []).reduce((total, position) => total + Number(position.unrealized_pnl), 0), [displayedSnapshot?.positions]);
   const accountBalance = Number(baseBalance?.available ?? 0) + Number(baseBalance?.reserved ?? 0);
-  const equity = accountBalance + unrealizedPnl;
-  const ordersMargin = Number(baseBalance?.reserved ?? 0);
-  const accountMargin = positions.reduce((total, position) => {
-    const leverage = Number.parseFloat(activeSettings.leverage.crypto) || 1;
-    return total + (Number(position.average_cost) * Math.abs(Number(position.quantity))) / leverage;
-  }, 0);
-  const marginBuffer = equity > 0 ? (Number(baseBalance?.available ?? 0) / equity) * 100 : 0;
+  const marginStatus = displayedSnapshot?.margin_status; // TVP-7.2b: equity at last prices, and the margin positions need
+  const equity = marginStatus ? Number(marginStatus.equity) : accountBalance + unrealizedPnl;
+  const ordersMargin = Number(baseBalance?.reserved ?? 0); const accountMargin = marginStatus ? Number(marginStatus.maintenance) : 0; const marginBuffer = equity > 0 ? ((equity - accountMargin) / equity) * 100 : 0;
   const commissionByOrder = useMemo(() => {
     const commissions = new Map<string, string>();
     for (const fill of displayedSnapshot?.recent_fills ?? []) commissions.set(fill.order_id, String(Number(commissions.get(fill.order_id) ?? 0) + Number(fill.commission)));
@@ -336,12 +341,16 @@ export function TradingTerminalDock({
     if (!activeAccount) return;
     setSettingsDraft(activeSettings); setAccountMenuOpen(false); setNotice(null); setModal('settings');
   };
-  const saveSettings = () => {
+  const saveSettings = async () => {
     if (!activeAccount) return;
     const next = { ...settingsByAccount, [activeAccount.account_id]: settingsDraft };
     setSettingsByAccount(next);
     try { window.localStorage.setItem(settingsStorageKey, JSON.stringify(next)); } catch { /* session-only fallback */ }
-    setModal(null); setNotice('Account settings saved for this paper account.');
+    setStatus('saving');
+    try {
+      const saved = await saveServerSettings(activeAccount, settingsDraft); setSnapshot(saved);
+      setAccounts(accounts.map((item) => item.account_id === saved.account.account_id ? saved.account : item)); setStatus('ready'); setModal(null); setNotice('Account settings saved.');
+    } catch (error) { setStatus('error'); setNotice(error instanceof Error && error.message.includes('(409)') ? 'The account changed elsewhere; reopen its settings and try again.' : 'Account settings could not be saved.'); }
   };
   const createAccount = async () => {
     const name = createDraft.name.trim(); const balance = Number(createDraft.balance);
@@ -351,7 +360,7 @@ export function TradingTerminalDock({
       const created = await tradingPaperApi.createAccount({
         account_id: accountIdForName(name), name, base_currency: createDraft.currency,
         initial_cash: createDraft.balance, allow_short: createDraft.allowShort,
-        commission_bps: createDraft.othersCommission ? String(Number(createDraft.commission) * 100) : '0',
+        margin: marginFromLeverage(createDraft.marginControl, createDraft.leverage), ...commissionInput(createDraft),
       });
       setAccounts([created.account, ...accounts.filter((account) => account.account_id !== created.account.account_id)]);
       setAccountId(created.account.account_id); setSnapshot(created); onAccountChange?.(created.account.account_id);
@@ -381,7 +390,7 @@ export function TradingTerminalDock({
   };
 
   const renderLeverageField = (label: string, key: keyof Leverage) => (
-    <label className="trading-account-field"><span>{label}</span><select value={settingsDraft.leverage[key]} onChange={(event) => setSettingsDraft((current) => ({ ...current, leverage: { ...current.leverage, [key]: event.target.value } }))}>{leverageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+    <label className="trading-account-field"><span>{label}</span><select value={key === 'others' ? '1:1' : settingsDraft.leverage[key]} disabled={key === 'others'} onChange={(event) => setSettingsDraft((current) => ({ ...current, leverage: { ...current.leverage, [key]: event.target.value } }))}>{leverageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
   );
   const currentForm = modal === 'create' ? createDraft : settingsDraft;
   const setFormValue = <K extends keyof CreateAccountDraft>(key: K, value: CreateAccountDraft[K]) => {
@@ -450,7 +459,7 @@ export function TradingTerminalDock({
             ) : null}
             {displayedSnapshot && tab === 'history' ? (
               <div className="trading-dock-table-scroll trading-order-history-scroll"><table className="trading-order-history-table"><thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Quantity</th><th>Limit price</th><th>Stop price</th><th>Fill price</th><th>Status</th><th>Commission</th><th>Placing time ↓</th><th>Closing time</th><th>Order ID</th><th>Level ID</th><th>Leverage</th><th>Margin</th></tr></thead><tbody>
-                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td><OrderType order={order} /></td><td>{quantity(order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td><td>{number(commissionByOrder.get(order.order_id))}</td><td>{tableTime(order.created_at)}</td><td>{order.status === 'open' ? '—' : tableTime(order.updated_at)}</td><td>{order.order_id}</td><td>—</td><td>{activeSettings.leverage.crypto}</td><td>{number(String(Number(order.quantity) * Number(order.average_fill_price ?? order.limit_price ?? order.stop_price ?? 0) / Math.max(1, Number.parseFloat(activeSettings.leverage.crypto))))} <small>{activeAccount?.base_currency}</small></td></tr>)}
+                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td><OrderType order={order} /></td><td>{quantity(order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td><td>{number(commissionByOrder.get(order.order_id))}</td><td>{tableTime(order.created_at)}</td><td>{order.status === 'open' ? '—' : tableTime(order.updated_at)}</td><td>{order.order_id}</td><td>—</td><td>{`${Math.round(1 / longMarginFraction(activeAccount, order.instrument_id))}:1`}</td><td>{number(String(Number(order.quantity) * Number(order.average_fill_price ?? order.limit_price ?? order.stop_price ?? 0) * longMarginFraction(activeAccount, order.instrument_id)))} <small>{activeAccount?.base_currency}</small></td></tr>)}
                 {filteredOrders.length === 0 ? <tr><td colSpan={15}>No orders in this filter.</td></tr> : null}
               </tbody></table></div>
             ) : null}
@@ -465,10 +474,10 @@ export function TradingTerminalDock({
         <header><h2 id="trading-account-modal-title">{modal === 'create' ? 'Create account' : 'Account settings'}</h2><button type="button" aria-label="Close account dialog" onClick={() => setModal(null)}>×</button></header>
         <div className="trading-account-modal-body">
           {modal === 'create' ? <><label className="trading-account-field trading-account-field-wide"><span>Account name</span><input autoFocus value={createDraft.name} onChange={(event) => setFormValue('name', event.target.value)} /></label><div className="trading-account-field-grid"><label className="trading-account-field"><span>Balance</span><input inputMode="decimal" value={createDraft.balance} onChange={(event) => setFormValue('balance', event.target.value)} /></label><label className="trading-account-field"><span>Currency</span><select value={createDraft.currency} onChange={(event) => setFormValue('currency', event.target.value)}><option>USD</option><option>CAD</option><option>EUR</option><option>GBP</option></select></label></div></> : <label className="trading-account-field trading-account-field-wide"><span>Account name</span><input value={activeAccount?.name ?? ''} readOnly /></label>}
-          <PaperShortingField mode={modal} draftValue={createDraft.allowShort} onDraftChange={(allowShort) => setCreateDraft((current) => ({ ...current, allowShort }))} account={activeAccount ?? null} onSaved={(next) => { setSnapshot(next); setAccounts(accounts.map((item) => item.account_id === next.account.account_id ? next.account : item)); }} /><fieldset><legend>Leverage</legend><label className="trading-account-check"><input type="checkbox" checked={currentForm.marginControl} onChange={(event) => setFormValue('marginControl', event.target.checked)} /><span>Margin control</span><small>i</small></label><div className="trading-account-field-grid">{modal === 'create' ? <>{(['stocks', 'futures', 'forex', 'crypto', 'others'] as const).map((key) => <label key={key} className="trading-account-field"><span>{key[0].toUpperCase() + key.slice(1)}</span><select value={createDraft.leverage[key]} onChange={(event) => setCreateDraft((current) => ({ ...current, leverage: { ...current.leverage, [key]: event.target.value } }))}>{leverageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>)}</> : <>{renderLeverageField('Stocks', 'stocks')}{renderLeverageField('Futures', 'futures')}{renderLeverageField('Forex', 'forex')}{renderLeverageField('Crypto', 'crypto')}{renderLeverageField('Others', 'others')}</>}</div></fieldset>
+          <PaperShortingField mode={modal} draftValue={createDraft.allowShort} onDraftChange={(allowShort) => setCreateDraft((current) => ({ ...current, allowShort }))} account={activeAccount ?? null} onSaved={(next) => { setSnapshot(next); setAccounts(accounts.map((item) => item.account_id === next.account.account_id ? next.account : item)); }} /><fieldset><legend>Leverage</legend><label className="trading-account-check"><input type="checkbox" checked={currentForm.marginControl} onChange={(event) => setFormValue('marginControl', event.target.checked)} /><span>Margin control</span><small>i</small></label><div className="trading-account-field-grid">{modal === 'create' ? <>{(['stocks', 'futures', 'forex', 'crypto', 'others'] as const).map((key) => <label key={key} className="trading-account-field"><span>{key[0].toUpperCase() + key.slice(1)}</span><select value={key === 'others' ? '1:1' : createDraft.leverage[key]} disabled={key === 'others'} onChange={(event) => setCreateDraft((current) => ({ ...current, leverage: { ...current.leverage, [key]: event.target.value } }))}>{leverageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>)}</> : <>{renderLeverageField('Stocks', 'stocks')}{renderLeverageField('Futures', 'futures')}{renderLeverageField('Forex', 'forex')}{renderLeverageField('Crypto', 'crypto')}{renderLeverageField('Others', 'others')}</>}</div></fieldset>
           <fieldset><legend>Commission</legend><label className="trading-account-check"><input type="checkbox" checked={currentForm.futuresOptions} onChange={(event) => setFormValue('futuresOptions', event.target.checked)} /><span>Futures and options</span></label><label className="trading-account-field trading-account-field-wide"><span>Commission per contract</span><input inputMode="decimal" value={currentForm.commissionPerContract} disabled={!currentForm.futuresOptions} onChange={(event) => setFormValue('commissionPerContract', event.target.value)} /></label><label className="trading-account-check"><input type="checkbox" checked={currentForm.othersCommission} onChange={(event) => setFormValue('othersCommission', event.target.checked)} /><span>Others</span></label><div className="trading-account-field-grid"><label className="trading-account-field"><span>Commission</span><input inputMode="decimal" value={currentForm.commission} disabled={!currentForm.othersCommission} onChange={(event) => setFormValue('commission', event.target.value)} /></label><label className="trading-account-field"><span>Commission type</span><select value={currentForm.commissionType} onChange={(event) => setFormValue('commissionType', event.target.value as CommissionType)}><option>Percent</option><option>Fixed</option></select></label></div></fieldset>
         </div>
-        <footer><div>{modal === 'settings' ? <><button type="button" className="trading-account-reset" onClick={() => void resetAccount()} disabled={status === 'saving' || replayMode}>Reset account</button><button type="button" className="trading-account-archive" onClick={() => void archiveAccount()} disabled={status === 'saving' || replayMode || !activeAccount?.enabled}>Archive</button></> : null}</div><div><button type="button" onClick={() => setModal(null)}>Cancel</button><button type="button" className="trading-account-primary" onClick={() => modal === 'create' ? void createAccount() : saveSettings()} disabled={status === 'saving'}>{modal === 'create' ? 'Create' : 'Save'}</button></div></footer>
+        <footer><div>{modal === 'settings' ? <><button type="button" className="trading-account-reset" onClick={() => void resetAccount()} disabled={status === 'saving' || replayMode}>Reset account</button><button type="button" className="trading-account-archive" onClick={() => void archiveAccount()} disabled={status === 'saving' || replayMode || !activeAccount?.enabled}>Archive</button></> : null}</div><div><button type="button" onClick={() => setModal(null)}>Cancel</button><button type="button" className="trading-account-primary" onClick={() => void (modal === 'create' ? createAccount() : saveSettings())} disabled={status === 'saving' || (modal === 'settings' && replayMode)}>{modal === 'create' ? 'Create' : 'Save'}</button></div></footer>
       </section></div> : null}
     </section>
   );
