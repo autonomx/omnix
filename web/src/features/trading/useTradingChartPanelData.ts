@@ -14,7 +14,7 @@ import type { useChartPanelState } from './useTradingChartPanelState';
 /** Indicator scheduling: recomputes indicator outputs off the render path. */
 export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState>) {
   const {
-    adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, historyLimitOverride, indicatorSchedulerRef, indicatorSessionRef,
+    adapterRef, barsRef, bindingId, fullscreenIndicatorRef, fullscreenMainPaneRef, historyLimitOverride, indicatorSchedulerRef, indicatorSessionRef,
     indicatorTimerRef, indicators, indicatorsRef, instrumentId, interval, minimizedIndicatorsRef, onActivate,
     onActivateRef, setAlertPlacement, setIndicatorError, setIndicatorOutputs, setIndicatorPaneGeometry,
   } = ws;
@@ -44,7 +44,7 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
       const scheduler = indicatorSchedulerRef.current;
       const targetAdapter = adapterRef.current;
       if (!scheduler || !targetAdapter) return;
-      void scheduler.calculate(barsRef.current, indicatorsRef.current, { session: indicatorSessionRef.current })
+      void scheduler.calculate(barsRef.current, indicatorsRef.current, { session: indicatorSessionRef.current, bindingId })
         .then((outputs) => {
           if (outputs && adapterRef.current === targetAdapter) {
             targetAdapter.setIndicatorOutputs(outputs);
@@ -82,7 +82,7 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
         })
         .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
     }, delay);
-  }, [refreshIndicatorPanes, adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
+  }, [refreshIndicatorPanes, adapterRef, barsRef, bindingId, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
 
   const defaultHistoryLimit = chartHistoryLimit(instrumentId, interval, indicators);
 

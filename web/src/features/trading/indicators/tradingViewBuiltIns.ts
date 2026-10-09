@@ -457,8 +457,17 @@ const DRAWING_INPUTS: Record<string, TradingViewBuiltInInputs> = {
   },
 };
 const DRAWING_INDICATORS = new Set(Object.keys(DRAWING_INPUTS));
-Object.assign(BUILTIN_INPUTS, DRAWING_INPUTS);
-const QUICK_WINS = new Set(Object.keys(BUILTIN_INPUTS).filter((name) => !DRAWING_INDICATORS.has(name)));
+// TVP-6.4: computed from intrabar data off the worker (intrabarIndicators.ts); the options repeat INTRABAR_LOWER_INTERVALS.
+const LOWER_INTERVALS = { auto: 'Auto', '1s': '1s', '5s': '5s', '15s': '15s', '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1H', '4h': '4H', '1d': '1D' };
+const INTRABAR_INPUTS: Record<string, TradingViewBuiltInInputs> = {
+  'Volume Delta': { periodLabel: null, params: [select('lowerInterval', 'Intrabar timeframe', 'auto', LOWER_INTERVALS)] },
+  'Cumulative Volume Delta': {
+    periodLabel: null,
+    params: [select('anchor', 'Anchor period', 'D', PERIOD_OPTIONS), select('lowerInterval', 'Intrabar timeframe', 'auto', LOWER_INTERVALS)],
+  },
+};
+Object.assign(BUILTIN_INPUTS, DRAWING_INPUTS, INTRABAR_INPUTS);
+const QUICK_WINS = new Set(Object.keys(BUILTIN_INPUTS).filter((name) => !DRAWING_INDICATORS.has(name) && !(name in INTRABAR_INPUTS)));
 const SESSION_INDICATORS = new Set(['Time Weighted Average Price', 'Relative Volume at Time', 'Rob Booker Intraday Pivot Points', 'Rob Booker Missed Pivot Points', 'Rob Booker Ziv Ghost Pivots']);
 
 function slugify(name: string): string {
@@ -1624,7 +1633,8 @@ export function calculateTradingViewBuiltInOutputs(
 
 export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInInstance): Array<{ key: string; title: string }> {
   const definition = definitionById.get(instance.id);
-  if (!definition?.available || !isTradingViewBuiltInId(instance.id)) return [];
+  // Intrabar indicators aren't computed here (no golden or server twin) but draw plots all the same.
+  if (!definition || !(definition.available || definition.name in INTRABAR_INPUTS) || !isTradingViewBuiltInId(instance.id)) return [];
   const id = instance.id;
   const name = definition.name;
   const multi: Record<string, Array<[string, string]>> = {
@@ -1671,6 +1681,8 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
     'Trading Sessions': [['sessions', 'Trading Sessions']],
     'Visible Average Price': [['average', 'Visible Average Price']],
     'VWAP Auto Anchored': [['vwap', 'Auto Anchored VWAP']],
+    'Volume Delta': [['delta', 'Volume Delta']],
+    'Cumulative Volume Delta': [['cvd', 'CVD']],
   };
   if (name === 'All Candlestick Patterns') {
     return selectedCandlestickPatterns(String(builtInParams(name, instance).patterns)).map((pattern) => ({ key: `${id}:${pattern.key}`, title: pattern.name }));
