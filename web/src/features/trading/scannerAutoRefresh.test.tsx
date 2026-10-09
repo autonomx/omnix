@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({ definitions: vi.fn(), runs: vi.fn(), results: vi.fn(), start: vi.fn(), create: vi.fn(), cancel: vi.fn() }));
+const api = vi.hoisted(() => ({ definitions: vi.fn(), runs: vi.fn(), results: vi.fn(), start: vi.fn(), create: vi.fn(), update: vi.fn(), cancel: vi.fn() }));
 vi.mock('./tradingScannerApi', () => ({ tradingScannerApi: api }));
+vi.mock('./useTradingAlerts', () => ({ useAlertIndicatorIds: () => new Set(['rsi']) }));
 
 import { resultChanges, useScannerAutoRefresh } from './scannerAutoRefresh';
 import type { TradingScannerResult } from './scannerTypes';
@@ -66,6 +67,23 @@ describe('screener auto-refresh (TVP-9.2)', () => {
     await waitFor(() => expect(api.start).toHaveBeenCalledWith('s1'));
     expect(await screen.findByRole('status')).toHaveTextContent('1 new, 1 dropped (a)');
     expect(screen.getByText('c').closest('tr')).toHaveClass('is-new');
+  });
+
+  it('edits a saved screen and saves it at its revision (TVP-9.1)', async () => {
+    const rules = [{ rule_id: 'up', metric: 'percent_change', operator: 'gte', threshold: '1', period: 14, lookback_bars: 5, role: 'filter', source: null }];
+    const saved = { scanner_id: 's1', name: 'Movers', instrument_ids: ['crypto:X:spot:AAA-USD'], interval: '1h', revision: 4, rules };
+    api.definitions.mockResolvedValue([saved]);
+    api.runs.mockResolvedValue([]);
+    api.update.mockResolvedValue({ ...saved, revision: 5 });
+    api.start.mockResolvedValue({});
+    render(<TradingScannerPanel instruments={[]} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Movers' }));
+    fireEvent.change(screen.getByLabelText('Value of up'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Movers and run' }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith(expect.objectContaining({
+      scanner_id: 's1', revision: 4, interval: '1h', instrument_ids: ['crypto:X:spot:AAA-USD'], rules: [expect.objectContaining({ rule_id: 'up', threshold: '3' })],
+    })));
+    expect(api.create).not.toHaveBeenCalled();
   });
 
   it('never compares results of different screens', async () => {

@@ -11620,7 +11620,7 @@ export interface components {
              * Metric
              * @enum {string}
              */
-            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr";
+            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr" | "indicator" | "relative_volume" | "gap_percent" | "high_distance_percent" | "low_distance_percent";
             /**
              * Operator
              * @enum {string}
@@ -11631,8 +11631,15 @@ export interface components {
              * @default 14
              */
             period?: number;
+            /**
+             * Role
+             * @default filter
+             * @enum {string}
+             */
+            role?: "filter" | "column";
             /** Rule Id */
             rule_id: string;
+            source?: components["schemas"]["IndicatorSource-Input"] | null;
             /** Threshold */
             threshold: number | string;
         };
@@ -11647,7 +11654,7 @@ export interface components {
              * Metric
              * @enum {string}
              */
-            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr";
+            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr" | "indicator" | "relative_volume" | "gap_percent" | "high_distance_percent" | "low_distance_percent";
             /**
              * Operator
              * @enum {string}
@@ -11658,8 +11665,15 @@ export interface components {
              * @default 14
              */
             period: number;
+            /**
+             * Role
+             * @default filter
+             * @enum {string}
+             */
+            role: "filter" | "column";
             /** Rule Id */
             rule_id: string;
+            source: components["schemas"]["IndicatorSource"] | null;
             /** Threshold */
             threshold: string;
         };

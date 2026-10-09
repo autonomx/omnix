@@ -657,7 +657,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               </header>
               <div>
                 <Suspense fallback={<p role="status">Loading analysis tool…</p>}>
-                {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} /> : null}
+                {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} onShowInstrument={(instrumentId) => updateChart(activeChartId, { instrumentId, bindingId: null })} /> : null}
                 {toolPanel === 'replay' ? (
                   <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
                 ) : null}

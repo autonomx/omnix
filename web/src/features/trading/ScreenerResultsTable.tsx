@@ -1,0 +1,67 @@
+import { useMemo, useState } from 'react';
+import { screenerRuleLabel, screenerValue, sortScreenerResults, type ScreenerSort } from './screenerRules';
+import type { TradingScannerResult, TradingScannerRule } from './scannerTypes';
+import { requestWatchlistAdd } from './tradingWatchlistEvents';
+
+function valueText(value: number | null): string {
+  if (value === null) return '—';
+  const digits = Math.abs(value) >= 1_000 ? 0 : Math.abs(value) >= 1 ? 2 : 4;
+  return value.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+/**
+ * A screen's results (TVP-9.1): one column per rule, sortable by any column; a row shows its symbol on the active
+ * chart (and so its colour link group), and the results can be added to the open watchlist.
+ */
+export function ScreenerResultsTable({
+  results, rules, added, symbolOf, onShow,
+}: {
+  results: readonly TradingScannerResult[];
+  rules: readonly TradingScannerRule[];
+  /** Results new since the previous run (TVP-9.2). */
+  added: ReadonlySet<string>;
+  symbolOf: (instrumentId: string) => string;
+  onShow: (instrumentId: string) => void;
+}) {
+  const [sort, setSort] = useState<ScreenerSort>({ key: 'rank', direction: 'asc' });
+  const sorted = useMemo(() => sortScreenerResults(results, rules, sort), [results, rules, sort]);
+  const header = (key: string, label: string) => {
+    const active = sort.key === key;
+    return (
+      <th key={key} aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button type="button" onClick={() => setSort({ key, direction: active && sort.direction === 'desc' ? 'asc' : active ? 'desc' : key === 'symbol' || key === 'rank' ? 'asc' : 'desc' })}>
+          {label}{active ? (sort.direction === 'asc' ? ' ▲' : ' ▼') : ''}
+        </button>
+      </th>
+    );
+  };
+  return (
+    <>
+      <div className="trading-screener-results-actions">
+        <button type="button" disabled={results.length === 0} onClick={() => requestWatchlistAdd(sorted.map((result) => result.instrument_id))}>
+          Add {results.length} to the watchlist
+        </button>
+      </div>
+      <table className="trading-scanner-results">
+        <thead>
+          <tr>
+            {header('rank', 'Rank')}
+            {header('symbol', 'Symbol')}
+            {rules.map((rule) => header(`rule:${rule.rule_id}`, screenerRuleLabel(rule)))}
+            {header('score', 'Score')}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((result) => (
+            <tr key={`${result.run_id}:${result.instrument_id}`} className={added.has(result.instrument_id) ? 'is-new' : undefined} title={added.has(result.instrument_id) ? 'New since the previous run' : undefined}>
+              <td>{result.rank}</td>
+              <td><button type="button" className="trading-screener-symbol" onClick={() => onShow(result.instrument_id)} title="Show on the active chart">{symbolOf(result.instrument_id)}</button></td>
+              {rules.map((rule) => <td key={rule.rule_id}>{valueText(screenerValue(result, rule))}</td>)}
+              <td>{valueText(Number(result.score))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
