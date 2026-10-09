@@ -12,6 +12,7 @@ from app.errors import LegacyPersistenceRetired
 from app.persistence.errors import RevisionConflict
 
 from .alerts_monitor import alert_monitor_interval_seconds
+from .alerts_notify import NotificationSettingsRepository, default_notification_settings_repository
 from .alerts_scripts import script_sources, validate_script_sources
 from .alerts_watchlist import watchlist_members, watchlist_symbol_cap
 from .repositories import TradingDocumentRepository, default_trading_repository
@@ -103,6 +104,7 @@ def create_trading_alert_router(
     delivery_repository_factory: Callable[[], NotificationDeliveryRepository] = default_delivery_repository,
     document_repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
     market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
+    notification_settings_factory: Callable[[], NotificationSettingsRepository] = default_notification_settings_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/alerts", tags=["trading-alerts"])
     channels = frozenset(available_channels)
@@ -188,6 +190,13 @@ def create_trading_alert_router(
             raise HTTPException(status_code=422, detail=f"watchlist {watchlist_id} was not found")
         return watchlist_members(document) or []
 
+    def delivery_or_422(channels) -> None:
+        """Email and push need their setup first (TVP-0.5b/c): settings, and a browser that allows notifications."""
+        if "email" in channels and notification_settings_factory().email() is None:
+            raise HTTPException(status_code=422, detail="set up email delivery before choosing the Email channel")
+        if "push" in channels and not notification_settings_factory().subscriptions():
+            raise HTTPException(status_code=422, detail="turn on notifications in a browser before choosing the Push channel")
+
     def scripts_or_422(conditions) -> None:
         """A script alert's script version must exist and compile (TVP-11.4)."""
         if not script_sources(conditions):
@@ -220,6 +229,7 @@ def create_trading_alert_router(
     def create_alert(request: TradingAlertCreate) -> TradingAlert:
         watchlist_or_422(watchlist_id_of(request.instrument_id))
         scripts_or_422(request.conditions)
+        delivery_or_422(request.parameters.notification_channels)
         repository = repository_factory()
         workspace_id = repository.context.workspace_id
         alert_id = request.alert_id
@@ -304,6 +314,8 @@ def create_trading_alert_router(
                     watchlist_or_422(watchlist_id_of(request.instrument_id))
                 if request.enabled or request.conditions != previous.conditions:
                     scripts_or_422(request.conditions)
+                added = set(request.parameters.notification_channels) - set(previous.parameters.notification_channels)
+                delivery_or_422(added if not request.enabled else request.parameters.notification_channels)
                 plan = plan_webhook(request, state.webhook_ref, workspace_id, alert_id)
                 updated = repository.update(alert_id, request, expected_revision=if_match, webhook_ref=plan.ref)
         except Exception as exc:

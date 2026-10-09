@@ -581,6 +581,45 @@ def delete_alert_webhooks(refs: Iterable[str] = (), *, prefix: str | None = None
     _write_payload(stored_payload)
 
 
+def _alert_notification_secrets(payload: dict[str, Any]) -> dict[str, str]:
+    entries = payload.get("alert_notification_secrets")
+    if not isinstance(entries, dict):
+        return {}
+    return {str(name): str(value) for name, value in entries.items() if isinstance(value, str)}
+
+
+def load_alert_notification_secret(name: str) -> str | None:
+    """An alert delivery credential (TVP-0.5b/c: an SMTP password, the web-push VAPID key), by name.
+
+    Raises ProviderSecretStoreUnavailable when the store cannot be read, like webhooks.
+    """
+    return _alert_notification_secrets(_stored_payload_strict()).get(name)
+
+
+@_serialized
+def save_alert_notification_secret(name: str, value: str) -> None:
+    """Store an alert delivery credential; never in PostgreSQL. Fails closed without an OS credential store."""
+    if sys.platform != "win32":
+        raise LegacyPersistenceRetired("alert delivery credentials require an operating-system credential store")
+    stored_payload = _stored_payload_strict()
+    entries = _alert_notification_secrets(stored_payload)
+    entries[name] = value
+    stored_payload["alert_notification_secrets"] = entries
+    _write_payload(stored_payload)
+
+
+@_serialized
+def delete_alert_notification_secret(name: str) -> None:
+    if sys.platform != "win32":
+        return
+    stored_payload = _stored_payload_strict()
+    entries = _alert_notification_secrets(stored_payload)
+    if entries.pop(name, None) is None:
+        return
+    stored_payload["alert_notification_secrets"] = entries
+    _write_payload(stored_payload)
+
+
 @_serialized
 def save_trading_provider_secrets(
     provider: str,
