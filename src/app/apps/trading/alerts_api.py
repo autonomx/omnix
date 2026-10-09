@@ -12,6 +12,7 @@ from app.errors import LegacyPersistenceRetired
 from app.persistence.errors import RevisionConflict
 
 from .alerts_monitor import alert_monitor_interval_seconds
+from .alerts_scripts import script_sources, validate_script_sources
 from .alerts_watchlist import watchlist_members, watchlist_symbol_cap
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .service import TradingMarketDataService, default_market_data_service
@@ -187,6 +188,15 @@ def create_trading_alert_router(
             raise HTTPException(status_code=422, detail=f"watchlist {watchlist_id} was not found")
         return watchlist_members(document) or []
 
+    def scripts_or_422(conditions) -> None:
+        """A script alert's script version must exist and compile (TVP-11.4)."""
+        if not script_sources(conditions):
+            return
+        try:
+            validate_script_sources(conditions, document_repository_factory())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @router.get("/watchlist-capacity", response_model=WatchlistAlertCapacity)
     def watchlist_capacity(watchlist_id: str = Query(min_length=1, max_length=200)) -> WatchlistAlertCapacity:
         """How many of a watchlist's symbols an alert on it evaluates: its symbols, and the cap their providers allow."""
@@ -209,6 +219,7 @@ def create_trading_alert_router(
     @router.post("", response_model=TradingAlert, status_code=201)
     def create_alert(request: TradingAlertCreate) -> TradingAlert:
         watchlist_or_422(watchlist_id_of(request.instrument_id))
+        scripts_or_422(request.conditions)
         repository = repository_factory()
         workspace_id = repository.context.workspace_id
         alert_id = request.alert_id
@@ -291,6 +302,8 @@ def create_trading_alert_router(
                 # An alert whose watchlist was deleted can still be disabled or edited; it can't be (re)enabled on it.
                 if request.enabled or request.instrument_id != previous.instrument_id:
                     watchlist_or_422(watchlist_id_of(request.instrument_id))
+                if request.enabled or request.conditions != previous.conditions:
+                    scripts_or_422(request.conditions)
                 plan = plan_webhook(request, state.webhook_ref, workspace_id, alert_id)
                 updated = repository.update(alert_id, request, expected_revision=if_match, webhook_ref=plan.ref)
         except Exception as exc:

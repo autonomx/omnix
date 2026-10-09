@@ -8,6 +8,7 @@ import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIn
 import { orderBySources, resolveSourceOutput } from './indicators/indicatorSources';
 import { tradingViewBuiltInUsesSessions } from './indicators/tradingViewBuiltIns';
 import { indicatorContextLabel } from './tradingChartPanelModel';
+import { isScriptIndicatorId, scriptAlertOutput, scriptIdOf, scriptIndicatorName, scriptInputValues, scriptRunStatus } from './scripts/scriptIndicators';
 import type { components } from './api/generated';
 import type { TradingAlertCreateInput } from './tradingTypes';
 
@@ -40,9 +41,27 @@ export type AlertIndicatorChoice = {
   /** `signal`: drawn as markers, valued (at the bar's price) only on the bars where it appears. */
   outputs: Array<{ key: string; title: string; signal?: true }>;
   inputs: components['schemas']['IndicatorSourceInputs-Input'];
+  /** A script indicator (TVP-11.4): the saved revision an alert on it runs, with this chart's inputs. */
+  script?: { scriptId: string; revision: number; inputs: Record<string, string | number | boolean> };
   /** Why the server can't alert on it, when it can't. */
   unavailable?: string;
 };
+
+/** A script indicator as an alert source: its plots, alertcondition() and alert() calls, from the chart's last run. */
+function scriptChoice(instance: CoreIndicatorInstance, outputs: readonly IndicatorOutput[]): AlertIndicatorChoice {
+  const id = String(instance.id);
+  const scriptId = scriptIdOf(id) ?? '';
+  const status = scriptRunStatus(scriptId);
+  const plots = outputs.filter((output) => output.key.startsWith(`${id}:`) && /^p\d+$/.test(output.key.slice(id.length + 1)))
+    .map((output) => ({ key: output.key, title: output.title, ...(output.render === 'markers' ? { signal: true as const } : {}) }));
+  const lines = [...plots, ...(status?.signals ?? []).map((signal) => ({ ...signal, signal: true as const }))];
+  const unavailable = !status?.revision ? 'Waiting for the script to run on the chart' : lines.length === 0 ? 'It has no plot, alertcondition() or alert() to alert on' : undefined;
+  const inputs = Object.fromEntries(Object.entries(scriptInputValues(instance)).filter((entry): entry is [string, string | number | boolean] => ['string', 'number', 'boolean'].includes(typeof entry[1])));
+  return {
+    key: id, label: scriptIndicatorName(instance) ?? id, outputs: lines, inputs: inputsOf(instance),
+    script: { scriptId, revision: status?.revision ?? Number(instance.params?.revision ?? 1), inputs }, ...(unavailable ? { unavailable } : {}),
+  };
+}
 
 /** What the dialog holds for a chart-indicator condition. */
 export type AlertIndicatorSelection = { key: string; output: string; operator: AlertIndicatorOperator };
@@ -76,6 +95,7 @@ export function alertIndicatorChoices(
   serverIds: ReadonlySet<string> | null,
 ): AlertIndicatorChoice[] {
   return instances.filter((instance) => instance.enabled).map((instance) => {
+    if (isScriptIndicatorId(String(instance.id))) return scriptChoice(instance, outputs);
     const source = instance.source ? instances.find((item) => item.id === instance.source!.indicatorId) : undefined;
     const lines = outputs.filter((output) => output.key.split(':', 1)[0] === instance.id)
       .map((output) => ({ key: output.key, title: output.title, ...(output.render === 'markers' ? { signal: true as const } : {}) }));
@@ -104,8 +124,11 @@ export function alertIndicatorChoices(
 /** The condition an indicator selection describes: the output against a value; "appears" is the output above 0. */
 export function indicatorConditionSpec(choice: AlertIndicatorChoice, selection: AlertIndicatorSelection, value: string): ConditionInput {
   const appears = selection.operator === 'appears';
+  const output = choice.script ? scriptAlertOutput(selection.output) : null;
   return {
-    source: { kind: 'indicator', indicator_id: choice.key, inputs: choice.inputs, output: selection.output },
+    source: choice.script && output
+      ? { kind: 'script', script_id: choice.script.scriptId, revision: choice.script.revision, inputs: choice.script.inputs, output }
+      : { kind: 'indicator', indicator_id: choice.key, inputs: choice.inputs, output: selection.output },
     operator: selection.operator === 'appears' ? 'greater_than' : selection.operator,
     target: { kind: 'value', value: appears ? APPEARS_VALUE : value },
   };
@@ -173,7 +196,7 @@ function singleIndicatorCondition(alert: ChartAlert): IndicatorValueCondition | 
 
 /** Whether a condition is a signal output's "appears" (greater than APPEARS_VALUE). */
 export function isAppearsCondition(condition: { source: { kind: string }; operator?: string; target?: { kind: string; value?: string | number } | null }): boolean {
-  return condition.source.kind === 'indicator' && condition.operator === 'greater_than' && condition.target?.kind === 'value'
+  return (condition.source.kind === 'indicator' || condition.source.kind === 'script') && condition.operator === 'greater_than' && condition.target?.kind === 'value'
     && Number(condition.target.value) <= Number(APPEARS_VALUE) / 10;
 }
 

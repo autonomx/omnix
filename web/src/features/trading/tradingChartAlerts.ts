@@ -86,6 +86,8 @@ function conditionPartLabel(part: ConditionPart): string {
     case 'change_percent': return `Change % (${part.lookback_bars})`;
     case 'indicator': return part.output;
     case 'trendline': return 'Trendline';
+    // TVP-11.4: a script's plot (numbered from 1), alertcondition() or alert() calls.
+    case 'script': return part.output === 'alert' ? 'Script alert()' : part.output.startsWith('alertcondition:') ? 'Script alertcondition()' : `Script plot ${Number(part.output.split(':')[1]) + 1}`;
     case 'value': return formatAlertThreshold(part.value);
     case 'source': return conditionPartLabel(part.source);
     case 'channel': return `${conditionPartLabel(part.lower)} – ${conditionPartLabel(part.upper)}`;
@@ -96,7 +98,7 @@ function conditionPartLabel(part: ConditionPart): string {
 /** A one-line description of an alert's conditions, e.g. "Price crossing up 100.00 and rsi:14 greater than 70.00". */
 export function alertConditionsSummary(alert: Pick<TradingAlert, 'conditions'>): string {
   return (alert.conditions ?? []).map((condition) => {
-    if (isAppearsCondition(condition)) return `${conditionPartLabel(condition.source)} appears`;
+    if (isAppearsCondition(condition)) return `${conditionPartLabel(condition.source)} ${condition.source.kind === 'script' ? 'fires' : 'appears'}`;
     const operator = operatorLabels[condition.operator] ?? condition.operator;
     const tail = condition.target
       ? conditionPartLabel(condition.target)

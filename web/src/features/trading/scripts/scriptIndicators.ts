@@ -276,10 +276,37 @@ function mapDrawings(
   if (tables > 0) notDrawn.push(`table ×${tables}`);
 }
 
+/** A script's alertcondition() calls and its alert() calls, as the alert dialog's signal outputs (TVP-11.4). */
+export function scriptSignals(id: string, result: ScriptRunResult, source: string): Array<{ key: string; title: string }> {
+  return [
+    ...result.plots.filter((plot) => plot.kind === 'alertcondition').map((plot) => ({ key: `${id}:ac${plot.index}`, title: plot.title })),
+    ...(/\balert\s*\(/.test(source) ? [{ key: `${id}:alert`, title: 'Any alert() function call' }] : []),
+  ];
+}
+
+/** The server's output name for a script indicator's output key (`script-x:p3` is `plot:3`), or null. */
+export function scriptAlertOutput(key: string): string | null {
+  const suffix = key.slice(key.indexOf(':') + 1);
+  const plot = /^p(\d+)$/.exec(suffix);
+  if (plot) return `plot:${plot[1]}`;
+  const condition = /^ac(\d+)$/.exec(suffix);
+  if (condition) return `alertcondition:${condition[1]}`;
+  return suffix === 'alert' ? 'alert' : null;
+}
+
 // --- Running scripts for the chart -----------------------------------------------------------------------------------
 
-/** What a chart's last run of a script reported, for the editor's console. */
-export type ScriptRunStatus = { at: number; error: string | null; logs: ScriptRunResult['logs']; notDrawn: string[] };
+/** What a chart's last run of a script reported: for the editor's console, and the alert dialog's script signals. */
+export type ScriptRunStatus = {
+  at: number;
+  error: string | null;
+  logs: ScriptRunResult['logs'];
+  notDrawn: string[];
+  /** The script revision that ran, which an alert on it keeps (TVP-11.4). */
+  revision?: number;
+  /** Its alertcondition() calls and, when it calls alert(), "alert": what the alert dialog offers besides its plots. */
+  signals?: Array<{ key: string; title: string }>;
+};
 const statuses = new Map<string, ScriptRunStatus>();
 const statusListeners = new Set<() => void>();
 
@@ -366,7 +393,10 @@ export async function calculateScriptIndicatorOutputs(
       return [];
     }
     const mapped = scriptOutputs(indicator, response.result, response.times, bars);
-    recordStatus(scriptId, { at: Date.now(), error: null, logs: response.result.logs, notDrawn: mapped.notDrawn });
+    recordStatus(scriptId, {
+      at: Date.now(), error: null, logs: response.result.logs, notDrawn: mapped.notDrawn, revision: script.revision,
+      signals: scriptSignals(String(indicator.id), response.result, script.source),
+    });
     return mapped.outputs;
   } catch (error) {
     recordStatus(scriptId, { at: Date.now(), error: error instanceof Error ? error.message : String(error), logs: [], notDrawn: [] });

@@ -196,6 +196,19 @@ class TradingDocumentRepository:
             for row in rows
         ]
 
+    def script_version_at(self, script_id: str, revision: int) -> dict[str, Any] | None:
+        """The script as it was at document revision ``revision``: the newest version saved at or before it."""
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                """
+                SELECT revision FROM omnix_trading_script_versions
+                 WHERE workspace_id = %s AND script_id = %s AND revision <= %s
+                 ORDER BY revision DESC LIMIT 1
+                """,
+                (self.context.workspace_id, script_id, revision),
+            ).fetchone()
+        return None if row is None else self.script_version(script_id, int(row[0]))
+
     def script_version(self, script_id: str, revision: int) -> dict[str, Any] | None:
         with self.uow_factory() as uow:
             row = uow.connection.execute(

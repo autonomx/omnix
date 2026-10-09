@@ -28,6 +28,7 @@ from .alert_conditions import (
     ChangePercentSource,
     ChannelTarget,
     IndicatorSource,
+    ScriptSource,
     PriceSource,
     SourceTarget,
     TrendlineSource,
@@ -78,6 +79,8 @@ class ConditionObservation:
     upper_previous: Decimal | None = None
     lower_previous: Decimal | None = None
     base: Decimal | None = None
+    # A script's alert() or alertcondition message on this bar (TVP-11.4).
+    message: str | None = None
 
     def payload(self) -> dict[str, Any]:
         values = {
@@ -96,6 +99,7 @@ class ConditionObservation:
             "operator": self.operator,
             "met": self.met,
             **{name: str(value) for name, value in values.items() if value is not None},
+            **({"message": self.message} if self.message is not None else {}),
         }
 
 
@@ -214,6 +218,7 @@ class _BarValues:
         self.bars = bars
         self._series: BarSeries | None = None
         self._indicator_cache: dict[tuple[Any, ...], dict[int, float]] = {}
+        self._script_cache: dict[str, Any] = {}
 
     def series(self) -> BarSeries:
         if self._series is None:
@@ -238,7 +243,24 @@ class _BarValues:
             return _trendline_value(source, self.bars[index].end_time)
         if isinstance(source, IndicatorSource):
             return self._indicator(source, index)
+        if isinstance(source, ScriptSource):
+            value = self._script(source).values.get(index)
+            return None if value is None else _decimal(value)
         return None
+
+    def _script(self, source: ScriptSource) -> Any:
+        """The script run once per source and bar list, in a worker process (``alerts_scripts.py``)."""
+        key = source.model_dump_json()
+        series = self._script_cache.get(key)
+        if series is None:
+            from .alerts_scripts import script_alert_series
+
+            series = script_alert_series(source, self.bars)
+            self._script_cache[key] = series
+        return series
+
+    def script_message(self, source: Any, index: int) -> str | None:
+        return self._script(source).messages.get(index) if isinstance(source, ScriptSource) else None
 
     def _price(self, name: str, index: int) -> Decimal | None:
         bar = self.bars[index]
@@ -320,6 +342,7 @@ def _evaluate_condition(values: _BarValues, position: int, condition: AlertCondi
         condition.operator, source, target=target, upper=upper, lower=lower, base=base, amount=condition.amount
     )
     return ConditionObservation(
+        message=values.script_message(condition.source, index) if met else None,
         position=position,
         operator=condition.operator,
         met=met,
@@ -379,9 +402,15 @@ def evaluate_conditions(
 # --- History -------------------------------------------------------------------
 
 
+# Bars a script alert reads before the evaluated bar: scripts declare no warm-up, so a fixed, generous history.
+SCRIPT_ALERT_LOOKBACK = 300
+
+
 def _source_lookback(source: Any) -> int:
     if isinstance(source, ChangePercentSource):
         return source.lookback_bars
+    if isinstance(source, ScriptSource):
+        return SCRIPT_ALERT_LOOKBACK
     if not isinstance(source, IndicatorSource):
         return 0
     inputs = source.inputs

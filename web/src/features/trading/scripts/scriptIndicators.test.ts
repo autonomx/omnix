@@ -140,3 +140,36 @@ describe('script runs on a live chart', () => {
     }
   });
 });
+
+describe('alerts on script indicators (TVP-11.4)', () => {
+  it('offers the plots, alertcondition() and alert() calls of the run, and alerts on the revision that ran', async () => {
+    vi.clearAllMocks();
+    forgetScriptSource('salert');
+    const { alertIndicatorChoices, withChartIndicatorCondition } = await import('../alertIndicatorSources');
+    const { alertConditionsSummary } = await import('../tradingChartAlerts');
+    tradingApi.document.mockResolvedValue({ record_id: 'salert', revision: 4, payload: { name: 'Breakout', source: 'plot(close)\nalertcondition(close > 1, "Up")\nif close > 2\n    alert("x")' } });
+    scriptsApi.run.mockResolvedValue({
+      times: runTimes, error: null,
+      result: result({ plots: [
+        { index: 0, kind: 'plot', title: 'Close', options: {}, values: [1, 2, 3, 4, 5], colors: null },
+        { index: 1, kind: 'alertcondition', title: 'Up', options: { message: 'up' }, values: [false, true, true, true, true], colors: null },
+      ] }),
+    });
+    const instance = { ...scriptIndicatorInstance('salert', 'Breakout', false, 3), params: withScriptInput(scriptIndicatorInstance('salert', 'Breakout', false, 3).params, 'Level', 2) };
+    const outputs = await calculateScriptIndicatorOutputs(bars(4), instance);
+    const [choice] = alertIndicatorChoices([instance], outputs, new Set());
+    expect(choice.unavailable).toBeUndefined();
+    expect(choice.outputs).toEqual([
+      { key: 'script-salert:p0', title: 'Close' },
+      { key: 'script-salert:ac1', title: 'Up', signal: true },
+      { key: 'script-salert:alert', title: 'Any alert() function call', signal: true },
+    ]);
+    const input = { condition_type: 'price_above', threshold: '0', parameters: {} } as never as Parameters<typeof withChartIndicatorCondition>[0];
+    expect(withChartIndicatorCondition(input, [choice], { key: choice.key, output: 'script-salert:ac1', operator: 'appears' }, '0')).toBe(true);
+    expect(input.conditions?.[0].source).toEqual({ kind: 'script', script_id: 'salert', revision: 4, inputs: { Level: 2 }, output: 'alertcondition:1' });
+    expect(alertConditionsSummary(input as never)).toBe('Script alertcondition() fires');
+    withChartIndicatorCondition(input, [choice], { key: choice.key, output: 'script-salert:p0', operator: 'crossing_up' }, '3');
+    expect(input.conditions?.[0]).toMatchObject({ source: { output: 'plot:0' }, operator: 'crossing_up', target: { kind: 'value', value: '3' } });
+    expect(alertConditionsSummary(input as never)).toContain('Script plot 1');
+  });
+});

@@ -25,6 +25,7 @@ from .alert_conditions import (
     ChannelTarget,
     PriceSource,
     TrendlineAlertPoint,
+    ScriptSource,
     TrendlineSource,
     ValueTarget,
     condition_sources,
@@ -303,6 +304,9 @@ class _AlertWrite(_AlertContract):
             # One definition for every symbol of a list: a trendline is drawn on one symbol's chart.
             if any(isinstance(source, TrendlineSource) for condition in self.conditions for source in condition_sources(condition)):
                 raise ValueError("a watchlist alert cannot use a trendline")
+            # A script run per symbol and pass is more than the monitor's budget allows.
+            if any(isinstance(source, ScriptSource) for condition in self.conditions for source in condition_sources(condition)):
+                raise ValueError("a watchlist alert cannot use a script")
             if self.binding_id is not None:
                 raise ValueError("a watchlist alert uses each symbol's own feed, not a binding")
         elif self.evaluation_policy.symbol_limit is not None:
@@ -1163,7 +1167,9 @@ class TradingAlertRepository:
         }
         # The message with its placeholders filled in, as every channel shows it (TVP-1.5).
         names, plots = message_values(alert, outcome, interval=context.interval, evaluated_at=evaluated_at)
-        payload["message"] = render_alert_message(alert.parameters.message.strip(), names, plots)
+        # Without a message of its own, a script alert says what the script's alert() or alertcondition says (TVP-11.4).
+        template = alert.parameters.message.strip() or next((item.message for item in outcome.observations if item.message), "")
+        payload["message"] = render_alert_message(template, names, plots)
         inserted = connection.execute(
             f"""
             INSERT INTO omnix_trading_alert_triggers (
