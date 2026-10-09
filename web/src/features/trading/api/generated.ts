@@ -823,6 +823,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/notifications/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Email */
+        get: operations["get_email_api_trading_notifications_email_get"];
+        /** Put Email */
+        put: operations["put_email_api_trading_notifications_email_put"];
+        post?: never;
+        /** Delete Email */
+        delete: operations["delete_email_api_trading_notifications_email_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/notifications/email/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Email */
+        post: operations["test_email_api_trading_notifications_email_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/notifications/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Push */
+        get: operations["get_push_api_trading_notifications_push_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/notifications/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Subscribe */
+        post: operations["subscribe_api_trading_notifications_push_subscriptions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/notifications/push/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unsubscribe */
+        delete: operations["unsubscribe_api_trading_notifications_push_subscriptions__subscription_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/notifications/push/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Push */
+        post: operations["test_push_api_trading_notifications_push_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/paper-analytics/epochs": {
         parameters: {
             query?: never;
@@ -3794,10 +3898,96 @@ export interface components {
         };
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
+        /** DeliveryTestResponse */
+        DeliveryTestResponse: {
+            /** Error */
+            error: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "delivered" | "retry" | "failed";
+        };
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
         /** EmailChangeRequest */
         EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
+        /**
+         * EmailSettings
+         * @description A workspace's SMTP server, as stored and shown (the password is only ``has_password``).
+         */
+        EmailSettings: {
+            /** From Address */
+            from_address: string;
+            /**
+             * Has Password
+             * @default false
+             */
+            has_password: boolean;
+            /** Host */
+            host: string;
+            /**
+             * Port
+             * @default 587
+             */
+            port: number;
+            /**
+             * Security
+             * @default starttls
+             * @enum {string}
+             */
+            security: "starttls" | "tls" | "none";
+            /** To Addresses */
+            to_addresses: string[];
+            /**
+             * Username
+             * @default
+             */
+            username: string;
+        };
+        /** EmailSettingsResponse */
+        EmailSettingsResponse: {
+            /** Configured */
+            configured: boolean;
+            settings: components["schemas"]["EmailSettings"] | null;
+            /** Store Available */
+            store_available: boolean;
+        };
+        /**
+         * EmailSettingsWrite
+         * @description ``password``: None keeps the stored one, an empty string removes it.
+         */
+        EmailSettingsWrite: {
+            /** From Address */
+            from_address: string;
+            /**
+             * Has Password
+             * @default false
+             */
+            has_password?: boolean;
+            /** Host */
+            host: string;
+            /** Password */
+            password?: string | null;
+            /**
+             * Port
+             * @default 587
+             */
+            port?: number;
+            /**
+             * Security
+             * @default starttls
+             * @enum {string}
+             */
+            security?: "starttls" | "tls" | "none";
+            /** To Addresses */
+            to_addresses: string[];
+            /**
+             * Username
+             * @default
+             */
+            username?: string;
+        };
         /**
          * EventReaderDiagnostics
          * @description Live job events in this process (WP-5.4).
@@ -9035,6 +9225,54 @@ export interface components {
          *     become file names.
          */
         PublicAssetRecord: core["schemas"]["PublicAssetRecord"];
+        /** PushSettingsResponse */
+        PushSettingsResponse: {
+            /** Available */
+            available: boolean;
+            /** Public Key */
+            public_key: string | null;
+            /** Subscriptions */
+            subscriptions: components["schemas"]["PushSubscription"][];
+        };
+        /**
+         * PushSubscription
+         * @description A subscription as the API shows it: no endpoint or keys, only the push service's host.
+         */
+        PushSubscription: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Success At */
+            last_success_at: string | null;
+            /** Service */
+            service: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** User Agent */
+            user_agent: string;
+            /** User Id */
+            user_id: string;
+        };
+        /** PushSubscriptionKeys */
+        PushSubscriptionKeys: {
+            /** Auth */
+            auth: string;
+            /** P256Dh */
+            p256dh: string;
+        };
+        /** PushSubscriptionWrite */
+        PushSubscriptionWrite: {
+            /** Endpoint */
+            endpoint: string;
+            keys: components["schemas"]["PushSubscriptionKeys"];
+            /**
+             * User Agent
+             * @default
+             */
+            user_agent?: string;
+        };
         /** QuoteResponse */
         QuoteResponse: {
             /** Binding Id */
@@ -14719,6 +14957,201 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_email_api_trading_notifications_email_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSettingsResponse"];
+                };
+            };
+        };
+    };
+    put_email_api_trading_notifications_email_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailSettingsWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_email_api_trading_notifications_email_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    test_email_api_trading_notifications_email_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryTestResponse"];
+                };
+            };
+        };
+    };
+    get_push_api_trading_notifications_push_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSettingsResponse"];
+                };
+            };
+        };
+    };
+    subscribe_api_trading_notifications_push_subscriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscriptionWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_api_trading_notifications_push_subscriptions__subscription_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_push_api_trading_notifications_push_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryTestResponse"];
                 };
             };
         };

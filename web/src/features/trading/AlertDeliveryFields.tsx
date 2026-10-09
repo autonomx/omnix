@@ -1,3 +1,4 @@
+import { AlertEmailSetup, AlertPushSetup } from './AlertChannelSetup';
 import type { AlertDeliveryEditor } from './alertDelivery';
 import { ALERT_SOUNDS, playAlertSound, type AlertSoundName } from './alertSounds';
 import type { TradingAlertNotificationChannel } from './tradingTypes';
@@ -7,11 +8,14 @@ const CHANNELS: Array<{ value: TradingAlertNotificationChannel; label: string }>
   { value: 'toast', label: 'Toasts' },
   { value: 'sound', label: 'Sound' },
   { value: 'webhook', label: 'Webhook' },
+  { value: 'email', label: 'Email' },
+  { value: 'push', label: 'Push' },
 ];
 
 /**
- * The alert's channels (TVP-1.5): in-app, toast, sound with its sound, and webhook with its URL and optional signing
- * secret. The stored URL and secret are never shown; typing new ones replaces them.
+ * The alert's channels (TVP-1.5): in-app, toast, sound with its sound, webhook with its URL and optional signing
+ * secret, and email and push (TVP-0.5b/c) with their setup. The stored URL and secret are never shown; typing new ones
+ * replaces them.
  */
 export function AlertDeliveryFields({
   editor, onChange,
@@ -57,6 +61,8 @@ export function AlertDeliveryFields({
           />
         </span>
       ) : null}
+      {editor.notifications.includes('email') ? <AlertEmailSetup /> : null}
+      {editor.notifications.includes('push') ? <AlertPushSetup /> : null}
     </>
   );
 }

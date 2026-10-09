@@ -11115,6 +11115,36 @@
         "title": "DeliveryIntent",
         "type": "object"
       },
+      "DeliveryTestResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "outcome": {
+            "enum": [
+              "delivered",
+              "retry",
+              "failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "error"
+        ],
+        "title": "DeliveryTestResponse",
+        "type": "object"
+      },
       "DesktopActivitySignal": {
         "additionalProperties": false,
         "description": "Conservative browser-side visual activity classification.",
@@ -13286,6 +13316,173 @@
           "email"
         ],
         "title": "EmailChangeRequest",
+        "type": "object"
+      },
+      "EmailSettings": {
+        "description": "A workspace's SMTP server, as stored and shown (the password is only ``has_password``).",
+        "properties": {
+          "from_address": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "From Address",
+            "type": "string"
+          },
+          "has_password": {
+            "default": false,
+            "title": "Has Password",
+            "type": "boolean"
+          },
+          "host": {
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "port": {
+            "default": 587,
+            "maximum": 65535,
+            "minimum": 1,
+            "title": "Port",
+            "type": "integer"
+          },
+          "security": {
+            "default": "starttls",
+            "enum": [
+              "starttls",
+              "tls",
+              "none"
+            ],
+            "title": "Security",
+            "type": "string"
+          },
+          "to_addresses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "To Addresses",
+            "type": "array"
+          },
+          "username": {
+            "default": "",
+            "maxLength": 320,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "from_address",
+          "to_addresses",
+          "port",
+          "security",
+          "username",
+          "has_password"
+        ],
+        "title": "EmailSettings",
+        "type": "object"
+      },
+      "EmailSettingsResponse": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmailSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "store_available": {
+            "title": "Store Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "configured",
+          "store_available",
+          "settings"
+        ],
+        "title": "EmailSettingsResponse",
+        "type": "object"
+      },
+      "EmailSettingsWrite": {
+        "description": "``password``: None keeps the stored one, an empty string removes it.",
+        "properties": {
+          "from_address": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "From Address",
+            "type": "string"
+          },
+          "has_password": {
+            "default": false,
+            "title": "Has Password",
+            "type": "boolean"
+          },
+          "host": {
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "port": {
+            "default": 587,
+            "maximum": 65535,
+            "minimum": 1,
+            "title": "Port",
+            "type": "integer"
+          },
+          "security": {
+            "default": "starttls",
+            "enum": [
+              "starttls",
+              "tls",
+              "none"
+            ],
+            "title": "Security",
+            "type": "string"
+          },
+          "to_addresses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "To Addresses",
+            "type": "array"
+          },
+          "username": {
+            "default": "",
+            "maxLength": 320,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "from_address",
+          "to_addresses"
+        ],
+        "title": "EmailSettingsWrite",
         "type": "object"
       },
       "EventReaderDiagnostics": {
@@ -35829,6 +36026,134 @@
           "derived_asset_ids"
         ],
         "title": "PublicAssetRecord",
+        "type": "object"
+      },
+      "PushSettingsResponse": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Key"
+          },
+          "subscriptions": {
+            "items": {
+              "$ref": "#/components/schemas/PushSubscription"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "subscriptions",
+          "public_key"
+        ],
+        "title": "PushSettingsResponse",
+        "type": "object"
+      },
+      "PushSubscription": {
+        "description": "A subscription as the API shows it: no endpoint or keys, only the push service's host.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "subscription_id": {
+            "title": "Subscription Id",
+            "type": "string"
+          },
+          "user_agent": {
+            "title": "User Agent",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subscription_id",
+          "user_id",
+          "service",
+          "user_agent",
+          "created_at",
+          "last_success_at"
+        ],
+        "title": "PushSubscription",
+        "type": "object"
+      },
+      "PushSubscriptionKeys": {
+        "properties": {
+          "auth": {
+            "maxLength": 64,
+            "minLength": 16,
+            "title": "Auth",
+            "type": "string"
+          },
+          "p256dh": {
+            "maxLength": 120,
+            "minLength": 80,
+            "title": "P256Dh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "p256dh",
+          "auth"
+        ],
+        "title": "PushSubscriptionKeys",
+        "type": "object"
+      },
+      "PushSubscriptionWrite": {
+        "properties": {
+          "endpoint": {
+            "maxLength": 2000,
+            "minLength": 12,
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/PushSubscriptionKeys"
+          },
+          "user_agent": {
+            "default": "",
+            "maxLength": 300,
+            "title": "User Agent",
+            "type": "string"
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ],
+        "title": "PushSubscriptionWrite",
         "type": "object"
       },
       "QuoteResponse": {
@@ -78540,6 +78865,221 @@
         "summary": "Get Bounce Model",
         "tags": [
           "trading-models"
+        ]
+      }
+    },
+    "/api/trading/notifications/email": {
+      "delete": {
+        "operationId": "delete_email_api_trading_notifications_email_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Email",
+        "tags": [
+          "trading-notifications"
+        ]
+      },
+      "get": {
+        "operationId": "get_email_api_trading_notifications_email_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Email",
+        "tags": [
+          "trading-notifications"
+        ]
+      },
+      "put": {
+        "operationId": "put_email_api_trading_notifications_email_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailSettingsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Email",
+        "tags": [
+          "trading-notifications"
+        ]
+      }
+    },
+    "/api/trading/notifications/email/test": {
+      "post": {
+        "operationId": "test_email_api_trading_notifications_email_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Test Email",
+        "tags": [
+          "trading-notifications"
+        ]
+      }
+    },
+    "/api/trading/notifications/push": {
+      "get": {
+        "operationId": "get_push_api_trading_notifications_push_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Push",
+        "tags": [
+          "trading-notifications"
+        ]
+      }
+    },
+    "/api/trading/notifications/push/subscriptions": {
+      "post": {
+        "operationId": "subscribe_api_trading_notifications_push_subscriptions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSubscriptionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Subscribe Api Trading Notifications Push Subscriptions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Subscribe",
+        "tags": [
+          "trading-notifications"
+        ]
+      }
+    },
+    "/api/trading/notifications/push/subscriptions/{subscription_id}": {
+      "delete": {
+        "operationId": "unsubscribe_api_trading_notifications_push_subscriptions__subscription_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subscription_id",
+            "required": true,
+            "schema": {
+              "title": "Subscription Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "trading-notifications"
+        ]
+      }
+    },
+    "/api/trading/notifications/push/test": {
+      "post": {
+        "operationId": "test_push_api_trading_notifications_push_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Test Push",
+        "tags": [
+          "trading-notifications"
         ]
       }
     },
