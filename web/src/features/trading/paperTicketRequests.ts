@@ -171,8 +171,11 @@ export function applyPaperTicketPrefill(
   return { kind: 'success', message: `${from} ${detail} Check it, then place the order.` };
 }
 
-/** Panel side: calls `apply` with each pre-fill, also one left before the panel mounted. */
-export function usePaperTicketPrefill(apply: (prefill: PaperTicketPrefill) => void): void {
+/**
+ * Panel side: calls `apply` with each pre-fill, also one left before the panel mounted. Until `ready` (the accounts
+ * are loaded, so a sell knows whether it opens a short) pre-fills wait; they still expire after their lifetime.
+ */
+export function usePaperTicketPrefill(apply: (prefill: PaperTicketPrefill) => void, ready = true): void {
   // The ticket that takes pre-fills is on screen while this is mounted.
   usePaperTicketPresence();
   const handler = useRef(apply);
@@ -180,11 +183,12 @@ export function usePaperTicketPrefill(apply: (prefill: PaperTicketPrefill) => vo
     handler.current = apply;
   });
   useEffect(() => {
+    if (!ready) return;
     const take = () => {
       const prefill = takePaperTicketPrefill();
       if (prefill) handler.current(prefill);
     };
     take();
     return onPaperTicketRequest(take);
-  }, []);
+  }, [ready]);
 }

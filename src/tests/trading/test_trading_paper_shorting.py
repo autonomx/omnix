@@ -134,3 +134,38 @@ def test_a_backtest_with_shorting_reverses_on_crosses() -> None:
     assert shorting.exposure_percent > long_only.exposure_percent
     assert shorting.economic_result_fingerprint == run(True).economic_result_fingerprint
     assert shorting.economic_result_fingerprint != long_only.economic_result_fingerprint
+
+
+def _short_position(quantity: str = "-100", cost: str = "10") -> PaperPosition:
+    return PaperPosition(instrument_id=INSTRUMENT, quantity=Decimal(quantity), average_cost=Decimal(cost), realized_pnl=Decimal("0"))
+
+
+def test_a_short_is_bought_back_through_the_raw_order_route() -> None:
+    events: list[str] = []
+    repo = Repo(events)
+    repo.current = snapshot(positions=[_short_position()])
+    client = _client(repo, Protections(events))
+    body = {"order_id": "cover", "instrument_id": INSTRUMENT, "side": "buy", "order_type": "market", "quantity": "60",
+            "reference_price": "10", "idempotency_key": "cover"}
+    assert client.post("/api/trading/paper/accounts/paper-1/orders", json=body).status_code == 201
+    # More than the short (less what is already working) would open a long: that needs a risk entry.
+    over = {**body, "order_id": "over", "idempotency_key": "over", "quantity": "60"}
+    refused = client.post("/api/trading/paper/accounts/paper-1/orders", json=over)
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "paper_entry_requires_server_risk_authority"
+
+
+def test_open_shorts_hold_buying_power_and_covers_are_not_entries() -> None:
+    held = snapshot(positions=[_short_position("-3000", "10")])
+    preview = preview_paper_risk(
+        snapshot=held.model_copy(update={"account": held.account.model_copy(update={"allow_short": True})}),
+        protections=[PaperPositionProtection(account_id="paper-1", instrument_id=INSTRUMENT, stop_loss=Decimal("11"), status="active")],
+        observation=observation(),
+        request=PaperRiskPreviewRequest(instrument_id="equity:NYSE:OTHER", entry_price=Decimal("10"), stop_price=Decimal("9.9"), desired_risk_pct=Decimal("1")),
+    )
+    # 100,000 less 2 x 30,000 held for the short leaves 40,000.
+    assert preview.buying_power_before == Decimal("40000")
+    cover = PaperOrder(account_id="paper-1", order_id="c", instrument_id=INSTRUMENT, side="buy", order_type="market",
+                       quantity=Decimal("3000"), reference_price=Decimal("12"), idempotency_key="c")
+    protections = [PaperPositionProtection(account_id="paper-1", instrument_id=INSTRUMENT, stop_loss=Decimal("11"), status="exit_submitted")]
+    assert paper_account_open_risk(snapshot(positions=[_short_position("-3000", "10")], open_orders=[cover]), protections) == (Decimal("3000"), 0)

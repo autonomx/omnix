@@ -108,13 +108,30 @@ def _raw_order_is_reducing_long_exposure(
 ) -> bool:
     """Raw HTTP orders are exit-only; new exposure must use server risk intent.
 
-    The currently supported manual workstation is long-entry only. A raw sell is
-    allowed only when the relational position and reservations prove it cannot
-    increase or reverse exposure. Replacement validation gives the cancelled
-    order's reservation back before checking the new quantity.
+    A raw sell is allowed only when the long position and its reservations
+    prove it cannot increase or reverse exposure; a raw buy only when it buys
+    back no more of a short (TVP-7.2a) than the buys already working leave.
+    A replacement gives the replaced order's quantity back before the check.
     """
-    if request.side != "sell":
-        return False
+    def open_orders(side: str):
+        return [
+            order
+            for order in snapshot.open_orders
+            if order.instrument_id == request.instrument_id
+            and order.side == side
+            and order.status == "open"
+            and order.order_id != replacing_order_id
+        ]
+
+    if request.side == "buy":
+        short = next(
+            (item for item in snapshot.positions if item.instrument_id == request.instrument_id and item.quantity < 0),
+            None,
+        )
+        if short is None:
+            return False
+        working = sum((order.quantity - order.filled_quantity for order in open_orders("buy")), Decimal("0"))
+        return request.quantity <= -short.quantity - working
     position = next(
         (
             item

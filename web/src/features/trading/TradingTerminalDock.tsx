@@ -142,6 +142,12 @@ function defaultSettings(account?: PaperAccount | null): PaperAccountSettings {
   };
 }
 
+/** A fill in the journal: a fill that realized P&L closed a position (TVP-7.2a: shorts too). */
+function fillAction(side: string | undefined, realized: number): string {
+  if (side === 'sell') return realized !== 0 ? 'Close long position' : 'Open short position';
+  return realized !== 0 ? 'Close short position' : 'Open long position';
+}
+
 function defaultCreateDraft(): CreateAccountDraft {
   return {
     name: '', balance: '100000.00', currency: 'USD', allowShort: true, ...defaultSettings(),
@@ -263,7 +269,7 @@ export function TradingTerminalDock({
         const order = ordersById.get(fill.order_id);
         const realized = orderEntries.filter((entry) => entry.entry_type === 'realized_pnl').reduce((total, entry) => total + Number(entry.amount), 0);
         const delta = orderEntries.reduce((total, entry) => total + Number(entry.amount), 0);
-        const action = `${order?.side === 'sell' ? 'Close long position' : 'Open long position'} for symbol ${symbol(fill.instrument_id)} at price ${number(fill.price, 4)} for ${quantity(fill.quantity)} units. Currency: ${fill.order_id ? (baseBalance?.currency ?? activeAccount?.base_currency ?? 'USD') : 'USD'}, rate: 1.000000, point value: 1.000000`;
+        const action = `${fillAction(order?.side, realized)} for symbol ${symbol(fill.instrument_id)} at price ${number(fill.price, 4)} for ${quantity(fill.quantity)} units. Currency: ${fill.order_id ? (baseBalance?.currency ?? activeAccount?.base_currency ?? 'USD') : 'USD'}, rate: 1.000000, point value: 1.000000`;
         return { time: fill.source_time, delta, realized, action };
       }),
     ].sort((left, right) => new Date(left.time ?? 0).getTime() - new Date(right.time ?? 0).getTime());
@@ -429,7 +435,7 @@ export function TradingTerminalDock({
                     const pnl = Number(position.unrealized_pnl);
                     const notional = Number(position.average_cost) * Math.abs(Number(position.quantity));
                     const pnlPercent = notional ? (pnl / notional) * 100 : 0;
-                    const side = position.pendingSide === 'sell' ? 'Exit' : position.pending ? 'Long' : Number(position.quantity) < 0 ? 'Short' : 'Long';
+                    const side = position.pendingSide === 'sell' ? 'Short' : position.pending ? 'Long' : Number(position.quantity) < 0 ? 'Short' : 'Long';
                     return <tr key={`${position.instrument_id}-${position.pending ? position.pendingOrderId : 'open'}`}><td><MarketBadge instrumentId={position.instrument_id} /></td><td className="positive">{side}</td><td>{quantity(position.quantity)}</td><td>{number(position.average_cost)}</td><td>—</td><td>—</td><td>{number(position.last_price)}</td><td className={signedClass(pnl)}>{signedNumber(pnl)} <small>{activeAccount?.base_currency}</small></td><td className={signedClass(pnlPercent)}>{signedNumber(pnlPercent)}%</td><td className="trading-row-actions"><span className={position.pending ? 'trading-pending-position' : 'trading-open-position'}>{position.pending ? 'Working' : 'Open'}</span><button type="button" aria-label={`Edit ${symbol(position.instrument_id)} position`}>⌑</button><button type="button" aria-label={`Close ${symbol(position.instrument_id)} position`}>×</button></td></tr>;
                   })}
                   {displayedPositions.length === 0 ? <tr><td colSpan={10}>No open positions.</td></tr> : null}

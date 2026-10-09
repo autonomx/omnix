@@ -554,15 +554,16 @@ def run_backtest(
                 budget = cash * request.execution_policy.position_size_fraction
                 commission_rate = commission_bps / Decimal("10000")
                 quantity = budget / (open_price * (Decimal("1") + commission_rate))
-                notional = quantity * open_price
-                commission = _commission(notional, commission_bps)
-                if side == "buy":
-                    cash -= notional + commission
-                    position += quantity
-                else:
-                    cash += notional - commission
-                    position -= quantity
+                # A balance a short's loss took below zero opens nothing (the sign would flip the side).
                 if quantity > 0:
+                    notional = quantity * open_price
+                    commission = _commission(notional, commission_bps)
+                    if side == "buy":
+                        cash -= notional + commission
+                        position += quantity
+                    else:
+                        cash += notional - commission
+                        position -= quantity
                     record(quantity, commission)
             pending = None
 

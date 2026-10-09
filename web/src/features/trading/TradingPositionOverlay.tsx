@@ -170,7 +170,7 @@ export function TradingPositionOverlay({
   const openAction = (nextAction: PositionAction) => {
     if (!position || position.pending || quantity <= 0) return;
     if (nextAction === 'reverse' && !isShort) {
-      setActionError('Reverse is unavailable while the paper engine is long-only. Close the position first.');
+      setActionError('Reverse is not available yet: close the position, then place the opposite order.');
       return;
     }
     setActionQuantity(String(quantity));
@@ -236,7 +236,7 @@ export function TradingPositionOverlay({
   const confirmAction = async () => {
     if (!action || !position || (!accountId && !replayMode)) return;
     if (action === 'reverse') {
-      setActionError('Reverse requires short-position support and is intentionally disabled in the current long-only paper engine.');
+      setActionError('Reverse is not available yet: close the position, then place the opposite order.');
       return;
     }
     const closeQuantity = partialClose ? Number(actionQuantity) : quantity;
@@ -377,7 +377,7 @@ export function TradingPositionOverlay({
                 <label className="trading-position-partial"><input type="checkbox" checked={partialClose} onChange={(event) => setPartialClose(event.target.checked)} /> Partial close</label>
                 {partialClose ? <label className="trading-position-partial-quantity">Quantity<input aria-label="Partial close quantity" inputMode="decimal" value={actionQuantity} onChange={(event) => setActionQuantity(event.target.value)} /></label> : null}
               </>
-            ) : <p>Reverse is currently unavailable because the paper engine is long-only.</p>}
+            ) : <p>Reverse is not available yet: close the position, then place the opposite order.</p>}
             {actionError ? <div className="trading-position-action-error" role="alert">{actionError}</div> : null}
             <footer><button type="button" onClick={() => setAction(null)} disabled={actionStatus === 'saving'}>Cancel</button><button type="button" className="primary" onClick={() => void confirmAction()} disabled={actionStatus === 'saving' || action === 'reverse'}>{actionStatus === 'saving' ? 'Saving…' : action === 'close' ? 'Close position' : 'Reverse unavailable'}</button></footer>
           </section>

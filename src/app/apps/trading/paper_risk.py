@@ -148,6 +148,7 @@ def paper_account_open_risk(
     unprotected = 0
 
     long_positions = {item.instrument_id for item in snapshot.positions if item.quantity > 0}
+    short_positions = {item.instrument_id for item in snapshot.positions if item.quantity < 0}
     for position in snapshot.positions:
         if position.quantity == 0:
             continue
@@ -161,8 +162,10 @@ def paper_account_open_risk(
             total += max(Decimal("0"), protection.stop_loss - position.average_cost) * abs(position.quantity)
 
     for order in snapshot.open_orders:
-        # A sell against a long position only reduces it; any other order is an entry.
+        # A sell against a long, or a buy against a short, only reduces it; any other order is an entry.
         if order.side == "sell" and order.instrument_id in long_positions:
+            continue
+        if order.side == "buy" and order.instrument_id in short_positions:
             continue
         remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
         if remaining <= 0:
@@ -207,7 +210,12 @@ def preview_paper_risk(
         (item for item in snapshot.balances if item.currency == snapshot.account.base_currency),
         None,
     )
-    buying_power = balance.available if balance is not None else Decimal("0")
+    # Open shorts hold twice what they cost to buy back: their proceeds and an equal margin (TVP-7.2a).
+    short_liability = sum(
+        (-item.quantity * item.average_cost for item in snapshot.positions if item.quantity < 0),
+        Decimal("0"),
+    )
+    buying_power = max(Decimal("0"), (balance.available if balance is not None else Decimal("0")) - 2 * short_liability)
     spread = observation.spread_bps
     reasons: list[str] = []
     is_short = request.side == "sell"
