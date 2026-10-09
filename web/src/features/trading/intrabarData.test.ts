@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixture } from '../../test/fixture';
 import {
-  autoIntrabarInterval, clearIntrabarCache, formingBar, groupIntrabars, intrabarRange, isIntrabarInterval, loadIntrabars, MAX_INTRABAR_BARS,
+  autoIntrabarInterval, clearIntrabarCache, tradingViewIntrabarInterval, formingBar, groupIntrabars, intrabarRange, isIntrabarInterval, loadIntrabars, MAX_INTRABAR_BARS,
 } from './intrabarData';
 import { tradingApi } from './tradingApi';
 import type { MarketBar } from './tradingTypes';
@@ -26,6 +26,8 @@ afterEach(() => {
 describe('intrabar data (TVP-0.6)', () => {
   it('picks a lower interval that fits inside the chart interval', () => {
     expect(autoIntrabarInterval('30s')).toBeNull();
+    // TradingView's own choice, read for the latest bars (TVP-6.4): 1m intraday, 5m daily, 1h above.
+    expect(['1m', '4h', '1d', '1w'].map(tradingViewIntrabarInterval)).toEqual([null, '1m', '5m', '1h']);
     expect(autoIntrabarInterval('1m')).toBeNull();
     expect(autoIntrabarInterval('5m')).toBe('1m');
     expect(autoIntrabarInterval('1h')).toBe('1m');
