@@ -31,6 +31,19 @@ class CoinMarketCapCredentialStatus(BaseModel):
     storage: str
 
 
+class ProviderKeyStatus(BaseModel):
+    """An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: str
+    configured: bool
+    api_key_masked: str = ""
+    api_key_source: Literal["environment", "os_protected_store", "missing"]
+    api_key_editable: bool
+    storage: str
+
+
 class CoinMarketCapCredentialUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -116,6 +129,20 @@ def _credential_status() -> CoinMarketCapCredentialStatus:
     sources = trading_provider_credential_sources("coinmarketcap")
     api_key = str(credentials.get("api_key") or "")
     return CoinMarketCapCredentialStatus(
+        configured=bool(api_key),
+        api_key_masked=_mask_key(api_key),
+        api_key_source=cast(Any, sources["api_key"]),
+        api_key_editable=sys.platform == "win32" and sources["api_key"] != "environment",
+        storage="Windows DPAPI user store" if sys.platform == "win32" else "environment only",
+    )
+
+
+def _key_status(provider: str) -> ProviderKeyStatus:
+    credentials = load_trading_provider_secrets().get(provider) or {}
+    sources = trading_provider_credential_sources(provider)
+    api_key = str(credentials.get("api_key") or "")
+    return ProviderKeyStatus(
+        provider=provider,
         configured=bool(api_key),
         api_key_masked=_mask_key(api_key),
         api_key_source=cast(Any, sources["api_key"]),
@@ -216,5 +243,25 @@ def create_trading_market_data_router() -> APIRouter:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.get("/providers/fred/credentials", response_model=ProviderKeyStatus)
+    async def fred_credentials() -> ProviderKeyStatus:
+        return await asyncio.to_thread(_key_status, "fred")
+
+    @router.put("/providers/fred/credentials", response_model=ProviderKeyStatus)
+    async def update_fred_credentials(request: CoinMarketCapCredentialUpdate) -> ProviderKeyStatus:
+        updates: dict[str, str | None] = {}
+        if request.api_key is not None:
+            updates["api_key"] = request.api_key
+        if request.clear_api_key:
+            updates["api_key"] = ""
+        if updates:
+            try:
+                await asyncio.to_thread(save_trading_provider_secrets, "fred", updates)
+            except LegacyPersistenceRetired as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await asyncio.to_thread(_key_status, "fred")
 
     return router

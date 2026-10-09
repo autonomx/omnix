@@ -44,6 +44,10 @@ _TRADING_ENVIRONMENT_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "coinmarketcap": {
         "api_key": ("COINMARKETCAP_API_KEY", "CMC_PRO_API_KEY"),
     },
+    # TVP-10.5: the economic calendar's FRED key (decision D-3).
+    "fred": {
+        "api_key": ("OMNIX_FRED_API_KEY", "FRED_API_KEY"),
+    },
 }
 _DESCRIPTION = "Omnix provider API keys"
 _CRYPTPROTECT_UI_FORBIDDEN = 0x01

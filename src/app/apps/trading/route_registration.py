@@ -30,6 +30,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
     from app.apps.trading.snapshots_api import create_trading_snapshots_router
     from app.apps.trading.heatmaps import create_trading_heatmaps_router
     from app.apps.trading.fundamentals import create_trading_fundamentals_router
+    from app.apps.trading.economic_calendar import create_trading_economic_calendar_router
     from app.apps.trading.strategy_api import create_trading_strategy_router
     from app.apps.trading.strategy_operations_api import create_trading_strategy_operations_router
     from app.apps.trading.strategy_prospective_economic_api import (
@@ -50,6 +51,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
         create_trading_snapshots_router,
         create_trading_heatmaps_router,
         create_trading_fundamentals_router,
+        create_trading_economic_calendar_router,
         create_trading_replay_router,
         create_trading_paper_router,
         create_trading_kill_switch_router,
