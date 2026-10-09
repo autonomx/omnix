@@ -5,6 +5,8 @@ import { tradingApi } from './tradingApi';
 import type { BarsResponse, CanonicalInstrument, ProviderBinding, TradingDocument } from './tradingTypes';
 import { TradingWatchlist } from './TradingWatchlist';
 import { useTradingCommandDispatcher } from './commands/useTradingCommands';
+import { onOmnixEvent } from '../../events/bus';
+import './advancedView';
 
 const apple: CanonicalInstrument = {
   instrument_id: 'equity:NASDAQ:AAPL',
@@ -349,6 +351,22 @@ describe('TradingWatchlist add symbol', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Watchlist options' }));
     expect(screen.getByRole('menuitem', { name: 'Rename watchlist' })).toBeDisabled();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('advanced view from the watchlist (TVP-5.4)', () => {
+  it('opens the advanced view on the shown list', async () => {
+    mockDocuments([record]);
+    mockMarketData();
+    const opened = vi.fn();
+    const stop = onOmnixEvent('omnix:trading-advanced-view', opened);
+    render(<TradingWatchlist instruments={[apple]} activeInstrumentId={apple.instrument_id} interval="1m" onSelect={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Select AAPL' });
+    fireEvent.click(screen.getByRole('button', { name: 'Watchlist options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Advanced view' }));
+    expect(opened).toHaveBeenCalledWith({ watchlistId: 'default' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    stop();
   });
 });
 

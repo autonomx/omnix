@@ -9,7 +9,7 @@ function isGeneratedTabName(name: string): boolean {
 }
 
 /** Tools the new-tab launcher opens (TVP-4.4). */
-export type TradingLauncherTool = 'scanner' | 'replay' | 'strategies' | 'tester' | 'seasonals' | 'heatmap' | 'financials' | 'calendar' | 'events' | 'paper';
+export type TradingLauncherTool = 'scanner' | 'replay' | 'strategies' | 'tester' | 'seasonals' | 'heatmap' | 'financials' | 'calendar' | 'events' | 'overview' | 'paper';
 
 const LAUNCHER_TOOLS: ReadonlyArray<{ tool: TradingLauncherTool; label: string }> = [
   { tool: 'scanner', label: 'Screener' },
@@ -21,6 +21,7 @@ const LAUNCHER_TOOLS: ReadonlyArray<{ tool: TradingLauncherTool; label: string }
   { tool: 'financials', label: 'Financials' },
   { tool: 'calendar', label: 'Economic calendar' },
   { tool: 'events', label: 'Earnings & dividends' },
+  { tool: 'overview', label: 'Advanced view' },
   { tool: 'paper', label: 'Paper trading' },
 ];
 
