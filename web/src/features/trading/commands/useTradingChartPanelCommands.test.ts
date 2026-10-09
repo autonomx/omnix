@@ -36,6 +36,7 @@ function mount(active: boolean, replayMode = false) {
   const setAlertPlacement = vi.fn();
   const selectedRangeRef = { current: 30 as number | undefined | null };
   const setSelectedRangeLabel = vi.fn();
+  const copySnapshotLink = vi.fn(async () => 'http://localhost/api/trading/snapshots/x.png');
   const hook = renderHook(() => {
     useTradingCommandDispatcher();
     const [priceScaleSettings, setPriceScaleSettings] = useState<TradingPriceScaleMenuState>(defaultTradingPriceScaleMenuState);
@@ -51,10 +52,11 @@ function mount(active: boolean, replayMode = false) {
       replayMode,
       setAlertPlacement,
       latest: { start_time: '2026-10-08T14:00:00.000Z', close: '101.5' } as never,
+      copySnapshotLink,
     });
     return priceScaleSettings;
   });
-  return { ...fake, hook, openGoToDate, setAlertPlacement, selectedRangeRef, setSelectedRangeLabel };
+  return { ...fake, hook, openGoToDate, setAlertPlacement, selectedRangeRef, setSelectedRangeLabel, copySnapshotLink };
 }
 
 const press = (init: KeyboardEventInit) => act(() => { fireEvent.keyDown(document.body, init); });
@@ -105,7 +107,11 @@ describe('chart panel shortcuts (TVP-2.1)', () => {
     press({ key: 'p', code: 'KeyP', altKey: true });
     expect(chart.hook.result.current.mode).toBe('normal');
 
+    // Alt+S copies a snapshot link (TVP-2.1); Ctrl+Alt+S saves the image.
     press({ key: 's', code: 'KeyS', altKey: true });
+    expect(chart.copySnapshotLink).toHaveBeenCalledTimes(1);
+    expect(download.downloadUrl).not.toHaveBeenCalled();
+    press({ key: 's', code: 'KeyS', altKey: true, ctrlKey: true });
     expect(download.downloadUrl).toHaveBeenCalledWith('data:image/png;base64,AA', 'chart-2.png');
     chart.hook.unmount();
   });

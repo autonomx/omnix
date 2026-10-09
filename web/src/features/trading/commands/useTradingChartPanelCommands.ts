@@ -35,14 +35,14 @@ const MODE_VALUES: Record<TradingPriceScaleMode, PriceScaleMode> = {
 type ChartCommandModel = Pick<
   TradingChartPanelModel,
   | 'active' | 'adapter' | 'chartId' | 'priceScaleSettings' | 'setPriceScaleSettings' | 'selectedRangeRef' | 'setSelectedRangeLabel'
-  | 'openGoToDate' | 'replayMode' | 'setAlertPlacement' | 'latest'
+  | 'openGoToDate' | 'replayMode' | 'setAlertPlacement' | 'latest' | 'copySnapshotLink'
 >;
 
 /** The active chart's keyboard commands (TVP-2.1): move, zoom, reset, price scale, snapshot and go to date (TVP-2.5). */
 export function useTradingChartPanelCommands(ws: ChartCommandModel): void {
   const {
     active, adapter, chartId, openGoToDate, priceScaleSettings, replayMode, setPriceScaleSettings, selectedRangeRef, setSelectedRangeLabel,
-    setAlertPlacement, latest,
+    setAlertPlacement, latest, copySnapshotLink,
   } = ws;
   const ready = () => active && adapter !== null;
   const withAdapter = (action: (target: TradingChartAdapter) => void) => () => {
@@ -74,7 +74,9 @@ export function useTradingChartPanelCommands(ws: ChartCommandModel): void {
   }), ready);
   useTradingCommand('chart.logScale', toggleMode('logarithmic'), ready);
   useTradingCommand('chart.percentScale', toggleMode('percentage'), ready);
-  useTradingCommand('chart.snapshot', withAdapter((target) => downloadUrl(target.snapshotDataUrl(), `${chartId}.png`)), ready);
+  // Alt+S copies a link to a stored snapshot, as TradingView's does; Ctrl+Alt+S saves the image.
+  useTradingCommand('chart.snapshot', () => { void copySnapshotLink(); }, ready);
+  useTradingCommand('chart.snapshotDownload', withAdapter((target) => downloadUrl(target.snapshotDataUrl(), `${chartId}.png`)), ready);
   // Like the toolbar button, go to date is off during replay.
   useTradingCommand('chart.goToDate', openGoToDate, () => ready() && !replayMode);
   // Alt+A: the alert dialog at the last price, as TradingView's "Add alert".

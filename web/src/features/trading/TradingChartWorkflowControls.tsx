@@ -120,6 +120,23 @@ export function ChartCopyImageButton({ ws }: { ws: TradingChartPanelModel }) {
   );
 }
 
+/** Copies a link to a stored snapshot of the chart (TVP-2.5; Alt+S). */
+export function ChartSnapshotLinkButton({ ws }: { ws: TradingChartPanelModel }) {
+  const { snapshotLinkStatus, copySnapshotLink } = ws;
+  const label = snapshotLinkStatus === 'copied' ? 'Link copied' : snapshotLinkStatus === 'error' ? 'Link failed' : snapshotLinkStatus === 'copying' ? 'Saving…' : 'Link';
+  return (
+    <button
+      type="button"
+      onClick={() => void copySnapshotLink()}
+      aria-label="Copy chart snapshot link"
+      title="Save a snapshot of the chart and copy its link (Alt+S); the link opens for signed-in members of this workspace"
+      disabled={snapshotLinkStatus === 'copying'}
+    >
+      {label}
+    </button>
+  );
+}
+
 /** Market session and delayed-data badges beside the symbol. */
 export function ChartMarketStatusBadges({ ws }: { ws: TradingChartPanelModel }) {
   const { active, dataDelay, marketStatus, marketStatusValue } = ws;

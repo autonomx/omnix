@@ -247,6 +247,9 @@ export const tradingApi = {
       cursor = { after_updated_at: last.updated_at, after_record_id: last.record_id };
     }
   },
+  /** A chart image behind a link (TVP-2.1/2.5): the link opens for signed-in members of the workspace. */
+  createSnapshot: (image: string, instrumentId: string, interval: string): Promise<components['schemas']['Snapshot']> =>
+    trading(api.POST('/api/trading/snapshots', { body: { image, instrument_id: instrumentId, interval } })),
   document: (kind: TradingDocumentKind, recordId: string): Promise<TradingDocument> =>
     trading(api.GET(DOCUMENT_PATHS[kind].record, { params: { path: { record_id: recordId } }, cache: 'no-store' })),
   createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>): Promise<TradingDocument> =>
