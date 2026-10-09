@@ -47311,6 +47311,22 @@
         "title": "TradingAlertEvaluationPolicy",
         "type": "object"
       },
+      "TradingAlertIndicatorListResponse": {
+        "properties": {
+          "indicator_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Indicator Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "indicator_ids"
+        ],
+        "title": "TradingAlertIndicatorListResponse",
+        "type": "object"
+      },
       "TradingAlertListResponse": {
         "properties": {
           "alerts": {
@@ -74933,6 +74949,28 @@
           }
         },
         "summary": "Evaluate Alerts",
+        "tags": [
+          "trading-alerts"
+        ]
+      }
+    },
+    "/api/trading/alerts/indicators": {
+      "get": {
+        "description": "The indicators the server evaluates for alerts (TVP-1.3): the dialog offers these, greys out the rest.",
+        "operationId": "list_alert_indicators_api_trading_alerts_indicators_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlertIndicatorListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Alert Indicators",
         "tags": [
           "trading-alerts"
         ]

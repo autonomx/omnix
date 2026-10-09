@@ -245,6 +245,9 @@ export const tradingApi = {
     })),
   alerts: async (): Promise<TradingAlert[]> =>
     (await trading(api.GET('/api/trading/alerts', { cache: 'no-store' }))).alerts,
+  /** The indicators the server evaluates for alerts (TVP-1.3). */
+  alertIndicators: async (): Promise<string[]> =>
+    (await trading(api.GET('/api/trading/alerts/indicators'))).indicator_ids,
   alertTriggers: async (): Promise<TradingAlertTrigger[]> =>
     (await trading(api.GET('/api/trading/alerts/triggers', { cache: 'no-store' }))).triggers,
   createAlert: (input: TradingAlertCreateInput): Promise<TradingAlert> =>

@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
+import { defaultIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
@@ -95,7 +96,7 @@ export function TradingChartAlertOverlay({
   latestPrice,
   symbol,
   placement,
-  onPlacementConsumed,
+  onPlacementConsumed, indicatorChoices,
 }: {
   adapter: TradingChartAdapter | null;
   instrumentId: string;
@@ -104,7 +105,7 @@ export function TradingChartAlertOverlay({
   latestPrice: number;
   symbol: string;
   placement: ChartAlertPlacement | null;
-  onPlacementConsumed: () => void;
+  onPlacementConsumed: () => void; /** The chart's indicators, for indicator alerts (TVP-1.3). */ indicatorChoices?: readonly AlertIndicatorChoice[];
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const alertsQuery = useTradingAlerts({ poll: true });
@@ -263,7 +264,7 @@ export function TradingChartAlertOverlay({
       trendline_points: isTrendline ? editor.trendlinePoints?.map((point) => ({ ...point, price: String(point.price) })) : null,
       trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null,
     };
-    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at;
+    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at; if (editor.condition.startsWith('indicator_')) withChartIndicatorCondition(input, indicatorChoices, editor.indicatorSelection ?? defaultIndicatorSelection(indicatorChoices ?? []), formatAlertThreshold(threshold));
     await runMutation(() => tradingApi.createAlert(input));
   };
 
@@ -414,7 +415,7 @@ export function TradingChartAlertOverlay({
         <div style={editorStyle} className="trading-chart-alert-editor-positioner">
           <TradingAlertDialog
             editor={editor}
-            symbol={symbol}
+            symbol={symbol} indicatorChoices={indicatorChoices}
             latestPrice={latestPrice}
             status={status}
             onChange={(patch) => setEditor((current) => current ? { ...current, ...patch } : current)}

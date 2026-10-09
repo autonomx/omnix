@@ -1,0 +1,1813 @@
+{
+ "note": "Server alert indicators (ids) and the web defaults for each (entries); regenerate entries with UPDATE_ALERT_CONTRACT=1 npm --prefix web run test -- alertIndicatorContract",
+ "ids": [
+  "atr",
+  "bollinger",
+  "ema",
+  "macd",
+  "rsi",
+  "rsi-divergence",
+  "sma",
+  "stochastic-rsi",
+  "tv-24-hour-volume",
+  "tv-accumulation-distribution-adl",
+  "tv-arnaud-legoux-moving-average",
+  "tv-aroon-indicator",
+  "tv-aroon-oscillator",
+  "tv-average-daily-range-adr-indicator",
+  "tv-average-directional-index-adx",
+  "tv-awesome-oscillator-ao",
+  "tv-balance-of-power-bop",
+  "tv-bbtrend",
+  "tv-bollinger-bands-b-b",
+  "tv-bollinger-bandwidth-bbw",
+  "tv-bull-bear-power",
+  "tv-chaikin-money-flow-cmf",
+  "tv-chaikin-oscillator",
+  "tv-chande-kroll-stop",
+  "tv-chande-momentum-oscillator-cmo",
+  "tv-chandelier-exit",
+  "tv-choppiness-index-chop",
+  "tv-commodity-channel-index-cci",
+  "tv-connors-rsi-crsi",
+  "tv-coppock-curve",
+  "tv-correlation-coefficient-cc",
+  "tv-detrended-price-oscillator-dpo",
+  "tv-directional-movement-dmi",
+  "tv-donchian-channels-dc",
+  "tv-double-exponential-moving-average-ema",
+  "tv-ease-of-movement-eom",
+  "tv-elder-s-force-index-efi",
+  "tv-envelope-env",
+  "tv-fisher-transform",
+  "tv-historical-volatility",
+  "tv-hull-moving-average",
+  "tv-ichimoku-cloud",
+  "tv-kaufman-s-adaptive-moving-average-kama",
+  "tv-keltner-channels-kc",
+  "tv-klinger-oscillator",
+  "tv-know-sure-thing-kst",
+  "tv-least-squares-moving-average",
+  "tv-linear-regression",
+  "tv-ma-cross",
+  "tv-mass-index",
+  "tv-mcginley-dynamic",
+  "tv-median",
+  "tv-momentum",
+  "tv-money-flow-mfi",
+  "tv-moving-average-ribbon",
+  "tv-moving-averages",
+  "tv-movingavg-cross",
+  "tv-movingavg2line-cross",
+  "tv-negative-volume-index-nvi",
+  "tv-net-volume",
+  "tv-on-balance-volume-obv",
+  "tv-parabolic-sar-sar",
+  "tv-percentage-price-oscillator-ppo",
+  "tv-percentage-volume-oscillator-pvo",
+  "tv-performance",
+  "tv-pivot-points-high-low",
+  "tv-pivot-points-standard",
+  "tv-positive-volume-index-pvi",
+  "tv-price-momentum-oscillator-pmo",
+  "tv-price-volume-trend-pvt",
+  "tv-pring-s-special-k",
+  "tv-rank-correlation-index-rci",
+  "tv-rate-of-change-roc",
+  "tv-rci-ribbon",
+  "tv-relative-vigor-index",
+  "tv-relative-volatility-index",
+  "tv-relative-volume-at-time",
+  "tv-rob-booker-adx-breakout",
+  "tv-rob-booker-intraday-pivot-points",
+  "tv-rob-booker-knoxville-divergence",
+  "tv-rob-booker-missed-pivot-points",
+  "tv-rob-booker-reversal",
+  "tv-rob-booker-ziv-ghost-pivots",
+  "tv-smi-ergodic-indicator",
+  "tv-smi-ergodic-oscillator",
+  "tv-smoothed-moving-average",
+  "tv-stochastic-momentum-index-smi",
+  "tv-stochastic-stoch",
+  "tv-supertrend",
+  "tv-technical-ratings",
+  "tv-time-weighted-average-price",
+  "tv-trend-strength-index",
+  "tv-triple-ema",
+  "tv-trix",
+  "tv-true-strength-index",
+  "tv-ulcer-index",
+  "tv-ultimate-oscillator-uo",
+  "tv-up-down-volume",
+  "tv-volatility-stop",
+  "tv-volume",
+  "tv-volume-weighted-moving-average-vwma",
+  "tv-vortex-indicator",
+  "tv-weighted-moving-average",
+  "tv-williams-alligator",
+  "tv-williams-fractal",
+  "tv-williams-r-r",
+  "tv-woodies-cci",
+  "tv-zig-zag",
+  "vwap"
+ ],
+ "entries": [
+  {
+   "id": "atr",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "atr:20"
+   ]
+  },
+  {
+   "id": "bollinger",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "bollinger:20:upper",
+    "bollinger:20:middle",
+    "bollinger:20:lower"
+   ]
+  },
+  {
+   "id": "ema",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "ema:20"
+   ]
+  },
+  {
+   "id": "macd",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "macd:12:26:line",
+    "macd:12:26:signal",
+    "macd:12:26:histogram"
+   ]
+  },
+  {
+   "id": "rsi",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "rsi:20"
+   ]
+  },
+  {
+   "id": "rsi-divergence",
+   "inputs": {
+    "period": 14,
+    "fast_period": 5,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "rsi-divergence:value"
+   ]
+  },
+  {
+   "id": "sma",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "sma:20"
+   ]
+  },
+  {
+   "id": "stochastic-rsi",
+   "inputs": {
+    "period": 14,
+    "fast_period": 3,
+    "slow_period": null,
+    "signal_period": 3,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "stochastic-rsi:k",
+    "stochastic-rsi:d"
+   ]
+  },
+  {
+   "id": "tv-24-hour-volume",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-24-hour-volume:volume-24h"
+   ]
+  },
+  {
+   "id": "tv-accumulation-distribution-adl",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-accumulation-distribution-adl:adl"
+   ]
+  },
+  {
+   "id": "tv-arnaud-legoux-moving-average",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-arnaud-legoux-moving-average:alma"
+   ]
+  },
+  {
+   "id": "tv-aroon-indicator",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-aroon-indicator:up",
+    "tv-aroon-indicator:down"
+   ]
+  },
+  {
+   "id": "tv-aroon-oscillator",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-aroon-oscillator:oscillator"
+   ]
+  },
+  {
+   "id": "tv-average-daily-range-adr-indicator",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-average-daily-range-adr-indicator:adr"
+   ]
+  },
+  {
+   "id": "tv-average-directional-index-adx",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-average-directional-index-adx:adx"
+   ]
+  },
+  {
+   "id": "tv-awesome-oscillator-ao",
+   "inputs": {
+    "period": 34,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-awesome-oscillator-ao:ao"
+   ]
+  },
+  {
+   "id": "tv-balance-of-power-bop",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-balance-of-power-bop:bop"
+   ]
+  },
+  {
+   "id": "tv-bbtrend",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-bbtrend:bbtrend"
+   ]
+  },
+  {
+   "id": "tv-bollinger-bands-b-b",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-bollinger-bands-b-b:percent-b"
+   ]
+  },
+  {
+   "id": "tv-bollinger-bandwidth-bbw",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-bollinger-bandwidth-bbw:bandwidth"
+   ]
+  },
+  {
+   "id": "tv-bull-bear-power",
+   "inputs": {
+    "period": 13,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-bull-bear-power:bull",
+    "tv-bull-bear-power:bear"
+   ]
+  },
+  {
+   "id": "tv-chaikin-money-flow-cmf",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-chaikin-money-flow-cmf:cmf"
+   ]
+  },
+  {
+   "id": "tv-chaikin-oscillator",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-chaikin-oscillator:chaikin"
+   ]
+  },
+  {
+   "id": "tv-chande-kroll-stop",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-chande-kroll-stop:long-stop",
+    "tv-chande-kroll-stop:short-stop"
+   ]
+  },
+  {
+   "id": "tv-chande-momentum-oscillator-cmo",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-chande-momentum-oscillator-cmo:cmo"
+   ]
+  },
+  {
+   "id": "tv-chandelier-exit",
+   "inputs": {
+    "period": 22,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-chandelier-exit:long-stop",
+    "tv-chandelier-exit:short-stop"
+   ]
+  },
+  {
+   "id": "tv-choppiness-index-chop",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-choppiness-index-chop:chop"
+   ]
+  },
+  {
+   "id": "tv-commodity-channel-index-cci",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-commodity-channel-index-cci:cci"
+   ]
+  },
+  {
+   "id": "tv-connors-rsi-crsi",
+   "inputs": {
+    "period": 100,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-connors-rsi-crsi:crsi"
+   ]
+  },
+  {
+   "id": "tv-coppock-curve",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-coppock-curve:coppock"
+   ]
+  },
+  {
+   "id": "tv-correlation-coefficient-cc",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-correlation-coefficient-cc:cc"
+   ]
+  },
+  {
+   "id": "tv-detrended-price-oscillator-dpo",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-detrended-price-oscillator-dpo:dpo"
+   ]
+  },
+  {
+   "id": "tv-directional-movement-dmi",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-directional-movement-dmi:plus-di",
+    "tv-directional-movement-dmi:minus-di",
+    "tv-directional-movement-dmi:adx"
+   ]
+  },
+  {
+   "id": "tv-donchian-channels-dc",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-donchian-channels-dc:upper",
+    "tv-donchian-channels-dc:middle",
+    "tv-donchian-channels-dc:lower"
+   ]
+  },
+  {
+   "id": "tv-double-exponential-moving-average-ema",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-double-exponential-moving-average-ema:dema"
+   ]
+  },
+  {
+   "id": "tv-ease-of-movement-eom",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-ease-of-movement-eom:eom"
+   ]
+  },
+  {
+   "id": "tv-elder-s-force-index-efi",
+   "inputs": {
+    "period": 13,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-elder-s-force-index-efi:efi"
+   ]
+  },
+  {
+   "id": "tv-envelope-env",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-envelope-env:upper",
+    "tv-envelope-env:basis",
+    "tv-envelope-env:lower"
+   ]
+  },
+  {
+   "id": "tv-fisher-transform",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-fisher-transform:fisher"
+   ]
+  },
+  {
+   "id": "tv-historical-volatility",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-historical-volatility:hv"
+   ]
+  },
+  {
+   "id": "tv-hull-moving-average",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-hull-moving-average:hma"
+   ]
+  },
+  {
+   "id": "tv-ichimoku-cloud",
+   "inputs": {
+    "period": 26,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-ichimoku-cloud:conversion",
+    "tv-ichimoku-cloud:base",
+    "tv-ichimoku-cloud:span-a",
+    "tv-ichimoku-cloud:span-b",
+    "tv-ichimoku-cloud:lagging"
+   ]
+  },
+  {
+   "id": "tv-kaufman-s-adaptive-moving-average-kama",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-kaufman-s-adaptive-moving-average-kama:kama"
+   ]
+  },
+  {
+   "id": "tv-keltner-channels-kc",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-keltner-channels-kc:upper",
+    "tv-keltner-channels-kc:basis",
+    "tv-keltner-channels-kc:lower"
+   ]
+  },
+  {
+   "id": "tv-klinger-oscillator",
+   "inputs": {
+    "period": 55,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-klinger-oscillator:klinger",
+    "tv-klinger-oscillator:signal"
+   ]
+  },
+  {
+   "id": "tv-know-sure-thing-kst",
+   "inputs": {
+    "period": 30,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-know-sure-thing-kst:kst",
+    "tv-know-sure-thing-kst:signal"
+   ]
+  },
+  {
+   "id": "tv-least-squares-moving-average",
+   "inputs": {
+    "period": 25,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-least-squares-moving-average:linreg"
+   ]
+  },
+  {
+   "id": "tv-linear-regression",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-linear-regression:linreg"
+   ]
+  },
+  {
+   "id": "tv-ma-cross",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-ma-cross:fast",
+    "tv-ma-cross:slow"
+   ]
+  },
+  {
+   "id": "tv-mass-index",
+   "inputs": {
+    "period": 25,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-mass-index:mass"
+   ]
+  },
+  {
+   "id": "tv-mcginley-dynamic",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-mcginley-dynamic:mcginley"
+   ]
+  },
+  {
+   "id": "tv-median",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-median:median"
+   ]
+  },
+  {
+   "id": "tv-momentum",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-momentum:momentum"
+   ]
+  },
+  {
+   "id": "tv-money-flow-mfi",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-money-flow-mfi:mfi"
+   ]
+  },
+  {
+   "id": "tv-moving-average-ribbon",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-moving-average-ribbon:sma-20",
+    "tv-moving-average-ribbon:sma-50",
+    "tv-moving-average-ribbon:sma-100",
+    "tv-moving-average-ribbon:sma-200"
+   ]
+  },
+  {
+   "id": "tv-moving-averages",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-moving-averages:sma",
+    "tv-moving-averages:ema"
+   ]
+  },
+  {
+   "id": "tv-movingavg-cross",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-movingavg-cross:fast",
+    "tv-movingavg-cross:slow"
+   ]
+  },
+  {
+   "id": "tv-movingavg2line-cross",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-movingavg2line-cross:fast",
+    "tv-movingavg2line-cross:slow"
+   ]
+  },
+  {
+   "id": "tv-negative-volume-index-nvi",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-negative-volume-index-nvi:nvi"
+   ]
+  },
+  {
+   "id": "tv-net-volume",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-net-volume:net-volume"
+   ]
+  },
+  {
+   "id": "tv-on-balance-volume-obv",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-on-balance-volume-obv:obv"
+   ]
+  },
+  {
+   "id": "tv-parabolic-sar-sar",
+   "inputs": {
+    "period": 2,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-parabolic-sar-sar:sar"
+   ]
+  },
+  {
+   "id": "tv-percentage-price-oscillator-ppo",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-percentage-price-oscillator-ppo:line",
+    "tv-percentage-price-oscillator-ppo:signal"
+   ]
+  },
+  {
+   "id": "tv-percentage-volume-oscillator-pvo",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-percentage-volume-oscillator-pvo:line",
+    "tv-percentage-volume-oscillator-pvo:signal"
+   ]
+  },
+  {
+   "id": "tv-performance",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-performance:performance"
+   ]
+  },
+  {
+   "id": "tv-pivot-points-high-low",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-pivot-points-high-low:pivot-high",
+    "tv-pivot-points-high-low:pivot-low"
+   ]
+  },
+  {
+   "id": "tv-pivot-points-standard",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-pivot-points-standard:pp",
+    "tv-pivot-points-standard:r1",
+    "tv-pivot-points-standard:s1"
+   ]
+  },
+  {
+   "id": "tv-positive-volume-index-pvi",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-positive-volume-index-pvi:pvi"
+   ]
+  },
+  {
+   "id": "tv-price-momentum-oscillator-pmo",
+   "inputs": {
+    "period": 35,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-price-momentum-oscillator-pmo:pmo",
+    "tv-price-momentum-oscillator-pmo:signal"
+   ]
+  },
+  {
+   "id": "tv-price-volume-trend-pvt",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-price-volume-trend-pvt:pvt"
+   ]
+  },
+  {
+   "id": "tv-pring-s-special-k",
+   "inputs": {
+    "period": 30,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-pring-s-special-k:special-k"
+   ]
+  },
+  {
+   "id": "tv-rank-correlation-index-rci",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rank-correlation-index-rci:rci"
+   ]
+  },
+  {
+   "id": "tv-rate-of-change-roc",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rate-of-change-roc:roc"
+   ]
+  },
+  {
+   "id": "tv-rci-ribbon",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rci-ribbon:rci-9",
+    "tv-rci-ribbon:rci-26",
+    "tv-rci-ribbon:rci-52"
+   ]
+  },
+  {
+   "id": "tv-relative-vigor-index",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-relative-vigor-index:rvi",
+    "tv-relative-vigor-index:signal"
+   ]
+  },
+  {
+   "id": "tv-relative-volatility-index",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-relative-volatility-index:rvol"
+   ]
+  },
+  {
+   "id": "tv-relative-volume-at-time",
+   "inputs": {
+    "period": 5,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-relative-volume-at-time:rvol-at-time"
+   ]
+  },
+  {
+   "id": "tv-rob-booker-adx-breakout",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rob-booker-adx-breakout:upper",
+    "tv-rob-booker-adx-breakout:lower",
+    "tv-rob-booker-adx-breakout:breakout-up",
+    "tv-rob-booker-adx-breakout:breakout-down"
+   ]
+  },
+  {
+   "id": "tv-rob-booker-intraday-pivot-points",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rob-booker-intraday-pivot-points:pp",
+    "tv-rob-booker-intraday-pivot-points:r1",
+    "tv-rob-booker-intraday-pivot-points:r2",
+    "tv-rob-booker-intraday-pivot-points:r3",
+    "tv-rob-booker-intraday-pivot-points:s1",
+    "tv-rob-booker-intraday-pivot-points:s2",
+    "tv-rob-booker-intraday-pivot-points:s3"
+   ]
+  },
+  {
+   "id": "tv-rob-booker-knoxville-divergence",
+   "inputs": {
+    "period": 150,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rob-booker-knoxville-divergence:bearish",
+    "tv-rob-booker-knoxville-divergence:bullish"
+   ]
+  },
+  {
+   "id": "tv-rob-booker-missed-pivot-points",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rob-booker-missed-pivot-points:missed-above",
+    "tv-rob-booker-missed-pivot-points:missed-below"
+   ]
+  },
+  {
+   "id": "tv-rob-booker-reversal",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rob-booker-reversal:bullish",
+    "tv-rob-booker-reversal:bearish"
+   ]
+  },
+  {
+   "id": "tv-rob-booker-ziv-ghost-pivots",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-rob-booker-ziv-ghost-pivots:pp",
+    "tv-rob-booker-ziv-ghost-pivots:r1",
+    "tv-rob-booker-ziv-ghost-pivots:s1"
+   ]
+  },
+  {
+   "id": "tv-smi-ergodic-indicator",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-smi-ergodic-indicator:smi",
+    "tv-smi-ergodic-indicator:signal"
+   ]
+  },
+  {
+   "id": "tv-smi-ergodic-oscillator",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-smi-ergodic-oscillator:oscillator"
+   ]
+  },
+  {
+   "id": "tv-smoothed-moving-average",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-smoothed-moving-average:smma"
+   ]
+  },
+  {
+   "id": "tv-stochastic-momentum-index-smi",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-stochastic-momentum-index-smi:smi",
+    "tv-stochastic-momentum-index-smi:signal"
+   ]
+  },
+  {
+   "id": "tv-stochastic-stoch",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-stochastic-stoch:k",
+    "tv-stochastic-stoch:d"
+   ]
+  },
+  {
+   "id": "tv-supertrend",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-supertrend:supertrend"
+   ]
+  },
+  {
+   "id": "tv-technical-ratings",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-technical-ratings:rating"
+   ]
+  },
+  {
+   "id": "tv-time-weighted-average-price",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-time-weighted-average-price:twap"
+   ]
+  },
+  {
+   "id": "tv-trend-strength-index",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-trend-strength-index:trend-strength"
+   ]
+  },
+  {
+   "id": "tv-triple-ema",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-triple-ema:tema"
+   ]
+  },
+  {
+   "id": "tv-trix",
+   "inputs": {
+    "period": 18,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-trix:trix"
+   ]
+  },
+  {
+   "id": "tv-true-strength-index",
+   "inputs": {
+    "period": 25,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-true-strength-index:tsi",
+    "tv-true-strength-index:signal"
+   ]
+  },
+  {
+   "id": "tv-ulcer-index",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-ulcer-index:ulcer"
+   ]
+  },
+  {
+   "id": "tv-ultimate-oscillator-uo",
+   "inputs": {
+    "period": 28,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-ultimate-oscillator-uo:uo"
+   ]
+  },
+  {
+   "id": "tv-up-down-volume",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-up-down-volume:net-volume"
+   ]
+  },
+  {
+   "id": "tv-volatility-stop",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-volatility-stop:vstop"
+   ]
+  },
+  {
+   "id": "tv-volume",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-volume:volume"
+   ]
+  },
+  {
+   "id": "tv-volume-weighted-moving-average-vwma",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-volume-weighted-moving-average-vwma:vwma"
+   ]
+  },
+  {
+   "id": "tv-vortex-indicator",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-vortex-indicator:plus",
+    "tv-vortex-indicator:minus"
+   ]
+  },
+  {
+   "id": "tv-weighted-moving-average",
+   "inputs": {
+    "period": 9,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-weighted-moving-average:wma"
+   ]
+  },
+  {
+   "id": "tv-williams-alligator",
+   "inputs": {
+    "period": 13,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-williams-alligator:jaw",
+    "tv-williams-alligator:teeth",
+    "tv-williams-alligator:lips"
+   ]
+  },
+  {
+   "id": "tv-williams-fractal",
+   "inputs": {
+    "period": 2,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-williams-fractal:up-fractal",
+    "tv-williams-fractal:down-fractal"
+   ]
+  },
+  {
+   "id": "tv-williams-r-r",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-williams-r-r:williams-r"
+   ]
+  },
+  {
+   "id": "tv-woodies-cci",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-woodies-cci:trend-cci",
+    "tv-woodies-cci:entry-cci"
+   ]
+  },
+  {
+   "id": "tv-zig-zag",
+   "inputs": {
+    "period": 5,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-zig-zag:zigzag"
+   ]
+  },
+  {
+   "id": "vwap",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "vwap:dataset"
+   ]
+  }
+ ]
+}
