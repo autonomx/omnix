@@ -11,6 +11,8 @@ any inputs. A ``ScriptRun`` can then take new bars one at a time (``append_bar``
 
 from __future__ import annotations
 
+import contextvars
+import copy
 import math
 import time as clock
 from collections.abc import Callable
@@ -19,7 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from ..indicators.registry import BarSeries
-from .errors import ScriptLimitError, ScriptRuntimeError, ScriptSyntaxError, ScriptUnsupportedError
+from .errors import ScriptError, ScriptLimitError, ScriptRuntimeError, ScriptSyntaxError, ScriptUnsupportedError
 from .parser import parse_script
 from .syntax import (
     Assign,
@@ -61,6 +63,42 @@ class ScriptLimits:
     # Per kind (labels, lines, boxes); a script's own max_*_count is capped by it.
     max_drawings: int = 500
     max_plots: int = 64
+    # Values: one string's length, one array's or map's size, and the array items a run may allocate in all.
+    max_string_length: int = 40_000
+    max_collection_size: int = 100_000
+    max_allocated_items: int = 10_000_000
+    max_alerts: int = 1_000
+
+
+# Pine's ints are 64-bit; Python's grow without bound, so arithmetic past this is an error.
+INT_LIMIT = 2**63 - 1
+
+# The run on this thread, for built-ins that count allocations against its limits.
+CURRENT_RUN: contextvars.ContextVar[ScriptRun | None] = contextvars.ContextVar("omnix_script_run", default=None)
+
+
+def current_limits() -> ScriptLimits:
+    run = CURRENT_RUN.get()
+    return run.limits if run is not None else ScriptLimits()
+
+
+def check_string(value: str) -> str:
+    limit = current_limits().max_string_length
+    if len(value) > limit:
+        raise ScriptLimitError(f"a string holds at most {limit} characters")
+    return value
+
+
+def allocate(items: int, size_after: int = 0) -> None:
+    """Counts `items` new array or map entries against the run's budget, and the collection's size after the change."""
+    run = CURRENT_RUN.get()
+    limits = run.limits if run is not None else ScriptLimits()
+    if size_after > limits.max_collection_size:
+        raise ScriptLimitError(f"an array or map holds at most {limits.max_collection_size} values")
+    if run is not None:
+        run.allocated += max(0, items)
+        if run.allocated > limits.max_allocated_items:
+            raise ScriptLimitError(f"the script created more than {limits.max_allocated_items} array values")
 
 
 # Runtime state
@@ -83,7 +121,10 @@ class Slot:
 
 
 class Context:
-    __slots__ = ("run", "root", "slots", "sites", "children")
+    """The script's own series (the root), or one call site of a user function. The root's series advance once
+    per bar; a function's advance once per call, as Pine's do (`x[1]` in a function is its previous call's value)."""
+
+    __slots__ = ("run", "root", "slots", "sites", "children", "calls")
 
     def __init__(self, run: ScriptRun, root: Context | None) -> None:
         self.run = run
@@ -91,15 +132,28 @@ class Context:
         self.slots: dict[int, Slot] = {}
         self.sites: dict[int, Any] = {}
         self.children: dict[int, Context] = {}
+        # Calls committed so far (function call sites only).
+        self.calls = 0
 
     def slot(self, key: int, persistent: bool) -> Slot:
         slot = self.slots.get(key)
         if slot is None:
             slot = self.slots[key] = Slot(persistent)
-            # Back-fill: a variable first declared on a later bar was na on the bars before.
-            slot.history = [None] * self.run.committed
-            self.run.all_slots.append(slot)
+            # Back-fill: a variable first set on a later bar (or call) was na before.
+            if self.root is self:
+                slot.history = [None] * self.run.committed
+                self.run.all_slots.append(slot)
+            else:
+                slot.history = [None] * self.calls
         return slot
+
+    def commit_call(self) -> None:
+        """Ends one call of a function: its series move on, as the root's do at the end of a bar."""
+        for slot in self.slots.values():
+            slot.history.append(slot.current)
+            if not slot.persistent:
+                slot.current = None
+        self.calls += 1
 
     def child(self, key: int) -> Context:
         child = self.children.get(key)
@@ -201,13 +255,28 @@ class Program:
     inputs: list[ScriptInput]
     plot_specs: list[tuple[str, str, dict[str, Any]]]  # kind, title, static options
     uses_drawings: bool
+    # The line of each top-level statement in `body`, for runtime errors.
+    lines: list[int] = field(default_factory=list)
+    # Reads the last bar (barstate.islast, last_bar_index, ...): a run can't be extended bar by bar, since bars that
+    # were last when they ran no longer are; such a script runs again in full on new bars.
+    uses_last_bar: bool = False
 
 
 def compile_script(source: str | Script) -> Program:
-    script = parse_script(source) if isinstance(source, str) else source
-    if script.version is not None and script.version < 5:
-        raise ScriptUnsupportedError(f"Pine v{script.version} scripts are not supported: use v5 or v6", 1)
-    return _Compiler(script).program()
+    """Parses and compiles a script. Any problem is a ScriptError with a line."""
+    try:
+        script = parse_script(source) if isinstance(source, str) else source
+        if script.version is None:
+            raise ScriptUnsupportedError("a script starts with //@version=5 or //@version=6", 1)
+        if script.version < 5:
+            raise ScriptUnsupportedError(f"Pine v{script.version} scripts are not supported: use v5 or v6", 1)
+        return _Compiler(script).program()
+    except ScriptError:
+        raise
+    except RecursionError:
+        raise ScriptSyntaxError("the script is nested too deeply", 0) from None
+    except Exception as error:  # noqa: BLE001 - anything else is a bug reported against the script, not a crash
+        raise ScriptSyntaxError(f"the script can't be compiled: {error}", 0) from None
 
 
 def run_script(
@@ -239,7 +308,7 @@ class ScriptRun:
             raise ScriptLimitError(f"a script runs on at most {limits.max_bars} bars")
         self.program = program
         self.limits = limits
-        self.inputs = inputs
+        self.inputs = validate_inputs(program, inputs)
         self.symbol = symbol
         self.timeframe = timeframe
         self.open = list(bars.open)
@@ -263,7 +332,15 @@ class ScriptRun:
         self.loop_iterations = 0
         self.bar_loop_iterations = 0
         self.seconds = 0.0
+        self.deadline = 0.0
+        self.allocated = 0
         self.last_bar_index = len(self.close) - 1
+        self.interval_ms = interval_ms(timeframe)
+
+    @property
+    def can_extend(self) -> bool:
+        """Whether new bars can be run one at a time (see Program.uses_last_bar)."""
+        return not self.program.uses_last_bar
 
     def __len__(self) -> int:
         return len(self.close)
@@ -272,7 +349,10 @@ class ScriptRun:
         self._run_bars(self.committed, len(self.close))
 
     def append_bar(self, bar: Any) -> None:
-        """Adds one closed bar and runs only it (incremental execution)."""
+        """Adds one closed bar and runs only it (incremental execution). A script that reads the last bar can't be
+        extended (`can_extend`); run it again in full."""
+        if not self.can_extend:
+            raise RuntimeError("this script reads the last bar: run it again on all the bars instead of extending it")
         series = BarSeries.from_bars([bar])
         self.open.append(series.open[0])
         self.high.append(series.high[0])
@@ -289,28 +369,51 @@ class ScriptRun:
     def _run_bars(self, start: int, end: int) -> None:
         began = clock.perf_counter()
         body = self.program.body
+        lines = self.program.lines
         root = self.root
-        deadline = began + self.limits.max_seconds - self.seconds
-        for t in range(start, end):
-            self.t = t
-            self.bar_loop_iterations = 0
-            for statement in body:
-                statement(root)
-            self.statics_done = True
-            for slot in self.all_slots:
-                slot.history.append(slot.current)
-                if not slot.persistent:
-                    slot.current = None
-            self.committed = t + 1
-            if t % 64 == 0 and clock.perf_counter() > deadline:
-                raise ScriptLimitError(f"the script ran for more than {self.limits.max_seconds:g} s", 0)
-        self.seconds += clock.perf_counter() - began
+        self.deadline = began + self.limits.max_seconds - self.seconds
+        token = CURRENT_RUN.set(self)
+        index = 0
+        try:
+            for t in range(start, end):
+                self.t = t
+                self.bar_loop_iterations = 0
+                for index, statement in enumerate(body):
+                    statement(root)
+                self.statics_done = True
+                for slot in self.all_slots:
+                    slot.history.append(slot.current)
+                    if not slot.persistent:
+                        slot.current = None
+                self.committed = t + 1
+                self.check_time()
+        except ScriptError as error:
+            if not error.line and index < len(lines):
+                error.line = lines[index]
+            raise
+        except RecursionError:
+            raise ScriptLimitError("the script is nested too deeply", lines[index] if index < len(lines) else 0) from None
+        except MemoryError:
+            raise ScriptLimitError("the script ran out of memory", lines[index] if index < len(lines) else 0) from None
+        except (_Break, _Continue):
+            raise ScriptSyntaxError("break and continue belong in a loop", lines[index] if index < len(lines) else 0) from None
+        except Exception as error:  # noqa: BLE001 - any other failure is the script's error, with its line
+            raise ScriptRuntimeError(f"{type(error).__name__}: {error}", lines[index] if index < len(lines) else 0) from None
+        finally:
+            CURRENT_RUN.reset(token)
+            self.seconds += clock.perf_counter() - began
+
+    def check_time(self) -> None:
+        if clock.perf_counter() > self.deadline:
+            raise ScriptLimitError(f"the script ran for more than {self.limits.max_seconds:g} s")
 
     def count_loop(self) -> None:
         self.loop_iterations += 1
         self.bar_loop_iterations += 1
         if self.bar_loop_iterations > self.limits.max_loop_iterations_per_bar or self.loop_iterations > self.limits.max_loop_iterations:
             raise ScriptLimitError("a loop ran too many times")
+        if self.loop_iterations % 1024 == 0:
+            self.check_time()
 
     def add_drawing(self, kind: str, fields: dict[str, Any]) -> Drawing:
         self.drawing_ids += 1
@@ -331,8 +434,8 @@ class ScriptRun:
         drawings = [drawing for items in self.drawings.values() for drawing in items if not drawing.deleted]
         drawings.sort(key=lambda drawing: drawing.id)
         return ScriptResult(
-            declaration=self.program.declaration,
-            inputs=self.program.inputs,
+            declaration=copy.deepcopy(self.program.declaration),
+            inputs=copy.deepcopy(self.program.inputs),
             plots=self.plots,
             hlines=self.hlines,
             fills=self.fills,
@@ -368,6 +471,9 @@ class ScriptRun:
         if name == "time":
             return self.time[t]
         if name == "time_close":
+            # The bar's start plus the interval; without a known interval, the next bar's start.
+            if self.interval_ms is not None:
+                return self.time[t] + self.interval_ms
             return self.time[t + 1] if t + 1 < len(self.time) else None
         if name == "bar_index":
             return t
@@ -375,6 +481,50 @@ class ScriptRun:
 
 
 SERIES_NAMES = {"open", "high", "low", "close", "volume", "hl2", "hlc3", "ohlc4", "hlcc4", "time", "time_close", "bar_index"}
+
+
+def interval_ms(timeframe: str) -> int | None:
+    """A fixed interval in milliseconds ("60" minutes, "15S", "D", "W"); None for months or unknown."""
+    text = timeframe.strip().upper()
+    if not text:
+        return None
+    unit = text[-1] if not text[-1].isdigit() else ""
+    number = text[:-1] if unit else text
+    count = int(number) if number.isdigit() else 1 if number == "" else None
+    if count is None:
+        return None
+    seconds = {"": 60, "S": 1, "D": 86_400, "W": 604_800}.get(unit)
+    return None if seconds is None else count * seconds * 1000
+
+
+def validate_inputs(program: Program, inputs: dict[str, Any]) -> dict[str, Any]:
+    """Checks a run's inputs against the script's declarations: known titles, the declared type, options and range."""
+    declared = {item.title: item for item in program.inputs}
+    for title, value in inputs.items():
+        item = declared.get(title)
+        if item is None:
+            raise ScriptRuntimeError(f"the script has no input {title!r}")
+        kind = item.type
+        if kind == "int" and not (isinstance(value, int) and not isinstance(value, bool)):
+            raise ScriptRuntimeError(f"input {title!r} takes a whole number")
+        if kind == "float" and not (isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)):
+            raise ScriptRuntimeError(f"input {title!r} takes a number")
+        if kind == "bool" and not isinstance(value, bool):
+            raise ScriptRuntimeError(f"input {title!r} takes true or false")
+        if kind in ("string", "color", "timeframe", "symbol", "session", "text_area") and not isinstance(value, str):
+            raise ScriptRuntimeError(f"input {title!r} takes text")
+        if isinstance(value, str) and len(value) > 4_096:
+            raise ScriptRuntimeError(f"input {title!r} is too long")
+        if kind == "source" and value not in SERIES_NAMES:
+            raise ScriptRuntimeError(f"input {title!r} takes a built-in series (close, hl2, ...)")
+        options = item.options.get("options")
+        if isinstance(options, list) and options and value not in options:
+            raise ScriptRuntimeError(f"input {title!r} takes one of {options}")
+        if kind in ("int", "float"):
+            low, high = item.options.get("minval"), item.options.get("maxval")
+            if isinstance(low, int | float) and value < low or isinstance(high, int | float) and value > high:
+                raise ScriptRuntimeError(f"input {title!r} is out of its range")
+    return dict(inputs)
 
 
 def truthy(value: Any) -> bool:
@@ -389,23 +539,43 @@ def _na(value: Any) -> bool:
     return value is None or (isinstance(value, float) and math.isnan(value))
 
 
+def _is_number(value: Any) -> bool:
+    kind = type(value)
+    return kind is int or kind is float
+
+
+def _not_numbers(op: str, a: Any, b: Any) -> None:
+    raise ScriptRuntimeError(f"can't apply {op} to {_type_name(a)} and {_type_name(b)}")
+
+
+def _type_name(value: Any) -> str:
+    return {bool: "bool", int: "int", float: "float", str: "string"}.get(type(value), type(value).__name__.lower().replace("script", ""))
+
+
+def _checked_int(value: Any) -> Any:
+    if type(value) is int and not -INT_LIMIT <= value <= INT_LIMIT:
+        raise ScriptRuntimeError("integer overflow: a value went past Pine's 64-bit int range")
+    return value
+
+
 def _divide(a: Any, b: Any) -> Any:
-    if _na(a) or _na(b) or b == 0:
+    if _na(a) or _na(b):
+        return None
+    if not (_is_number(a) and _is_number(b)):
+        _not_numbers("/", a, b)
+    if b == 0:
         return None
     if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and a % b == 0:
         return a // b
     return a / b
 
 
-def _divide_truncating(a: Any, b: Any) -> Any:
-    # Pine v5 and earlier: an int divided by an int is an int, truncated towards zero.
-    if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and not isinstance(b, bool) and b != 0:
-        return int(a / b)
-    return _divide(a, b)
-
-
 def _modulo(a: Any, b: Any) -> Any:
-    if _na(a) or _na(b) or b == 0:
+    if _na(a) or _na(b):
+        return None
+    if not (_is_number(a) and _is_number(b)):
+        _not_numbers("%", a, b)
+    if b == 0:
         return None
     result = math.fmod(a, b)
     return int(result) if isinstance(a, int) and isinstance(b, int) else result
@@ -414,17 +584,27 @@ def _modulo(a: Any, b: Any) -> Any:
 def _add(a: Any, b: Any) -> Any:
     if a is None or b is None:
         return None
-    if isinstance(a, str) or isinstance(b, str):
-        return f"{a}{b}" if isinstance(a, str) and isinstance(b, str) else None
-    return a + b
+    if type(a) is str and type(b) is str:
+        return check_string(a + b)
+    if not (_is_number(a) and _is_number(b)):
+        _not_numbers("+", a, b)
+    return _checked_int(a + b)
 
 
 def _sub(a: Any, b: Any) -> Any:
-    return None if a is None or b is None else a - b
+    if a is None or b is None:
+        return None
+    if not (_is_number(a) and _is_number(b)):
+        _not_numbers("-", a, b)
+    return _checked_int(a - b)
 
 
 def _mul(a: Any, b: Any) -> Any:
-    return None if a is None or b is None else a * b
+    if a is None or b is None:
+        return None
+    if not (_is_number(a) and _is_number(b)):
+        _not_numbers("*", a, b)
+    return _checked_int(a * b)
 
 
 def _compare(op: str) -> Callable[[Any, Any], Any]:
@@ -432,10 +612,14 @@ def _compare(op: str) -> Callable[[Any, Any], Any]:
 
     function = {"<": operator.lt, ">": operator.gt, "<=": operator.le, ">=": operator.ge, "==": operator.eq, "!=": operator.ne}[op]
 
+    ordering = op in ("<", ">", "<=", ">=")
+
     def compare(a: Any, b: Any) -> Any:
         if _na(a) or _na(b):
             # na compares false, except na != value.
             return op == "!=" and not (_na(a) and _na(b))
+        if ordering and not ((_is_number(a) and _is_number(b)) or (type(a) is str and type(b) is str)):
+            _not_numbers(op, a, b)
         return function(a, b)
 
     return compare
@@ -455,13 +639,22 @@ class _Compiler:
         self.inputs: list[ScriptInput] = []
         self.plot_specs: list[tuple[str, str, dict[str, Any]]] = []
         self.uses_drawings = False
+        self.uses_last_bar = False
         self.function_depth = 0
+        self.loop_depth = 0
+        self.version = script.version or 6
 
     def program(self) -> Program:
-        body = [closure for statement in self.script.body if (closure := self.statement(statement)) is not None]
+        body: list[Closure] = []
+        lines: list[int] = []
+        for statement in self.script.body:
+            closure = self.statement(statement)
+            if closure is not None:
+                body.append(closure)
+                lines.append(statement.line)
         if not self.declaration:
             raise ScriptSyntaxError("a script declares itself with indicator(...)", 1)
-        return Program(self.script, body, self.declaration, self.inputs, self.plot_specs, self.uses_drawings)
+        return Program(self.script, body, self.declaration, self.inputs, self.plot_specs, self.uses_drawings, lines, self.uses_last_bar)
 
     def fail(self, node: Node, message: str, unsupported: bool = False) -> None:
         error = ScriptUnsupportedError if unsupported else ScriptSyntaxError
@@ -485,6 +678,8 @@ class _Compiler:
             return self.for_in(node)
         if isinstance(node, While):
             return self.while_loop(node)
+        if isinstance(node, (Break, Continue)) and self.loop_depth == 0:
+            self.fail(node, "break and continue belong in a loop")
         if isinstance(node, Break):
             def do_break(ctx: Context) -> Any:
                 raise _Break
@@ -520,6 +715,8 @@ class _Compiler:
     def bind(self, node: Node, name: str, persistent: bool) -> _Binding:
         if name in self.builtins.RESERVED_NAMES:
             self.fail(node, f"{name!r} is a built-in name and can't be declared")
+        if name in self.scope.names:
+            self.fail(node, f"{name!r} is already declared: assign it with :=")
         binding = _Binding("slot", key=node.id * 1000 + len(self.scope.names), persistent=persistent, is_global=not self.scope.in_function)
         self.scope.names[name] = binding
         return binding
@@ -596,9 +793,11 @@ class _Compiler:
         self.scope = _Scope(outer, outer.in_function)
         for name, binding in bindings:
             self.scope.names[name] = binding
+        self.loop_depth += 1
         try:
             return self.block(body)
         finally:
+            self.loop_depth -= 1
             self.scope = outer
 
     def for_loop(self, node: For) -> Closure:
@@ -607,6 +806,9 @@ class _Compiler:
         binding = _Binding("slot", key=node.id * 1000, is_global=not self.scope.in_function)
         body = self.loop_body(node.body, [(node.var, binding)])
         get_slot = self.slot_writer(binding)
+
+        # v6 checks the `to` bound again before each iteration; v5 reads it once.
+        dynamic = self.version >= 6
 
         def run_for(ctx: Context) -> Any:
             first, last = start(ctx), end(ctx)
@@ -630,6 +832,10 @@ class _Compiler:
                 except _Break:
                     break
                 index += increment
+                if dynamic:
+                    last = end(ctx)
+                    if _na(last):
+                        break
             return value
 
         return run_for
@@ -669,7 +875,11 @@ class _Compiler:
 
     def while_loop(self, node: While) -> Closure:
         condition = self.expression(node.condition)
-        body = self.block(node.body)
+        self.loop_depth += 1
+        try:
+            body = self.block(node.body)
+        finally:
+            self.loop_depth -= 1
 
         def run_while(ctx: Context) -> Any:
             value = None
@@ -765,16 +975,26 @@ class _Compiler:
 
     def binary(self, node: Binary) -> Closure:
         left, right = self.expression(node.left), self.expression(node.right)
-        if node.op == "and":
-            return lambda ctx: truthy(left(ctx)) and truthy(right(ctx))
-        if node.op == "or":
-            return lambda ctx: truthy(left(ctx)) or truthy(right(ctx))
+        if node.op in ("and", "or"):
+            if self.version >= 6:
+                # v6 evaluates and/or lazily.
+                if node.op == "and":
+                    return lambda ctx: truthy(left(ctx)) and truthy(right(ctx))
+                return lambda ctx: truthy(left(ctx)) or truthy(right(ctx))
+            # v5 evaluates both sides on every bar (a ta.* call on the right still advances).
+            if node.op == "and":
+                return lambda ctx: (lambda a, b: truthy(a) and truthy(b))(left(ctx), right(ctx))
+            return lambda ctx: (lambda a, b: truthy(a) or truthy(b))(left(ctx), right(ctx))
         if node.op in _ARITHMETIC:
             operation = _ARITHMETIC[node.op]
-            if node.op == "/" and (self.script.version or 6) <= 5:
-                operation = _divide_truncating
+            if node.op == "/" and self.version <= 5:
+                # v5 truncates only an int constant divided by an int constant (7 / 2 == 3).
+                a_constant, b_constant = _int_constant(node.left), _int_constant(node.right)
+                if a_constant is not None and b_constant is not None and b_constant != 0:
+                    truncated = int(a_constant / b_constant)
+                    return lambda ctx: truncated
             if node.op in ("+", "-", "*"):
-                # The hot path: numbers.
+                # The hot path: two numbers.
                 symbol = node.op
 
                 def arithmetic(ctx: Context) -> Any:
@@ -782,9 +1002,13 @@ class _Compiler:
                     b = right(ctx)
                     if a is None or b is None:
                         return None
-                    if symbol == "+":
-                        return a + b if not (isinstance(a, str) or isinstance(b, str)) else _add(a, b)
-                    return a - b if symbol == "-" else a * b
+                    kind_a, kind_b = type(a), type(b)
+                    if (kind_a is float or kind_a is int) and (kind_b is float or kind_b is int):
+                        result = a + b if symbol == "+" else a - b if symbol == "-" else a * b
+                        if type(result) is int and not -INT_LIMIT <= result <= INT_LIMIT:
+                            return _checked_int(result)
+                        return result
+                    return operation(a, b)
 
                 return arithmetic
             return lambda ctx: operation(left(ctx), right(ctx))
@@ -867,7 +1091,8 @@ class _Compiler:
                 if match is None:
                     return body(ctx)
                 candidate = match(ctx)
-                if (subject is not None and candidate == value) or (subject is None and truthy(candidate)):
+                # na equals nothing, so an na subject takes the default case.
+                if (subject is not None and not _na(value) and not _na(candidate) and candidate == value) or (subject is None and truthy(candidate)):
                     return body(ctx)
             return None
 
@@ -931,9 +1156,21 @@ class _Compiler:
         def call_user(ctx: Context) -> Any:
             arguments = [(key, value(ctx)) for key, value in params]
             child = ctx.child(site)
+            # The previous call's values become the series' history (x[1] in a function is its last call's x).
+            if child.slots or child.calls:
+                child.commit_call()
             for key, argument in arguments:
                 child.slot(key, False).current = argument
             assert body.body is not None
             return body.body(child)
 
         return call_user
+
+
+def _int_constant(node: Node) -> int | None:
+    """An int literal, or a negated one."""
+    if isinstance(node, Literal) and type(node.value) is int:
+        return node.value
+    if isinstance(node, Unary) and node.op == "-" and isinstance(node.operand, Literal) and type(node.operand.value) is int:
+        return -node.operand.value
+    return None

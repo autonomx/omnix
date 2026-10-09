@@ -539,8 +539,10 @@ def mfi(state: Any, value: Value, volume: Value, length: Value) -> tuple[Any, Va
         return (previous, up_state, down_state), None
     flow = value * volume
     moved = None if previous is None else value - previous
-    up_state, up = math_sum(up_state, None if moved is None else (flow if moved > 0 else 0.0), length)
-    down_state, down = math_sum(down_state, None if moved is None else (flow if moved < 0 else 0.0), length)
+    # As Pine's reference: `change <= 0 ? 0 : flow`, where a comparison with na (the first bar) is false, so the
+    # first bar's flow counts on both sides.
+    up_state, up = math_sum(up_state, flow if moved is None or moved > 0 else 0.0, length)
+    down_state, down = math_sum(down_state, flow if moved is None or moved < 0 else 0.0, length)
     if up is None or down is None:
         return (value, up_state, down_state), None
     return (value, up_state, down_state), 100.0 if down == 0 else 100 - 100 / (1 + up / down)
@@ -556,7 +558,8 @@ def obv(state: Any, close: Value, volume: Value) -> tuple[Any, Value]:
 
 
 def dmi(state: Any, high: Value, low: Value, close: Value, di_length: Value, adx_smoothing: Value) -> tuple[Any, Value]:
-    previous, plus_state, minus_state, range_state, adx_state = state or ((None, None, None), None, None, None, None)
+    """Pine's reference: +DI and -DI are fixnan'd (a zero true range keeps the last values), ADX smooths them."""
+    previous, plus_state, minus_state, range_state, adx_state, last = state or ((None, None, None), None, None, None, None, (None, None))
     previous_high, previous_low, previous_close = previous
     if previous_high is None:
         up = down = None
@@ -569,14 +572,16 @@ def dmi(state: Any, high: Value, low: Value, close: Value, di_length: Value, adx
     range_state, smoothed_range = rma(range_state, span, di_length)
     plus_state, smoothed_plus = rma(plus_state, plus_dm, di_length)
     minus_state, smoothed_minus = rma(minus_state, minus_dm, di_length)
-    plus = minus = adx = None
+    plus, minus = last
     if smoothed_range and smoothed_plus is not None and smoothed_minus is not None:
         plus = 100 * smoothed_plus / smoothed_range
         minus = 100 * smoothed_minus / smoothed_range
+    adx = None
+    if plus is not None and minus is not None:
         total = plus + minus
-        adx_state, adx = rma(adx_state, abs(plus - minus) / (1 if total == 0 else total), adx_smoothing)
-        adx = None if adx is None else 100 * adx
-    return ((high, low, close), plus_state, minus_state, range_state, adx_state), (plus, minus, adx)
+        adx_state, smoothed = rma(adx_state, abs(plus - minus) / (1 if total == 0 else total), adx_smoothing)
+        adx = None if smoothed is None else 100 * smoothed
+    return ((high, low, close), plus_state, minus_state, range_state, adx_state, (plus, minus)), (plus, minus, adx)
 
 
 def supertrend(state: Any, high: Value, low: Value, close: Value, factor: Value, atr_period: Value) -> tuple[Any, Value]:
@@ -601,31 +606,38 @@ def supertrend(state: Any, high: Value, low: Value, close: Value, factor: Value,
     return (atr_state, close, upper, lower, trend, direction), (trend, direction)
 
 
-def sar(state: Any, high: Value, low: Value, start: Value, increment: Value, maximum: Value) -> tuple[Any, Value]:
-    """Parabolic SAR, following Pine's reference implementation."""
+def sar(state: Any, high: Value, low: Value, close: Value, start: Value, increment: Value, maximum: Value) -> tuple[Any, Value]:
+    """Parabolic SAR: Pine's reference (`pine_sar` in the ta.sar documentation), line by line."""
     if state is None:
-        # The first bar has no SAR; the trend starts on the second.
-        return ("first", high, low), None
-    if state[0] == "first":
-        _, first_high, first_low = state
-        rising = high > first_high or low >= first_low
-        if rising:
-            extreme, value = js_max(high, first_high), first_low
+        # The first bar has no SAR; the trend is chosen on the second from the closes.
+        return (1, None, None, None, None, high, low, close, None, None), None
+    calls, result, extreme, acceleration, below, high1, low1, close1, high2, low2 = state
+    first_trend_bar = False
+    if calls == 1:
+        if close > close1:
+            below, extreme, result = True, high, low1
         else:
-            extreme, value = js_min(low, first_low), first_high
-        return ("trend", rising, value, extreme, start, high, low, first_high, first_low), value
-    _, rising, value, extreme, factor, previous_high, previous_low, older_high, older_low = state
-    value = value + factor * (extreme - value)
-    if rising:
-        value = js_min(value, previous_low, older_low)
-        if low < value:
-            rising, value, extreme, factor = False, extreme, low, start
-        elif high > extreme:
-            extreme, factor = high, js_min(factor + increment, maximum)
-    else:
-        value = js_max(value, previous_high, older_high)
-        if high > value:
-            rising, value, extreme, factor = True, extreme, high, start
+            below, extreme, result = False, low, high1
+        first_trend_bar = True
+        acceleration = start
+    result = result + acceleration * (extreme - result)
+    if below:
+        if result > low:
+            first_trend_bar, below, result, extreme, acceleration = True, False, js_max(high, extreme), low, start
+    elif result < high:
+        first_trend_bar, below, result, extreme, acceleration = True, True, js_min(low, extreme), high, start
+    if not first_trend_bar:
+        if below:
+            if high > extreme:
+                extreme, acceleration = high, js_min(acceleration + increment, maximum)
         elif low < extreme:
-            extreme, factor = low, js_min(factor + increment, maximum)
-    return ("trend", rising, value, extreme, factor, high, low, previous_high, previous_low), value
+            extreme, acceleration = low, js_min(acceleration + increment, maximum)
+    if below:
+        result = js_min(result, low1)
+        if calls > 1:
+            result = js_min(result, low2)
+    else:
+        result = js_max(result, high1)
+        if calls > 1:
+            result = js_max(result, high2)
+    return (calls + 1, result, extreme, acceleration, below, high, low, close, high1, low1), result

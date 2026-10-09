@@ -18,10 +18,14 @@ Scripts run only on the server, in a Python interpreter.
    - so does everything inside brackets.
 2. **Compile.** `compile_script` turns the tree into a `Program` of Python closures and resolves every name at compile time. A program doesn't depend on any run, so it is compiled once per script version and reused for every symbol, user and input set.
 3. **Run.** `ScriptRun` executes the program bar by bar over a `BarSeries`. `append_bar` runs only a newly closed bar, so a cached run is extended incrementally.
+   - A script that reads the last bar (`barstate.islast`, `islastconfirmedhistory`, `isrealtime`, `last_bar_index`, `last_bar_time`) can't be extended: a bar that was last when it ran no longer is. For such a script `ScriptRun.can_extend` is false, and it runs again in full on new bars.
+   - Every failure is a `ScriptError` with a line: syntax, unsupported feature, runtime error (including any Python error inside a built-in), or limit.
 
 **Series model.**
 - Every variable is a `Slot`: its value on the current bar plus its committed history. At the end of a bar each slot commits; a `var` keeps its value and the others reset to `na`.
 - Each call site of a user function gets its own `Context`, as in Pine: its variables and its `ta.*` calls keep their own series.
+  - A function's variables and parameters advance once per **call**, as Pine documents: `x[1]` in a function is its previous call's value, even when the function isn't called on every bar.
+  - Its `ta.*` calls advance once per bar on which they run (they commit by bar index), so a function called twice on one bar from a loop recomputes that bar. This matches Pine for calls on different bars; Pine warns against `ta.*` calls in loops.
 - Each `ta.*` call site keeps a `ta.Site`. The function is a pure `step(state, inputs) -> (state, output)` applied to the state committed at the end of the previous bar. Calling it again on the same bar (a loop, or later a realtime bar that updates) therefore recomputes that bar instead of advancing twice.
 
 **One source of truth.** `ta.*` functions follow the server indicator registry's order of operations (TVP-0.2), so a script and the chart's indicator agree to within a few ulps:
@@ -29,16 +33,17 @@ Scripts run only on the server, in a Python interpreter.
 - EMA and RMA seed with the mean of the first `length` values;
 - RSI and ATR smooth with `(avg * (n - 1) + x) / n`.
 
-**Result cache key:** script hash, inputs, instrument, interval, last bar time and formula version. A cache miss on a run that already exists extends that run with the new bars.
+**Result cache key:** script hash, inputs, instrument, interval, last bar time and formula version. A cache miss on a run that already exists extends that run with the new bars when `can_extend`, and runs again in full otherwise.
 
 ## 2. Supported subset
 
 ### Versions and declaration
 
-- `//@version=5` and `//@version=6`. Older versions are refused.
-- Division follows the version:
-  - in v5, an int divided by an int is an int, truncated toward zero;
-  - in v6, `/` returns a fraction (`7 / 2 == 3.5`).
+- `//@version=5` and `//@version=6`. Older versions, and a script without a `//@version` line (v1 in Pine), are refused.
+- Division follows the version, per TradingView's v6 migration guide:
+  - in v5, an int **constant** divided by an int constant is truncated toward zero (`7 / 2 == 3`); any other division keeps the fraction (`bar_index / 2` is 0.5 on bar 1);
+  - in v6, `/` always returns the fraction (`7 / 2 == 3.5`).
+- `and` and `or` follow the version too: v5 evaluates both sides on every bar (a `ta.*` call on the right still advances), v6 evaluates them lazily.
 - `indicator(...)` with constant arguments is required. Recorded: `title`, `shorttitle`, `overlay`, `format`, `precision`, `max_*_count` and the rest.
 - `strategy()` and `library()` are refused as unsupported. Strategies arrive with TVP-11.5.
 
@@ -55,7 +60,7 @@ Scripts run only on the server, in a Python interpreter.
   - `if` / `else if` / `else` as a statement, or as an expression whose value is the branch's last value;
   - `switch` with a subject, or without one (conditions), with a default `=>` case.
 - **Loops:**
-  - `for i = a to b [by step]` (counts down when `b < a`);
+  - `for i = a to b [by step]` (counts down when `b < a`); v6 checks the `to` bound again before each iteration, v5 reads it once;
   - `for x in array` and `for [i, x] in array`;
   - `while`, `break`, `continue`.
 - **User functions:**
@@ -65,7 +70,7 @@ Scripts run only on the server, in a Python interpreter.
 - **Operators:** `?:`, `or`, `and`, `== !=`, `< > <= >=`, `+ -`, `* / %`, unary `- + not`.
 - **History:** `expr[n]` on any expression.
   - On a variable or built-in series it reads that series.
-  - On any other expression it reads a buffer filled on the bars where the expression ran.
+  - On any other expression it reads that expression's own series: one value per bar at the top level (`na` on bars where the branch holding it didn't run), one per call inside a function.
 - **Method syntax:** `arr.push(x)` and `lbl.set_text(...)` dispatch on the value's type at run time.
 - **Generic constructors:** `array.new<float>(...)`, `map.new<string, float>()`.
 
@@ -75,6 +80,8 @@ Scripts run only on the server, in a Python interpreter.
 - A comparison involving `na` is false, except `!=` between `na` and a value.
 - `nz`, `na()` and `fixnan` work as in Pine.
 - Conditions treat `na`, `false` and `0` as false.
+- `switch` on an `na` subject takes the default case: `na` equals nothing.
+- Ints are 64-bit: arithmetic past that range is a runtime error. Arithmetic needs numbers (`"x" * 5` is an error); `+` also joins two strings.
 - Division by zero gives `na`.
 
 ### Built-in variables
@@ -145,6 +152,9 @@ Scripts run only on the server, in a Python interpreter.
 - **`ta.stoch`** is `na` on a flat window, because Pine divides by a zero range. The chart's Stochastic RSI shows 50 there. This is the one known difference between a template and its chart indicator.
 - **`ta.pivothigh`:** the pivot bar must be strictly above the bars before it and at least as high as the bars after it. On a plateau, the first bar is the pivot. `ta.pivotlow` mirrors this. To be checked against TradingView in TVP-11.1.
 - **Lengths:** `na` gives `na`; a length that isn't a positive whole number is a runtime error, as in Pine.
+- **`ta.sar`**, **`ta.supertrend`**, **`ta.dmi`** (with `fixnan`), **`ta.wma`**, **`ta.cci`**, **`ta.dev`**, **`ta.vwma`**, **`ta.mfi`**, **`ta.obv`** and **`ta.stoch`** are checked against TradingView's documented reference implementations (`pine_sar` and the like), run through the interpreter itself (`test_trading_scripts_safety.py`).
+- **`time_close`** is the bar's start plus the interval (the run's timeframe); without a fixed interval (months), the next bar's start.
+- **Known deviation:** inputs to `ta.*` that are `na` in the middle of a series are not yet tested against TradingView; no golden dataset has gaps of `na`.
 
 ### Not supported yet
 
@@ -155,7 +165,7 @@ Scripts run only on the server, in a Python interpreter.
 | `import`/`export` libraries, user-defined types, methods, enums | Later; refused with a reason |
 | `matrix.*`, `polyline.*`, `chart.point` | Later |
 | `indicator(timeframe=...)` | TVP-11.1 |
-| Realtime-bar semantics: `varip`, rollback of an unconfirmed bar | TVP-11.1. Runs are on closed bars, and `varip` behaves like `var` there, as in Pine's history. |
+| Realtime-bar semantics: `varip`, rollback of an unconfirmed bar | TVP-11.1. Runs are on closed bars, and `varip` behaves like `var` there, as in Pine's history. A script that reads the last bar runs again in full instead of being extended. |
 | Type checking (declared types are parsed, not enforced) | TVP-11.1 |
 | `ta.alma`, `ta.swma`, `ta.wpr`, `ta.cog`, `ta.tsi`, `ta.kcw` and other rarely used functions | TVP-11.1 |
 
@@ -168,12 +178,17 @@ Unsupported names are refused at compile time with "not supported yet" and the l
 | Bars per run | 20,000 |
 | Loop iterations per run | 5,000,000 |
 | Loop iterations per bar | 100,000 |
-| Wall time per run | 20 s; to be lowered per user (§3) |
+| Wall time per run | 20 s, checked after every bar and every 1,024 loop iterations; to be lowered per user (§4) |
 | Drawings of each kind | 500 |
 | Plots per script | 64 |
-| Array size | 100,000 |
+| One string's length | 40,000 characters, checked before a string is built (`+`, `str.repeat`, `str.format`, `replace`, `join`) |
+| One array's or map's size | 100,000, checked by every function that grows one |
+| Array and map values created per run | 10,000,000 |
+| Alerts kept per run | 1,000 (the newest) |
+| Expression nesting | 64 levels of brackets or unary operators, 256 operators in one chain |
+| Input values | checked against the declared type, options and range; unknown titles are refused |
 
-Scripts have no file, network or OS access: the interpreter only exposes the functions above.
+Scripts have no file, network or OS access: the interpreter only exposes the functions above. These checks are in-process: they can't interrupt a single long built-in operation (sorting a 100,000-value array), so production runs need a separate process with CPU and memory limits (§4).
 
 ## 3. Spike results (TVP-11.0, 2026-10-09)
 
@@ -221,15 +236,17 @@ Measured with `scripts/omnix_scripts_benchmark.py`: 5,000 hourly bars, one CPU c
 
 | Measure | Median | Max |
 |---|---|---|
-| Full run, 34 runnable scripts | 48 ms | 285 ms (ZigZag with arrays and lines) |
-| Incremental, per new bar | 0.016 ms | 0.073 ms |
+| Full run, 34 runnable scripts | 52 ms | 313 ms (ZigZag with arrays and lines) |
+| Incremental, per new bar (32 scripts that can be extended) | 0.017 ms | 0.073 ms |
 | Compile | about 1 ms | 7 ms |
+
+The two scripts that read the last bar (RSI with a dashboard table, ZigZag) run again in full on each new bar: 74 ms and 313 ms. TVP-11.1 follow-up: Pine's realtime model, keeping the state before the last bar and re-running only from there, makes them incremental too.
 
 **Memory retained by a 5,000-bar run:** 0.6–6.5 MB. Every slot keeps its full history.
 
 **TVP-11.1 follow-up:** keep history only for the variables and expressions a script reads with `[n]`, up to the deepest offset it uses. This is known at compile time for constant offsets, and is Pine's `max_bars_back` model. It cuts retained memory by most of that figure.
 
-**Result cache:** 10 popular scripts on 5 symbols over 30 new bars.
+**Result cache:** simulated with 10 popular scripts on 5 symbols; each user opens one script on one symbol, then 30 new bars close and every open chart asks for the result at each bar (requests = users × 31).
 
 | Users | Hit rate | Runs kept | Compute |
 |---|---|---|---|
@@ -237,7 +254,7 @@ Measured with `scripts/omnix_scripts_benchmark.py`: 5,000 hourly bars, one CPU c
 | 100 | 56% | 44 | 1.3 s total |
 
 - Identical charts share one computation per bar.
-- New bars extend the cached runs incrementally, about 0.02 ms each.
+- New bars extend the cached runs incrementally, about 0.02 ms each (scripts that read the last bar run again in full).
 - Compute time is dominated by first loads.
 
 ## 4. Decision D-9: confirmed
@@ -249,5 +266,5 @@ A server-side Python interpreter fits the budget:
 **Conditions for TVP-11.1:**
 1. **Per-user limits:** a CPU budget per run (proposed 2 s for 20,000 bars) and a cap on concurrent runs per user.
 2. **Memory:** history only for referenced series (above), and the cache bounded by memory as well as by entries.
-3. **Execution:** runs off the event loop, in a worker thread or process.
+3. **Execution:** runs in a separate worker process with CPU-time and memory limits (`RLIMIT_CPU`/`RLIMIT_AS` or a container), killed when it overruns. A thread is not enough: under the GIL a runaway script would starve the server, and a thread can't be killed. A `ScriptRun` is mutable and owned by one worker; the cache shares immutable results, not runs.
 4. **Stale runs:** a run is reset when its bars change (an edited or backfilled bar), never patched.

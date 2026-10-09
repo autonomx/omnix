@@ -4,11 +4,11 @@ src = input(close, title="Source")
 modeSwitch = input.string("Hma", title="Hull Variation", options=["Hma", "Thma", "Ehma"])
 length = input(55, title="Length")
 switchColor = input(true, "Color Hull according to trend?")
-HMA(_src, _length) => ta.wma(2 * ta.wma(_src, _length / 2) - ta.wma(_src, _length), math.round(math.sqrt(_length)))
-EHMA(_src, _length) => ta.ema(2 * ta.ema(_src, _length / 2) - ta.ema(_src, _length), math.round(math.sqrt(_length)))
-THMA(_src, _length) => ta.wma(ta.wma(_src, _length / 3) * 3 - ta.wma(_src, _length / 2) - ta.wma(_src, _length), _length)
+HMA(_src, _length) => ta.wma(2 * ta.wma(_src, int(_length / 2)) - ta.wma(_src, _length), math.round(math.sqrt(_length)))
+EHMA(_src, _length) => ta.ema(2 * ta.ema(_src, int(_length / 2)) - ta.ema(_src, _length), math.round(math.sqrt(_length)))
+THMA(_src, _length) => ta.wma(ta.wma(_src, int(_length / 3)) * 3 - ta.wma(_src, int(_length / 2)) - ta.wma(_src, _length), _length)
 Mode(modeSwitch, src, len) =>
-    modeSwitch == "Hma" ? HMA(src, len) : modeSwitch == "Ehma" ? EHMA(src, len) : modeSwitch == "Thma" ? THMA(src, len / 2) : na
+    modeSwitch == "Hma" ? HMA(src, len) : modeSwitch == "Ehma" ? EHMA(src, len) : modeSwitch == "Thma" ? THMA(src, int(len / 2)) : na
 _hull = Mode(modeSwitch, src, int(length))
 MHULL = _hull
 SHULL = _hull[2]

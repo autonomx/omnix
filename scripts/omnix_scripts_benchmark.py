@@ -85,6 +85,9 @@ def measure(name: str, source: str, bars: BarSeries) -> dict[str, float] | None:
     retained, _ = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     timings = []
+    if not partial.can_extend:
+        # Reads the last bar: each new bar runs it again in full.
+        return {"compile_ms": compiled * 1000, "full_ms": full * 1000, "bar_ms": full * 1000, "retained_kb": retained / 1024, "peak_kb": peak / 1024}
     for index in range(BARS - APPENDED, BARS):
         began = time.perf_counter()
         partial.append_bar(bar_at(bars, index))
@@ -115,6 +118,9 @@ def cache_simulation(sources: dict[str, str], users: int, symbols: int, minutes:
                 continue
             began = time.perf_counter()
             state = runs.get((name, symbol))
+            if state is not None and not state.can_extend:
+                # Reads the last bar: runs again in full.
+                state = None
             if state is None:
                 state = ScriptRun(compile_script(source), slice_bars(datasets[symbol], last), {}, ScriptLimits(), str(symbol), "60")
                 state.run_all()

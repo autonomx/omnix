@@ -43,6 +43,11 @@ _UNSUPPORTED_KEYWORDS = {
     "enum": "enums",
 }
 
+# Expressions nested deeper than this (brackets, unary operators) or chains of more operators are refused before
+# they can exhaust the interpreter's stack.
+MAX_NESTING = 64
+MAX_CHAIN = 256
+
 # Binary operators by precedence, loosest first (Pine's table; ?: is below them all).
 _LEVELS: list[set[str]] = [{"or"}, {"and"}, {"==", "!="}, {"<", ">", "<=", ">="}, {"+", "-"}, {"*", "/", "%"}]
 
@@ -58,6 +63,12 @@ class _Parser:
     def __init__(self, tokens: list[Token]) -> None:
         self.tokens = tokens
         self.pos = 0
+        self.depth = 0
+
+    def nest(self) -> None:
+        self.depth += 1
+        if self.depth > MAX_NESTING:
+            self.fail("the expression is nested too deeply")
 
     # Token helpers
 
@@ -384,11 +395,15 @@ class _Parser:
     # Expressions
 
     def expression(self) -> Node:
-        if self.at_keyword("if"):
-            return self.if_statement()
-        if self.at_keyword("switch"):
-            return self.switch_statement()
-        return self.ternary()
+        self.nest()
+        try:
+            if self.at_keyword("if"):
+                return self.if_statement()
+            if self.at_keyword("switch"):
+                return self.switch_statement()
+            return self.ternary()
+        finally:
+            self.depth -= 1
 
     def ternary(self) -> Node:
         condition = self.binary(0)
@@ -405,16 +420,25 @@ class _Parser:
             return self.unary()
         left = self.binary(level + 1)
         operators = _LEVELS[level]
+        terms = 0
         while (self.token.kind in ("OP", "KEYWORD")) and self.token.value in operators:
             token = self.advance()
             right = self.binary(level + 1)
             left = Binary(line=token.line, op=str(token.value), left=left, right=right)
+            terms += 1
+            # The compiled expression nests one closure per operator.
+            if terms > MAX_CHAIN:
+                self.fail("the expression is too long")
         return left
 
     def unary(self) -> Node:
         if self.at_op("-", "+") or self.at_keyword("not"):
             token = self.advance()
-            operand = self.unary()
+            self.nest()
+            try:
+                operand = self.unary()
+            finally:
+                self.depth -= 1
             return Unary(line=token.line, op=str(token.value), operand=operand)
         return self.postfix(self.primary())
 

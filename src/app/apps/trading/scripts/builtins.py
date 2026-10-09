@@ -8,13 +8,14 @@ register what they produce with the compiler.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
 from . import ta
 from .errors import ScriptLimitError, ScriptRuntimeError, ScriptSyntaxError, ScriptUnsupportedError
-from .runtime import SERIES_NAMES, Closure, Context, Drawing, ScriptInput, _na, truthy
+from .runtime import SERIES_NAMES, Closure, Context, Drawing, ScriptInput, _na, allocate, check_string, current_limits, truthy
 from .syntax import Call, ColorLiteral, Literal, Name, Node, TupleExpr, Unary
 
 Factory = Callable[[Any, Call], Closure]
@@ -142,7 +143,8 @@ def site_with_optional_source(spec: str, step: ta.Step, source: str) -> Factory:
     short_params = full_params[1:]
 
     def factory(c: Any, node: Call) -> Closure:
-        if len(node.args) < len(full_params) - len(defaults) and "source" not in node.kwargs:
+        provided = len(node.args) + sum(1 for key in node.kwargs if key in full_params)
+        if provided < len(full_params) - len(defaults) and "source" not in node.kwargs:
             closures = _bind(c, node, short_params, defaults)
             return _site_closure(node.id, step, closures, lambda run, t: (run.series(source, t),))
         return _site_closure(node.id, step, _bind(c, node, full_params, defaults), None)
@@ -204,12 +206,12 @@ def _number_or_na(function: Callable[..., float]) -> Callable[..., Any]:
 
 
 def _round(value: Any, precision: Any = None) -> Any:
-    if _na(value):
+    if _na(value) or not isinstance(value, int | float) or not math.isfinite(value):
         return None
-    if precision is None:
+    if precision is None or _na(precision):
         # Pine rounds halves up, like JavaScript.
         return int(math.floor(value + 0.5))
-    factor = 10 ** int(precision)
+    factor = 10 ** max(0, min(15, int(precision)))
     return math.floor(value * factor + 0.5) / factor
 
 
@@ -238,11 +240,19 @@ def _sign(value: Any) -> Any:
 
 
 def _int(value: Any) -> Any:
-    return None if _na(value) else int(value)
+    if _na(value):
+        return None
+    if not isinstance(value, int | float):
+        raise ScriptRuntimeError("int() takes a number")
+    return int(value) if math.isfinite(value) else None
 
 
 def _float(value: Any) -> Any:
-    return None if _na(value) else float(value)
+    if _na(value):
+        return None
+    if not isinstance(value, int | float):
+        raise ScriptRuntimeError("float() takes a number")
+    return float(value)
 
 
 def _bool(value: Any) -> Any:
@@ -261,7 +271,7 @@ COLORS = {
 
 
 def _rgba(color: Any) -> tuple[int, int, int, float] | None:
-    if not isinstance(color, str) or not color.startswith("#") or len(color) not in (7, 9):
+    if not isinstance(color, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?", color):
         return None
     red, green, blue = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
     alpha = int(color[7:9], 16) if len(color) == 9 else 255
@@ -325,29 +335,32 @@ def _tostring(value: Any, format: Any = "") -> Any:
             return f"{value:.2f}"
         return repr(value) if not value.is_integer() else str(int(value)) if abs(value) < 1e16 else repr(value)
     if isinstance(value, ScriptArray):
-        return "[" + ", ".join(str(_tostring(item)) for item in value.items) + "]"
+        return check_string("[" + ", ".join(str(_tostring(item)) for item in value.items) + "]")
     return str(value)
 
 
+_PLACEHOLDER = re.compile(r"\{(\d+)(?:,([^{}]*))?\}")
+
+
 def _format(template: Any, *values: Any) -> Any:
+    """{0}, {1,number,#.##}: one pass over the template, so a value containing braces is never re-read."""
     if not isinstance(template, str):
         return None
-    result = template
-    for index, value in enumerate(values):
-        for pattern in (f"{{{index}}}",):
-            result = result.replace(pattern, str(_tostring(value)))
-        # {0,number,#.##} and similar
-        while f"{{{index}," in result:
-            start = result.index(f"{{{index},")
-            end = result.index("}", start)
-            pattern = result[start + 1 : end].split(",")
-            fmt = pattern[2] if len(pattern) > 2 else ""
-            result = result[:start] + str(_tostring(float(value) if isinstance(value, int | float) else value, fmt or "")) + result[end + 1 :]
-    return result
+
+    def replace(match: re.Match[str]) -> str:
+        index = int(match.group(1))
+        if index >= len(values):
+            return match.group(0)
+        value = values[index]
+        parts = (match.group(2) or "").split(",")
+        pattern = parts[1] if len(parts) > 1 else ""
+        return str(_tostring(float(value) if isinstance(value, int | float) and not isinstance(value, bool) else value, pattern))
+
+    return check_string(_PLACEHOLDER.sub(replace, template))
 
 
 def _substring(source: Any, begin: Any, end: Any = None) -> Any:
-    if not isinstance(source, str) or _na(begin):
+    if not isinstance(source, str) or _na(begin) or not isinstance(begin, int | float) or not (end is None or isinstance(end, int | float)):
         return None
     return source[int(begin) :] if end is None else source[int(begin) : int(end)]
 
@@ -362,18 +375,22 @@ def _tonumber(text: Any) -> Any:
 def _split(text: Any, separator: Any) -> Any:
     if not isinstance(text, str) or not isinstance(separator, str):
         return None
-    return ScriptArray(list(text) if separator == "" else text.split(separator))
+    parts = list(text) if separator == "" else text.split(separator)
+    allocate(len(parts), len(parts))
+    return ScriptArray(parts)
 
 
 def _replace(source: Any, target: Any, replacement: Any, occurrence: Any = 0) -> Any:
     if not all(isinstance(value, str) for value in (source, target, replacement)):
         return None
+    if not isinstance(occurrence, int | float) and occurrence is not None:
+        return None
     start = -1
-    for _ in range(int(occurrence or 0) + 1):
+    for _ in range(max(0, int(occurrence or 0)) + 1):
         start = source.find(target, start + 1)
         if start < 0:
             return source
-    return source[:start] + replacement + source[start + len(target) :]
+    return check_string(source[:start] + replacement + source[start + len(target) :])
 
 
 # Arrays
@@ -381,9 +398,12 @@ def _replace(source: Any, target: Any, replacement: Any, occurrence: Any = 0) ->
 
 def _array_new(initial: Any = None) -> Callable[[Any, Any], Any]:
     def create(size: Any = 0, initial_value: Any = initial) -> Any:
+        if not _na(size) and not isinstance(size, int | float):
+            raise ScriptRuntimeError("an array's size is a number")
         count = 0 if _na(size) else int(size)
-        if count < 0 or count > 100_000:
-            raise ScriptLimitError("an array holds at most 100,000 values")
+        if count < 0:
+            raise ScriptRuntimeError("an array's size can't be negative")
+        allocate(count, count)
         return ScriptArray([initial_value] * count)
 
     return create
@@ -397,7 +417,7 @@ def _items(array: Any) -> list[Any]:
 
 def _index(array: Any, index: Any) -> int:
     items = _items(array)
-    if _na(index):
+    if _na(index) or not isinstance(index, int | float):
         raise ScriptRuntimeError("array index is na")
     position = int(index)
     if position < 0:
@@ -407,10 +427,13 @@ def _index(array: Any, index: Any) -> int:
     return position
 
 
+def _grow(items: list[Any], count: int) -> None:
+    allocate(count, len(items) + count)
+
+
 def _push(array: Any, value: Any) -> None:
     items = _items(array)
-    if len(items) >= 100_000:
-        raise ScriptLimitError("an array holds at most 100,000 values")
+    _grow(items, 1)
     items.append(value)
 
 
@@ -429,7 +452,9 @@ def _shift(array: Any) -> Any:
 
 
 def _unshift(array: Any, value: Any) -> None:
-    _items(array).insert(0, value)
+    items = _items(array)
+    _grow(items, 1)
+    items.insert(0, value)
 
 
 def _get(array: Any, index: Any) -> Any:
@@ -441,7 +466,11 @@ def _set(array: Any, index: Any, value: Any) -> None:
 
 
 def _insert(array: Any, index: Any, value: Any) -> None:
-    _items(array).insert(int(index), value)
+    items = _items(array)
+    if _na(index) or not isinstance(index, int | float) or not 0 <= int(index) <= len(items):
+        raise ScriptRuntimeError("array index is out of bounds")
+    _grow(items, 1)
+    items.insert(int(index), value)
 
 
 def _remove(array: Any, index: Any) -> Any:
@@ -494,12 +523,43 @@ def _array_sort(array: Any, order: Any = "order.ascending") -> None:
 
 
 def _array_slice(array: Any, start: Any, end: Any) -> Any:
-    return ScriptArray(_items(array)[int(start) : int(end)])
+    items = _items(array)
+    if any(_na(value) or not isinstance(value, int | float) for value in (start, end)):
+        raise ScriptRuntimeError("slice() takes two indexes")
+    part = items[int(start) : int(end)]
+    allocate(len(part), len(part))
+    return ScriptArray(part)
+
+
+def _array_copy(array: Any) -> Any:
+    items = _items(array)
+    allocate(len(items), len(items))
+    return ScriptArray(list(items))
+
+
+def _array_concat(array: Any, other: Any) -> Any:
+    items, extra = _items(array), _items(other)
+    _grow(items, len(extra))
+    items.extend(list(extra))
+    return array
+
+
+def _array_join(array: Any, separator: Any = "") -> Any:
+    if not isinstance(separator, str):
+        separator = ""
+    return check_string(separator.join(str(_tostring(item)) for item in _items(array)))
+
+
+def _array_from(*values: Any) -> Any:
+    allocate(len(values), len(values))
+    return ScriptArray(list(values))
 
 
 def _array_fill(array: Any, value: Any, start: Any = 0, end: Any = None) -> None:
     items = _items(array)
-    for index in range(int(start), len(items) if end is None else int(end)):
+    first = 0 if _na(start) else max(0, int(start))
+    last = len(items) if _na(end) else min(len(items), int(end))
+    for index in range(first, last):
         items[index] = value
 
 
@@ -510,23 +570,51 @@ ARRAY_METHODS: dict[str, Callable[..., Any]] = {
     "median": _array_median, "includes": lambda a, v: v in _items(a),
     "indexof": lambda a, v: _items(a).index(v) if v in _items(a) else -1,
     "lastindexof": lambda a, v: len(_items(a)) - 1 - _items(a)[::-1].index(v) if v in _items(a) else -1,
-    "first": lambda a: _get(a, 0), "last": lambda a: _get(a, -1), "copy": lambda a: ScriptArray(list(_items(a))),
+    "first": lambda a: _get(a, 0), "last": lambda a: _get(a, -1), "copy": _array_copy,
     "reverse": lambda a: _items(a).reverse(), "sort": _array_sort, "slice": _array_slice, "fill": _array_fill,
-    "concat": lambda a, b: (_items(a).extend(_items(b)), a)[1],
-    "join": lambda a, separator="": separator.join(str(_tostring(item)) for item in _items(a)),
+    "concat": _array_concat,
+    "join": _array_join,
 }
 
 
+def _map_put(target: Any, key: Any, value: Any) -> Any:
+    if not isinstance(target, ScriptMap):
+        raise ScriptRuntimeError("expected a map, got na")
+    if key not in target.items:
+        allocate(1, len(target.items) + 1)
+    previous = target.items.get(key)
+    target.items[key] = value
+    return previous
+
+
 MAP_METHODS: dict[str, Callable[..., Any]] = {
-    "put": lambda m, k, v: m.items.__setitem__(k, v),
+    "put": lambda m, k, v: _map_put(m, k, v),
     "get": lambda m, k: m.items.get(k),
     "contains": lambda m, k: k in m.items,
     "remove": lambda m, k: m.items.pop(k, None),
     "size": lambda m: len(m.items),
-    "keys": lambda m: ScriptArray(list(m.items)),
-    "values": lambda m: ScriptArray(list(m.items.values())),
+    "keys": lambda m: _array_from(*m.items),
+    "values": lambda m: _array_from(*m.items.values()),
     "clear": lambda m: m.items.clear(),
 }
+
+
+def _replace_all(source: Any, target: Any, replacement: Any) -> Any:
+    if not all(isinstance(value, str) for value in (source, target, replacement)):
+        return None
+    if target and source.count(target) * max(0, len(replacement) - len(target)) + len(source) > current_limits().max_string_length:
+        check_string(" " * (current_limits().max_string_length + 1))
+    return source.replace(target, replacement) if target else source
+
+
+def _repeat(source: Any, count: Any, separator: Any = "") -> Any:
+    if not isinstance(source, str) or _na(count) or not isinstance(count, int | float) or not isinstance(separator, str):
+        return None
+    times = max(0, int(count))
+    # Checked before the string is built.
+    if times * (len(source) + len(separator)) > current_limits().max_string_length:
+        check_string(" " * (current_limits().max_string_length + 1))
+    return separator.join([source] * times)
 
 
 STR_METHODS: dict[str, Callable[..., Any]] = {
@@ -540,12 +628,12 @@ STR_METHODS: dict[str, Callable[..., Any]] = {
     "trim": lambda s: s.strip() if isinstance(s, str) else None,
     "substring": _substring,
     "replace": _replace,
-    "replace_all": lambda s, a, b: s.replace(a, b) if isinstance(s, str) else None,
+    "replace_all": lambda s, a, b: _replace_all(s, a, b),
     "split": _split,
     "tonumber": _tonumber,
     "tostring": _tostring,
     "format": _format,
-    "repeat": lambda s, count, separator="": separator.join([s] * int(count)) if isinstance(s, str) else None,
+    "repeat": lambda s, count, separator="": _repeat(s, count, separator),
 }
 
 
@@ -772,6 +860,8 @@ def _output(kind: str, spec: str) -> Factory:
                 _store(plot.colors, t, {key: closure(ctx) for key, closure in dynamic.items()})
             if kind == "alertcondition" and truthy(value) and t == len(run.close) - 1:
                 run.alerts.append({"kind": "alertcondition", "title": plot.title, "bar": t, "message": plot.options.get("message")})
+                if len(run.alerts) > run.limits.max_alerts:
+                    del run.alerts[0]
             return index
 
         return emit
@@ -822,7 +912,10 @@ def _alert(c: Any, node: Call) -> Closure:
 
     def emit(ctx: Context) -> Any:
         run = ctx.run
-        run.alerts.append({"kind": "alert", "bar": run.t, "message": closures[0](ctx), "freq": closures[1](ctx)})
+        message = closures[0](ctx)
+        run.alerts.append({"kind": "alert", "bar": run.t, "message": message if not isinstance(message, str) else check_string(message), "freq": closures[1](ctx)})
+        if len(run.alerts) > run.limits.max_alerts:
+            del run.alerts[0]
         return None
 
     return emit
@@ -1015,6 +1108,8 @@ def builtin_variable(c: Any, node: Name) -> Closure | None:
         return lambda ctx: ctx.run.t
     if name in SERIES_NAMES:
         return lambda ctx: ctx.run.series(name, ctx.run.t)
+    if name in ("last_bar_index", "last_bar_time", "barstate.islast", "barstate.islastconfirmedhistory", "barstate.isrealtime"):
+        c.uses_last_bar = True
     if name == "last_bar_index":
         return lambda ctx: ctx.run.last_bar_index
     if name == "last_bar_time":
@@ -1172,7 +1267,7 @@ FUNCTIONS: dict[str, Factory] = {
     "ta.mfi": site("series, length", lambda s, vol, v, n: ta.mfi(s, v, vol, n), lambda run, t: (run.volume[t],)),
     "ta.dmi": site("diLength, adxSmoothing", ta.dmi, _hlc),
     "ta.supertrend": site("factor, atrPeriod", ta.supertrend, _hlc),
-    "ta.sar": site("start, inc, max", ta.sar, lambda run, t: (run.high[t], run.low[t])),
+    "ta.sar": site("start, inc, max", ta.sar, _hlc),
     "ta.vwap": _vwap_function,
     "math.sum": site("source, length", ta.math_sum),
     "fixnan": site("source", _fixnan),
@@ -1253,7 +1348,7 @@ FUNCTIONS: dict[str, Factory] = {
     "log.warning": pure("message", lambda message: None),
     "log.error": pure("message", lambda message: None),
     # arrays and maps
-    "array.from": variadic(lambda *values: ScriptArray(list(values))),
+    "array.from": variadic(_array_from),
     "array.new": pure("size=0, initial_value=na", _array_new()),
     "array.new_float": pure("size=0, initial_value=na", _array_new()),
     "array.new_int": pure("size=0, initial_value=na", _array_new()),
