@@ -11,6 +11,7 @@ from app.runtime.scheduler import ScheduledTaskSpec
 def create_trading_router(context: FeatureContext) -> APIRouter:
     """Compose the Trading HTTP surface without patching the gateway class."""
     from app.apps.trading.alerts_api import create_trading_alert_router
+    from app.apps.trading.alerts_notify_api import create_trading_notification_router
     from app.apps.trading.api import create_trading_router as create_trading_base_router
     from app.apps.trading.catalyst_api import create_trading_catalyst_router
     from app.apps.trading.execution_api import create_trading_execution_router
@@ -41,6 +42,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
         create_trading_metric_router,
         create_trading_execution_router,
         create_trading_alert_router,
+        create_trading_notification_router,
         create_trading_scanner_router,
         create_trading_replay_router,
         create_trading_paper_router,

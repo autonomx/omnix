@@ -83,7 +83,7 @@ DeliveryChannel = Literal["webhook", "email", "push"]
 DeliveryStatus = Literal["pending", "sending", "delivered", "failed"]
 
 # Channels the outbox delivers; TVP-0.5b (email) and TVP-0.5c (push) add theirs.
-OUTBOX_CHANNELS: tuple[DeliveryChannel, ...] = ("webhook",)
+OUTBOX_CHANNELS: tuple[DeliveryChannel, ...] = ("webhook", "email", "push")
 
 MAX_WEBHOOK_ATTEMPTS = 8
 FIRST_RETRY_SECONDS = 30.0
@@ -701,7 +701,12 @@ class NotificationDeliveryMonitor(ScheduledTradingMonitor):
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.repository_factory = repository_factory
-        self.senders: Mapping[str, NotificationSender] = senders if senders is not None else {"webhook": WebhookSender()}
+        if senders is None:
+            # Email and web push (TVP-0.5b/c) read their workspace's settings in alerts_notify.py.
+            from .alerts_notify import EmailSender, PushSender
+
+            senders = {"webhook": WebhookSender(), "email": EmailSender(), "push": PushSender()}
+        self.senders: Mapping[str, NotificationSender] = senders
         self.interval_seconds = interval_seconds
         self.max_sends = max_sends
         self.clock = clock
