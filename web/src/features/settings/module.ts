@@ -15,6 +15,8 @@ export const settingsModule = defineModule({
     'GET /api/hermes/status',
     'GET /api/trading/market-data/providers/coinmarketcap/credentials',
     'PUT /api/trading/market-data/providers/coinmarketcap/credentials',
+    'GET /api/trading/market-data/providers/fred/credentials',
+    'PUT /api/trading/market-data/providers/fred/credentials',
     'GET /api/trading/market-data/providers/ibkr/settings',
     'PUT /api/trading/market-data/providers/ibkr/settings',
   ],

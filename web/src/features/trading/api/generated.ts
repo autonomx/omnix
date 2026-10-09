@@ -307,6 +307,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/economic-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calendar */
+        get: operations["calendar_api_trading_economic_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/execution/observation": {
         parameters: {
             query?: never;
@@ -615,6 +632,24 @@ export interface paths {
         get: operations["coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get"];
         /** Update Coinmarketcap Credentials */
         put: operations["update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/market-data/providers/fred/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fred Credentials */
+        get: operations["fred_credentials_api_trading_market_data_providers_fred_credentials_get"];
+        /** Update Fred Credentials */
+        put: operations["update_fred_credentials_api_trading_market_data_providers_fred_credentials_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3383,6 +3418,36 @@ export interface components {
              */
             shadow_only: boolean;
         };
+        /** CalendarEvent */
+        CalendarEvent: {
+            /** Actual */
+            actual: number | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Importance
+             * @enum {string}
+             */
+            importance: "high" | "normal";
+            /** Link */
+            link: string;
+            /** Name */
+            name: string;
+            /** Previous */
+            previous: number | null;
+            /** Release Id */
+            release_id: number;
+            /** Series */
+            series: string | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+        };
         /** CalibrationBin */
         CalibrationBin: {
             /** Count */
@@ -4033,6 +4098,28 @@ export interface components {
         };
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /** EconomicCalendar */
+        EconomicCalendar: {
+            /** Configured */
+            configured: boolean;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Events */
+            events: components["schemas"]["CalendarEvent"][];
+            /**
+             * Source
+             * @default FRED release calendar (Federal Reserve Bank of St. Louis); US releases only
+             */
+            source: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+        };
         /** EmailChangeRequest */
         EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
@@ -9306,6 +9393,11 @@ export interface components {
         };
         /** ProviderFacadePayload */
         ProviderFacadePayload: core["schemas"]["ProviderFacadePayload"];
+        /**
+         * ProviderKeyStatus
+         * @description An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself.
+         */
+        ProviderKeyStatus: core["schemas"]["ProviderKeyStatus"];
         /** ProviderModelCacheEntry */
         ProviderModelCacheEntry: core["schemas"]["ProviderModelCacheEntry"];
         /** ProviderModelCachePayload */
@@ -14182,6 +14274,39 @@ export interface operations {
             };
         };
     };
+    calendar_api_trading_economic_calendar_get: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+                importance?: "high" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EconomicCalendar"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     observation_api_trading_execution_observation_get: {
         parameters: {
             query: {
@@ -14913,6 +15038,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoinMarketCapCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fred_credentials_api_trading_market_data_providers_fred_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyStatus"];
+                };
+            };
+        };
+    };
+    update_fred_credentials_api_trading_market_data_providers_fred_credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoinMarketCapCredentialUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyStatus"];
                 };
             };
             /** @description Validation Error */

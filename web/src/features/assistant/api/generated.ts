@@ -7934,6 +7934,11 @@ export interface components {
         ProviderCapability: core["schemas"]["ProviderCapability"];
         /** ProviderFacadePayload */
         ProviderFacadePayload: core["schemas"]["ProviderFacadePayload"];
+        /**
+         * ProviderKeyStatus
+         * @description An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself.
+         */
+        ProviderKeyStatus: core["schemas"]["ProviderKeyStatus"];
         /** ProviderModelCacheEntry */
         ProviderModelCacheEntry: core["schemas"]["ProviderModelCacheEntry"];
         /** ProviderModelCachePayload */

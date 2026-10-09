@@ -6225,6 +6225,86 @@
         "title": "BrokerWorkspaceAuthorizationRequest",
         "type": "object"
       },
+      "CalendarEvent": {
+        "properties": {
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "importance": {
+            "enum": [
+              "high",
+              "normal"
+            ],
+            "title": "Importance",
+            "type": "string"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "release_id": {
+            "title": "Release Id",
+            "type": "integer"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series"
+          },
+          "unit": {
+            "default": "",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "release_id",
+          "name",
+          "importance",
+          "link",
+          "series",
+          "unit",
+          "actual",
+          "previous"
+        ],
+        "title": "CalendarEvent",
+        "type": "object"
+      },
       "CalibrationBin": {
         "additionalProperties": false,
         "properties": {
@@ -13289,6 +13369,45 @@
           "runtime"
         ],
         "title": "DiagnosticsPayload",
+        "type": "object"
+      },
+      "EconomicCalendar": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "end": {
+            "format": "date",
+            "title": "End",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "source": {
+            "default": "FRED release calendar (Federal Reserve Bank of St. Louis); US releases only",
+            "title": "Source",
+            "type": "string"
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "start",
+          "end",
+          "events",
+          "source"
+        ],
+        "title": "EconomicCalendar",
         "type": "object"
       },
       "EmailChangeRequest": {
@@ -35634,6 +35753,52 @@
           "models"
         ],
         "title": "ProviderFacadePayload",
+        "type": "object"
+      },
+      "ProviderKeyStatus": {
+        "additionalProperties": false,
+        "description": "An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself.",
+        "properties": {
+          "api_key_editable": {
+            "title": "Api Key Editable",
+            "type": "boolean"
+          },
+          "api_key_masked": {
+            "default": "",
+            "title": "Api Key Masked",
+            "type": "string"
+          },
+          "api_key_source": {
+            "enum": [
+              "environment",
+              "os_protected_store",
+              "missing"
+            ],
+            "title": "Api Key Source",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "storage": {
+            "title": "Storage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "configured",
+          "api_key_source",
+          "api_key_editable",
+          "storage",
+          "api_key_masked"
+        ],
+        "title": "ProviderKeyStatus",
         "type": "object"
       },
       "ProviderModelCacheEntry": {
@@ -77686,6 +77851,87 @@
         ]
       }
     },
+    "/api/trading/economic-calendar": {
+      "get": {
+        "operationId": "calendar_api_trading_economic_calendar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "importance",
+            "required": false,
+            "schema": {
+              "default": "high",
+              "enum": [
+                "high",
+                "all"
+              ],
+              "title": "Importance",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EconomicCalendar"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Calendar",
+        "tags": [
+          "trading-economic-calendar"
+        ]
+      }
+    },
     "/api/trading/execution/observation": {
       "get": {
         "operationId": "observation_api_trading_execution_observation_get",
@@ -78811,6 +79057,66 @@
           }
         },
         "summary": "Update Coinmarketcap Credentials",
+        "tags": [
+          "trading-market-data"
+        ]
+      }
+    },
+    "/api/trading/market-data/providers/fred/credentials": {
+      "get": {
+        "operationId": "fred_credentials_api_trading_market_data_providers_fred_credentials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Fred Credentials",
+        "tags": [
+          "trading-market-data"
+        ]
+      },
+      "put": {
+        "operationId": "update_fred_credentials_api_trading_market_data_providers_fred_credentials_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoinMarketCapCredentialUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Fred Credentials",
         "tags": [
           "trading-market-data"
         ]
