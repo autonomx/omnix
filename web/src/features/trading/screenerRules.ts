@@ -20,6 +20,14 @@ export const SCREENER_METRICS: ReadonlyArray<{ value: ScreenerMetric; label: str
   { value: 'rsi', label: 'RSI', uses: 'period' },
   { value: 'atr', label: 'ATR', uses: 'period' },
   { value: 'indicator', label: 'Indicator line', uses: 'indicator' },
+  // US stocks' fundamentals from SEC filings (TVP-9.1), at the last close.
+  { value: 'market_cap', label: 'Market cap (USD)', uses: 'none' },
+  { value: 'pe_ratio', label: 'P/E (TTM)', uses: 'none' },
+  { value: 'ps_ratio', label: 'P/S (TTM)', uses: 'none' },
+  { value: 'pb_ratio', label: 'P/B', uses: 'none' },
+  { value: 'eps_ttm', label: 'EPS (TTM)', uses: 'none' },
+  { value: 'revenue_growth', label: 'Revenue growth % (YoY, TTM)', uses: 'none' },
+  { value: 'net_margin', label: 'Net margin % (TTM)', uses: 'none' },
 ];
 
 export const SCREENER_OPERATORS = [

@@ -18,6 +18,7 @@ from .indicators.engine import (
     simple_moving_average,
 )
 from .alert_conditions import IndicatorSource, validate_indicator_source
+from .fundamental_snapshots import FUNDAMENTAL_METRICS, fundamental_metric, snapshot_for_instrument
 from .models import BarsResponse, MarketBar
 
 
@@ -26,6 +27,8 @@ from .models import BarsResponse, MarketBar
 ScannerMetric = Literal[
     "close", "percent_change", "volume", "sma", "ema", "rsi", "atr",
     "indicator", "relative_volume", "gap_percent", "high_distance_percent", "low_distance_percent",
+    # US stocks' fundamentals (TVP-9.1, SEC frames; fundamental_snapshots.py), at the last close. Growth and margin in %.
+    "market_cap", "pe_ratio", "ps_ratio", "pb_ratio", "eps_ttm", "revenue_growth", "net_margin",
 ]
 # A filter must match; a column is computed and shown only.
 ScannerRuleRole = Literal["filter", "column"]
@@ -197,6 +200,8 @@ def scanner_metric_formula(rule: TradingScannerRule) -> str:
         return f"volume[t] / mean(volume[t-{rule.period}..t-1])"
     if rule.metric == "gap_percent":
         return "((open[t] / close[t-1]) - 1) * 100"
+    if rule.metric in FUNDAMENTAL_METRICS:
+        return f"sec_frames:{rule.metric}(close[t])"
     if rule.metric == "high_distance_percent":
         return f"((close[t] / max(high[t-{rule.period}+1..t])) - 1) * 100"
     if rule.metric == "low_distance_percent":
@@ -210,10 +215,12 @@ def scanner_metric_formula(rule: TradingScannerRule) -> str:
     return f"{CORE_INDICATOR_FORMULA_VERSION}:{rule.metric}:{rule.period}"
 
 
-def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar], values: Any = None) -> Decimal | None:
+def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar], values: Any = None, fundamentals: Any = None) -> Decimal | None:
     if not bars:
         return None
     closes = [Decimal(bar.close) for bar in bars]
+    if rule.metric in FUNDAMENTAL_METRICS:
+        return fundamental_metric(rule.metric, fundamentals, closes[-1])
     if rule.metric == "close":
         return closes[-1]
     if rule.metric == "volume":
@@ -302,8 +309,13 @@ def evaluate_scanner_dataset(
         from .alerts_evaluation import _BarValues
 
         shared = _BarValues(bars)
+    # A company's SEC fundamentals, once per instrument, when a rule reads them (TVP-9.1).
+    fundamentals = (
+        snapshot_for_instrument(response.instrument.instrument_id)
+        if any(rule.metric in FUNDAMENTAL_METRICS for rule in definition.rules) else None
+    )
     for rule in definition.rules:
-        value = scanner_metric_value(rule, bars, shared)
+        value = scanner_metric_value(rule, bars, shared, fundamentals)
         if value is None:
             if rule.role == "column":
                 continue  # a column without the history shows no value; it never drops a result
