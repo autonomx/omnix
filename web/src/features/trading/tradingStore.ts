@@ -40,6 +40,8 @@ export type TradingChartSettings = {
   extendedHours?: boolean;
   /** A price line at the latest pre/post-market price; defaults on. */
   extendedPriceLine?: boolean;
+  /** Earnings, dividend and split markers on stock charts (TVP-10.1); defaults on. */
+  events?: boolean;
 };
 
 export type TradingChartState = {

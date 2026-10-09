@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { chartPalette } from './chartPalette';
+import { isStockInstrument } from './corporateEvents';
 import { tradingApi } from './tradingApi';
 import {
   barCountdownEnabled,
@@ -358,6 +359,8 @@ export function useChartWorkflow(ws: WorkflowInput) {
     barCountdownVisible: barCountdownOn && !replayMode,
     barCountdownAvailable: tradingIntervalDurationMs(interval) !== null,
     extendedPriceLineEnabled,
+    eventMarkersAvailable: isStockInstrument(ws.instrumentId),
+    eventMarkersOn: settings.events !== false && isStockInstrument(ws.instrumentId),
     handleStageDoubleClick,
     ...goTo,
     ...useChartImageCopy(adapterRef, ws.instrumentId, interval),

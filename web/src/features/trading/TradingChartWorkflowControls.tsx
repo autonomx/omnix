@@ -158,7 +158,7 @@ export function ChartMarketStatusBadges({ ws }: { ws: TradingChartPanelModel }) 
 export function ChartWorkflowSettings({ ws }: { ws: TradingChartPanelModel }) {
   const {
     applyChartTemplateRecord, barCountdownAvailable, barCountdownOn, chartSettings, chartTemplateStatus, chartTemplates,
-    deleteChartTemplate, extendedHoursAvailable, loadChartTemplates, saveChartTemplate, sessionTaggedBars,
+    deleteChartTemplate, eventMarkersAvailable, eventMarkersOn, extendedHoursAvailable, loadChartTemplates, saveChartTemplate, sessionTaggedBars,
     showExtendedHours, updateChartSettings,
   } = ws;
   const extendedReason = !sessionTaggedBars
@@ -200,6 +200,12 @@ export function ChartWorkflowSettings({ ws }: { ws: TradingChartPanelModel }) {
         />
         Pre/post-market price line
       </label>
+      {eventMarkersAvailable ? (
+        <label className="trading-chart-setting-toggle">
+          <input type="checkbox" checked={eventMarkersOn} onChange={(event) => updateChartSettings({ events: event.target.checked })} />
+          Earnings, dividends and splits
+        </label>
+      ) : null}
       <section className="trading-chart-templates" aria-label="Chart templates">
         <strong>Templates</strong>
         <small>Style and indicators, without the symbol.</small>

@@ -236,6 +236,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/corporate-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Company */
+        get: operations["company_api_trading_corporate_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/corporate-events/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calendar */
+        get: operations["calendar_api_trading_corporate_events_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/currency-rates": {
         parameters: {
             query?: never;
@@ -3903,6 +3937,25 @@ export interface components {
         CoinMarketCapCredentialStatus: core["schemas"]["CoinMarketCapCredentialStatus"];
         /** CoinMarketCapCredentialUpdate */
         CoinMarketCapCredentialUpdate: core["schemas"]["CoinMarketCapCredentialUpdate"];
+        /** CompanyEvents */
+        CompanyEvents: {
+            /** Events */
+            events: components["schemas"]["CorporateEvent"][];
+            /** Fetched At */
+            fetched_at: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Sources
+             * @default [
+             *       "SEC 8-K item 2.02 filings",
+             *       "Alpaca corporate actions"
+             *     ]
+             */
+            sources: string[];
+            /** Ticker */
+            ticker: string;
+        };
         /** CompatibilityHandoffPayload */
         CompatibilityHandoffPayload: core["schemas"]["CompatibilityHandoffPayload"];
         /** CompleteJobRequest */
@@ -3969,6 +4022,105 @@ export interface components {
             session_date: string;
             /** Terminal Count */
             terminal_count: number;
+        };
+        /** CorporateCalendarEvent */
+        CorporateCalendarEvent: {
+            /** Amount */
+            amount: number | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Estimated
+             * @default false
+             */
+            estimated: boolean;
+            /** Fiscal Period */
+            fiscal_period: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "earnings" | "dividend" | "split";
+            /** Link */
+            link: string | null;
+            /** Payable Date */
+            payable_date: string | null;
+            /** Record Date */
+            record_date: string | null;
+            /**
+             * Special
+             * @default false
+             */
+            special: boolean;
+            /** Split From */
+            split_from: number | null;
+            /** Split To */
+            split_to: number | null;
+            /** Ticker */
+            ticker: string;
+            /** Timing */
+            timing: ("before_open" | "during_market" | "after_close") | null;
+        };
+        /** CorporateEvent */
+        CorporateEvent: {
+            /** Amount */
+            amount: number | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Estimated
+             * @default false
+             */
+            estimated: boolean;
+            /** Fiscal Period */
+            fiscal_period: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "earnings" | "dividend" | "split";
+            /** Link */
+            link: string | null;
+            /** Payable Date */
+            payable_date: string | null;
+            /** Record Date */
+            record_date: string | null;
+            /**
+             * Special
+             * @default false
+             */
+            special: boolean;
+            /** Split From */
+            split_from: number | null;
+            /** Split To */
+            split_to: number | null;
+            /** Timing */
+            timing: ("before_open" | "during_market" | "after_close") | null;
+        };
+        /** CorporateEventCalendar */
+        CorporateEventCalendar: {
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Events */
+            events: components["schemas"]["CorporateCalendarEvent"][];
+            /** Pending */
+            pending: string[];
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
         };
         /**
          * CreateChatSessionRequest
@@ -14042,6 +14194,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalystEvidenceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    company_api_trading_corporate_events_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyEvents"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calendar_api_trading_corporate_events_calendar_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+                instrument_id?: string[] | null;
+                kind?: ("earnings" | "dividend" | "split")[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorporateEventCalendar"];
                 };
             };
             /** @description Validation Error */
