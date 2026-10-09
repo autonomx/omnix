@@ -28011,6 +28011,302 @@
         "title": "OperationalPremarketState",
         "type": "object"
       },
+      "OptionChain": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "dividend_yield": {
+            "title": "Dividend Yield",
+            "type": "number"
+          },
+          "expiration": {
+            "format": "date",
+            "title": "Expiration",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "number"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/OptionChainRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "default": "Alpaca options market data (indicative feed)",
+            "title": "Source",
+            "type": "string"
+          },
+          "underlying": {
+            "title": "Underlying",
+            "type": "string"
+          },
+          "underlying_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Underlying Price"
+          },
+          "years_to_expiry": {
+            "title": "Years To Expiry",
+            "type": "number"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "underlying",
+          "expiration",
+          "underlying_price",
+          "years_to_expiry",
+          "rate",
+          "dividend_yield",
+          "rows",
+          "as_of",
+          "source"
+        ],
+        "title": "OptionChain",
+        "type": "object"
+      },
+      "OptionChainRow": {
+        "properties": {
+          "call": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptionQuote"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "put": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptionQuote"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          }
+        },
+        "required": [
+          "strike",
+          "call",
+          "put"
+        ],
+        "title": "OptionChainRow",
+        "type": "object"
+      },
+      "OptionExpiration": {
+        "properties": {
+          "contracts": {
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "open_interest": {
+            "title": "Open Interest",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "days",
+          "contracts",
+          "open_interest"
+        ],
+        "title": "OptionExpiration",
+        "type": "object"
+      },
+      "OptionQuote": {
+        "properties": {
+          "ask": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask"
+          },
+          "bid": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bid"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "gamma": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gamma"
+          },
+          "greeks_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "alpaca",
+                  "model"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeks Source"
+          },
+          "iv": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "mark": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark"
+          },
+          "open_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Interest"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "theta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theta"
+          },
+          "vega": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vega"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume"
+          }
+        },
+        "required": [
+          "symbol",
+          "bid",
+          "ask",
+          "last",
+          "mark",
+          "volume",
+          "open_interest",
+          "iv",
+          "delta",
+          "gamma",
+          "theta",
+          "vega",
+          "greeks_source"
+        ],
+        "title": "OptionQuote",
+        "type": "object"
+      },
       "OutcomeMeasurementsV1": {
         "additionalProperties": false,
         "properties": {
@@ -80767,6 +81063,108 @@
         "summary": "Test Push",
         "tags": [
           "trading-notifications"
+        ]
+      }
+    },
+    "/api/trading/options/chain": {
+      "get": {
+        "operationId": "chain_api_trading_options_chain_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expiration",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Expiration",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionChain"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chain",
+        "tags": [
+          "trading-options"
+        ]
+      }
+    },
+    "/api/trading/options/expirations": {
+      "get": {
+        "operationId": "expirations_api_trading_options_expirations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptionExpiration"
+                  },
+                  "title": "Response Expirations Api Trading Options Expirations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Expirations",
+        "tags": [
+          "trading-options"
         ]
       }
     },

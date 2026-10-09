@@ -1064,6 +1064,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/options/chain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chain */
+        get: operations["chain_api_trading_options_chain_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/options/expirations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Expirations */
+        get: operations["expirations_api_trading_options_expirations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/paper-analytics/epochs": {
         parameters: {
             query?: never;
@@ -7117,6 +7151,88 @@ export interface components {
              * @default []
              */
             warnings: string[];
+        };
+        /** OptionChain */
+        OptionChain: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Dividend Yield */
+            dividend_yield: number;
+            /**
+             * Expiration
+             * Format: date
+             */
+            expiration: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Rate */
+            rate: number;
+            /** Rows */
+            rows: components["schemas"]["OptionChainRow"][];
+            /**
+             * Source
+             * @default Alpaca options market data (indicative feed)
+             */
+            source: string;
+            /** Underlying */
+            underlying: string;
+            /** Underlying Price */
+            underlying_price: number | null;
+            /** Years To Expiry */
+            years_to_expiry: number;
+        };
+        /** OptionChainRow */
+        OptionChainRow: {
+            call: components["schemas"]["OptionQuote"] | null;
+            put: components["schemas"]["OptionQuote"] | null;
+            /** Strike */
+            strike: number;
+        };
+        /** OptionExpiration */
+        OptionExpiration: {
+            /** Contracts */
+            contracts: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Days */
+            days: number;
+            /** Open Interest */
+            open_interest: number;
+        };
+        /** OptionQuote */
+        OptionQuote: {
+            /** Ask */
+            ask: number | null;
+            /** Bid */
+            bid: number | null;
+            /** Delta */
+            delta: number | null;
+            /** Gamma */
+            gamma: number | null;
+            /** Greeks Source */
+            greeks_source: ("alpaca" | "model") | null;
+            /** Iv */
+            iv: number | null;
+            /** Last */
+            last: number | null;
+            /** Mark */
+            mark: number | null;
+            /** Open Interest */
+            open_interest: number | null;
+            /** Symbol */
+            symbol: string;
+            /** Theta */
+            theta: number | null;
+            /** Vega */
+            vega: number | null;
+            /** Volume */
+            volume: number | null;
         };
         /** OutcomeMeasurementsV1 */
         OutcomeMeasurementsV1: {
@@ -16090,6 +16206,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeliveryTestResponse"];
+                };
+            };
+        };
+    };
+    chain_api_trading_options_chain_get: {
+        parameters: {
+            query: {
+                expiration: string;
+                instrument_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionChain"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    expirations_api_trading_options_expirations_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionExpiration"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
