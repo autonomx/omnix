@@ -68,8 +68,13 @@ describe('intrabar data (TVP-0.6)', () => {
     const response = { bars: [], complete: true } as never;
     const spy = vi.spyOn(tradingApi, 'intrabars').mockRejectedValueOnce(new Error('down')).mockResolvedValue(response);
     const request = { instrumentId: 'x', interval: '1h', lowerInterval: '1m', start: T0, end: T0 + HOUR };
+    vi.useFakeTimers({ now: T0 });
     await expect(loadIntrabars(request)).rejects.toThrow('down');
+    // A failed load is held a few seconds, then asked for again.
+    await expect(loadIntrabars(request)).rejects.toThrow('down');
+    vi.setSystemTime(T0 + 4_001);
     await expect(loadIntrabars(request)).resolves.toBe(response);
+    vi.useRealTimers();
     await loadIntrabars(request);
     expect(spy).toHaveBeenCalledTimes(2);
     await loadIntrabars({ ...request, lowerInterval: '5m' });

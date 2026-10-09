@@ -1,3 +1,4 @@
+import { useTradingReplayStore } from './tradingReplayStore';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import { tradingApi } from './tradingApi';
@@ -14,8 +15,8 @@ import type { useChartPanelState } from './useTradingChartPanelState';
 /** Indicator scheduling: recomputes indicator outputs off the render path. */
 export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState>) {
   const {
-    adapterRef, barsRef, bindingId, fullscreenIndicatorRef, fullscreenMainPaneRef, historyLimitOverride, indicatorSchedulerRef, indicatorSessionRef,
-    indicatorTimerRef, indicators, indicatorsRef, instrumentId, interval, minimizedIndicatorsRef, onActivate,
+    adapterRef, barsRef, fullscreenIndicatorRef, fullscreenMainPaneRef, historyLimitOverride, indicatorBindingRef, indicatorSchedulerRef, indicatorSessionRef,
+    indicatorTimerRef, indicators, indicatorsRef, instrumentId, interval, minimizedIndicatorsRef, onActivate, replayMode,
     onActivateRef, setAlertPlacement, setIndicatorError, setIndicatorOutputs, setIndicatorPaneGeometry,
   } = ws;
 
@@ -44,7 +45,9 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
       const scheduler = indicatorSchedulerRef.current;
       const targetAdapter = adapterRef.current;
       if (!scheduler || !targetAdapter) return;
-      void scheduler.calculate(barsRef.current, indicatorsRef.current, { session: indicatorSessionRef.current, bindingId })
+      // Replaying, intrabar indicators read no lower bar after the clock.
+      const clock = replayMode ? useTradingReplayStore.getState().clock : null;
+      void scheduler.calculate(barsRef.current, indicatorsRef.current, { session: indicatorSessionRef.current, bindingId: indicatorBindingRef.current, clock })
         .then((outputs) => {
           if (outputs && adapterRef.current === targetAdapter) {
             targetAdapter.setIndicatorOutputs(outputs);
@@ -82,7 +85,7 @@ export function useChartIndicatorScheduling(ws: TradingChartPanelProps & ReturnT
         })
         .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
     }, delay);
-  }, [refreshIndicatorPanes, adapterRef, barsRef, bindingId, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
+  }, [refreshIndicatorPanes, adapterRef, barsRef, indicatorBindingRef, replayMode, fullscreenIndicatorRef, fullscreenMainPaneRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, indicatorsRef, minimizedIndicatorsRef, setIndicatorError, setIndicatorOutputs]);
 
   const defaultHistoryLimit = chartHistoryLimit(instrumentId, interval, indicators);
 

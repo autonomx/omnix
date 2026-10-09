@@ -458,7 +458,7 @@ const DRAWING_INPUTS: Record<string, TradingViewBuiltInInputs> = {
 };
 const DRAWING_INDICATORS = new Set(Object.keys(DRAWING_INPUTS));
 // TVP-6.4: computed from intrabar data off the worker (intrabarIndicators.ts); the options repeat INTRABAR_LOWER_INTERVALS.
-const LOWER_INTERVALS = { auto: 'Auto', '1s': '1s', '5s': '5s', '15s': '15s', '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1H', '4h': '4H', '1d': '1D' };
+const LOWER_INTERVALS = { auto: 'Auto', '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1H', '4h': '4H', '1d': '1D' };
 const INTRABAR_INPUTS: Record<string, TradingViewBuiltInInputs> = {
   'Volume Delta': { periodLabel: null, params: [select('lowerInterval', 'Intrabar timeframe', 'auto', LOWER_INTERVALS)] },
   'Cumulative Volume Delta': {

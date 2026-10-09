@@ -28,9 +28,11 @@ type WorkerFactory = () => Worker;
  */
 export type CompareBarsLoader = (instrumentId: string, interval: string, range: { from: number; to: number }) => Promise<readonly MarketBar[]>;
 type CompareBars = Record<string, MarketBar[]>;
-/** What the chart knows beyond its bars: the instrument's session calendar. */
-/** The chart's session calendar, and the feed binding its bars come from (intrabar indicators read the same feed). */
-export type IndicatorCalculationContext = { session?: TradingSessionSpec; bindingId?: string | null };
+/**
+ * The chart's session calendar, the feed binding its bars come from (intrabar indicators read the same feed), and the
+ * replay clock while the chart replays (intrabar indicators use no lower bar after it).
+ */
+export type IndicatorCalculationContext = { session?: TradingSessionSpec; bindingId?: string | null; clock?: number | null };
 
 function defaultWorkerFactory(): Worker {
   return new Worker(new URL('./indicator.worker.ts', import.meta.url), { type: 'module' });

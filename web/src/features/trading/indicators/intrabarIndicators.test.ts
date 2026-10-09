@@ -45,11 +45,13 @@ describe('volume delta (TVP-6.4)', () => {
     expect(deltas.get(T0 + HOUR)).toEqual({ delta: -11, max: 0, min: -11 });
     expect(deltas.get(T0 + 2 * HOUR)?.delta).toBe(24);
     expect(volumeDeltaPoints(hours, deltas).map((point) => [point.value, point.color])).toEqual([[11, '#089981'], [-11, '#f23645'], [24, '#089981']]);
+    // Leading unchanged bars count as buying, as in TradingView.
+    expect(intrabarDeltas(hours.slice(0, 1), [bar(T0, 15, 100, 100, 7, '15m')], '1h').get(T0)?.delta).toBe(7);
   });
 
   it('adds the deltas up within each anchor period', () => {
     const deltas = intrabarDeltas(hours, quarters, '1h');
-    expect(cumulativeVolumeDeltaPoints(hours, deltas, 'D').map((point) => point.value)).toEqual([11, 0, 24]);
+    expect(cumulativeVolumeDeltaPoints(hours, deltas, 'D').map((point) => [point.value, point.color])).toEqual([[11, '#089981'], [0, '#f23645'], [24, '#089981']]);
     expect(cumulativeVolumeDeltaPoints(hours, deltas, 'M').map((point) => point.value)).toEqual([11, 0, 24]);
     // Chart bars without lower bars have no value.
     expect(volumeDeltaPoints([...hours, bar(T0 + 3 * HOUR, 60, 1, 1, 0, '1h')], deltas)).toHaveLength(3);
@@ -70,7 +72,43 @@ describe('volume delta (TVP-6.4)', () => {
     const [output] = await calculateIntrabarIndicatorOutputs(hours, indicator, { bindingId: 'binance:spot' });
     expect(output).toMatchObject({ key: 'tv-cumulative-volume-delta:cvd', title: 'CVD (15m)', pane: 1, kind: 'histogram' });
     expect(output.points.map((point) => point.value)).toEqual([11, 0, 24]);
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ bindingId: 'binance:spot', interval: '1h', lowerInterval: '15m', start: T0, end: T0 + 3 * HOUR }));
+    // The closed bars' lower bars: the range ends at the last bar's close and spans 5,000 lower bars.
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ bindingId: 'binance:spot', interval: '1h', lowerInterval: '15m', start: T0 + 3 * HOUR - 5_000 * 15 * MINUTE, end: T0 + 3 * HOUR }));
+  });
+
+  it('reloads the forming bar once per lower interval, live', async () => {
+    vi.useFakeTimers({ now: T0 + 2 * HOUR + 30 * MINUTE });
+    const spy = vi.spyOn(tradingApi, 'intrabars').mockImplementation(async (request) => ({
+      bars: quarters.filter((item) => Date.parse(item.start_time) >= request.start && Date.parse(item.end_time) <= Math.min(request.end, Date.now())), complete: true,
+    }) as never);
+    const live = [...hours.slice(0, 2), { ...hours[2], is_final: false }];
+    const indicator = { id: 'tv-volume-delta', period: 1, enabled: true, params: { lowerInterval: '15m' } } as unknown as CoreIndicatorInstance;
+    expect((await calculateIntrabarIndicatorOutputs(live, indicator))[0].points.at(-1)?.value).toBe(12);
+    vi.setSystemTime(T0 + 2 * HOUR + 40 * MINUTE);
+    expect((await calculateIntrabarIndicatorOutputs(live, indicator))[0].points.at(-1)?.value).toBe(12);
+    vi.setSystemTime(T0 + 2 * HOUR + 46 * MINUTE);
+    expect((await calculateIntrabarIndicatorOutputs(live, indicator))[0].points.at(-1)?.value).toBe(18);
+    // The closed bars' range loaded once; the forming bar's twice.
+    expect(spy).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('reads no lower bar after the replay clock, from a range that holds while playback steps', async () => {
+    const spy = vi.spyOn(tradingApi, 'intrabars').mockResolvedValue({ bars: quarters, complete: true } as never);
+    const indicator = { id: 'tv-volume-delta', period: 1, enabled: true, params: { lowerInterval: '15m' } } as unknown as CoreIndicatorInstance;
+    const atClock = await calculateIntrabarIndicatorOutputs(hours, indicator, { clock: T0 + 2 * HOUR + 30 * MINUTE });
+    expect(atClock[0].points.map((point) => point.value)).toEqual([11, -11, 12]);
+    await calculateIntrabarIndicatorOutputs(hours, indicator, { clock: T0 + 2 * HOUR + 45 * MINUTE });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads each bar of a 1m chart as its own intrabar, without loading', async () => {
+    const spy = vi.spyOn(tradingApi, 'intrabars');
+    const minutes = quarters.slice(0, 4).map((item, i) => ({ ...item, interval: '1m', start_time: new Date(T0 + i * MINUTE).toISOString(), end_time: new Date(T0 + (i + 1) * MINUTE).toISOString() }));
+    const [output] = await calculateIntrabarIndicatorOutputs(minutes, { id: 'tv-volume-delta', period: 1, enabled: true } as unknown as CoreIndicatorInstance);
+    expect(output.points.map((point) => point.value)).toEqual([10, -4, 3, 2]);
+    expect(output.title).toBe('Volume Delta (chart)');
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it('draws nothing when the lower bars fail to load', async () => {

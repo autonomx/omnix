@@ -55,23 +55,32 @@ export function intrabarRange(bars: readonly MarketBar[], interval: string, lowe
   return first ? { start: Date.parse(first.start_time), end } : null;
 }
 
-const cache = new Map<string, Promise<IntrabarResponse>>();
+const cache = new Map<string, { promise: Promise<IntrabarResponse>; expiresAt: number }>();
 const CACHE_LIMIT = 32;
+/** A failed load is answered from the cache this long, so a failing range isn't asked for on every redraw. */
+const FAILURE_HOLD_MS = 4_000;
 
 function cacheKey(request: IntrabarRequest): string {
   return [request.instrumentId, request.bindingId ?? '', request.interval, request.lowerInterval, request.start, request.end].join('|');
 }
 
-/** Loads (once per instrument, feed, intervals and range) the lower bars; a failed load is not cached. */
-export function loadIntrabars(request: IntrabarRequest): Promise<IntrabarResponse> {
+/**
+ * Loads the lower bars once per instrument, feed, intervals and range; with `maxAgeMs` (a forming bar's lower bars)
+ * the load is repeated once that old. A failed load is kept for a few seconds, then asked for again.
+ */
+export function loadIntrabars(request: IntrabarRequest, options: { maxAgeMs?: number } = {}): Promise<IntrabarResponse> {
   const key = cacheKey(request);
+  const now = Date.now();
   const cached = cache.get(key);
-  if (cached) return cached;
-  const pending = tradingApi.intrabars(request).catch((error: unknown) => {
-    cache.delete(key);
+  if (cached && cached.expiresAt > now) return cached.promise;
+  const entry = { promise: Promise.resolve() as unknown as Promise<IntrabarResponse>, expiresAt: now + (options.maxAgeMs ?? Number.POSITIVE_INFINITY) };
+  entry.promise = tradingApi.intrabars(request).catch((error: unknown) => {
+    entry.expiresAt = Math.min(entry.expiresAt, Date.now() + FAILURE_HOLD_MS);
     throw error;
   });
-  cache.set(key, pending);
+  cache.delete(key);
+  cache.set(key, entry);
+  const pending = entry.promise;
   // Oldest first: a Map keeps insertion order.
   while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
   return pending;

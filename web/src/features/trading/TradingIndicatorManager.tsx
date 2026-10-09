@@ -65,7 +65,7 @@ const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILT
   return indicatorDefinition({
     id: definition.id as CoreIndicatorId,
     name: definition.name,
-    author: external ? 'External market data' : 'TradingView built-in',
+    author: isIntrabarIndicatorId(definition.id) ? 'Intrabar data' : external ? 'External market data' : 'TradingView built-in',
     boosts: definition.available ? 'Built-in' : external ? 'Live data' : 'Needs data',
     section: 'technicals',
     // Like TradingView, candlestick patterns are listed with the chart patterns.
