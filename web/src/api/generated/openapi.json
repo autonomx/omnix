@@ -1589,6 +1589,9 @@
               },
               {
                 "$ref": "#/components/schemas/TrendlineSource-Input"
+              },
+              {
+                "$ref": "#/components/schemas/ScriptSource-Input"
               }
             ],
             "title": "Source"
@@ -1678,6 +1681,9 @@
               },
               {
                 "$ref": "#/components/schemas/TrendlineSource-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ScriptSource"
               }
             ],
             "title": "Source"
@@ -41541,6 +41547,119 @@
         "title": "ScriptRunResponse",
         "type": "object"
       },
+      "ScriptSource": {
+        "additionalProperties": false,
+        "description": "An Omnix Script's output (TVP-11.4), from the script as saved at ``revision`` (its later edits don't change the alert).\n\n``output``: ``plot:<i>`` is the value of the plot call at position i among the script's output calls (plotshape\nand plotchar only where they show); ``alertcondition:<i>`` and ``alert`` (any ``alert()`` call) have a value only\non the bars where they fire.",
+        "properties": {
+          "inputs": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "maxProperties": 50,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "kind": {
+            "const": "script",
+            "title": "Kind",
+            "type": "string"
+          },
+          "output": {
+            "pattern": "^(plot:\\d{1,4}|alertcondition:\\d{1,4}|alert)$",
+            "title": "Output",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "script_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Script Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "script_id",
+          "revision",
+          "output",
+          "inputs"
+        ],
+        "title": "ScriptSource",
+        "type": "object"
+      },
+      "ScriptSource-Input": {
+        "additionalProperties": false,
+        "description": "An Omnix Script's output (TVP-11.4), from the script as saved at ``revision`` (its later edits don't change the alert).\n\n``output``: ``plot:<i>`` is the value of the plot call at position i among the script's output calls (plotshape\nand plotchar only where they show); ``alertcondition:<i>`` and ``alert`` (any ``alert()`` call) have a value only\non the bars where they fire.",
+        "properties": {
+          "inputs": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "maxProperties": 50,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "kind": {
+            "const": "script",
+            "title": "Kind",
+            "type": "string"
+          },
+          "output": {
+            "pattern": "^(plot:\\d{1,4}|alertcondition:\\d{1,4}|alert)$",
+            "title": "Output",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "script_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Script Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "script_id",
+          "revision",
+          "output"
+        ],
+        "title": "ScriptSource",
+        "type": "object"
+      },
       "ScriptVersion": {
         "properties": {
           "name": {
@@ -42780,6 +42899,9 @@
               },
               {
                 "$ref": "#/components/schemas/TrendlineSource-Input"
+              },
+              {
+                "$ref": "#/components/schemas/ScriptSource-Input"
               }
             ],
             "title": "Source"
@@ -42813,6 +42935,9 @@
               },
               {
                 "$ref": "#/components/schemas/TrendlineSource-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ScriptSource"
               }
             ],
             "title": "Source"

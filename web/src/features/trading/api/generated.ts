@@ -2336,7 +2336,7 @@ export interface components {
              */
             operator: "crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than" | "entering_channel" | "exiting_channel" | "inside_channel" | "outside_channel" | "moving_up" | "moving_down" | "moving_up_percent" | "moving_down_percent";
             /** Source */
-            source: components["schemas"]["PriceSource-Input"] | components["schemas"]["ChangePercentSource-Input"] | components["schemas"]["IndicatorSource-Input"] | components["schemas"]["TrendlineSource-Input"];
+            source: components["schemas"]["PriceSource-Input"] | components["schemas"]["ChangePercentSource-Input"] | components["schemas"]["IndicatorSource-Input"] | components["schemas"]["TrendlineSource-Input"] | components["schemas"]["ScriptSource-Input"];
             /** Target */
             target?: components["schemas"]["ValueTarget-Input"] | components["schemas"]["SourceTarget-Input"] | components["schemas"]["ChannelTarget-Input"] | null;
         };
@@ -2352,7 +2352,7 @@ export interface components {
              */
             operator: "crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than" | "entering_channel" | "exiting_channel" | "inside_channel" | "outside_channel" | "moving_up" | "moving_down" | "moving_up_percent" | "moving_down_percent";
             /** Source */
-            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource-Output"] | components["schemas"]["TrendlineSource-Output"];
+            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource-Output"] | components["schemas"]["TrendlineSource-Output"] | components["schemas"]["ScriptSource"];
             /** Target */
             target: components["schemas"]["ValueTarget-Output"] | components["schemas"]["SourceTarget-Output"] | components["schemas"]["ChannelTarget-Output"] | null;
         };
@@ -9471,6 +9471,56 @@ export interface components {
             /** Times */
             times: string[];
         };
+        /**
+         * ScriptSource
+         * @description An Omnix Script's output (TVP-11.4), from the script as saved at ``revision`` (its later edits don't change the alert).
+         *
+         *     ``output``: ``plot:<i>`` is the value of the plot call at position i among the script's output calls (plotshape
+         *     and plotchar only where they show); ``alertcondition:<i>`` and ``alert`` (any ``alert()`` call) have a value only
+         *     on the bars where they fire.
+         */
+        ScriptSource: {
+            /** Inputs */
+            inputs: {
+                [key: string]: boolean | number | string;
+            };
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "script";
+            /** Output */
+            output: string;
+            /** Revision */
+            revision: number;
+            /** Script Id */
+            script_id: string;
+        };
+        /**
+         * ScriptSource
+         * @description An Omnix Script's output (TVP-11.4), from the script as saved at ``revision`` (its later edits don't change the alert).
+         *
+         *     ``output``: ``plot:<i>`` is the value of the plot call at position i among the script's output calls (plotshape
+         *     and plotchar only where they show); ``alertcondition:<i>`` and ``alert`` (any ``alert()`` call) have a value only
+         *     on the bars where they fire.
+         */
+        "ScriptSource-Input": {
+            /** Inputs */
+            inputs?: {
+                [key: string]: boolean | number | string;
+            };
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "script";
+            /** Output */
+            output: string;
+            /** Revision */
+            revision: number;
+            /** Script Id */
+            script_id: string;
+        };
         /** ScriptVersion */
         ScriptVersion: {
             /** Name */
@@ -9704,7 +9754,7 @@ export interface components {
              */
             kind: "source";
             /** Source */
-            source: components["schemas"]["PriceSource-Input"] | components["schemas"]["ChangePercentSource-Input"] | components["schemas"]["IndicatorSource-Input"] | components["schemas"]["TrendlineSource-Input"];
+            source: components["schemas"]["PriceSource-Input"] | components["schemas"]["ChangePercentSource-Input"] | components["schemas"]["IndicatorSource-Input"] | components["schemas"]["TrendlineSource-Input"] | components["schemas"]["ScriptSource-Input"];
         };
         /** SourceTarget */
         "SourceTarget-Output": {
@@ -9714,7 +9764,7 @@ export interface components {
              */
             kind: "source";
             /** Source */
-            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource-Output"] | components["schemas"]["TrendlineSource-Output"];
+            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource-Output"] | components["schemas"]["TrendlineSource-Output"] | components["schemas"]["ScriptSource"];
         };
         /** StartTradingResearchInput */
         StartTradingResearchInput: {

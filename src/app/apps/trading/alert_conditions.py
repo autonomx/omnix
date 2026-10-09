@@ -143,11 +143,31 @@ class TrendlineSource(BaseModel):
     points: list[TrendlineAlertPoint] = Field(min_length=2, max_length=2)
 
 
+ScriptInputValue = bool | int | float | str
+
+
+class ScriptSource(BaseModel):
+    """An Omnix Script's output (TVP-11.4), from the script as saved at ``revision`` (its later edits don't change the alert).
+
+    ``output``: ``plot:<i>`` is the value of the plot call at position i among the script's output calls (plotshape
+    and plotchar only where they show); ``alertcondition:<i>`` and ``alert`` (any ``alert()`` call) have a value only
+    on the bars where they fire.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["script"]
+    script_id: str = Field(min_length=1, max_length=200)
+    revision: int = Field(ge=1)
+    inputs: dict[str, ScriptInputValue] = Field(default_factory=dict, max_length=50)
+    output: str = Field(pattern=r"^(plot:\d{1,4}|alertcondition:\d{1,4}|alert)$")
+
+
 # The unions are told apart by each member's required literal ``kind``
 # (pydantic's smart union). A ``discriminator`` would be faster, but FastAPI's split input/output
 # schemas then publish a mapping that names the wrong schemas, and the
 # generated TypeScript types become unusable.
-AlertSource = PriceSource | ChangePercentSource | IndicatorSource | TrendlineSource
+AlertSource = PriceSource | ChangePercentSource | IndicatorSource | TrendlineSource | ScriptSource
 
 
 class ValueTarget(BaseModel):
