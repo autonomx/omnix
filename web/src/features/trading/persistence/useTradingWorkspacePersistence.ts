@@ -68,7 +68,7 @@ function workspaceId(name: string): string {
  * Puts a stored workspace into the store (without saving for it). `keepSession` keeps this window's session-only
  * state, replay and closed tabs (a reload of what another window saved).
  */
-function applyWorkspace(value: unknown, applyingRef: { current: boolean }, keepSession: boolean): boolean {
+function applyWorkspace(value: unknown, applyingRef: { current: boolean }, keepSession: boolean, tabId: string | null = null): boolean {
   const payload = parseTradingWorkspace(value);
   if (!payload) return false;
   const tabs = payload.tabs ?? [{
@@ -80,7 +80,9 @@ function applyWorkspace(value: unknown, applyingRef: { current: boolean }, keepS
     links: payload.links,
     panels: payload.panels,
   }];
-  const activeTabId = payload.activeTabId && tabs.some((tab) => tab.tabId === payload.activeTabId) ? payload.activeTabId : tabs[0].tabId;
+  // The tab this window shows (or was opened on) when the workspace has it, else the stored one.
+  const preferred = tabId && tabs.some((tab) => tab.tabId === tabId) ? tabId : payload.activeTabId;
+  const activeTabId = preferred && tabs.some((tab) => tab.tabId === preferred) ? preferred : tabs[0].tabId;
   const activeTab = tabs.find((tab) => tab.tabId === activeTabId) ?? tabs[0];
   applyingRef.current = true;
   useTradingStore.setState({
@@ -105,22 +107,13 @@ function initialRecord(records: readonly TradingDocument[]): TradingDocument | n
   return records.find((item) => item.record_id === requested) ?? records.find((item) => item.record_id === 'main') ?? records[0] ?? null;
 }
 
-/** Shows a tab of the hydrated workspace without saving for it (a window opened on that tab). */
-function showTab(tabId: string | null, applyingRef: { current: boolean }): void {
-  const store = useTradingStore.getState();
-  if (!tabId || tabId === store.activeTabId || !store.tabs.some((tab) => tab.tabId === tabId)) return;
-  applyingRef.current = true;
-  store.setActiveTab(tabId);
-  applyingRef.current = false;
-}
-
 type WindowSyncInput = {
   status: WorkspacePersistenceStatus;
   activeIdRef: { current: string };
   recordsRef: { current: Map<string, TradingDocument> };
   cancelledRef: { current: boolean };
   applyingRef: { current: boolean };
-  hydrate: (value: unknown, keepSession?: boolean) => boolean;
+  hydrate: (value: unknown, keepSession?: boolean, tabId?: string | null) => boolean;
 };
 
 /**
@@ -145,8 +138,7 @@ function useWorkspaceWindowSync({ status, activeIdRef, recordsRef, cancelledRef,
       if (!latest || cancelledRef.current || id !== activeIdRef.current || statusRef.current !== 'saved') return;
       if ((recordsRef.current.get(id)?.revision ?? -1) >= latest.revision) return;
       recordsRef.current.set(id, latest);
-      const shownTab = useTradingStore.getState().activeTabId;
-      if (hydrate(latest.payload, true)) showTab(shownTab, applyingRef);
+      hydrate(latest.payload, true, useTradingStore.getState().activeTabId);
     }, () => undefined);
   }), [activeIdRef, applyingRef, cancelledRef, hydrate, recordsRef, statusRef]);
 
@@ -199,8 +191,9 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     });
   }, [activeName]);
 
-  const hydrate = useCallback((value: unknown, keepSession = false): boolean => {
-    if (!applyWorkspace(value, applyingRef, keepSession)) return false;
+  /** Loads a stored workspace, showing `tabId` when it has it; what it then shows counts as saved. */
+  const hydrate = useCallback((value: unknown, keepSession = false, tabId: string | null = null): boolean => {
+    if (!applyWorkspace(value, applyingRef, keepSession, tabId)) return false;
     lastPayloadRef.current = JSON.stringify(currentPayload());
     return true;
   }, [currentPayload]);
@@ -293,8 +286,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
         activeIdRef.current = record.record_id;
         setTradingWorkspaceScopeId(record.record_id);
         setActiveWorkspaceId(record.record_id);
-        if (!hydrate(record.payload) && draft) hydrate(draft);
-        showTab(requestedTradingWindow().tabId, applyingRef);
+        if (!hydrate(record.payload, false, requestedTradingWindow().tabId) && draft) hydrate(draft);
         forgetRequestedTradingWindow();
         refreshSummaries();
         setStatus('saved');

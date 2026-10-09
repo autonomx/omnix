@@ -12,7 +12,7 @@ import { useEffect } from 'react';
 export type SavedDocumentKind = 'workspace' | 'watchlist';
 
 type PresenceMessage =
-  | { type: 'hello' | 'here' | 'focus'; windowId: string; focusedAt: number }
+  | { type: 'hello' | 'here' | 'focus'; windowId: string; focusedAt: number; visible?: boolean }
   | { type: 'bye'; windowId: string }
   | { type: 'saved'; windowId: string; kind: SavedDocumentKind; id: string; revision: number };
 
@@ -35,7 +35,7 @@ function defaultChannel(): BroadcastChannel | null {
 }
 
 type SavedListener = (kind: SavedDocumentKind, id: string, revision: number) => void;
-type Peer = { focusedAt: number; seenAt: number };
+type Peer = { focusedAt: number; seenAt: number; visible: boolean };
 
 export class TradingWindowPresence {
   readonly windowId = newWindowId();
@@ -45,8 +45,15 @@ export class TradingWindowPresence {
   private readonly channel: BroadcastChannel | null;
   private focusedAt = 0;
   private joined = false;
+  /** Whether this page is shown (a hidden page doesn't poll alerts, so it must not keep the others quiet). */
+  private visible = true;
 
-  constructor(channel?: BroadcastChannel | null, private readonly now: () => number = Date.now) {
+  constructor(
+    channel?: BroadcastChannel | null,
+    private readonly now: () => number = Date.now,
+    isVisible: () => boolean = () => typeof document === 'undefined' || document.visibilityState !== 'hidden',
+  ) {
+    this.visible = isVisible();
     this.channel = channel === undefined ? defaultChannel() : channel;
     if (this.channel) this.channel.onmessage = (event: MessageEvent<PresenceMessage>) => this.receive(event.data);
   }
@@ -56,7 +63,7 @@ export class TradingWindowPresence {
     this.joined = true;
     const focused = typeof document !== 'undefined' && typeof document.hasFocus === 'function' && document.hasFocus();
     if (focused) this.focusedAt = this.now();
-    this.post({ type: 'hello', windowId: this.windowId, focusedAt: this.focusedAt });
+    this.post({ type: 'hello', windowId: this.windowId, focusedAt: this.focusedAt, visible: this.visible });
   }
 
   /** Stops taking part (its Trading workspace unmounted, or the page is going). */
@@ -69,27 +76,38 @@ export class TradingWindowPresence {
   /** This window was focused now. */
   focus(at = this.now()): void {
     this.focusedAt = at;
-    if (this.joined) this.post({ type: 'focus', windowId: this.windowId, focusedAt: at });
+    if (this.joined) this.post({ type: 'focus', windowId: this.windowId, focusedAt: at, visible: this.visible });
+  }
+
+  /** This page was shown or hidden (another browser tab, a minimised window). */
+  setVisible(visible: boolean): void {
+    this.visible = visible;
+    this.heartbeat();
   }
 
   /** Tells the others this window is still here. */
   heartbeat(): void {
-    if (this.joined) this.post({ type: 'here', windowId: this.windowId, focusedAt: this.focusedAt });
+    if (this.joined) this.post({ type: 'here', windowId: this.windowId, focusedAt: this.focusedAt, visible: this.visible });
   }
 
-  /** Whether this window plays alert sounds and toasts: the most recently focused of the open Trading windows. */
+  /**
+   * Whether this window plays alert sounds and toasts: the most recently focused of the shown Trading windows (a
+   * hidden page doesn't poll), or of all of them when none is shown.
+   */
   isAlertWindow(): boolean {
     const now = this.now();
-    let best: [string, number] = [this.windowId, this.focusedAt];
+    const windows: Array<[string, Peer]> = [[this.windowId, { focusedAt: this.focusedAt, seenAt: now, visible: this.visible }]];
     for (const [windowId, peer] of this.peers) {
-      if (now - peer.seenAt > PRESENCE_TTL_MS) {
-        this.peers.delete(windowId);
-        continue;
-      }
-      // Ties go to the smaller id, so exactly one window wins.
-      if (peer.focusedAt > best[1] || (peer.focusedAt === best[1] && windowId < best[0])) best = [windowId, peer.focusedAt];
+      if (now - peer.seenAt > PRESENCE_TTL_MS) this.peers.delete(windowId);
+      else windows.push([windowId, peer]);
     }
-    return best[0] === this.windowId;
+    const shown = windows.filter(([, peer]) => peer.visible);
+    let best: [string, number] | null = null;
+    for (const [windowId, peer] of shown.length > 0 ? shown : windows) {
+      // Ties go to the smaller id, so exactly one window wins.
+      if (!best || peer.focusedAt > best[1] || (peer.focusedAt === best[1] && windowId < best[0])) best = [windowId, peer.focusedAt];
+    }
+    return best?.[0] === this.windowId;
   }
 
   announceSaved(kind: SavedDocumentKind, id: string, revision: number): void {
@@ -111,8 +129,8 @@ export class TradingWindowPresence {
       this.savedListeners.forEach((listener) => listener(message.kind, message.id, message.revision));
       return;
     }
-    this.peers.set(message.windowId, { focusedAt: message.focusedAt, seenAt: this.now() });
-    if (message.type === 'hello' && this.joined) this.post({ type: 'here', windowId: this.windowId, focusedAt: this.focusedAt });
+    this.peers.set(message.windowId, { focusedAt: message.focusedAt, seenAt: this.now(), visible: message.visible ?? true });
+    if (message.type === 'hello' && this.joined) this.heartbeat();
   }
 
   private post(message: PresenceMessage): void {
@@ -145,6 +163,8 @@ export function useTradingWindowPresence(): void {
     const onShow = (event: PageTransitionEvent) => {
       if (event.persisted) presence.join();
     };
+    const onVisibility = () => presence.setVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', onVisibility);
     const timer = window.setInterval(() => presence.heartbeat(), HEARTBEAT_MS);
     window.addEventListener('focus', onFocus);
     window.addEventListener('pagehide', onHide);
@@ -154,6 +174,7 @@ export function useTradingWindowPresence(): void {
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('pagehide', onHide);
       window.removeEventListener('pageshow', onShow);
+      document.removeEventListener('visibilitychange', onVisibility);
       presence.leave();
     };
   }, []);

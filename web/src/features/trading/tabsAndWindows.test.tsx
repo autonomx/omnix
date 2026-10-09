@@ -317,3 +317,69 @@ describe('workspace saves across windows (TVP-4.3 review)', () => {
     expect(update.mock.calls[0][1].revision).toBe(1);
   });
 });
+
+describe('TVP-4.3 re-review fixes', () => {
+  it('lets a shown window ring while the most recently focused one is hidden', () => {
+    const clock = { now: 1_000 };
+    const [main, popup] = pairedWindows(clock);
+    popup.focus(1_500);
+    main.focus(2_000);
+    expect([main.isAlertWindow(), popup.isAlertWindow()]).toEqual([true, false]);
+    // The main window goes to another browser tab: hidden, it doesn't poll alerts.
+    main.setVisible(false);
+    expect([main.isAlertWindow(), popup.isAlertWindow()]).toEqual([false, true]);
+    // With none shown, the most recently focused one rings, as before.
+    popup.setVisible(false);
+    expect([main.isAlertWindow(), popup.isAlertWindow()]).toEqual([true, false]);
+  });
+
+  it('keeps replay, closed tabs and the shown tab through another window\u2019s save, and then saves nothing for a session-only change', async () => {
+    vi.spyOn(tradingDraftRecovery, 'load').mockResolvedValue(null);
+    vi.spyOn(tradingDraftRecovery, 'save').mockResolvedValue(undefined);
+    vi.spyOn(tradingDraftRecovery, 'clear').mockResolvedValue(undefined);
+    // Two tabs, the stored one showing the first.
+    const store = useTradingStore.getState();
+    store.addBlankTab();
+    const [first, second] = useTradingStore.getState().tabs.map((tab) => tab.tabId);
+    useTradingStore.getState().setActiveTab(first);
+    const payload = (name: string) => {
+      const state = useTradingStore.getState();
+      return serializeTradingWorkspace({
+        name, layout: state.layout, activeChartId: state.activeChartId, charts: state.charts, links: state.links,
+        panels: state.panels, favoriteInstrumentIds: [], favoriteIntervals: [], activeTabId: first, tabs: state.tabs.map((tab) => ({ ...tab, name: tab.tabId === second ? name : tab.name })),
+      }) as unknown as Record<string, unknown>;
+    };
+    const record = (revision: number, name: string) => ({ record_id: 'main', record_type: 'workspace', revision, status: 'active', updated_at: null, payload: payload(name) }) as TradingDocument;
+    let records = [record(1, 'Second')];
+    vi.spyOn(tradingApi, 'documents').mockImplementation(async () => records);
+    const update = vi.spyOn(tradingApi, 'updateDocument');
+    // This window was opened on the second tab; it replays and has a closed tab to reopen (session-only state).
+    window.history.replaceState(null, '', `/trading?tab=${second}`);
+    const { result } = renderHook(() => useTradingWorkspacePersistence());
+    await waitFor(() => expect(result.current.status).toBe('saved'));
+    expect(useTradingStore.getState().activeTabId).toBe(second);
+    act(() => useTradingStore.setState({ replayMode: true, closedTabs: [{ tab: useTradingStore.getState().tabs[0], index: 0 }] }));
+    expect(result.current.status).toBe('saved');
+    records = [record(2, 'Renamed elsewhere')];
+    act(() => tradingWindowPresence().receive({ type: 'saved', windowId: 'other', kind: 'workspace', id: 'main', revision: 2 }));
+    await waitFor(() => expect(useTradingStore.getState().tabs[1].name).toBe('Renamed elsewhere'));
+    const state = useTradingStore.getState();
+    expect([state.activeTabId, state.replayMode, state.closedTabs.length]).toEqual([second, true, 1]);
+    act(() => useTradingStore.getState().setReplayMode(false));
+    expect(result.current.status).toBe('saved');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('duplicates once for a double click', async () => {
+    let release: (records: TradingDocument[]) => void = () => undefined;
+    vi.spyOn(tradingApi, 'allDocuments').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+    const { duplicateTradingTab } = await import('./persistence/duplicateWorkspace');
+    const source = useTradingStore.getState().activeTabId;
+    const first = duplicateTradingTab(source);
+    const second = duplicateTradingTab(source);
+    await waitFor(() => expect(tradingApi.allDocuments).toHaveBeenCalled());
+    await act(async () => { release([]); await first; await second; });
+    expect(await second).toBeNull();
+    expect(useTradingStore.getState().tabs).toHaveLength(2);
+  });
+});

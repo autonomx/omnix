@@ -1,6 +1,6 @@
 import { flushTradingDrawingSaves, safeRecordPart, tradingDrawingRecordId } from '../drawings/useTradingDrawings';
 import { tradingApi } from '../tradingApi';
-import { duplicatedChartId, newTradingTabId, useTradingStore } from '../tradingStore';
+import { MAX_TRADING_TABS, duplicatedChartId, newTradingTabId, useTradingStore, type TradingTabState } from '../tradingStore';
 import type { TradingDocument } from '../tradingTypes';
 import { currentTradingWorkspaceScopeId, type TradingWorkspacePersistence } from './useTradingWorkspacePersistence';
 
@@ -76,10 +76,22 @@ export function tabDrawingCopies(
  * Duplicates a tab with its drawings (TVP-4.4): the drawings are copied to the copy's id first, so its charts load
  * them when they mount. A failed drawing copy still duplicates the tab (without them). Resolves to the new tab's id.
  */
+let duplicating = false;
+
 export async function duplicateTradingTab(tabId: string): Promise<string | null> {
   const state = useTradingStore.getState();
   const source = state.tabs.find((tab) => tab.tabId === tabId);
-  if (!source) return null;
+  // One at a time (a double click makes one copy), and no drawing copies for a tab that can't be added.
+  if (!source || duplicating || state.tabs.length >= MAX_TRADING_TABS) return null;
+  duplicating = true;
+  try {
+    return await duplicateWithDrawings(tabId, source, state);
+  } finally {
+    duplicating = false;
+  }
+}
+
+async function duplicateWithDrawings(tabId: string, source: TradingTabState, state: ReturnType<typeof useTradingStore.getState>): Promise<string | null> {
   const targetId = newTradingTabId();
   const charts = tabId === state.activeTabId ? state.charts : source.charts;
   const chartIds = new Map(charts.map((chart) => [chart.chartId, duplicatedChartId(targetId, chart.chartId)]));
