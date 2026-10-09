@@ -342,6 +342,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/fundamentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Company */
+        get: operations["company_api_trading_fundamentals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/heatmaps/crypto": {
         parameters: {
             query?: never;
@@ -4275,6 +4292,63 @@ export interface components {
          * @enum {string}
          */
         FeedType: "rest" | "websocket" | "websocket_and_rest" | "socket" | "historical_polling" | "historical_daily";
+        /** Financials */
+        Financials: {
+            /** Annual */
+            annual: {
+                [key: string]: {
+                    [key: string]: unknown;
+                }[];
+            };
+            /** Cik */
+            cik: string;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Industry */
+            industry: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Labels */
+            labels: {
+                [key: string]: string;
+            };
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Price */
+            price: number | null;
+            /** Quarterly */
+            quarterly: {
+                [key: string]: {
+                    [key: string]: unknown;
+                }[];
+            };
+            /** Ratios */
+            ratios: {
+                [key: string]: number | null;
+            };
+            /** Sector */
+            sector: string | null;
+            /** Shares Outstanding */
+            shares_outstanding: number | null;
+            /**
+             * Source
+             * @default SEC XBRL company facts
+             */
+            source: string;
+            /** Ticker */
+            ticker: string;
+        };
         /** FinvizFrozenCohort */
         FinvizFrozenCohort: {
             /** Cohort Id */
@@ -14180,6 +14254,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlpacaIexCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    company_api_trading_fundamentals_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Financials"];
                 };
             };
             /** @description Validation Error */
