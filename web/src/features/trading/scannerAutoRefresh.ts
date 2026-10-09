@@ -32,10 +32,12 @@ export function useScannerAutoRefresh(auto: AutoRefresh | null, busy: (scannerId
   useEffect(() => {
     latest.current = { busy, start };
   });
+  const scannerId = auto?.scannerId;
+  const everyMs = auto?.everyMs ?? 0;
   useEffect(() => {
-    if (!auto || auto.everyMs <= 0) return;
+    if (!scannerId || everyMs <= 0) return;
     return startPolling(() => {
-      if (!latest.current.busy(auto.scannerId)) void latest.current.start(auto.scannerId).catch(() => undefined);
-    }, auto.everyMs);
-  }, [auto?.scannerId, auto?.everyMs]);
+      if (!latest.current.busy(scannerId)) void latest.current.start(scannerId).catch(() => undefined);
+    }, everyMs);
+  }, [scannerId, everyMs]);
 }
