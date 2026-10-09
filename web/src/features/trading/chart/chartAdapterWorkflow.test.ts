@@ -21,15 +21,20 @@ function seriesMock() {
 const chartMock = {
   applyOptions: vi.fn(),
   timeScale: () => ({ subscribeVisibleLogicalRangeChange: vi.fn(), unsubscribeVisibleLogicalRangeChange: vi.fn(), getVisibleLogicalRange: () => null }),
-  addSeries: vi.fn(() => {
+  addSeries: vi.fn<(type: unknown) => SeriesMock>(() => {
     const created = seriesMock();
     series.push(created);
     return created;
   }),
+  removeSeries: vi.fn(),
+  clearCrosshairPosition: vi.fn(),
   priceScale: () => ({ width: () => 64 }),
   panes: () => paneRects.map((rect) => ({
     getHeight: () => rect.height,
     getHTMLElement: () => ({ getBoundingClientRect: () => ({ top: rect.top, height: rect.height }) }),
+    priceScale: () => ({ applyOptions: vi.fn() }),
+    setStretchFactor: vi.fn(),
+    getStretchFactor: () => 1,
   })),
   remove: vi.fn(),
 };
@@ -90,6 +95,25 @@ describe('chart adapter workflow hooks (TVP-2.5)', () => {
     series[0].update.mockClear();
     adapter.updateBar({ ...(bar as object), ingestion_revision: 2 } as never);
     expect(series[0].update.mock.calls.at(-1)?.[0]).toMatchObject({ color: '#26a69a' });
+  });
+
+  it('draws a candles output as candles in its pane, and a new series when an output changes kind (TVP-6.4)', async () => {
+    const { CandlestickSeries, HistogramSeries } = await import('lightweight-charts');
+    chartMock.addSeries.mockClear();
+    const adapter = new TradingChartAdapter(document.createElement('div'));
+    const output = {
+      key: 'tv-volume-delta:delta', title: 'Volume Delta (15m)', pane: 1 as const, kind: 'candles' as const,
+      points: [{ time: '2026-08-05T12:00:00.000Z', value: 11, open: 0, high: 11, low: -2 }],
+    };
+    adapter.setIndicatorOutputs([output]);
+    // The last candlestick series: the chart's own price series is one too.
+    const types = chartMock.addSeries.mock.calls.map(([type]) => type);
+    const candleCall = types.lastIndexOf(CandlestickSeries);
+    expect(candleCall).toBeGreaterThan(0);
+    expect(series[candleCall].setData).toHaveBeenCalledWith([{ time: Date.parse('2026-08-05T12:00:00Z') / 1000, open: 0, high: 11, low: -2, close: 11 }]);
+    adapter.setIndicatorOutputs([{ ...output, kind: 'histogram' }]);
+    expect(chartMock.removeSeries).toHaveBeenCalledWith(series[candleCall]);
+    expect(chartMock.addSeries.mock.calls.at(-1)?.[0]).toBe(HistogramSeries);
   });
 
   it('tells which pane a double-click landed on', () => {

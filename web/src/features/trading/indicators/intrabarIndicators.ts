@@ -57,11 +57,11 @@ export function intrabarDeltas(chartBars: readonly MarketBar[], lowerBars: reado
 const UP = '#089981';
 const DOWN = '#f23645';
 
-/** Volume Delta: a histogram coloured by sign. */
+/** Volume Delta, as TradingView draws it: a candle from 0 to the bar's delta, its wicks the running delta's extremes. */
 export function volumeDeltaPoints(bars: readonly MarketBar[], deltas: ReadonlyMap<number, BarDelta>): IndicatorOutput['points'] {
   return bars.flatMap((bar) => {
     const value = deltas.get(Date.parse(bar.start_time));
-    return value ? [{ time: bar.start_time, value: value.delta, color: value.delta >= 0 ? UP : DOWN }] : [];
+    return value ? [{ time: bar.start_time, value: value.delta, open: 0, high: value.max, low: value.min, color: value.delta >= 0 ? UP : DOWN }] : [];
   });
 }
 
@@ -80,9 +80,11 @@ export function cumulativeVolumeDeltaPoints(
     if (index === 0 || key[index] !== key[index - 1]) total = 0;
     const value = deltas.get(times[index]);
     if (!value) return;
+    const open = total;
     total += value.delta;
-    // Coloured like TradingView's CVD candles: by this bar's delta (close above open), not the running total's sign.
-    points.push({ time: bar.start_time, value: total, color: value.delta >= 0 ? UP : DOWN });
+    // TradingView's CVD candles: from the total before the bar to after it, the wicks its running extremes; coloured by
+    // this bar's delta (close above open), not the total's sign.
+    points.push({ time: bar.start_time, value: total, open, high: open + value.max, low: open + value.min, color: value.delta >= 0 ? UP : DOWN });
   });
   return points;
 }
@@ -158,7 +160,7 @@ export async function calculateIntrabarIndicatorOutputs(
     key,
     title: `${cumulative ? 'CVD' : 'Volume Delta'} (${lowerInterval ?? 'chart'})`,
     pane: 1,
-    kind: 'histogram',
+    kind: 'candles',
     points,
     visible: indicator.style?.plots?.[key] !== false,
     color: indicator.style?.colors?.[key] ?? UP,
