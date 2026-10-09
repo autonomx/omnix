@@ -55,6 +55,7 @@ def result_payload(result: ScriptResult) -> dict[str, Any]:
         "alerts": jsonable(result.alerts),
         "logs": jsonable(result.logs),
         "profile": jsonable(result.profile),
+        "strategy": jsonable(result.strategy),
         "bars": result.bars,
         "seconds": result.seconds,
     }

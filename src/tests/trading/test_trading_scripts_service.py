@@ -123,3 +123,24 @@ def test_script_routes_come_before_the_script_documents() -> None:
 
     source = open(route_registration.__file__, encoding="utf-8").read()
     assert source.index("        create_trading_scripts_router,") < source.index("        create_trading_base_router,")
+
+
+def test_a_deep_backtest_runs_a_strategy_on_the_providers_history(service) -> None:
+    calls = []
+
+    class Market:
+        def bars(self, instrument_id, interval, limit, binding_id=None, **kwargs):
+            calls.append(limit)
+            return SimpleNamespace(bars=market_bars(30))
+
+    app = FastAPI()
+    app.include_router(create_trading_scripts_router(service_factory=lambda: service, market_service_factory=Market))
+    client = TestClient(app)
+    strategy = '//@version=5\nstrategy("S", overlay=true)\nif bar_index == 2\n    strategy.entry("L", strategy.long, qty=1)\nif bar_index == 10\n    strategy.close("L")\nplot(close)\n'
+    body = client.post("/api/trading/scripts/backtest", json={"source": strategy, "instrument_id": "equity:X:Y", "interval": "1m"}).json()
+    assert calls == [20_000] and body["error"] is None and len(body["times"]) == 30
+    [trade] = body["result"]["strategy"]["trades"]
+    assert (trade["entry_price"], trade["exit_price"]) == (103, 111)
+    assert "plots" not in body["result"] and len(body["result"]["strategy"]["equity"]) == 30
+    refused = client.post("/api/trading/scripts/backtest", json={"source": SMA, "instrument_id": "equity:X:Y", "interval": "1m", "bars": 100}).json()
+    assert refused["result"] is None and refused["error"]["kind"] == "strategy"

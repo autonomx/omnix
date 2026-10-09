@@ -25,6 +25,8 @@ from .scripts import ScriptError, ScriptLimits, compile_script
 
 # A run's budget: wall time inside the worker, and how long the server waits for the worker before killing it.
 RUN_LIMITS = ScriptLimits(max_seconds=5.0)
+# A deep backtest (TVP-11.5): a strategy over all the history a provider serves, with more time.
+BACKTEST_LIMITS = ScriptLimits(max_seconds=30.0)
 WORKER_GRACE_SECONDS = 5.0
 DEFAULT_WORKERS = 2
 DEFAULT_RUNS_PER_USER = 2
@@ -153,10 +155,12 @@ class ScriptRunService:
         timeframe: str = "",
         user_id: str = "",
         profile: bool = False,
+        limits: ScriptLimits | None = None,
     ) -> dict[str, Any]:
         """A run's result (``worker.result_payload``); ScriptServiceError for the script's error or a busy service."""
+        limits = limits or self.limits
         key = hashlib.sha256(
-            json.dumps([source, inputs or {}, symbol, timeframe, profile, bars.fingerprint()], sort_keys=True, default=str).encode()
+            json.dumps([source, inputs or {}, symbol, timeframe, profile, bars.fingerprint(), asdict(limits)], sort_keys=True, default=str).encode()
         ).hexdigest()
         with self._cache_guard:
             cached = self._cache.get(key)
@@ -169,8 +173,8 @@ class ScriptRunService:
         try:
             answer = self._dispatch({
                 "id": key, "source": source, "bars": asdict(bars), "inputs": inputs or {}, "symbol": symbol,
-                "timeframe": timeframe, "limits": asdict(self.limits), "profile": profile,
-            })
+                "timeframe": timeframe, "limits": asdict(limits), "profile": profile,
+            }, limits)
         finally:
             slot.release()
         if "error" in answer:
@@ -183,7 +187,8 @@ class ScriptRunService:
                 self._cache.popitem(last=False)
         return result
 
-    def _dispatch(self, job: dict[str, Any]) -> dict[str, Any]:
+    def _dispatch(self, job: dict[str, Any], limits: ScriptLimits | None = None) -> dict[str, Any]:
+        limits = limits or self.limits
         try:
             worker = self._idle.get(timeout=self.limits.max_seconds + self.grace_seconds)
         except queue.Empty as exc:
@@ -191,13 +196,13 @@ class ScriptRunService:
         try:
             if worker is None or worker.process.poll() is not None:
                 worker = _Worker(self.command())
-            answer = worker.ask(job, timeout=self.limits.max_seconds + self.grace_seconds)
+            answer = worker.ask(job, timeout=limits.max_seconds + self.grace_seconds)
         except queue.Empty:
             # Overran: the worker goes, a new one starts on the next job.
             worker.kill()
             worker = None
             self.killed_runs += 1
-            raise ScriptServiceError("limit", f"the script ran for more than {self.limits.max_seconds:g} s and was stopped") from None
+            raise ScriptServiceError("limit", f"the script ran for more than {limits.max_seconds:g} s and was stopped") from None
         except (OSError, ValueError, ScriptServiceError) as exc:
             if worker is not None:
                 worker.kill()
@@ -245,6 +250,7 @@ def bars_for_script(bars: Sequence[Any]) -> ScriptBars:
 
 
 __all__ = [
+    "BACKTEST_LIMITS",
     "RUN_LIMITS",
     "ScriptBars",
     "ScriptRunService",

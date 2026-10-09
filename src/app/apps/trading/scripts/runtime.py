@@ -216,6 +216,8 @@ class ScriptResult:
     logs: list[dict[str, Any]] = field(default_factory=list)
     # With profiling on, seconds spent in each top-level statement, by its line (TVP-11.2).
     profile: list[dict[str, Any]] = field(default_factory=list)
+    # A strategy() script's backtest: trades, equity, drawdown and the performance summary (TVP-11.5).
+    strategy: dict[str, Any] | None = None
 
 
 # The program
@@ -350,6 +352,12 @@ class ScriptRun:
         self.allocated = 0
         self.last_bar_index = len(self.close) - 1
         self.interval_ms = interval_ms(timeframe)
+        # A strategy() script trades a simulated account, filled on these bars only (scripts/strategy.py).
+        self.broker: Any = None
+        if program.declaration.get("kind") == "strategy":
+            from .strategy import Broker, StrategySettings
+
+            self.broker = Broker(self, StrategySettings.from_declaration(program.declaration))
 
     @property
     def can_extend(self) -> bool:
@@ -389,9 +397,12 @@ class ScriptRun:
         token = CURRENT_RUN.set(self)
         index = 0
         try:
+            broker = self.broker
             for t in range(start, end):
                 self.t = t
                 self.bar_loop_iterations = 0
+                if broker is not None:
+                    broker.open_bar(t)
                 if self.profiling:
                     for index, statement in enumerate(body):
                         began_statement = clock.perf_counter()
@@ -401,6 +412,8 @@ class ScriptRun:
                     for index, statement in enumerate(body):
                         statement(root)
                 self.statics_done = True
+                if broker is not None:
+                    broker.close_bar(t)
                 for slot in self.all_slots:
                     slot.history.append(slot.current)
                     if not slot.persistent:
@@ -465,6 +478,7 @@ class ScriptRun:
             seconds=self.seconds,
             logs=list(self.logs),
             profile=self._profile(),
+            strategy=self.broker.report() if self.broker is not None else None,
         )
 
     def _profile(self) -> list[dict[str, Any]]:

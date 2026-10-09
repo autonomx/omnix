@@ -15,6 +15,7 @@ from typing import Any
 
 from . import ta
 from .errors import ScriptLimitError, ScriptRuntimeError, ScriptSyntaxError, ScriptUnsupportedError
+from .strategy import Broker, StrategyError, StrategySettings
 from .runtime import CURRENT_RUN, SERIES_NAMES, Closure, Context, Drawing, ScriptInput, _na, allocate, check_string, current_limits, truthy
 from .syntax import Call, ColorLiteral, Literal, Name, Node, TupleExpr, Unary
 
@@ -23,7 +24,7 @@ Factory = Callable[[Any, Call], Closure]
 RESERVED_NAMES = {"open", "high", "low", "close", "volume", "time", "bar_index", "na", "true", "false"}
 
 # Namespaces Omnix Scripts doesn't support yet, so their names say so instead of "unknown".
-UNSUPPORTED_PREFIXES = ("request.", "strategy.", "matrix.", "ticker.", "polyline.", "chart.", "library", "strategy")
+UNSUPPORTED_PREFIXES = ("request.", "strategy.risk.", "matrix.", "ticker.", "polyline.", "chart.", "library")
 
 
 def is_unsupported(name: str) -> bool:
@@ -956,28 +957,50 @@ def _alert(c: Any, node: Call) -> Closure:
     return emit
 
 
+_STRATEGY_PARAMS = [
+    "title", "shorttitle", "overlay", "format", "precision", "scale", "pyramiding", "calc_on_order_fills", "calc_on_every_tick",
+    "max_bars_back", "backtest_fill_limits_assumption", "default_qty_type", "default_qty_value", "initial_capital", "currency",
+    "slippage", "commission_type", "commission_value", "process_orders_on_close", "close_entries_rule", "margin_long",
+    "margin_short", "explicit_plot_zorder", "max_lines_count", "max_labels_count", "max_boxes_count", "calc_bars_count",
+    "risk_free_rate", "use_bar_magnifier", "fill_orders_on_standard_ohlc", "max_polylines_count", "dynamic_requests", "behind_chart",
+]
+
+
 def _declaration(kind: str) -> Factory:
-    params = ["title", "shorttitle", "overlay", "format", "precision", "scale", "max_bars_back", "timeframe", "timeframe_gaps",
-              "explicit_plot_zorder", "max_lines_count", "max_labels_count", "max_boxes_count", "calc_bars_count",
-              "max_polylines_count", "dynamic_requests", "behind_chart"]
+    params = _STRATEGY_PARAMS if kind == "strategy" else [
+        "title", "shorttitle", "overlay", "format", "precision", "scale", "max_bars_back", "timeframe", "timeframe_gaps",
+        "explicit_plot_zorder", "max_lines_count", "max_labels_count", "max_boxes_count", "calc_bars_count",
+        "max_polylines_count", "dynamic_requests", "behind_chart",
+    ]
 
     def factory(c: Any, node: Call) -> Closure:
-        if kind != "indicator":
-            raise ScriptUnsupportedError(f"{kind}() scripts are not supported yet: Omnix Scripts runs indicators", node.line)
+        if kind not in ("indicator", "strategy"):
+            raise ScriptUnsupportedError(f"{kind}() scripts are not supported yet: Omnix Scripts runs indicators and strategies", node.line)
         if c.declaration:
-            raise ScriptSyntaxError("a script has one indicator() declaration", node.line)
+            raise ScriptSyntaxError("a script has one indicator() or strategy() declaration", node.line)
+        if len(node.args) > len(params) or any(key not in params for key in node.kwargs):
+            unknown = next((key for key in node.kwargs if key not in params), None)
+            raise ScriptSyntaxError(f"{kind}() has no argument {unknown!r}" if unknown else f"{kind}() takes at most {len(params)} arguments", node.line)
         arguments: dict[str, Node] = dict(zip(params, node.args, strict=False))
         arguments.update(node.kwargs)
-        declaration: dict[str, Any] = {"kind": kind, "overlay": False}
+        declaration: dict[str, Any] = {"kind": kind, "overlay": None if kind == "strategy" else False}
         for key, value in arguments.items():
             literal = _literal(value)
             if literal is _MISSING:
-                raise ScriptSyntaxError(f"indicator() takes constant values; {key!r} isn't one", node.line)
+                raise ScriptSyntaxError(f"{kind}() takes constant values; {key!r} isn't one", node.line)
             declaration[key] = literal
         if "title" not in declaration:
-            raise ScriptSyntaxError("indicator() needs a title", node.line)
+            raise ScriptSyntaxError(f"{kind}() needs a title", node.line)
         if declaration.get("timeframe"):
             raise ScriptSyntaxError("indicator(timeframe=...) is not supported yet", node.line)
+        if kind == "strategy":
+            # TVP-11.5: a backtest on the run's bars, never an order (scripts/strategy.py).
+            if declaration.get("overlay") is None:
+                declaration["overlay"] = True
+            try:
+                StrategySettings.from_declaration(declaration)
+            except (StrategyError, TypeError, ValueError) as error:
+                raise ScriptSyntaxError(f"strategy(): {error}", node.line) from None
         c.declaration = declaration
         return lambda ctx: None
 
@@ -1085,6 +1108,13 @@ _CONSTANT_NAMESPACES = (
     "order.", "font.", "currency.", "scale.", "adjustment.", "session.", "settlement_as_close.", "backadjustment.",
 )
 
+_STRATEGY_CONSTANTS = {
+    "strategy.long", "strategy.short", "strategy.fixed", "strategy.cash", "strategy.percent_of_equity",
+    "strategy.commission.percent", "strategy.commission.cash_per_contract", "strategy.commission.cash_per_order",
+    "strategy.oca.none", "strategy.oca.cancel", "strategy.oca.reduce",
+    "strategy.direction.all", "strategy.direction.long", "strategy.direction.short",
+}
+
 _NAMED_CONSTANTS: dict[str, Any] = {
     "math.pi": math.pi, "math.e": math.e, "math.phi": (1 + math.sqrt(5)) / 2, "math.rphi": 2 / (1 + math.sqrt(5)),
     "dayofweek.sunday": 1, "dayofweek.monday": 2, "dayofweek.tuesday": 3, "dayofweek.wednesday": 4,
@@ -1098,7 +1128,7 @@ def _constant(name: str) -> Any:
         return _NAMED_CONSTANTS[name]
     if name.startswith("color.") and name[6:] in COLORS:
         return COLORS[name[6:]]
-    if name.startswith(_CONSTANT_NAMESPACES):
+    if name.startswith(_CONSTANT_NAMESPACES) or name in _STRATEGY_CONSTANTS:
         return name
     return _MISSING
 
@@ -1179,6 +1209,9 @@ def builtin_variable(c: Any, node: Name) -> Closure | None:
         if _timeframe_value(name, "60") is _MISSING:
             return None
         return lambda ctx: _timeframe_value(name, ctx.run.timeframe)
+    if name.startswith("strategy.") and name in STRATEGY_VARIABLES:
+        read = STRATEGY_VARIABLES[name]
+        return lambda ctx: read(_broker(ctx.run))
     if name == "ta.tr":
         return _site_closure(node.id, lambda state, h, l, cl: ta.tr(state, h, l, cl, False), [], _hlc)
     if name == "ta.obv":
@@ -1230,6 +1263,102 @@ def _vwap_function(c: Any, node: Call) -> Closure:
         return state.run(run.t, step, source(ctx), run.volume[run.t], run.starts[run.t], anchor(ctx))
 
     return call
+
+
+def _broker(run: Any) -> Broker:
+    """The run's simulated account (TVP-11.5); strategy.* belongs in a strategy() script."""
+    broker = getattr(run, "broker", None)
+    if broker is None:
+        raise ScriptRuntimeError("strategy.* functions and variables need a strategy() script")
+    return broker
+
+
+def _strategy_call(method: str) -> Callable[..., Any]:
+    def call(*arguments: Any) -> None:
+        run = CURRENT_RUN.get()
+        try:
+            getattr(_broker(run), method)(*arguments)
+        except StrategyError as error:
+            raise ScriptRuntimeError(f"strategy.{method}(): {error}") from None
+
+    return call
+
+
+def _trade_field(source: str, name: str) -> Callable[[Any], Any]:
+    """strategy.closedtrades.<name>(trade_num) and strategy.opentrades.<name>(trade_num)."""
+
+    def read(number: Any) -> Any:
+        trades = getattr(_broker(CURRENT_RUN.get()), "closed_trades" if source == "closedtrades" else "open_trades")
+        if _na(number) or not 0 <= int(number) < len(trades):
+            return None
+        trade = trades[int(number)]
+        if name == "size":
+            return trade.qty * trade.direction
+        if name in ("entry_bar_index", "exit_bar_index"):
+            return getattr(trade, name.replace("_index", ""))
+        if name == "commission":
+            return trade.entry_commission + trade.exit_commission
+        if name == "profit" and source == "opentrades":
+            run = CURRENT_RUN.get()
+            return trade.unrealized(run.close[run.t])
+        if name in ("max_runup", "max_drawdown"):
+            return getattr(trade, name)
+        return getattr(trade, name)
+
+    return read
+
+
+_TRADE_FIELDS = {
+    "closedtrades": ("profit", "entry_price", "exit_price", "entry_bar_index", "exit_bar_index", "entry_time", "exit_time", "size",
+                     "entry_id", "exit_id", "commission", "max_runup", "max_drawdown", "entry_comment", "exit_comment"),
+    "opentrades": ("profit", "entry_price", "entry_bar_index", "entry_time", "size", "entry_id", "commission", "max_runup",
+                   "max_drawdown", "entry_comment"),
+}
+
+STRATEGY_VARIABLES: dict[str, Callable[[Broker], Any]] = {
+    "strategy.position_size": lambda broker: broker.position_size,
+    "strategy.position_avg_price": lambda broker: broker.position_avg_price,
+    "strategy.position_entry_name": lambda broker: broker.open_trades[0].entry_id if broker.open_trades else "",
+    "strategy.equity": lambda broker: broker.equity_now(),
+    "strategy.netprofit": lambda broker: broker.netprofit,
+    "strategy.openprofit": lambda broker: broker.openprofit(),
+    "strategy.grossprofit": lambda broker: sum(trade.profit for trade in broker.closed_trades if trade.profit > 0),
+    "strategy.grossloss": lambda broker: -sum(trade.profit for trade in broker.closed_trades if trade.profit < 0),
+    "strategy.closedtrades": lambda broker: len(broker.closed_trades),
+    "strategy.opentrades": lambda broker: len(broker.open_trades),
+    "strategy.wintrades": lambda broker: sum(1 for trade in broker.closed_trades if trade.profit > 0),
+    "strategy.losstrades": lambda broker: sum(1 for trade in broker.closed_trades if trade.profit < 0),
+    "strategy.eventrades": lambda broker: sum(1 for trade in broker.closed_trades if trade.profit == 0),
+    "strategy.initial_capital": lambda broker: broker.settings.initial_capital,
+    "strategy.max_drawdown": lambda broker: broker.max_drawdown,
+    "strategy.max_runup": lambda broker: broker.max_runup,
+    "strategy.max_contracts_held_all": lambda broker: broker.max_contracts,
+}
+
+_ENTRY_SPEC = "id, direction, qty=na, limit=na, stop=na, oca_name=na, oca_type=strategy.oca.none, comment=na, alert_message=na, disable_alert=false"
+
+
+def _strategy_functions() -> dict[str, Factory]:
+    functions: dict[str, Factory] = {
+        "strategy.entry": pure(_ENTRY_SPEC, lambda *a: _strategy_call("entry")(*a[:8])),
+        "strategy.order": pure(_ENTRY_SPEC, lambda *a: _strategy_call("order")(*a[:8])),
+        "strategy.exit": pure(
+            "id, from_entry=na, qty=na, qty_percent=na, profit=na, limit=na, loss=na, stop=na, trail_price=na, trail_points=na, "
+            "trail_offset=na, oca_name=na, comment=na, comment_profit=na, comment_loss=na, comment_trailing=na, alert_message=na, "
+            "alert_profit=na, alert_loss=na, alert_trailing=na, disable_alert=false",
+            lambda *a: _strategy_call("exit")(*a[:12], a[12]),
+        ),
+        "strategy.close": pure("id, comment=na, qty=na, qty_percent=na, alert_message=na, immediately=false, disable_alert=false",
+                               lambda *a: _strategy_call("close")(a[0], a[1], a[2], a[3], a[5])),
+        "strategy.close_all": pure("comment=na, alert_message=na, immediately=false, disable_alert=false",
+                                   lambda *a: _strategy_call("close_all")(a[0], a[2])),
+        "strategy.cancel": pure("id", lambda id: _strategy_call("cancel")(id)),
+        "strategy.cancel_all": pure("", lambda: _strategy_call("cancel_all")()),
+    }
+    for source, names in _TRADE_FIELDS.items():
+        for name in names:
+            functions[f"strategy.{source}.{name}"] = pure("trade_num", _trade_field(source, name))
+    return functions
 
 
 def _runtime_error(message: Any) -> None:
@@ -1409,6 +1538,7 @@ FUNCTIONS: dict[str, Factory] = {
     "table.new": _drawing_factory("table"),
     "linefill.new": _drawing_factory("linefill"),
 }
+FUNCTIONS.update(_strategy_functions())
 FUNCTIONS["ta.vwma"] = site("source, length", lambda s, vol, v, n: ta.vwma(s, v, vol, n), lambda run, t: (run.volume[t],))
 for _name in INPUT_SPECS:
     FUNCTIONS[_name] = _input(_name)

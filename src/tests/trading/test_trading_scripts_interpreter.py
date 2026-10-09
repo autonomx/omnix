@@ -269,7 +269,6 @@ def _random_walk() -> BarSeries:
 
 
 OUTSIDE_THE_SUBSET = {
-    "ema_cross_strategy": "strategy",
     "mtf_ema": "request.security",
     "order_blocks_udt": "user-defined types",
 }
@@ -284,6 +283,8 @@ def test_community_idioms_run(path: Path) -> None:
         return
     result = run_script(source, _random_walk(), timeframe="60")
     produced = sum(1 for plot in result.plots for value in plot.values if value is not None) + len(result.drawings)
+    # A strategy (TVP-11.5) produces trades.
+    produced += len((result.strategy or {}).get("trades", [])) + len((result.strategy or {}).get("open_trades", []))
     assert produced > 0
 
 
