@@ -489,6 +489,7 @@
     "GET /api/trading/instruments/search": "trading",
     "GET /api/trading/kill-switches": "trading",
     "PUT /api/trading/kill-switches": "trading",
+    "GET /api/trading/macro/yield-curve": "trading",
     "GET /api/trading/market-data/providers/coinmarketcap/credentials": "trading",
     "PUT /api/trading/market-data/providers/coinmarketcap/credentials": "trading",
     "GET /api/trading/market-data/providers/fred/credentials": "trading",

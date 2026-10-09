@@ -78,7 +78,7 @@ export function TradingChartPanel(props: TradingChartPanelProps) {
       {chartQuery.error ? (
         <div className="trading-chart-state error">
           <span>{chartQuery.error.message}</span>
-          {chartQuery.error.message.includes('CoinMarketCap API key') && onOpenMarketDataSettings ? (
+          {/(CoinMarketCap|FRED) API key/.test(chartQuery.error.message) && onOpenMarketDataSettings ? (
             <button type="button" onClick={onOpenMarketDataSettings}>Open market-data settings</button>
           ) : null}
         </div>

@@ -65,6 +65,7 @@ const TradingScannerPanel = lazy(() => import('./TradingScannerPanel').then((mod
 const TradingStrategiesPanel = lazy(() => import('./TradingStrategiesPanel').then((module) => ({ default: module.TradingStrategiesPanel })));
 const TradingEconomicCalendar = lazy(() => import('./TradingEconomicCalendar').then((module) => ({ default: module.TradingEconomicCalendar })));
 const TradingAdvancedView = lazy(() => import('./TradingAdvancedView').then((module) => ({ default: module.TradingAdvancedView })));
+const TradingYieldCurve = lazy(() => import('./TradingYieldCurve').then((module) => ({ default: module.TradingYieldCurve })));
 const TradingScriptScreener = lazy(() => import('./TradingScriptScreener').then((module) => ({ default: module.TradingScriptScreener })));
 const TradingEventsCalendar = lazy(() => import('./TradingEventsCalendar').then((module) => ({ default: module.TradingEventsCalendar })));
 const TradingFinancials = lazy(() => import('./TradingFinancials').then((module) => ({ default: module.TradingFinancials })));
@@ -81,12 +82,12 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'columns-4', label: '4 columns' },
 ];
 
-type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'tester' | 'seasonals' | 'heatmap' | 'financials' | 'calendar' | 'events' | 'overview' | 'script-screener';
+type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'tester' | 'seasonals' | 'heatmap' | 'financials' | 'calendar' | 'events' | 'overview' | 'script-screener' | 'yield-curve';
 
 const TOOL_PANEL_TITLES: Record<ToolPanel, string> = {
   scanner: 'Market scanner', replay: 'Replay & backtest', strategies: 'Automated strategies', tester: 'Strategy tester', seasonals: 'Seasonals',
   heatmap: 'Heatmap', financials: 'Financials', calendar: 'Economic calendar', events: 'Earnings & dividends', overview: 'Advanced view',
-  'script-screener': 'Script screener',
+  'script-screener': 'Script screener', 'yield-curve': 'US Treasury yield curve',
 };
 
 /** The tool drawer's title; tools on one symbol name it. */
@@ -621,6 +622,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={toolPanel === 'events'} onClick={() => toggleToolPanel('events')}>Earnings</button>
           <button type="button" aria-pressed={toolPanel === 'overview'} onClick={() => toggleToolPanel('overview')}>Advanced view</button>
           <button type="button" aria-pressed={toolPanel === 'script-screener'} onClick={() => toggleToolPanel('script-screener')}>Script screener</button>
+          <button type="button" aria-pressed={toolPanel === 'yield-curve'} onClick={() => toggleToolPanel('yield-curve')}>Yield curve</button>
           <button type="button" aria-pressed={sidePanelTab === 'paper' && panels.right} onClick={openPaperTrading}>Trade</button>
           <button type="button" aria-pressed={sidePanelTab === 'research' && panels.right} onClick={openResearchPanel}>AI Research</button>
         </div>
@@ -697,6 +699,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 {toolPanel === 'financials' ? <TradingFinancials instrumentId={activeChart.instrumentId} /> : null}
                 {toolPanel === 'calendar' ? <TradingEconomicCalendar onOpenSettings={() => { void navigate({ to: '/settings', search: { category: 'trading-market-data' } }); }} /> : null}
                 {toolPanel === 'overview' ? <TradingAdvancedView key={advancedWatchlistId ?? 'charts'} chartInstrumentIds={charts.map((chart) => chart.instrumentId)} initialWatchlistId={advancedWatchlistId} onShowInstrument={showInstrumentOnChart} /> : null}
+                {toolPanel === 'yield-curve' ? <TradingYieldCurve onShowInstrument={showInstrumentOnChart} /> : null}
                 {toolPanel === 'script-screener' ? <TradingScriptScreener chartInstrumentIds={charts.map((chart) => chart.instrumentId)} onShowInstrument={showInstrumentOnChart} /> : null}
                 {toolPanel === 'events' ? <TradingEventsCalendar chartInstrumentIds={charts.map((chart) => chart.instrumentId)} onShowInstrument={showInstrumentOnChart} /> : null}
                 {toolPanel === 'replay' ? (
