@@ -57,6 +57,7 @@ def test_earnings_come_from_8k_item_2_02_with_their_session_and_quarter() -> Non
 def test_sessions_and_fiscal_quarters() -> None:
     assert session_of(datetime(2026, 3, 10, 13, 29, tzinfo=timezone.utc)) == (date(2026, 3, 10), "before_open")  # 09:29 EDT
     assert session_of(datetime(2026, 3, 10, 20, 0, tzinfo=timezone.utc)) == (date(2026, 3, 10), "after_close")
+    assert session_of(datetime(2026, 11, 27, 19, 0, tzinfo=timezone.utc)) == (date(2026, 11, 27), "after_close")  # 14:00 on an early close
     assert fiscal_period(date(2026, 2, 5), "1231") == "Q4 FY2025"
     assert fiscal_period(date(2026, 3, 31), "1231") == "Q4 FY2025"  # March isn't over on its last day's report
     assert fiscal_period(date(2026, 5, 20), "0201") == "Q1 FY2027"  # a year ending in early February ends in January

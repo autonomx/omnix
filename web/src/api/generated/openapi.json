@@ -42772,6 +42772,174 @@
         "title": "ScriptRunResponse",
         "type": "object"
       },
+      "ScriptScreenOutput": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "kind"
+        ],
+        "title": "ScriptScreenOutput",
+        "type": "object"
+      },
+      "ScriptScreenRequest": {
+        "properties": {
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "instrument_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Instrument Ids",
+            "type": "array"
+          },
+          "interval": {
+            "default": "1d",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "limit": {
+            "default": 500,
+            "maximum": 2000,
+            "minimum": 50,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "source": {
+            "maxLength": 200000,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "instrument_ids"
+        ],
+        "title": "ScriptScreenRequest",
+        "type": "object"
+      },
+      "ScriptScreenResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptScreenOutput"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptScreenRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "outputs",
+          "rows",
+          "error"
+        ],
+        "title": "ScriptScreenResponse",
+        "type": "object"
+      },
+      "ScriptScreenRow": {
+        "properties": {
+          "bar_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar Time"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "last": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Last",
+            "type": "object"
+          },
+          "previous": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Previous",
+            "type": "object"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "bar_time",
+          "last",
+          "previous",
+          "error"
+        ],
+        "title": "ScriptScreenRow",
+        "type": "object"
+      },
       "ScriptSource": {
         "additionalProperties": false,
         "description": "An Omnix Script's output (TVP-11.4), from the script as saved at ``revision`` (its later edits don't change the alert).\n\n``output``: ``plot:<i>`` is the value of the plot call at position i among the script's output calls (plotshape\nand plotchar only where they show); ``alertcondition:<i>`` and ``alert`` (any ``alert()`` call) have a value only\non the bars where they fire.",
@@ -83065,6 +83233,48 @@
           }
         },
         "summary": "Run",
+        "tags": [
+          "trading-scripts"
+        ]
+      }
+    },
+    "/api/trading/scripts/screen": {
+      "post": {
+        "description": "Run a script on each listed symbol's latest ``limit`` bars (TVP-11.6): every output's last two values per symbol.",
+        "operationId": "screen_api_trading_scripts_screen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptScreenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptScreenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Screen",
         "tags": [
           "trading-scripts"
         ]

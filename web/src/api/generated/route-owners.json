@@ -567,6 +567,7 @@
     "POST /api/trading/scripts/check": "trading",
     "GET /api/trading/scripts/reference": "trading",
     "POST /api/trading/scripts/run": "trading",
+    "POST /api/trading/scripts/screen": "trading",
     "DELETE /api/trading/scripts/{record_id}": "trading",
     "GET /api/trading/scripts/{record_id}": "trading",
     "PUT /api/trading/scripts/{record_id}": "trading",

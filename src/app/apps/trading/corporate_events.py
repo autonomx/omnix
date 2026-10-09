@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable, Iterable
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -28,6 +28,7 @@ from app.config.env import env_str
 from app.persistence.unit_of_work import unit_of_work
 
 from .company_profiles import CompanyProfiles, SecCompanySource, default_company_profiles
+from .us_equity_calendar import REGULAR_OPEN, after_regular_close
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ def session_of(accepted: datetime) -> tuple[date, Timing]:
     """The New York date and session of a filing accepted at ``accepted``."""
     local = accepted.astimezone(NEW_YORK)
     clock = local.time()
-    timing: Timing = "before_open" if clock < time(9, 30) else "after_close" if clock >= time(16, 0) else "during_market"
+    timing: Timing = "before_open" if clock < REGULAR_OPEN else "after_close" if after_regular_close(accepted) else "during_market"
     return local.date(), timing
 
 

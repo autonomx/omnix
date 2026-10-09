@@ -14,6 +14,9 @@ export type ScriptCheckResult = components['schemas']['ScriptCheckResponse'];
 export type ScriptReference = components['schemas']['ScriptReferenceResponse'];
 export type ScriptVersionSummary = components['schemas']['ScriptVersionSummary'];
 export type ScriptVersion = components['schemas']['ScriptVersion'];
+export type ScriptScreenResponse = components['schemas']['ScriptScreenResponse'];
+export type ScriptScreenRow = components['schemas']['ScriptScreenRow'];
+export type ScriptScreenOutput = components['schemas']['ScriptScreenOutput'];
 
 /** A script document's payload. */
 export type ScriptPayload = { name: string; source: string };
@@ -104,6 +107,11 @@ export const scriptsApi = {
     }));
     return { times: response.times, result: (response.result ?? null) as ScriptRunResult | null, error: response.error ?? null };
   },
+  /** One script on each symbol of a list (TVP-11.6): every output's last two values per symbol. */
+  screen: (request: { source: string; instrumentIds: string[]; interval: string; inputs?: Record<string, unknown>; limit?: number }): Promise<ScriptScreenResponse> =>
+    scripts(api.POST('/api/trading/scripts/screen', {
+      body: { source: request.source, instrument_ids: request.instrumentIds, interval: request.interval, inputs: request.inputs ?? {}, limit: request.limit ?? 500 },
+    })),
   reference: (): Promise<ScriptReference> => scripts(api.GET('/api/trading/scripts/reference')),
   versions: async (scriptId: string): Promise<ScriptVersionSummary[]> =>
     (await scripts(api.GET('/api/trading/scripts/{record_id}/versions', { params: { path: { record_id: scriptId } }, cache: 'no-store' }))).versions,
