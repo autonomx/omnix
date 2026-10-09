@@ -77,6 +77,12 @@ export function drawingAlertUpdates(
  * bars are a replay's): once a drawing settles after a move, its alerts take the level's new line. A drawing deleted
  * on this chart, or a level that went away, offers its alerts for disabling.
  */
+// Alerts the user kept on a prompt: not offered again on this page, on any chart.
+const keptAlerts = new Set<string>();
+
+/** Bars enough to place a level (a step between bars): before them every level reads as missing. */
+const MIN_SYNC_BARS = 2;
+
 export function DrawingAlertSync({
   adapter, instrumentId, instrument, drawings, active, replayMode,
 }: {
@@ -101,13 +107,17 @@ export function DrawingAlertSync({
   const seen = useRef<Set<string>>(new Set());
   const failures = useRef(new Map<string, number>());
   const attempted = useRef(new Map<string, string>());
-  // Alerts the user kept on the prompt: not offered again on this page.
-  const dismissed = useRef(new Set<string>());
   const { tickSize, pointValue } = instrument;
 
   useEffect(() => {
     if (!adapter || !active || replayMode || linked.length === 0) return;
-    const timer = window.setTimeout(() => {
+    let timer: ReturnType<typeof window.setTimeout> | undefined;
+    const settle = () => {
+      // No bars yet (first load, an interval switch): no level can be placed, so none is lost; look again later.
+      if (adapter.drawingBars().length < MIN_SYNC_BARS) {
+        timer = window.setTimeout(settle, DRAWING_ALERT_SETTLE_MS);
+        return;
+      }
       const access = chartAccessFor(adapter, { tickSize, pointValue });
       const matches = adapter.drawingBarIndexMatchesBars();
       const { moved, lost } = drawingAlertUpdates(
@@ -115,7 +125,7 @@ export function DrawingAlertSync({
       );
       // The level orphans are what this pass found (a level that came back takes its alert off the prompt), less the
       // ones the user chose to keep.
-      const lostEnabled = lost.filter((alert) => alert.enabled && !dismissed.current.has(alert.alert_id));
+      const lostEnabled = lost.filter((alert) => alert.enabled && !keptAlerts.has(alert.alert_id));
       setOrphans((current) => {
         const deleted = current.filter((item) => item.reason === 'deleted');
         const next = [...deleted, ...lostEnabled.filter((alert) => !deleted.some((item) => item.alert.alert_id === alert.alert_id)).map((alert) => ({ alert, reason: 'level' as const }))];
@@ -139,7 +149,8 @@ export function DrawingAlertSync({
           void mutationsRef.current.refresh();
         });
       }
-    }, DRAWING_ALERT_SETTLE_MS);
+    };
+    timer = window.setTimeout(settle, DRAWING_ALERT_SETTLE_MS);
     return () => window.clearTimeout(timer);
   }, [active, adapter, drawings, linked, pointValue, replayMode, tickSize]);
 
@@ -156,12 +167,14 @@ export function DrawingAlertSync({
     seen.current = now;
   }, [drawings, linked]);
 
-  // One chart asks: the active one (charts sharing drawings would all ask otherwise).
-  if (orphans.length === 0 || !active) return null;
+  // One chart asks: the active one (charts sharing drawings would all ask otherwise), and only about alerts still armed
+  // and not kept (here or on another chart).
+  const asking = orphans.filter((item) => !keptAlerts.has(item.alert.alert_id) && (alerts ?? []).some((alert) => alert.alert_id === item.alert.alert_id && alert.enabled));
+  if (asking.length === 0 || !active) return null;
   const disable = () => {
     setError(null);
     // The alerts as they are now: one disabled meanwhile (here or elsewhere) needs nothing.
-    const pending = orphans.map((item) => (alerts ?? []).find((alert) => alert.alert_id === item.alert.alert_id) ?? item.alert).filter((alert) => alert.enabled);
+    const pending = asking.map((item) => (alerts ?? []).find((alert) => alert.alert_id === item.alert.alert_id) ?? item.alert).filter((alert) => alert.enabled);
     void Promise.allSettled(pending.map((alert) => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { enabled: false })))).then((outcomes) => {
       const failed = new Set<string>();
       outcomes.forEach((outcome, index) => {
@@ -177,13 +190,13 @@ export function DrawingAlertSync({
     });
   };
   const keep = () => {
-    orphans.forEach((item) => dismissed.current.add(item.alert.alert_id));
+    asking.forEach((item) => keptAlerts.add(item.alert.alert_id));
     setOrphans([]);
     setError(null);
   };
   return (
     <div className="trading-drawing-alert-prompt" role="alertdialog" aria-label="Alerts of a deleted drawing" onPointerDown={(event) => event.stopPropagation()}>
-      <span>{orphans.length === 1 ? 'An alert follows' : `${orphans.length} alerts follow`} a drawing or level that is gone. Disable {orphans.length === 1 ? 'it' : 'them'}?</span>
+      <span>{asking.length === 1 ? 'An alert follows' : `${asking.length} alerts follow`} a drawing or level that is gone. Disable {asking.length === 1 ? 'it' : 'them'}?</span>
       {error ? <small role="alert">{error}</small> : null}
       <button type="button" onClick={disable}>Disable</button>
       <button type="button" onClick={keep}>Keep</button>

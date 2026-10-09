@@ -57,9 +57,10 @@ export const fibonacciTool = defineDrawingTool({
     const seen = new Map<number, number>();
     return recordsProperty(properties, 'levels', DEFAULT_LEVELS).flatMap((record) => {
       const level = record.value;
-      if (typeof level !== 'number' || !Number.isFinite(level) || record.visible === false) return [];
+      if (typeof level !== 'number' || !Number.isFinite(level)) return [];
       const count = (seen.get(level) ?? 0) + 1;
       seen.set(level, count);
+      if (record.visible === false) return [];
       const price = first.price + (second.price - first.price) * level;
       const key = count === 1 ? `level-${level}` : `level-${level}-${count}`;
       const alertLevel = horizontalAlertLevel(key, `Level ${level} (${services.formatPrice(price)})`, { time: left, price }, 'right', services);

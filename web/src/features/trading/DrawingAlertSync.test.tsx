@@ -5,7 +5,7 @@ import type { DrawingAlertLevel } from './drawings/tools/types';
 import type { TradingAlert } from './tradingTypes';
 
 // levels: what this chart offers; keys: the levels the drawing has at all.
-const state = vi.hoisted(() => ({ alerts: [] as unknown[], levels: ['upper', 'lower'], keys: ['upper', 'lower'] }));
+const state = vi.hoisted(() => ({ alerts: [] as unknown[], levels: ['upper', 'lower'], keys: ['upper', 'lower'], bars: 3 }));
 const api = vi.hoisted(() => ({ updateAlert: vi.fn() }));
 const mutations = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn(async () => undefined) }));
 vi.mock('./useTradingAlerts', () => ({ useTradingAlerts: () => ({ data: state.alerts }), useTradingAlertMutations: () => ({ ...mutations }) }));
@@ -32,7 +32,7 @@ const alert = (level: string, points: Array<{ time: string; price: string }>) =>
   alert_id: `a-${level}`, instrument_id: 'btc', condition_type: 'trendline_crossing', threshold: '0', enabled: true, revision: 1,
   parameters: { drawing_id: 'ch', drawing_level: level, trendline_points: points }, evaluation_policy: {},
 }) as unknown as TradingAlert;
-const adapter = { drawingBarIndexMatchesBars: () => true } as never;
+const adapter = { drawingBarIndexMatchesBars: () => true, drawingBars: () => ({ length: state.bars }) } as never;
 type Props = Partial<Parameters<typeof DrawingAlertSync>[0]>;
 // A fresh instrument object each render, as the chart passes it: the settle timer must still fire.
 const sync = (props: Props) => <DrawingAlertSync adapter={adapter} instrumentId="btc" instrument={{ tickSize: null, pointValue: 1 }} drawings={[]} active replayMode={false} {...props} />;
@@ -40,6 +40,7 @@ const sync = (props: Props) => <DrawingAlertSync adapter={adapter} instrumentId=
 beforeEach(() => {
   state.levels = ['upper', 'lower'];
   state.keys = ['upper', 'lower'];
+  state.bars = 3;
   api.updateAlert.mockImplementation(async (item: TradingAlert) => item);
 });
 afterEach(() => {
@@ -114,7 +115,7 @@ describe('drawing alerts follow their drawing (TVP-1.4)', () => {
 
   it('leaves alone a level the drawing has but this chart cannot offer, and does not ask again once kept', async () => {
     vi.useFakeTimers();
-    state.alerts = [alert('lower', [{ time: T0, price: '95' }, { time: T1, price: '105' }])];
+    state.alerts = [{ ...alert('lower', [{ time: T0, price: '95' }, { time: T1, price: '105' }]), alert_id: 'a-kept' }];
     state.levels = ['upper'];
     const view = render(sync({ drawings: [channel(100)] }));
     await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
@@ -126,6 +127,42 @@ describe('drawing alerts follow their drawing (TVP-1.4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
     view.rerender(sync({ drawings: [channel(102)] }));
     await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('decides nothing before the chart has bars, and catches up when they arrive', async () => {
+    vi.useFakeTimers();
+    state.alerts = [alert('lower', [{ time: T0, price: '95' }, { time: T1, price: '105' }])];
+    state.bars = 0;
+    // Without bars no level can be placed: the tool offers none.
+    state.levels = [];
+    state.keys = [];
+    render(sync({ drawings: [channel(120)] }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS * 3); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(api.updateAlert).not.toHaveBeenCalled();
+    state.bars = 3;
+    state.levels = ['upper', 'lower'];
+    state.keys = ['upper', 'lower'];
+    await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
+    expect(api.updateAlert).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('does not ask on another chart about an alert kept or disabled meanwhile', async () => {
+    const kept = { ...alert('upper', []), alert_id: 'a-kept-elsewhere' };
+    state.alerts = [kept];
+    const view = render(sync({ adapter: null, drawings: [channel(100)] }));
+    view.rerender(sync({ adapter: null, drawings: [] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep' }));
+    view.rerender(sync({ adapter: null, drawings: [channel(100)] }));
+    view.rerender(sync({ adapter: null, drawings: [] }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    state.alerts = [{ ...alert('lower', []), enabled: false }];
+    view.rerender(sync({ adapter: null, drawings: [channel(100)] }));
+    view.rerender(sync({ adapter: null, drawings: [] }));
+    await act(async () => { await Promise.resolve(); });
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 

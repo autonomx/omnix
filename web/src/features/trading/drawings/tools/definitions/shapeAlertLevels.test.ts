@@ -30,5 +30,8 @@ describe('alert levels of rectangles and fib retracements (TVP-1.4)', () => {
     // Keyed by value: removing a level keeps the others' keys; a repeated value gets its own.
     const edited = { levels: [{ value: 0.5, visible: true, color: '' }, { value: 0.5, visible: true, color: '' }] };
     expect(fibonacciTool.alertLevels!([{ time: T0, price: 100 }, { time: T1, price: 200 }], edited, services).map((level) => level.key)).toEqual(['level-0.5', 'level-0.5-2']);
+    // Hiding the first keeps the second's key.
+    const hidden = { levels: [{ ...edited.levels[0], visible: false }, edited.levels[1]] };
+    expect(fibonacciTool.alertLevels!([{ time: T0, price: 100 }, { time: T1, price: 200 }], hidden, services).map((level) => level.key)).toEqual(['level-0.5-2']);
   });
 });
