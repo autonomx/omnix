@@ -85,7 +85,8 @@ export type DrawingToolGroupId =
   | 'brushes'
   | 'arrows'
   | 'shapes'
-  | 'text-and-notes';
+  | 'text-and-notes'
+  | 'emojis';
 
 /**
  * Paint and interaction of one shape.
