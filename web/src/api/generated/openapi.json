@@ -41647,6 +41647,64 @@
         "title": "ScannerRunListResponse",
         "type": "object"
       },
+      "ScreenFromWordsRequest": {
+        "properties": {
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ScreenFromWordsRequest",
+        "type": "object"
+      },
+      "ScreenProposal": {
+        "description": "What the model proposed, after validation: rules to show in the editor, not a screen that runs.",
+        "properties": {
+          "interval": {
+            "default": "1d",
+            "title": "Interval",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/TradingScannerRule-Output"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "unsupported": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unsupported",
+            "type": "array"
+          }
+        },
+        "required": [
+          "interval",
+          "rules",
+          "unsupported",
+          "notes",
+          "provider"
+        ],
+        "title": "ScreenProposal",
+        "type": "object"
+      },
       "ScriptBacktestRequest": {
         "properties": {
           "bars": {
@@ -81204,6 +81262,48 @@
           }
         },
         "summary": "Create Scanner",
+        "tags": [
+          "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/scanners/propose": {
+      "post": {
+        "description": "Screener rules for a description (TVP-9.4): a proposal for the user to edit and run, never run here.",
+        "operationId": "propose_from_words_api_trading_scanners_propose_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFromWordsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose From Words",
         "tags": [
           "trading-scanners"
         ]

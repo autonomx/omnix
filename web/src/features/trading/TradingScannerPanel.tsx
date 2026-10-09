@@ -4,6 +4,7 @@ import type { CanonicalInstrument } from './tradingTypes';
 import type { TradingScannerDefinition, TradingScannerDefinitionInput, TradingScannerResult, TradingScannerRun } from './scannerTypes';
 import { ScreenerResultsTable } from './ScreenerResultsTable';
 import { ScreenerRuleEditor } from './ScreenerRuleEditor';
+import { ScreenFromWords } from './ScreenFromWords';
 import { newScreenerRule, screenerHistoryNeeded, type ScreenerRuleInput } from './screenerRules';
 import { tradingScannerApi } from './tradingScannerApi';
 import { useAlertIndicatorIds } from './useTradingAlerts';
@@ -159,6 +160,7 @@ export function TradingScannerPanel({ instruments, onShowInstrument }: {
         <label>Name<input value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label>Interval<select value={interval} onChange={(event) => setScanInterval(event.target.value)}>{['1m', '5m', '15m', '1h', '4h', '1d'].map((item) => <option key={item}>{item}</option>)}</select></label>
       </div>
+      <ScreenFromWords onProposal={(proposed, proposedInterval) => { setRules(proposed); setScanInterval(proposedInterval); }} />
       <ScreenerRuleEditor rules={rules} indicatorIds={indicatorIds} onChange={setRules} />
       {notice ? <p className="trading-scanner-changes" role="alert">{notice}</p> : null}
       <fieldset className="trading-scanner-universe">

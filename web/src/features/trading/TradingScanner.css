@@ -1,4 +1,6 @@
 @layer features {
+  /* A screen from words (TVP-9.4). */
+  .trading-screen-from-words form{display:flex;gap:6px}.trading-screen-from-words input{flex:1;min-width:0}.trading-screen-from-words p{margin:4px 0;font-size:11px}
   .trading-screener-rules{display:grid;gap:6px;margin:8px 0;border:1px solid color-mix(in srgb, var(--c-blue-630) 25%, transparent);border-radius:5px;padding:8px}
   .trading-screener-rule{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
   .trading-screener-rule input{width:72px}

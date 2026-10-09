@@ -547,6 +547,7 @@
     "POST /api/trading/research": "trading",
     "GET /api/trading/scanners": "trading",
     "POST /api/trading/scanners": "trading",
+    "POST /api/trading/scanners/propose": "trading",
     "GET /api/trading/scanners/runs": "trading",
     "POST /api/trading/scanners/runs/{run_id}/cancel": "trading",
     "GET /api/trading/scanners/runs/{run_id}/results": "trading",
