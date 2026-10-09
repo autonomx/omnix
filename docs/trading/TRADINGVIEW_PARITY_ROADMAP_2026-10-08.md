@@ -1077,9 +1077,9 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 | D-1 | Script language and runtime | **Decided 2026-10-08** | TradingView-compatible (Pine) subset so users can paste existing scripts; product name "Omnix Scripts" |
 | D-2 | Paper shorting model | **Decided 2026-10-08** | Like TradingView: short any instrument, leverage per asset class, long/short margin %, margin calls, % or fixed commission, no borrow fees (TVP-7.2a, TVP-7.2b) |
 | D-3 | Breadth, classification and macro sources | **Decided 2026-10-09** | §7.2 as recommended: breadth computed from Alpaca SIP over the SEC ticker universe, sectors from SEC SIC codes, US macro and the economic calendar from FRED (a free key the owner enters in settings), US Treasury yield curves |
-| D-4 | On-chain data provider | Recommended | Defer; §7.2 |
+| D-4 | On-chain data provider | **Decided 2026-10-09** | Defer: the 55 remaining on-chain and crypto series stay excluded; Bitcoin's 8 on-chain series stay on blockchain.info |
 | D-5 | Fundamentals and earnings-date sources | **Decided 2026-10-09** | Free sources only: SEC XBRL company facts (statements, ratios, screener fundamentals), Alpaca corporate actions (dividends, splits), SEC 8-K item 2.02 (past earnings dates). Upcoming earnings dates wait for a paid calendar vendor the owner may choose later |
-| D-6 | Options data source | Recommended | §7.2 |
+| D-6 | Options data source | **Decided 2026-10-09** | Alpaca options market data (snapshots with Greeks and implied volatility; real-time OPRA needs Alpaca's paid data plan). Research only: no options orders |
 | D-7 | Manual live trading from the chart | Not in this roadmap | Live execution stays with deterministic strategies |
 | D-8 | Native desktop wrapper (Electron/Tauri) | Recommended | Not needed; PWA (TVP-4.5) |
 | D-9 | Server runtime for indicators and scripts | **Confirmed 2026-10-09** by the TVP-11.0 spike | Python only, no Node sidecar; scripts run on the server with a shared result cache (§6, TVP-11). Measured on 5,000 bars: median 48 ms per full run (max 285 ms), 0.016 ms per new bar; conditions for TVP-11.1 in `OMNIX_SCRIPTS_SPEC.md` §4 |
@@ -1144,7 +1144,7 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 |---|---|---|---|---|---|---|
 | Charts and layouts | 33 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Drawing tools | 101 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
-| Indicators | 156 | 0 | 0 / 0 / 0 | 54 | 0 | 100% |
+| Indicators | 156 | 0 | 0 / 0 / 0 | 0 | 54 | 100% |
 | User scripts | 8 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Alerts | 24 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Shortcuts | 50 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
@@ -1152,15 +1152,15 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Screener | 7 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Replay | 11 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Paper and chart trading | 22 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
-| Research data | 8 | 0 | 0 / 0 / 0 | 1 | 0 | 100% |
+| Research data | 8 | 0 | 0 / 0 / 1 | 0 | 0 | 89% |
 | Tabs and windows | 7 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
-| **Total** | 438 | 0 | 0 / 0 / 0 | 55 | 0 | 100% |
+| **Total** | 438 | 0 | 0 / 0 / 1 | 0 | 54 | 100% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
 | Daily | 163 | 0 | 0 | 0 | 0 | 163 | 100% |
 | Weekly | 210 | 0 | 0 | 0 | 0 | 210 | 100% |
-| Rare | 65 | 0 | 0 | 55 | 0 | 120 | 100% |
+| Rare | 65 | 0 | 1 | 0 | 54 | 120 | 98% |
 
 Missing daily + weekly features: **0**
 
