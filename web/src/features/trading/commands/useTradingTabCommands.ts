@@ -1,4 +1,6 @@
+import { currentTradingWorkspaceScopeId } from '../persistence/useTradingWorkspacePersistence';
 import { MAX_TRADING_TABS, useTradingStore, type TradingTabState } from '../tradingStore';
+import { currentWindowKey, tabsForWindow, windowAssignments } from '../tradingWindowSets';
 import type { TradingCommandId } from './tradingCommands';
 import { useTradingCommand } from './useTradingCommands';
 
@@ -9,12 +11,16 @@ export function cycleId<T>(items: readonly T[], currentId: string, idOf: (item: 
   return idOf(items[(index + step + items.length) % items.length]);
 }
 
+/** The tabs this browser window shows (popped-out windows show their own, TVP-4.6). */
+function windowTabs(): TradingTabState[] {
+  return tabsForWindow(useTradingStore.getState().tabs, windowAssignments(currentTradingWorkspaceScopeId()), currentWindowKey());
+}
+
 function useGoToTab(id: TradingCommandId, index: number): void {
   useTradingCommand(id, () => {
-    const { tabs, setActiveTab } = useTradingStore.getState();
-    const tab = tabs[index];
-    if (tab) setActiveTab(tab.tabId);
-  }, () => useTradingStore.getState().tabs.length > index);
+    const tab = windowTabs()[index];
+    if (tab) useTradingStore.getState().setActiveTab(tab.tabId);
+  }, () => windowTabs().length > index);
 }
 
 /**
@@ -24,10 +30,10 @@ function useGoToTab(id: TradingCommandId, index: number): void {
  */
 export function useTradingTabCommands(onCloseTab: (tab: TradingTabState) => void): void {
   const store = useTradingStore.getState;
-  const hasSeveralTabs = () => store().tabs.length > 1;
+  const hasSeveralTabs = () => windowTabs().length > 1;
   const switchTab = (step: 1 | -1) => () => {
-    const { tabs, activeTabId, setActiveTab } = store();
-    const next = cycleId(tabs, activeTabId, (tab) => tab.tabId, step);
+    const { activeTabId, setActiveTab } = store();
+    const next = cycleId(windowTabs(), activeTabId, (tab) => tab.tabId, step);
     if (next) setActiveTab(next);
   };
   // Tab stops at the first and last chart, so the next Tab moves focus on as usual.
@@ -60,9 +66,8 @@ export function useTradingTabCommands(onCloseTab: (tab: TradingTabState) => void
   useGoToTab('tab.goTo7', 6);
   useGoToTab('tab.goTo8', 7);
   useTradingCommand('tab.goToLast', () => {
-    const { tabs, setActiveTab } = store();
-    const last = tabs.at(-1);
-    if (last) setActiveTab(last.tabId);
+    const last = windowTabs().at(-1);
+    if (last) store().setActiveTab(last.tabId);
   });
   useTradingCommand('tab.reopenClosed', () => { store().reopenClosedTab(); }, () => store().closedTabs.length > 0);
 }

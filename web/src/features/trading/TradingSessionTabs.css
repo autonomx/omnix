@@ -185,3 +185,9 @@
   :root[data-omnix-appearance='light'] .trading-session-tab-menu{background:var(--c-neutral-1000);color:var(--c-slate-260-2);box-shadow:0 8px 24px rgba(0,0,0,.15)}
   .trading-session-tab-launcher{display:flex;align-items:stretch}
 }
+
+@layer features {
+  .trading-window-restore{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:5px 12px;border-bottom:1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);background:color-mix(in srgb, var(--c-yellow-840) 8%, transparent);font-size:11px}
+  .trading-window-restore-item{display:inline-flex;align-items:center;gap:5px}
+  .trading-window-restore button{padding:2px 8px;font-size:10px}
+}

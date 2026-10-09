@@ -199,12 +199,16 @@ export function requestedTradingWindow(search: string = typeof window === 'undef
   return { workspaceId: params.get('workspace'), tabId: params.get('tab') };
 }
 
-/** Drops `?workspace=` and `?tab=` once used, so a later reload follows the workspace chosen since. */
+/**
+ * Drops `?workspace=` and `?tab=` once used, so a later reload follows the workspace chosen since. A popped-out
+ * window (`?window=`, TVP-4.6) keeps its workspace: it reopens on its own tabs.
+ */
 export function forgetRequestedTradingWindow(): void {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has('workspace') && !url.searchParams.has('tab')) return;
-  url.searchParams.delete('workspace');
+  const popped = url.searchParams.has('window');
+  if (!(url.searchParams.has('workspace') && !popped) && !url.searchParams.has('tab')) return;
+  if (!popped) url.searchParams.delete('workspace');
   url.searchParams.delete('tab');
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }

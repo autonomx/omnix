@@ -11,7 +11,7 @@ import { TradingSessionTabs } from './TradingSessionTabs';
 import { useTradingStore } from './tradingStore';
 import type { TradingDocument } from './tradingTypes';
 import {
-  HEARTBEAT_MS, PRESENCE_TTL_MS, TradingWindowPresence, requestedTradingWindow, tradingWindowPresence, tradingWindowUrl, useTradingWindowPresence,
+  HEARTBEAT_MS, PRESENCE_TTL_MS, TradingWindowPresence, forgetRequestedTradingWindow, requestedTradingWindow, tradingWindowPresence, tradingWindowUrl, useTradingWindowPresence,
 } from './windowPresence';
 
 const initialStore = useTradingStore.getState();
@@ -89,6 +89,28 @@ describe('trading windows (TVP-4.3)', () => {
     expect(url).toBe('https://omnix.test/trading?workspace=swing-1a2b&tab=tab-3');
     expect(requestedTradingWindow('?workspace=swing-1a2b&tab=tab-3')).toEqual({ workspaceId: 'swing-1a2b', tabId: 'tab-3' });
     expect(requestedTradingWindow('')).toEqual({ workspaceId: null, tabId: null });
+  });
+
+  it('forgets the opening tab, and the workspace too unless the window is a popped-out one (TVP-4.6)', () => {
+    window.history.replaceState(null, '', '/trading?workspace=swing&tab=tab-3');
+    forgetRequestedTradingWindow();
+    expect(window.location.search).toBe('');
+    window.history.replaceState(null, '', '/trading?workspace=swing&tab=tab-3&window=w-abc12345');
+    forgetRequestedTradingWindow();
+    expect(window.location.search).toBe('?workspace=swing&window=w-abc12345');
+  });
+
+  it('offers to pop a tab out, or move it back from a popped-out window (TVP-4.6)', () => {
+    const onPopOut = vi.fn();
+    const onMoveToMain = vi.fn();
+    const tabs = useTradingStore.getState().tabs;
+    render(<TradingSessionTabs tabs={tabs} activeTabId={tabs[0].tabId} canAdd getTabLabel={(tab) => tab.name} onSelect={vi.fn()} onClose={vi.fn()} workspaceId="main" onPopOut={onPopOut} onMoveToMain={onMoveToMain} />);
+    fireEvent.click(screen.getByRole('button', { name: `More actions for ${tabs[0].name} chart session` }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pop out to a new window' }));
+    expect(onPopOut).toHaveBeenCalledWith(tabs[0].tabId);
+    fireEvent.click(screen.getByRole('button', { name: `More actions for ${tabs[0].name} chart session` }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to the main window' }));
+    expect(onMoveToMain).toHaveBeenCalledWith(tabs[0].tabId);
   });
 });
 
