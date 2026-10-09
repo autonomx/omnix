@@ -1122,7 +1122,7 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 
 ## 9. Progress
 
-**Status on 2026-10-09.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4, 0.5a, 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.6, 5.1–5.3, 6.1, 7.1, 7.4, TVP-7.3, TVP-1.5, TVP-4.5, TVP-7.2a, TVP-4.1, TVP-1.3, TVP-9.1, TVP-9.2, TVP-1.4, TVP-11.0, TVP-3.2, TVP-3.3, TVP-4.2–4.4, TVP-3.4, 3.5, 3.7, TVP-1.6, TVP-6.2, TVP-6.3, TVP-0.6, 8.1 (wave 3), TVP-6.4, TVP-6.5, TVP-7.2b, TVP-1.7, TVP-11.1–11.3, TVP-11.4, TVP-11.5, TVP-0.5b, 0.5c, TVP-2.1/2.5 snapshot links, TVP-9.4, TVP-10.3, TVP-6.6, TVP-9.3, TVP-10.2, TVP-9.1 fundamentals, TVP-10.5 calendar, Rare: workspace import, TVP-10.1 and 8.1 (wave 1). TVP-0.4 is done and the TVP-3 drawing tools have started (3.1 merged). TVP-0.5a (webhook delivery) is done. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **0**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
+**Status on 2026-10-09.** Merged into `tradingview-parity`: TVP-0.1, 0.2, 0.3, 0.4, 0.5a, 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.6, 5.1–5.3, 6.1, 7.1, 7.4, TVP-7.3, TVP-1.5, TVP-4.5, TVP-7.2a, TVP-4.1, TVP-1.3, TVP-9.1, TVP-9.2, TVP-1.4, TVP-11.0, TVP-3.2, TVP-3.3, TVP-4.2–4.4, TVP-3.4, 3.5, 3.7, TVP-1.6, TVP-6.2, TVP-6.3, TVP-0.6, 8.1 (wave 3), TVP-6.4, TVP-6.5, TVP-7.2b, TVP-1.7, TVP-11.1–11.3, TVP-11.4, TVP-11.5, TVP-0.5b, 0.5c, TVP-2.1/2.5 snapshot links, TVP-9.4, TVP-10.3, TVP-6.6, TVP-9.3, TVP-10.2, TVP-9.1 fundamentals, TVP-10.5 calendar, Rare: workspace import, TVP-10.1, TVP-5.4 and 8.1 (wave 1). TVP-0.4 is done and the TVP-3 drawing tools have started (3.1 merged). TVP-0.5a (webhook delivery) is done. Missing daily- and weekly-tier features fell from 150 at the first ledger count to **0**. Nothing is on `main` yet; the integration branch merges there as one reviewed change when the owner decides.
 
 **Completion.**
 
@@ -1131,7 +1131,7 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 |---|---|
 | TradingView parity, all features in scope | 99% |
 | TradingView parity, daily + weekly features | 100% |
-| Roadmap work packages merged in full | 82% (55 of 67) |
+| Roadmap work packages merged in full | 84% (56 of 67) |
 | Daily + weekly gap closed since the first count | 100% (150 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
@@ -1148,18 +1148,18 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | User scripts | 7 | 0 | 0 / 0 / 1 | 0 | 0 | 88% |
 | Alerts | 24 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Shortcuts | 50 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
-| Watchlists | 10 | 1 | 0 / 0 / 0 | 0 | 0 | 95% |
+| Watchlists | 11 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Screener | 7 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Replay | 11 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Paper and chart trading | 22 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Research data | 7 | 0 | 0 / 0 / 1 | 1 | 0 | 88% |
 | Tabs and windows | 6 | 0 | 0 / 0 / 1 | 0 | 0 | 86% |
-| **Total** | 432 | 2 | 0 / 0 / 4 | 55 | 0 | 99% |
+| **Total** | 433 | 1 | 0 / 0 / 4 | 55 | 0 | 99% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
 | Daily | 163 | 0 | 0 | 0 | 0 | 163 | 100% |
-| Weekly | 208 | 2 | 0 | 0 | 0 | 210 | 100% |
+| Weekly | 209 | 1 | 0 | 0 | 0 | 210 | 100% |
 | Rare | 61 | 0 | 4 | 55 | 0 | 120 | 94% |
 
 Missing daily + weekly features: **0**
@@ -1225,6 +1225,7 @@ Done (have counts 1, partial 0.5, of the features in scope): **99%** overall, **
 | TVP-10.5 (economic calendar) | **Done** | merged (this commit) | Economic calendar (D-3): `economic_calendar.py` reads FRED's release calendar (past and scheduled US releases), marks the market-moving ones and gives their headline as first published and the value before it from FRED vintage data; a Calendar tool lists them by day. The FRED key is a market-data credential (settings or `OMNIX_FRED_API_KEY`). Treasury yield curves and global events are not built. Reviewed inline. |
 | Rare: workspace import | Import beside Export saves a workspace file as a new workspace (validated like a stored one); the rare Seasonals entry is have (TVP-10.3 panel). Web trading tests 1,185 pass. |
 | TVP-10.1 | **Done** | merged (this commit) | Earnings, dividends and splits (D-5): `corporate_events.py` reads each company's SEC 8-K item 2.02 filings (date, session, fiscal quarter, filing link) and Alpaca corporate actions (dividends, splits, past and declared), cached per ticker for a day (migration `0152_trading_corporate_events.sql`); stock charts show E/D/S markers (a chart setting), and an Earnings & dividends tool lists the open charts' or a watchlist's events by day. Upcoming earnings dates are estimates from the same quarter a year earlier, marked as such, until a vendor is chosen. Reviewed inline. |
+| TVP-5.4 | **Done** | merged (this commit) | Advanced view: a full-width tool (also Advanced view in the watchlist menu) listing a watchlist's or the open charts' symbols beside the chosen one's overview (key statistics, valuation, dividend yield, next earnings), performance (1W to All), earnings with reported diluted EPS per quarter, dividends by year with splits, financials and news. Reviewed inline. |
 | TVP-8.1 (wave 1 part) | **Merged** (wave 1 part) | merged `421e588670` | One speed control (9 speeds) and one replay clock for all charts; jump to bar during playback; one "Real time" exit; bars streamed during replay backfilled; charts redraw only when their visible bar count changes. Replay paper trading runs through a sequential per-session queue: every bar once and in order, flat bars without server calls, orders at the clock's bar on the session feed. Fixed older bugs: replay orders with a feed binding never filled; replay bars marked positions in other instruments. Three review rounds. Remaining: sub-bar playback (needs TVP-0.6) and replay shortcuts (TVP-2) |
 | TVP-0.5a | **Done** | merged (this commit) | Outbox table (migration `0142_trading_notification_deliveries.sql`) written in the trigger's transaction; delivery monitor across workspaces (system operation `notifications.delivery`) with leases, fencing and backoff (30 s to 1 h, 8 attempts); webhook sender: HTTPS only, strict URL policy after DNS with the connection pinned to the checked address, one deadline per send, no redirects, proxies or body reads, URL never logged, HMAC-SHA256 signature; `GET /api/trading/alerts/deliveries` (status only). Two review rounds (the first found token logging, unbounded sends and CGNAT addresses; all fixed). Follow-ups: webhook editor and message placeholders (TVP-1.5); throughput is about 24 sends a minute |
 | TVP-3.1 | **Done** | merged (this commit) | Eight tools: info line (price change, percent, bars, angle), extended line, trend angle, parallel channel (middle line, fill, width-keeping handles), flat top/bottom, disjoint channel, regression trend (least squares of closes on bar index, deviation bands), anchored VWAP (the indicator's formula). Channel lines are built in time/price and both drawn and alerted on, so drawings and alerts agree on a log scale too; alert levels on every line. One review round. Follow-ups: regression deviation is the population one (TradingView may use n-1); info line shows no time span or distance |
