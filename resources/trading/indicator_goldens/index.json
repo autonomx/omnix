@@ -16,6 +16,9 @@
  "session_datasets": [
   "equity-dst-30m"
  ],
+ "candlestick_datasets": [
+  "candlestick-patterns"
+ ],
  "indicators": [
   {
    "id": "tv-24-hour-volume",
@@ -25,6 +28,11 @@
   {
    "id": "tv-accumulation-distribution-adl",
    "name": "Accumulation Distribution (ADL)",
+   "default_period": 1
+  },
+  {
+   "id": "tv-all-candlestick-patterns",
+   "name": "All Candlestick Patterns",
    "default_period": 1
   },
   {

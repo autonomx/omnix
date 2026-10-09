@@ -162,6 +162,48 @@ export function generateSessionDatasets(): GoldenDataset[] {
 }
 
 export const SESSION_DATASET = 'equity-dst-30m';
+
+// Candles (open, high, low, close) that complete each candlestick pattern the generated walks rarely produce (TVP-6.3),
+// each after spacer bars of body 1; read with trend detection off, so the shapes alone decide.
+const CANDLE_SNIPPETS: ReadonlyArray<ReadonlyArray<[number, number, number, number]>> = [
+  [[100, 103.1, 99.9, 103], [104.5, 105, 104, 104.5], [103.5, 103.6, 101.9, 102]], // abandoned baby, bearish
+  [[103, 103.1, 99.9, 100], [98.5, 99, 98, 98.5], [99.5, 101.1, 99.4, 101]], // abandoned baby, bullish
+  [[103, 103.1, 99.9, 100], [99, 99.1, 98.6, 98.7], [98.8, 99.6, 98.7, 99.5]], // downside tasuki gap
+  [[100, 100, 98, 100]], // dragonfly doji
+  [[100, 102, 100, 100]], // gravestone doji
+  [[100, 103.1, 99.9, 103], [101.5, 101.8, 101.2, 101.5]], // harami cross, bearish
+  [[103, 103.1, 99.9, 100], [101.5, 101.8, 101.2, 101.5]], // harami cross, bullish
+  [[100, 101.5, 100, 100.3]], // inverted hammer and shooting star
+  [[100, 103, 100, 103], [99, 99, 96, 96]], // kicking, bearish
+  [[103, 103, 100, 100], [104, 107, 104, 107]], // kicking, bullish
+  [[103, 103.1, 99.9, 100], [99, 99.3, 98.9, 99.2], [99.5, 102.6, 99.4, 102.5]], // morning star
+  [[103, 103.1, 99.9, 100], [99, 99.2, 98.8, 99], [99.5, 102.6, 99.4, 102.5]], // morning doji star
+  [[103, 103.1, 99.9, 100], [99.6, 100, 99.5, 99.9]], // on neck
+  [[100, 103.1, 99.9, 103], [102.8, 102.85, 102.45, 102.5], [102.5, 102.55, 102.15, 102.2], [102.2, 102.25, 101.85, 101.9], [102, 105.1, 101.9, 105]], // rising three methods
+  [[110, 110.1, 107, 107], [108, 108.1, 105, 105], [106, 106.1, 103, 103]], // three black crows
+  [[100, 103, 99.9, 103], [102, 105, 101.9, 105], [104, 107, 103.9, 107]], // three white soldiers
+  [[100, 100.5, 99.5, 100], [101.5, 102, 101, 101.5], [100.5, 101, 100, 100.5]], // tri-star, bearish
+  [[100, 100.5, 99.5, 100], [98.5, 99, 98, 98.5], [99.5, 100, 99, 99.5]], // tri-star, bullish
+];
+
+function candlestickPatterns(): GoldenBar[] {
+  const candles: Array<[number, number, number, number]> = [];
+  const spacers = (count: number) => {
+    for (let i = 0; i < count; i += 1) candles.push(i % 2 === 0 ? [100, 101.5, 99.5, 101] : [101, 101.5, 99.5, 100]);
+  };
+  spacers(20);
+  for (const snippet of CANDLE_SNIPPETS) {
+    candles.push(...snippet);
+    spacers(3);
+  }
+  return candles.map(([open, high, low, close], index) => bar(index, open, high, low, close, 1_000 + index));
+}
+
+export function generateCandlestickDatasets(): GoldenDataset[] {
+  return [{ name: 'candlestick-patterns', bars: candlestickPatterns() }];
+}
+
+export const CANDLESTICK_DATASET = 'candlestick-patterns';
 /** The session calendar the server derives for a US equity, and a futures-style 18:00 ET roll. */
 export const EQUITY_SESSION: TradingSessionSpec = { timezone: 'America/New_York', startMinute: 0, regularStartMinute: 570, regularOnly: true };
 export const FUTURES_SESSION: TradingSessionSpec = { timezone: 'America/New_York', startMinute: 1080 };

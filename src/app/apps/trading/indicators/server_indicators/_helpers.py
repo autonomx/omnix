@@ -503,8 +503,12 @@ class Chart:
 Builder = Callable[[Chart], Outputs]
 
 
-def builtin(indicator_id: str, name: str, numeric_class: NumericClass, default_period: int) -> Callable[[Builder], Builder]:
-    """Registers a branch with the browser's preamble: no bars gives no outputs, and the period falls back to the default."""
+def builtin(
+    indicator_id: str, name: str, numeric_class: NumericClass, default_period: int, signal_warmup: int | None = None
+) -> Callable[[Builder], Builder]:
+    """Registers a branch with the browser's preamble: no bars gives no outputs, and the period falls back to the default.
+
+    ``signal_warmup``: the outputs are signals with values only where they appear (see ``ServerIndicator``)."""
 
     def decorate(build: Builder) -> Builder:
         def compute(bars: BarSeries, inputs: IndicatorInputs) -> Outputs:
@@ -512,7 +516,7 @@ def builtin(indicator_id: str, name: str, numeric_class: NumericClass, default_p
                 return []
             return build(Chart(indicator_id, safe_period(inputs.period, default_period), inputs, bars))
 
-        register(indicator_id, name, numeric_class)(compute)
+        register(indicator_id, name, numeric_class, signal_warmup)(compute)
         return build
 
     return decorate

@@ -15,6 +15,7 @@ import {
 import type { TradingSessionSpec } from '../tradingSessions';
 import {
   ALTERNATIVE_PERIOD_DATASET,
+  CANDLESTICK_DATASET,
   COMPARE_DATASET,
   COMPARE_SYMBOL,
   EQUITY_SESSION,
@@ -22,6 +23,7 @@ import {
   INPUT_VARIANT_DATASET,
   SESSION_DATASET,
   asMarketBars,
+  generateCandlestickDatasets,
   generateCompareDatasets,
   generateGoldenDatasets,
   generateSessionDatasets,
@@ -37,6 +39,8 @@ const DATASET_NAMES = generateGoldenDatasets().map((dataset) => dataset.name);
 const COMPARE_DATASET_NAMES = generateCompareDatasets().map((dataset) => dataset.name);
 // Datasets for session-aware and parameterised built-ins only (TVP-6.1), for the same reason.
 const SESSION_DATASET_NAMES = generateSessionDatasets().map((dataset) => dataset.name);
+// Candles that complete the rarer candlestick patterns (TVP-6.3), for that indicator only.
+const CANDLESTICK_DATASET_NAMES = generateCandlestickDatasets().map((dataset) => dataset.name);
 
 type GoldenInputs = {
   period: number;
@@ -67,7 +71,8 @@ function loadDatasets(names: readonly string[], generate: () => GoldenDataset[])
 const DATASETS = loadDatasets(DATASET_NAMES, generateGoldenDatasets);
 const COMPARE_DATASETS = loadDatasets(COMPARE_DATASET_NAMES, generateCompareDatasets);
 const SESSION_DATASETS = loadDatasets(SESSION_DATASET_NAMES, generateSessionDatasets);
-const datasetByName = new Map([...DATASETS, ...COMPARE_DATASETS, ...SESSION_DATASETS].map((dataset) => [dataset.name, dataset]));
+const CANDLESTICK_DATASETS = loadDatasets(CANDLESTICK_DATASET_NAMES, generateCandlestickDatasets);
+const datasetByName = new Map([...DATASETS, ...COMPARE_DATASETS, ...SESSION_DATASETS, ...CANDLESTICK_DATASETS].map((dataset) => [dataset.name, dataset]));
 
 // Extra inputs worth a case of their own: Intraday Pivot Points' period is its pivot period in hours; looser Reversal levels and
 // shorter weekly/monthly lengths give those branches points on the five-week session dataset.
@@ -76,6 +81,7 @@ const EXTRA_CASES: Record<string, Array<[string, Partial<GoldenInputs>, string?]
   'tv-rob-booker-reversal': [['levels-50', { params: { upper: 50, lower: 50 } }], ['levels-50', { params: { upper: 50, lower: 50 } }, SESSION_DATASET]],
   'tv-relative-volume-at-time': [['anchor-W-length-2', { period: 2, params: { anchor: 'W' } }], ['anchor-M-length-1', { period: 1, params: { anchor: 'M', mode: 'regular' } }]],
   'tv-rob-booker-missed-pivot-points': [['pivotPeriod-W-back-2', { period: 2, params: { pivotPeriod: 'W' } }]],
+  'tv-all-candlestick-patterns': [['default', {}, CANDLESTICK_DATASET], ['trend-none', { params: { trend: 'none' } }, CANDLESTICK_DATASET]],
 };
 
 /** Cases for declared params and sessions (TVP-6.1): each non-default option, changed numbers, invalid values, and session calendars. */
@@ -217,11 +223,12 @@ describe('indicator goldens shared with the server registry', () => {
       datasets: DATASET_NAMES,
       compare_datasets: COMPARE_DATASET_NAMES,
       session_datasets: SESSION_DATASET_NAMES,
+      candlestick_datasets: CANDLESTICK_DATASET_NAMES,
       indicators: AVAILABLE.map(({ id, name, defaultPeriod }) => ({ id, name, default_period: defaultPeriod })),
     }, null, 1)}\n`);
   });
 
-  it.each([...DATASETS, ...COMPARE_DATASETS, ...SESSION_DATASETS].map((dataset) => [dataset.name, dataset] as const))('dataset %s is stored', (name, dataset) => {
+  it.each([...DATASETS, ...COMPARE_DATASETS, ...SESSION_DATASETS, ...CANDLESTICK_DATASETS].map((dataset) => [dataset.name, dataset] as const))('dataset %s is stored', (name, dataset) => {
     expectFile(datasetPath(name), datasetFile(dataset));
   });
 
