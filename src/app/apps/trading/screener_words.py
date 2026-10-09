@@ -27,13 +27,14 @@ logger = logging.getLogger(__name__)
 
 MAX_REQUEST_CHARS = 500
 MAX_PROPOSED_RULES = 10
-INTERVALS = ("1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w")
+# The screener panel's intervals.
+INTERVALS = ("1m", "5m", "15m", "1h", "4h", "1d")
 
 SCREEN_FROM_WORDS_TEMPLATE = prompt_template(
     "trading.screener_from_words",
     "1",
     """You turn a trader's description of a stock or crypto screen into screener rules. Answer with one JSON object and nothing else:
-{"interval": one of "1m","5m","15m","30m","1h","4h","1d","1w", "rules": [rule, ...], "unsupported": [text, ...], "notes": text}
+{"interval": one of "1m","5m","15m","1h","4h","1d", "rules": [rule, ...], "unsupported": [text, ...], "notes": text}
 
 Each rule: {"metric": metric, "operator": "gt"|"gte"|"lt"|"lte", "threshold": number, "period": integer 1-500, "lookback_bars": integer 1-499, "role": "filter"|"column", "source": null or indicator}
 Metrics (on the chosen interval's bars, at the latest bar):

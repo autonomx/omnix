@@ -1511,6 +1511,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/scanners/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose From Words
+         * @description Screener rules for a description (TVP-9.4): a proposal for the user to edit and run, never run here.
+         */
+        post: operations["propose_from_words_api_trading_scanners_propose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/scanners/runs": {
         parameters: {
             query?: never;
@@ -9704,6 +9724,36 @@ export interface components {
             /** Runs */
             runs: components["schemas"]["TradingScannerRun"][];
         };
+        /** ScreenFromWordsRequest */
+        ScreenFromWordsRequest: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * ScreenProposal
+         * @description What the model proposed, after validation: rules to show in the editor, not a screen that runs.
+         */
+        ScreenProposal: {
+            /**
+             * Interval
+             * @default 1d
+             */
+            interval: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /**
+             * Provider
+             * @default
+             */
+            provider: string;
+            /** Rules */
+            rules: components["schemas"]["TradingScannerRule-Output"][];
+            /** Unsupported */
+            unsupported: string[];
+        };
         /** ScriptBacktestRequest */
         ScriptBacktestRequest: {
             /**
@@ -16538,6 +16588,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingScannerDefinition-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_from_words_api_trading_scanners_propose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenFromWordsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenProposal"];
                 };
             };
             /** @description Validation Error */
