@@ -27592,8 +27592,15 @@
         "description": "Account settings a person changes after creating the account (TVP-7.2a, TVP-7.2b).\n\nFields left out keep their value.",
         "properties": {
           "allow_short": {
-            "title": "Allow Short",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Short"
           },
           "commission_bps": {
             "anyOf": [
@@ -27659,9 +27666,6 @@
             "title": "Margin"
           }
         },
-        "required": [
-          "allow_short"
-        ],
         "title": "PaperAccountSettings",
         "type": "object"
       },
@@ -29086,13 +29090,13 @@
       },
       "PaperMargin-Input": {
         "additionalProperties": false,
-        "description": "Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).\n\nThe part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.\nThe same percentage is the maintenance requirement; equity below it triggers a margin call.",
+        "description": "Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).\n\nThe part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1, 0.2% is 500:1.\nThe same percentage is the maintenance requirement; equity below it triggers a margin call.",
         "properties": {
           "long_pct": {
             "anyOf": [
               {
                 "maximum": 100,
-                "minimum": 1,
+                "minimum": 0.1,
                 "type": "number"
               },
               {
@@ -29107,7 +29111,7 @@
             "anyOf": [
               {
                 "maximum": 100,
-                "minimum": 1,
+                "minimum": 0.1,
                 "type": "number"
               },
               {
@@ -29124,7 +29128,7 @@
       },
       "PaperMargin-Output": {
         "additionalProperties": false,
-        "description": "Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).\n\nThe part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.\nThe same percentage is the maintenance requirement; equity below it triggers a margin call.",
+        "description": "Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).\n\nThe part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1, 0.2% is 500:1.\nThe same percentage is the maintenance requirement; equity below it triggers a margin call.",
         "properties": {
           "long_pct": {
             "default": "100",
@@ -78435,7 +78439,7 @@
         ]
       },
       "patch": {
-        "description": "Change the account's settings (shorting on or off, TVP-7.2a) at the revision the person saw.",
+        "description": "Change the account's settings at the revision the person saw: shorting (TVP-7.2a), margin by asset class and\ncommission (TVP-7.2b). Fields left out keep their value; lowering margin can bring a margin call on the next pass.",
         "operationId": "update_account_settings_api_trading_paper_accounts__account_id__patch",
         "parameters": [
           {

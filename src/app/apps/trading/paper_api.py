@@ -228,7 +228,8 @@ def create_trading_paper_router(
         settings: PaperAccountSettings,
         if_match: int = Header(alias="If-Match", ge=1),
     ):
-        """Change the account's settings (shorting on or off, TVP-7.2a) at the revision the person saw."""
+        """Change the account's settings at the revision the person saw: shorting (TVP-7.2a), margin by asset class and
+        commission (TVP-7.2b). Fields left out keep their value; lowering margin can bring a margin call on the next pass."""
         try:
             return await asyncio.to_thread(
                 repository_factory().update_account_settings, account_id, settings, expected_revision=if_match

@@ -204,14 +204,14 @@ class TradingPaperRepository:
         stops follow) and leaves open shorts and their exits as they are.
         """
         with self.uow_factory() as uow:
-            if not settings.allow_short:
+            if settings.allow_short is False:
                 locked, _ = self._lock_account(uow, account_id)
                 for short_entry in self._working_short_entries(uow, account_id):
                     self._cancel_locked(uow, locked, short_entry)
             row = uow.connection.execute(
                 """
                 UPDATE omnix_trading_paper_accounts
-                   SET allow_short = %s,
+                   SET allow_short = COALESCE(%s, allow_short),
                        margin_settings = COALESCE(%s::jsonb, margin_settings),
                        commission_type = COALESCE(%s, commission_type),
                        commission_bps = COALESCE(%s, commission_bps),
@@ -995,7 +995,9 @@ class TradingPaperRepository:
 
                 remaining_before = max(Decimal("0"), order.quantity - order.filled_quantity)
                 if order.side == "buy":
-                    reservation_spend = min(order.reserved_cash, total_cost)
+                    # The hold covers the margin share and the commission; the rest of a leveraged buy is borrowed,
+                    # taken from the cash (TVP-7.2b). At 100% margin the share is the whole cost, as before.
+                    reservation_spend = min(order.reserved_cash, total_cost if covers_short else margin_cost)
                     cash_reserved -= reservation_spend
                     cash_available -= total_cost - reservation_spend
                     next_reserved_cash = max(
@@ -1227,6 +1229,15 @@ class TradingPaperRepository:
                         account.base_currency,
                     ),
                 )
+            # The instrument's open position is marked at every observation (TVP-7.2b): buying power and margin read it.
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_positions
+                   SET last_price = %s, unrealized_pnl = (%s - average_cost) * quantity
+                 WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s AND quantity <> 0
+                """,
+                (observation.price, observation.price, self.context.workspace_id, account_id, observation.instrument_id),
+            )
             uow.commit()
         return fills
 

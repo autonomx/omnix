@@ -7,7 +7,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .execution import ExecutionObservation
-from .paper import PaperAccountSnapshot, PaperOrderRequest, PaperTimeInForce
+from .paper import (
+    PaperAccountSnapshot,
+    PaperMarginPosition,
+    PaperOrderRequest,
+    PaperTimeInForce,
+    paper_buying_power,
+    paper_margin_fraction,
+)
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .strategy_risk import paper_account_equity, paper_daily_realized_pnl
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
@@ -210,12 +217,16 @@ def preview_paper_risk(
         (item for item in snapshot.balances if item.currency == snapshot.account.base_currency),
         None,
     )
-    # Open shorts hold twice what they cost to buy back: their proceeds and an equal margin (TVP-7.2a).
-    short_liability = sum(
-        (-item.quantity * item.average_cost for item in snapshot.positions if item.quantity < 0),
+    # The account's buying power as order placement computes it (TVP-7.2b): leverage, shorts and prices.
+    margin_positions = [
+        PaperMarginPosition(item.instrument_id, item.quantity, item.average_cost, item.last_price)
+        for item in snapshot.positions
+        if item.quantity != 0
+    ]
+    buying_power = max(
         Decimal("0"),
+        paper_buying_power(snapshot.account, balance.available if balance is not None else Decimal("0"), margin_positions),
     )
-    buying_power = max(Decimal("0"), (balance.available if balance is not None else Decimal("0")) - 2 * short_liability)
     spread = observation.spread_bps
     reasons: list[str] = []
     is_short = request.side == "sell"
@@ -266,10 +277,14 @@ def preview_paper_risk(
     risk_per_share = request.stop_price - request.entry_price if is_short else request.entry_price - request.stop_price
     requested_risk = equity * request.desired_risk_pct / Decimal("100") if equity > 0 else Decimal("0")
     risk_budget = min(requested_risk, open_risk_remaining, daily_loss_remaining)
-    commission_factor = Decimal("1") + snapshot.account.commission_bps / Decimal("10000")
+    # An entry holds its margin share of the notional and its commission (bps, or a fixed amount once).
+    margin = paper_margin_fraction(snapshot.account, request.instrument_id, short=is_short)
+    fixed = snapshot.account.commission_type == "fixed_per_order"
+    commission_factor = margin + (Decimal("0") if fixed else snapshot.account.commission_bps / Decimal("10000"))
+    fixed_commission = snapshot.account.commission_fixed if fixed else Decimal("0")
     quantity_by_risk = risk_budget / risk_per_share if risk_per_share > 0 else Decimal("0")
     quantity_by_buying_power = (
-        buying_power / (request.entry_price * commission_factor)
+        max(Decimal("0"), buying_power - fixed_commission) / (request.entry_price * commission_factor)
         if request.entry_price > 0 and commission_factor > 0
         else Decimal("0")
     )
@@ -289,7 +304,7 @@ def preview_paper_risk(
     actual_risk = quantity * max(Decimal("0"), risk_per_share)
     actual_risk_pct = actual_risk / equity * Decimal("100") if equity > 0 else Decimal("0")
     estimated_notional = quantity * request.entry_price
-    after = max(Decimal("0"), buying_power - estimated_notional * commission_factor)
+    after = max(Decimal("0"), buying_power - estimated_notional * commission_factor - (fixed_commission if quantity > 0 else 0))
     aggregate_pct = open_risk / equity * Decimal("100") if equity > 0 else Decimal("0")
 
     return PaperRiskPreview(

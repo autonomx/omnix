@@ -181,6 +181,8 @@ def _reserve(snapshot: PaperAccountSnapshot, request: PaperOrderRequest, order: 
             request,
             available_cash=balance.available,
             commission_bps=snapshot.account.commission_bps,
+            # Replay trades on cash alone, but charges the account's fixed commission where it has one (TVP-7.2b).
+            fixed_commission=snapshot.account.commission_fixed if snapshot.account.commission_type == "fixed_per_order" else None,
         )
         if reserved_cash <= 0 or reserved_cash > balance.available:
             return _reject(snapshot, order, "insufficient_paper_cash")

@@ -103,3 +103,45 @@ def test_the_monitor_watches_accounts_that_can_be_margin_called() -> None:
     assert _uses_margin(snapshot(account(), "10")) is False
     assert _uses_margin(snapshot(account(), "-10")) is True
     assert _uses_margin(snapshot(account(margin={"crypto": PaperMargin(long_pct=D("50"))}), "10")) is True
+
+
+def test_the_risk_preview_sizes_with_leverage_and_a_fixed_commission() -> None:
+    from datetime import datetime, timezone
+
+    from app.apps.trading.execution import ExecutionObservation
+    from app.apps.trading.paper import PaperAccountSnapshot, PaperBalance
+    from app.apps.trading.paper_risk import PaperRiskPreviewRequest, preview_paper_risk
+
+    now = datetime.now(timezone.utc)
+    quote = ExecutionObservation(
+        instrument_id="equity:NYSE:T", binding_id="b", provider="fixture", bid=D("9.99"), ask=D("10.01"), last=D("10"),
+        source_time=now, received_at=now, session="regular", freshness_mode="polled", execution_eligible=True,
+    )
+
+    def preview(acct: PaperAccount):
+        snap = PaperAccountSnapshot(
+            account=acct, balances=[PaperBalance(currency="USD", available=D("1000"))], positions=[], open_orders=[], recent_fills=[], recent_ledger=[],
+        )
+        # A wide stop and a large risk: buying power is what limits the size.
+        request = PaperRiskPreviewRequest(instrument_id="equity:NYSE:T", binding_id="b", entry_price=D("10"), stop_price=D("9.99"), desired_risk_pct=D("1"))
+        return preview_paper_risk(snapshot=snap, protections=[], observation=quote, request=request)
+
+    def plain(**fields) -> PaperAccount:
+        return PaperAccount(account_id="a", name="A", base_currency="USD", commission_bps=D("0"), **fields)
+
+    cash_only = preview(plain())
+    leveraged = preview(plain(margin={"equity": PaperMargin(long_pct=D("25"))}))
+    fixed = preview(plain(commission_type="fixed_per_order", commission_fixed=D("10")))
+    assert cash_only.recommended_quantity == D("100")
+    assert leveraged.recommended_quantity == D("400")
+    # The fixed commission comes out of the buying power once.
+    assert fixed.recommended_quantity == D("99")
+
+
+def test_a_fractional_position_closes_to_the_satoshi_rounded_up() -> None:
+    leveraged = account(margin={"crypto": PaperMargin(long_pct=D("10"))})
+    positions = [PaperMarginPosition("crypto:BTC", D("1.5"), D("60000"), D("50000"))]
+    status = paper_margin_status(leveraged, D("-68001"), D("0"), positions)
+    [(_, quantity)] = paper_margin_call_closes(leveraged, status, positions)
+    assert quantity == quantity.quantize(D("0.00000001"))
+    assert quantity * D("50000") * D("0.1") >= status.maintenance - status.equity

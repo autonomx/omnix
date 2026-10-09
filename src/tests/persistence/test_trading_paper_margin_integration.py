@@ -125,8 +125,8 @@ def test_leverage_raises_buying_power_and_borrows_the_rest(paper) -> None:
     assert snapshot.balances[0].available == Decimal("10000") - cost
     status = snapshot.margin_status
     assert status is not None
-    # Half the cost is held, half borrowed: buying power is what the cash and the long's free half leave.
-    assert status.buying_power == Decimal("10000") - cost + cost / 2
+    # Half the value is held, half borrowed: buying power is the cash plus the long's free half, at its last price.
+    assert status.buying_power == Decimal("10000") - cost + position.quantity * position.last_price / 2
     assert status.maintenance == position.quantity * position.last_price / 2
     assert status.margin_call is False
     # An account made without margin settings (as strategies make them) holds 100%, as before.
@@ -191,3 +191,56 @@ def test_settings_change_margin_and_commission_and_keep_the_rest(paper) -> None:
     assert (updated.commission_type, updated.commission_fixed, updated.allow_short) == ("fixed_per_order", Decimal("1.5"), True)
     kept = repository.update_account_settings(account_id, PaperAccountSettings(allow_short=False), expected_revision=updated.revision).account
     assert kept.margin == updated.margin and kept.commission_fixed == Decimal("1.5") and kept.allow_short is False
+
+
+def test_partial_fills_of_a_leveraged_limit_buy_each_draw_their_margin_share(paper) -> None:
+    account_id = paper.account("partial", margin={"equity": PaperMargin(long_pct=Decimal("50"))})
+    key = uuid.uuid4().hex
+    OrderGateway(paper.repository_factory()).place_manual_entry(
+        account_id,
+        PaperOrderRequest(
+            order_id=f"order-{key}", instrument_id=paper.instrument_id, side="buy", order_type="limit",
+            quantity=Decimal("100"), limit_price=Decimal("100"), idempotency_key=f"idem-{key}",
+        ),
+    )
+    # Thin books: each observation fills part of the order.
+    for second in range(1, 40):
+        observation = _observation(paper.instrument_id, "100", seconds=second).model_copy(update={"ask_size": Decimal("100")})
+        paper.repository_factory().process_observation(account_id, observation)
+        snapshot = paper.repository_factory().snapshot(account_id)
+        if not snapshot.open_orders:
+            break
+    order = next(item for item in snapshot.order_history if item.order_id == f"order-{key}")
+    assert (order.status, order.filled_quantity) == ("filled", Decimal("100"))
+    assert len([fill for fill in snapshot.recent_fills if fill.order_id == order.order_id]) > 1
+    assert snapshot.balances[0].reserved == 0
+    assert snapshot.balances[0].available == Decimal("10000") - Decimal("10000")
+
+
+def test_a_short_with_a_working_cover_is_still_margin_called(paper) -> None:
+    account_id = paper.account("covered", allow_short=True)
+    _market(paper, account_id, paper.instrument_id, "sell", "100", "100")
+    key = uuid.uuid4().hex
+    OrderGateway(paper.repository_factory()).place_reducing(
+        account_id,
+        PaperOrderRequest(
+            order_id=f"tp-{key}", instrument_id=paper.instrument_id, side="buy", order_type="limit",
+            quantity=Decimal("100"), limit_price=Decimal("50"), idempotency_key=f"tp-{key}",
+        ),
+    )
+    _margin_call(paper, account_id, "160")
+    snapshot = paper.repository_factory().snapshot(account_id)
+    assert [order.side for order in _margin_orders(paper, account_id)] == ["buy"]
+    # The take-profit made room for it.
+    assert next(order for order in snapshot.order_history if order.order_id == f"tp-{key}").status == "cancelled"
+
+
+def test_a_cancelled_margin_call_is_followed_by_a_new_one(paper) -> None:
+    account_id = paper.account("retry", margin={"equity": PaperMargin(long_pct=Decimal("50"))})
+    _market(paper, account_id, paper.instrument_id, "buy", "150", "100")
+    _margin_call(paper, account_id, "60")
+    [first] = _margin_orders(paper, account_id)
+    paper.repository_factory().cancel_order(account_id, first.order_id)
+    _margin_call(paper, account_id, "60")
+    orders = _margin_orders(paper, account_id)
+    assert sorted(order.status for order in orders) == ["cancelled", "open"]

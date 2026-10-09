@@ -37,8 +37,9 @@ export function marginFromLeverage(marginControl: boolean, leverage: LeverageSet
 /** The leverage selects for an account's margin: N:1 from its long margin %, 1:1 where none is set. */
 export function leverageFromAccount(account: PaperAccount | null | undefined, fallback: LeverageSettings): { marginControl: boolean; leverage: LeverageSettings } {
   const margin = (account?.margin ?? {}) as Record<string, { long_pct: string | number }>;
-  if (!account || Object.keys(margin).length === 0) return { marginControl: false, leverage: fallback };
-  const leverage = { ...fallback };
+  // "Others" has no asset class on the server: always 1:1.
+  if (!account || Object.keys(margin).length === 0) return { marginControl: false, leverage: { ...fallback, others: '1:1' } };
+  const leverage = { ...fallback, others: '1:1' };
   for (const [market, assetClass] of Object.entries(LEVERAGE_CLASSES) as Array<[keyof typeof LEVERAGE_CLASSES, string]>) {
     const pct = Number(margin[assetClass]?.long_pct ?? 100);
     leverage[market] = `${Math.round(100 / pct)}:1`;
@@ -52,7 +53,7 @@ export function commissionInput(settings: CommissionSettings): { commission_type
   const amount = settings.othersCommission && Number.isFinite(value) && value > 0 ? value : 0;
   return settings.commissionType === 'Fixed'
     ? { commission_type: 'fixed_per_order', commission_bps: '0', commission_fixed: String(amount) }
-    : { commission_type: 'percent', commission_bps: String(amount * 100), commission_fixed: '0' };
+    : { commission_type: 'percent', commission_bps: String(Number((amount * 100).toFixed(8))), commission_fixed: '0' };
 }
 
 /** The dialog's commission for an account. */

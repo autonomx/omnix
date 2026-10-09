@@ -7,6 +7,7 @@ import hashlib
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, cast
 
 from app.runtime.features import FeatureContext
@@ -377,13 +378,28 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             if any(order.instrument_id == instrument_id and order.order_id.startswith(MARGIN_CALL_ORDER_PREFIX) for order in snapshot.open_orders):
                 continue
             close_side = "sell" if position.quantity > 0 else "buy"
-            if close_side == "sell":
-                # Working sells hold the long's quantity; the margin call takes their place.
-                for order in snapshot.open_orders:
-                    if order.instrument_id == instrument_id and order.side == "sell":
-                        await asyncio.to_thread(repository.cancel_order, account_id, order.order_id)
+            # Working orders on the closing side hold the position (sells reserve a long; buys count against a short):
+            # cancel the newest of them until the close fits, the margin call taking their place.
+            same_side = sorted(
+                (order for order in snapshot.open_orders if order.instrument_id == instrument_id and order.side == close_side),
+                key=lambda order: (order.created_at or datetime.min.replace(tzinfo=timezone.utc), order.order_id),
+                reverse=True,
+            )
+            working = sum((order.quantity - order.filled_quantity for order in same_side), Decimal("0"))
+            free = abs(position.quantity) - (position.reserved_quantity if close_side == "sell" else working)
+            for order in same_side:
+                if free >= quantity:
+                    break
+                try:
+                    await asyncio.to_thread(OrderGateway(repository).cancel, account_id, order.order_id)
+                except ValueError:
+                    continue  # filled or cancelled meanwhile
+                free += order.quantity - order.filled_quantity
+            # Earlier margin calls on the instrument (cancelled, rejected or filled) are part of the key, so a new
+            # shortfall after one of them places a new order rather than finding the old one.
+            earlier = sum(1 for order in snapshot.order_history if order.instrument_id == instrument_id and order.order_id.startswith(MARGIN_CALL_ORDER_PREFIX))
             key = hashlib.sha256(
-                f"margin-call|{account_id}|{instrument_id}|{position.quantity}|{position.average_cost}|{quantity}".encode()
+                f"margin-call|{account_id}|{instrument_id}|{position.quantity}|{position.average_cost}|{quantity}|{earlier}".encode()
             ).hexdigest()
             price = prices.get(instrument_id) or position.last_price or position.average_cost
             try:

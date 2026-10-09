@@ -18,8 +18,9 @@ describe('paper leverage and commission settings (TVP-7.2b)', () => {
 
   it('reads the ratios back from the account, and 1:1 without margin', () => {
     const leveraged = account({ margin: { equity: { long_pct: '50', short_pct: '50' }, crypto: { long_pct: '0.2', short_pct: '0.2' } } as never });
-    expect(leverageFromAccount(leveraged, leverage)).toEqual({ marginControl: true, leverage: { ...leverage, stocks: '2:1', futures: '1:1', forex: '1:1', crypto: '500:1' } });
-    expect(leverageFromAccount(account({ margin: {} as never }), leverage)).toEqual({ marginControl: false, leverage });
+    expect(leverageFromAccount(leveraged, leverage)).toEqual({ marginControl: true, leverage: { ...leverage, stocks: '2:1', futures: '1:1', forex: '1:1', crypto: '500:1', others: '1:1' } });
+    expect(leverageFromAccount(account({ margin: {} as never }), leverage)).toEqual({ marginControl: false, leverage: { ...leverage, others: '1:1' } });
+    expect(commissionInput({ othersCommission: true, commission: '0.07', commissionType: 'Percent' }).commission_bps).toBe('7');
     expect(longMarginFraction(leveraged, 'equity:NASDAQ:AAPL')).toBe(0.5);
     expect(longMarginFraction(leveraged, 'forex:EUR-USD')).toBe(1);
   });

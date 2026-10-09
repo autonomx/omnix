@@ -889,7 +889,8 @@ export interface paths {
         head?: never;
         /**
          * Update Account Settings
-         * @description Change the account's settings (shorting on or off, TVP-7.2a) at the revision the person saw.
+         * @description Change the account's settings at the revision the person saw: shorting (TVP-7.2a), margin by asset class and
+         *     commission (TVP-7.2b). Fields left out keep their value; lowering margin can bring a margin call on the next pass.
          */
         patch: operations["update_account_settings_api_trading_paper_accounts__account_id__patch"];
         trace?: never;
@@ -6470,7 +6471,7 @@ export interface components {
          */
         PaperAccountSettings: {
             /** Allow Short */
-            allow_short: boolean;
+            allow_short?: boolean | null;
             /** Commission Bps */
             commission_bps?: number | string | null;
             /** Commission Fixed */
@@ -6952,7 +6953,7 @@ export interface components {
          * PaperMargin
          * @description Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).
          *
-         *     The part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.
+         *     The part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1, 0.2% is 500:1.
          *     The same percentage is the maintenance requirement; equity below it triggers a margin call.
          */
         "PaperMargin-Input": {
@@ -6971,7 +6972,7 @@ export interface components {
          * PaperMargin
          * @description Margin for one asset class, as TradingView's paper account sets it (TVP-7.2b).
          *
-         *     The part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1.
+         *     The part of a position's value the account must hold: 100% is no leverage (the default), 50% is 2:1, 0.2% is 500:1.
          *     The same percentage is the maintenance requirement; equity below it triggers a margin call.
          */
         "PaperMargin-Output": {

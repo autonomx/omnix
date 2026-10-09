@@ -92,7 +92,7 @@ class PaperAccountSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    allow_short: bool
+    allow_short: bool | None = None
     margin: dict[str, PaperMargin] | None = None
     commission_type: CommissionType | None = None
     commission_bps: Decimal | None = Field(default=None, ge=0, le=1000)
@@ -409,18 +409,19 @@ class PaperMarginPosition:
 
 
 def paper_buying_power(account: PaperAccount, available_cash: Decimal, positions: list[PaperMarginPosition]) -> Decimal:
-    """Cash a new entry can hold (TVP-7.2b): the available cash, less what shorts hold, plus what leveraged longs free.
+    """Cash a new entry can hold (TVP-7.2b): equity less the margin positions need, less working holds.
 
-    A short holds its sale's proceeds (in the cash) and its margin; a long holds its margin share of the cost, the rest
-    borrowed (it left the cash when bought). At 100% margin this is the cash less twice the short liability, as before.
+    At each position's last price (its cost until one is known): a short holds what buying it back costs (its proceeds
+    sit in the cash) and its margin; a long holds its margin share, the rest borrowed (the cash went below zero when it
+    was bought). For unleveraged longs this is the available cash, as before; a short at 100% holds twice its value.
     """
     excess = available_cash
     for position in positions:
+        price = position.last_price if position.last_price is not None else position.average_cost
         if position.quantity < 0:
-            liability = -position.quantity * position.average_cost
-            excess -= liability * (1 + paper_margin_fraction(account, position.instrument_id, short=True))
+            excess -= -position.quantity * price * (1 + paper_margin_fraction(account, position.instrument_id, short=True))
         elif position.quantity > 0:
-            excess += position.quantity * position.average_cost * (1 - paper_margin_fraction(account, position.instrument_id, short=False))
+            excess += position.quantity * price * (1 - paper_margin_fraction(account, position.instrument_id, short=False))
     return excess
 
 
@@ -464,8 +465,9 @@ def paper_margin_call_closes(account: PaperAccount, status: PaperMarginStatus, p
             break
         size = abs(position.quantity)
         needed = shortfall / per_unit if per_unit > 0 else size
-        if size == size.to_integral_value():
-            needed = needed.to_integral_value(rounding=ROUND_CEILING)
+        # Whole units for whole positions; fractional ones (crypto) to 1e-8, rounded up so the close is enough.
+        step = Decimal("1") if size == size.to_integral_value() else Decimal("0.00000001")
+        needed = (needed / step).to_integral_value(rounding=ROUND_CEILING) * step
         quantity = min(size, needed)
         closes.append((position.instrument_id, quantity))
         shortfall -= quantity * per_unit
