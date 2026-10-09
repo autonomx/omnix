@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import type { MarketBar } from '../tradingTypes';
 import { findPatternPivots } from './autoPatterns';
-import { CANDLESTICK_PATTERNS } from './candlestickPatterns';
+import { CANDLESTICK_PATTERNS, selectedCandlestickPatterns } from './candlestickPatterns';
 import { drawingIndicatorOutputs } from './drawingIndicators';
 import { UTC_SESSION, sessionClock, sessionPeriods, type SessionPeriod, type TradingSessionSpec } from './tradingSessions';
 
@@ -1672,7 +1672,9 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
     'Visible Average Price': [['average', 'Visible Average Price']],
     'VWAP Auto Anchored': [['vwap', 'Auto Anchored VWAP']],
   };
-  if (name === 'All Candlestick Patterns') return CANDLESTICK_PATTERNS.map((pattern) => ({ key: `${id}:${pattern.key}`, title: pattern.name }));
+  if (name === 'All Candlestick Patterns') {
+    return selectedCandlestickPatterns(String(builtInParams(name, instance).patterns)).map((pattern) => ({ key: `${id}:${pattern.key}`, title: pattern.name }));
+  }
   if (name === 'Moving Average Ribbon') return [20, 50, 100, 200].map((p) => ({ key: `${id}:sma-${p}`, title: `SMA ${p}` }));
   if (name === 'Moving Averages') return [{ key: `${id}:sma`, title: 'SMA' }, { key: `${id}:ema`, title: 'EMA' }];
   if (name === 'RCI Ribbon') return [9, 26, 52].map((p) => ({ key: `${id}:rci-${p}`, title: `RCI ${p}` }));

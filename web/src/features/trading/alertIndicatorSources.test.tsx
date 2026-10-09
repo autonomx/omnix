@@ -1,10 +1,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AlertIndicatorPicker } from './AlertIndicatorPicker';
-import { alertIndicatorChoices, chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, defaultIndicatorSelection, resolveIndicatorSelection, withChartIndicatorCondition } from './alertIndicatorSources';
+import { alertIndicatorChoices, APPEARS_VALUE, chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, defaultIndicatorSelection, resolveIndicatorSelection, withChartIndicatorCondition } from './alertIndicatorSources';
 import { editorDefaults } from './TradingChartAlertOverlay';
 import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIndicators';
-import { chartAlertCreateInput } from './tradingChartAlerts';
+import { alertConditionsSummary, chartAlertCreateInput } from './tradingChartAlerts';
 
 afterEach(cleanup);
 
@@ -71,9 +71,23 @@ describe('alerts on signal outputs (TVP-6.3)', () => {
     expect(selection).toEqual({ key: 'tv-all-candlestick-patterns', output: 'tv-all-candlestick-patterns:hammer', operator: 'appears' });
     const input = chartAlertCreateInput({ alertId: 'a', instrumentId: 'btc', bindingId: null, interval: '1h', threshold: 0, latestPrice: 1, expiration: 'never' });
     expect(withChartIndicatorCondition(input, patterns, selection, '187.5')).toBe(true);
-    expect(input.conditions?.[0]).toMatchObject({ operator: 'greater_than', target: { kind: 'value', value: '0' }, source: { output: 'tv-all-candlestick-patterns:hammer' } });
+    expect(input.conditions?.[0]).toMatchObject({ operator: 'greater_than', target: { kind: 'value', value: APPEARS_VALUE }, source: { output: 'tv-all-candlestick-patterns:hammer' } });
+    // No line to draw or drag on the chart, and it reads as "appears".
+    const alert = { condition_type: 'conditions', threshold: 0, parameters: {}, conditions: input.conditions };
+    expect(chartAlertIndicatorId(alert)).toBeNull();
+    expect(conditionsAtValue(alert, '187.5')).toBe(input.conditions);
+    expect(alertConditionsSummary({ conditions: input.conditions as never })).toBe('tv-all-candlestick-patterns:hammer appears');
     // Back on a line, the comparison is a line's again.
     expect(resolveIndicatorSelection(patterns, { ...selection, key: 'sma' })).toEqual({ key: 'sma', output: 'sma:20', operator: 'crossing' });
+  });
+
+  it('greys out fractals: they are confirmed bars after the bar alerts evaluate', () => {
+    const fractals = alertIndicatorChoices(
+      [{ id: 'tv-williams-fractal', period: 2, enabled: true } as unknown as CoreIndicatorInstance],
+      [marker('tv-williams-fractal:up-fractal', 'Up Fractal')],
+      new Set(['tv-williams-fractal']),
+    );
+    expect(fractals[0].unavailable).toMatch(/confirmed bars later/);
   });
 
   it('shows only "Appears" for a pattern and switches the comparison with the indicator', () => {

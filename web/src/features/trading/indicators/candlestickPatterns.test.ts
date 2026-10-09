@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { asMarketBars, generateCandlestickDatasets } from './goldens/goldenDatasets';
 import { CANDLESTICK_PATTERNS, candlestickPatternOutputs, detectCandlestickPatterns, selectedCandlestickPatterns } from './candlestickPatterns';
-import { calculateTradingViewBuiltInOutputs, tradingViewBuiltInDefinition, tradingViewBuiltInInputs } from './tradingViewBuiltIns';
+import { calculateTradingViewBuiltInOutputs, tradingViewBuiltInDefinition, tradingViewBuiltInInputs, tradingViewBuiltInPlotDefinitions } from './tradingViewBuiltIns';
 
 const bars = asMarketBars(generateCandlestickDatasets()[0]);
 const series = (key: 'open' | 'high' | 'low' | 'close') => bars.map((bar) => Number(bar[key]));
@@ -85,5 +85,9 @@ describe('candlestick patterns (TVP-6.3)', () => {
     expect(one.map((output) => output.key)).toEqual(['tv-all-candlestick-patterns:tri-star-bullish']);
     expect(one[0].points).toHaveLength(1);
     expect(calculateTradingViewBuiltInOutputs([], { id: 'tv-all-candlestick-patterns', period: 1 })).toEqual([]);
+    // The Style tab lists the selected patterns' plots.
+    expect(tradingViewBuiltInPlotDefinitions({ id: 'tv-all-candlestick-patterns', period: 1 })).toHaveLength(44);
+    expect(tradingViewBuiltInPlotDefinitions({ id: 'tv-all-candlestick-patterns', period: 1, params: { patterns: 'neutral' } }).map((plot) => plot.title))
+      .toEqual(['Doji', 'Spinning Top Black', 'Spinning Top White']);
   });
 });

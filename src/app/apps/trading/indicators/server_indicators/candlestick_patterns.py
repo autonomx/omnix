@@ -298,7 +298,7 @@ PATTERNS: tuple[tuple[str, str, int, Detector], ...] = (
         lambda c, i: c.down[i - 4] and c.long[i - 4] and c.black[i - 4] and _three_inside(c, i, True)
         and c.long[i] and c.black[i] and c.close[i] < c.close[i - 4],
     ),
-    ("falling-window", "bearish", 1, lambda c, i: c.down[i] and c.range[i] != 0 and c.range[i - 1] != 0 and c.high[i] < c.low[i - 1]),
+    ("falling-window", "bearish", 1, lambda c, i: c.down[i - 1] and c.range[i] != 0 and c.range[i - 1] != 0 and c.high[i] < c.low[i - 1]),
     ("gravestone-doji", "bearish", 0, lambda c, i: c.doji_body[i] and c.dn_shadow[i] <= c.body[i]),
     ("hammer", "bullish", 0, lambda c, i: _hammer_shape(c, i) and c.down[i]),
     ("hanging-man", "bearish", 0, lambda c, i: _hammer_shape(c, i) and c.up[i]),
@@ -336,7 +336,7 @@ PATTERNS: tuple[tuple[str, str, int, Detector], ...] = (
         lambda c, i: c.up[i - 4] and c.long[i - 4] and c.white[i - 4] and _three_inside(c, i, False)
         and c.long[i] and c.white[i] and c.close[i] > c.close[i - 4],
     ),
-    ("rising-window", "bullish", 1, lambda c, i: c.up[i] and c.range[i] != 0 and c.range[i - 1] != 0 and c.low[i] > c.high[i - 1]),
+    ("rising-window", "bullish", 1, lambda c, i: c.up[i - 1] and c.range[i] != 0 and c.range[i - 1] != 0 and c.low[i] > c.high[i - 1]),
     ("shooting-star", "bearish", 0, lambda c, i: _star_shape(c, i) and c.up[i]),
     ("spinning-top-black", "neutral", 0, lambda c, i: _spinning_top(c, i) and c.black[i]),
     ("spinning-top-white", "neutral", 0, lambda c, i: _spinning_top(c, i) and c.white[i]),
@@ -371,7 +371,11 @@ def _selected(selection: str) -> list[tuple[str, str, int, Detector]]:
     return one or list(PATTERNS)
 
 
-@builtin("tv-all-candlestick-patterns", "All Candlestick Patterns", "recursive", 1)
+# Alerts read the default trend (SMA50): a pattern can first appear at bar 49 + its lookback of up to 4 bars.
+SIGNAL_WARMUP = 54
+
+
+@builtin("tv-all-candlestick-patterns", "All Candlestick Patterns", "recursive", 1, signal_warmup=SIGNAL_WARMUP)
 def _all_candlestick_patterns(chart: Chart) -> Outputs:
     selection = chart.select_param("patterns", "all", SELECTIONS)
     trend = chart.select_param("trend", "sma50", ("sma50", "sma50-sma200", "none"))

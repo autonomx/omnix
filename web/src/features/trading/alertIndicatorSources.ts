@@ -22,6 +22,13 @@ export const ALERT_INDICATOR_OPERATORS: Array<{ value: AlertIndicatorOperator; l
   { value: 'greater_than', label: 'Greater Than' },
   { value: 'less_than', label: 'Less Than' },
 ];
+/**
+ * "Appears" is stored as the output greater than this: any value at all, even a negative price (a signal is valued at
+ * its bar's low or high), and a target no line alert uses, so the chart draws no line for it.
+ */
+export const APPEARS_VALUE = '-1000000000000000000';
+/** Signals marked bars after the fact (a fractal is confirmed `radius` bars later): never on the bar alerts evaluate. */
+const LAGGED_SIGNAL_INDICATORS = new Set(['tv-williams-fractal']);
 /** The comparison a signal output offers: it has a value only on the bars where the signal appears. */
 export const ALERT_SIGNAL_OPERATORS: Array<{ value: AlertIndicatorOperator; label: string }> = [{ value: 'appears', label: 'Appears' }];
 
@@ -71,7 +78,9 @@ export function alertIndicatorChoices(
         ? 'Its extra inputs are not evaluated by server alerts yet'
         : lines.length === 0
           ? 'It draws no line to alert on'
-          : undefined;
+          : LAGGED_SIGNAL_INDICATORS.has(instance.id)
+            ? 'Its marks are confirmed bars later, so server alerts never see them on the latest bar'
+            : undefined;
     return { key: instance.id, label: indicatorContextLabel(instance), outputs: lines, inputs: inputsOf(instance), ...(unavailable ? { unavailable } : {}) };
   });
 }
@@ -82,7 +91,7 @@ export function indicatorConditionSpec(choice: AlertIndicatorChoice, selection: 
   return {
     source: { kind: 'indicator', indicator_id: choice.key, inputs: choice.inputs, output: selection.output },
     operator: selection.operator === 'appears' ? 'greater_than' : selection.operator,
-    target: { kind: 'value', value: appears ? '0' : value },
+    target: { kind: 'value', value: appears ? APPEARS_VALUE : value },
   };
 }
 
@@ -136,12 +145,20 @@ export function resolveIndicatorSelection(
 }
 
 type ChartAlert = { condition_type: string; threshold: string | number; parameters: { indicator_id?: string | null }; conditions?: readonly unknown[] };
-type IndicatorValueCondition = { source: { kind: string; indicator_id?: string }; target?: { kind: string; value?: string | number } };
+type IndicatorValueCondition = { source: { kind: string; indicator_id?: string }; operator?: string; target?: { kind: string; value?: string | number } };
 
 function singleIndicatorCondition(alert: ChartAlert): IndicatorValueCondition | null {
   if (alert.condition_type !== 'conditions' || alert.conditions?.length !== 1) return null;
   const condition = alert.conditions[0] as IndicatorValueCondition;
+  // An "appears" alert has no line to draw or drag.
+  if (isAppearsCondition(condition)) return null;
   return condition.source.kind === 'indicator' && condition.target?.kind === 'value' ? condition : null;
+}
+
+/** Whether a condition is a signal output's "appears" (greater than APPEARS_VALUE). */
+export function isAppearsCondition(condition: { source: { kind: string }; operator?: string; target?: { kind: string; value?: string | number } | null }): boolean {
+  return condition.source.kind === 'indicator' && condition.operator === 'greater_than' && condition.target?.kind === 'value'
+    && Number(condition.target.value) <= Number(APPEARS_VALUE) / 10;
 }
 
 /** The indicator an alert is drawn on: a legacy indicator alert's, or a single "indicator line vs value" condition's. */

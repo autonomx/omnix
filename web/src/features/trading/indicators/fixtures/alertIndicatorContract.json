@@ -1708,22 +1708,6 @@
    ]
   },
   {
-   "id": "tv-williams-fractal",
-   "inputs": {
-    "period": 2,
-    "fast_period": null,
-    "slow_period": null,
-    "signal_period": null,
-    "standard_deviations": null,
-    "anchor_time": null,
-    "anchor_bars_ago": null
-   },
-   "outputs": [
-    "tv-williams-fractal:up-fractal",
-    "tv-williams-fractal:down-fractal"
-   ]
-  },
-  {
    "id": "tv-williams-r-r",
    "inputs": {
     "period": 14,
