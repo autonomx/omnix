@@ -51,9 +51,14 @@ def _plots(source: str, bars: BarSeries | None = None, **kwargs: Any) -> dict[st
 
 
 def test_wall_time_is_enforced_inside_a_bar() -> None:
-    source = _script("var a = array.new_float(20000, 1.0)\nfor i = 0 to 400\n    b = a.copy()\n    b.sort()\nplot(close)")
+    import time
+
+    # Thousands of sorts in one bar: the check inside the loop stops it long before the bar ends.
+    source = _script("var a = array.new_float(20000, 1.0)\nfor i = 0 to 5000\n    a.sort()\nplot(close)")
+    began = time.perf_counter()
     with pytest.raises(ScriptLimitError, match="ran for more than"):
-        run_script(source, _bars(2), limits=ScriptLimits(max_seconds=0.05))
+        run_script(source, _bars(1), limits=ScriptLimits(max_seconds=0.1))
+    assert time.perf_counter() - began < 2.0
 
 
 @pytest.mark.parametrize(
@@ -82,6 +87,17 @@ def test_collections_and_alerts_are_capped() -> None:
     budget = ScriptLimits(max_allocated_items=1_000)
     with pytest.raises(ScriptLimitError, match="created more than"):
         run_script(_script("a = array.new_float(100, 1.0)\nplot(close)"), _bars(20), limits=budget)
+
+
+def test_joins_stop_at_the_string_limit() -> None:
+    limits = ScriptLimits(max_string_length=1_000)
+    for body in (
+        'a = array.new_string(1000, "xxxxxxxxxx")\ns = a.join(",")',
+        'a = array.new_string(1000, "xxxxxxxxxx")\ns = str.tostring(a)',
+        's = str.format(str.repeat("{0}", 500), "xxxxxxxxxx")',
+    ):
+        with pytest.raises(ScriptLimitError, match="string"):
+            run_script(_script(body + "\nplot(close)"), _bars(1), limits=limits)
 
 
 def test_format_reads_its_template_once() -> None:
@@ -129,7 +145,7 @@ def test_scripts_without_a_version_or_with_a_stray_break_are_refused() -> None:
 
 def test_inputs_are_validated() -> None:
     source = _script('n = input.int(3, "Length", minval=1, maxval=10)\nk = input.string("a", "Kind", options=["a", "b"])\nplot(n)')
-    for inputs in ({"Length": 0}, {"Length": 2.5}, {"Length": "9"}, {"Kind": "c"}, {"Unknown": 1}):
+    for inputs in ({"Length": 0}, {"Length": 2.5}, {"Length": "9"}, {"Kind": "c"}, {"Unknown": 1}, {"Kind": ["a"]}):
         with pytest.raises(ScriptRuntimeError):
             run_script(source, _bars(2), inputs=inputs)
     assert _plots(source, _bars(1), inputs={"Length": 7})["plot 1"] == [7]
@@ -191,6 +207,8 @@ def test_scripts_reading_the_last_bar_run_again_in_full() -> None:
 def test_time_close_is_the_bar_start_plus_the_interval() -> None:
     values = _plots(_script('plot(time_close - time, "span")'), _bars(3), timeframe="60")
     assert values["span"] == [3_600_000] * 3
+    # Without a fixed interval it is na, never the next bar's start.
+    assert _plots(_script('plot(time_close, "close")'), _bars(3))["close"] == [None] * 3
 
 
 def test_results_do_not_share_the_program_state() -> None:

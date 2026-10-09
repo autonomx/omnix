@@ -295,6 +295,9 @@ def run_script(
 
 
 class ScriptRun:
+    """One run of a program over bars. A run that raised (any ScriptError) is left part-way through a bar: discard
+    it and start a new one rather than extending it."""
+
     def __init__(
         self,
         program: Program,
@@ -353,6 +356,8 @@ class ScriptRun:
         extended (`can_extend`); run it again in full."""
         if not self.can_extend:
             raise RuntimeError("this script reads the last bar: run it again on all the bars instead of extending it")
+        if len(self.close) + 1 > self.limits.max_bars:
+            raise ScriptLimitError(f"a script runs on at most {self.limits.max_bars} bars")
         series = BarSeries.from_bars([bar])
         self.open.append(series.open[0])
         self.high.append(series.high[0])
@@ -362,8 +367,6 @@ class ScriptRun:
         self.starts.append(series.start_times[0])
         self.time.append(int(series.start_times[0].timestamp() * 1000))
         self.last_bar_index = len(self.close) - 1
-        if len(self.close) > self.limits.max_bars:
-            raise ScriptLimitError(f"a script runs on at most {self.limits.max_bars} bars")
         self._run_bars(self.committed, len(self.close))
 
     def _run_bars(self, start: int, end: int) -> None:
@@ -412,7 +415,7 @@ class ScriptRun:
         self.bar_loop_iterations += 1
         if self.bar_loop_iterations > self.limits.max_loop_iterations_per_bar or self.loop_iterations > self.limits.max_loop_iterations:
             raise ScriptLimitError("a loop ran too many times")
-        if self.loop_iterations % 1024 == 0:
+        if self.loop_iterations % 256 == 0:
             self.check_time()
 
     def add_drawing(self, kind: str, fields: dict[str, Any]) -> Drawing:
@@ -471,10 +474,9 @@ class ScriptRun:
         if name == "time":
             return self.time[t]
         if name == "time_close":
-            # The bar's start plus the interval; without a known interval, the next bar's start.
-            if self.interval_ms is not None:
-                return self.time[t] + self.interval_ms
-            return self.time[t + 1] if t + 1 < len(self.time) else None
+            # The bar's start plus the interval; na without a fixed interval (months, or no timeframe given), so a
+            # bar's value never depends on the bars after it.
+            return self.time[t] + self.interval_ms if self.interval_ms is not None else None
         if name == "bar_index":
             return t
         raise ScriptRuntimeError(f"unknown series {name}")
@@ -507,7 +509,11 @@ def validate_inputs(program: Program, inputs: dict[str, Any]) -> dict[str, Any]:
         kind = item.type
         if kind == "int" and not (isinstance(value, int) and not isinstance(value, bool)):
             raise ScriptRuntimeError(f"input {title!r} takes a whole number")
-        if kind == "float" and not (isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)):
+        if kind == "any" or kind not in ("int", "float", "price", "time", "bool", "string", "color", "timeframe", "symbol", "session", "text_area", "source"):
+            raise ScriptRuntimeError(f"input {title!r} can't be set")
+        if kind == "time" and not (isinstance(value, int) and not isinstance(value, bool)):
+            raise ScriptRuntimeError(f"input {title!r} takes a time (milliseconds)")
+        if kind in ("float", "price") and not (isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)):
             raise ScriptRuntimeError(f"input {title!r} takes a number")
         if kind == "bool" and not isinstance(value, bool):
             raise ScriptRuntimeError(f"input {title!r} takes true or false")

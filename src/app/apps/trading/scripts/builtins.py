@@ -335,8 +335,21 @@ def _tostring(value: Any, format: Any = "") -> Any:
             return f"{value:.2f}"
         return repr(value) if not value.is_integer() else str(int(value)) if abs(value) < 1e16 else repr(value)
     if isinstance(value, ScriptArray):
-        return check_string("[" + ", ".join(str(_tostring(item)) for item in value.items) + "]")
+        return "[" + _bounded_join(", ", (str(_tostring(item)) for item in value.items), 2) + "]"
     return str(value)
+
+
+def _bounded_join(separator: str, parts: Any, reserve: int = 0) -> str:
+    """Joins parts, stopping as soon as the result would pass the string limit (never building more)."""
+    limit = current_limits().max_string_length - reserve
+    pieces: list[str] = []
+    total = 0
+    for index, part in enumerate(parts):
+        total += len(part) + (len(separator) if index else 0)
+        if total > limit:
+            check_string(" " * (limit + reserve + 1))
+        pieces.append(part)
+    return separator.join(pieces)
 
 
 _PLACEHOLDER = re.compile(r"\{(\d+)(?:,([^{}]*))?\}")
@@ -347,16 +360,28 @@ def _format(template: Any, *values: Any) -> Any:
     if not isinstance(template, str):
         return None
 
-    def replace(match: re.Match[str]) -> str:
+    limit = current_limits().max_string_length
+    pieces: list[str] = []
+    total = 0
+    position = 0
+    for match in _PLACEHOLDER.finditer(template):
+        pieces.append(template[position : match.start()])
         index = int(match.group(1))
         if index >= len(values):
-            return match.group(0)
-        value = values[index]
-        parts = (match.group(2) or "").split(",")
-        pattern = parts[1] if len(parts) > 1 else ""
-        return str(_tostring(float(value) if isinstance(value, int | float) and not isinstance(value, bool) else value, pattern))
-
-    return check_string(_PLACEHOLDER.sub(replace, template))
+            text = match.group(0)
+        else:
+            value = values[index]
+            parts = (match.group(2) or "").split(",")
+            pattern = parts[1] if len(parts) > 1 else ""
+            text = str(_tostring(float(value) if isinstance(value, int | float) and not isinstance(value, bool) else value, pattern))
+        pieces.append(text)
+        total += match.start() - position + len(text)
+        # Stops as soon as the result passes the limit, before building it.
+        if total > limit:
+            check_string(" " * (limit + 1))
+        position = match.end()
+    pieces.append(template[position:])
+    return check_string("".join(pieces))
 
 
 def _substring(source: Any, begin: Any, end: Any = None) -> Any:
@@ -547,7 +572,7 @@ def _array_concat(array: Any, other: Any) -> Any:
 def _array_join(array: Any, separator: Any = "") -> Any:
     if not isinstance(separator, str):
         separator = ""
-    return check_string(separator.join(str(_tostring(item)) for item in _items(array)))
+    return _bounded_join(separator, (str(_tostring(item)) for item in _items(array)))
 
 
 def _array_from(*values: Any) -> Any:
@@ -1013,7 +1038,8 @@ def _input(name: str) -> Factory:
             raise ScriptSyntaxError(f"{name}() takes a constant default value", node.line)
         if kind == "int" and isinstance(default, float) and default.is_integer():
             default = int(default)
-        c.inputs.append(ScriptInput(title, kind if kind != "any" else type(default).__name__, default, options))
+        inferred = {bool: "bool", int: "int", float: "float", str: "string"}.get(type(default), "any")
+        c.inputs.append(ScriptInput(title, kind if kind != "any" else inferred, default, options))
         return lambda ctx: ctx.run.inputs.get(title, default)
 
     return factory

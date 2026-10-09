@@ -19,7 +19,7 @@ Scripts run only on the server, in a Python interpreter.
 2. **Compile.** `compile_script` turns the tree into a `Program` of Python closures and resolves every name at compile time. A program doesn't depend on any run, so it is compiled once per script version and reused for every symbol, user and input set.
 3. **Run.** `ScriptRun` executes the program bar by bar over a `BarSeries`. `append_bar` runs only a newly closed bar, so a cached run is extended incrementally.
    - A script that reads the last bar (`barstate.islast`, `islastconfirmedhistory`, `isrealtime`, `last_bar_index`, `last_bar_time`) can't be extended: a bar that was last when it ran no longer is. For such a script `ScriptRun.can_extend` is false, and it runs again in full on new bars.
-   - Every failure is a `ScriptError` with a line: syntax, unsupported feature, runtime error (including any Python error inside a built-in), or limit.
+   - Every failure of a script is a `ScriptError` with a line: syntax, unsupported feature, runtime error (including any Python error inside a built-in), or limit. A run that raised is discarded, never extended. (Misusing the API, such as extending a run that can't be extended, raises `RuntimeError`.)
 
 **Series model.**
 - Every variable is a `Slot`: its value on the current bar plus its committed history. At the end of a bar each slot commits; a `var` keeps its value and the others reset to `na`.
@@ -41,7 +41,7 @@ Scripts run only on the server, in a Python interpreter.
 
 - `//@version=5` and `//@version=6`. Older versions, and a script without a `//@version` line (v1 in Pine), are refused.
 - Division follows the version, per TradingView's v6 migration guide:
-  - in v5, an int **constant** divided by an int constant is truncated toward zero (`7 / 2 == 3`); any other division keeps the fraction (`bar_index / 2` is 0.5 on bar 1);
+  - in v5, an int **literal** divided by an int literal is truncated toward zero (`7 / 2 == 3`); any other division keeps the fraction (`bar_index / 2` is 0.5 on bar 1). Known deviation: TradingView also truncates `const int` variables (`len = 10`, then `len / 4` is 2); Omnix gives 2.5 until constants are folded through declarations (TVP-11.1);
   - in v6, `/` always returns the fraction (`7 / 2 == 3.5`).
 - `and` and `or` follow the version too: v5 evaluates both sides on every bar (a `ta.*` call on the right still advances), v6 evaluates them lazily.
 - `indicator(...)` with constant arguments is required. Recorded: `title`, `shorttitle`, `overlay`, `format`, `precision`, `max_*_count` and the rest.
@@ -153,7 +153,7 @@ Scripts run only on the server, in a Python interpreter.
 - **`ta.pivothigh`:** the pivot bar must be strictly above the bars before it and at least as high as the bars after it. On a plateau, the first bar is the pivot. `ta.pivotlow` mirrors this. To be checked against TradingView in TVP-11.1.
 - **Lengths:** `na` gives `na`; a length that isn't a positive whole number is a runtime error, as in Pine.
 - **`ta.sar`**, **`ta.supertrend`**, **`ta.dmi`** (with `fixnan`), **`ta.wma`**, **`ta.cci`**, **`ta.dev`**, **`ta.vwma`**, **`ta.mfi`**, **`ta.obv`** and **`ta.stoch`** are checked against TradingView's documented reference implementations (`pine_sar` and the like), run through the interpreter itself (`test_trading_scripts_safety.py`).
-- **`time_close`** is the bar's start plus the interval (the run's timeframe); without a fixed interval (months), the next bar's start.
+- **`time_close`** is the bar's start plus the interval (the run's timeframe); `na` without a fixed interval (months, or no timeframe given).
 - **Known deviation:** inputs to `ta.*` that are `na` in the middle of a series are not yet tested against TradingView; no golden dataset has gaps of `na`.
 
 ### Not supported yet
@@ -178,17 +178,17 @@ Unsupported names are refused at compile time with "not supported yet" and the l
 | Bars per run | 20,000 |
 | Loop iterations per run | 5,000,000 |
 | Loop iterations per bar | 100,000 |
-| Wall time per run | 20 s, checked after every bar and every 1,024 loop iterations; to be lowered per user (§4) |
+| Wall time per run | 20 s, checked after every bar and every 256 loop iterations; to be lowered per user (§4) |
 | Drawings of each kind | 500 |
 | Plots per script | 64 |
-| One string's length | 40,000 characters, checked before a string is built (`+`, `str.repeat`, `str.format`, `replace`, `join`) |
+| One string's length | 40,000 characters, checked before a string is built (`str.repeat`, `replace_all`) or while it is built (`str.format`, `join`, `str.tostring` of an array), and on `+` and `replace` |
 | One array's or map's size | 100,000, checked by every function that grows one |
 | Array and map values created per run | 10,000,000 |
 | Alerts kept per run | 1,000 (the newest) |
 | Expression nesting | 64 levels of brackets or unary operators, 256 operators in one chain |
 | Input values | checked against the declared type, options and range; unknown titles are refused |
 
-Scripts have no file, network or OS access: the interpreter only exposes the functions above. These checks are in-process: they can't interrupt a single long built-in operation (sorting a 100,000-value array), so production runs need a separate process with CPU and memory limits (§4).
+Scripts have no file, network or OS access: the interpreter only exposes the functions above. These caps bound each value, not a run's total memory (a 40,000-character string kept in a series over 20,000 bars is about 800 MB): total memory is bounded only by the worker process's limit (§4). These checks are in-process: they can't interrupt a single long built-in operation (sorting a 100,000-value array), so production runs need a separate process with CPU and memory limits (§4).
 
 ## 3. Spike results (TVP-11.0, 2026-10-09)
 
