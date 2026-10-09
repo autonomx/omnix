@@ -1,3 +1,4 @@
+import { horizontalAlertLevel } from '../alertLevels';
 import { booleanProperty, recordsProperty } from '../properties';
 import { lineStroke } from '../shapes';
 import { defineDrawingTool, type DrawingPropertyRecord, type DrawingShape } from '../types';
@@ -45,6 +46,18 @@ export const fibonacciTool = defineDrawingTool({
       const color = typeof record.color === 'string' && record.color ? record.color : stroke.stroke;
       const line: DrawingShape = { kind: 'segment', x1, y1: y, x2, y2: y, ...stroke, stroke: color };
       return showLabels ? [line, { kind: 'text', x: right + 4, y: y - 2, text: String(level) }] : [line];
+    });
+  },
+  // Each visible level as a level from the drawing's left edge onwards (TVP-1.4).
+  alertLevels: ([first, second], properties, services) => {
+    if (!first || !second) return [];
+    const left = Date.parse(first.time) <= Date.parse(second.time) ? first.time : second.time;
+    return recordsProperty(properties, 'levels', DEFAULT_LEVELS).flatMap((record) => {
+      const level = record.value;
+      if (typeof level !== 'number' || !Number.isFinite(level) || record.visible === false) return [];
+      const price = first.price + (second.price - first.price) * level;
+      const alertLevel = horizontalAlertLevel(`level-${level}`, `Level ${level} (${services.formatPrice(price)})`, { time: left, price }, 'right', services);
+      return alertLevel ? [alertLevel] : [];
     });
   },
 });

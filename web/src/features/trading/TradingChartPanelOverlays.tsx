@@ -1,3 +1,4 @@
+import { DrawingAlertSync } from './DrawingAlertSync';
 import { useMemo } from 'react';
 import { alertIndicatorChoices } from './alertIndicatorSources';
 import { useAlertIndicatorIds } from './useTradingAlerts';
@@ -74,6 +75,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         onPlacementConsumed={clearAlertPlacement}
         indicatorChoices={indicatorChoices}
       />
+      <DrawingAlertSync adapter={adapter} instrumentId={instrumentId} instrument={drawingInstrumentOf(chartQuery.data?.instrument)} drawings={drawings.state.drawings} />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
       <TradingOrderLinesOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} tickSize={tickSize} disabled={replayMode} />
       {active ? (

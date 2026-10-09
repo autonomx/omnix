@@ -215,13 +215,14 @@ export function drawingMenuEntries(
   const levels = alertLevels
     ? guardToolCall(drawing.toolType, 'alertLevels', () => offeredAlertLevels(alertLevels(drawing.points, properties, services), services, barIndexMatchesBars), [])
     : [];
-  const legacyLine = levels[0] && (levels[0].extend === 'none' || levels[0].extend === 'both') ? levels[0] : undefined;
+  const alertable = levels.filter((level) => level.extend !== 'left');
+  const legacyLine = alertable[0];
   const snapshot = { drawingId: drawing.drawingId, instrumentId: drawing.instrumentId, points: drawing.points, properties, text: drawing.text ?? '' };
   return {
     drawingId: drawing.drawingId,
     drawingTool: drawing.toolType,
     trendlinePoints: legacyLine?.anchors.map((point) => ({ time: point.time, price: point.price })),
-    drawingAlertLevels: levels.length > 0 ? levels : undefined,
+    drawingAlertLevels: alertable.length > 0 ? alertable : undefined,
     drawingActions: definition?.contextActions?.flatMap((action) => {
       const request = guardToolCall(drawing.toolType, `contextActions.${action.id}`, () => action.request(snapshot, services), null);
       return request ? [{ id: action.id, label: action.label, request }] : [];

@@ -32,6 +32,10 @@ export type TradingAlertEditorState = AlertDeliveryEditor & {
   indicatorSelection?: AlertIndicatorSelection;
   /** The chart indicator the alert was placed on (its pane), any indicator id. */
   chartIndicatorId?: string;
+  /** The drawing a line alert follows, its levels and the chosen one (TVP-1.4). */
+  drawingId?: string;
+  drawingLevels?: ReadonlyArray<{ key: string; label: string; anchors: readonly [{ time: string; price: number }, { time: string; price: number }] }>;
+  drawingLevel?: string;
   // Alerts described by conditions (condition 'conditions') show them read-only until the condition editor ships.
   conditionsSummary?: string;
 }
@@ -169,8 +173,22 @@ export function TradingAlertDialog({
             </select>
             )}
           </div>
-          {isTrendline ? (
-            <div className="trading-alert-value-row"><span>Line</span><strong>Selected trendline</strong></div>
+          {isTrendline && editor.drawingLevels && editor.drawingLevels.length > 1 ? (
+            <div className="trading-alert-value-row">
+              <span>Level</span>
+              <select
+                aria-label="Alert drawing level"
+                value={editor.drawingLevel}
+                onChange={(event) => {
+                  const level = editor.drawingLevels?.find((item) => item.key === event.target.value);
+                  if (level) onChange({ drawingLevel: level.key, trendlinePoints: level.anchors.map((point) => ({ time: point.time, price: point.price })) });
+                }}
+              >
+                {editor.drawingLevels.map((level) => <option key={level.key} value={level.key}>{level.label}</option>)}
+              </select>
+            </div>
+          ) : isTrendline ? (
+            <div className="trading-alert-value-row"><span>Line</span><strong>{editor.drawingLevels?.[0]?.label ?? 'Selected trendline'}</strong></div>
           ) : (
             <div className="trading-alert-value-row">
               <span>Value</span>

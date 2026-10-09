@@ -1,3 +1,4 @@
+import { horizontalAlertLevel } from '../alertLevels';
 import { areaFill, constrainToSquare, lineStroke } from '../shapes';
 import { defineDrawingTool } from '../types';
 
@@ -20,6 +21,17 @@ export const rectangleTool = defineDrawingTool({
       ...lineStroke(context),
       ...areaFill(context.style.color),
     }];
+  },
+  // Its top and bottom as levels from its left edge onwards (TVP-1.4).
+  alertLevels: ([first, second], _properties, services) => {
+    if (!first || !second) return [];
+    const left = Date.parse(first.time) <= Date.parse(second.time) ? first.time : second.time;
+    const top = Math.max(first.price, second.price);
+    const bottom = Math.min(first.price, second.price);
+    return [
+      horizontalAlertLevel('top', 'Top', { time: left, price: top }, 'right', services),
+      horizontalAlertLevel('bottom', 'Bottom', { time: left, price: bottom }, 'right', services),
+    ].filter((level) => level !== null);
   },
 });
 
