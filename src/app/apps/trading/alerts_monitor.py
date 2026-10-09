@@ -12,6 +12,8 @@ from app.runtime.features import FeatureContext
 
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .alerts_watchlist import evaluated_symbols, watchlist_members, watchlist_symbol_cap
+from .repositories import TradingDocumentRepository, default_trading_repository
 from .alerts import (
     AlertEvaluationContext,
     AlertOutcomeRecord,
@@ -44,6 +46,10 @@ def _interval_seconds() -> float:
     return max(5.0, value)
 
 
+# The pass interval, public for the watchlist capacity the API reports (TVP-1.7).
+alert_monitor_interval_seconds = _interval_seconds
+
+
 def _history_limit(alerts: Sequence[TradingAlert]) -> int:
     """Bars to fetch for a group of alerts; see ``alerts_evaluation.history_limit``."""
     return history_limit(max((required_bars(alert.conditions) for alert in alerts), default=1))
@@ -68,10 +74,14 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         *,
         repository_factory: Callable[[], TradingAlertRepository] = default_alert_repository,
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
+        document_repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
         interval_seconds: float | None = None,
     ) -> None:
         self.repository_factory = repository_factory
         self.market_service_factory = market_service_factory
+        self.document_repository_factory = document_repository_factory
+        # Watchlist alerts (TVP-1.7): symbols evaluated in the last pass, by alert.
+        self.watchlist_symbol_counts: dict[str, int] = {}
         self.interval_seconds = interval_seconds or _interval_seconds()
         self.last_error: str | None = None
         self.last_run_at: datetime | None = None
@@ -89,9 +99,16 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         self.unreadable_alert_ids = [item.alert_id for item in listing.unreadable[:20]]
         error: str | None = None
         targets: dict[tuple[str, str | None, str], list[TradingAlert]] = defaultdict(list)
+        # Watchlist alerts, by each member symbol they evaluate (TVP-1.7).
+        watch_targets: dict[tuple[str, str | None, str], list[TradingAlert]] = defaultdict(list)
         now = datetime.now(timezone.utc)
+        service = self.market_service_factory()
+        watchlist_alerts: list[TradingAlert] = []
         for alert in alerts:
             if alert.enabled and not alert.is_expired(now):
+                if alert.watchlist_id is not None:
+                    watchlist_alerts.append(alert)
+                    continue
                 targets[
                     (
                         alert.instrument_id,
@@ -99,17 +116,19 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                         alert.evaluation_policy.interval,
                     )
                 ].append(alert)
+        if watchlist_alerts:
+            await self._expand_watchlists(watchlist_alerts, watch_targets, service)
         triggered = 0
-        service = self.market_service_factory()
-        for target in sorted(targets, key=lambda item: (item[0], item[1] or "", item[2])):
+        for target in sorted(set(targets) | set(watch_targets), key=lambda item: (item[0], item[1] or "", item[2])):
             instrument_id, requested_binding_id, interval = target
-            target_alerts = targets[target]
+            target_alerts = targets.get(target, [])
+            symbol_alerts = watch_targets.get(target, [])
             try:
                 response = await asyncio.to_thread(
                     service.bars,
                     instrument_id,
                     interval,
-                    _history_limit(target_alerts),
+                    _history_limit([*target_alerts, *symbol_alerts]),
                     requested_binding_id,
                 )
                 if not response.bars:
@@ -117,22 +136,22 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                 bars = list(response.bars)
                 # Indicator maths is CPU work; keep it off the event loop.
                 outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars)
-                if not outcomes:
+                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars)
+                if not outcomes and not symbol_outcomes:
                     continue
-                triggers = await asyncio.to_thread(
-                    repository.record_outcomes,
-                    AlertEvaluationContext(
-                        instrument_id=instrument_id,
-                        interval=interval,
-                        evaluated_at=datetime.now(timezone.utc),
-                        binding_id=requested_binding_id,
-                        resolved_binding_id=response.binding.binding_id,
-                        provider=response.binding.provider,
-                    ),
-                    outcomes,
+                context = AlertEvaluationContext(
+                    instrument_id=instrument_id,
+                    interval=interval,
+                    evaluated_at=datetime.now(timezone.utc),
+                    binding_id=requested_binding_id,
+                    resolved_binding_id=response.binding.binding_id,
+                    provider=response.binding.provider,
                 )
+                if outcomes:
+                    triggered += len(await asyncio.to_thread(repository.record_outcomes, context, outcomes))
+                if symbol_outcomes:
+                    triggered += len(await asyncio.to_thread(repository.record_watchlist_outcomes, context, symbol_outcomes))
                 self.evaluation_count += 1
-                triggered += len(triggers)
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"
         self.trigger_count += triggered
@@ -140,6 +159,39 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         self.last_error = error
         self.last_run_at = datetime.now(timezone.utc)
         return triggered
+
+    async def _expand_watchlists(
+        self,
+        alerts: list[TradingAlert],
+        watch_targets: dict[tuple[str, str | None, str], list[TradingAlert]],
+        service: TradingMarketDataService,
+    ) -> None:
+        """Each watchlist alert's member symbols, read now, capped by its limit and their providers' budgets."""
+        documents = self.document_repository_factory()
+        members: dict[str, list[str]] = {}
+        counts: dict[str, int] = {}
+
+        def provider_of(symbol: str) -> str | None:
+            try:
+                return service.registry.resolve_binding(symbol).provider
+            except Exception:  # an unknown symbol has no provider budget to respect, and no bars either
+                return None
+
+        for alert in alerts:
+            watchlist_id = alert.watchlist_id or ""
+            if watchlist_id not in members:
+                try:
+                    document = await asyncio.to_thread(documents.get, "watchlist", watchlist_id)
+                except Exception:
+                    document = None
+                members[watchlist_id] = watchlist_members(document)
+            symbols = members[watchlist_id]
+            cap = await asyncio.to_thread(watchlist_symbol_cap, symbols, provider_of, self.interval_seconds)
+            chosen = evaluated_symbols(alert, symbols, cap)
+            counts[alert.alert_id] = len(chosen)
+            for symbol in chosen:
+                watch_targets[(symbol, None, alert.evaluation_policy.interval)].append(alert)
+        self.watchlist_symbol_counts = counts
 
     def diagnostics(self) -> dict[str, Any]:
         return {

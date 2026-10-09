@@ -264,6 +264,9 @@ export const tradingApi = {
     (await trading(api.GET('/api/trading/alerts/indicators'))).indicator_ids,
   alertTriggers: async (): Promise<TradingAlertTrigger[]> =>
     (await trading(api.GET('/api/trading/alerts/triggers', { cache: 'no-store' }))).triggers,
+  /** How many of a watchlist's symbols an alert on it evaluates (TVP-1.7). */
+  watchlistAlertCapacity: (watchlistId: string) =>
+    trading(api.GET('/api/trading/alerts/watchlist-capacity', { params: { query: { watchlist_id: watchlistId } } })),
   createAlert: (input: TradingAlertCreateInput): Promise<TradingAlert> =>
     trading(api.POST('/api/trading/alerts', { body: input })),
   updateAlert: (alert: TradingAlert, input: TradingAlertUpdateInput): Promise<TradingAlert> =>

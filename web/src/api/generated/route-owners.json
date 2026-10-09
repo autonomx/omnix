@@ -449,6 +449,7 @@
     "POST /api/trading/alerts/evaluate": "trading",
     "GET /api/trading/alerts/indicators": "trading",
     "GET /api/trading/alerts/triggers": "trading",
+    "GET /api/trading/alerts/watchlist-capacity": "trading",
     "DELETE /api/trading/alerts/{alert_id}": "trading",
     "PUT /api/trading/alerts/{alert_id}": "trading",
     "GET /api/trading/bars": "trading",

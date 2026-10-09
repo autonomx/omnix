@@ -47734,12 +47734,26 @@
             "minLength": 1,
             "title": "Interval",
             "type": "string"
+          },
+          "symbol_limit": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol Limit"
           }
         },
         "required": [
           "interval",
           "allow_partial_bars",
-          "formula_version"
+          "formula_version",
+          "symbol_limit"
         ],
         "title": "TradingAlertEvaluationPolicy",
         "type": "object"
@@ -47763,6 +47777,19 @@
             "minLength": 1,
             "title": "Interval",
             "type": "string"
+          },
+          "symbol_limit": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol Limit"
           }
         },
         "title": "TradingAlertEvaluationPolicy",
@@ -53604,6 +53631,35 @@
           "pressure_score"
         ],
         "title": "VoiceSessionEvaluationRecord",
+        "type": "object"
+      },
+      "WatchlistAlertCapacity": {
+        "description": "What an alert on a watchlist evaluates (TVP-1.7): the dialog shows it next to the symbol limit.",
+        "properties": {
+          "default_limit": {
+            "title": "Default Limit",
+            "type": "integer"
+          },
+          "provider_cap": {
+            "title": "Provider Cap",
+            "type": "integer"
+          },
+          "symbol_count": {
+            "title": "Symbol Count",
+            "type": "integer"
+          },
+          "watchlist_id": {
+            "title": "Watchlist Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "watchlist_id",
+          "symbol_count",
+          "provider_cap",
+          "default_limit"
+        ],
+        "title": "WatchlistAlertCapacity",
         "type": "object"
       },
       "WorkerHealth": {
@@ -75573,6 +75629,51 @@
           }
         },
         "summary": "List Triggers",
+        "tags": [
+          "trading-alerts"
+        ]
+      }
+    },
+    "/api/trading/alerts/watchlist-capacity": {
+      "get": {
+        "description": "How many of a watchlist's symbols an alert on it evaluates: its symbols, and the cap their providers allow.",
+        "operationId": "watchlist_capacity_api_trading_alerts_watchlist_capacity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Watchlist Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatchlistAlertCapacity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Watchlist Capacity",
         "tags": [
           "trading-alerts"
         ]

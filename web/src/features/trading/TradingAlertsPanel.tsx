@@ -1,3 +1,4 @@
+import { useAlertWatchlistTargets } from './useAlertWatchlistTargets';
 import { useEffect, useMemo, useState } from 'react';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
 import {
@@ -324,10 +325,11 @@ export function TradingAlertsPanel({
     if (!editor || editor.mode !== 'create') return;
     const threshold = Number(editor.threshold);
     if (!Number.isFinite(threshold)) return void setStatus('error');
+    const target = editor.target ?? instrumentId; const onList = target.startsWith('watchlist:'); // TVP-1.7: on each symbol's own feed
     const input = chartAlertCreateInput({
       alertId: `panel-alert-${crypto.randomUUID()}`,
-      instrumentId,
-      bindingId,
+      instrumentId: target,
+      bindingId: onList ? null : bindingId,
       interval,
       threshold,
       latestPrice: Number.NaN,
@@ -351,7 +353,7 @@ export function TradingAlertsPanel({
 
   const activeAlert = alerts.find((alert) => alert.instrument_id === instrumentId);
   const dialogAlert = editor?.mode === 'edit' ? alerts.find((alert) => alert.alert_id === editor.alertId) : null;
-  const dialogSymbol = symbolForInstrumentId(dialogAlert?.instrument_id ?? instrumentId);
+  const dialogSymbol = symbolForInstrumentId(dialogAlert?.instrument_id ?? instrumentId); const listTargets = useAlertWatchlistTargets(instrumentId, dialogSymbol, editor?.target);
   const dialogLatestPrice = Number(activeAlert?.last_observed_value ?? Number.NaN);
 
   return (
@@ -384,7 +386,7 @@ export function TradingAlertsPanel({
             <>
               <ul className="trading-alert-list">
                 {visibleAlerts.map((alert) => {
-                const symbol = symbolForInstrumentId(alert.instrument_id);
+                const symbol = listTargets.labelFor(alert.instrument_id) ?? symbolForInstrumentId(alert.instrument_id);
                 const title = alertTitle(alert);
                 const state = alertStatus(alert);
                 return (
@@ -500,7 +502,7 @@ export function TradingAlertsPanel({
             status={status}
             onChange={(patch) => setEditor((current) => current ? { ...current, ...patch } : current)}
             onSubmit={() => void (editor.mode === 'create' ? createAlert() : saveEditor())}
-            onClose={() => setEditor(null)}
+            onClose={() => setEditor(null)} targetChoices={editor.mode === 'create' ? listTargets.choices : undefined} targetNote={listTargets.note}
           />
         </div>
       ) : null}
