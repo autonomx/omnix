@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useAlertWatchlistTargets } from './useAlertWatchlistTargets';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
 import {
   alertConditionsSummary,
@@ -51,6 +52,7 @@ const indicatorLabels: Record<string, string> = {
 };
 
 function symbolForInstrumentId(instrumentId: string): string {
+  if (instrumentId.startsWith('watchlist:')) return 'Watchlist';
   const symbol = instrumentId.split(':').at(-1) ?? instrumentId;
   return symbol.replace(/[-_/]/g, '').toUpperCase();
 }
@@ -244,19 +246,21 @@ export function TradingAlertsPanel({
     }
   };
 
+  const dialogAlert = editor?.mode === 'edit' ? alerts.find((alert) => alert.alert_id === editor.alertId) : null; const dialogSymbol = symbolForInstrumentId(dialogAlert?.instrument_id ?? instrumentId);
+  const listTargets = useAlertWatchlistTargets(instrumentId, dialogSymbol, editor?.target); const { labelFor } = listTargets; const symbolOf = useCallback((id: string) => labelFor(id) ?? symbolForInstrumentId(id), [labelFor]); // a list alert shows its list name
   const alertById = useMemo(() => new Map(alerts.map((alert) => [alert.alert_id, alert])), [alerts]);
   const query = search.trim().toLowerCase();
   const visibleAlerts = useMemo(() => {
     const filtered = alerts.filter((alert) => {
       if (!query) return true;
-      const symbol = symbolForInstrumentId(alert.instrument_id).toLowerCase();
+      const symbol = symbolOf(alert.instrument_id).toLowerCase();
       return `${symbol} ${alertTitle(alert)} ${alert.parameters.message ?? ''}`.toLowerCase().includes(query);
     });
     return filtered.sort((left, right) => {
-      if (sortBySymbol) return symbolForInstrumentId(left.instrument_id).localeCompare(symbolForInstrumentId(right.instrument_id));
+      if (sortBySymbol) return symbolOf(left.instrument_id).localeCompare(symbolOf(right.instrument_id));
       return (right.last_triggered_at ?? '').localeCompare(left.last_triggered_at ?? '');
     });
-  }, [alerts, query, sortBySymbol]);
+  }, [alerts, query, sortBySymbol, symbolOf]);
 
   const groupedLogs = useMemo(() => {
     const groups = new Map<string, TradingAlertTrigger[]>();
@@ -324,10 +328,11 @@ export function TradingAlertsPanel({
     if (!editor || editor.mode !== 'create') return;
     const threshold = Number(editor.threshold);
     if (!Number.isFinite(threshold)) return void setStatus('error');
+    const target = editor.target ?? instrumentId; const onList = target.startsWith('watchlist:'); // TVP-1.7: on each symbol's own feed
     const input = chartAlertCreateInput({
       alertId: `panel-alert-${crypto.randomUUID()}`,
-      instrumentId,
-      bindingId,
+      instrumentId: target,
+      bindingId: onList ? null : bindingId,
       interval,
       threshold,
       latestPrice: Number.NaN,
@@ -350,8 +355,6 @@ export function TradingAlertsPanel({
   };
 
   const activeAlert = alerts.find((alert) => alert.instrument_id === instrumentId);
-  const dialogAlert = editor?.mode === 'edit' ? alerts.find((alert) => alert.alert_id === editor.alertId) : null;
-  const dialogSymbol = symbolForInstrumentId(dialogAlert?.instrument_id ?? instrumentId);
   const dialogLatestPrice = Number(activeAlert?.last_observed_value ?? Number.NaN);
 
   return (
@@ -384,7 +387,7 @@ export function TradingAlertsPanel({
             <>
               <ul className="trading-alert-list">
                 {visibleAlerts.map((alert) => {
-                const symbol = symbolForInstrumentId(alert.instrument_id);
+                const symbol = symbolOf(alert.instrument_id);
                 const title = alertTitle(alert);
                 const state = alertStatus(alert);
                 return (
@@ -437,7 +440,7 @@ export function TradingAlertsPanel({
                 >
                   {(() => {
                     const alert = tooltip.alert;
-                    const symbol = symbolForInstrumentId(alert.instrument_id);
+                    const symbol = symbolOf(alert.instrument_id);
                     const title = alertTitle(alert);
                     const state = alertStatus(alert);
                     return (
@@ -500,7 +503,7 @@ export function TradingAlertsPanel({
             status={status}
             onChange={(patch) => setEditor((current) => current ? { ...current, ...patch } : current)}
             onSubmit={() => void (editor.mode === 'create' ? createAlert() : saveEditor())}
-            onClose={() => setEditor(null)}
+            onClose={() => setEditor(null)} targetChoices={editor.mode === 'create' ? listTargets.choices : undefined} targetNote={listTargets.note}
           />
         </div>
       ) : null}

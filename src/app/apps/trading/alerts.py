@@ -25,7 +25,9 @@ from .alert_conditions import (
     ChannelTarget,
     PriceSource,
     TrendlineAlertPoint,
+    TrendlineSource,
     ValueTarget,
+    condition_sources,
     legacy_conditions,
     validate_conditions_against_registry,
 )
@@ -146,12 +148,47 @@ class TradingAlertParameters(BaseModel):
     trendline_mode: TrendlineMode | None = None
 
 
+# Watchlist alerts (TVP-1.7): an alert on every symbol of a watchlist has the instrument ``watchlist:<record id>``.
+WATCHLIST_INSTRUMENT_PREFIX = "watchlist:"
+# The most symbols one watchlist alert evaluates; the default and each provider's own cap are lower.
+WATCHLIST_SYMBOL_MAX = 1_000
+WATCHLIST_SYMBOL_DEFAULT = 100
+
+
+def watchlist_id_of(instrument_id: str) -> str | None:
+    """The watchlist record id of a watchlist alert's instrument, or None for an ordinary alert."""
+    if not instrument_id.startswith(WATCHLIST_INSTRUMENT_PREFIX):
+        return None
+    record_id = instrument_id[len(WATCHLIST_INSTRUMENT_PREFIX):]
+    return record_id or None
+
+
+def watchlist_symbols(payload: Mapping[str, Any]) -> list[str]:
+    """A watchlist document's symbols, in list order and once each (``instrumentIds``, else its symbol items)."""
+    raw = payload.get("instrumentIds")
+    if not isinstance(raw, list):
+        raw = [item.get("instrumentId") for item in payload.get("items", []) if isinstance(item, dict) and item.get("type") == "symbol"]
+    symbols: list[str] = []
+    for value in raw:
+        if isinstance(value, str) and value and not value.startswith(WATCHLIST_INSTRUMENT_PREFIX) and value not in symbols:
+            symbols.append(value)
+    return symbols
+
+
 class TradingAlertEvaluationPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     interval: str = Field(default="1m", min_length=1, max_length=16)
     allow_partial_bars: bool = False
     formula_version: str = CORE_INDICATOR_FORMULA_VERSION
+    # Watchlist alerts (TVP-1.7): the most symbols of the list evaluated, in list order; the server also caps it by
+    # what the symbols' providers can serve each pass (``watchlist_symbol_cap``). Stored only when set.
+    symbol_limit: int | None = Field(default=None, ge=1, le=WATCHLIST_SYMBOL_MAX)
+
+
+def policy_json(policy: TradingAlertEvaluationPolicy) -> str:
+    """The policy as stored: without unset optional fields, so alerts written before them keep the same JSON."""
+    return policy.model_dump_json(exclude_none=True)
 
 
 # Settings that say how an alert notifies, not when it fires. They are stored
@@ -215,6 +252,11 @@ class TradingAlert(_AlertContract):
     def webhook_ref(self) -> str | None:
         return self._webhook_ref
 
+    @property
+    def watchlist_id(self) -> str | None:
+        """The watchlist a watchlist alert watches (TVP-1.7): its instrument is ``watchlist:<record id>``."""
+        return watchlist_id_of(self.instrument_id)
+
     def is_expired(self, at: datetime | None = None) -> bool:
         if self.expires_at is None:
             return False
@@ -255,6 +297,16 @@ class _AlertWrite(_AlertContract):
                     "conditions disagree with the legacy condition_type; send condition_type 'conditions'"
                 )
             self.conditions = derived
+        if self.instrument_id.startswith(WATCHLIST_INSTRUMENT_PREFIX) and watchlist_id_of(self.instrument_id) is None:
+            raise ValueError("a watchlist alert names its watchlist: watchlist:<record id>")
+        if watchlist_id_of(self.instrument_id) is not None:
+            # One definition for every symbol of a list: a trendline is drawn on one symbol's chart.
+            if any(isinstance(source, TrendlineSource) for condition in self.conditions for source in condition_sources(condition)):
+                raise ValueError("a watchlist alert cannot use a trendline")
+            if self.binding_id is not None:
+                raise ValueError("a watchlist alert uses each symbol's own feed, not a binding")
+        elif self.evaluation_policy.symbol_limit is not None:
+            raise ValueError("symbol_limit is for watchlist alerts")
         validate_conditions_against_registry(self.conditions)
         validate_conditions_can_fire(self.conditions)
         # Only "once per bar close" waits for closed bars; every other frequency
@@ -767,7 +819,7 @@ class TradingAlertRepository:
                     request.condition_type,
                     request.threshold,
                     condition_parameters,
-                    request.evaluation_policy.model_dump_json(),
+                    policy_json(request.evaluation_policy),
                     request.cooldown_seconds,
                     request.expires_at,
                     request.frequency,
@@ -790,6 +842,10 @@ class TradingAlertRepository:
         condition_parameters, notification_settings = _split_parameters(request.parameters, webhook_ref)
         with self.uow_factory() as uow:
             previous_conditions = self._stored_conditions(uow.connection, alert_id)
+            was_enabled = uow.connection.execute(
+                "SELECT enabled FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id = %s",
+                (self.context.workspace_id, alert_id),
+            ).fetchone()
             row = uow.connection.execute(
                 f"""
                 UPDATE omnix_trading_alerts
@@ -810,7 +866,7 @@ class TradingAlertRepository:
                     request.condition_type,
                     request.threshold,
                     condition_parameters,
-                    request.evaluation_policy.model_dump_json(),
+                    policy_json(request.evaluation_policy),
                     request.enabled,
                     request.cooldown_seconds,
                     request.expires_at,
@@ -841,6 +897,12 @@ class TradingAlertRepository:
                     (self.context.workspace_id, alert_id),
                 ).fetchone()
                 self._write_conditions(uow.connection, alert_id, request.conditions)
+            if request.enabled and was_enabled is not None and not was_enabled[0] and watchlist_id_of(request.instrument_id) is not None:
+                # Re-enabling a watchlist alert re-arms it on every symbol ('once' fired there, cooldowns).
+                uow.connection.execute(
+                    "DELETE FROM omnix_trading_alert_symbol_states WHERE workspace_id = %s AND alert_id = %s",
+                    (self.context.workspace_id, alert_id),
+                )
             uow.commit()
             return _alert(row, request.conditions)
 
@@ -907,7 +969,7 @@ class TradingAlertRepository:
         triggers: list[TradingAlertTrigger] = []
         with self.uow_factory() as uow:
             for alert in self._locked_alerts(uow.connection, evaluation.instrument_id, evaluation.evaluated_at):
-                if alert.binding_id and alert.binding_id != evaluation.binding_id:
+                if alert.watchlist_id is not None or (alert.binding_id and alert.binding_id != evaluation.binding_id):
                     continue
                 if alert.evaluation_policy.interval != evaluation.interval:
                     continue
@@ -936,13 +998,209 @@ class TradingAlertRepository:
             for alert in self._locked_alerts(uow.connection, context.instrument_id, context.evaluated_at):
                 record = by_alert.get(alert.alert_id)
                 # An alert edited since its bars were evaluated waits for the next pass.
-                if record is None or record.revision != alert.revision:
+                if record is None or record.revision != alert.revision or alert.watchlist_id is not None:
                     continue
                 trigger = self._apply(uow.connection, alert, record.outcome, context)
                 if trigger is not None:
                     triggers.append(trigger)
             uow.commit()
         return triggers
+
+    def record_watchlist_outcomes(
+        self,
+        context: AlertEvaluationContext,
+        outcomes: Iterable[AlertOutcomeRecord],
+    ) -> list[TradingAlertTrigger]:
+        """Watchlist alerts' outcomes on one symbol (``context.instrument_id``), with that symbol's own state (TVP-1.7).
+
+        Frequency, cooldown and ``once`` apply per symbol: the alert stays on when one symbol fires once, and its
+        trigger key names the symbol, so each symbol fires on its own.
+        """
+        records = list(outcomes)
+        triggers: list[TradingAlertTrigger] = []
+        if not records:
+            return triggers
+        symbol = context.instrument_id
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(
+                f"""
+                SELECT {_ALERT_COLUMNS}
+                  FROM omnix_trading_alerts
+                 WHERE workspace_id = %s AND alert_id = ANY(%s) AND enabled = TRUE
+                   AND (expires_at IS NULL OR expires_at > %s)
+                 ORDER BY alert_id
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, [record.alert_id for record in records], context.evaluated_at),
+            ).fetchall()
+            by_alert = {record.alert_id: record for record in records}
+            for alert in self._alerts(uow.connection, rows):
+                record = by_alert.get(alert.alert_id)
+                # An alert edited since its bars were evaluated waits for the next pass.
+                if record is None or record.revision != alert.revision or alert.watchlist_id is None:
+                    continue
+                trigger = self._apply_symbol(uow.connection, alert, symbol, record.outcome, context)
+                if trigger is not None:
+                    triggers.append(trigger)
+            uow.commit()
+        return triggers
+
+    def _apply_symbol(
+        self,
+        connection,
+        alert: TradingAlert,
+        symbol: str,
+        outcome: AlertConditionOutcome,
+        context: AlertEvaluationContext,
+    ) -> TradingAlertTrigger | None:
+        final_only = alert.frequency == "once_per_bar_close" or not alert.evaluation_policy.allow_partial_bars
+        if final_only and not outcome.bar_is_final:
+            return None
+        state = connection.execute(
+            """
+            SELECT alert_revision, definition_revision, last_triggered_at, fired_once
+              FROM omnix_trading_alert_symbol_states
+             WHERE workspace_id = %s AND alert_id = %s AND instrument_id = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, alert.alert_id, symbol),
+        ).fetchone()
+        # A state written under an older definition starts afresh; notification edits keep it, and re-enabling the
+        # alert deletes it (``update``), so 'once' fires again on each symbol.
+        current = state is not None and int(state[1]) == alert.definition_revision
+        last_triggered_at = state[2] if current else None
+        fired_once = current and bool(state[3])
+        evaluated_at = context.evaluated_at
+        should_trigger = (
+            outcome.met
+            and not fired_once
+            and not (outcome.bar_is_final and alert.updated_at is not None and outcome.bar_end <= alert.updated_at)
+            and cooldown_elapsed(last_triggered_at, evaluated_at, alert.cooldown_seconds)
+            and frequency_allows(alert.frequency, last_triggered_at, evaluated_at)
+        )
+        inserted_trigger: TradingAlertTrigger | None = None
+        if should_trigger:
+            # The symbol is part of the key, so each symbol of the list fires on its own. 'once' is keyed by the
+            # definition and bar, not the revision: the symbol's state says whether it fired, and a notification
+            # edit (a new revision) must not fire it again.
+            scope = f"{alert.alert_id}|{symbol}"
+            if alert.frequency == "once":
+                scope += "|" + outcome.bar_start.astimezone(timezone.utc).isoformat()
+            key = alert_trigger_key(
+                scope,
+                alert.frequency,
+                outcome,
+                revision=alert.definition_revision,
+                definition_revision=alert.definition_revision,
+            )
+            inserted_trigger = self._record_trigger(connection, alert.model_copy(update={"instrument_id": symbol}), outcome, context, key)
+            if inserted_trigger is not None:
+                last_triggered_at = evaluated_at
+                fired_once = alert.frequency == "once"
+        connection.execute(
+            """
+            INSERT INTO omnix_trading_alert_symbol_states (
+                workspace_id, alert_id, instrument_id, alert_revision, definition_revision,
+                last_observed_price, last_observed_value, last_triggered_at, fired_once
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (workspace_id, alert_id, instrument_id) DO UPDATE
+               SET alert_revision = EXCLUDED.alert_revision,
+                   definition_revision = EXCLUDED.definition_revision,
+                   last_observed_price = EXCLUDED.last_observed_price,
+                   last_observed_value = COALESCE(EXCLUDED.last_observed_value, omnix_trading_alert_symbol_states.last_observed_value),
+                   last_triggered_at = EXCLUDED.last_triggered_at,
+                   fired_once = EXCLUDED.fired_once,
+                   updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                self.context.workspace_id, alert.alert_id, symbol, alert.revision, alert.definition_revision,
+                outcome.close, outcome.primary_value, last_triggered_at, fired_once,
+            ),
+        )
+        if inserted_trigger is not None:
+            # The alert's own row shows when any of its symbols last fired.
+            connection.execute(
+                "UPDATE omnix_trading_alerts SET last_triggered_at = %s WHERE workspace_id = %s AND alert_id = %s",
+                (evaluated_at, self.context.workspace_id, alert.alert_id),
+            )
+        return inserted_trigger
+
+    def _record_trigger(
+        self,
+        connection,
+        alert: TradingAlert,
+        outcome: AlertConditionOutcome,
+        context: AlertEvaluationContext,
+        key: str,
+    ) -> TradingAlertTrigger | None:
+        """Insert a trigger with this idempotency key and its outbox rows; None when the key was already used.
+
+        For a watchlist alert ``alert`` is a copy whose instrument is the symbol that fired (TVP-1.7).
+        """
+        evaluated_at = context.evaluated_at
+        primary_value = outcome.primary_value
+        resolved_binding_id = context.resolved_binding_id or context.binding_id
+        payload = {
+            "instrument_id": alert.instrument_id,
+            "condition_type": alert.condition_type,
+            "frequency": alert.frequency,
+            "conditions": [condition.model_dump(mode="json") for condition in alert.conditions],
+            "observations": outcome.observation_payload(),
+            "condition_parameters": alert.parameters.model_dump(mode="json"),
+            "evaluation_policy": alert.evaluation_policy.model_dump(mode="json", exclude_none=True),
+            "provider": context.provider,
+            "requested_binding_id": context.binding_id,
+            "resolved_binding_id": resolved_binding_id,
+            "bar_start": outcome.bar_start.isoformat(),
+            "bar_is_final": outcome.bar_is_final,
+            "source_time": outcome.bar_end.isoformat(),
+            "evaluation_time": evaluated_at.isoformat(),
+            "previous_value": str(outcome.observations[0].source_previous) if outcome.observations else None,
+            "observed_value": str(primary_value),
+            "threshold": str(alert.threshold),
+            "expires_at": alert.expires_at.isoformat() if alert.expires_at else None,
+            "interval": context.interval,
+        }
+        # The message with its placeholders filled in, as every channel shows it (TVP-1.5).
+        names, plots = message_values(alert, outcome, interval=context.interval, evaluated_at=evaluated_at)
+        payload["message"] = render_alert_message(alert.parameters.message.strip(), names, plots)
+        inserted = connection.execute(
+            f"""
+            INSERT INTO omnix_trading_alert_triggers (
+                workspace_id, trigger_id, alert_id, instrument_id,
+                binding_id, provider, observed_value, observed_price,
+                threshold, condition_type, observed_at, evaluated_at,
+                idempotency_key, payload
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s::jsonb
+            )
+            ON CONFLICT (workspace_id, idempotency_key) DO NOTHING
+            RETURNING {_TRIGGER_COLUMNS}
+            """,
+            (
+                self.context.workspace_id,
+                key[:32],
+                alert.alert_id,
+                alert.instrument_id,
+                resolved_binding_id,
+                context.provider,
+                primary_value if primary_value is not None else outcome.close,
+                outcome.close,
+                alert.threshold,
+                alert.condition_type,
+                outcome.bar_end,
+                evaluated_at,
+                key,
+                json.dumps(payload),
+            ),
+        ).fetchone()
+        if inserted is not None:
+            inserted_trigger = _trigger(inserted)
+            # The outbox rows commit with the trigger: no trigger is lost or delivered twice by the outbox.
+            enqueue_alert_deliveries(connection, self.context.workspace_id, alert, inserted_trigger)
+            return inserted_trigger
+        return None
 
     def _apply(
         self,
@@ -974,66 +1232,8 @@ class TradingAlertRepository:
                 revision=alert.revision,
                 definition_revision=alert.definition_revision,
             )
-            resolved_binding_id = context.resolved_binding_id or context.binding_id
-            payload = {
-                "instrument_id": alert.instrument_id,
-                "condition_type": alert.condition_type,
-                "frequency": alert.frequency,
-                "conditions": [condition.model_dump(mode="json") for condition in alert.conditions],
-                "observations": outcome.observation_payload(),
-                "condition_parameters": alert.parameters.model_dump(mode="json"),
-                "evaluation_policy": alert.evaluation_policy.model_dump(mode="json"),
-                "provider": context.provider,
-                "requested_binding_id": context.binding_id,
-                "resolved_binding_id": resolved_binding_id,
-                "bar_start": outcome.bar_start.isoformat(),
-                "bar_is_final": outcome.bar_is_final,
-                "source_time": outcome.bar_end.isoformat(),
-                "evaluation_time": evaluated_at.isoformat(),
-                "previous_value": str(outcome.observations[0].source_previous) if outcome.observations else None,
-                "observed_value": str(primary_value),
-                "threshold": str(alert.threshold),
-                "expires_at": alert.expires_at.isoformat() if alert.expires_at else None,
-                "interval": context.interval,
-            }
-            # The message with its placeholders filled in, as every channel shows it (TVP-1.5).
-            names, plots = message_values(alert, outcome, interval=context.interval, evaluated_at=evaluated_at)
-            payload["message"] = render_alert_message(alert.parameters.message.strip(), names, plots)
-            inserted = connection.execute(
-                f"""
-                INSERT INTO omnix_trading_alert_triggers (
-                    workspace_id, trigger_id, alert_id, instrument_id,
-                    binding_id, provider, observed_value, observed_price,
-                    threshold, condition_type, observed_at, evaluated_at,
-                    idempotency_key, payload
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s::jsonb
-                )
-                ON CONFLICT (workspace_id, idempotency_key) DO NOTHING
-                RETURNING {_TRIGGER_COLUMNS}
-                """,
-                (
-                    self.context.workspace_id,
-                    key[:32],
-                    alert.alert_id,
-                    alert.instrument_id,
-                    resolved_binding_id,
-                    context.provider,
-                    primary_value if primary_value is not None else outcome.close,
-                    outcome.close,
-                    alert.threshold,
-                    alert.condition_type,
-                    outcome.bar_end,
-                    evaluated_at,
-                    key,
-                    json.dumps(payload),
-                ),
-            ).fetchone()
-            if inserted is not None:
-                inserted_trigger = _trigger(inserted)
-                # The outbox rows commit with the trigger: no trigger is lost or delivered twice by the outbox.
-                enqueue_alert_deliveries(connection, self.context.workspace_id, alert, inserted_trigger)
+            inserted_trigger = self._record_trigger(connection, alert, outcome, context, key)
+            if inserted_trigger is not None:
                 triggered_at = evaluated_at
                 if alert.frequency == "once":
                     enabled = False

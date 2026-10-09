@@ -49,6 +49,8 @@ export type TradingAlertEditorState = AlertDeliveryEditor & {
   conditionsEditable?: boolean;
   /** Why the conditions can't be saved (shown until the conditions change). */
   conditionError?: string;
+  /** What a new alert applies to: the chart's instrument, or `watchlist:<id>` for every symbol of a list (TVP-1.7). */
+  target?: string;
 }
 
 /** Whether "Add condition" can add one, or why not. */
@@ -124,6 +126,8 @@ export function TradingAlertDialog({
   onToggle,
   onArchive,
   indicatorChoices,
+  targetChoices,
+  targetNote,
 }: {
   editor: TradingAlertEditorState;
   symbol: string;
@@ -136,6 +140,9 @@ export function TradingAlertDialog({
   onArchive?: () => void;
   /** The chart's indicators (TVP-1.3); without them the dialog offers the legacy indicator list. */
   indicatorChoices?: readonly AlertIndicatorChoice[];
+  /** What a new alert can apply to (TVP-1.7): this symbol or a watchlist; and what a list alert runs on. */
+  targetChoices?: ReadonlyArray<{ value: string; label: string }>;
+  targetNote?: string | null;
 }) {
   // On a chart with indicators, an indicator alert is on one of them (unless editing a legacy alert).
   const usesChartIndicators = Boolean(indicatorChoices?.length) && editor.mode === 'create' && editor.condition.startsWith('indicator_');
@@ -174,6 +181,10 @@ export function TradingAlertDialog({
       <div className="trading-alert-dialog-body">
         <section className="trading-alert-condition-section" aria-label="Alert condition">
           <div className="trading-alert-section-heading"><strong>Condition</strong><span>Price, indicator, or volume</span></div>
+          {targetChoices && targetChoices.length > 1 && editor.mode === 'create' ? (
+            <div className="trading-alert-condition-row"><select aria-label="Alert applies to" value={editor.target ?? targetChoices[0].value} onChange={(event) => onChange({ target: event.target.value })}>{targetChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></div>
+          ) : null}
+          {targetNote && editor.target?.startsWith('watchlist:') ? <small className="trading-alert-condition-note">{targetNote}</small> : null}
           {isConditions && editor.conditionsEditable !== false && drafts.length > 0 ? (
             <AlertConditionRows drafts={drafts} firstNumber={1} minimum={1} choices={indicatorChoices ?? []} onChange={(conditionDrafts) => { setConditionNote(null); onChange({ conditionDrafts, conditionError: undefined }); }} />
           ) : isConditions ? (

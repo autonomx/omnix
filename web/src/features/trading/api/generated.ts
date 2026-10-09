@@ -110,6 +110,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/alerts/watchlist-capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Watchlist Capacity
+         * @description How many of a watchlist's symbols an alert on it evaluates: its symbols, and the cap their providers allow.
+         */
+        get: operations["watchlist_capacity_api_trading_alerts_watchlist_capacity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/alerts/{alert_id}": {
         parameters: {
             query?: never;
@@ -10916,6 +10936,8 @@ export interface components {
              * @default 1m
              */
             interval: string;
+            /** Symbol Limit */
+            symbol_limit: number | null;
         };
         /** TradingAlertEvaluationPolicy */
         "TradingAlertEvaluationPolicy-Input": {
@@ -10934,6 +10956,8 @@ export interface components {
              * @default 1m
              */
             interval?: string;
+            /** Symbol Limit */
+            symbol_limit?: number | null;
         };
         /** TradingAlertIndicatorListResponse */
         TradingAlertIndicatorListResponse: {
@@ -12560,6 +12584,20 @@ export interface components {
              */
             session_regime_version: string;
         };
+        /**
+         * WatchlistAlertCapacity
+         * @description What an alert on a watchlist evaluates (TVP-1.7): the dialog shows it next to the symbol limit.
+         */
+        WatchlistAlertCapacity: {
+            /** Default Limit */
+            default_limit: number;
+            /** Provider Cap */
+            provider_cap: number;
+            /** Symbol Count */
+            symbol_count: number;
+            /** Watchlist Id */
+            watchlist_id: string;
+        };
         /** WorkerHealth */
         WorkerHealth: core["schemas"]["WorkerHealth"];
         /** WorkerHealthPayload */
@@ -12774,6 +12812,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingAlertTriggerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_capacity_api_trading_alerts_watchlist_capacity_get: {
+        parameters: {
+            query: {
+                watchlist_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistAlertCapacity"];
                 };
             };
             /** @description Validation Error */

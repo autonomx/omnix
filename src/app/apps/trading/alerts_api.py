@@ -11,7 +11,13 @@ from pydantic import BaseModel
 from app.errors import LegacyPersistenceRetired
 from app.persistence.errors import RevisionConflict
 
+from .alerts_monitor import alert_monitor_interval_seconds
+from .alerts_watchlist import watchlist_members, watchlist_symbol_cap
+from .repositories import TradingDocumentRepository, default_trading_repository
+from .service import TradingMarketDataService, default_market_data_service
 from .alerts import (
+    WATCHLIST_SYMBOL_DEFAULT,
+    watchlist_id_of,
     TradingAlert,
     TradingAlertCreate,
     TradingAlertEvaluation,
@@ -54,6 +60,16 @@ class TradingAlertDeliveryListResponse(BaseModel):
     deliveries: list[NotificationDelivery]
 
 
+class WatchlistAlertCapacity(BaseModel):
+    """What an alert on a watchlist evaluates (TVP-1.7): the dialog shows it next to the symbol limit."""
+
+    watchlist_id: str
+    symbol_count: int
+    # The most symbols a pass fetches for this list within its providers' request budgets.
+    provider_cap: int
+    default_limit: int
+
+
 AlertRepositoryFactory = Callable[[], TradingAlertRepository]
 
 
@@ -84,6 +100,8 @@ def create_trading_alert_router(
     webhook_store: AlertWebhookStore | None = None,
     available_channels: Iterable[str] = AVAILABLE_ALERT_CHANNELS,
     delivery_repository_factory: Callable[[], NotificationDeliveryRepository] = default_delivery_repository,
+    document_repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
+    market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/alerts", tags=["trading-alerts"])
     channels = frozenset(available_channels)
@@ -160,8 +178,37 @@ def create_trading_alert_router(
         listing = repository_factory().list_alerts_report(limit=limit)
         return TradingAlertListResponse(alerts=listing.alerts, unreadable=listing.unreadable)
 
+    def watchlist_or_422(watchlist_id: str | None) -> list[str]:
+        """A watchlist alert's watchlist must exist; its members, read now (TVP-1.7)."""
+        if watchlist_id is None:
+            return []
+        document = document_repository_factory().get("watchlist", watchlist_id)
+        if not document or document.get("status", "active") != "active":
+            raise HTTPException(status_code=422, detail=f"watchlist {watchlist_id} was not found")
+        return watchlist_members(document) or []
+
+    @router.get("/watchlist-capacity", response_model=WatchlistAlertCapacity)
+    def watchlist_capacity(watchlist_id: str = Query(min_length=1, max_length=200)) -> WatchlistAlertCapacity:
+        """How many of a watchlist's symbols an alert on it evaluates: its symbols, and the cap their providers allow."""
+        symbols = watchlist_or_422(watchlist_id)
+        registry = market_service_factory().registry
+
+        def provider_of(symbol: str) -> str | None:
+            try:
+                return registry.resolve_binding(symbol).provider
+            except Exception:
+                return None
+
+        return WatchlistAlertCapacity(
+            watchlist_id=watchlist_id,
+            symbol_count=len(symbols),
+            provider_cap=watchlist_symbol_cap(symbols, provider_of, alert_monitor_interval_seconds()),
+            default_limit=WATCHLIST_SYMBOL_DEFAULT,
+        )
+
     @router.post("", response_model=TradingAlert, status_code=201)
     def create_alert(request: TradingAlertCreate) -> TradingAlert:
+        watchlist_or_422(watchlist_id_of(request.instrument_id))
         repository = repository_factory()
         workspace_id = repository.context.workspace_id
         alert_id = request.alert_id
@@ -241,6 +288,9 @@ def create_trading_alert_router(
                 previous = repository.get(alert_id) if state.exists else None
                 if previous is None or previous.revision != if_match:
                     raise RevisionConflict(f"Trading alert expected revision {if_match}: {alert_id}")
+                # An alert whose watchlist was deleted can still be disabled or edited; it can't be (re)enabled on it.
+                if request.enabled or request.instrument_id != previous.instrument_id:
+                    watchlist_or_422(watchlist_id_of(request.instrument_id))
                 plan = plan_webhook(request, state.webhook_ref, workspace_id, alert_id)
                 updated = repository.update(alert_id, request, expected_revision=if_match, webhook_ref=plan.ref)
         except Exception as exc:
