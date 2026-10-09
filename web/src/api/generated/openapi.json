@@ -49488,7 +49488,12 @@
               "sma",
               "ema",
               "rsi",
-              "atr"
+              "atr",
+              "indicator",
+              "relative_volume",
+              "gap_percent",
+              "high_distance_percent",
+              "low_distance_percent"
             ],
             "title": "Metric",
             "type": "string"
@@ -49510,11 +49515,30 @@
             "title": "Period",
             "type": "integer"
           },
+          "role": {
+            "default": "filter",
+            "enum": [
+              "filter",
+              "column"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
           "rule_id": {
             "maxLength": 100,
             "minLength": 1,
             "title": "Rule Id",
             "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IndicatorSource-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "threshold": {
             "anyOf": [
@@ -49556,7 +49580,12 @@
               "sma",
               "ema",
               "rsi",
-              "atr"
+              "atr",
+              "indicator",
+              "relative_volume",
+              "gap_percent",
+              "high_distance_percent",
+              "low_distance_percent"
             ],
             "title": "Metric",
             "type": "string"
@@ -49578,11 +49607,30 @@
             "title": "Period",
             "type": "integer"
           },
+          "role": {
+            "default": "filter",
+            "enum": [
+              "filter",
+              "column"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
           "rule_id": {
             "maxLength": 100,
             "minLength": 1,
             "title": "Rule Id",
             "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IndicatorSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "threshold": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -49596,7 +49644,9 @@
           "operator",
           "threshold",
           "period",
-          "lookback_bars"
+          "lookback_bars",
+          "role",
+          "source"
         ],
         "title": "TradingScannerRule",
         "type": "object"

@@ -1,3 +1,4 @@
+import { useWatchlistAddRequests } from './tradingWatchlistEvents';
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument, ProviderBinding } from './tradingTypes';
@@ -136,6 +137,9 @@ export function TradingWatchlist({
     if (flagColor) void setFlag([normalizedActiveInstrumentId], flagColor);
     else if (!instrumentIds.includes(normalizedActiveInstrumentId)) commit((payload) => addWatchlistSymbols(payload, [normalizedActiveInstrumentId]));
   }, () => Boolean(normalizedActiveInstrumentId) && status !== 'loading' && (flagColor != null || (selected != null && !readOnly)));
+
+  // The screener's "add to the watchlist" (TVP-9.1): one edit; the list keeps each symbol once (normalizeItems).
+  useWatchlistAddRequests((ids) => commit((payload) => addWatchlistSymbols(payload, ids.map(binanceInstrumentIdFor))), editable && selected != null && status !== 'loading');
 
   const addInstrument = async (instrument: CanonicalInstrument) => {
     const instrumentId = binanceInstrumentIdFor(instrument.instrument_id);

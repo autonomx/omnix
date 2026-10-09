@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, Protocol
 
@@ -17,10 +17,18 @@ from .indicators.engine import (
     relative_strength_index,
     simple_moving_average,
 )
+from .alert_conditions import IndicatorSource, validate_indicator_source
 from .models import BarsResponse, MarketBar
 
 
-ScannerMetric = Literal["close", "percent_change", "volume", "sma", "ema", "rsi", "atr"]
+# TVP-9.1: any registry indicator line ("indicator", with a source), relative volume, gap % and the distance
+# from the period's high or low (a 252-bar period on daily bars is the 52-week high/low).
+ScannerMetric = Literal[
+    "close", "percent_change", "volume", "sma", "ema", "rsi", "atr",
+    "indicator", "relative_volume", "gap_percent", "high_distance_percent", "low_distance_percent",
+]
+# A filter must match; a column is computed and shown only.
+ScannerRuleRole = Literal["filter", "column"]
 ScannerOperator = Literal["gt", "gte", "lt", "lte"]
 ScannerRunStatus = Literal["queued", "running", "completed", "failed", "cancelled", "timed_out"]
 
@@ -34,6 +42,17 @@ class TradingScannerRule(BaseModel):
     threshold: Decimal
     period: int = Field(default=14, ge=1, le=500)
     lookback_bars: int = Field(default=1, ge=1, le=499)
+    role: ScannerRuleRole = "filter"
+    # The indicator, inputs and line of an "indicator" rule (validated against the server registry).
+    source: IndicatorSource | None = None
+
+    @model_validator(mode="after")
+    def validate_source(self):
+        if (self.metric == "indicator") != (self.source is not None):
+            raise ValueError("an indicator rule needs a source, and only an indicator rule takes one")
+        if self.source is not None:
+            validate_indicator_source(self.source)
+        return self
 
 
 class TradingScannerDefinition(BaseModel):
@@ -64,6 +83,10 @@ class TradingScannerDefinition(BaseModel):
         unknown_bindings = set(self.binding_ids) - set(self.instrument_ids)
         if unknown_bindings:
             raise ValueError(f"scanner binding_ids contain instruments outside allowlist: {sorted(unknown_bindings)}")
+        if not any(rule.role == "filter" for rule in self.rules):
+            raise ValueError("a scanner needs at least one filter rule")
+        if len({rule.rule_id for rule in self.rules}) != len(self.rules):
+            raise ValueError("scanner rule_ids must be unique")
         required = max(scanner_rule_history(rule) for rule in self.rules)
         if self.history_limit < required:
             raise ValueError(
@@ -136,6 +159,16 @@ ProgressCallback = Callable[[int], None]
 
 
 def scanner_rule_history(rule: TradingScannerRule) -> int:
+    if rule.metric == "indicator" and rule.source is not None:
+        from .alerts_evaluation import _source_lookback
+
+        return _source_lookback(rule.source)
+    if rule.metric == "relative_volume":
+        return rule.period + 1
+    if rule.metric in {"high_distance_percent", "low_distance_percent"}:
+        return rule.period
+    if rule.metric == "gap_percent":
+        return 2
     if rule.metric == "percent_change":
         return rule.lookback_bars + 1
     if rule.metric in {"sma", "ema", "atr"}:
@@ -146,6 +179,10 @@ def scanner_rule_history(rule: TradingScannerRule) -> int:
 
 
 def _metric_key(rule: TradingScannerRule) -> str:
+    if rule.metric == "indicator" and rule.source is not None:
+        return f"indicator:{rule.source.output}"
+    if rule.metric in {"relative_volume", "high_distance_percent", "low_distance_percent"}:
+        return f"{rule.metric}:{rule.period}"
     if rule.metric == "percent_change":
         return f"percent_change:{rule.lookback_bars}"
     if rule.metric in {"sma", "ema", "rsi", "atr"}:
@@ -154,6 +191,16 @@ def _metric_key(rule: TradingScannerRule) -> str:
 
 
 def scanner_metric_formula(rule: TradingScannerRule) -> str:
+    if rule.metric == "indicator" and rule.source is not None:
+        return f"{CORE_INDICATOR_FORMULA_VERSION}:{rule.source.indicator_id}:{rule.source.output}"
+    if rule.metric == "relative_volume":
+        return f"volume[t] / mean(volume[t-{rule.period}..t-1])"
+    if rule.metric == "gap_percent":
+        return "((open[t] / close[t-1]) - 1) * 100"
+    if rule.metric == "high_distance_percent":
+        return f"((close[t] / max(high[t-{rule.period}+1..t])) - 1) * 100"
+    if rule.metric == "low_distance_percent":
+        return f"((close[t] / min(low[t-{rule.period}+1..t])) - 1) * 100"
     if rule.metric == "percent_change":
         return f"((close[t] / close[t-{rule.lookback_bars}]) - 1) * 100"
     if rule.metric == "volume":
@@ -163,7 +210,7 @@ def scanner_metric_formula(rule: TradingScannerRule) -> str:
     return f"{CORE_INDICATOR_FORMULA_VERSION}:{rule.metric}:{rule.period}"
 
 
-def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar]) -> Decimal | None:
+def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar], values: Any = None) -> Decimal | None:
     if not bars:
         return None
     closes = [Decimal(bar.close) for bar in bars]
@@ -175,6 +222,12 @@ def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar]) ->
         if len(closes) <= rule.lookback_bars or closes[-rule.lookback_bars - 1] == 0:
             return None
         return (closes[-1] / closes[-rule.lookback_bars - 1] - Decimal("1")) * Decimal("100")
+    if rule.metric == "indicator" and rule.source is not None:
+        from .alerts_evaluation import _BarValues
+
+        return (values or _BarValues(bars)).value(rule.source, len(bars) - 1)
+    if rule.metric in {"relative_volume", "high_distance_percent", "low_distance_percent", "gap_percent"}:
+        return _bar_metric(rule, bars, closes)
     if rule.metric == "sma":
         values = simple_moving_average(closes, rule.period)
     elif rule.metric == "ema":
@@ -189,6 +242,30 @@ def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar]) ->
             rule.period,
         )
     return values[-1] if values else None
+
+
+def _bar_metric(rule: TradingScannerRule, bars: Sequence[MarketBar], closes: list[Decimal]) -> Decimal | None:
+    """Relative volume, gap % and the distance from the period's high or low; None without the history."""
+    if rule.metric == "gap_percent":
+        if len(bars) < 2 or closes[-2] == 0:
+            return None
+        return (Decimal(bars[-1].open) / closes[-2] - Decimal("1")) * Decimal("100")
+    if rule.metric == "relative_volume":
+        # Against the average of the N bars before this one, as TradingView's relative volume does.
+        if len(bars) < rule.period + 1:
+            return None
+        prior = bars[-rule.period - 1:-1]
+        average = sum((Decimal(bar.volume) for bar in prior), Decimal("0")) / Decimal(rule.period)
+        return Decimal(bars[-1].volume) / average if average > 0 else None
+    if len(bars) < rule.period:
+        return None
+    window = bars[-rule.period:]
+    extreme = (
+        max(Decimal(bar.high) for bar in window)
+        if rule.metric == "high_distance_percent"
+        else min(Decimal(bar.low) for bar in window)
+    )
+    return (closes[-1] / extreme - Decimal("1")) * Decimal("100") if extreme > 0 else None
 
 
 def scanner_rule_matches(rule: TradingScannerRule, value: Decimal) -> bool:
@@ -219,16 +296,26 @@ def evaluate_scanner_dataset(
     formulas: dict[str, str] = {}
     matched: list[str] = []
     score = Decimal("0")
+    filters = [rule for rule in definition.rules if rule.role == "filter"]
+    shared = None
+    if any(rule.metric == "indicator" for rule in definition.rules):
+        from .alerts_evaluation import _BarValues
+
+        shared = _BarValues(bars)
     for rule in definition.rules:
-        value = scanner_metric_value(rule, bars)
+        value = scanner_metric_value(rule, bars, shared)
         if value is None:
+            if rule.role == "column":
+                continue  # a column without the history shows no value; it never drops a result
             return None
         metrics[_metric_key(rule)] = value
+        # Every rule's value by its id too (TVP-9.1): the screener's columns read these.
+        metrics[f"rule:{rule.rule_id}"] = value
         formulas[rule.rule_id] = scanner_metric_formula(rule)
-        if scanner_rule_matches(rule, value):
+        if rule.role == "filter" and scanner_rule_matches(rule, value):
             matched.append(rule.rule_id)
             score += _score(rule, value)
-    if len(matched) != len(definition.rules):
+    if len(matched) != len(filters):
         return None
     metrics["_formula_count"] = Decimal(len(formulas))
     return TradingScannerResult(
@@ -275,7 +362,9 @@ async def execute_scanner(
                 ),
                 timeout=definition.request_timeout_seconds,
             )
-            result = evaluate_scanner_dataset(
+            # Indicator rules are CPU work: off the event loop (TVP-9.1).
+            result = await asyncio.to_thread(
+                evaluate_scanner_dataset,
                 definition,
                 run_id,
                 response,
