@@ -1,4 +1,4 @@
-import { ALERT_INDICATOR_OPERATORS, type AlertIndicatorChoice, type AlertIndicatorOperator, type AlertIndicatorSelection } from './alertIndicatorSources';
+import { ALERT_INDICATOR_OPERATORS, ALERT_SIGNAL_OPERATORS, operatorForOutput, type AlertIndicatorChoice, type AlertIndicatorOperator, type AlertIndicatorSelection } from './alertIndicatorSources';
 
 /** The chart's indicators, their output lines and the comparison, for an indicator alert (TVP-1.3). */
 export function AlertIndicatorPicker({
@@ -11,7 +11,7 @@ export function AlertIndicatorPicker({
   const choice = choices.find((item) => item.key === selection?.key);
   const pick = (key: string) => {
     const next = choices.find((item) => item.key === key);
-    if (next && !next.unavailable) onChange({ key, output: next.outputs[0].key, operator: selection?.operator ?? 'crossing' });
+    if (next && !next.unavailable) onChange({ key, output: next.outputs[0].key, operator: operatorForOutput(next, next.outputs[0].key, selection?.operator) });
   };
   return (
     <>
@@ -28,7 +28,7 @@ export function AlertIndicatorPicker({
           aria-label="Alert indicator line"
           value={selection?.output ?? ''}
           disabled={!choice}
-          onChange={(event) => selection && onChange({ ...selection, output: event.target.value })}
+          onChange={(event) => selection && onChange({ ...selection, output: event.target.value, operator: operatorForOutput(choice, event.target.value, selection.operator) })}
         >
           {(choice?.outputs ?? []).map((output) => <option key={output.key} value={output.key}>{output.title}</option>)}
         </select>
@@ -40,7 +40,7 @@ export function AlertIndicatorPicker({
           disabled={!selection}
           onChange={(event) => selection && onChange({ ...selection, operator: event.target.value as AlertIndicatorOperator })}
         >
-          {ALERT_INDICATOR_OPERATORS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          {(selection?.operator === 'appears' ? ALERT_SIGNAL_OPERATORS : ALERT_INDICATOR_OPERATORS).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
       </div>
     </>

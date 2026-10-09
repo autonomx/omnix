@@ -4,6 +4,7 @@
  * numeric series. Browser-side: the server registry doesn't evaluate them, so they aren't offered for alerts.
  */
 import type { MarketBar } from '../tradingTypes';
+import { candlestickPatternOutputs } from './candlestickPatterns';
 import { sessionClock, sessionPeriods, type TradingSessionSpec } from './tradingSessions';
 import {
   atr, bollinger, ema, finite, full, highest, lowest, nums, startTimes,
@@ -322,6 +323,7 @@ export function seasonality(bars: readonly MarketBar[], years: number): Array<{ 
 const DRAWING_NAMES = new Set([
   'Auto Fib Retracement', 'Auto Fib Extension', 'Auto Pitchfork', 'Auto Trendlines', 'Auto key levels', 'VWAP Auto Anchored',
   'Visible Average Price', 'Bollinger Bars', 'Chop Zone', 'Moon Phases', 'Trading Sessions', 'Multi-Time Period Charts indicator', 'Seasonality',
+  'All Candlestick Patterns',
 ]);
 const SEASON_COLORS = ['#2962ff', '#f23645', '#ff9800', '#4caf50', '#9c27b0', '#00bcd4'];
 
@@ -406,6 +408,8 @@ export function drawingIndicatorOutputs(
         { ...line(id, 'open', 'Period open', periodOpen, bars, '#787b86', 'levels'), lineStyle: 'dotted' },
       ];
     }
+    case 'All Candlestick Patterns':
+      return candlestickPatternOutputs(id, bars, String(params.patterns), String(params.trend));
     case 'Seasonality':
       return seasonality(bars, period).map(({ year, values }, index) => ({ ...line(id, String(year), String(year), values, bars, SEASON_COLORS[index % SEASON_COLORS.length]), pane: 1 as const }));
     default:

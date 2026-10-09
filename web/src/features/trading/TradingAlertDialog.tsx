@@ -219,7 +219,7 @@ export function TradingAlertDialog({
             </div>
           ) : isTrendline ? (
             <div className="trading-alert-value-row"><span>Line</span><strong>{editor.drawingLevels?.[0]?.label ?? 'Selected trendline'}</strong></div>
-          ) : (
+          ) : chartIndicators?.operator === 'appears' ? null : (
             <div className="trading-alert-value-row">
               <span>Value</span>
               <input

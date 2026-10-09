@@ -424,3 +424,15 @@ describe('indicators that draw (TVP-6.2)', () => {
     expect(indicatorLineData(background, [], 100).map((point) => ('value' in point ? point.value : null))).toEqual([1, 1]);
   });
 });
+
+describe('pattern markers (TVP-6.3)', () => {
+  it('places markers above or below the bar with their text, else at the price of the point', () => {
+    const pattern: IndicatorOutput = {
+      key: 'tv-all-candlestick-patterns:hammer', title: 'Hammer - Bullish', pane: 0, kind: 'line', render: 'markers', marker: 'arrowUp',
+      markerPosition: 'belowBar', markerText: 'H', color: '#089981', points: [{ time: bar.start_time, value: 99.5 }],
+    };
+    expect(indicatorMarkers(pattern, 100)).toEqual([{ time: Date.parse(bar.start_time) / 1000, position: 'belowBar', shape: 'arrowUp', color: '#089981', size: 1, text: 'H' }]);
+    const atPrice: IndicatorOutput = { ...pattern, markerPosition: undefined, markerText: undefined };
+    expect(indicatorMarkers(atPrice, 100)[0]).toMatchObject({ position: 'atPriceMiddle', price: 9950 });
+  });
+});

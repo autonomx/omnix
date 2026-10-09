@@ -619,6 +619,13 @@ export function visibleAverageClose(bars: readonly MarketBar[], range: { from: n
 /** Point signals (divergences, reversals, fractals) as series markers at their price. */
 export function indicatorMarkers(output: IndicatorOutput, multiplier = 1): SeriesMarker<UTCTimestamp>[] {
   const scale = output.pane === 0 ? multiplier : 1;
+  const { markerPosition: position, markerText: text } = output;
+  // Above or below the bar (candlestick patterns), with the pattern's short name.
+  if (position) {
+    return output.points.map((point) => ({
+      time: timestamp(point.time), position, shape: output.marker ?? 'circle', color: output.color ?? indicatorColor(output), size: 1, ...(text ? { text } : {}),
+    }));
+  }
   return output.points.map((point) => ({
     time: timestamp(point.time),
     position: 'atPriceMiddle',

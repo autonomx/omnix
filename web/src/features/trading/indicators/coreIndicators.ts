@@ -64,6 +64,9 @@ export type IndicatorOutput = {
   /** Line outputs: joined (default), horizontal levels with gaps on bars without a value, or point markers. */
   render?: 'line' | 'levels' | 'markers';
   marker?: 'arrowUp' | 'arrowDown' | 'circle';
+  /** Markers: text beside each marker, and above or below the bar instead of at the point's price (candlestick patterns). */
+  markerText?: string;
+  markerPosition?: 'aboveBar' | 'belowBar';
 };
 export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'

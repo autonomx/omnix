@@ -12,7 +12,8 @@ import type { TradingAlertCreateInput } from './tradingTypes';
 
 type ConditionInput = NonNullable<TradingAlertCreateInput['conditions']>[number];
 
-export type AlertIndicatorOperator = 'crossing' | 'crossing_up' | 'crossing_down' | 'greater_than' | 'less_than';
+/** `appears`: a signal output (markers: candlestick patterns, fractals) has a value on this bar; stored as greater than 0. */
+export type AlertIndicatorOperator = 'crossing' | 'crossing_up' | 'crossing_down' | 'greater_than' | 'less_than' | 'appears';
 
 export const ALERT_INDICATOR_OPERATORS: Array<{ value: AlertIndicatorOperator; label: string }> = [
   { value: 'crossing', label: 'Crossing' },
@@ -21,12 +22,15 @@ export const ALERT_INDICATOR_OPERATORS: Array<{ value: AlertIndicatorOperator; l
   { value: 'greater_than', label: 'Greater Than' },
   { value: 'less_than', label: 'Less Than' },
 ];
+/** The comparison a signal output offers: it has a value only on the bars where the signal appears. */
+export const ALERT_SIGNAL_OPERATORS: Array<{ value: AlertIndicatorOperator; label: string }> = [{ value: 'appears', label: 'Appears' }];
 
 export type AlertIndicatorChoice = {
   /** The indicator id; one instance per id on a chart. */
   key: string;
   label: string;
-  outputs: Array<{ key: string; title: string }>;
+  /** `signal`: drawn as markers, valued (at the bar's price) only on the bars where it appears. */
+  outputs: Array<{ key: string; title: string; signal?: true }>;
   inputs: components['schemas']['IndicatorSourceInputs'];
   /** Why the server can't alert on it, when it can't. */
   unavailable?: string;
@@ -54,7 +58,8 @@ export function alertIndicatorChoices(
   serverIds: ReadonlySet<string> | null,
 ): AlertIndicatorChoice[] {
   return instances.filter((instance) => instance.enabled).map((instance) => {
-    const lines = outputs.filter((output) => output.key.split(':', 1)[0] === instance.id).map((output) => ({ key: output.key, title: output.title }));
+    const lines = outputs.filter((output) => output.key.split(':', 1)[0] === instance.id)
+      .map((output) => ({ key: output.key, title: output.title, ...(output.render === 'markers' ? { signal: true as const } : {}) }));
     const unavailable = serverIds === null
       ? 'Checking which indicators server alerts support…'
       : !serverIds.has(instance.id)
@@ -71,13 +76,21 @@ export function alertIndicatorChoices(
   });
 }
 
-/** The condition an indicator selection describes: the output against a value. */
+/** The condition an indicator selection describes: the output against a value; "appears" is the output above 0. */
 export function indicatorConditionSpec(choice: AlertIndicatorChoice, selection: AlertIndicatorSelection, value: string): ConditionInput {
+  const appears = selection.operator === 'appears';
   return {
     source: { kind: 'indicator', indicator_id: choice.key, inputs: choice.inputs, output: selection.output },
-    operator: selection.operator,
-    target: { kind: 'value', value },
+    operator: selection.operator === 'appears' ? 'greater_than' : selection.operator,
+    target: { kind: 'value', value: appears ? '0' : value },
   };
+}
+
+/** The operator a selection keeps on another output: "appears" for a signal, else the line's comparison (crossing by default). */
+export function operatorForOutput(choice: AlertIndicatorChoice | undefined, output: string, operator: AlertIndicatorOperator | undefined): AlertIndicatorOperator {
+  const signal = choice?.outputs.find((item) => item.key === output)?.signal === true;
+  if (signal) return 'appears';
+  return operator && operator !== 'appears' ? operator : 'crossing';
 }
 
 /**
@@ -104,7 +117,7 @@ export function defaultIndicatorSelection(choices: readonly AlertIndicatorChoice
   // Placed on a pane whose indicator can't be alerted on: no stand-in (its value is on another scale); the user picks.
   if (preferKey && choices.some((item) => item.key === preferKey && item.unavailable)) return undefined;
   const choice = choices.find((item) => item.key === preferKey && !item.unavailable) ?? choices.find((item) => !item.unavailable);
-  return choice ? { key: choice.key, output: choice.outputs[0].key, operator: 'crossing' } : undefined;
+  return choice ? { key: choice.key, output: choice.outputs[0].key, operator: operatorForOutput(choice, choice.outputs[0].key, undefined) } : undefined;
 }
 
 /**
@@ -118,7 +131,8 @@ export function resolveIndicatorSelection(
 ): AlertIndicatorSelection | undefined {
   const choice = selection ? choices.find((item) => item.key === selection.key && !item.unavailable) : undefined;
   if (!choice || !selection) return defaultIndicatorSelection(choices, preferKey);
-  return choice.outputs.some((output) => output.key === selection.output) ? selection : { ...selection, output: choice.outputs[0].key };
+  const output = choice.outputs.some((item) => item.key === selection.output) ? selection.output : choice.outputs[0].key;
+  return { ...selection, output, operator: operatorForOutput(choice, output, selection.operator) };
 }
 
 type ChartAlert = { condition_type: string; threshold: string | number; parameters: { indicator_id?: string | null }; conditions?: readonly unknown[] };

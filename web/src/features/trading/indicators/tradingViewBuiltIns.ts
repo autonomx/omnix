@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import type { MarketBar } from '../tradingTypes';
 import { findPatternPivots } from './autoPatterns';
+import { CANDLESTICK_PATTERNS } from './candlestickPatterns';
 import { drawingIndicatorOutputs } from './drawingIndicators';
 import { UTC_SESSION, sessionClock, sessionPeriods, type SessionPeriod, type TradingSessionSpec } from './tradingSessions';
 
@@ -28,6 +29,9 @@ export type TradingViewBuiltInOutput = {
   /** How the chart draws the points: a joined line (default), horizontal levels with gaps where there is no value, or markers. */
   render?: IndicatorRender;
   marker?: IndicatorMarkerShape;
+  /** Markers: text beside each marker, and above or below the bar instead of at the point's price. */
+  markerText?: string;
+  markerPosition?: 'aboveBar' | 'belowBar';
 };
 export type IndicatorRender = 'line' | 'levels' | 'markers';
 export type IndicatorMarkerShape = 'arrowUp' | 'arrowDown' | 'circle';
@@ -71,6 +75,7 @@ Addresses with balance ≥ X (USD)
 Advance/Decline Line
 Advance/Decline Ratio
 Advance/Decline Ratio (Bars)
+All Candlestick Patterns
 Analyst price forecast
 Arnaud Legoux Moving Average
 Aroon Indicator
@@ -399,6 +404,8 @@ const SUPPORTED: Record<string, SupportedConfig> = {
   'Trading Sessions': { defaultPeriod: 1, pane: 0 },
   'Visible Average Price': { defaultPeriod: 1, pane: 0 },
   'VWAP Auto Anchored': { defaultPeriod: 200, pane: 0 },
+  // TVP-6.3: candlestick patterns (candlestickPatterns.ts).
+  'All Candlestick Patterns': { defaultPeriod: 1, pane: 0 },
 };
 
 const SPECIALIZED_REQUIREMENTS: Record<string, string> = {
@@ -441,6 +448,13 @@ const DRAWING_INPUTS: Record<string, TradingViewBuiltInInputs> = {
   'Trading Sessions': { periodLabel: null, params: [] },
   'Visible Average Price': { periodLabel: null, params: [] },
   'VWAP Auto Anchored': { periodLabel: 'Length', params: [select('anchor', 'Anchor', 'highest-high', { 'highest-high': 'Highest high', 'lowest-low': 'Lowest low', 'highest-volume': 'Highest volume' })] },
+  'All Candlestick Patterns': {
+    periodLabel: null,
+    params: [
+      select('patterns', 'Patterns', 'all', { all: 'All', bullish: 'Bullish', bearish: 'Bearish', neutral: 'Neutral', ...Object.fromEntries(CANDLESTICK_PATTERNS.map((pattern) => [pattern.key, pattern.name])) }),
+      select('trend', 'Detect trend based on', 'sma50', { sma50: 'SMA50', 'sma50-sma200': 'SMA50, SMA200', none: 'No detection' }),
+    ],
+  },
 };
 const DRAWING_INDICATORS = new Set(Object.keys(DRAWING_INPUTS));
 Object.assign(BUILTIN_INPUTS, DRAWING_INPUTS);
@@ -1658,6 +1672,7 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
     'Visible Average Price': [['average', 'Visible Average Price']],
     'VWAP Auto Anchored': [['vwap', 'Auto Anchored VWAP']],
   };
+  if (name === 'All Candlestick Patterns') return CANDLESTICK_PATTERNS.map((pattern) => ({ key: `${id}:${pattern.key}`, title: pattern.name }));
   if (name === 'Moving Average Ribbon') return [20, 50, 100, 200].map((p) => ({ key: `${id}:sma-${p}`, title: `SMA ${p}` }));
   if (name === 'Moving Averages') return [{ key: `${id}:sma`, title: 'SMA' }, { key: `${id}:ema`, title: 'EMA' }];
   if (name === 'RCI Ribbon') return [9, 26, 52].map((p) => ({ key: `${id}:rci-${p}`, title: `RCI ${p}` }));

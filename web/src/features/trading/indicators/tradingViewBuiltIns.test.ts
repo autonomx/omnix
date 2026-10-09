@@ -61,8 +61,8 @@ function hourlyBars(count: number, close: (index: number) => number, volume: (in
 
 describe('TradingView built-in indicator catalog', () => {
   it('mirrors the complete unique TradingView built-in support-folder catalog', () => {
-    expect(TRADINGVIEW_BUILTIN_DEFINITIONS).toHaveLength(208);
-    expect(new Set(TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => definition.name)).size).toBe(208);
+    expect(TRADINGVIEW_BUILTIN_DEFINITIONS).toHaveLength(209);
+    expect(new Set(TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => definition.name)).size).toBe(209);
     expect(TRADINGVIEW_BUILTIN_DEFINITIONS.some((definition) => definition.name === '1 year active supply %')).toBe(true);
     expect(TRADINGVIEW_BUILTIN_DEFINITIONS.some((definition) => definition.name === 'Zig Zag')).toBe(true);
   });
