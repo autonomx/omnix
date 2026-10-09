@@ -51216,7 +51216,14 @@
               "relative_volume",
               "gap_percent",
               "high_distance_percent",
-              "low_distance_percent"
+              "low_distance_percent",
+              "market_cap",
+              "pe_ratio",
+              "ps_ratio",
+              "pb_ratio",
+              "eps_ttm",
+              "revenue_growth",
+              "net_margin"
             ],
             "title": "Metric",
             "type": "string"
@@ -51308,7 +51315,14 @@
               "relative_volume",
               "gap_percent",
               "high_distance_percent",
-              "low_distance_percent"
+              "low_distance_percent",
+              "market_cap",
+              "pe_ratio",
+              "ps_ratio",
+              "pb_ratio",
+              "eps_ttm",
+              "revenue_growth",
+              "net_margin"
             ],
             "title": "Metric",
             "type": "string"

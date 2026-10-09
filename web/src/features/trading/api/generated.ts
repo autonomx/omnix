@@ -12707,7 +12707,7 @@ export interface components {
              * Metric
              * @enum {string}
              */
-            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr" | "indicator" | "relative_volume" | "gap_percent" | "high_distance_percent" | "low_distance_percent";
+            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr" | "indicator" | "relative_volume" | "gap_percent" | "high_distance_percent" | "low_distance_percent" | "market_cap" | "pe_ratio" | "ps_ratio" | "pb_ratio" | "eps_ttm" | "revenue_growth" | "net_margin";
             /**
              * Operator
              * @enum {string}
@@ -12741,7 +12741,7 @@ export interface components {
              * Metric
              * @enum {string}
              */
-            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr" | "indicator" | "relative_volume" | "gap_percent" | "high_distance_percent" | "low_distance_percent";
+            metric: "close" | "percent_change" | "volume" | "sma" | "ema" | "rsi" | "atr" | "indicator" | "relative_volume" | "gap_percent" | "high_distance_percent" | "low_distance_percent" | "market_cap" | "pe_ratio" | "ps_ratio" | "pb_ratio" | "eps_ttm" | "revenue_growth" | "net_margin";
             /**
              * Operator
              * @enum {string}

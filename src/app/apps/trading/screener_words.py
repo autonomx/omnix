@@ -32,7 +32,7 @@ INTERVALS = ("1m", "5m", "15m", "1h", "4h", "1d")
 
 SCREEN_FROM_WORDS_TEMPLATE = prompt_template(
     "trading.screener_from_words",
-    "1",
+    "2",
     """You turn a trader's description of a stock or crypto screen into screener rules. Answer with one JSON object and nothing else:
 {"interval": one of "1m","5m","15m","1h","4h","1d", "rules": [rule, ...], "unsupported": [text, ...], "notes": text}
 
@@ -45,6 +45,7 @@ Metrics (on the chosen interval's bars, at the latest bar):
 - "gap_percent": percent gap between the last open and the previous close.
 - "high_distance_percent", "low_distance_percent": percent distance of the close below the highest high / above the lowest low of the last period bars (period 252 on "1d" is the 52-week high/low).
 - "indicator": any other indicator line; "source" is {"kind": "indicator", "indicator_id": id, "inputs": {"period": n}, "output": output key}, chosen from the indicator list in the request.
+- US stocks' fundamentals from SEC filings, at the last price: "market_cap" (USD), "pe_ratio", "ps_ratio", "pb_ratio", "eps_ttm", "revenue_growth" (percent, year over year), "net_margin" (percent); "period" and "lookback_bars" are ignored for these.
 "filter" rules must all match; "column" rules are only shown. Use at least one filter. Thresholds are plain numbers: percentages as percent (5 means 5%), prices in the quote currency.
 Comparing two indicators (for example close above its 200-day average) is not possible: say so in "unsupported" and add the nearest filters you can.
 Put every part of the description you could not express in "unsupported". Never invent symbols, metrics or indicators.""",

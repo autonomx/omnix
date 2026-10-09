@@ -32,7 +32,7 @@ ANSWER = {
         # Written for the default period; the model asked for 21: the output moves to the 21-period line.
         {"metric": "indicator", "operator": "lt", "threshold": 30, "period": 14, "lookback_bars": 1, "role": "column",
          "source": {"kind": "indicator", "indicator_id": "rsi", "inputs": {"period": 21}, "output": "rsi:14"}},
-        {"metric": "market_cap", "operator": "gt", "threshold": 1e9},
+        {"metric": "short_interest", "operator": "gt", "threshold": 1e9},
     ],
     "unsupported": ["above the 200-day average (comparing two lines)"],
     "notes": "Daily gainers on heavy volume.",
@@ -48,7 +48,7 @@ def test_the_model_proposes_and_the_scanner_validates() -> None:
     ]
     assert proposal.rules[2].source.output == "rsi:21"
     assert [rule.rule_id for rule in proposal.rules] == ["proposed-1", "proposed-2", "proposed-3"]
-    assert proposal.unsupported[0].startswith("above the 200-day") and "market_cap" in proposal.unsupported[1]
+    assert proposal.unsupported[0].startswith("above the 200-day") and "short_interest" in proposal.unsupported[1]
     system, user = provider.messages
     assert system.content == SCREEN_FROM_WORDS_TEMPLATE.text
     assert json.loads(user.content) == {"description": "daily gainers over 5% on twice the usual volume, show RSI", "indicators": [{"id": "rsi", "outputs": ["rsi:14"]}]}
