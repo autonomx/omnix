@@ -17,6 +17,19 @@ length = input.int(20, "Length", minval=1)
 plot(ta.sma(close, length), "SMA", color=color.blue)
 `;
 
+/** A strategy to start from (TVP-11.5): it trades a simulated account; the Strategy Tester shows its backtest. */
+export const NEW_STRATEGY_SOURCE = `//@version=6
+strategy("My strategy", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+fast = ta.sma(close, 14)
+slow = ta.sma(close, 28)
+if ta.crossover(fast, slow)
+    strategy.entry("Long", strategy.long)
+if ta.crossunder(fast, slow)
+    strategy.entry("Short", strategy.short)
+plot(fast, "Fast", color=color.blue)
+plot(slow, "Slow", color=color.orange)
+`;
+
 export type ConsoleEntry = { at: number; level: 'info' | 'warning' | 'error'; message: string; bar?: number | null };
 export type ScriptEditorChart = {
   instrumentId: string;
@@ -229,6 +242,7 @@ export function useScriptEditor(chart: ScriptEditorChart) {
     setName: (name: string) => setEditing((current) => ({ ...current, name })),
     setSource: (source: string) => setEditing((current) => ({ ...current, source })),
     newScript: (force = false) => openDraft('My script', NEW_SCRIPT_SOURCE, force),
+    newStrategy: (force = false) => openDraft('My strategy', NEW_STRATEGY_SOURCE, force),
     openScript,
     openDraft,
     save: () => void save(),

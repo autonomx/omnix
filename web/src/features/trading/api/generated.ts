@@ -1510,6 +1510,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/scripts/backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backtest
+         * @description A strategy script over all the history the provider serves (up to ``bars``), for the strategy tester.
+         *
+         *     A research backtest: the script trades a simulated account on these bars and never reaches an order gateway.
+         */
+        post: operations["backtest_api_trading_scripts_backtest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/scripts/check": {
         parameters: {
             query?: never;
@@ -9392,6 +9414,26 @@ export interface components {
             /** Runs */
             runs: components["schemas"]["TradingScannerRun"][];
         };
+        /** ScriptBacktestRequest */
+        ScriptBacktestRequest: {
+            /**
+             * Bars
+             * @default 20000
+             */
+            bars?: number;
+            /** Binding Id */
+            binding_id?: string | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Instrument Id */
+            instrument_id: string;
+            /** Interval */
+            interval: string;
+            /** Source */
+            source: string;
+        };
         /** ScriptCheckRequest */
         ScriptCheckRequest: {
             /** Source */
@@ -16205,6 +16247,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backtest_api_trading_scripts_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScriptBacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptRunResponse"];
                 };
             };
             /** @description Validation Error */

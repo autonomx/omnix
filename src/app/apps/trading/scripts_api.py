@@ -20,7 +20,7 @@ from app.security.tenant_context import current_tenant
 from .scripts.builtins import _NAMED_CONSTANTS, COLORS, FUNCTIONS
 from .scripts.runtime import SERIES_NAMES
 from .repositories import RepositoryFactory, default_trading_repository
-from .scripts_service import ScriptRunService, ScriptServiceError, bars_for_script, check_script, default_script_service
+from .scripts_service import BACKTEST_LIMITS, ScriptRunService, ScriptServiceError, bars_for_script, check_script, default_script_service
 from .service import TradingMarketDataService, default_market_data_service
 
 logger = logging.getLogger(__name__)
@@ -105,6 +105,16 @@ class ScriptRunRequest(BaseModel):
     profile: bool = False
 
 
+class ScriptBacktestRequest(BaseModel):
+    source: str = Field(max_length=MAX_SOURCE_LENGTH)
+    instrument_id: str = Field(min_length=3, max_length=200)
+    binding_id: str | None = Field(default=None, max_length=240)
+    interval: str = Field(min_length=1, max_length=16)
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    # Deep backtesting: up to this many of the latest bars the provider has (TVP-11.5).
+    bars: int = Field(default=20_000, ge=10, le=20_000)
+
+
 class ScriptRunResponse(BaseModel):
     # The start of each bar the script ran on (ISO), one per value in each plot.
     times: list[str]
@@ -176,6 +186,37 @@ def create_trading_scripts_router(
         except ScriptServiceError as error:
             return ScriptRunResponse(times=times, error=ScriptDiagnostic(**error.payload()))
         return ScriptRunResponse(times=times, result=result)
+
+    @router.post("/backtest", response_model=ScriptRunResponse)
+    async def backtest(request: ScriptBacktestRequest) -> ScriptRunResponse:
+        """A strategy script over all the history the provider serves (up to ``bars``), for the strategy tester.
+
+        A research backtest: the script trades a simulated account on these bars and never reaches an order gateway.
+        """
+        try:
+            response = await asyncio.to_thread(
+                market_service_factory().bars, request.instrument_id, request.interval, request.bars, request.binding_id, alignment="clock",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.warning("script_backtest_bars_failed", exc_info=True)
+            raise HTTPException(status_code=502, detail={"code": "market_data_failed", "message": "The market data provider request failed."}) from exc
+        bars = list(response.bars)
+        times = [bar.start_time.isoformat() for bar in bars]
+        user_id = str(getattr(current_tenant(), "user_id", "") or "")
+        try:
+            result = await asyncio.to_thread(
+                service_factory().run, request.source, bars_for_script(bars), inputs=request.inputs,
+                symbol=request.instrument_id, timeframe=request.interval, user_id=user_id, limits=BACKTEST_LIMITS,
+            )
+        except ScriptServiceError as error:
+            return ScriptRunResponse(times=times, error=ScriptDiagnostic(**error.payload()))
+        if not result.get("strategy"):
+            return ScriptRunResponse(times=times, error=ScriptDiagnostic(kind="strategy", message="only strategy() scripts can be backtested", line=0, column=0))
+        # The tester reads the report; the plots and drawings stay with the chart's run.
+        slim = {key: result[key] for key in ("declaration", "inputs", "strategy", "bars", "seconds", "logs")}
+        return ScriptRunResponse(times=times, result=slim)
 
     @router.get("/reference", response_model=ScriptReferenceResponse)
     def reference() -> ScriptReferenceResponse:

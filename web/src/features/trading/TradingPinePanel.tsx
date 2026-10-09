@@ -147,6 +147,7 @@ export function TradingPinePanel({
           {editor.scripts.map((record) => <option key={record.record_id} value={record.record_id}>{String(record.payload.name ?? record.record_id)}</option>)}
         </select>
         <button type="button" onClick={() => guarded('a new script', (force) => editor.newScript(force))}>New</button>
+        <button type="button" onClick={() => guarded('a new strategy', (force) => editor.newStrategy(force))}>New strategy</button>
         <button type="button" onClick={editor.save} disabled={editor.busy !== null || (!dirty && editing.record !== null)}>Save</button>
         <button type="button" onClick={() => setSaveAsName(`${editing.name} (copy)`)} disabled={editor.busy !== null}>Save as…</button>
         <button type="button" className="trading-script-primary" onClick={editor.addToChart} disabled={editor.busy !== null || problems > 0}>{editor.onChart ? 'Update on chart' : 'Add to chart'}</button>

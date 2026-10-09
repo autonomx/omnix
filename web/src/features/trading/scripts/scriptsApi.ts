@@ -30,6 +30,27 @@ export type ScriptPlot = {
   colors: unknown[] | null;
 };
 export type ScriptDrawing = { kind: string; id: number; fields: Record<string, unknown> };
+/** A strategy's closed or open trade (TVP-11.5); times are epoch milliseconds, bars the run's bar indexes. */
+export type StrategyTrade = {
+  number: number; entry_id: string; direction: 'long' | 'short'; qty: number; entry_bar: number; entry_time: number; entry_price: number;
+  entry_comment: string | null; exit_id: string | null; exit_bar: number | null; exit_time: number | null; exit_price: number | null;
+  exit_comment: string | null; profit: number; profit_percent: number; cum_profit: number; runup: number; drawdown: number; bars: number;
+  commission: number;
+};
+export type StrategySummary = Record<string, number | null>;
+/** A strategy script's backtest (`scripts/strategy.py` `Broker.report`): a simulated account, never an order. */
+export type StrategyReport = {
+  settings: Record<string, string | number | boolean>;
+  summary: { all: StrategySummary; long: StrategySummary; short: StrategySummary };
+  trades: StrategyTrade[];
+  trades_total: number;
+  open_trades: StrategyTrade[];
+  fills: Array<{ bar: number; time: number; price: number; qty: number; side: 'buy' | 'sell'; id: string; comment: string | null; position: number }>;
+  equity: number[];
+  drawdown: number[];
+  buy_hold: number[];
+};
+
 /** A run's result (`scripts/worker.py` `result_payload`). */
 export type ScriptRunResult = {
   declaration: { kind?: string; title?: string; shorttitle?: string; overlay?: boolean; precision?: number } & Record<string, unknown>;
@@ -43,6 +64,8 @@ export type ScriptRunResult = {
   profile: Array<{ line: number; seconds: number }>;
   bars: number;
   seconds: number;
+  /** A strategy() script's backtest on the run's bars (TVP-11.5). */
+  strategy?: StrategyReport | null;
 };
 export type ScriptRunResponse = { times: string[]; result: ScriptRunResult | null; error: ScriptDiagnostic | null };
 export type ScriptRunRequest = {
@@ -67,6 +90,16 @@ export const scriptsApi = {
         inputs: request.inputs ?? {},
         limit: Math.max(10, Math.min(5_000, Math.round(request.limit ?? 1_000))),
         profile: request.profile ?? false,
+      },
+    }));
+    return { times: response.times, result: (response.result ?? null) as ScriptRunResult | null, error: response.error ?? null };
+  },
+  /** A strategy over all the history the provider serves, up to `bars` (TVP-11.5); the result has no plots. */
+  backtest: async (request: Omit<ScriptRunRequest, 'limit' | 'profile'> & { bars?: number }): Promise<ScriptRunResponse> => {
+    const response = await scripts(api.POST('/api/trading/scripts/backtest', {
+      body: {
+        source: request.source, instrument_id: request.instrumentId, binding_id: request.bindingId ?? null, interval: request.interval,
+        inputs: request.inputs ?? {}, bars: Math.max(10, Math.min(20_000, Math.round(request.bars ?? 20_000))),
       },
     }));
     return { times: response.times, result: (response.result ?? null) as ScriptRunResult | null, error: response.error ?? null };

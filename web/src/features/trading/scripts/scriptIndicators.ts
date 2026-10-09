@@ -15,7 +15,7 @@
 import type { CoreIndicatorId, CoreIndicatorInstance, IndicatorOutput, IndicatorPoint } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 import { tradingApi } from '../tradingApi';
-import { scriptsApi, type ScriptPayload, type ScriptPlot, type ScriptRunResponse, type ScriptRunResult } from './scriptsApi';
+import { scriptsApi, type ScriptPayload, type ScriptPlot, type ScriptRunResponse, type ScriptRunResult, type StrategyReport } from './scriptsApi';
 
 export const SCRIPT_INDICATOR_PREFIX = 'script-';
 const INPUT_PREFIX = 'in:';
@@ -145,6 +145,7 @@ export function scriptOutputs(indicator: CoreIndicatorInstance, result: ScriptRu
   });
   if (result.fills.length > 0) notDrawn.push(`fill() ×${result.fills.length}`);
   mapDrawings(id, result, aligned, ownPane, add, notDrawn);
+  if (result.strategy) mapFills(id, result.strategy, aligned, add);
   return { outputs: outputs.filter((output) => output.visible !== false), notDrawn };
 }
 
@@ -227,6 +228,23 @@ function mapMarkers(
   });
 }
 
+/** A strategy's fills as arrows on the price chart: buys below the bar, sells above, each with its order id and size. */
+function mapFills(id: string, strategy: StrategyReport, bars: ChartBars, add: (output: Omit<IndicatorOutput, 'visible' | 'precision'>) => void): void {
+  const size = (qty: number) => Number(qty.toFixed(4)).toString();
+  for (const side of ['buy', 'sell'] as const) {
+    const points: IndicatorPoint[] = [];
+    for (const fill of strategy.fills) {
+      const time = bars.times[fill.bar];
+      if (fill.side === side && time) points.push({ time, value: fill.price, label: `${fill.id} ${side === 'buy' ? '+' : '−'}${size(fill.qty)}` });
+    }
+    add({
+      key: `${id}:${side}s`, title: side === 'buy' ? 'Buys' : 'Sells', pane: 0, kind: 'line', render: 'markers',
+      marker: side === 'buy' ? 'arrowUp' : 'arrowDown', markerPosition: side === 'buy' ? 'belowBar' : 'aboveBar',
+      color: side === 'buy' ? '#2962ff' : '#e91e63', points, labelsOnPriceScale: false,
+    });
+  }
+}
+
 function mapDrawings(
   id: string, result: ScriptRunResult, bars: ChartBars, ownPane: 0 | 1, add: (output: Omit<IndicatorOutput, 'visible' | 'precision'>) => void, notDrawn: string[],
 ): void {
@@ -306,6 +324,10 @@ export type ScriptRunStatus = {
   revision?: number;
   /** Its alertcondition() calls and, when it calls alert(), "alert": what the alert dialog offers besides its plots. */
   signals?: Array<{ key: string; title: string }>;
+  /** A strategy() script's backtest on the chart's bars, and the run's bar times (TVP-11.5). */
+  strategy?: StrategyReport;
+  times?: string[];
+  name?: string;
 };
 const statuses = new Map<string, ScriptRunStatus>();
 const statusListeners = new Set<() => void>();
@@ -319,8 +341,16 @@ export function subscribeScriptRunStatus(listener: () => void): () => void {
   return () => statusListeners.delete(listener);
 }
 
+let statusVersion = 0;
+
+/** Changes whenever a script reports a run (for components that list several scripts' statuses). */
+export function scriptRunStatusVersion(): number {
+  return statusVersion;
+}
+
 function recordStatus(scriptId: string, status: ScriptRunStatus): void {
   statuses.set(scriptId, status);
+  statusVersion += 1;
   for (const listener of statusListeners) listener();
 }
 
@@ -396,6 +426,7 @@ export async function calculateScriptIndicatorOutputs(
     recordStatus(scriptId, {
       at: Date.now(), error: null, logs: response.result.logs, notDrawn: mapped.notDrawn, revision: script.revision,
       signals: scriptSignals(String(indicator.id), response.result, script.source),
+      ...(response.result.strategy ? { strategy: response.result.strategy, times: response.times, name: script.name } : {}),
     });
     return mapped.outputs;
   } catch (error) {

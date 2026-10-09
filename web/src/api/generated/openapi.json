@@ -41322,6 +41322,58 @@
         "title": "ScannerRunListResponse",
         "type": "object"
       },
+      "ScriptBacktestRequest": {
+        "properties": {
+          "bars": {
+            "default": 20000,
+            "maximum": 20000,
+            "minimum": 10,
+            "title": "Bars",
+            "type": "integer"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 200000,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "instrument_id",
+          "interval"
+        ],
+        "title": "ScriptBacktestRequest",
+        "type": "object"
+      },
       "ScriptCheckRequest": {
         "properties": {
           "source": {
@@ -80917,6 +80969,48 @@
         "summary": "Create Trading Script",
         "tags": [
           "trading"
+        ]
+      }
+    },
+    "/api/trading/scripts/backtest": {
+      "post": {
+        "description": "A strategy script over all the history the provider serves (up to ``bars``), for the strategy tester.\n\nA research backtest: the script trades a simulated account on these bars and never reaches an order gateway.",
+        "operationId": "backtest_api_trading_scripts_backtest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptBacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Backtest",
+        "tags": [
+          "trading-scripts"
         ]
       }
     },
