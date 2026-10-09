@@ -342,6 +342,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/heatmaps/crypto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Crypto */
+        get: operations["crypto_api_trading_heatmaps_crypto_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/heatmaps/stocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stocks */
+        get: operations["stocks_api_trading_heatmaps_stocks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/hermes-research/attribution": {
         parameters: {
             query?: never;
@@ -5920,6 +5954,54 @@ export interface components {
         GuestUpgradeRequest: core["schemas"]["GuestUpgradeRequest"];
         /** HTTPValidationError */
         HTTPValidationError: core["schemas"]["HTTPValidationError"];
+        /** Heatmap */
+        Heatmap: {
+            /** As Of */
+            as_of: number;
+            /**
+             * Market
+             * @enum {string}
+             */
+            market: "stocks" | "crypto";
+            /** Size By */
+            size_by: string;
+            /** Tiles */
+            tiles: components["schemas"]["HeatmapTile"][];
+            /**
+             * Unclassified
+             * @default 0
+             */
+            unclassified: number;
+        };
+        /** HeatmapTile */
+        HeatmapTile: {
+            /** Change Percent */
+            change_percent: number;
+            /** Dollar Volume */
+            dollar_volume: number;
+            /** Group */
+            group: string;
+            /**
+             * Industry
+             * @default
+             */
+            industry: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Market Cap */
+            market_cap: number | null;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Price */
+            price: number;
+            /** Size */
+            size: number;
+            /** Symbol */
+            symbol: string;
+        };
         /** HermesDiagnosticsPaths */
         HermesDiagnosticsPaths: core["schemas"]["HermesDiagnosticsPaths"];
         /**
@@ -14098,6 +14180,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlpacaIexCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crypto_api_trading_heatmaps_crypto_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heatmap"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stocks_api_trading_heatmaps_stocks_get: {
+        parameters: {
+            query?: {
+                size_by?: "market_cap" | "dollar_volume";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heatmap"];
                 };
             };
             /** @description Validation Error */

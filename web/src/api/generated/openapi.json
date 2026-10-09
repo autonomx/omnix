@@ -19257,6 +19257,114 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "Heatmap": {
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "number"
+          },
+          "market": {
+            "enum": [
+              "stocks",
+              "crypto"
+            ],
+            "title": "Market",
+            "type": "string"
+          },
+          "size_by": {
+            "title": "Size By",
+            "type": "string"
+          },
+          "tiles": {
+            "items": {
+              "$ref": "#/components/schemas/HeatmapTile"
+            },
+            "title": "Tiles",
+            "type": "array"
+          },
+          "unclassified": {
+            "default": 0,
+            "title": "Unclassified",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "market",
+          "size_by",
+          "tiles",
+          "as_of",
+          "unclassified"
+        ],
+        "title": "Heatmap",
+        "type": "object"
+      },
+      "HeatmapTile": {
+        "properties": {
+          "change_percent": {
+            "title": "Change Percent",
+            "type": "number"
+          },
+          "dollar_volume": {
+            "title": "Dollar Volume",
+            "type": "number"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "industry": {
+            "default": "",
+            "title": "Industry",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "market_cap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Cap"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "size": {
+            "title": "Size",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "symbol",
+          "group",
+          "change_percent",
+          "size",
+          "price",
+          "dollar_volume",
+          "name",
+          "industry",
+          "market_cap"
+        ],
+        "title": "HeatmapTile",
+        "type": "object"
+      },
       "HermesAdapterPreviewRequest": {
         "properties": {
           "context": {
@@ -77540,6 +77648,110 @@
         "summary": "Update Alpaca Iex Credentials",
         "tags": [
           "trading-execution"
+        ]
+      }
+    },
+    "/api/trading/heatmaps/crypto": {
+      "get": {
+        "operationId": "crypto_api_trading_heatmaps_crypto_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 300,
+              "minimum": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Heatmap"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Crypto",
+        "tags": [
+          "trading-heatmaps"
+        ]
+      }
+    },
+    "/api/trading/heatmaps/stocks": {
+      "get": {
+        "operationId": "stocks_api_trading_heatmaps_stocks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "size_by",
+            "required": false,
+            "schema": {
+              "default": "market_cap",
+              "enum": [
+                "market_cap",
+                "dollar_volume"
+              ],
+              "title": "Size By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 1000,
+              "minimum": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Heatmap"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stocks",
+        "tags": [
+          "trading-heatmaps"
         ]
       }
     },
