@@ -80,6 +80,29 @@ describe('volume delta (TVP-6.4)', () => {
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ bindingId: 'binance:spot', interval: '1h', lowerInterval: '15m', start: T0 + 3 * HOUR - 5_000 * 15 * MINUTE, end: T0 + 3 * HOUR }));
   });
 
+  it('on auto above 1h, reads 1m for the latest bars and the coarse interval for older ones (option 3)', async () => {
+    // Three 4h bars, each with one 5m bar of +5 (buying); 1m bars reach only the last one, with -3 (selling).
+    const fours = [0, 1, 2].map((i) => bar(T0 + i * 4 * HOUR, 240, 100, 101, 0, '4h'));
+    const fiveMinutes = [0, 1, 2].map((i) => bar(T0 + i * 4 * HOUR, 5, 100, 101, 5, '5m'));
+    const oneMinute = [bar(T0 + 8 * HOUR, 1, 101, 100, 3, '1m')];
+    const spy = vi.spyOn(tradingApi, 'intrabars').mockImplementation(async (request) => ({
+      bars: request.lowerInterval === '1m' ? oneMinute.filter((item) => Date.parse(item.start_time) >= request.start) : fiveMinutes, complete: true,
+    }) as never);
+    const auto = { id: 'tv-volume-delta', period: 1, enabled: true, params: { lowerInterval: 'auto' } } as unknown as CoreIndicatorInstance;
+    const [output] = await calculateIntrabarIndicatorOutputs(fours, auto);
+    expect(output.title).toBe('Volume Delta (1m, earlier 5m)');
+    expect(output.points.map((point) => point.value)).toEqual([5, 5, -3]);
+    expect(spy.mock.calls.map(([request]) => request.lowerInterval).sort()).toEqual(['1m', '5m']);
+    // A chosen interval reads that one only.
+    spy.mockClear();
+    clearIntrabarCache();
+    const chosen = { ...auto, params: { lowerInterval: '5m' } } as unknown as CoreIndicatorInstance;
+    const [single] = await calculateIntrabarIndicatorOutputs(fours, chosen);
+    expect(single.title).toBe('Volume Delta (5m)');
+    expect(single.points.map((point) => point.value)).toEqual([5, 5, 5]);
+    expect(spy.mock.calls.map(([request]) => request.lowerInterval)).toEqual(['5m']);
+  });
+
   it('reloads the forming bar once per lower interval, live', async () => {
     vi.useFakeTimers({ now: T0 + 2 * HOUR + 30 * MINUTE });
     const spy = vi.spyOn(tradingApi, 'intrabars').mockImplementation(async (request) => ({

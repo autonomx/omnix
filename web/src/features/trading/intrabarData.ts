@@ -37,6 +37,18 @@ export function autoIntrabarInterval(interval: string): string | null {
   return '1d';
 }
 
+/**
+ * The lower interval TradingView's volume delta reads on auto: 1m inside intraday charts, 5m inside daily ones, 1h
+ * above. Finer than `autoIntrabarInterval` above 1h; Omnix reads it for the latest bars (TVP-6.4).
+ */
+export function tradingViewIntrabarInterval(interval: string): string | null {
+  const ms = tradingIntervalDurationMs(interval);
+  if (ms === null || ms <= 60_000) return null;
+  if (ms < 86_400_000) return '1m';
+  if (ms < 7 * 86_400_000) return '5m';
+  return '1h';
+}
+
 /** Whether `lowerInterval` fits inside `interval`: shorter, and a whole number of times. */
 export function isIntrabarInterval(interval: string, lowerInterval: string): boolean {
   const chart = tradingIntervalDurationMs(interval);

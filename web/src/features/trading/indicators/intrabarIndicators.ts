@@ -5,11 +5,12 @@
  * volume; Cumulative Volume Delta adds it up and restarts each anchor period.
  *
  * The lower bars reach back MAX_INTRABAR_BARS from the latest bar, so older chart bars have no value (TradingView has a
- * similar limit). Auto picks 1m on intraday charts up to 1h, then 5m, 1h and 1d (TradingView: 1m intraday, 5m daily,
- * 1h above), so a few hundred bars fit; on a 1m chart each bar is its own intrabar (no seconds data). Drawn as a
- * histogram where TradingView draws candles. Computed on the main thread after the bars load, like the external data.
+ * similar limit). On auto, the latest bars read TradingView's lower interval (1m intraday, 5m daily, 1h above); above
+ * 1h, where that reaches only a few dozen bars, the older bars read a coarser one (5m, 1h, 1d) so a few hundred bars
+ * have a value: two requests. On a 1m chart each bar is its own intrabar (no seconds data). Drawn as candles, like
+ * TradingView's. Computed on the main thread after the bars load, like the external data.
  */
-import { autoIntrabarInterval, groupIntrabars, isIntrabarInterval, loadIntrabars, MAX_INTRABAR_BARS } from '../intrabarData';
+import { autoIntrabarInterval, groupIntrabars, isIntrabarInterval, loadIntrabars, MAX_INTRABAR_BARS, tradingViewIntrabarInterval } from '../intrabarData';
 import { tradingIntervalDurationMs } from '../tradingIntervals';
 import type { MarketBar } from '../tradingTypes';
 import type { CoreIndicatorInstance, IndicatorOutput } from './coreIndicators';
@@ -108,7 +109,7 @@ export type IntrabarIndicatorContext = { session?: TradingSessionSpec; bindingId
  * per quarter of the range rather than every step, and lower bars after the clock are dropped.
  */
 async function lowerBarsFor(
-  bars: readonly MarketBar[], instrumentId: string, interval: string, lowerInterval: string, context: IntrabarIndicatorContext,
+  bars: readonly MarketBar[], instrumentId: string, interval: string, lowerInterval: string, context: IntrabarIndicatorContext, withForming = true,
 ): Promise<{ lower: MarketBar[]; from: number } | null> {
   const lowerMs = tradingIntervalDurationMs(lowerInterval);
   const last = bars[bars.length - 1];
@@ -124,8 +125,8 @@ async function lowerBarsFor(
     const response = await loadIntrabars({ ...request, start: end - span, end });
     return { lower: (response.bars as MarketBar[]).filter((bar) => Date.parse(bar.end_time) <= clock), from: end - span };
   }
-  const forming = !last.is_final;
-  const closedEnd = forming ? lastStart : lastEnd;
+  const forming = !last.is_final && withForming;
+  const closedEnd = !last.is_final ? lastStart : lastEnd;
   const [closed, open] = await Promise.all([
     loadIntrabars({ ...request, start: closedEnd - span, end: closedEnd }),
     forming ? loadIntrabars({ ...request, start: lastStart, end: lastEnd }, { maxAgeMs: lowerMs }) : null,
@@ -144,21 +145,34 @@ export async function calculateIntrabarIndicatorOutputs(
   const instrumentId = bars[0]?.instrument_id;
   if (!isIntrabarIndicatorId(id) || !interval || !instrumentId) return [];
   const lowerInterval = intrabarLowerInterval(indicator, interval);
+  // On auto above 1h, the latest bars read TradingView's finer interval and the older ones the coarse one.
+  const auto = typeof indicator.params?.lowerInterval !== 'string' || indicator.params.lowerInterval === 'auto';
+  const fineInterval = auto ? tradingViewIntrabarInterval(interval) : null;
+  const mixed = fineInterval !== null && lowerInterval !== null && fineInterval !== lowerInterval && isIntrabarInterval(interval, fineInterval);
   // Without a lower interval (a 1m chart: the providers have no seconds), each chart bar is its own intrabar.
-  const loaded = lowerInterval
-    ? await lowerBarsFor(bars, instrumentId, interval, lowerInterval, context).catch(() => null)
-    : { lower: [...bars], from: Number.NEGATIVE_INFINITY };
+  const [loaded, fine] = await Promise.all([
+    lowerInterval
+      ? lowerBarsFor(bars, instrumentId, interval, lowerInterval, context, !mixed).catch(() => null)
+      : { lower: [...bars], from: Number.NEGATIVE_INFINITY },
+    mixed ? lowerBarsFor(bars, instrumentId, interval, fineInterval, context).catch(() => null) : null,
+  ]);
   if (!loaded) return [];
   // Only chart bars the lower bars fully cover get a value.
   const covered = bars.filter((bar) => Date.parse(bar.start_time) >= loaded.from);
   const deltas = intrabarDeltas(covered, loaded.lower, interval);
+  if (fine && fine.lower.length > 0) {
+    // The fine bars cover from where the provider's history of them starts, if later than asked (Yahoo keeps a week of 1m).
+    const fineFrom = Math.max(fine.from, Math.min(...fine.lower.map((bar) => Date.parse(bar.start_time))));
+    const fineCovered = bars.filter((bar) => Date.parse(bar.start_time) >= fineFrom);
+    for (const [start, delta] of intrabarDeltas(fineCovered, fine.lower, interval)) deltas.set(start, delta);
+  }
   const cumulative = id === 'tv-cumulative-volume-delta';
   const anchor = indicator.params?.anchor === 'W' || indicator.params?.anchor === 'M' ? indicator.params.anchor : 'D';
   const key = cumulative ? `${id}:cvd` : `${id}:delta`;
   const points = cumulative ? cumulativeVolumeDeltaPoints(bars, deltas, anchor, context.session) : volumeDeltaPoints(bars, deltas);
   const output: IndicatorOutput = {
     key,
-    title: `${cumulative ? 'CVD' : 'Volume Delta'} (${lowerInterval ?? 'chart'})`,
+    title: `${cumulative ? 'CVD' : 'Volume Delta'} (${mixed && fine ? `${fineInterval}, earlier ${lowerInterval}` : lowerInterval ?? 'chart'})`,
     pane: 1,
     kind: 'candles',
     points,
