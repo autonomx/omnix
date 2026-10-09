@@ -64,10 +64,51 @@ describe('colour link groups (TVP-4.1)', () => {
     expect(parseTradingWorkspace(unknown)?.charts?.[0].linkGroup).toBeUndefined();
   });
 
+  it('meets the tab-wide instrument link both ways, and keeps the active tab entry in step', () => {
+    // Tab 1 linked: a1's change reaches every chart in it, so the blue group goes to tab 2 too.
+    act(() => useTradingStore.getState().setLink('instrument', true));
+    act(() => useTradingStore.getState().updateChart('a3', { instrumentId: 'near' }));
+    expect(symbols()).toEqual({ active: { a1: 'near', a2: 'near', a3: 'near', a4: 'near' }, other: { b1: 'near', b2: 'near' } });
+    const state = useTradingStore.getState();
+    expect(state.tabs.find((item) => item.tabId === 'tab-1')?.charts.map((item) => item.instrumentId)).toEqual(state.charts.map((item) => item.instrumentId));
+  });
+
+  it('carries a group change through a linked inactive tab to all its charts', () => {
+    useTradingStore.setState((state) => ({
+      tabs: state.tabs.map((item) => item.tabId === 'tab-2' ? { ...item, links: { ...item.links, instrument: true }, charts: [...item.charts, chart('b3', 'ltc')] } : item),
+    }));
+    act(() => useTradingStore.getState().updateChart('a1', { instrumentId: 'doge' }));
+    // b1 (red) takes it; tab 2 is linked, so b2 and b3 follow, and b2's blue group reaches a4.
+    expect(symbols()).toEqual({ active: { a1: 'doge', a2: 'doge', a3: 'sol', a4: 'doge' }, other: { b1: 'doge', b2: 'doge', b3: 'doge' } });
+  });
+
+  it('a reopened tab takes its groups current symbols', () => {
+    act(() => useTradingStore.getState().setActiveTab('tab-2'));
+    act(() => useTradingStore.getState().removeTab('tab-2'));
+    act(() => useTradingStore.getState().updateChart('a1', { instrumentId: 'doge' }));
+    act(() => { useTradingStore.getState().reopenClosedTab(); });
+    expect(useTradingStore.getState().charts.map((item) => [item.chartId, item.instrumentId])).toEqual([['b1', 'doge'], ['b2', 'ada']]);
+  });
+
   it('picks the group from the chart header', () => {
     render(<ChartLinkGroupButton chartId="a3" group={undefined} />);
     fireEvent.click(screen.getByRole('button', { name: 'No link group: change' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Red' }));
     expect(useTradingStore.getState().charts.find((item) => item.chartId === 'a3')).toMatchObject({ linkGroup: 'red', instrumentId: 'btc' });
+  });
+
+  it('closes its menu with Escape or a press outside, and moves with the arrow keys', () => {
+    render(<><ChartLinkGroupButton chartId="a3" group="green" /><p>outside</p></>);
+    const button = screen.getByRole('button', { name: 'Green link group: change' });
+    fireEvent.click(button);
+    expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: 'Green' }));
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: 'Blue' }));
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(button);
+    fireEvent.click(button);
+    fireEvent.pointerDown(screen.getByText('outside'));
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

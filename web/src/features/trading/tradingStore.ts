@@ -1,4 +1,4 @@
-import { chartsJoiningGroup, linkedSymbolChange, type ChartLinkGroup } from './chartLinkGroups';
+import { chartsWithGroup, groupSymbol, linkedSymbolChange, reconcileGroups, type ChartLinkGroup } from './chartLinkGroups';
 import { loadDrawingToolSettings, saveDrawingToolSettings, type DrawingToolSettings } from './drawings/drawingToolSettings';
 import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
@@ -115,7 +115,8 @@ type TradingWorkspaceState = {
   toggleDrawingsHidden: () => void;
   setDrawingToolSetting: <K extends keyof DrawingToolSettings>(key: K, value: DrawingToolSettings[K]) => void;
   setDrawingSnapMode: (mode: DrawingSnapMode) => void;
-  updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) => void;
+  /** Not the link group: `setChartLinkGroup` changes it, with its symbol. */
+  updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId' | 'linkGroup'>>) => void;
   /** Puts a chart in a colour link group (it takes the group's symbol) or, with null, takes it out. */
   setChartLinkGroup: (chartId: string, group: ChartLinkGroup | null) => void;
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
@@ -269,7 +270,8 @@ function reopenedTabState(state: TradingWorkspaceState): Partial<TradingWorkspac
   if (state.tabs.some((tab) => tab.tabId === entry.tab.tabId)) return { closedTabs };
   const tabs = state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab);
   const index = Math.min(entry.index, tabs.length);
-  const { tab } = entry;
+  // Its group members take their groups' current symbols (TVP-4.1).
+  const tab = reconcileGroups(entry.tab, state.charts, tabs, state.activeTabId);
   return {
     activeTabId: tab.tabId,
     tabs: [...tabs.slice(0, index), tab, ...tabs.slice(index)],
@@ -298,7 +300,7 @@ function syncActiveTab(
 }
 
 /** A chart change, with the tab's links and the chart's colour group (TVP-4.1) carrying it to other charts. */
-function chartUpdate(state: TradingWorkspaceState, chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) {
+function chartUpdate(state: TradingWorkspaceState, chartId: string, patch: Partial<Omit<TradingChartState, 'chartId' | 'linkGroup'>>) {
   const instrumentChanged = patch.instrumentId !== undefined;
   const linkedInstrument = instrumentChanged && state.links.instrument;
   const linkedInterval = patch.interval !== undefined && state.links.interval;
@@ -488,7 +490,14 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   }),
   setDrawingSnapMode: (drawingSnapMode) => set({ drawingSnapMode }),
   updateChart: (chartId, patch) => set((state) => chartUpdate(state, chartId, patch)),
-  setChartLinkGroup: (chartId, group) => set((state) => syncActiveTab(state, { charts: chartsJoiningGroup(state, chartId, group) })),
+  setChartLinkGroup: (chartId, group) => set((state) => {
+    // A chart joining a group takes the group's symbol, which then goes wherever its links reach.
+    const symbol = group ? groupSymbol(state.charts, state.tabs, state.activeTabId, group, chartId) : null;
+    const grouped = { ...state, charts: chartsWithGroup(state.charts, chartId, group) };
+    const current = grouped.charts.find((chart) => chart.chartId === chartId);
+    if (!symbol || !current || current.instrumentId === symbol.instrumentId) return syncActiveTab(grouped, { charts: grouped.charts });
+    return { charts: grouped.charts, ...chartUpdate(grouped, chartId, { instrumentId: symbol.instrumentId, bindingId: null }) };
+  }),
   toggleIndicator: (chartId, id, period) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => {
       if (chart.chartId !== chartId) return chart;
       const existing = chart.indicators.find((indicator) => indicator.id === id);

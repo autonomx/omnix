@@ -48,11 +48,18 @@ export function groupSymbol(
   return member ? { instrumentId: member.instrumentId, bindingId: member.bindingId } : null;
 }
 
-type LinkState = { charts: readonly TradingChartState[]; tabs: readonly TradingTabState[]; activeTabId: string };
+type LinkState = {
+  charts: readonly TradingChartState[];
+  tabs: readonly TradingTabState[];
+  activeTabId: string;
+  links: { instrument: boolean };
+};
 
 /**
- * A symbol change on `chartId` carried to its group: the active tab's charts (after the change) and a function that
- * applies it to the other tabs. Null when the chart is in no group or the symbol did not change.
+ * A symbol change on `chartId` carried as far as groups and tab-wide links reach (TVP-4.1): the groups of charts
+ * that take the symbol pass it to their members in every tab, and a tab whose instrument link is on passes it to
+ * all its charts, whose groups pass it on in turn. Six groups and a finite set of tabs bound the walk. Null when
+ * the symbol reaches no group (the tab's own link already did the rest).
  */
 export function linkedSymbolChange(
   state: LinkState,
@@ -60,25 +67,58 @@ export function linkedSymbolChange(
   instrumentId: string | undefined,
   charts: readonly TradingChartState[],
 ): { charts: TradingChartState[]; otherTabs: (tabs: readonly TradingTabState[]) => TradingTabState[] } | null {
-  const group = state.charts.find((chart) => chart.chartId === chartId)?.linkGroup;
-  if (!group || instrumentId === undefined) return null;
+  if (instrumentId === undefined) return null;
   const symbol = { instrumentId, bindingId: null };
+  const reached = (chart: TradingChartState) => chart.chartId === chartId || state.links.instrument;
+  const groups = new Set(charts.filter((chart) => chart.linkGroup && reached(chart)).map((chart) => chart.linkGroup as ChartLinkGroup));
+  if (groups.size === 0) return null;
+  let active = [...charts];
+  const others = new Map(state.tabs.filter((tab) => tab.tabId !== state.activeTabId).map((tab) => [tab.tabId, tab]));
+  for (let seen = -1; seen !== groups.size;) {
+    seen = groups.size;
+    active = spread(active, groups, symbol, state.links.instrument, chartId);
+    for (const [tabId, tab] of others) others.set(tabId, { ...tab, charts: spread(tab.charts, groups, symbol, tab.links.instrument) });
+  }
   return {
-    charts: withGroupSymbol(charts, group, symbol, chartId),
-    otherTabs: (tabs) => tabsWithGroupSymbol(tabs, state.activeTabId, group, symbol),
+    charts: active,
+    otherTabs: (tabs) => tabs.map((tab) => others.get(tab.tabId) ?? tab),
   };
 }
 
-/** The active tab's charts with `chartId` in `group` (taking the group's symbol), or out of any group with null. */
-export function chartsJoiningGroup(state: LinkState, chartId: string, group: ChartLinkGroup | null): TradingChartState[] {
-  const symbol = group ? groupSymbol(state.charts, state.tabs, state.activeTabId, group, chartId) : null;
-  return state.charts.map((chart) => {
+/** One step: group members take the symbol; a linked tab with a member that took it passes it to all its charts. */
+function spread(
+  charts: readonly TradingChartState[],
+  groups: Set<ChartLinkGroup>,
+  symbol: Symbol,
+  tabLinked: boolean,
+  except?: string,
+): TradingChartState[] {
+  let next = [...charts];
+  for (const group of groups) next = withGroupSymbol(next, group, symbol, except);
+  const changed = next.some((chart, index) => chart !== charts[index]);
+  if (tabLinked && changed) {
+    next = next.map((chart) => (chart.instrumentId === symbol.instrumentId || chart.chartId === except ? chart : { ...chart, instrumentId: symbol.instrumentId, bindingId: null }));
+  }
+  for (const chart of next) if (chart.linkGroup && chart.instrumentId === symbol.instrumentId) groups.add(chart.linkGroup);
+  return next;
+}
+
+/** The active tab's charts with `chartId` put in `group`, or taken out of any group with null; symbols unchanged. */
+export function chartsWithGroup(charts: readonly TradingChartState[], chartId: string, group: ChartLinkGroup | null): TradingChartState[] {
+  return charts.map((chart) => {
     if (chart.chartId !== chartId) return chart;
     const rest = { ...chart };
     delete rest.linkGroup;
-    if (!group) return rest;
-    return symbol && symbol.instrumentId !== chart.instrumentId
-      ? { ...rest, linkGroup: group, instrumentId: symbol.instrumentId, bindingId: null }
-      : { ...rest, linkGroup: group };
+    return group ? { ...rest, linkGroup: group } : rest;
   });
+}
+
+/** A reopened tab's group members take their groups' current symbols, which may have changed while it was closed. */
+export function reconcileGroups(tab: TradingTabState, charts: readonly TradingChartState[], tabs: readonly TradingTabState[], activeTabId: string): TradingTabState {
+  let next = tab.charts;
+  for (const group of new Set(tab.charts.flatMap((chart) => (chart.linkGroup ? [chart.linkGroup] : [])))) {
+    const symbol = groupSymbol(charts, tabs, activeTabId, group, '');
+    if (symbol) next = withGroupSymbol(next, group, symbol);
+  }
+  return next === tab.charts ? tab : { ...tab, charts: next };
 }
