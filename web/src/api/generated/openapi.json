@@ -47355,6 +47355,12 @@
             "title": "Message",
             "type": "string"
           },
+          "name": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Name",
+            "type": "string"
+          },
           "notification_channels": {
             "items": {
               "enum": [
@@ -47510,6 +47516,12 @@
             "title": "Message",
             "type": "string"
           },
+          "name": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Name",
+            "type": "string"
+          },
           "notification_channels": {
             "items": {
               "enum": [
@@ -47604,6 +47616,7 @@
           "component",
           "anchor_bars_ago",
           "message",
+          "name",
           "notification_channels",
           "trigger_policy",
           "delivery",

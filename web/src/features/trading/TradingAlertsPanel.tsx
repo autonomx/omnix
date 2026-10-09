@@ -10,7 +10,7 @@ import {
   formatAlertThreshold,
   notifyTradingAlertsChanged,
 } from './tradingChartAlerts';
-import { alertSoundName, soundChange } from './alertSounds';
+import { deliveryCreateFields, deliveryEditorOf, deliveryUpdatePatch } from './alertDelivery';
 import { tradingApi } from './tradingApi';
 import type {
   TradingAlert,
@@ -76,6 +76,9 @@ function directionLabel(condition: TradingAlertCondition): string {
 }
 
 function alertTitle(alert: TradingAlert): string {
+  // The alert's name (TVP-1.5), then its message, then its condition.
+  const name = alert.parameters.name?.trim();
+  if (name) return name;
   const message = alert.parameters.message?.trim();
   if (message) return message;
 
@@ -163,7 +166,7 @@ function editorForAlert(alert: TradingAlert): TradingAlertEditorState {
     triggerPolicy: alertFrequency(alert),
     message: alert.parameters.message ?? '',
     notifications: alert.parameters.notification_channels ?? ['app', 'toast'],
-    sound: alertSoundName(alert.parameters.delivery?.sound?.name), storedSound: alert.parameters.delivery?.sound?.name,
+    ...deliveryEditorOf(alert),
     indicator: alert.parameters.indicator_id ?? 'rsi',
     period: String(alert.parameters.period ?? 14),
     lookback: String(alert.parameters.lookback_bars ?? 1),
@@ -312,7 +315,7 @@ export function TradingAlertsPanel({
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
       message: editor.message, notification_channels: editor.notifications,
-      sound_name: soundChange(editor),
+      ...deliveryUpdatePatch(editor),
     })));
   };
 
@@ -331,7 +334,7 @@ export function TradingAlertsPanel({
       expiration: editor.expiration,
       triggerPolicy: editor.triggerPolicy,
       message: editor.message,
-      notificationChannels: editor.notifications, soundName: editor.sound ?? 'chime',
+      notificationChannels: editor.notifications, ...deliveryCreateFields(editor),
     });
     input.condition_type = editor.condition;
     input.threshold = formatAlertThreshold(threshold);

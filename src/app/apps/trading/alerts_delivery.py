@@ -121,7 +121,9 @@ def enqueue_alert_deliveries(connection: Any, workspace_id: str, alert: TradingA
     channels = [channel for channel in OUTBOX_CHANNELS if channel in alert.parameters.notification_channels]
     if "webhook" in channels and not alert.webhook_ref:
         channels.remove("webhook")
-    message = alert.parameters.message.strip() or default_alert_message(alert, trigger)
+    # The trigger carries the message with its placeholders filled in (TVP-1.5).
+    rendered = str(trigger.payload.get("message") or "").strip()
+    message = rendered or alert.parameters.message.strip() or default_alert_message(alert, trigger)
     added = 0
     for channel in channels:
         row = connection.execute(

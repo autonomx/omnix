@@ -33,7 +33,9 @@ export function TradingAlertToastLayer() {
     const trigger = fresh.find((item) => !alertOf(item.alert_id) || channelsOf(item.alert_id).includes('toast'));
     if (!trigger) return;
     const alert = alertOf(trigger.alert_id);
-    const message = alert?.parameters.message || `${symbol(trigger.instrument_id)} crossed ${trigger.threshold}`;
+    // The server fills the message's placeholders when the alert triggers (TVP-1.5).
+    const rendered = typeof trigger.payload?.message === 'string' ? trigger.payload.message : '';
+    const message = rendered || alert?.parameters.message || `${symbol(trigger.instrument_id)} crossed ${trigger.threshold}`;
     setToast({ triggerId: trigger.trigger_id, title: 'Alert triggered', message });
     const timer = window.setTimeout(() => setToast((currentToast) => currentToast?.triggerId === trigger.trigger_id ? null : currentToast), 6_000);
     return () => window.clearTimeout(timer);

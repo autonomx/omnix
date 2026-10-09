@@ -129,6 +129,13 @@ def test_a_trigger_enqueues_one_webhook_delivery_in_its_transaction(outbox) -> N
     assert len(_rows(outbox, hooked.alert_id)) == 1
 
 
+def test_the_delivery_and_the_trigger_carry_the_message_with_placeholders_filled(outbox) -> None:
+    hooked = _alert(outbox, "templated", channels=["app", "webhook"], webhook_ref="ref-t", message='{"close": {{close}}, "x": "{{nope}}"}')
+    triggers = [trigger for trigger in _trigger(outbox) if trigger.alert_id == hooked.alert_id]
+    assert triggers[0].payload["message"] == '{"close": 101, "x": "{{nope}}"}'
+    assert [row[5] for row in _rows(outbox, hooked.alert_id)] == ['{"close": 101, "x": "{{nope}}"}']
+
+
 def test_claim_send_retry_and_deliver(outbox) -> None:
     hooked = _alert(outbox, "retry", channels=["webhook"], webhook_ref="ref-2")
     _trigger(outbox)

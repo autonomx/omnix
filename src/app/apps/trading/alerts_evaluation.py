@@ -110,6 +110,12 @@ class AlertConditionOutcome:
     volume: Decimal
     observations: tuple[ConditionObservation, ...] = field(default_factory=tuple)
     bar_index: int | None = None
+    # The bar's other prices, for message placeholders (TVP-1.5); absent for a legacy quote evaluation.
+    open: Decimal | None = None
+    high: Decimal | None = None
+    low: Decimal | None = None
+    # False when the observation had no volume (a legacy quote): ``volume`` is then a stand-in 0.
+    volume_known: bool = True
 
     @property
     def primary_value(self) -> Decimal | None:
@@ -363,6 +369,9 @@ def evaluate_conditions(
         volume=_decimal(bar.volume) or Decimal("0"),
         observations=observations,
         bar_index=index,
+        open=_decimal(bar.open),
+        high=_decimal(bar.high),
+        low=_decimal(bar.low),
     )
 
 
