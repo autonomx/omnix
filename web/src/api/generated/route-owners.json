@@ -447,6 +447,7 @@
     "POST /api/trading/alerts": "trading",
     "GET /api/trading/alerts/deliveries": "trading",
     "POST /api/trading/alerts/evaluate": "trading",
+    "GET /api/trading/alerts/indicators": "trading",
     "GET /api/trading/alerts/triggers": "trading",
     "DELETE /api/trading/alerts/{alert_id}": "trading",
     "PUT /api/trading/alerts/{alert_id}": "trading",

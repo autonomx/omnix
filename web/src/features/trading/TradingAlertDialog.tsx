@@ -8,6 +8,8 @@ import type {
 import { formatAlertThreshold } from './tradingChartAlerts';
 import { MESSAGE_PLACEHOLDERS, type AlertDeliveryEditor } from './alertDelivery';
 import { AlertDeliveryFields } from './AlertDeliveryFields';
+import { AlertIndicatorPicker } from './AlertIndicatorPicker';
+import { resolveIndicatorSelection, type AlertIndicatorChoice, type AlertIndicatorSelection } from './alertIndicatorSources';
 import './TradingChartAlertOpaque.css';
 
 export type TradingAlertEditorState = AlertDeliveryEditor & {
@@ -26,6 +28,10 @@ export type TradingAlertEditorState = AlertDeliveryEditor & {
   period: string;
   lookback: string;
   trendlinePoints?: Array<{ time: string; price: number }>;
+  /** A chart indicator, line and comparison (TVP-1.3), when the alert is on one. */
+  indicatorSelection?: AlertIndicatorSelection;
+  /** The chart indicator the alert was placed on (its pane), any indicator id. */
+  chartIndicatorId?: string;
   // Alerts described by conditions (condition 'conditions') show them read-only until the condition editor ships.
   conditionsSummary?: string;
 }
@@ -90,6 +96,7 @@ export function TradingAlertDialog({
   onClose,
   onToggle,
   onArchive,
+  indicatorChoices,
 }: {
   editor: TradingAlertEditorState;
   symbol: string;
@@ -100,7 +107,14 @@ export function TradingAlertDialog({
   onClose: () => void;
   onToggle?: () => void;
   onArchive?: () => void;
+  /** The chart's indicators (TVP-1.3); without them the dialog offers the legacy indicator list. */
+  indicatorChoices?: readonly AlertIndicatorChoice[];
 }) {
+  // On a chart with indicators, an indicator alert is on one of them (unless editing a legacy alert).
+  const usesChartIndicators = Boolean(indicatorChoices?.length) && editor.mode === 'create' && editor.condition.startsWith('indicator_');
+  const chartIndicators = indicatorChoices && usesChartIndicators
+    ? resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId)
+    : undefined;
   const [showConditionNote, setShowConditionNote] = useState(false);
   const family = conditionFamily(editor.condition);
   const direction = conditionDirection(editor.condition);
@@ -143,6 +157,7 @@ export function TradingAlertDialog({
             >
               {(isTrendline ? [{ value: 'trendline_crossing', label: 'Trendline' }] : priceConditionOptions).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
+            {usesChartIndicators ? null : (
             <select
               aria-label="Alert crossing"
               value={isTrendline ? editor.condition : direction}
@@ -152,6 +167,7 @@ export function TradingAlertDialog({
                 ? trendlineModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)
                 : <><option value="above">Crossing above</option><option value="below">Crossing below</option></>}
             </select>
+            )}
           </div>
           {isTrendline ? (
             <div className="trading-alert-value-row"><span>Line</span><strong>Selected trendline</strong></div>
@@ -172,7 +188,11 @@ export function TradingAlertDialog({
           {isPercent ? (
             <label className="trading-alert-inline-field">Lookback bars<input inputMode="numeric" value={editor.lookback} onChange={(event) => onChange({ lookback: event.target.value })} /></label>
           ) : null}
-          {isIndicator ? (
+          {usesChartIndicators && !indicatorChoices?.some((choice) => !choice.unavailable) ? (
+            <small className="trading-alert-condition-note" role="alert">None of this chart&apos;s indicators can be alerted on by the server yet.</small>
+          ) : usesChartIndicators ? (
+            <AlertIndicatorPicker choices={indicatorChoices ?? []} selection={chartIndicators} onChange={(indicatorSelection) => onChange({ indicatorSelection })} />
+          ) : isIndicator ? (
             <div className="trading-alert-condition-row">
               <select aria-label="Alert indicator" value={editor.indicator} onChange={(event) => onChange({ indicator: event.target.value as TradingAlertIndicatorId })}>
                 {['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap', 'stochastic-rsi'].map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}

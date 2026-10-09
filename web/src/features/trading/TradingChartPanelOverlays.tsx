@@ -1,3 +1,6 @@
+import { useMemo } from 'react';
+import { alertIndicatorChoices } from './alertIndicatorSources';
+import { useAlertIndicatorIds } from './useTradingAlerts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingOrderLinesOverlay } from './TradingOrderLinesOverlay';
@@ -14,12 +17,14 @@ import { ChartWorkflowSettings } from './TradingChartWorkflowControls';
 export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartType, clearAlertPlacement,
-    drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
+    drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicatorOutputs, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
     onActivate, onChangeChartType, onToggleIndicator, openContextMenu, paperAccountId, priceScaleMultiplier,
     provenance, replayMode, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
     setSettingsVisible, setTableVisible, settingsVisible, tableVisible,
   } = ws;
   const tickSize = drawingInstrumentOf(chartQuery.data?.instrument).tickSize;
+  const alertIndicatorIds = useAlertIndicatorIds();
+  const indicatorChoices = useMemo(() => alertIndicatorChoices(indicators, indicatorOutputs, alertIndicatorIds), [alertIndicatorIds, indicatorOutputs, indicators]);
   return (
     <>
       <TradingDrawingOverlay
@@ -51,6 +56,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
             : undefined;
           setAlertPlacement({
             ...placement,
+            ...(indicatorId ? { chartIndicatorId: indicatorId } : {}),
             ...(supportedIndicatorId ? { indicatorId: supportedIndicatorId } : {}),
             ...(indicator?.period !== undefined ? { indicatorPeriod: indicator.period } : {}),
           });
@@ -66,6 +72,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         symbol={chartQuery.data?.instrument.display_symbol ?? instrumentId}
         placement={alertPlacement}
         onPlacementConsumed={clearAlertPlacement}
+        indicatorChoices={indicatorChoices}
       />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
       <TradingOrderLinesOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} tickSize={tickSize} disabled={replayMode} />
@@ -157,7 +164,7 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
             }}
             onCopyPrice={copyContextPrice}
             onPastePrice={pasteContextPrice}
-            onAddAlert={contextMenu?.indicatorId || !contextMenu?.contextIndicatorId ? contextMenuAlert : null}
+            onAddAlert={contextMenuAlert}
             onToggleCursor={() => setCursorLocked((value) => !value)}
             onToggleTable={() => setTableVisible((value) => !value)}
             onObjectTree={() => setObjectTreeVisible(true)}
