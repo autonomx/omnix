@@ -243,7 +243,13 @@ describe('TVP-3.2/3.3 follow-ups', () => {
     const { shapes } = runTool('fib-spiral', [[-3000, 300], [-2950, 300]]);
     const spiral = shapes.find((shape) => shape.kind === 'polyline');
     const points = spiral && spiral.kind === 'polyline' ? spiral.points : [];
-    const longest = Math.max(...points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y)));
+    // Fine steps where the arm can cross the view (coarse ones further from it stay off-screen).
+    const near = (point: { x: number; y: number }) => point.x > -100 && point.x < 900 && point.y > -100 && point.y < 700;
+    const longest = Math.max(...points.slice(1).flatMap((point, index) => (near(point) && near(points[index]) ? [Math.hypot(point.x - points[index].x, point.y - points[index].y)] : [])));
     expect(longest).toBeLessThan(8);
+    // A centre much further off still reaches across the view within the point cap.
+    const farther = runTool('fib-spiral', [[-20000, 300], [-19950, 300]]).shapes.find((shape) => shape.kind === 'polyline');
+    const reach = farther && farther.kind === 'polyline' ? Math.max(...farther.points.map((point) => Math.hypot(point.x + 20000, point.y - 300))) : 0;
+    expect(reach).toBeGreaterThan(Math.hypot(20800, 300));
   });
 });

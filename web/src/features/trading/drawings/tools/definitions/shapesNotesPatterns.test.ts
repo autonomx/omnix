@@ -155,6 +155,8 @@ describe('TVP-3.4/3.5/3.7 review fixes', () => {
     expect(hidden.some((shape) => shape.kind === 'segment' && shape.y1 === 320 && shape.y2 === 320)).toBe(true);
     const xabcd = runTool('xabcd-pattern', [[0, 400], [100, 200], [200, 323.6], [300, 250], [400, 360]], { properties: { showLabels: false } }).shapes;
     expect(xabcd.filter((shape) => shape.kind === 'polygon')).toHaveLength(2);
+    const triangle = runTool('triangle-pattern', [[0, 100], [20, 300], [100, 150], [120, 250]], { properties: { showLabels: false } }).shapes;
+    expect(triangle.filter((shape) => shape.kind === 'segment')).toHaveLength(2);
   });
 
   it('three drives puts each ratio on the line joining the legs it compares', () => {

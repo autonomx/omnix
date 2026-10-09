@@ -37,12 +37,15 @@ export function moveRatio(a: DrawingPoint, b: DrawingPoint, c: DrawingPoint, d: 
   return base === 0 ? null : Math.abs(d.price - c.price) / base;
 }
 
+/** Marks a ratio line, which the label switch hides with the labels (the pattern's own lines stay). */
+const RATIO_CLASS = 'pattern-ratio';
+
 function ratioLine(context: DrawingGeometryContext, from: number, to: number, ratio: number | null): DrawingShape[] {
   const a = context.points[from];
   const b = context.points[to];
   if (!a || !b || ratio === null) return [];
   return [
-    { kind: 'segment', x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...lineStroke(context), dash: [4, 4], strokeWidth: 1 },
+    { kind: 'segment', x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...lineStroke(context), dash: [4, 4], strokeWidth: 1, className: RATIO_CLASS },
     { kind: 'text', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 4, text: ratio.toFixed(3), align: 'middle', fontSize: 11, fill: context.style.color, hit: 'none' },
   ];
 }
@@ -75,7 +78,7 @@ function patternTool<const Id extends string>(id: Id, label: string, displayName
       const complete = context.points.length >= spec.anchors;
       const all = complete && spec.extras ? spec.extras(context) : [];
       // Hiding labels and ratios hides their text and the dashed ratio lines, not the pattern's own lines and fills.
-      const extras = showLabels ? all : all.filter((shape) => shape.kind !== 'text' && !(shape.kind === 'segment' && shape.strokeWidth === 1 && shape.dash));
+      const extras = showLabels ? all : all.filter((shape) => shape.kind !== 'text' && shape.className !== RATIO_CLASS);
       const fills = extras.filter((shape) => shape.kind === 'polygon');
       return [...fills, ...labelledPolyline(context, showLabels ? spec.labels : []), ...extras.filter((shape) => shape.kind !== 'polygon')];
     },
