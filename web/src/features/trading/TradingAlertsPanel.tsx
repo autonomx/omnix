@@ -317,7 +317,7 @@ export function TradingAlertsPanel({
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy, message: editor.message, notification_channels: editor.notifications, ...deliveryUpdatePatch(editor),
     });
-    if (applyConditionDrafts(input, editor)) return void setStatus('error'); await runMutation(() => tradingApi.updateAlert(alert, input));
+    if (applyConditionDrafts(input, editor, (problem) => setEditor((current) => current && { ...current, conditionError: problem }))) return void setStatus('error'); await runMutation(() => tradingApi.updateAlert(alert, input));
   };
 
   const createAlert = async () => {
@@ -346,7 +346,7 @@ export function TradingAlertsPanel({
       lookback_bars: Number(editor.lookback) || 1,
     };
     input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at;
-    if (applyConditionDrafts(input, editor)) return void setStatus('error'); await runMutation(() => tradingApi.createAlert(input));
+    if (applyConditionDrafts(input, editor, (problem) => setEditor((current) => current && { ...current, conditionError: problem }))) return void setStatus('error'); await runMutation(() => tradingApi.createAlert(input));
   };
 
   const activeAlert = alerts.find((alert) => alert.instrument_id === instrumentId);

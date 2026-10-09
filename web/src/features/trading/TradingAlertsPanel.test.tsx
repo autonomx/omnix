@@ -115,3 +115,37 @@ describe('TradingAlertsPanel multi-condition editing (TVP-1.6)', () => {
     await waitFor(() => expect(tradingApi.updateAlert.mock.calls.at(-1)![1].conditions).toHaveLength(1));
   });
 });
+
+describe('TradingAlertsPanel conditions it cannot edit (TVP-1.6)', () => {
+  it('saves a trendline conditions alert with its conditions unchanged', async () => {
+    const trendline = {
+      ...conditionsAlert,
+      alert_id: 'trend-1',
+      conditions: [
+        { source: { kind: 'price', field: 'close' }, operator: 'crossing', target: { kind: 'source', source: { kind: 'trendline', points: [{ time: '2026-10-08T09:00:00Z', price: '1' }, { time: '2026-10-08T10:00:00Z', price: '2' }] } } },
+      ],
+    };
+    tradingApi.alerts.mockResolvedValue([trendline]);
+    tradingApi.alertTriggers.mockResolvedValue([]);
+    tradingApi.updateAlert.mockResolvedValue(trendline);
+    render(<TradingAlertsPanel instrumentId={trendline.instrument_id} bindingId={null} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Options for / }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit alert' }));
+    expect(screen.queryByLabelText('Condition 1 source')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(tradingApi.updateAlert).toHaveBeenCalled());
+    expect(tradingApi.updateAlert.mock.calls.at(-1)![1].conditions).toEqual(trendline.conditions);
+  });
+
+  it('shows why a condition can\'t be saved', async () => {
+    tradingApi.alerts.mockResolvedValue([conditionsAlert]);
+    tradingApi.alertTriggers.mockResolvedValue([]);
+    render(<TradingAlertsPanel instrumentId={conditionsAlert.instrument_id} bindingId={null} />);
+    const title = 'BTCUSDT Price crossing up 100.00 and rsi:14 greater than 70.00';
+    fireEvent.click(await screen.findByRole('button', { name: `Options for ${title}` }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit alert' }));
+    fireEvent.change(screen.getByLabelText('Condition 1 value'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Each condition needs a value.');
+  });
+});

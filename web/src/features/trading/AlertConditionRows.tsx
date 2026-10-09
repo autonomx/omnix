@@ -2,12 +2,16 @@
 import type { AlertIndicatorChoice } from './alertIndicatorSources';
 import {
   OPERATOR_OPTIONS,
+  choiceMatchesDraft,
   SOURCE_OPTIONS,
   indicatorDraftPatch,
   operatorTakes,
   type ConditionDraft,
   type ConditionSourceKind,
 } from './alertConditionDrafts';
+
+/** The indicator select's value for a stored indicator the chart doesn't offer as is. */
+const STORED = '__stored__';
 
 function ConditionRow({
   draft,
@@ -24,7 +28,8 @@ function ConditionRow({
 }) {
   const takes = operatorTakes(draft.operator);
   const available = choices.filter((choice) => !choice.unavailable);
-  const choice = available.find((item) => item.key === draft.indicatorId);
+  // The chart's indicator only when it is the stored one (same inputs, draws the line); else the stored one shows as is.
+  const choice = available.find((item) => choiceMatchesDraft(item, draft));
   const update = (patch: Partial<ConditionDraft>) => onChange({ ...draft, ...patch });
   const setSource = (source: ConditionSourceKind) => {
     if (source !== 'indicator') return update({ source });
@@ -49,14 +54,14 @@ function ConditionRow({
       ) : null}
       {draft.source === 'indicator' ? (
         <div className="trading-alert-condition-row">
-          <select aria-label={`Condition ${number} indicator`} value={draft.indicatorId ?? ''} onChange={(event) => {
+          <select aria-label={`Condition ${number} indicator`} value={choice ? choice.key : STORED} onChange={(event) => {
             const picked = available.find((item) => item.key === event.target.value);
             if (picked) update(indicatorDraftPatch(picked));
           }}>
-            {choice ? null : <option value={draft.indicatorId ?? ''}>{draft.indicatorId ?? 'Choose'}</option>}
+            {choice ? null : <option value={STORED}>{draft.indicatorId ? `${draft.indicatorId} (as saved)` : 'Choose'}</option>}
             {available.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
           </select>
-          <select aria-label={`Condition ${number} line`} value={draft.output ?? ''} onChange={(event) => update({ output: event.target.value })}>
+          <select aria-label={`Condition ${number} line`} value={draft.output ?? ''} onChange={(event) => (choice ? update(indicatorDraftPatch(choice, event.target.value)) : update({ output: event.target.value }))}>
             {choice ? null : <option value={draft.output ?? ''}>{draft.output ?? 'Line'}</option>}
             {(choice?.outputs ?? []).map((output) => <option key={output.key} value={output.key}>{output.title}</option>)}
           </select>

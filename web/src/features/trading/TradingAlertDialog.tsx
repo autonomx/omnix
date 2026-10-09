@@ -47,6 +47,8 @@ export type TradingAlertEditorState = AlertDeliveryEditor & {
   conditionDrafts?: ConditionDraft[];
   /** False when a conditions alert holds one the dialog can't edit: it is shown as its summary and kept. */
   conditionsEditable?: boolean;
+  /** Why the conditions can't be saved (shown until the conditions change). */
+  conditionError?: string;
 }
 
 /** Whether "Add condition" can add one, or why not. */
@@ -173,7 +175,7 @@ export function TradingAlertDialog({
         <section className="trading-alert-condition-section" aria-label="Alert condition">
           <div className="trading-alert-section-heading"><strong>Condition</strong><span>Price, indicator, or volume</span></div>
           {isConditions && editor.conditionsEditable !== false && drafts.length > 0 ? (
-            <AlertConditionRows drafts={drafts} firstNumber={1} minimum={1} choices={indicatorChoices ?? []} onChange={(conditionDrafts) => onChange({ conditionDrafts })} />
+            <AlertConditionRows drafts={drafts} firstNumber={1} minimum={1} choices={indicatorChoices ?? []} onChange={(conditionDrafts) => { setConditionNote(null); onChange({ conditionDrafts, conditionError: undefined }); }} />
           ) : isConditions ? (
             <div className="trading-alert-value-row"><span>Conditions</span><strong>{editor.conditionsSummary || 'Conditions'}</strong></div>
           ) : (<>
@@ -181,7 +183,11 @@ export function TradingAlertDialog({
             <select
               aria-label="Alert condition"
               value={family}
-              onChange={(event) => onChange({ condition: updateCondition(event.target.value as TradingAlertCondition, direction) })}
+              onChange={(event) => {
+                const condition = updateCondition(event.target.value as TradingAlertCondition, direction);
+                // A family that takes one condition drops the added ones.
+                onChange({ condition, ...(acceptsExtraConditions(condition) && (!condition.startsWith('indicator_') || (Boolean(indicatorChoices?.length) && editor.mode === 'create')) ? {} : { conditionDrafts: [] }), conditionError: undefined });
+              }}
             >
               {(isTrendline ? [{ value: 'trendline_crossing', label: 'Trendline' }] : priceConditionOptions).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
@@ -242,7 +248,7 @@ export function TradingAlertDialog({
               <input aria-label="Alert indicator period" inputMode="numeric" value={editor.period} onChange={(event) => onChange({ period: event.target.value })} />
             </div>
           ) : null}
-          <AlertConditionRows drafts={drafts} firstNumber={2} minimum={0} choices={indicatorChoices ?? []} onChange={(conditionDrafts) => onChange({ conditionDrafts })} />
+          <AlertConditionRows drafts={drafts} firstNumber={2} minimum={0} choices={indicatorChoices ?? []} onChange={(conditionDrafts) => { setConditionNote(null); onChange({ conditionDrafts, conditionError: undefined }); }} />
           </>)}
           <button
             type="button"
@@ -256,7 +262,8 @@ export function TradingAlertDialog({
             ＋ Add condition
           </button>
           {conditionNote ? <small className="trading-alert-condition-note" role="status">{conditionNote}</small> : null}
-          {drafts.length > 0 && !isConditions ? <small className="trading-alert-condition-note">All conditions must hold together (AND); one frequency and message.</small> : null}
+          {drafts.length > 0 && !isConditions ? <small className="trading-alert-condition-note">All conditions must hold together (AND); one frequency and message. The alert is then listed by its conditions, without a line on the chart.</small> : null}
+          {editor.conditionError ? <small className="trading-alert-condition-note" role="alert">{editor.conditionError}</small> : null}
         </section>
 
         <dl className="trading-alert-dialog-settings">

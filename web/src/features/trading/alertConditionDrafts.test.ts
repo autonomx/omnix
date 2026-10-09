@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { applyConditionDrafts, conditionDraft, conditionEditorFields, draftCondition, newConditionDraft } from './alertConditionDrafts';
+import { describe, expect, it, vi } from 'vitest';
+import { applyConditionDrafts, choiceMatchesDraft, conditionDraft, conditionEditorFields, draftCondition, newConditionDraft } from './alertConditionDrafts';
 
 const price = (overrides = {}) => ({ condition_type: 'price_above' as string, threshold: '100', parameters: { lookback_bars: 3 }, conditions: undefined as unknown, ...overrides });
 
@@ -9,7 +9,7 @@ describe('multi-condition alert drafts (TVP-1.6)', () => {
     const condition = draftCondition(moving);
     expect(condition).toEqual({ source: { kind: 'change_percent', lookback_bars: 5 }, operator: 'moving_up_percent', amount: '2', bars: 3 });
     expect(conditionDraft(condition as never)).toMatchObject({ source: 'change', lookback: '5', operator: 'moving_up_percent', amount: '2', bars: '3' });
-    expect(draftCondition({ ...newConditionDraft(), operator: 'entering_channel', upper: '1', lower: '2' })).toMatch(/upper value is above/);
+    expect(draftCondition({ ...newConditionDraft(), operator: 'entering_channel', upper: '1', lower: '2' })).toMatch(/must be above/);
     expect(draftCondition({ ...newConditionDraft(), value: '' })).toMatch(/needs a value/);
     expect(draftCondition({ ...newConditionDraft(), source: 'indicator' })).toMatch(/indicator/);
     // A trendline condition can't be edited in the dialog: the alert keeps it.
@@ -41,5 +41,31 @@ describe('multi-condition alert drafts (TVP-1.6)', () => {
     expect(applyConditionDrafts(price() as never, { condition: 'price_above', conditionDrafts: six })).toMatch(/at most 5/);
     expect(applyConditionDrafts(price() as never, { condition: 'price_above', conditionDrafts: [newConditionDraft('')] })).toMatch(/needs a value/);
     expect(applyConditionDrafts(price({ condition_type: 'trendline_crossing' }) as never, { condition: 'trendline_crossing', conditionDrafts: [newConditionDraft('1')] })).toMatch(/one condition/);
+  });
+});
+
+describe('multi-condition review fixes (TVP-1.6)', () => {
+  it('converts a volume alert, and keeps a chart indicator alert\'s condition first', () => {
+    const volume = price({ condition_type: 'volume_below', threshold: '500' });
+    applyConditionDrafts(volume as never, { condition: 'volume_below', conditionDrafts: [newConditionDraft('1')] });
+    expect((volume.conditions as unknown[])[0]).toEqual({ source: { kind: 'price', field: 'volume' }, operator: 'crossing_down', target: { kind: 'value', value: '500' } });
+    const indicatorCondition = { source: { kind: 'indicator', indicator_id: 'rsi', inputs: { period: 14 }, output: 'rsi:14' }, operator: 'crossing', target: { kind: 'value', value: '70' } };
+    const indicator = price({ condition_type: 'conditions', threshold: '0', conditions: [indicatorCondition] });
+    expect(applyConditionDrafts(indicator as never, { condition: 'indicator_above', conditionDrafts: [newConditionDraft('100')] })).toBeNull();
+    expect((indicator.conditions as unknown[])[0]).toEqual(indicatorCondition);
+    expect(indicator.conditions).toHaveLength(2);
+  });
+
+  it('reports why conditions can\'t be saved', () => {
+    const report = vi.fn();
+    expect(applyConditionDrafts(price() as never, { condition: 'price_above', conditionDrafts: [{ ...newConditionDraft(), operator: 'inside_channel', upper: '1', lower: '2' }] }, report)).toMatch(/must be above/);
+    expect(report).toHaveBeenCalledWith('The upper value must be above the lower value.');
+  });
+
+  it('matches a chart indicator to a stored condition only with the same inputs and line', () => {
+    const draft = conditionDraft({ source: { kind: 'indicator', indicator_id: 'rsi', inputs: { period: 14 }, output: 'rsi:14' }, operator: 'greater_than', target: { kind: 'value', value: '70' } } as never)!;
+    const rsi = (period: number) => ({ key: 'rsi', label: `RSI ${period}`, inputs: { period }, outputs: [{ key: `rsi:${period}`, title: `RSI ${period}` }] }) as never;
+    expect(choiceMatchesDraft(rsi(14), draft)).toBe(true);
+    expect(choiceMatchesDraft(rsi(21), draft)).toBe(false);
   });
 });

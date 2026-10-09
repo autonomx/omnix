@@ -97,7 +97,7 @@ export function draftCondition(draft: ConditionDraft): ConditionInput | string {
   }
   if (takes === 'channel') {
     if (!isNumber(draft.upper) || !isNumber(draft.lower)) return 'A channel needs an upper and a lower value.';
-    if (Number(draft.upper) <= Number(draft.lower)) return "A channel's upper value is above its lower value.";
+    if (Number(draft.upper) <= Number(draft.lower)) return 'The upper value must be above the lower value.';
     return { source, operator: draft.operator, target: { kind: 'channel', upper: { kind: 'value', value: draft.upper.trim() }, lower: { kind: 'value', value: draft.lower.trim() } } };
   }
   if (!isNumber(draft.value)) return 'Each condition needs a value.';
@@ -121,6 +121,13 @@ export function conditionDraft(condition: ConditionOutput | ConditionInput): Con
   }
   if (takes === 'value' && target?.kind === 'value') return { ...draft, value: String(target.value) };
   return null;
+}
+
+/** Whether a chart indicator is the one a draft reads: the same indicator and inputs, drawing the draft's line. */
+export function choiceMatchesDraft(choice: AlertIndicatorChoice, draft: ConditionDraft): boolean {
+  if (choice.key !== draft.indicatorId || !choice.outputs.some((output) => output.key === draft.output)) return false;
+  const inputs = (value: unknown) => JSON.stringify(Object.entries((value ?? {}) as Record<string, unknown>).filter(([, item]) => item !== null && item !== undefined).sort(([a], [b]) => a.localeCompare(b)));
+  return inputs(choice.inputs) === inputs(draft.indicatorInputs);
 }
 
 /** A chart indicator for a draft: its id, inputs and first line. */
@@ -158,10 +165,16 @@ function legacyCondition(input: AlertInput): ConditionInput | null {
  * Applies the dialog's conditions to a create or update request: a conditions alert gets its drafts; a legacy alert
  * with extra conditions becomes a conditions alert (its own condition first). Returns an error message, or null.
  */
-export function applyConditionDrafts(input: AlertInput, editor: EditorConditions): string | null {
+export function applyConditionDrafts(input: AlertInput, editor: EditorConditions, report?: (problem: string) => void): string | null {
+  const problem = conditionDraftsProblem(input, editor);
+  if (problem) report?.(problem);
+  return problem;
+}
+
+function conditionDraftsProblem(input: AlertInput, editor: EditorConditions): string | null {
   const drafts = editor.conditionDrafts ?? [];
   const isConditions = editor.condition === 'conditions';
-  if (isConditions && !editor.conditionsEditable) return null;
+  if (isConditions && editor.conditionsEditable === false) return null;
   if (!isConditions && drafts.length === 0) return null;
   const extra: ConditionInput[] = [];
   for (const draft of drafts) {

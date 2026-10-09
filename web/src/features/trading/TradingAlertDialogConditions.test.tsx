@@ -38,3 +38,26 @@ describe('alert dialog conditions (TVP-1.6)', () => {
     expect(screen.getByRole('status').textContent).toMatch(/follow their drawing/);
   });
 });
+
+describe('alert dialog conditions review fixes (TVP-1.6)', () => {
+  it('shows why the conditions can\'t be saved, and drops added ones for a family that takes one', () => {
+    const onChange = vi.fn();
+    dialog(editor({ conditionDrafts: [newConditionDraft('1')], conditionError: 'Each condition needs a value.' }), onChange);
+    expect(screen.getByRole('alert').textContent).toBe('Each condition needs a value.');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Alert condition' }), { target: { value: 'indicator_above' } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ condition: 'indicator_above', conditionDrafts: [] }));
+  });
+
+  it('shows a stored indicator as saved when the chart has it with other inputs, and follows the chart\'s when it is the same', () => {
+    const stored = { ...newConditionDraft('70'), source: 'indicator' as const, indicatorId: 'rsi', indicatorInputs: { period: 14 }, output: 'rsi:14', operator: 'greater_than' as const };
+    const rsi = (period: number) => ({ key: 'rsi', label: `RSI ${period}`, inputs: { period }, outputs: [{ key: `rsi:${period}`, title: `RSI ${period}` }] });
+    const onChange = vi.fn();
+    render(<TradingAlertDialog editor={editor({ conditionDrafts: [stored] })} symbol="BTCUSDT" latestPrice={101} status="idle" onChange={onChange} onSubmit={vi.fn()} onClose={vi.fn()} indicatorChoices={[rsi(21)] as never} />);
+    const indicator = screen.getByLabelText('Condition 2 indicator') as HTMLSelectElement;
+    expect(indicator.selectedOptions[0].textContent).toBe('rsi (as saved)');
+    expect((screen.getByLabelText('Condition 2 line') as HTMLSelectElement).value).toBe('rsi:14');
+    cleanup();
+    render(<TradingAlertDialog editor={editor({ conditionDrafts: [stored] })} symbol="BTCUSDT" latestPrice={101} status="idle" onChange={onChange} onSubmit={vi.fn()} onClose={vi.fn()} indicatorChoices={[rsi(14)] as never} />);
+    expect((screen.getByLabelText('Condition 2 indicator') as HTMLSelectElement).selectedOptions[0].textContent).toBe('RSI 14');
+  });
+});
