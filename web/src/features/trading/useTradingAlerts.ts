@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
@@ -87,4 +87,10 @@ export function useTradingAlertTriggers(options: { poll?: boolean } = {}) {
   }, [options.poll, queryClient]);
 
   return query;
+}
+
+/** The indicators the server evaluates for alerts (TVP-1.3); null while loading or unavailable. */
+export function useAlertIndicatorIds(): ReadonlySet<string> | null {
+  const query = useQuery({ queryKey: ['trading', 'alerts', 'indicators'], queryFn: tradingApi.alertIndicators, staleTime: 60 * 60_000 });
+  return useMemo(() => (query.data ? new Set(query.data) : null), [query.data]);
 }

@@ -73,6 +73,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/alerts/indicators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Alert Indicators
+         * @description The indicators the server evaluates for alerts (TVP-1.3): the dialog offers these, greys out the rest.
+         */
+        get: operations["list_alert_indicators_api_trading_alerts_indicators_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/alerts/triggers": {
         parameters: {
             query?: never;
@@ -10726,6 +10746,11 @@ export interface components {
              */
             interval?: string;
         };
+        /** TradingAlertIndicatorListResponse */
+        TradingAlertIndicatorListResponse: {
+            /** Indicator Ids */
+            indicator_ids: string[];
+        };
         /** TradingAlertListResponse */
         TradingAlertListResponse: {
             /** Alerts */
@@ -12496,6 +12521,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alert_indicators_api_trading_alerts_indicators_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingAlertIndicatorListResponse"];
                 };
             };
         };

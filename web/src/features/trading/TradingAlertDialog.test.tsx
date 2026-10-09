@@ -58,3 +58,19 @@ describe('TradingAlertDialog sound', () => {
     expect(onChange).toHaveBeenCalledWith({ sound: 'alarm' });
   });
 });
+
+describe('TradingAlertDialog chart indicators (TVP-1.3)', () => {
+  const choices = [{ key: 'rsi', label: 'RSI (14)', outputs: [{ key: 'rsi:14', title: 'RSI' }], inputs: { period: 14 } as never }];
+
+  it('offers the chart indicators instead of the legacy list on a new indicator alert', () => {
+    render(<TradingAlertDialog editor={{ ...editor, condition: 'indicator_above' }} symbol="BTC" latestPrice={100} status="ready" onChange={vi.fn()} onSubmit={vi.fn()} onClose={vi.fn()} indicatorChoices={choices} />);
+    expect(screen.getByLabelText('Alert chart indicator')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Alert indicator')).toBeNull();
+    expect(screen.queryByLabelText('Alert crossing')).toBeNull();
+  });
+
+  it('keeps the legacy list without chart indicators', () => {
+    render(<TradingAlertDialog editor={{ ...editor, condition: 'indicator_above' }} symbol="BTC" latestPrice={100} status="ready" onChange={vi.fn()} onSubmit={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Alert indicator')).toBeInTheDocument();
+  });
+});

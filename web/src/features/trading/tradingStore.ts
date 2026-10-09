@@ -148,7 +148,8 @@ function usesSeparatePane(id: CoreIndicatorId): boolean {
     : indicatorUsesSeparatePane(id);
 }
 
-function newIndicatorInstance(id: CoreIndicatorId, period?: number): CoreIndicatorInstance {
+/** A new instance with its default inputs (also the alert contract's defaults, TVP-1.3). */
+export function newIndicatorInstance(id: CoreIndicatorId, period?: number): CoreIndicatorInstance {
   const defaults: CoreIndicatorInstance = isAutoChartPatternId(id)
     ? { id, period: 3, enabled: true, visible: true, style: { labelsOnPriceScale: false, valuesInStatusLine: false, inputsInStatusLine: false } }
     : isTradingViewBuiltInId(id)

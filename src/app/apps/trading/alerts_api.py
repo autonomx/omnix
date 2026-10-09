@@ -21,6 +21,7 @@ from .alerts import (
     TradingAlertUpdate,
     default_alert_repository,
 )
+from .indicators.registry import server_indicator_ids
 from .alerts_delivery import NotificationDelivery, NotificationDeliveryRepository, default_delivery_repository
 from .alerts_channels import (
     AVAILABLE_ALERT_CHANNELS,
@@ -42,6 +43,10 @@ class TradingAlertListResponse(BaseModel):
 
 class TradingAlertTriggerListResponse(BaseModel):
     triggers: list[TradingAlertTrigger]
+
+
+class TradingAlertIndicatorListResponse(BaseModel):
+    indicator_ids: list[str]
 
 
 class TradingAlertDeliveryListResponse(BaseModel):
@@ -177,6 +182,11 @@ def create_trading_alert_router(
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             raise
         return created
+
+    @router.get("/indicators", response_model=TradingAlertIndicatorListResponse)
+    def list_alert_indicators() -> TradingAlertIndicatorListResponse:
+        """The indicators the server evaluates for alerts (TVP-1.3): the dialog offers these, greys out the rest."""
+        return TradingAlertIndicatorListResponse(indicator_ids=server_indicator_ids())
 
     @router.get("/triggers", response_model=TradingAlertTriggerListResponse)
     def list_triggers(

@@ -88,3 +88,17 @@ def test_a_legacy_quote_leaves_the_bar_placeholders_it_does_not_have() -> None:
     )
     names, plots = message_values(_alert(), legacy, interval="1m", evaluated_at=START)
     assert render_alert_message("{{open}} {{high}} {{low}} {{close}} {{volume}}", names, plots) == "{{open}} {{high}} {{low}} 101 {{volume}}"
+
+
+def test_the_alert_dialog_learns_which_indicators_the_server_evaluates() -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.apps.trading.alerts_api import create_trading_alert_router
+    from app.apps.trading.indicators.registry import server_indicator_ids
+
+    app = FastAPI()
+    app.include_router(create_trading_alert_router(repository_factory=lambda: None, webhook_store=object()))
+    body = TestClient(app).get("/api/trading/alerts/indicators").json()
+    assert body["indicator_ids"] == server_indicator_ids()
+    assert {"rsi", "macd", "bollinger"} <= set(body["indicator_ids"])

@@ -243,6 +243,7 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
       ...point,
       contextIndicatorId: resolvedIndicatorId,
       indicatorId: alertIndicatorId,
+      chartIndicatorId: resolvedIndicatorId,
       indicatorPeriod: resolvedIndicator?.period,
       x: Math.max(6, Math.min(point.x, Math.max(6, width - 286))),
       y: Math.max(6, Math.min(point.y, Math.max(6, height - 420))),
@@ -339,7 +340,8 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
   };
 
   const contextMenuAlert = () => {
-    if (contextMenu?.indicatorId || !contextMenu?.contextIndicatorId) setAlertPlacement(contextMenu);
+    // Any pane's indicator can be alerted on from the dialog's chart indicators (TVP-1.3).
+    if (contextMenu) setAlertPlacement(contextMenu);
   };
 
   return {
