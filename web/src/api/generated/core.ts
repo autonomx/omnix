@@ -2863,6 +2863,30 @@ export interface components {
             /** Providers */
             providers: components["schemas"]["ProviderSummary"][];
         };
+        /**
+         * ProviderKeyStatus
+         * @description An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself.
+         */
+        ProviderKeyStatus: {
+            /** Api Key Editable */
+            api_key_editable: boolean;
+            /**
+             * Api Key Masked
+             * @default
+             */
+            api_key_masked: string;
+            /**
+             * Api Key Source
+             * @enum {string}
+             */
+            api_key_source: "environment" | "os_protected_store" | "missing";
+            /** Configured */
+            configured: boolean;
+            /** Provider */
+            provider: string;
+            /** Storage */
+            storage: string;
+        };
         /** ProviderModelCacheEntry */
         ProviderModelCacheEntry: {
             /** Diagnostics */
