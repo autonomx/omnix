@@ -13,7 +13,7 @@ from app.runtime.pagination import MAX_PAGE_SIZE
 
 TRADING_MODULE = "trading"
 SUPPORTED_DOCUMENT_TYPES = frozenset(
-    {"workspace", "watchlist", "watchlist_flag_set", "drawing", "indicator_preset"}
+    {"workspace", "watchlist", "watchlist_flag_set", "drawing", "indicator_preset", "script"}
 )
 
 

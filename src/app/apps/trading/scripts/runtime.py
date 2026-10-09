@@ -68,6 +68,8 @@ class ScriptLimits:
     max_collection_size: int = 100_000
     max_allocated_items: int = 10_000_000
     max_alerts: int = 1_000
+    # Log messages kept per run (the newest), for the editor's console (TVP-11.2).
+    max_logs: int = 1_000
 
 
 # Pine's ints are 64-bit; Python's grow without bound, so arithmetic past this is an error.
@@ -210,6 +212,10 @@ class ScriptResult:
     alerts: list[dict[str, Any]]
     bars: int
     seconds: float
+    # log.info/warning/error calls, the newest max_logs: {"time", "bar", "level", "message"} (TVP-11.2).
+    logs: list[dict[str, Any]] = field(default_factory=list)
+    # With profiling on, seconds spent in each top-level statement, by its line (TVP-11.2).
+    profile: list[dict[str, Any]] = field(default_factory=list)
 
 
 # The program
@@ -286,10 +292,12 @@ def run_script(
     limits: ScriptLimits | None = None,
     symbol: str = "",
     timeframe: str = "",
+    profile: bool = False,
 ) -> ScriptResult:
     if isinstance(program, str):
         program = compile_script(program)
     run = ScriptRun(program, bars, inputs or {}, limits or ScriptLimits(), symbol, timeframe)
+    run.profiling = profile
     run.run_all()
     return run.result()
 
@@ -335,6 +343,9 @@ class ScriptRun:
         self.loop_iterations = 0
         self.bar_loop_iterations = 0
         self.seconds = 0.0
+        self.logs: list[dict[str, Any]] = []
+        self.profiling = False
+        self.statement_seconds = [0.0] * len(program.body)
         self.deadline = 0.0
         self.allocated = 0
         self.last_bar_index = len(self.close) - 1
@@ -381,8 +392,14 @@ class ScriptRun:
             for t in range(start, end):
                 self.t = t
                 self.bar_loop_iterations = 0
-                for index, statement in enumerate(body):
-                    statement(root)
+                if self.profiling:
+                    for index, statement in enumerate(body):
+                        began_statement = clock.perf_counter()
+                        statement(root)
+                        self.statement_seconds[index] += clock.perf_counter() - began_statement
+                else:
+                    for index, statement in enumerate(body):
+                        statement(root)
                 self.statics_done = True
                 for slot in self.all_slots:
                     slot.history.append(slot.current)
@@ -446,7 +463,24 @@ class ScriptRun:
             alerts=self.alerts,
             bars=len(self.close),
             seconds=self.seconds,
+            logs=list(self.logs),
+            profile=self._profile(),
         )
+
+    def _profile(self) -> list[dict[str, Any]]:
+        if not self.profiling:
+            return []
+        by_line: dict[int, float] = {}
+        for index, seconds in enumerate(self.statement_seconds):
+            line = self.program.lines[index] if index < len(self.program.lines) else 0
+            by_line[line] = by_line.get(line, 0.0) + seconds
+        return [{"line": line, "seconds": seconds} for line, seconds in sorted(by_line.items())]
+
+    def log(self, level: str, message: Any) -> None:
+        """A log.* call: kept with the bar it ran on, the newest ``max_logs``."""
+        self.logs.append({"time": self.time[self.t] if self.t < len(self.time) else None, "bar": self.t, "level": level, "message": str(message)})
+        if len(self.logs) > self.limits.max_logs:
+            del self.logs[0]
 
     # Series
 

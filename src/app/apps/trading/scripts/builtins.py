@@ -15,7 +15,7 @@ from typing import Any
 
 from . import ta
 from .errors import ScriptLimitError, ScriptRuntimeError, ScriptSyntaxError, ScriptUnsupportedError
-from .runtime import SERIES_NAMES, Closure, Context, Drawing, ScriptInput, _na, allocate, check_string, current_limits, truthy
+from .runtime import CURRENT_RUN, SERIES_NAMES, Closure, Context, Drawing, ScriptInput, _na, allocate, check_string, current_limits, truthy
 from .syntax import Call, ColorLiteral, Literal, Name, Node, TupleExpr, Unary
 
 Factory = Callable[[Any, Call], Closure]
@@ -1250,6 +1250,13 @@ def _timeframe_change(c: Any, node: Call) -> Closure:
     return call
 
 
+def _log(level: str, message: Any) -> None:
+    """log.info/warning/error: kept on the run for the editor's console (TVP-11.2)."""
+    run = CURRENT_RUN.get()
+    if run is not None:
+        run.log(level, message)
+
+
 FUNCTIONS: dict[str, Factory] = {
     # ta
     "ta.sma": site("source, length", ta.sma),
@@ -1370,9 +1377,9 @@ FUNCTIONS: dict[str, Factory] = {
     "strategy": _declaration("strategy"),
     "library": _declaration("library"),
     "runtime.error": pure("message", _runtime_error),
-    "log.info": pure("message", lambda message: None),
-    "log.warning": pure("message", lambda message: None),
-    "log.error": pure("message", lambda message: None),
+    "log.info": pure("message", lambda message: _log("info", message)),
+    "log.warning": pure("message", lambda message: _log("warning", message)),
+    "log.error": pure("message", lambda message: _log("error", message)),
     # arrays and maps
     "array.from": variadic(_array_from),
     "array.new": pure("size=0, initial_value=na", _array_new()),

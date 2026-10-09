@@ -25,6 +25,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
     from app.apps.trading.replay_api import create_trading_replay_router
     from app.apps.trading.research_api import create_trading_research_router
     from app.apps.trading.scanner_api import create_trading_scanner_router
+    from app.apps.trading.scripts_api import create_trading_scripts_router
     from app.apps.trading.strategy_api import create_trading_strategy_router
     from app.apps.trading.strategy_operations_api import create_trading_strategy_operations_router
     from app.apps.trading.strategy_prospective_economic_api import (
@@ -39,6 +40,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
         create_trading_execution_router,
         create_trading_alert_router,
         create_trading_scanner_router,
+        create_trading_scripts_router,
         create_trading_replay_router,
         create_trading_paper_router,
         create_trading_kill_switch_router,
