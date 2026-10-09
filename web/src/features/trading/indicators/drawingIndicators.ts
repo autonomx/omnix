@@ -177,18 +177,47 @@ export function chopZoneColors(high: readonly number[], low: readonly number[], 
   });
 }
 
-// Moon phases: new and full moons from the mean synodic month, from the new moon of 2000-01-06 18:14 UTC.
+// Moon phases: Meeus, Astronomical Algorithms ch. 49 (the main periodic terms; within a few minutes of the true phase).
 
-const SYNODIC_MS = 29.530588853 * 86_400_000;
-const NEW_MOON_EPOCH = Date.UTC(2000, 0, 6, 18, 14);
+const SYNODIC_DAYS = 29.530588861;
+const RADIANS = Math.PI / 180;
+// [coefficient for the new moon, for the full moon, power of E, then the multipliers of M, M', F and Omega].
+const PHASE_TERMS: ReadonlyArray<[number, number, number, number, number, number, number]> = [
+  [-0.40720, -0.40614, 0, 0, 1, 0, 0], [0.17241, 0.17302, 1, 1, 0, 0, 0], [0.01608, 0.01614, 0, 0, 2, 0, 0], [0.01039, 0.01043, 0, 0, 0, 2, 0],
+  [0.00739, 0.00734, 1, -1, 1, 0, 0], [-0.00514, -0.00515, 1, 1, 1, 0, 0], [0.00208, 0.00209, 2, 2, 0, 0, 0], [-0.00111, -0.00111, 0, 0, 1, -2, 0],
+  [-0.00057, -0.00057, 0, 0, 1, 2, 0], [0.00056, 0.00056, 1, 1, 2, 0, 0], [-0.00042, -0.00042, 0, 0, 3, 0, 0], [0.00042, 0.00042, 1, 1, 0, 2, 0],
+  [0.00038, 0.00038, 1, 1, 0, -2, 0], [-0.00024, -0.00024, 1, -1, 2, 0, 0], [-0.00017, -0.00017, 0, 0, 0, 0, 1], [-0.00007, -0.00007, 0, 2, 1, 0, 0],
+  [0.00004, 0.00004, 0, 0, 2, -2, 0], [0.00004, 0.00004, 0, 3, 0, 0, 0], [0.00003, 0.00003, 0, 1, 1, -2, 0], [0.00003, 0.00003, 0, 0, 2, 2, 0],
+  [-0.00003, -0.00003, 0, 1, 1, 2, 0], [0.00003, 0.00003, 0, -1, 1, 2, 0], [-0.00002, -0.00002, 0, -1, 1, -2, 0], [-0.00002, -0.00002, 0, 1, 3, 0, 0],
+  [0.00002, 0.00002, 0, 0, 4, 0, 0],
+];
+
+/** The instant (ms) of lunation `k`: a whole k is a new moon, k + 0.5 the full moon after it; k = 0 is 2000-01-06. */
+export function moonPhaseTime(k: number): number {
+  const t = k / 1236.85;
+  const jde = 2451550.09766 + SYNODIC_DAYS * k + 0.00015437 * t ** 2 - 0.00000015 * t ** 3 + 0.00000000073 * t ** 4;
+  const e = 1 - 0.002516 * t - 0.0000074 * t ** 2;
+  const m = (2.5534 + 29.1053567 * k - 0.0000014 * t ** 2 - 0.00000011 * t ** 3) * RADIANS;
+  const mp = (201.5643 + 385.81693528 * k + 0.0107582 * t ** 2 + 0.00001238 * t ** 3 - 0.000000058 * t ** 4) * RADIANS;
+  const f = (160.7108 + 390.67050284 * k - 0.0016118 * t ** 2 - 0.00000227 * t ** 3 + 0.000000011 * t ** 4) * RADIANS;
+  const omega = (124.7746 - 1.56375588 * k + 0.0020672 * t ** 2 + 0.00000215 * t ** 3) * RADIANS;
+  const full = !Number.isInteger(k);
+  let correction = 0;
+  for (const [newCoefficient, fullCoefficient, power, cm, cmp, cf, co] of PHASE_TERMS) {
+    correction += (full ? fullCoefficient : newCoefficient) * e ** power * Math.sin(cm * m + cmp * mp + cf * f + co * omega);
+  }
+  // Julian ephemeris day to Unix ms (TT - UTC, about a minute, is below this accuracy).
+  return (jde + correction - 2440587.5) * 86_400_000;
+}
 
 /** The new and full moons between two instants (ms). */
 export function moonEvents(from: number, to: number): Array<{ time: number; full: boolean }> {
   const events: Array<{ time: number; full: boolean }> = [];
-  for (let k = Math.floor((from - NEW_MOON_EPOCH) / SYNODIC_MS) - 1; ; k += 1) {
-    const newMoon = NEW_MOON_EPOCH + k * SYNODIC_MS;
-    if (newMoon > to) break;
-    for (const [time, isFull] of [[newMoon, false], [newMoon + SYNODIC_MS / 2, true]] as const) {
+  const first = Math.floor((from - Date.UTC(2000, 0, 6)) / (SYNODIC_DAYS * 86_400_000)) - 1;
+  for (let k = first; ; k += 1) {
+    if (moonPhaseTime(k) > to) break;
+    for (const [phase, isFull] of [[k, false], [k + 0.5, true]] as const) {
+      const time = moonPhaseTime(phase);
       if (time >= from && time < to) events.push({ time, full: isFull });
     }
   }
@@ -216,24 +245,38 @@ function minuteOfDay(time: number, zone: string): number {
   return hour * 60 + minute;
 }
 
-/** The session each bar starts in (the last listed wins where they overlap), on intraday bars only. */
+/** The smallest positive gap between consecutive times, or Infinity. */
+function smallestStep(times: readonly number[]): number {
+  let step = Number.POSITIVE_INFINITY;
+  for (let i = 1; i < times.length; i += 1) if (times[i] > times[i - 1]) step = Math.min(step, times[i] - times[i - 1]);
+  return step;
+}
+
+/**
+ * The session each bar starts in (the last listed wins where they overlap), on intraday bars only. A session is labelled
+ * where it starts: a change of session, or the first bar after a gap (the next day's session on regular-hours bars).
+ */
 export function tradingSessionShading(times: readonly number[]): Array<{ name: string; color: string; first: boolean } | null> {
-  const step = times.length > 1 ? Math.min(...times.slice(1).map((time, i) => time - times[i]).filter((gap) => gap > 0)) : Number.POSITIVE_INFINITY;
+  const step = smallestStep(times);
   if (!(step < 86_400_000)) return times.map(() => null);
   let previous: string | null = null;
-  return times.map((time) => {
+  return times.map((time, index) => {
     let session: (typeof SESSIONS)[number] | null = null;
     for (const candidate of SESSIONS) {
       const minute = minuteOfDay(time, candidate.zone);
       if (minute >= candidate.open && minute < candidate.close) session = candidate;
     }
-    const first = session !== null && session.name !== previous;
+    const first = session !== null && (session.name !== previous || time - times[index - 1] > step);
     previous = session?.name ?? null;
     return session ? { name: session.name, color: session.color, first } : null;
   });
 }
 
-/** Seasonality: each year's change since its first bar, at the current year's dates (daily bars only). */
+/**
+ * Seasonality: each year's change since its first bar, at the current year's dates (daily bars only). Dates align by
+ * month and day, so 1 March is 1 March in a leap year too; a year whose first bar is after 15 January (history starting
+ * mid-year) is left out rather than measured from that bar.
+ */
 export function seasonality(bars: readonly MarketBar[], years: number): Array<{ year: number; values: MaybeNumber[] }> {
   const times = startTimes(bars);
   if (bars.length < 2) return [];
@@ -241,9 +284,10 @@ export function seasonality(bars: readonly MarketBar[], years: number): Array<{ 
   if (gaps[Math.floor(gaps.length / 2)] < 20 * 3_600_000) return [];
   const close = nums(bars, 'close');
   const yearOf = (time: number) => new Date(time).getUTCFullYear();
+  // Month and day as MMDD.
   const dayOf = (time: number) => {
     const date = new Date(time);
-    return Math.floor((Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86_400_000);
+    return (date.getUTCMonth() + 1) * 100 + date.getUTCDate();
   };
   const current = yearOf(times[times.length - 1]);
   const byYear = new Map<number, Array<{ day: number; close: number }>>();
@@ -257,7 +301,7 @@ export function seasonality(bars: readonly MarketBar[], years: number): Array<{ 
   const result: Array<{ year: number; values: MaybeNumber[] }> = [];
   for (let year = current; year >= current - years; year -= 1) {
     const list = byYear.get(year);
-    if (!list || list.length === 0) continue;
+    if (!list || list.length === 0 || list[0].day > 115) continue;
     const base = list[0].close;
     const values = times.map((time) => {
       if (yearOf(time) !== current) return null;

@@ -576,6 +576,12 @@ export function indicatorLineData(
   return [...points, ...gaps].sort((left, right) => left.time - right.time);
 }
 
+/** `rgba(r, g, b, a)` as `rgb(r, g, b)`; any other colour as it is. */
+export function opaqueColor(color: string): string {
+  const match = /^rgba\(\s*([^,]+),\s*([^,]+),\s*([^,]+),[^)]*\)$/.exec(color.trim());
+  return match ? `rgb(${match[1]}, ${match[2]}, ${match[3]})` : color;
+}
+
 /** A background output's labels (Trading Sessions' names) as text marks at the top of the pane. */
 export function backgroundLabelMarkers(output: IndicatorOutput): SeriesMarker<UTCTimestamp>[] {
   return output.points.flatMap((point) => (point.label ? [{
@@ -583,7 +589,8 @@ export function backgroundLabelMarkers(output: IndicatorOutput): SeriesMarker<UT
     position: 'aboveBar' as const,
     shape: 'square' as const,
     size: 0,
-    color: point.color ?? output.color ?? '#787b86',
+    // The text takes the marker's colour: the shading's colour made opaque, so a 10% tint still gives readable text.
+    color: opaqueColor(point.color ?? output.color ?? '#787b86'),
     text: point.label,
   }] : []));
 }
@@ -785,6 +792,13 @@ export class TradingChartAdapter {
     if (this.bars.length > 0) this.setPriceData(this.bars);
   }
 
+  /** Background outputs go behind the price series (they're added after it, and a chart-type change re-adds it). */
+  private sendBackgroundsBack(): void {
+    for (const series of this.indicatorSeries.values()) {
+      if (String(series.options().priceScaleId ?? '').startsWith('background:')) series.setSeriesOrder(0);
+    }
+  }
+
   /** The Visible Average Price line: the average close of the bars in view, kept as the view moves (TVP-6.2). */
   private renderViewportAverage(): void {
     if (this.destroyed) return;
@@ -818,7 +832,7 @@ export class TradingChartAdapter {
       return;
     }
     if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).update(this.coloredBar(this.chartType === 'volume-candles' ? volumeCandleData(bar, this.bars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier)));
-    else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).update(candlestickData(bar, this.priceScaleMultiplier));
+    else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).update(this.coloredBar(candlestickData(bar, this.priceScaleMultiplier)));
     else if (isColumnType(this.chartType)) (this.priceSeries as ISeriesApi<'Histogram'>).update(isVolumeColumnType(this.chartType) ? volumeData(bar) : columnData(bar, this.priceScaleMultiplier));
     else if (isAreaType(this.chartType)) (this.priceSeries as ISeriesApi<'Area'>).update(lineData(bar, this.priceScaleMultiplier));
     else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).update(lineData(bar, this.priceScaleMultiplier));
@@ -837,6 +851,7 @@ export class TradingChartAdapter {
     for (const primitive of this.priceSeriesPrimitives) this.priceSeries.attachPrimitive(primitive);
     this.renderSessionPriceLine();
     this.viewportAverageLine = null;
+    this.sendBackgroundsBack();
     this.setBars(bars, false);
     this.renderViewportAverage();
   }
@@ -872,6 +887,8 @@ export class TradingChartAdapter {
     this.assertActive();
     const visibleRange = fit ? null : this.chart.timeScale().getVisibleLogicalRange();
     this.bars = normalizeChartBars(bars);
+    // New bars (another symbol or interval): no indicator colours until the indicators are recomputed for them.
+    if (fit) this.barColors = new Map();
     this.invalidateDrawingTimes();
     this.revisions.clear();
     for (const bar of this.bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
@@ -1062,7 +1079,10 @@ export class TradingChartAdapter {
         series = columns
           ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId, ...(output.kind === 'background' ? { title: '', base: 0 } : {}) }, paneIndex)
           : this.chart.addSeries(LineSeries, { ...commonOptions, ...indicatorLineShape(output), ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 1, priceScaleId }, paneIndex);
-        if (output.kind === 'background') series.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+        if (output.kind === 'background') {
+          series.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+          series.setSeriesOrder(0);
+        }
         this.indicatorSeries.set(output.key, series);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {

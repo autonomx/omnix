@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignIndicatorPoints, alignSeriesToTimes, backgroundLabelMarkers, candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, DrawingTimeIndex, heikinAshiBars, indicatorBarColors, indicatorLineData, indicatorMarkers, indicatorOutputOnBars, lineData, normalizeChartBars, renkoBars, TradingChartAdapter, TRADING_CHART_TYPE_OPTIONS, upsertChartBar, visibleAverageClose, volumeData } from './chartAdapter';
+import { alignIndicatorPoints, alignSeriesToTimes, backgroundLabelMarkers, candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, DrawingTimeIndex, heikinAshiBars, indicatorBarColors, indicatorLineData, indicatorMarkers, indicatorOutputOnBars, lineData, normalizeChartBars, renkoBars, TradingChartAdapter, opaqueColor, TRADING_CHART_TYPE_OPTIONS, upsertChartBar, visibleAverageClose, volumeData } from './chartAdapter';
 import type { IndicatorOutput } from '../indicators/coreIndicators';
 import type { UTCTimestamp } from 'lightweight-charts';
 import type { MarketBar } from '../tradingTypes';
@@ -416,9 +416,11 @@ describe('indicators that draw (TVP-6.2)', () => {
       points: [{ time: bar.start_time, value: 1, color: 'rgba(1, 2, 3, 0.1)', label: 'Tokyo' }, { time: secondBar.start_time, value: 1 }],
     };
     expect(backgroundLabelMarkers(background)).toEqual([
-      { time: Date.parse(bar.start_time) / 1000, position: 'aboveBar', shape: 'square', size: 0, color: 'rgba(1, 2, 3, 0.1)', text: 'Tokyo' },
+      { time: Date.parse(bar.start_time) / 1000, position: 'aboveBar', shape: 'square', size: 0, color: 'rgb(1, 2, 3)', text: 'Tokyo' },
     ]);
     expect(indicatorOutputOnBars(background, [], 60)).toBe(background);
+    expect(opaqueColor('rgba(255, 152, 0, 0.10)')).toBe('rgb(255, 152, 0)');
+    expect(opaqueColor('#ff9800')).toBe('#ff9800');
     expect(indicatorLineData(background, [], 100).map((point) => ('value' in point ? point.value : null))).toEqual([1, 1]);
   });
 });

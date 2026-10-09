@@ -1144,7 +1144,7 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 |---|---|---|---|---|---|---|
 | Charts and layouts | 31 | 1 | 0 / 0 / 1 | 0 | 0 | 95% |
 | Drawing tools | 100 | 0 | 0 / 0 / 1 | 0 | 0 | 99% |
-| Indicators | 147 | 0 | 0 / 9 / 0 | 54 | 0 | 94% |
+| Indicators | 146 | 1 | 0 / 9 / 0 | 54 | 0 | 94% |
 | User scripts | 1 | 0 | 3 / 3 / 1 | 0 | 0 | 13% |
 | Alerts | 21 | 0 | 1 / 2 / 0 | 0 | 0 | 88% |
 | Shortcuts | 49 | 1 | 0 / 0 / 0 | 0 | 0 | 99% |
@@ -1154,12 +1154,12 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Paper and chart trading | 19 | 0 | 0 / 3 / 0 | 0 | 0 | 86% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 5 | 1 | 0 / 0 / 1 | 0 | 0 | 79% |
-| **Total** | 399 | 5 | 4 / 24 / 6 | 55 | 0 | 92% |
+| **Total** | 398 | 6 | 4 / 24 / 6 | 55 | 0 | 92% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
 | Daily | 158 | 1 | 4 | 0 | 0 | 163 | 97% |
-| Weekly | 182 | 4 | 24 | 0 | 0 | 210 | 88% |
+| Weekly | 181 | 5 | 24 | 0 | 0 | 210 | 87% |
 | Rare | 59 | 0 | 6 | 55 | 0 | 120 | 91% |
 
 Missing daily + weekly features: **28**

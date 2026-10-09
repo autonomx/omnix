@@ -169,6 +169,9 @@ describe('bar and background colours', () => {
     expect(at(8)).toMatchObject({ name: 'London', first: true });
     expect(at(14, 30)).toMatchObject({ name: 'New York', first: true });
     expect(at(21)).toBeNull();
+    // Regular-hours bars: each day's session is labelled after the overnight gap.
+    const regular = [0, 1].flatMap((dayIndex) => [0, 1, 2].map((i) => Date.UTC(2026, 0, 5 + dayIndex, 14, 30) + i * 30 * MINUTE));
+    expect(tradingSessionShading(regular).map((item) => item?.first)).toEqual([true, false, false, true, false, false]);
     expect(tradingSessionShading(Array.from({ length: 5 }, (_, i) => day + i * DAY)).every((item) => item === null)).toBe(true);
     const [background] = outputs('Trading Sessions', times.map((time) => bar(time, 10, { step: 30 * MINUTE })), 1);
     expect(background.kind).toBe('background');
@@ -195,12 +198,15 @@ describe('bar and background colours', () => {
 });
 
 describe('moon phases and seasonality', () => {
-  it('finds the new and full moons of January 2024 within a day', () => {
+  it('finds the new and full moons within minutes of the true phase', () => {
     const events = moonEvents(Date.UTC(2024, 0, 1), Date.UTC(2024, 1, 1));
     const newMoon = events.find((event) => !event.full)!;
     const fullMoon = events.find((event) => event.full)!;
-    expect(Math.abs(newMoon.time - Date.UTC(2024, 0, 11, 11, 57))).toBeLessThan(DAY);
-    expect(Math.abs(fullMoon.time - Date.UTC(2024, 0, 25, 17, 54))).toBeLessThan(DAY);
+    expect(Math.abs(newMoon.time - Date.UTC(2024, 0, 11, 11, 57))).toBeLessThan(10 * MINUTE);
+    expect(Math.abs(fullMoon.time - Date.UTC(2024, 0, 25, 17, 54))).toBeLessThan(10 * MINUTE);
+    const december = moonEvents(Date.UTC(2024, 11, 1), Date.UTC(2025, 1, 1));
+    expect(Math.abs(december.find((event) => event.full)!.time - Date.UTC(2024, 11, 15, 9, 2))).toBeLessThan(10 * MINUTE);
+    expect(Math.abs(december.find((event) => !event.full && event.time > Date.UTC(2025, 0, 15))!.time - Date.UTC(2025, 0, 29, 12, 36))).toBeLessThan(10 * MINUTE);
     expect(events).toHaveLength(2);
   });
 
@@ -210,13 +216,13 @@ describe('moon phases and seasonality', () => {
     expect(full.render).toBe('markers');
     expect(full.points).toHaveLength(1);
     expect(fresh.points).toHaveLength(1);
-    expect(Math.abs(Date.parse(full.points[0].time) - Date.UTC(2024, 0, 25))).toBeLessThanOrEqual(DAY);
+    expect(full.points[0].time).toBe(new Date(Date.UTC(2024, 0, 25)).toISOString());
     expect(full.points[0].value).toBe(Number(bars.find((item) => item.start_time === full.points[0].time)!.high));
   });
 
   it('plots each year\'s change since its first bar at the current year\'s dates, on daily bars', () => {
     const start = Date.UTC(2024, 0, 1);
-    const bars = Array.from({ length: 366 + 40 }, (_, i) => bar(start + i * DAY, 100 + i, { step: DAY }));
+    const bars = Array.from({ length: 366 + 70 }, (_, i) => bar(start + i * DAY, 100 + i, { step: DAY }));
     const years = seasonality(bars, 1);
     expect(years.map((item) => item.year)).toEqual([2025, 2024]);
     const index2025 = 366 + 10;
@@ -225,6 +231,11 @@ describe('moon phases and seasonality', () => {
     expect(years[1].values[index2025]).toBeCloseTo(10);
     expect(years[1].values[0]).toBeNull();
     expect(seasonality(swingBars, 1)).toEqual([]);
+    // Aligned by month and day: 1 March 2025 reads 2024's 1 March, not its 29 February.
+    const march2025 = bars.findIndex((item) => item.start_time.startsWith('2025-03-01'));
+    expect(years[1].values[march2025]).toBeCloseTo((Number(bars.find((item) => item.start_time.startsWith('2024-03-01'))!.close) / 100 - 1) * 100);
+    // A year whose history starts mid-year is left out.
+    expect(seasonality(bars.slice(40), 1).map((item) => item.year)).toEqual([2025]);
     const lines = outputs('Seasonality', bars, 1);
     expect(lines.map((item) => [item.title, item.pane])).toEqual([['2025', 1], ['2024', 1]]);
   });

@@ -66,8 +66,9 @@ def test_the_real_ledger_tracks_every_tradingview_built_in_indicator() -> None:
 
     assert len(tracked) == 208
     assert golden_ids <= tracked
+    # An indicator with goldens is implemented; "partial" records a known gap against TradingView (Seasonality).
     assert all(
-        entry["status"] == "have"
+        entry["status"] in {"have", "partial"}
         for entry in entries
         if entry.get("indicator_id") in golden_ids
     )

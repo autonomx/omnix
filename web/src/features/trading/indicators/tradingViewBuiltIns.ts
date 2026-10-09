@@ -1647,6 +1647,16 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
     'Williams Alligator': [['jaw', 'Jaw'], ['teeth', 'Teeth'], ['lips', 'Lips']],
     'Williams Fractal': [['up-fractal', 'Up Fractal'], ['down-fractal', 'Down Fractal']],
     'Woodies CCI': [['trend-cci', 'Trend CCI'], ['entry-cci', 'Entry CCI']],
+    // TVP-6.2 indicators that draw (drawingIndicators.ts); the auto fibs', key levels' and seasonality's plots vary with the bars.
+    'Auto Pitchfork': [['median', 'Median'], ['upper', 'Upper'], ['lower', 'Lower']],
+    'Auto Trendlines': [['resistance', 'Resistance'], ['support', 'Support']],
+    'Bollinger Bars': [['bars', 'Bar colors'], ['upper', 'Upper'], ['lower', 'Lower']],
+    'Chop Zone': [['zone', 'Chop Zone']],
+    'Moon Phases': [['full', 'Full moon'], ['new', 'New moon']],
+    'Multi-Time Period Charts indicator': [['candles', 'Period candles'], ['high', 'Period high'], ['low', 'Period low'], ['open', 'Period open']],
+    'Trading Sessions': [['sessions', 'Trading Sessions']],
+    'Visible Average Price': [['average', 'Visible Average Price']],
+    'VWAP Auto Anchored': [['vwap', 'Auto Anchored VWAP']],
   };
   if (name === 'Moving Average Ribbon') return [20, 50, 100, 200].map((p) => ({ key: `${id}:sma-${p}`, title: `SMA ${p}` }));
   if (name === 'Moving Averages') return [{ key: `${id}:sma`, title: 'SMA' }, { key: `${id}:ema`, title: 'EMA' }];
