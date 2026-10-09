@@ -655,6 +655,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/macro/yield-curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Yield Curve */
+        get: operations["yield_curve_api_trading_macro_yield_curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/market-data/providers/coinmarketcap/credentials": {
         parameters: {
             query?: never;
@@ -2826,7 +2843,7 @@ export interface components {
          * AssetClass
          * @enum {string}
          */
-        AssetClass: "crypto" | "equity" | "forex" | "commodity";
+        AssetClass: "crypto" | "equity" | "forex" | "commodity" | "economic";
         /** AssetContentResponse */
         AssetContentResponse: core["schemas"]["AssetContentResponse"];
         /** AssetLegacyRootScan */
@@ -3591,6 +3608,8 @@ export interface components {
              * @default 0.01
              */
             minimum_tick: string;
+            /** Name */
+            name: string | null;
             /**
              * Price Scale
              * @default 100
@@ -13821,6 +13840,36 @@ export interface components {
             /** Universe Id */
             universe_id: string;
         };
+        /** YieldCurve */
+        YieldCurve: {
+            /** Curves */
+            curves: components["schemas"]["YieldCurveLine"][];
+            /**
+             * Source
+             * @default U.S. Department of the Treasury, daily par yield curve rates
+             */
+            source: string;
+            /** Spreads */
+            spreads: {
+                [key: string]: number | null;
+            };
+            /** Tenors */
+            tenors: string[];
+            /** Years */
+            years: number[];
+        };
+        /** YieldCurveLine */
+        YieldCurveLine: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Label */
+            label: string;
+            /** Yields */
+            yields: (number | null)[];
+        };
     };
     responses: never;
     parameters: never;
@@ -15277,6 +15326,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingKillSwitch"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    yield_curve_api_trading_macro_yield_curve_get: {
+        parameters: {
+            query?: {
+                on?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YieldCurve"];
                 };
             };
             /** @description Validation Error */

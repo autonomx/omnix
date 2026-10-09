@@ -32,6 +32,7 @@ from .base import MarketDataProvider
 from .binance import BinanceMarketDataProvider
 from .ibkr import IbkrEquityProvider
 from .coinmarketcap import CoinMarketCapProvider
+from .fred import FredSeriesProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
 from .errors import ProviderFallbackEligibleError
@@ -55,6 +56,7 @@ class ProviderRegistry:
             "kraken": lambda: AdditionalCryptoProvider("kraken", cache=self.cache),
             "hyperliquid": lambda: AdditionalCryptoProvider("hyperliquid", cache=self.cache),
             "coinmarketcap": lambda: CoinMarketCapProvider(cache=self.cache),
+            "fred": lambda: FredSeriesProvider(cache=self.cache),
         }
         self._providers: dict[str, Any] = {}
 
@@ -86,6 +88,8 @@ class ProviderRegistry:
         silently falling back to Yahoo or a caller supplied price.
         """
         requested = self.resolve_binding(instrument_id, binding_id)
+        if requested.provider == "fred" or instrument_id.startswith("economic:"):
+            raise ValueError(f"{instrument_id} is an economic series: research data, never traded")
         if instrument_id.startswith("equity:") and requested.provider in {
             "yahoo",
             "stooq",

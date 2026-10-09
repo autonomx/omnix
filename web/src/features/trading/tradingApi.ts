@@ -75,9 +75,10 @@ function barsQuery(instrumentId: string, interval: string, limit: number, bindin
 
 const DOCUMENT_PAGE_SIZE = 500;
 
-function formulaInstrument(instrumentId: string, expression: string, source: CanonicalInstrument): CanonicalInstrument {
+function formulaInstrument(instrumentId: string, expression: string, source: CanonicalInstrument): CanonicalInstrument & { name: string | null } {
   return {
     ...source,
+    name: null,
     instrument_id: instrumentId,
     display_symbol: expression,
     venue_symbol: expression,

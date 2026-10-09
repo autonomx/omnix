@@ -2146,7 +2146,8 @@
           "crypto",
           "equity",
           "forex",
-          "commodity"
+          "commodity",
+          "economic"
         ],
         "title": "AssetClass",
         "type": "string"
@@ -6624,6 +6625,18 @@
             "title": "Minimum Tick",
             "type": "string"
           },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "price_scale": {
             "default": 100,
             "exclusiveMinimum": 0,
@@ -6684,7 +6697,8 @@
           "session_calendar",
           "price_scale",
           "minimum_tick",
-          "status"
+          "status",
+          "name"
         ],
         "title": "CanonicalInstrument",
         "type": "object"
@@ -56273,6 +56287,93 @@
         "title": "YahooGapperDiscoveryRequest",
         "type": "object"
       },
+      "YieldCurve": {
+        "properties": {
+          "curves": {
+            "items": {
+              "$ref": "#/components/schemas/YieldCurveLine"
+            },
+            "title": "Curves",
+            "type": "array"
+          },
+          "source": {
+            "default": "U.S. Department of the Treasury, daily par yield curve rates",
+            "title": "Source",
+            "type": "string"
+          },
+          "spreads": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Spreads",
+            "type": "object"
+          },
+          "tenors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tenors",
+            "type": "array"
+          },
+          "years": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Years",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tenors",
+          "years",
+          "curves",
+          "spreads",
+          "source"
+        ],
+        "title": "YieldCurve",
+        "type": "object"
+      },
+      "YieldCurveLine": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "yields": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Yields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "date",
+          "yields"
+        ],
+        "title": "YieldCurveLine",
+        "type": "object"
+      },
       "app__conversation__memory_contracts__MemoryCandidate": {
         "additionalProperties": false,
         "description": "Non-prompt-eligible proposal awaiting an explicit resolution.",
@@ -79682,6 +79783,56 @@
         "summary": "Set Kill Switch",
         "tags": [
           "trading-kill-switches"
+        ]
+      }
+    },
+    "/api/trading/macro/yield-curve": {
+      "get": {
+        "operationId": "yield_curve_api_trading_macro_yield_curve_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "on",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "On"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YieldCurve"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Yield Curve",
+        "tags": [
+          "trading-macro"
         ]
       }
     },

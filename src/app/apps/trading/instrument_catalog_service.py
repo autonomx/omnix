@@ -7,8 +7,10 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from .catalog import (
+    ECONOMIC_SERIES,
     _binding,
     _commodity,
+    register_economic_series,
     register_instrument,
     search_instruments,
 )
@@ -179,9 +181,12 @@ class ProviderBackedInstrumentCatalog:
         *,
         binance_runtime: ProviderHttpRuntime | None = None,
         yahoo_runtime: ProviderHttpRuntime | None = None,
+        fred_search: Any = None,
         ttl_seconds: float = CATALOG_TTL_SECONDS,
         query_cache_size: int = QUERY_CACHE_SIZE,
     ) -> None:
+        self._fred_search = fred_search
+        self._fred_query_cache: OrderedDict[str, list[tuple[str, str]]] = OrderedDict()
         self.binance_runtime = binance_runtime or ProviderHttpRuntime("binance_catalog", max_concurrency=1)
         self.yahoo_runtime = yahoo_runtime or ProviderHttpRuntime("yahoo_catalog", max_concurrency=2)
         self.ttl_seconds = max(1.0, float(ttl_seconds))
@@ -205,6 +210,7 @@ class ProviderBackedInstrumentCatalog:
         for instrument in self._search_yahoo(clean):
             register_instrument(instrument, _dynamic_bindings(instrument))
             discovered.append(instrument)
+        discovered.extend(self._search_economic(clean))
 
         unique: dict[str, CanonicalInstrument] = {}
         for instrument in [*static_matches, *discovered]:
@@ -288,6 +294,45 @@ class ProviderBackedInstrumentCatalog:
             while len(self._yahoo_query_cache) > self.query_cache_size:
                 self._yahoo_query_cache.popitem(last=False)
         return results
+
+
+    def _search_economic(self, query: str) -> list[CanonicalInstrument]:
+        """FRED series (TVP-10.5): the curated ones whose id or title matches, then FRED's own search when keyed."""
+        words = query.lower().split()
+        matches = [
+            (series_id, title) for series_id, title in ECONOMIC_SERIES.items()
+            if query.replace("FRED:", "") in series_id or all(word in title.lower() for word in words)
+        ]
+        with self._lock:
+            cached = self._fred_query_cache.get(query)
+        if cached is None:
+            try:
+                search = self._fred_search or _default_fred_search
+                cached = search(query)
+            except Exception:
+                cached = []
+            with self._lock:
+                self._fred_query_cache[query] = cached
+                while len(self._fred_query_cache) > self.query_cache_size:
+                    self._fred_query_cache.popitem(last=False)
+        instruments = []
+        for series_id, title in dict([*cached, *matches]).items():
+            instrument = register_economic_series(series_id, title or None)
+            if instrument is not None:
+                instruments.append(instrument)
+        return instruments
+
+
+_fred_provider: Any = None
+
+
+def _default_fred_search(query: str) -> list[tuple[str, str]]:
+    global _fred_provider
+    if _fred_provider is None:
+        from .providers.fred import FredSeriesProvider
+
+        _fred_provider = FredSeriesProvider()
+    return _fred_provider.search(query)
 
 
 _default_catalog: ProviderBackedInstrumentCatalog | None = None
