@@ -239,6 +239,21 @@ describe('moon phases and seasonality', () => {
     const lines = outputs('Seasonality', bars, 1);
     expect(lines.map((item) => [item.title, item.pane])).toEqual([['2025', 1], ['2024', 1]]);
   });
+
+  it('draws earlier years on to the end of the year past the last bar, on trading days', () => {
+    const start = Date.UTC(2024, 0, 1);
+    // Weekday bars only, through Friday 2025-12-19.
+    const days = Array.from({ length: 719 }, (_, i) => start + i * DAY).filter((time) => ![0, 6].includes(new Date(time).getUTCDay()));
+    const bars = days.map((time, i) => bar(time, 100 + i, { step: DAY }));
+    expect(bars.at(-1)!.start_time).toBe('2025-12-19T00:00:00.000Z');
+    const [current, previous] = seasonality(bars, 1);
+    expect(current.ahead).toEqual([]);
+    expect(previous.ahead.map((point) => point.time.slice(0, 10))).toEqual(['2025-12-22', '2025-12-23', '2025-12-24', '2025-12-25', '2025-12-26', '2025-12-29', '2025-12-30', '2025-12-31']);
+    const dec31 = bars.find((item) => item.start_time.startsWith('2024-12-31'))!;
+    expect(previous.ahead.at(-1)!.value).toBeCloseTo((Number(dec31.close) / 100 - 1) * 100);
+    const [, line2024] = outputs('Seasonality', bars, 1);
+    expect(line2024.points.at(-1)).toEqual(previous.ahead.at(-1));
+  });
 });
 
 describe('dispatch', () => {
