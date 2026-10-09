@@ -22,7 +22,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .indicators.registry import BarSeries, IndicatorInputs, compute_indicator, server_indicator
+from .indicators.registry import BarSeries, IndicatorInputs, IndicatorOutputSeries, compute_indicator, server_indicator
+from .indicators.sources import accepts_source, compute_on_source, find_output
 
 MAX_ALERT_CONDITIONS = 5
 
@@ -89,11 +90,15 @@ class IndicatorSourceInputs(BaseModel):
     standard_deviations: float | None = Field(default=None, gt=0, le=100)
     anchor_time: str | None = Field(default=None, max_length=64)
     anchor_bars_ago: int | None = Field(default=None, ge=0, le=999)
+    # Indicator on indicator (TVP-6.5): read this output of another indicator instead of the close.
+    source: IndicatorOutputRef | None = None
 
     @model_validator(mode="after")
     def validate_anchor(self) -> IndicatorSourceInputs:
         if self.anchor_time is not None and self.anchor_bars_ago is not None:
             raise ValueError("indicator inputs take anchor_time or anchor_bars_ago, not both")
+        if self.source is not None and self.source.inputs.source is not None:
+            raise ValueError("an indicator's source cannot itself read another indicator")
         return self
 
     def registry_inputs(self, anchor_time: str | None = None) -> IndicatorInputs:
@@ -105,6 +110,19 @@ class IndicatorSourceInputs(BaseModel):
             standard_deviations=self.standard_deviations,
             anchor_time=anchor_time if anchor_time is not None else self.anchor_time,
         )
+
+
+class IndicatorOutputRef(BaseModel):
+    """Another indicator's output on the same chart, as an indicator's source (TVP-6.5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    indicator_id: str = Field(min_length=1, max_length=120)
+    inputs: IndicatorSourceInputs = Field(default_factory=IndicatorSourceInputs)
+    output: str = Field(min_length=1, max_length=240)
+
+
+IndicatorSourceInputs.model_rebuild()
 
 
 class IndicatorSource(BaseModel):
@@ -239,22 +257,40 @@ def _inputs_key(inputs: IndicatorSourceInputs) -> tuple[Any, ...]:
         inputs.signal_period,
         inputs.standard_deviations,
         inputs.anchor_time,
+        inputs.source.model_dump_json() if inputs.source is not None else None,
     )
+
+
+def compute_source_indicator(
+    indicator_id: str, bars: BarSeries, inputs: IndicatorSourceInputs, anchor_time: str | None = None
+) -> list[IndicatorOutputSeries]:
+    """An indicator on ``bars`` with these inputs: on its source indicator's output when it has one (TVP-6.5).
+
+    A source output the source indicator doesn't produce gives no outputs."""
+    registry_inputs = inputs.registry_inputs(anchor_time)
+    if inputs.source is None:
+        return compute_indicator(indicator_id, bars, registry_inputs)
+    reference = inputs.source
+    source = find_output(compute_indicator(reference.indicator_id, bars, reference.inputs.registry_inputs()), reference.output)
+    if source is None:
+        return []
+    return compute_on_source(indicator_id, bars, registry_inputs, source)
 
 
 @lru_cache(maxsize=512)
 def _output_profile(indicator_id: str, inputs_key: tuple[Any, ...]) -> tuple[tuple[str, int | None], ...]:
-    period, fast, slow, signal, deviations, anchor_time = inputs_key
-    outputs = compute_indicator(
+    period, fast, slow, signal, deviations, anchor_time, source = inputs_key
+    outputs = compute_source_indicator(
         indicator_id,
         _synthetic_series(),
-        IndicatorInputs(
+        IndicatorSourceInputs(
             period=period,
             fast_period=fast,
             slow_period=slow,
             signal_period=signal,
             standard_deviations=deviations,
             anchor_time=anchor_time,
+            source=IndicatorOutputRef.model_validate_json(source) if source is not None else None,
         ),
     )
     profile: list[tuple[str, int | None]] = []
@@ -276,6 +312,13 @@ def indicator_output_profile(source: IndicatorSource) -> tuple[tuple[str, int | 
 def validate_indicator_source(source: IndicatorSource) -> None:
     if server_indicator(source.indicator_id) is None:
         raise ValueError(f"indicator {source.indicator_id!r} is not available on the server")
+    reference = source.inputs.source
+    if reference is not None:
+        if not accepts_source(source.indicator_id):
+            raise ValueError(f"indicator {source.indicator_id!r} does not take another indicator as its source")
+        validate_indicator_source(
+            IndicatorSource(kind="indicator", indicator_id=reference.indicator_id, inputs=reference.inputs, output=reference.output)
+        )
     try:
         profile = indicator_output_profile(source)
     except Exception as exc:  # any failure of the indicator on these inputs is the caller's input error

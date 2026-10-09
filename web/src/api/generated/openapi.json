@@ -1674,7 +1674,7 @@
                 "$ref": "#/components/schemas/ChangePercentSource"
               },
               {
-                "$ref": "#/components/schemas/IndicatorSource"
+                "$ref": "#/components/schemas/IndicatorSource-Output"
               },
               {
                 "$ref": "#/components/schemas/TrendlineSource-Output"
@@ -20367,8 +20367,9 @@
         "title": "ImplementationPlanSubmission",
         "type": "object"
       },
-      "IndicatorSource": {
+      "IndicatorOutputRef-Input": {
         "additionalProperties": false,
+        "description": "Another indicator's output on the same chart, as an indicator's source (TVP-6.5).",
         "properties": {
           "indicator_id": {
             "maxLength": 120,
@@ -20377,12 +20378,7 @@
             "type": "string"
           },
           "inputs": {
-            "$ref": "#/components/schemas/IndicatorSourceInputs"
-          },
-          "kind": {
-            "const": "indicator",
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/IndicatorSourceInputs-Input"
           },
           "output": {
             "maxLength": 240,
@@ -20392,12 +20388,38 @@
           }
         },
         "required": [
-          "kind",
+          "indicator_id",
+          "output"
+        ],
+        "title": "IndicatorOutputRef",
+        "type": "object"
+      },
+      "IndicatorOutputRef-Output": {
+        "additionalProperties": false,
+        "description": "Another indicator's output on the same chart, as an indicator's source (TVP-6.5).",
+        "properties": {
+          "indicator_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Indicator Id",
+            "type": "string"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/IndicatorSourceInputs-Output"
+          },
+          "output": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Output",
+            "type": "string"
+          }
+        },
+        "required": [
           "indicator_id",
           "output",
           "inputs"
         ],
-        "title": "IndicatorSource",
+        "title": "IndicatorOutputRef",
         "type": "object"
       },
       "IndicatorSource-Input": {
@@ -20432,133 +20454,37 @@
         "title": "IndicatorSource",
         "type": "object"
       },
-      "IndicatorSourceInputs": {
+      "IndicatorSource-Output": {
         "additionalProperties": false,
-        "description": "Indicator inputs as the chart stores them.\n\n``anchor_bars_ago`` anchors an anchored indicator (VWAP) that many bars\nbefore the bar being evaluated, so the anchor moves with the bar.",
         "properties": {
-          "anchor_bars_ago": {
-            "anyOf": [
-              {
-                "maximum": 999,
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Anchor Bars Ago"
+          "indicator_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Indicator Id",
+            "type": "string"
           },
-          "anchor_time": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Anchor Time"
+          "inputs": {
+            "$ref": "#/components/schemas/IndicatorSourceInputs-Output"
           },
-          "fast_period": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "gt": 0,
-                "le": 1000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fast Period"
+          "kind": {
+            "const": "indicator",
+            "title": "Kind",
+            "type": "string"
           },
-          "period": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "number"
-              }
-            ],
-            "default": 14,
-            "gt": 0,
-            "le": 1000,
-            "title": "Period"
-          },
-          "signal_period": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "gt": 0,
-                "le": 1000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Signal Period"
-          },
-          "slow_period": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "gt": 0,
-                "le": 1000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Slow Period"
-          },
-          "standard_deviations": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0,
-                "maximum": 100,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Standard Deviations"
+          "output": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Output",
+            "type": "string"
           }
         },
         "required": [
-          "period",
-          "fast_period",
-          "slow_period",
-          "signal_period",
-          "standard_deviations",
-          "anchor_time",
-          "anchor_bars_ago"
+          "kind",
+          "indicator_id",
+          "output",
+          "inputs"
         ],
-        "title": "IndicatorSourceInputs",
+        "title": "IndicatorSource",
         "type": "object"
       },
       "IndicatorSourceInputs-Input": {
@@ -20664,6 +20590,16 @@
             ],
             "title": "Slow Period"
           },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IndicatorOutputRef-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "standard_deviations": {
             "anyOf": [
               {
@@ -20678,6 +20614,146 @@
             "title": "Standard Deviations"
           }
         },
+        "title": "IndicatorSourceInputs",
+        "type": "object"
+      },
+      "IndicatorSourceInputs-Output": {
+        "additionalProperties": false,
+        "description": "Indicator inputs as the chart stores them.\n\n``anchor_bars_ago`` anchors an anchored indicator (VWAP) that many bars\nbefore the bar being evaluated, so the anchor moves with the bar.",
+        "properties": {
+          "anchor_bars_ago": {
+            "anyOf": [
+              {
+                "maximum": 999,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Bars Ago"
+          },
+          "anchor_time": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Time"
+          },
+          "fast_period": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "gt": 0,
+                "le": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fast Period"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "default": 14,
+            "gt": 0,
+            "le": 1000,
+            "title": "Period"
+          },
+          "signal_period": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "gt": 0,
+                "le": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Period"
+          },
+          "slow_period": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "gt": 0,
+                "le": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slow Period"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IndicatorOutputRef-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "standard_deviations": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 100,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard Deviations"
+          }
+        },
+        "required": [
+          "period",
+          "fast_period",
+          "slow_period",
+          "signal_period",
+          "standard_deviations",
+          "anchor_time",
+          "anchor_bars_ago",
+          "source"
+        ],
         "title": "IndicatorSourceInputs",
         "type": "object"
       },
@@ -42111,7 +42187,7 @@
                 "$ref": "#/components/schemas/ChangePercentSource"
               },
               {
-                "$ref": "#/components/schemas/IndicatorSource"
+                "$ref": "#/components/schemas/IndicatorSource-Output"
               },
               {
                 "$ref": "#/components/schemas/TrendlineSource-Output"
@@ -49736,7 +49812,7 @@
           "source": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/IndicatorSource"
+                "$ref": "#/components/schemas/IndicatorSource-Output"
               },
               {
                 "type": "null"

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
+import type { IndicatorSourceRef } from './indicatorSources';
 import type { MarketBar } from '../tradingTypes';
 import { autoChartPatternLines, isAutoChartPatternId, type AutoChartPatternId } from './autoPatterns';
 
@@ -67,6 +68,8 @@ export type IndicatorOutput = {
   /** Markers: text beside each marker, and above or below the bar instead of at the point's price (candlestick patterns). */
   markerText?: string;
   markerPosition?: 'aboveBar' | 'belowBar';
+  /** A pane-1 output drawn in another indicator's pane (an indicator on that indicator, TVP-6.5). */
+  paneOf?: string;
 };
 export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'
@@ -87,6 +90,8 @@ export type CoreIndicatorInstance = {
   compareSymbol?: string | null;
   /** Built-in inputs beyond the period (`tradingViewBuiltInInputs`), by key. */
   params?: Record<string, number | string>;
+  /** Another chart indicator's output read instead of the close (TVP-6.5, `indicatorSources.ts`); none reads the close. */
+  source?: IndicatorSourceRef | null;
   style?: CoreIndicatorStyle;
 };
 

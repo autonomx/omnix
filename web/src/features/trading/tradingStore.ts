@@ -588,11 +588,10 @@ export const useTradingStore = create<TradingWorkspaceState>((set, get) => ({
       if (!existing) return { ...chart, indicators: [...chart.indicators, newIndicatorInstance(id, period)] };
       return {
         ...chart,
-        indicators: chart.indicators.map((indicator) => indicator.id !== id ? indicator : {
-          ...indicator,
-          enabled: !indicator.enabled,
-          visible: indicator.enabled ? false : true,
-          period: period ?? indicator.period,
+        indicators: chart.indicators.map((indicator) => {
+          // Removing an indicator removes it as a source too (TVP-6.5): what read it reads the close again.
+          if (indicator.id !== id) return existing.enabled && indicator.source?.indicatorId === id ? { ...indicator, source: null } : indicator;
+          return { ...indicator, enabled: !indicator.enabled, visible: indicator.enabled ? false : true, period: period ?? indicator.period };
         }),
       };
     }) })),

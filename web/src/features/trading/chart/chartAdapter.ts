@@ -525,7 +525,8 @@ function indicatorColor(output: IndicatorOutput): string {
 
 function indicatorPaneId(output: IndicatorOutput): string | null {
   if (output.pane === 0) return null;
-  return output.key.split(':', 1)[0] ?? null;
+  // An indicator on another indicator shares its source's pane (TVP-6.5).
+  return output.paneOf ?? output.key.split(':', 1)[0] ?? null;
 }
 
 /** Levels step between values; markers hide the line (the markers carry the points). */

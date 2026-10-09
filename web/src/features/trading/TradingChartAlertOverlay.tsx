@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { applyConditionDrafts, conditionEditorFields } from './alertConditionDrafts';
-import { chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, resolveIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
+import { chartAlertIndicatorId, chartAlertSourceIndicatorId, chartAlertThreshold, conditionsAtValue, resolveIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
 import { indicatorUsesSeparatePane, type CoreIndicatorId } from './indicators/coreIndicators';
 import { tradingViewBuiltInUsesSeparatePane } from './indicators/tradingViewBuiltIns';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -36,7 +36,11 @@ function indicatorIdForAlert(alert: TradingAlert): CoreIndicatorId | null {
 /** The indicator pane an alert sits on; null when its indicator is drawn on the price pane (it moves in prices). */
 function paneIndicatorId(alert: TradingAlert): CoreIndicatorId | null {
   const indicatorId = indicatorIdForAlert(alert);
-  return indicatorId && (indicatorUsesSeparatePane(indicatorId) || tradingViewBuiltInUsesSeparatePane(indicatorId)) ? indicatorId : null;
+  const separate = (id: string) => indicatorUsesSeparatePane(id as CoreIndicatorId) || tradingViewBuiltInUsesSeparatePane(id);
+  if (indicatorId && separate(indicatorId)) return indicatorId;
+  // An overlay on a pane indicator (SMA of RSI, TVP-6.5) is drawn in that indicator's pane.
+  const sourceId = indicatorId ? chartAlertSourceIndicatorId(alert) : null;
+  return sourceId && separate(sourceId) ? sourceId as CoreIndicatorId : null;
 }
 
 /** The update that moves a dragged alert to `threshold`: its condition's value (unrounded) for a conditions alert. */

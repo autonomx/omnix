@@ -1,3 +1,4 @@
+import { calculateWithSources } from './indicatorSources';
 import { calculateIntrabarIndicatorOutputs, isIntrabarIndicatorId } from './intrabarIndicators';
 import type { MarketBar } from '../tradingTypes';
 import {
@@ -58,19 +59,19 @@ function styleOutputs(outputs: IndicatorOutput[], indicator: CoreIndicatorInstan
     .filter((output) => output.visible !== false);
 }
 
-function calculateOutputs(
+/** An indicator's outputs before its style (the worker computes the same, see indicator.worker.ts). */
+function rawOutputs(
   bars: readonly MarketBar[],
   indicator: CoreIndicatorInstance,
   compareBars: CompareBars | undefined,
   context: IndicatorCalculationContext,
 ): IndicatorOutput[] {
   const id = String(indicator.id);
-  const outputs = isTradingViewBuiltInId(id)
+  return isTradingViewBuiltInId(id)
     ? calculateTradingViewBuiltInOutputs(bars, { ...indicator, id, session: context.session }, {
       compareBars: indicator.compareSymbol ? compareBars?.[indicator.compareSymbol] : undefined,
     }) as IndicatorOutput[]
     : indicatorOutputs(bars, indicator);
-  return styleOutputs(outputs, indicator);
 }
 
 function compareSymbols(indicators: readonly CoreIndicatorInstance[]): string[] {
@@ -108,11 +109,12 @@ export class TradingIndicatorScheduler {
     const requestId = ++this.latestRequestId;
     const clonedBars = bars.map((bar) => ({ ...bar }));
     const activeIndicators = indicators
-      .filter((indicator) => indicator.enabled && indicator.visible !== false)
+      .filter((indicator) => indicator.enabled)
       .map((indicator) => ({ ...indicator }));
     // External-data and intrabar indicators (TVP-6.4) load their data, then compute here rather than in the worker.
     const asynchronous = (indicator: CoreIndicatorInstance) => isExternalIndicatorId(String(indicator.id)) || isIntrabarIndicatorId(String(indicator.id));
-    const externalIndicators = activeIndicators.filter(asynchronous);
+    const externalIndicators = activeIndicators.filter((indicator) => asynchronous(indicator) && indicator.visible !== false);
+    // Hidden local indicators still go to the worker: another indicator may read them (TVP-6.5).
     const localIndicators = activeIndicators.filter((indicator) => !asynchronous(indicator));
     const symbols = compareSymbols(localIndicators);
 
@@ -123,8 +125,11 @@ export class TradingIndicatorScheduler {
     ).then((groups) => groups.flat());
 
     if (!this.worker) {
-      const localPromise = this.loadCompareBars(symbols, clonedBars).then((compareBars) => (
-        localIndicators.flatMap((indicator) => calculateOutputs(clonedBars, indicator, compareBars, context))
+      const localPromise = this.loadCompareBars(symbols, clonedBars).then((compareBars) => calculateWithSources(
+        clonedBars,
+        localIndicators,
+        (bars, indicator) => rawOutputs(bars, indicator, compareBars, context),
+        (raw, indicator) => (indicator.visible === false ? [] : styleOutputs(raw, indicator)),
       ));
       return Promise.all([localPromise, externalPromise]).then(([local, external]) => (
         requestId === this.latestRequestId && !this.destroyed ? [...local, ...external] : null
@@ -159,7 +164,12 @@ export class TradingIndicatorScheduler {
     compareBars: CompareBars | undefined,
     context: IndicatorCalculationContext,
   ): Promise<IndicatorOutput[] | null> {
-    if (!this.worker) return Promise.resolve(indicators.flatMap((indicator) => calculateOutputs(bars, indicator, compareBars, context)));
+    if (!this.worker) {
+      return Promise.resolve(calculateWithSources(
+        bars, indicators, (source, indicator) => rawOutputs(source, indicator, compareBars, context),
+        (raw, indicator) => (indicator.visible === false ? [] : styleOutputs(raw, indicator)),
+      ));
+    }
     return new Promise<IndicatorOutput[] | null>((resolve, reject) => {
       for (const [pendingId, pending] of this.pending) {
         if (pendingId < requestId) {
