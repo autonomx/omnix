@@ -1722,6 +1722,16 @@ export class TradingChartAdapter {
     return () => this.chart.unsubscribeClick(handler);
   }
 
+  /** A click on a bar of the chart: its time in milliseconds (time sync, TVP-4.2). */
+  onBarClick(listener: (timeMs: number) => void): () => void {
+    this.assertActive();
+    const handler = (parameter: { time?: Time }) => {
+      if (typeof parameter.time === 'number') listener(parameter.time * 1000);
+    };
+    this.chart.subscribeClick(handler);
+    return () => this.chart.unsubscribeClick(handler);
+  }
+
   onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {
     this.assertActive();
     const handler = (parameter: { time?: Time; point?: { x: number; y: number }; paneIndex?: number; seriesData: Map<unknown, unknown> }) => {

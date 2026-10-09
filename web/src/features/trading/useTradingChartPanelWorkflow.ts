@@ -23,6 +23,7 @@ import {
 } from './tradingChartWorkflow';
 import { isTradingFormulaInstrumentId } from './tradingFormula';
 import { tradingIntervalDurationMs } from './tradingIntervals';
+import { useChartTimeSync } from './chartTimeSync';
 import { useTradingStore, type TradingChartSettings } from './tradingStore';
 import { dateInputValue } from './tradingTime';
 import type { MarketBar } from './tradingTypes';
@@ -284,6 +285,9 @@ export function useChartWorkflow(ws: WorkflowInput) {
   } = ws;
   const updateChart = useTradingStore((state) => state.updateChart);
   const settings: TradingChartSettings = chartSettings ?? {};
+  const goTo = useChartGoToDate(ws);
+  // Time sync (TVP-4.2): a bar clicked on another chart of the tab scrolls this one there (not in replay).
+  useChartTimeSync(chartId, adapter, (timeMs) => (replayMode ? null : goTo.goToDate(timeMs)));
 
   const updateChartSettings = useCallback((patch: Partial<TradingChartSettings>) => {
     const current = useTradingStore.getState().charts.find((chart) => chart.chartId === chartId)?.settings ?? {};
@@ -341,7 +345,7 @@ export function useChartWorkflow(ws: WorkflowInput) {
     barCountdownAvailable: tradingIntervalDurationMs(interval) !== null,
     extendedPriceLineEnabled,
     handleStageDoubleClick,
-    ...useChartGoToDate(ws),
+    ...goTo,
     ...useChartImageCopy(adapterRef),
     ...useChartTemplates(ws),
     ...marketStatus,

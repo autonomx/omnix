@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { playAlertSound } from './alertSounds';
 import { useTradingAlerts, useTradingAlertTriggers } from './useTradingAlerts';
+import { tradingWindowPresence } from './windowPresence';
 import './TradingAlertToastLayer.css';
 
 type Toast = { triggerId: string; title: string; message: string };
@@ -24,6 +25,8 @@ export function TradingAlertToastLayer() {
     }
     const fresh = triggersQuery.data.filter((item) => !seen.current?.has(item.trigger_id));
     seen.current = current;
+    // With several Trading windows open, only the most recently focused one rings and shows the toast (TVP-4.3).
+    if (!tradingWindowPresence().isAlertWindow()) return;
     const alertOf = (alertId: string) => alertsQuery.data?.find((item) => item.alert_id === alertId);
     const channelsOf = (alertId: string) => alertOf(alertId)?.parameters.notification_channels ?? ['app', 'toast'];
     // The Sound channel plays the alert's sound (chime unless it chose another): once per poll, for the first

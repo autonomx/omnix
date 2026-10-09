@@ -230,6 +230,8 @@ function parseLinks(value: unknown): TradingLinkState | null {
   if (!value || typeof value !== 'object') return null;
   const links = value as Partial<TradingLinkState>;
   if (['instrument', 'interval', 'crosshair', 'visibleRange'].some((key) => typeof links[key as keyof TradingLinkState] !== 'boolean')) return null;
+  // Time sync (TVP-4.2) is optional: documents written before it have none (off).
+  if (links.time !== undefined && typeof links.time !== 'boolean') return null;
   return links as TradingLinkState;
 }
 

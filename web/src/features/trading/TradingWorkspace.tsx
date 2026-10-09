@@ -19,6 +19,7 @@ import { TradingOrderToastLayer } from './TradingOrderToastLayer';
 import { PaperOrderNotificationsWatch } from './PaperOrderNotificationsWatch';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { TradingSessionTabs } from './TradingSessionTabs';
+import { openTradingWindow, useTradingWindowPresence } from './windowPresence';
 import { tradingApi } from './tradingApi';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import { TradingChartTypeMenu } from './TradingChartTypeMenu';
@@ -91,6 +92,7 @@ function preferredInstrument(
 }
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  useTradingWindowPresence();
   useTradingCommandDispatcher();
   useInstalledAppCommandKeys();
   const navigate = useNavigate();
@@ -124,7 +126,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const favoriteInstrumentIds = useTradingStore((state) => state.favoriteInstrumentIds);
   const setLayout = useTradingStore((state) => state.setLayout);
   const setActiveTab = useTradingStore((state) => state.setActiveTab);
-  const addTab = useTradingStore((state) => state.addTab);
   const removeTab = useTradingStore((state) => state.removeTab);
   const setChartCount = useTradingStore((state) => state.setChartCount);
   const addChart = useTradingStore((state) => state.addChart);
@@ -470,6 +471,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-label="Create workspace" onClick={createWorkspace} disabled={!workspaceHydrated}>+</button>
           <button type="button" aria-label="Rename workspace" onClick={renameWorkspace} disabled={!workspaceHydrated}>Rename</button>
           <button type="button" aria-label="Duplicate workspace" onClick={duplicateWorkspace} disabled={!workspaceHydrated}>Duplicate</button>
+          <button type="button" aria-label="Open workspace in a new window" title="Open in a new window" onClick={() => openTradingWindow(persistence.activeWorkspaceId)} disabled={!workspaceHydrated}>⧉</button>
           <button type="button" aria-label="Delete workspace" onClick={deleteWorkspace} disabled={!workspaceHydrated || persistence.workspaces.length <= 1}>Delete</button>
         </div>
 
@@ -597,8 +599,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         canAdd={tabs.length < MAX_TRADING_TABS}
         getTabLabel={sessionTabLabel}
         onSelect={setActiveTab}
-        onAdd={() => addTab()}
         onClose={closeTabSession}
+        workspaceId={persistence.activeWorkspaceId} workspaces={persistence.workspaces} onSelectWorkspace={(id) => void persistence.selectWorkspace(id)}
+        onOpenTool={(tool) => (tool === 'paper' ? openPaperTrading() : (setToolPanelFullscreen(false), setToolPanel(tool)))}
       />
 
       <TradingSymbolSearch

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { tradingWindowPresence } from './windowPresence';
 import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
 import {
@@ -111,6 +112,20 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     return () => { cancelled = true; };
   }, [instruments]);
 
+  // A watchlist saved in another Trading window (TVP-4.3): take its revision; changes queued here apply on top of it.
+  useEffect(() => tradingWindowPresence().onOtherWindowSaved((kind, id, revision) => {
+    if (kind !== 'watchlist' || (serverById.current.get(id)?.revision ?? -1) >= revision) return;
+    void tradingApi.documents('watchlists').then((loaded) => {
+      const latest = loaded.find((record) => record.record_id === id);
+      // Archived in the other window: the lists as they are now.
+      if (!latest) return void (serverById.current.has(id) && setAllServerRecords(loaded));
+      // Never back to an older revision (this window may have saved a newer one meanwhile).
+      if ((serverById.current.get(id)?.revision ?? -1) >= latest.revision) return;
+      if (serverById.current.has(id)) setServerRecord(latest);
+      else setAllServerRecords(loaded);
+    }).catch(() => undefined);
+  }), []);
+
   function setAllServerRecords(next: TradingDocument[]) {
     serverById.current = new Map(next.map((record) => [record.record_id, record]));
     setServerRecords(next);
@@ -133,6 +148,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
       try {
         const saved = await tradingApi.updateDocument('watchlists', record, serializeWatchlist(operation(upgradeWatchlistPayload(record.payload))));
         setServerRecord(saved);
+        tradingWindowPresence().announceSaved('watchlist', saved.record_id, saved.revision);
         return 'saved';
       } catch (error) {
         if (!isConflictError(error)) return 'error';
@@ -178,6 +194,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
       serverById.current.set(record.record_id, record);
       setServerRecords((items) => [...items, record]);
       setSelectedListId(record.record_id);
+      tradingWindowPresence().announceSaved('watchlist', record.record_id, record.revision);
       setStatus('saved');
       return true;
     } catch {
@@ -191,6 +208,7 @@ export function useTradingWatchlistDocuments(instruments: CanonicalInstrument[])
     setStatus('saving');
     try {
       await tradingApi.archiveDocument('watchlists', selected);
+      tradingWindowPresence().announceSaved('watchlist', selected.record_id, selected.revision + 1);
       const next = serverRecords.filter((item) => item.record_id !== selected.record_id);
       setAllServerRecords(next);
       setSelectedListId(next[0]?.record_id ?? '');
