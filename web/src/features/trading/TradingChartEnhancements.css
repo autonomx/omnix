@@ -72,4 +72,6 @@
   .trading-indicator-legend-toggle{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center}
 
   .trading-chart-grid.is-chart-focus-mode{grid-template-columns:1fr;grid-template-rows:1fr}
+  /* Sub-bar replay (TVP-8.1): where the intrabar data stops. */
+  .trading-replay-toolbar .trading-replay-note{max-width:160px;overflow:hidden;color:var(--c-yellow-840);font-size:8px;text-overflow:ellipsis}
 }

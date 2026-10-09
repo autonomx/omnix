@@ -208,6 +208,20 @@ export const tradingApi = {
     if (decodeTradingFormula(instrumentId)) return formulaBars(instrumentId, interval, limit);
     return trading(api.GET('/api/trading/bars', { params: { query: barsQuery(instrumentId, interval, limit, bindingId, options) } }));
   },
+  /** Lower-timeframe bars inside chart bars (TVP-0.6); see intrabarData.ts. */
+  intrabars: (request: { instrumentId: string; bindingId?: string | null; interval: string; lowerInterval: string; start: number; end: number }) =>
+    trading(api.GET('/api/trading/bars/intrabar', {
+      params: {
+        query: {
+          instrument_id: request.instrumentId,
+          interval: request.interval,
+          lower_interval: request.lowerInterval,
+          start: new Date(request.start).toISOString(),
+          end: new Date(request.end).toISOString(),
+          ...(request.bindingId ? { binding_id: request.bindingId } : {}),
+        },
+      },
+    })),
   quote: (instrumentId: string, bindingId?: string | null): Promise<TradingQuote> =>
     trading(api.GET('/api/trading/quotes', {
       params: { query: { instrument_id: instrumentId, ...(bindingId ? { binding_id: bindingId } : {}) } },

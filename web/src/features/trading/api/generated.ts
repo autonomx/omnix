@@ -145,6 +145,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/bars/intrabar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bars Intrabar
+         * @description Lower-timeframe bars inside chart bars (TVP-0.6), for volume delta and sub-bar replay.
+         */
+        get: operations["bars_intrabar_api_trading_bars_intrabar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/catalysts/classify-shadow": {
         parameters: {
             query?: never;
@@ -5580,6 +5600,31 @@ export interface components {
              * Format: date-time
              */
             observed_at: string;
+        };
+        /** IntrabarResponse */
+        IntrabarResponse: {
+            /** Available From */
+            available_from: string | null;
+            /** Bars */
+            bars: components["schemas"]["MarketBar-Output"][];
+            /** Complete */
+            complete: boolean;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Interval */
+            interval: string;
+            /** Lower Interval */
+            lower_interval: string;
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
         };
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
@@ -12691,6 +12736,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BarsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bars_intrabar_api_trading_bars_intrabar_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+                instrument_id: string;
+                interval: string;
+                lower_interval: string;
+                binding_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntrabarResponse"];
                 };
             };
             /** @description Validation Error */

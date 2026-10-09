@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTradingCommand } from './commands/useTradingCommands';
 import { replayBarAtClock, replayClockForBar, replayVisibleCount } from './replayClock';
 import { TradingChartPanelProps } from './tradingChartPanelModel';
 import { useTradingReplayStore } from './tradingReplayStore';
@@ -90,6 +91,12 @@ export function useChartReplayActions(ws: TradingChartPanelProps & ReturnType<ty
 
   /** Leave replay for live data (jump to real time); every chart refits to its latest bars. */
   const exitReplay = () => setReplayMode(false);
+
+  // Replay keys (TVP-8.1) act on the active chart's replay once a start bar is chosen.
+  const replaying = () => active && replayMode && !replayChoosingStart;
+  useTradingCommand('replay.playPause', toggleReplayPlaying, replaying);
+  useTradingCommand('replay.stepForward', nextReplayBar, replaying);
+  useTradingCommand('replay.stepBack', previousReplayBar, replaying);
 
   useEffect(() => {
     if (!adapter || !replayMode || !active || replayStartTime === null) {

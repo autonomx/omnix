@@ -226,6 +226,9 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     chartKey: `${instrumentId}|${bindingId ?? ''}|${interval}`,
     bindingId: chartQuery.data?.binding.binding_id ?? bindingId ?? null,
     reloadBars,
+    instrumentId,
+    interval,
+    showExtendedHours,
   });
 
   return {
