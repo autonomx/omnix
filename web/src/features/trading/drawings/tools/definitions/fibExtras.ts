@@ -431,12 +431,20 @@ export const fibSpiralTool = defineDrawingTool({
     const corners = [[0, 0], [context.viewport.width, 0], [0, context.viewport.height], [context.viewport.width, context.viewport.height]];
     const limit = Math.max(...corners.map(([x, y]) => Math.hypot(x - center.x, y - center.y))) * 1.2;
     const points: ScreenPoint[] = [];
-    for (let turn = -6 * Math.PI; turn <= 40 * Math.PI; turn += Math.PI / 32) {
+    // Steps of at most 4 px along the arm where it can cross the view; coarse (π/32) while it is still nearer the
+    // centre than the view's nearest point, so a far-off centre doesn't spend the point cap before the view.
+    const nearest = Math.hypot(
+      Math.max(0 - center.x, 0, center.x - context.viewport.width),
+      Math.max(0 - center.y, 0, center.y - context.viewport.height),
+    );
+    for (let turn = -6 * Math.PI; turn <= 40 * Math.PI && points.length < 6_000;) {
       const r = radius * Math.exp(growth * turn);
       if (r > limit) break;
-      if (r < 0.5) continue;
-      const angle = start + direction * turn;
-      points.push({ x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r });
+      if (r >= 0.5) {
+        const angle = start + direction * turn;
+        points.push({ x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r });
+      }
+      turn += r < nearest - 8 ? Math.PI / 32 : Math.min(Math.PI / 32, 4 / Math.max(r, 1));
     }
     return [guide, { kind: 'polyline', points, ...stroke }];
   },

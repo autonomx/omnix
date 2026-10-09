@@ -192,6 +192,8 @@ export const drawingToolGroups: DrawingToolGroup[] = [
       { label: 'Arrow', glyph: '➚', tool: 'arrow' },
       { label: 'Arrow mark up', glyph: '△', available: false },
       { label: 'Arrow mark down', glyph: '▽', available: false },
+      { label: 'Arrow mark left', glyph: '◁', available: false },
+      { label: 'Arrow mark right', glyph: '▷', available: false },
     ],
   },
   {
@@ -218,6 +220,7 @@ export const drawingToolGroups: DrawingToolGroup[] = [
     items: [
       { label: 'Text', glyph: 'T', tool: 'text' },
       { label: 'Note', glyph: '▣', available: false },
+      { label: 'Anchored note', glyph: '▤', available: false },
       { label: 'Price note', glyph: '$', available: false },
       { label: 'Pin', glyph: '⌖', available: false },
       { label: 'Table', glyph: '▦', available: false },

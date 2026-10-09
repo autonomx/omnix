@@ -61,8 +61,10 @@ export const fibonacciTool = defineDrawingTool({
       if (!showLabels) return [line];
       const price = context.formatPrice(rawFirst.price + (rawSecond.price - rawFirst.price) * level);
       const text = content === 'prices' ? price : content === 'percents' ? `${(level * 100).toFixed(1)}%` : content === 'both' ? `${level} (${price})` : String(level);
+      // At a pane edge (an extended line), the label reads inwards.
       const labelX = leftLabels ? Math.max(4, x1 - 4) : Math.min(context.viewport.width - 4, x2 + 4);
-      return [line, { kind: 'text', x: labelX, y: y - 2, text, align: leftLabels || x2 >= context.viewport.width - 4 ? 'end' : 'start' }];
+      const align = leftLabels ? (x1 <= 4 ? 'start' : 'end') : x2 >= context.viewport.width - 4 ? 'end' : 'start';
+      return [line, { kind: 'text', x: labelX, y: y - 2, text, align }];
     });
   },
   // Each visible level as a level from the drawing's left edge onwards (TVP-1.4).

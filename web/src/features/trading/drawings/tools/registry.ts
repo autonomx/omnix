@@ -1,5 +1,9 @@
 // The drawing tool registry (TVP-0.4). To add a tool, write one module in
 // `definitions/` and list it here; hosts and the toolbar pick it up from here.
+import {
+  anchoredNoteTool, arrowMarkDownTool, arrowMarkerTool, arrowMarkLeftTool, arrowMarkRightTool, arrowMarkUpTool, calloutTool, commentTool,
+  emojiTool, flagMarkTool, iconTool, noteTool, priceLabelTool, priceNoteTool, signpostTool,
+} from './definitions/annotations';
 import { arrowTool } from './definitions/arrow';
 import { anchoredVwapTool, regressionTrendTool } from './definitions/barTools';
 import { circleTool, ellipseTool, rectangleTool } from './definitions/boxShapes';
@@ -15,10 +19,17 @@ import { measurementTool } from './definitions/measurement';
 import {
   gannBoxTool, gannFanTool, gannSquareFixedTool, gannSquareTool, modifiedSchiffPitchforkTool, pitchfanTool, pitchforkTool, schiffPitchforkTool,
 } from './definitions/pitchforks';
+import {
+  abcdPatternTool, cyclicLinesTool, cypherPatternTool, elliottCorrectionTool, elliottDoubleComboTool, elliottImpulseTool, elliottTriangleTool,
+  elliottTripleComboTool, headAndShouldersTool, sineLineTool, threeDrivesPatternTool, timeCyclesTool, trianglePatternTool, xabcdPatternTool,
+} from './definitions/patterns';
 import { longPositionTool, shortPositionTool } from './definitions/positions';
 import { barsPatternTool, ghostFeedTool, positionForecastTool, sectorTool } from './definitions/projections';
 import { datePriceRangeTool, dateRangeTool } from './definitions/ranges';
 import { fixedRangeVolumeProfileTool } from './definitions/volumeProfile';
+import {
+  arcTool, brushTool, curveTool, doubleCurveTool, highlighterTool, pathTool, polylineTool, rotatedRectangleTool, triangleTool,
+} from './definitions/shapesExtra';
 import { textTool } from './definitions/text';
 import { rayTool, trendLineTool } from './definitions/trendLines';
 import { crosslineTool, verticalLineTool } from './definitions/verticalLines';
@@ -75,6 +86,47 @@ export const DRAWING_TOOL_DEFINITIONS = [
   gannSquareFixedTool,
   gannSquareTool,
   gannFanTool,
+  // TVP-3.4 shapes and freehand
+  brushTool,
+  highlighterTool,
+  pathTool,
+  polylineTool,
+  curveTool,
+  doubleCurveTool,
+  triangleTool,
+  rotatedRectangleTool,
+  arcTool,
+  // TVP-3.5 annotations
+  noteTool,
+  anchoredNoteTool,
+  priceNoteTool,
+  calloutTool,
+  commentTool,
+  signpostTool,
+  priceLabelTool,
+  flagMarkTool,
+  arrowMarkUpTool,
+  arrowMarkDownTool,
+  arrowMarkLeftTool,
+  arrowMarkRightTool,
+  arrowMarkerTool,
+  iconTool,
+  emojiTool,
+  // TVP-3.7 patterns, Elliott waves and cycles
+  xabcdPatternTool,
+  cypherPatternTool,
+  abcdPatternTool,
+  trianglePatternTool,
+  threeDrivesPatternTool,
+  headAndShouldersTool,
+  elliottImpulseTool,
+  elliottCorrectionTool,
+  elliottTriangleTool,
+  elliottDoubleComboTool,
+  elliottTripleComboTool,
+  cyclicLinesTool,
+  timeCyclesTool,
+  sineLineTool,
 ] as const;
 
 /** Every tool that creates a drawing; the toolbar adds `cursor`, `alert` and `eraser`. */
