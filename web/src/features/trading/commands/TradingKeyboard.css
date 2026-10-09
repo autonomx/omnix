@@ -25,6 +25,8 @@
   .trading-shortcut-dialog>input{margin:0 18px;padding:8px 10px;border:1px solid var(--c-slate-890);border-radius:6px;background:transparent;color:var(--c-slate-240)}
   .trading-shortcut-dialog>input:focus{border-color:var(--c-blue-650);outline:0;box-shadow:0 0 0 3px color-mix(in srgb, var(--c-blue-650) 13%, transparent)}
   .trading-shortcut-conflicts{margin:8px 18px 0;color:var(--c-red-560);font-size:12px}
+  .trading-install-app-note{margin:6px 18px 0;color:var(--c-slate-630);font-size:12px}
+  .trading-install-app-note button{margin-left:8px;border:1px solid var(--c-blue-630);border-radius:4px;background:var(--c-blue-630);padding:2px 8px;color:var(--c-neutral-1000);font-size:12px;cursor:pointer}
   .trading-shortcut-notice{min-height:16px;margin:6px 18px 4px;color:var(--c-slate-630);font-size:12px}
   .trading-shortcut-groups{min-height:0;overflow:auto;padding:0 18px 16px}
   .trading-shortcut-groups h3{margin:14px 0 4px;color:var(--c-slate-630);font-size:11px;letter-spacing:.07em;text-transform:uppercase}

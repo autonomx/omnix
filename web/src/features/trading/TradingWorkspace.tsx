@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
+import { useInstalledAppCommandKeys } from './installedApp';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
@@ -91,6 +92,7 @@ function preferredInstrument(
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
   useTradingCommandDispatcher();
+  useInstalledAppCommandKeys();
   const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
   const [symbolQuery, setSymbolQuery] = useState('');

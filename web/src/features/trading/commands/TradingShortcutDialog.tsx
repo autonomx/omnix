@@ -14,6 +14,7 @@ import {
 } from './tradingCommands';
 import { useModalDialog } from './useModalDialog';
 import { useTradingCommandAvailability, useTradingCommandKeyOverrides } from './useTradingCommands';
+import { InstallAppNote } from '../InstallAppNote';
 import './TradingKeyboard.css';
 
 const COMMANDS: readonly TradingCommandDefinition[] = TRADING_COMMANDS;
@@ -189,6 +190,7 @@ export function TradingShortcutDialog({ open, onClose }: { open: boolean; onClos
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        <InstallAppNote availability={availability} />
         {clashes.length > 0 ? (
           <p className="trading-shortcut-conflicts" role="alert">
             {clashes.length === 1 ? '1 key is' : `${clashes.length} keys are`} used by more than one command or by typing on the chart.
