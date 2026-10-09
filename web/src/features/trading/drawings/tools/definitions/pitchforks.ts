@@ -2,7 +2,8 @@
 //
 // A pitchfork is three clicks: A, then B and C, the swing high and low. Its median line runs from an origin through
 // the midpoint M of B-C; the tines are parallels through M + (B - M) x level on either side. The variants differ in
-// the origin only: A (Andrews), A moved halfway to B in price (Schiff), or the midpoint of A-B (modified Schiff).
+// the origin only: A (Andrews), A moved halfway to B in price (Schiff), or the midpoint of A-B in price and time
+// (modified Schiff, and the inside pitchfork, which TradingView documents with that same origin).
 // Lines are built in bar index/price and projected, so the drawing and its alerts agree.
 import { lineAlertLevel, lineThroughPoint } from '../alertLevels';
 import { booleanProperty, numberListProperty, numberProperty, recordsProperty } from '../properties';
@@ -20,7 +21,7 @@ import {
   type ScreenPoint,
 } from '../types';
 
-type PitchforkKind = 'andrews' | 'schiff' | 'modified-schiff';
+type PitchforkKind = 'andrews' | 'schiff' | 'modified-schiff' | 'inside';
 type Services = Pick<DrawingToolServices, 'barIndexForTime' | 'timeForBarIndex'>;
 
 /** A point at a fractional bar index between two anchors (bar-index space, like the chart and the alerts). */
@@ -164,6 +165,7 @@ function makePitchfork<const Id extends string>(id: Id, label: string, displayNa
 export const pitchforkTool = makePitchfork('pitchfork', 'Pitchfork', 'Pitchfork', 'andrews');
 export const schiffPitchforkTool = makePitchfork('schiff-pitchfork', 'Schiff pitchfork', 'Schiff Pitchfork', 'schiff');
 export const modifiedSchiffPitchforkTool = makePitchfork('modified-schiff-pitchfork', 'Modified Schiff pitchfork', 'Modified Schiff Pitchfork', 'modified-schiff');
+export const insidePitchforkTool = makePitchfork('inside-pitchfork', 'Inside pitchfork', 'Inside Pitchfork', 'inside');
 
 // Pitchfan: rays from A through B-C at the levels.
 

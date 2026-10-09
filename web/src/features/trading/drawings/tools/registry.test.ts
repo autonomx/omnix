@@ -20,7 +20,7 @@ const DRAWING_TOOLS = [
   'ghost-feed', 'sector', 'fixed-range-volume-profile',
   // TVP-3.2 Fibonacci, TVP-3.3 pitchforks and Gann
   'fib-extension', 'fib-time-zone', 'fib-time', 'fib-channel', 'fib-speed-fan', 'fib-arcs', 'fib-circles', 'fib-spiral', 'fib-wedge',
-  'pitchfork', 'schiff-pitchfork', 'modified-schiff-pitchfork', 'pitchfan', 'gann-box', 'gann-square-fixed', 'gann-square', 'gann-fan',
+  'pitchfork', 'schiff-pitchfork', 'modified-schiff-pitchfork', 'inside-pitchfork', 'pitchfan', 'gann-box', 'gann-square-fixed', 'gann-square', 'gann-fan',
   // TVP-3.4 shapes and freehand, TVP-3.5 annotations, TVP-3.7 patterns, waves and cycles
   'brush', 'highlighter', 'path', 'polyline', 'curve', 'double-curve', 'triangle', 'rotated-rectangle', 'arc',
   'note', 'anchored-note', 'price-note', 'callout', 'comment', 'signpost', 'price-label', 'flag-mark', 'arrow-mark-up', 'arrow-mark-down',
