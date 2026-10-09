@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
+  claimsBrowserKey,
   resolveCommand,
   tradingCommandDefinition,
   type KeyOverrides,
@@ -56,7 +57,12 @@ function dispatch(event: KeyboardEvent): void {
   if (event.key === 'Escape') forgetChartClick();
   if (event.defaultPrevented || event.isComposing) return;
   const match = resolveCommand(registered, event, keyOverrides, availability);
-  if (!match) return;
+  if (!match) {
+    // In the app window a claimed browser key with nothing to run (one tab, typing in a field) must not reach the
+    // browser: Ctrl+W would close the whole window.
+    if (availability === 'installed' && claimsBrowserKey(event)) event.preventDefault();
+    return;
+  }
   if (event.repeat && !match.definition.repeatable) {
     event.preventDefault();
     return;

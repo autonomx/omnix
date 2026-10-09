@@ -1,29 +1,33 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { tradingCommandAvailability } from './commands/useTradingCommands';
+import { setTradingCommandAvailability, tradingCommandAvailability, useTradingCommandDispatcher } from './commands/useTradingCommands';
 import { InstallAppNote } from './InstallAppNote';
-import { isInstalledApp, setInstallPromptForTests, useInstalledAppCommandKeys } from './installedApp';
+import { setInstallPromptForTests } from '../../shared/installPrompt';
+import { isInstalledApp, useInstalledAppCommandKeys } from './installedApp';
 
 afterEach(() => {
   cleanup();
   act(() => setInstallPromptForTests(null));
 });
 
-function media(standalone: boolean) {
-  const changeListeners: Array<() => void> = [];
+function media(standalone: boolean, mode = '(display-mode: standalone)') {
+  const changeListeners = new Set<() => void>();
   let matches = standalone;
   const query = (text: string) => ({
-    get matches() { return text === '(display-mode: standalone)' && matches; },
-    addEventListener: (_: string, listener: () => void) => { changeListeners.push(listener); },
-    removeEventListener: vi.fn(),
+    get matches() { return text === mode && matches; },
+    addEventListener: (_: string, listener: () => void) => { changeListeners.add(listener); },
+    removeEventListener: (_: string, listener: () => void) => { changeListeners.delete(listener); },
   }) as unknown as MediaQueryList;
-  return { query, setStandalone(next: boolean) { matches = next; changeListeners.forEach((listener) => listener()); } };
+  return { query, changeListeners, setStandalone(next: boolean) { matches = next; changeListeners.forEach((listener) => listener()); } };
 }
 
 describe('installed app (TVP-4.5)', () => {
   it('detects the app window by its display mode', () => {
     expect(isInstalledApp(media(true).query)).toBe(true);
     expect(isInstalledApp(media(false).query)).toBe(false);
+    expect(isInstalledApp(media(true, '(display-mode: window-controls-overlay)').query)).toBe(true);
+    // A fullscreen browser tab (F11) is not the app.
+    expect(isInstalledApp(media(true, '(display-mode: fullscreen)').query)).toBe(false);
   });
 
   it('switches the trading keys to the app keys in the app window, and back', () => {
@@ -34,6 +38,21 @@ describe('installed app (TVP-4.5)', () => {
     expect(tradingCommandAvailability()).toBe('installed');
     hook.unmount();
     expect(tradingCommandAvailability()).toBe('browser');
+    expect(window.changeListeners.size).toBe(0);
+  });
+
+  it('keeps a claimed browser key from reaching the browser in the app window, even with nothing to run', () => {
+    const hook = renderHook(() => useTradingCommandDispatcher());
+    const press = () => {
+      const event = new KeyboardEvent('keydown', { key: 'w', code: 'KeyW', ctrlKey: true, bubbles: true, cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(press()).toBe(false);
+    act(() => setTradingCommandAvailability('installed'));
+    expect(press()).toBe(true);
+    act(() => setTradingCommandAvailability('browser'));
+    hook.unmount();
   });
 
   it('offers the browser install prompt in the shortcut dialog', async () => {
@@ -43,6 +62,13 @@ describe('installed app (TVP-4.5)', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Install app' })));
     expect(prompt).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('Installed');
+  });
+
+  it('reports a dismissed install', async () => {
+    act(() => setInstallPromptForTests({ prompt: vi.fn(async () => undefined), userChoice: Promise.resolve({ outcome: 'dismissed' as const }) } as never));
+    render(<InstallAppNote availability="browser" />);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Install app' })));
+    expect(await screen.findByRole('status')).toHaveTextContent('Not installed');
   });
 
   it('explains the app keys without a prompt, and says nothing in the app', () => {

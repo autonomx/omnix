@@ -198,6 +198,14 @@ export type RegisteredCommand = { definition: TradingCommandDefinition; handler:
  * skipped. A hotkey beats a typed-character pattern; then the most specific
  * scope wins, then the latest registration.
  */
+const CLAIMED_BROWSER_KEYS = [...new Set(TRADING_COMMANDS.flatMap((command) => ('installedKeys' in command ? command.installedKeys : [])))]
+  .filter((key) => isBrowserReservedHotkey(key));
+
+/** Whether the key is one of the browser's that the installed app claims (Ctrl+T/W/Tab/Shift+T...). */
+export function claimsBrowserKey(event: KeyboardEvent): boolean {
+  return CLAIMED_BROWSER_KEYS.some((key) => matchesHotkey(key, event));
+}
+
 export function resolveCommand(
   registered: readonly RegisteredCommand[],
   event: KeyboardEvent,

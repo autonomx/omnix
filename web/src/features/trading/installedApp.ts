@@ -2,11 +2,13 @@
 // in its own window (a web app manifest, no native wrapper, decision D-8).
 // There the browser-reserved keys (Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1..9)
 // reach the page, so the trading commands switch to TradingView's keys.
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
+import { installPrompt, onInstallPromptChange, takeInstallPrompt } from '../../shared/installPrompt';
 import { setTradingCommandAvailability } from './commands/useTradingCommands';
 
 /** The display modes of an installed app's own window. */
-const INSTALLED_QUERIES = ['(display-mode: standalone)', '(display-mode: window-controls-overlay)', '(display-mode: fullscreen)'] as const;
+// Not fullscreen: a browser tab in fullscreen (F11) reports it too, and the manifest asks for standalone.
+const INSTALLED_QUERIES = ['(display-mode: standalone)', '(display-mode: window-controls-overlay)'] as const;
 
 type MediaQueries = (query: string) => Pick<MediaQueryList, 'matches' | 'addEventListener' | 'removeEventListener'>;
 
@@ -33,49 +35,14 @@ export function useInstalledAppCommandKeys(media: MediaQueries = browserQueries)
   }, [media]);
 }
 
-/** The browser's install prompt (Chromium's `beforeinstallprompt`), kept until used. */
-type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
-
-let deferred: InstallPromptEvent | null = null;
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((listener) => listener());
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (event) => {
-    // Keep the browser's own mini-infobar quiet; the shortcut dialog offers the install instead.
-    event.preventDefault();
-    deferred = event as InstallPromptEvent;
-    notify();
-  });
-  window.addEventListener('appinstalled', () => {
-    deferred = null;
-    notify();
-  });
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
 /** Installs the app through the browser's prompt; null when the browser offers none (installed, or not supported). */
 export function useInstallApp(): (() => Promise<boolean>) | null {
-  const prompt = useSyncExternalStore(subscribe, () => deferred, () => null);
-  const [, setUsed] = useState(0);
+  const prompt = useSyncExternalStore(onInstallPromptChange, installPrompt, () => null);
   if (!prompt) return null;
   return async () => {
-    const event = prompt;
-    deferred = null;
-    notify();
+    const event = takeInstallPrompt();
+    if (!event) return false;
     await event.prompt();
-    const choice = await event.userChoice;
-    setUsed((value) => value + 1);
-    return choice.outcome === 'accepted';
+    return (await event.userChoice).outcome === 'accepted';
   };
-}
-
-/** Tests only: a captured install prompt. */
-export function setInstallPromptForTests(event: InstallPromptEvent | null): void {
-  deferred = event;
-  notify();
 }
