@@ -30,10 +30,13 @@ describe('TradingIndicatorManager filters', () => {
     fireEvent.change(availabilityFilter, { target: { value: 'ready' } });
     expect(screen.getByText('Analyst price forecast')).toBeTruthy();
     expect(screen.getByText('Dividend Yield')).toBeTruthy();
+    // Market breadth is computed by Omnix (TVP-6.6).
+    expect(screen.getByText('Advance/Decline Line')).toBeTruthy();
 
+    // Every stock-specific series has its data now.
     fireEvent.change(availabilityFilter, { target: { value: 'data-required' } });
     expect(screen.queryByText('Analyst price forecast')).toBeNull();
-    expect(screen.getByText('Advance/Decline Line')).toBeTruthy();
+    expect(screen.queryByText('Advance/Decline Line')).toBeNull();
     expect(screen.queryByText('Relative Strength Index (RSI)')).toBeNull();
   });
 

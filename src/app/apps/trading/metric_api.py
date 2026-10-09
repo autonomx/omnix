@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query
 
+from .breadth import BREADTH_METRICS, BreadthRepository, breadth_metric, default_breadth_repository
 from .fundamental_metric_data import (
     YahooAnalystMetricAdapter,
     default_yahoo_analyst_metric_adapter,
@@ -44,6 +45,7 @@ def _normalize_metric_units(response: MarketMetricResponse) -> MarketMetricRespo
 def create_trading_metric_router(
     metric_service_factory: Callable[[], TradingMetricDataService] = default_metric_data_service,
     yahoo_analyst_factory: Callable[[], YahooAnalystMetricAdapter] = default_yahoo_analyst_metric_adapter,
+    breadth_repository_factory: Callable[[], BreadthRepository] = default_breadth_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
@@ -60,7 +62,10 @@ def create_trading_metric_router(
         end_time: datetime | None = Query(default=None),
     ) -> MarketMetricResponse:
         try:
-            if metric in {"yahoo.analyst_price_forecast", "yahoo.price_target"}:
+            if metric in BREADTH_METRICS:
+                # Market breadth (TVP-6.6): the same for every chart.
+                response = breadth_metric(metric, breadth_repository_factory(), instrument_id=instrument_id, interval=interval, limit=limit, end_time=end_time)
+            elif metric in {"yahoo.analyst_price_forecast", "yahoo.price_target"}:
                 response = yahoo_analyst_factory().analyst_targets(
                     instrument_id,
                     interval,
