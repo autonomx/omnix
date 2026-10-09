@@ -25,7 +25,8 @@ afterEach(() => {
 
 describe('intrabar data (TVP-0.6)', () => {
   it('picks a lower interval that fits inside the chart interval', () => {
-    expect(autoIntrabarInterval('30s')).toBe('1s');
+    expect(autoIntrabarInterval('30s')).toBeNull();
+    expect(autoIntrabarInterval('1m')).toBeNull();
     expect(autoIntrabarInterval('5m')).toBe('1m');
     expect(autoIntrabarInterval('1h')).toBe('1m');
     expect(autoIntrabarInterval('4h')).toBe('5m');

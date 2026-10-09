@@ -228,6 +228,7 @@ export function useChartPanelData(ws: TradingChartPanelProps & ReturnType<typeof
     reloadBars,
     instrumentId,
     interval,
+    showExtendedHours,
   });
 
   return {

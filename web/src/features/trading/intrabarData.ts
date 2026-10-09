@@ -1,5 +1,5 @@
 /**
- * Intrabar data (TVP-0.6): lower-timeframe bars inside chart bars, for volume delta (TVP-6.4) and sub-bar replay
+ * Intrabar data (TVP-0.6): lower-timeframe bars (one minute and up) inside chart bars, for volume delta (TVP-6.4) and sub-bar replay
  * (TVP-8.1). The server reads them from the latest bars of the lower interval, so a range further back than the
  * provider reaches comes back partial (`complete` false, `available_from` where the data starts).
  */
@@ -25,12 +25,12 @@ export const MAX_INTRABAR_BARS = 5_000;
 
 /**
  * The lower interval read inside a chart interval when the user leaves it on auto, like TradingView's volume delta:
- * seconds charts read 1s, intraday charts 1m, daily charts 5m... kept so a few hundred chart bars fit the budget.
+ * intraday charts read 1m, longer ones 5m, 1h or 1d, so a few hundred chart bars fit the budget; none below 1m.
  */
 export function autoIntrabarInterval(interval: string): string | null {
   const ms = tradingIntervalDurationMs(interval);
-  if (ms === null || ms <= 1_000) return null;
-  if (ms < 60_000) return '1s';
+  // No seconds: the providers' bar intervals start at one minute.
+  if (ms === null || ms <= 60_000) return null;
   if (ms <= 3_600_000) return '1m';
   if (ms < 86_400_000) return '5m';
   if (ms < 7 * 86_400_000) return '1h';

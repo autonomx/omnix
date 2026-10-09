@@ -96,7 +96,7 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     indicatorSessionRef.current = sessionForInstrument(chartQuery.data?.instrument);
     scheduleIndicators();
     // Keyed by timezoneId and the loaded data, not by values derived from them (selectedTimezone, historyLimit).
-    // Replay re-runs it only when this chart's visible bar count changes, not on every clock tick.
+    // Replay re-runs it only when this chart's visible bar count or forming bar changes, not on every clock tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, loadedBars, chartQuery.data, interval, replayFormingBar, replayMode, replayVisible, replayVisibleBarCount, rightOffset, scheduleIndicators, timezoneId, adapterRef, allBarsRef, barsRef, fittedBarsKeyRef, forceLiveRender, pendingIntervalScrollRef, pendingRangeIntervalRef, replayWasVisibleRef, selectedRangeRef, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef, indicatorSessionRef]);
 

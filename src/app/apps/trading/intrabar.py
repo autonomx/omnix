@@ -72,8 +72,10 @@ def intrabar_bars(
     fetched = sorted(response.bars, key=lambda bar: bar.start_time)
     available_from = _utc(fetched[0].start_time) if fetched else None
     inside = [bar for bar in fetched if start <= _utc(bar.start_time) < end]
-    # Fewer bars than asked for means the provider has none older.
-    complete = available_from is not None and (available_from <= start or len(fetched) < limit)
+    # Short of the range start, the bars are complete only when the provider says it has no older ones: providers that
+    # cap their history (Yahoo keeps about a week of 1m bars) also return fewer bars than asked.
+    history_complete = bool(getattr(response.provenance, "history_complete", False))
+    complete = available_from is not None and (available_from <= start or history_complete)
     return IntrabarResponse(
         instrument_id=instrument_id,
         interval=interval,
