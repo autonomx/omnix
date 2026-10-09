@@ -83,3 +83,13 @@ def test_expiration_is_postgres_authority_and_evaluation_filter() -> None:
     assert "ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ" in migration
     assert "expires_at > %s" in implementation
     assert '"expires_at": alert.expires_at.isoformat()' in implementation
+
+
+def test_a_line_alert_keeps_its_drawing_link() -> None:
+    """TVP-1.4: the drawing and level a line alert follows round-trip through the parameters."""
+    from app.apps.trading.alerts import TradingAlertParameters
+
+    parameters = TradingAlertParameters(drawing_id="channel-1", drawing_level="lower")
+    restored = TradingAlertParameters.model_validate(parameters.model_dump(mode="json"))
+    assert (restored.drawing_id, restored.drawing_level) == ("channel-1", "lower")
+    assert TradingAlertParameters().drawing_id is None

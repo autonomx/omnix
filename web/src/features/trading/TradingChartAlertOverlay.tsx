@@ -102,6 +102,10 @@ export function editorDefaults(placement: ChartAlertPlacement, latestPrice: numb
     period: String(placement.indicatorPeriod ?? 14),
     lookback: '1',
     trendlinePoints: isTrendline ? placement.trendlinePoints?.map((point) => ({ ...point })) : undefined,
+    // A drawing's line alert follows the drawing (TVP-1.4): it starts on the first level the menu offers.
+    ...(isTrendline && placement.drawingId && placement.drawingAlertLevels?.length
+      ? { drawingId: placement.drawingId, drawingLevels: placement.drawingAlertLevels, drawingLevel: placement.drawingAlertLevels[0].key }
+      : {}),
     ...(placement.chartIndicatorId ? { chartIndicatorId: placement.chartIndicatorId } : {}),
   };
 }
@@ -280,7 +284,7 @@ export function TradingChartAlertOverlay({
       period: Number(editor.period) || 14,
       lookback_bars: Number(editor.lookback) || 1,
       trendline_points: isTrendline ? editor.trendlinePoints?.map((point) => ({ ...point, price: String(point.price) })) : null,
-      trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null,
+      trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null, ...(isTrendline && editor.drawingId ? { drawing_id: editor.drawingId, drawing_level: editor.drawingLevel ?? null } : {}),
     };
     input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at; if (editor.condition.startsWith('indicator_') && indicatorChoices?.length && !withChartIndicatorCondition(input, indicatorChoices, resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId), String(threshold))) return void setStatus('error');
     await runMutation(() => tradingApi.createAlert(input));

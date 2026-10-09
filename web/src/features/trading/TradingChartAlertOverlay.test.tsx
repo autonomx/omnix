@@ -34,3 +34,14 @@ describe('Trading chart alert placement defaults', () => {
     expect(editor.indicator).toBe('rsi');
   });
 });
+
+describe('alerts placed from a drawing (TVP-1.4)', () => {
+  it('follow the drawing, starting on its first level', () => {
+    const levels = [
+      { key: 'upper', label: 'Upper', anchors: [{ time: 'a', price: 2 }, { time: 'b', price: 3 }] as const, extend: 'right' as const, interpolation: 'bars' as const },
+      { key: 'lower', label: 'Lower', anchors: [{ time: 'a', price: 1 }, { time: 'b', price: 2 }] as const, extend: 'right' as const, interpolation: 'bars' as const },
+    ];
+    expect(editorDefaults({ time: 'a', price: 2, x: 0, y: 0, source: 'context-menu', drawingId: 'ch', drawingAlertLevels: levels, trendlinePoints: [{ time: 'a', price: 2 }, { time: 'b', price: 3 }] }, 1))
+      .toMatchObject({ condition: 'trendline_crossing', drawingId: 'ch', drawingLevel: 'upper', drawingLevels: levels });
+  });
+});

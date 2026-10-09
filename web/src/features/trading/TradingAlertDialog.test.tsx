@@ -74,3 +74,15 @@ describe('TradingAlertDialog chart indicators (TVP-1.3)', () => {
     expect(screen.getByLabelText('Alert indicator')).toBeInTheDocument();
   });
 });
+
+describe('TradingAlertDialog drawing levels (TVP-1.4)', () => {
+  it('picks the drawing level the line alert follows', () => {
+    const levels = [
+      { key: 'upper', label: 'Upper line', anchors: [{ time: 'a', price: 2 }, { time: 'b', price: 3 }] as const },
+      { key: 'lower', label: 'Lower line', anchors: [{ time: 'a', price: 1 }, { time: 'b', price: 2 }] as const },
+    ];
+    const onChange = renderDialog({ ...editor, condition: 'trendline_crossing', drawingId: 'ch', drawingLevels: levels, drawingLevel: 'upper', trendlinePoints: [{ time: 'a', price: 2 }, { time: 'b', price: 3 }] });
+    fireEvent.change(screen.getByLabelText('Alert drawing level'), { target: { value: 'lower' } });
+    expect(onChange).toHaveBeenCalledWith({ drawingLevel: 'lower', trendlinePoints: [{ time: 'a', price: 1 }, { time: 'b', price: 2 }] });
+  });
+});

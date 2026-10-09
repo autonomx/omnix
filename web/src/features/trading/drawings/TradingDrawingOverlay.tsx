@@ -201,6 +201,18 @@ export function offeredAlertLevels(levels: unknown, services: DrawingToolService
 }
 
 /**
+ * The keys of the alert levels a drawing has (TVP-1.4), whatever this chart can offer: a level that only extends
+ * back in time doesn't count. An alert whose level is not among them has lost it.
+ */
+export function drawingAlertLevelKeys(drawing: TradingDrawing, services: DrawingToolServices): Set<string> {
+  const alertLevels = drawingToolDefinition(drawing.toolType)?.alertLevels;
+  if (!alertLevels) return new Set();
+  const properties = drawingPropertiesWithDefaults(drawing.toolType, drawing.properties);
+  const levels = guardToolCall(drawing.toolType, 'alertLevels', () => alertLevels(drawing.points, properties, services), []);
+  return new Set((Array.isArray(levels) ? levels : []).filter((level) => level && level.extend !== 'left').map((level) => String(level.key)));
+}
+
+/**
  * What a drawing's tool offers from the context menu: its alert levels (see `offeredAlertLevels`) and actions.
  */
 export function drawingMenuEntries(
@@ -215,13 +227,14 @@ export function drawingMenuEntries(
   const levels = alertLevels
     ? guardToolCall(drawing.toolType, 'alertLevels', () => offeredAlertLevels(alertLevels(drawing.points, properties, services), services, barIndexMatchesBars), [])
     : [];
-  const legacyLine = levels[0] && (levels[0].extend === 'none' || levels[0].extend === 'both') ? levels[0] : undefined;
+  const alertable = levels.filter((level) => level.extend !== 'left');
+  const legacyLine = alertable[0];
   const snapshot = { drawingId: drawing.drawingId, instrumentId: drawing.instrumentId, points: drawing.points, properties, text: drawing.text ?? '' };
   return {
     drawingId: drawing.drawingId,
     drawingTool: drawing.toolType,
     trendlinePoints: legacyLine?.anchors.map((point) => ({ time: point.time, price: point.price })),
-    drawingAlertLevels: levels.length > 0 ? levels : undefined,
+    drawingAlertLevels: alertable.length > 0 ? alertable : undefined,
     drawingActions: definition?.contextActions?.flatMap((action) => {
       const request = guardToolCall(drawing.toolType, `contextActions.${action.id}`, () => action.request(snapshot, services), null);
       return request ? [{ id: action.id, label: action.label, request }] : [];

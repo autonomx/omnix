@@ -10775,6 +10775,10 @@ export interface components {
              */
             component?: "value" | "line" | "signal" | "histogram" | "upper" | "middle" | "lower";
             delivery?: components["schemas"]["AlertDeliverySettings-Input"];
+            /** Drawing Id */
+            drawing_id?: string | null;
+            /** Drawing Level */
+            drawing_level?: string | null;
             /**
              * Fast Period
              * @default 12
@@ -10839,6 +10843,10 @@ export interface components {
              */
             component: "value" | "line" | "signal" | "histogram" | "upper" | "middle" | "lower";
             delivery: components["schemas"]["AlertDeliverySettings-Output"];
+            /** Drawing Id */
+            drawing_id: string | null;
+            /** Drawing Level */
+            drawing_level: string | null;
             /**
              * Fast Period
              * @default 12

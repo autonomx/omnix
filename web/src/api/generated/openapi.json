@@ -47379,6 +47379,30 @@
           "delivery": {
             "$ref": "#/components/schemas/AlertDeliverySettings-Input"
           },
+          "drawing_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawing Id"
+          },
+          "drawing_level": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawing Level"
+          },
           "fast_period": {
             "default": 12,
             "maximum": 500,
@@ -47540,6 +47564,30 @@
           "delivery": {
             "$ref": "#/components/schemas/AlertDeliverySettings-Output"
           },
+          "drawing_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawing Id"
+          },
+          "drawing_level": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawing Level"
+          },
           "fast_period": {
             "default": 12,
             "maximum": 500,
@@ -47682,6 +47730,8 @@
           "anchor_bars_ago",
           "message",
           "name",
+          "drawing_id",
+          "drawing_level",
           "notification_channels",
           "trigger_policy",
           "delivery",

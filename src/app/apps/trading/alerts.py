@@ -126,6 +126,10 @@ class TradingAlertParameters(BaseModel):
     message: str = Field(default="", max_length=500)
     # The alert's name, for the list and the {{alert_name}} placeholder (TVP-1.5).
     name: str = Field(default="", max_length=120)
+    # The drawing (and which of its levels) a line alert follows (TVP-1.4): the chart moves the alert's line with
+    # the drawing. The server evaluates trendline_points as usual; these only link the alert back.
+    drawing_id: str | None = Field(default=None, max_length=200)
+    drawing_level: str | None = Field(default=None, max_length=100)
     notification_channels: list[AlertNotificationChannel] = Field(
         default_factory=lambda: list[AlertNotificationChannel](["app", "toast"]),
         max_length=6,

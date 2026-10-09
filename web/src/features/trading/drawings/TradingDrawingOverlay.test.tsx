@@ -216,7 +216,7 @@ describe('TradingDrawingOverlay', () => {
     expect(svg.querySelector('[data-drawing-draft] .trading-measurement-label-text')?.textContent).toBe('100.00 (14.29%)');
   });
 
-  it('passes trend line anchors to the context menu, and none for other tools', () => {
+  it('passes trend line anchors to the context menu, and a rectangle its edges (TVP-1.4)', () => {
     const trend = drawing('trend-line', [[100, 300], [200, 200]]);
     const { svg, handlers } = renderOverlay({ drawings: [trend, drawing('rectangle', [[300, 100], [400, 200]], { drawingId: 'box' })] });
     fireEvent.contextMenu(svg.querySelector('g[data-drawing-id="trend-line-1"] line')!, { clientX: 150, clientY: 250 });
@@ -225,7 +225,10 @@ describe('TradingDrawingOverlay', () => {
       drawingAlertLevels: [expect.objectContaining({ anchors: trend.points, interpolation: 'bars' })],
     }), undefined);
     fireEvent.contextMenu(svg.querySelector('g[data-drawing-id="box"] rect')!, { clientX: 350, clientY: 150 });
-    expect(handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({ drawingId: 'box', trendlinePoints: undefined }), undefined);
+    expect(handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({
+      drawingId: 'box',
+      drawingAlertLevels: [expect.objectContaining({ key: 'top', extend: 'right' }), expect.objectContaining({ key: 'bottom', extend: 'right' })],
+    }), undefined);
   });
 
   it('erases a drawing with the eraser and selects one with the cursor', () => {
@@ -361,13 +364,24 @@ describe('TradingDrawingOverlay', () => {
     }), undefined);
   });
 
-  it('offers the legacy line alert for segments and full lines, never for rays', () => {
+  it('offers no line alert for a level that only extends back in time (TVP-1.4)', () => {
+    // Drawn right to left, this ray extends to the left: the server's line would alert where nothing is drawn.
     const ray = drawing('ray', [[200, 300], [100, 200]], { drawingId: 'ray' });
     const { svg, handlers } = renderOverlay({ drawings: [ray] });
     fireEvent.contextMenu(svg.querySelector('g[data-drawing-id="ray"] line')!, { clientX: 150, clientY: 250 });
     expect(handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({
       trendlinePoints: undefined,
-      drawingAlertLevels: [expect.objectContaining({ extend: 'left' })],
+      drawingAlertLevels: undefined,
+    }), undefined);
+  });
+
+  it('offers a ray extending forward (TVP-1.4)', () => {
+    const ray = drawing('ray', [[100, 200], [200, 300]], { drawingId: 'ray' });
+    const { svg, handlers } = renderOverlay({ drawings: [ray] });
+    fireEvent.contextMenu(svg.querySelector('g[data-drawing-id="ray"] line')!, { clientX: 150, clientY: 250 });
+    expect(handlers.onContextMenu).toHaveBeenLastCalledWith(expect.objectContaining({
+      drawingId: 'ray',
+      drawingAlertLevels: [expect.objectContaining({ extend: 'right' })],
     }), undefined);
   });
 
