@@ -297,6 +297,8 @@ class _AlertWrite(_AlertContract):
                     "conditions disagree with the legacy condition_type; send condition_type 'conditions'"
                 )
             self.conditions = derived
+        if self.instrument_id.startswith(WATCHLIST_INSTRUMENT_PREFIX) and watchlist_id_of(self.instrument_id) is None:
+            raise ValueError("a watchlist alert names its watchlist: watchlist:<record id>")
         if watchlist_id_of(self.instrument_id) is not None:
             # One definition for every symbol of a list: a trendline is drawn on one symbol's chart.
             if any(isinstance(source, TrendlineSource) for condition in self.conditions for source in condition_sources(condition)):
@@ -840,6 +842,10 @@ class TradingAlertRepository:
         condition_parameters, notification_settings = _split_parameters(request.parameters, webhook_ref)
         with self.uow_factory() as uow:
             previous_conditions = self._stored_conditions(uow.connection, alert_id)
+            was_enabled = uow.connection.execute(
+                "SELECT enabled FROM omnix_trading_alerts WHERE workspace_id = %s AND alert_id = %s",
+                (self.context.workspace_id, alert_id),
+            ).fetchone()
             row = uow.connection.execute(
                 f"""
                 UPDATE omnix_trading_alerts
@@ -891,6 +897,12 @@ class TradingAlertRepository:
                     (self.context.workspace_id, alert_id),
                 ).fetchone()
                 self._write_conditions(uow.connection, alert_id, request.conditions)
+            if request.enabled and was_enabled is not None and not was_enabled[0] and watchlist_id_of(request.instrument_id) is not None:
+                # Re-enabling a watchlist alert re-arms it on every symbol ('once' fired there, cooldowns).
+                uow.connection.execute(
+                    "DELETE FROM omnix_trading_alert_symbol_states WHERE workspace_id = %s AND alert_id = %s",
+                    (self.context.workspace_id, alert_id),
+                )
             uow.commit()
             return _alert(row, request.conditions)
 
@@ -957,7 +969,7 @@ class TradingAlertRepository:
         triggers: list[TradingAlertTrigger] = []
         with self.uow_factory() as uow:
             for alert in self._locked_alerts(uow.connection, evaluation.instrument_id, evaluation.evaluated_at):
-                if alert.binding_id and alert.binding_id != evaluation.binding_id:
+                if alert.watchlist_id is not None or (alert.binding_id and alert.binding_id != evaluation.binding_id):
                     continue
                 if alert.evaluation_policy.interval != evaluation.interval:
                     continue
@@ -986,7 +998,7 @@ class TradingAlertRepository:
             for alert in self._locked_alerts(uow.connection, context.instrument_id, context.evaluated_at):
                 record = by_alert.get(alert.alert_id)
                 # An alert edited since its bars were evaluated waits for the next pass.
-                if record is None or record.revision != alert.revision:
+                if record is None or record.revision != alert.revision or alert.watchlist_id is not None:
                     continue
                 trigger = self._apply(uow.connection, alert, record.outcome, context)
                 if trigger is not None:
@@ -1053,10 +1065,11 @@ class TradingAlertRepository:
             """,
             (self.context.workspace_id, alert.alert_id, symbol),
         ).fetchone()
-        # A state written under an older definition (or, for 'once', an older revision) starts afresh.
+        # A state written under an older definition starts afresh; notification edits keep it, and re-enabling the
+        # alert deletes it (``update``), so 'once' fires again on each symbol.
         current = state is not None and int(state[1]) == alert.definition_revision
         last_triggered_at = state[2] if current else None
-        fired_once = current and bool(state[3]) and int(state[0]) == alert.revision
+        fired_once = current and bool(state[3])
         evaluated_at = context.evaluated_at
         should_trigger = (
             outcome.met
@@ -1067,12 +1080,17 @@ class TradingAlertRepository:
         )
         inserted_trigger: TradingAlertTrigger | None = None
         if should_trigger:
-            # The symbol is part of the key, so each symbol of the list fires on its own.
+            # The symbol is part of the key, so each symbol of the list fires on its own. 'once' is keyed by the
+            # definition and bar, not the revision: the symbol's state says whether it fired, and a notification
+            # edit (a new revision) must not fire it again.
+            scope = f"{alert.alert_id}|{symbol}"
+            if alert.frequency == "once":
+                scope += "|" + outcome.bar_start.astimezone(timezone.utc).isoformat()
             key = alert_trigger_key(
-                f"{alert.alert_id}|{symbol}",
+                scope,
                 alert.frequency,
                 outcome,
-                revision=alert.revision,
+                revision=alert.definition_revision,
                 definition_revision=alert.definition_revision,
             )
             inserted_trigger = self._record_trigger(connection, alert.model_copy(update={"instrument_id": symbol}), outcome, context, key)
@@ -1129,7 +1147,7 @@ class TradingAlertRepository:
             "conditions": [condition.model_dump(mode="json") for condition in alert.conditions],
             "observations": outcome.observation_payload(),
             "condition_parameters": alert.parameters.model_dump(mode="json"),
-            "evaluation_policy": alert.evaluation_policy.model_dump(mode="json"),
+            "evaluation_policy": alert.evaluation_policy.model_dump(mode="json", exclude_none=True),
             "provider": context.provider,
             "requested_binding_id": context.binding_id,
             "resolved_binding_id": resolved_binding_id,

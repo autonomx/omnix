@@ -12,8 +12,9 @@ from app.runtime.features import FeatureContext
 
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
-from .alerts_watchlist import evaluated_symbols, watchlist_members, watchlist_symbol_cap
+from .alerts_watchlist import Target, plan_watchlist_pass, watchlist_members
 from .repositories import TradingDocumentRepository, default_trading_repository
+from .providers.request_budget import upstream_of
 from .alerts import (
     AlertEvaluationContext,
     AlertOutcomeRecord,
@@ -80,8 +81,8 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         self.repository_factory = repository_factory
         self.market_service_factory = market_service_factory
         self.document_repository_factory = document_repository_factory
-        # Watchlist alerts (TVP-1.7): symbols evaluated in the last pass, by alert.
-        self.watchlist_symbol_counts: dict[str, int] = {}
+        # Watchlist alerts (TVP-1.7), by alert: its list's members, those evaluated and skipped in the last pass.
+        self.watchlist_status: dict[str, dict[str, Any]] = {}
         self.interval_seconds = interval_seconds or _interval_seconds()
         self.last_error: str | None = None
         self.last_run_at: datetime | None = None
@@ -99,8 +100,6 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         self.unreadable_alert_ids = [item.alert_id for item in listing.unreadable[:20]]
         error: str | None = None
         targets: dict[tuple[str, str | None, str], list[TradingAlert]] = defaultdict(list)
-        # Watchlist alerts, by each member symbol they evaluate (TVP-1.7).
-        watch_targets: dict[tuple[str, str | None, str], list[TradingAlert]] = defaultdict(list)
         now = datetime.now(timezone.utc)
         service = self.market_service_factory()
         watchlist_alerts: list[TradingAlert] = []
@@ -116,8 +115,8 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                         alert.evaluation_policy.interval,
                     )
                 ].append(alert)
-        if watchlist_alerts:
-            await self._expand_watchlists(watchlist_alerts, watch_targets, service)
+        # Watchlist alerts, by each member symbol they evaluate (TVP-1.7).
+        watch_targets = await self._expand_watchlists(watchlist_alerts, set(targets), service)
         triggered = 0
         for target in sorted(set(targets) | set(watch_targets), key=lambda item: (item[0], item[1] or "", item[2])):
             instrument_id, requested_binding_id, interval = target
@@ -163,35 +162,36 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
     async def _expand_watchlists(
         self,
         alerts: list[TradingAlert],
-        watch_targets: dict[tuple[str, str | None, str], list[TradingAlert]],
+        fetched: set[Target],
         service: TradingMarketDataService,
-    ) -> None:
-        """Each watchlist alert's member symbols, read now, capped by its limit and their providers' budgets."""
+    ) -> dict[Target, list[TradingAlert]]:
+        """Each watchlist alert's member symbols, read now, within its limit and the pass's request budget."""
+        if not alerts:
+            self.watchlist_status = {}
+            return {}
         documents = self.document_repository_factory()
-        members: dict[str, list[str]] = {}
-        counts: dict[str, int] = {}
-
-        def provider_of(symbol: str) -> str | None:
+        members: dict[str, list[str] | None] = {}
+        for watchlist_id in sorted({alert.watchlist_id or "" for alert in alerts}):
             try:
-                return service.registry.resolve_binding(symbol).provider
-            except Exception:  # an unknown symbol has no provider budget to respect, and no bars either
-                return None
+                document = await asyncio.to_thread(documents.get, "watchlist", watchlist_id)
+            except Exception:
+                document = None
+            members[watchlist_id] = watchlist_members(document)
+        upstreams: dict[str, str | None] = {}
 
-        for alert in alerts:
-            watchlist_id = alert.watchlist_id or ""
-            if watchlist_id not in members:
+        def upstream_for(symbol: str) -> str | None:
+            # Once per symbol and pass: resolving a binding walks the catalog.
+            if symbol not in upstreams:
                 try:
-                    document = await asyncio.to_thread(documents.get, "watchlist", watchlist_id)
-                except Exception:
-                    document = None
-                members[watchlist_id] = watchlist_members(document)
-            symbols = members[watchlist_id]
-            cap = await asyncio.to_thread(watchlist_symbol_cap, symbols, provider_of, self.interval_seconds)
-            chosen = evaluated_symbols(alert, symbols, cap)
-            counts[alert.alert_id] = len(chosen)
-            for symbol in chosen:
-                watch_targets[(symbol, None, alert.evaluation_policy.interval)].append(alert)
-        self.watchlist_symbol_counts = counts
+                    upstreams[symbol] = upstream_of(service.registry.resolve_binding(symbol).provider)
+                except Exception:  # an unknown symbol: no bars to fetch
+                    upstreams[symbol] = None
+            return upstreams[symbol]
+
+        watch_targets, self.watchlist_status = await asyncio.to_thread(
+            plan_watchlist_pass, alerts, members, fetched, upstream_for, self.interval_seconds,
+        )
+        return watch_targets
 
     def diagnostics(self) -> dict[str, Any]:
         return {
@@ -204,6 +204,7 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
             "trigger_count": self.trigger_count,
             "unreadable_alert_count": self.unreadable_count,
             "unreadable_alert_ids": list(self.unreadable_alert_ids),
+            "watchlist_alerts": {alert_id: dict(status) for alert_id, status in self.watchlist_status.items()},
         }
 
 

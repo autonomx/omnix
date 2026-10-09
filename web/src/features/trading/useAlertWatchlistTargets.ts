@@ -2,7 +2,7 @@
  * Watchlist alerts (TVP-1.7): an alert's "Applies to" choice between the chart's symbol and a watchlist, whose
  * alerts carry the instrument `watchlist:<record id>` and run on every symbol of the list.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { tradingApi } from './tradingApi';
 
 export const WATCHLIST_ALERT_PREFIX = 'watchlist:';
@@ -44,9 +44,9 @@ export function useAlertWatchlistTargets(instrumentId: string, symbol: string, t
     ...lists.map((list) => ({ value: `${WATCHLIST_ALERT_PREFIX}${list.id}`, label: `Watchlist: ${list.name}` })),
   ];
   /** An alert's list label ("List: Tech"), or null for an alert on one symbol. */
-  const labelFor = (alertInstrumentId: string): string | null => {
+  const labelFor = useCallback((alertInstrumentId: string): string | null => {
     const id = watchlistIdOf(alertInstrumentId);
     return id ? `List: ${lists.find((list) => list.id === id)?.name ?? id}` : null;
-  };
+  }, [lists]);
   return { choices, note, labelFor };
 }

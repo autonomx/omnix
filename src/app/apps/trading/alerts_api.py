@@ -185,7 +185,7 @@ def create_trading_alert_router(
         document = document_repository_factory().get("watchlist", watchlist_id)
         if not document or document.get("status", "active") != "active":
             raise HTTPException(status_code=422, detail=f"watchlist {watchlist_id} was not found")
-        return watchlist_members(document)
+        return watchlist_members(document) or []
 
     @router.get("/watchlist-capacity", response_model=WatchlistAlertCapacity)
     def watchlist_capacity(watchlist_id: str = Query(min_length=1, max_length=200)) -> WatchlistAlertCapacity:
@@ -280,7 +280,6 @@ def create_trading_alert_router(
         request: TradingAlertUpdate,
         if_match: int = Header(alias="If-Match", ge=1),
     ) -> TradingAlert:
-        watchlist_or_422(watchlist_id_of(request.instrument_id))
         repository = repository_factory()
         workspace_id = repository.context.workspace_id
         plan: _WebhookPlan | None = None
@@ -289,6 +288,9 @@ def create_trading_alert_router(
                 previous = repository.get(alert_id) if state.exists else None
                 if previous is None or previous.revision != if_match:
                     raise RevisionConflict(f"Trading alert expected revision {if_match}: {alert_id}")
+                # An alert whose watchlist was deleted can still be disabled or edited; it can't be (re)enabled on it.
+                if request.enabled or request.instrument_id != previous.instrument_id:
+                    watchlist_or_422(watchlist_id_of(request.instrument_id))
                 plan = plan_webhook(request, state.webhook_ref, workspace_id, alert_id)
                 updated = repository.update(alert_id, request, expected_revision=if_match, webhook_ref=plan.ref)
         except Exception as exc:

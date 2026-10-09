@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.apps.trading.alerts import TradingAlertCreate, TradingAlertRepository
+from app.apps.trading.alerts import TradingAlertCreate, TradingAlertEvaluation, TradingAlertRepository, TradingAlertUpdate
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
 from app.apps.trading.repositories import TradingDocumentRepository
 from app.persistence.config import DatabaseSettings
@@ -127,6 +127,46 @@ def test_a_once_alert_fires_once_per_symbol_and_follows_the_list(env) -> None:
             (env.context.workspace_id, created.alert_id),
         ).fetchall()
     assert [(row[0], row[1]) for row in states] == [(a, True), (b, True), (c, True)]
+
+
+def _edit(env, alert, **changes):
+    fields = alert.model_dump(include={"instrument_id", "conditions", "evaluation_policy", "frequency", "enabled", "parameters"})
+    fields["parameters"] = {**fields["parameters"], **changes.pop("parameters", {})}
+    return env.alerts.update(alert.alert_id, TradingAlertUpdate(**{**fields, **changes}), expected_revision=alert.revision, webhook_ref=None)
+
+
+def test_a_message_edit_keeps_once_and_re_enabling_re_arms_every_symbol(env) -> None:
+    created = _create(env, "rearm", "once")
+    market = Market()
+    market.closes = [99, 101]
+    a, b, _ = env.symbols
+    assert _run(env, market) == [a, b]
+    edited = _edit(env, created, parameters={"message": "{{ticker}} is up"})
+    assert edited.revision > created.revision and edited.definition_revision == created.definition_revision
+    assert _run(env, market) == []
+    disabled = _edit(env, edited, enabled=False)
+    enabled = _edit(env, disabled, enabled=True)
+    assert enabled.definition_revision == created.definition_revision
+    market.closes = [99, 101, 102]
+    assert _run(env, market) == [a, b]
+
+
+def test_the_ordinary_paths_leave_watchlist_alerts_alone(env) -> None:
+    created = _create(env, "pushed", "once")
+    triggers = env.alerts.evaluate(TradingAlertEvaluation(
+        instrument_id=created.instrument_id, interval="1m", observed_price=Decimal("500"), evaluated_at=datetime.now(timezone.utc),
+    ))
+    assert triggers == []
+    alert = env.alerts.get(created.alert_id)
+    assert alert is not None and alert.enabled is True and alert.revision == created.revision
+
+
+def test_symbol_states_are_row_level_secured(env) -> None:
+    with env.uow() as uow:
+        row = uow.connection.execute(
+            "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'omnix_trading_alert_symbol_states'"
+        ).fetchone()
+    assert tuple(row) == (True, True)
 
 
 def test_an_every_time_alert_keeps_each_symbol_history_apart(env) -> None:
