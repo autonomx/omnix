@@ -1292,21 +1292,6 @@
    ]
   },
   {
-   "id": "tv-relative-volume-at-time",
-   "inputs": {
-    "period": 5,
-    "fast_period": null,
-    "slow_period": null,
-    "signal_period": null,
-    "standard_deviations": null,
-    "anchor_time": null,
-    "anchor_bars_ago": null
-   },
-   "outputs": [
-    "tv-relative-volume-at-time:rvol-at-time"
-   ]
-  },
-  {
    "id": "tv-rob-booker-adx-breakout",
    "inputs": {
     "period": 20,
@@ -1322,27 +1307,6 @@
     "tv-rob-booker-adx-breakout:lower",
     "tv-rob-booker-adx-breakout:breakout-up",
     "tv-rob-booker-adx-breakout:breakout-down"
-   ]
-  },
-  {
-   "id": "tv-rob-booker-intraday-pivot-points",
-   "inputs": {
-    "period": 1,
-    "fast_period": null,
-    "slow_period": null,
-    "signal_period": null,
-    "standard_deviations": null,
-    "anchor_time": null,
-    "anchor_bars_ago": null
-   },
-   "outputs": [
-    "tv-rob-booker-intraday-pivot-points:pp",
-    "tv-rob-booker-intraday-pivot-points:r1",
-    "tv-rob-booker-intraday-pivot-points:r2",
-    "tv-rob-booker-intraday-pivot-points:r3",
-    "tv-rob-booker-intraday-pivot-points:s1",
-    "tv-rob-booker-intraday-pivot-points:s2",
-    "tv-rob-booker-intraday-pivot-points:s3"
    ]
   },
   {
@@ -1362,22 +1326,6 @@
    ]
   },
   {
-   "id": "tv-rob-booker-missed-pivot-points",
-   "inputs": {
-    "period": 10,
-    "fast_period": null,
-    "slow_period": null,
-    "signal_period": null,
-    "standard_deviations": null,
-    "anchor_time": null,
-    "anchor_bars_ago": null
-   },
-   "outputs": [
-    "tv-rob-booker-missed-pivot-points:missed-above",
-    "tv-rob-booker-missed-pivot-points:missed-below"
-   ]
-  },
-  {
    "id": "tv-rob-booker-reversal",
    "inputs": {
     "period": 14,
@@ -1391,23 +1339,6 @@
    "outputs": [
     "tv-rob-booker-reversal:bullish",
     "tv-rob-booker-reversal:bearish"
-   ]
-  },
-  {
-   "id": "tv-rob-booker-ziv-ghost-pivots",
-   "inputs": {
-    "period": 1,
-    "fast_period": null,
-    "slow_period": null,
-    "signal_period": null,
-    "standard_deviations": null,
-    "anchor_time": null,
-    "anchor_bars_ago": null
-   },
-   "outputs": [
-    "tv-rob-booker-ziv-ghost-pivots:pp",
-    "tv-rob-booker-ziv-ghost-pivots:r1",
-    "tv-rob-booker-ziv-ghost-pivots:s1"
    ]
   },
   {
@@ -1516,21 +1447,6 @@
    },
    "outputs": [
     "tv-technical-ratings:rating"
-   ]
-  },
-  {
-   "id": "tv-time-weighted-average-price",
-   "inputs": {
-    "period": 1,
-    "fast_period": null,
-    "slow_period": null,
-    "signal_period": null,
-    "standard_deviations": null,
-    "anchor_time": null,
-    "anchor_bars_ago": null
-   },
-   "outputs": [
-    "tv-time-weighted-average-price:twap"
    ]
   },
   {
@@ -1807,6 +1723,118 @@
    },
    "outputs": [
     "vwap:dataset"
+   ]
+  }
+ ],
+ "variants": [
+  {
+   "id": "sma",
+   "inputs": {
+    "period": 20,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "sma:20"
+   ]
+  },
+  {
+   "id": "rsi",
+   "inputs": {
+    "period": 14,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "rsi:14"
+   ]
+  },
+  {
+   "id": "macd",
+   "inputs": {
+    "period": 5,
+    "fast_period": 5,
+    "slow_period": 35,
+    "signal_period": 5,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "macd:5:35:line",
+    "macd:5:35:signal",
+    "macd:5:35:histogram"
+   ]
+  },
+  {
+   "id": "bollinger",
+   "inputs": {
+    "period": 10,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": 3,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "bollinger:10:upper",
+    "bollinger:10:middle",
+    "bollinger:10:lower"
+   ]
+  },
+  {
+   "id": "stochastic-rsi",
+   "inputs": {
+    "period": 10,
+    "fast_period": 5,
+    "slow_period": null,
+    "signal_period": 4,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "stochastic-rsi:k",
+    "stochastic-rsi:d"
+   ]
+  },
+  {
+   "id": "rsi",
+   "inputs": {
+    "period": 21,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "rsi:21"
+   ]
+  },
+  {
+   "id": "vwap",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": "2026-01-02T15:00:00.000Z",
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "vwap:2026-01-02T15:00:00.000Z"
    ]
   }
  ]

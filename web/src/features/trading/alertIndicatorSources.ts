@@ -5,6 +5,7 @@
 // conditions alert, so the server evaluates the same indicator, inputs and
 // output on its own bars.
 import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIndicators';
+import { tradingViewBuiltInUsesSessions } from './indicators/tradingViewBuiltIns';
 import { indicatorContextLabel } from './tradingChartPanelModel';
 import type { components } from './api/generated';
 import type { TradingAlertCreateInput } from './tradingTypes';
@@ -54,9 +55,14 @@ export function alertIndicatorChoices(
 ): AlertIndicatorChoice[] {
   return instances.filter((instance) => instance.enabled).map((instance) => {
     const lines = outputs.filter((output) => output.key.split(':', 1)[0] === instance.id).map((output) => ({ key: output.key, title: output.title }));
-    const unavailable = serverIds && !serverIds.has(instance.id)
-      ? 'Server alerts are not available for this indicator yet'
-      : instance.compareSymbol || (instance.params && Object.keys(instance.params).length > 0)
+    const unavailable = serverIds === null
+      ? 'Checking which indicators server alerts support…'
+      : !serverIds.has(instance.id)
+        ? 'Server alerts are not available for this indicator yet'
+        // The server evaluates session-based indicators on UTC days; the chart draws them on the market's sessions.
+        : tradingViewBuiltInUsesSessions(instance.id)
+          ? 'It uses the market sessions, which server alerts do not follow yet'
+          : instance.compareSymbol || (instance.params && Object.keys(instance.params).length > 0)
         ? 'Its extra inputs are not evaluated by server alerts yet'
         : lines.length === 0
           ? 'It draws no line to alert on'
@@ -93,8 +99,50 @@ export function withChartIndicatorCondition(
   return true;
 }
 
-/** The selection a dialog starts with: the first indicator the server can alert on, its first line, crossing. */
-export function defaultIndicatorSelection(choices: readonly AlertIndicatorChoice[]): AlertIndicatorSelection | undefined {
-  const choice = choices.find((item) => !item.unavailable);
+/** The selection a dialog starts with: the indicator the alert was placed on, else the first the server can alert on. */
+export function defaultIndicatorSelection(choices: readonly AlertIndicatorChoice[], preferKey?: string): AlertIndicatorSelection | undefined {
+  const choice = choices.find((item) => item.key === preferKey && !item.unavailable) ?? choices.find((item) => !item.unavailable);
   return choice ? { key: choice.key, output: choice.outputs[0].key, operator: 'crossing' } : undefined;
+}
+
+/**
+ * A selection that still fits the chart: an indicator that went away (or became unavailable) falls back to the
+ * default, a line that went away to the indicator's first line. Undefined when nothing can be alerted on.
+ */
+export function resolveIndicatorSelection(
+  choices: readonly AlertIndicatorChoice[],
+  selection: AlertIndicatorSelection | undefined,
+  preferKey?: string,
+): AlertIndicatorSelection | undefined {
+  const choice = selection ? choices.find((item) => item.key === selection.key && !item.unavailable) : undefined;
+  if (!choice || !selection) return defaultIndicatorSelection(choices, preferKey);
+  return choice.outputs.some((output) => output.key === selection.output) ? selection : { ...selection, output: choice.outputs[0].key };
+}
+
+type ChartAlert = { condition_type: string; threshold: string | number; parameters: { indicator_id?: string | null }; conditions?: readonly unknown[] };
+type IndicatorValueCondition = { source: { kind: string; indicator_id?: string }; target?: { kind: string; value?: string | number } };
+
+function singleIndicatorCondition(alert: ChartAlert): IndicatorValueCondition | null {
+  if (alert.condition_type !== 'conditions' || alert.conditions?.length !== 1) return null;
+  const condition = alert.conditions[0] as IndicatorValueCondition;
+  return condition.source.kind === 'indicator' && condition.target?.kind === 'value' ? condition : null;
+}
+
+/** The indicator an alert is drawn on: a legacy indicator alert's, or a single "indicator line vs value" condition's. */
+export function chartAlertIndicatorId(alert: ChartAlert): string | null {
+  if (alert.condition_type.startsWith('indicator_')) return alert.parameters.indicator_id ?? null;
+  return singleIndicatorCondition(alert)?.source.indicator_id ?? null;
+}
+
+/** The value an alert is drawn at: its threshold, or its single indicator condition's value. */
+export function chartAlertThreshold(alert: ChartAlert): number {
+  const condition = singleIndicatorCondition(alert);
+  return Number(condition ? condition.target?.value : alert.threshold);
+}
+
+/** An alert's conditions with the single indicator condition moved to `value` (a dragged line). */
+export function conditionsAtValue<T extends ChartAlert>(alert: T, value: string): T['conditions'] {
+  if (!singleIndicatorCondition(alert)) return alert.conditions;
+  const [condition] = alert.conditions as IndicatorValueCondition[];
+  return [{ ...condition, target: { kind: 'value', value } }] as T['conditions'];
 }

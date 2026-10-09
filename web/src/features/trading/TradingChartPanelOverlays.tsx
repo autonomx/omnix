@@ -56,6 +56,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
             : undefined;
           setAlertPlacement({
             ...placement,
+            ...(indicatorId ? { chartIndicatorId: indicatorId } : {}),
             ...(supportedIndicatorId ? { indicatorId: supportedIndicatorId } : {}),
             ...(indicator?.period !== undefined ? { indicatorPeriod: indicator.period } : {}),
           });
@@ -163,7 +164,7 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
             }}
             onCopyPrice={copyContextPrice}
             onPastePrice={pasteContextPrice}
-            onAddAlert={contextMenu?.indicatorId || !contextMenu?.contextIndicatorId ? contextMenuAlert : null}
+            onAddAlert={contextMenuAlert}
             onToggleCursor={() => setCursorLocked((value) => !value)}
             onToggleTable={() => setTableVisible((value) => !value)}
             onObjectTree={() => setObjectTreeVisible(true)}

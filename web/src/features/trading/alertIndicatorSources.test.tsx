@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AlertIndicatorPicker } from './AlertIndicatorPicker';
-import { alertIndicatorChoices, defaultIndicatorSelection, withChartIndicatorCondition } from './alertIndicatorSources';
+import { alertIndicatorChoices, chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, defaultIndicatorSelection, resolveIndicatorSelection, withChartIndicatorCondition } from './alertIndicatorSources';
+import { editorDefaults } from './TradingChartAlertOverlay';
 import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIndicators';
 import { chartAlertCreateInput } from './tradingChartAlerts';
 
@@ -53,5 +54,39 @@ describe('alerts on chart indicators (TVP-1.3)', () => {
     expect(onChange).toHaveBeenLastCalledWith({ key: 'macd', output: 'macd:12:26:signal', operator: 'crossing' });
     fireEvent.change(screen.getByLabelText('Alert indicator comparison'), { target: { value: 'less_than' } });
     expect(onChange).toHaveBeenLastCalledWith({ key: 'macd', output: 'macd:12:26:line', operator: 'less_than' });
+  });
+});
+
+describe('chart indicator alerts stay what the dialog showed (TVP-1.3 review)', () => {
+  const choices = alertIndicatorChoices(
+    [{ id: 'sma', period: 20, enabled: true }, { id: 'rsi', period: 14, enabled: true }],
+    [line('sma:20', 'SMA'), line('rsi:14', 'RSI')],
+    new Set(['sma', 'rsi']),
+  );
+
+  it('starts on the pane the alert was placed on, and repairs a selection that went stale', () => {
+    expect(resolveIndicatorSelection(choices, undefined, 'rsi')).toEqual({ key: 'rsi', output: 'rsi:14', operator: 'crossing' });
+    expect(resolveIndicatorSelection(choices, { key: 'macd', output: 'macd:12:26:line', operator: 'less_than' }, 'rsi')?.key).toBe('rsi');
+    expect(resolveIndicatorSelection(choices, { key: 'sma', output: 'sma:50', operator: 'less_than' })).toEqual({ key: 'sma', output: 'sma:20', operator: 'less_than' });
+    expect(editorDefaults({ time: 't', price: 70, x: 0, y: 0, source: 'context-menu', chartIndicatorId: 'tv-awesome-oscillator-ao' }, 100))
+      .toMatchObject({ condition: 'indicator_above', chartIndicatorId: 'tv-awesome-oscillator-ao' });
+  });
+
+  it('offers nothing while the server list loads, and nothing session-based', () => {
+    expect(alertIndicatorChoices([{ id: 'sma', period: 20, enabled: true }], [line('sma:20', 'SMA')], null)[0].unavailable).toMatch(/Checking/);
+    const session = alertIndicatorChoices([{ id: 'tv-relative-volume-at-time', period: 20, enabled: true } as never], [line('tv-relative-volume-at-time:value', 'RVOL')], new Set(['tv-relative-volume-at-time']));
+    expect(session[0].unavailable).toMatch(/market sessions/);
+  });
+
+  it('draws and drags a single indicator condition like a legacy indicator alert, without rounding its value', () => {
+    const alert = {
+      condition_type: 'conditions', threshold: '0', parameters: {},
+      conditions: [{ source: { kind: 'indicator', indicator_id: 'macd', output: 'macd:12:26:line' }, operator: 'crossing', target: { kind: 'value', value: '0.005' } }],
+    };
+    expect(chartAlertIndicatorId(alert)).toBe('macd');
+    expect(chartAlertThreshold(alert)).toBe(0.005);
+    expect(conditionsAtValue(alert, '0.0042')).toEqual([{ ...alert.conditions[0], target: { kind: 'value', value: '0.0042' } }]);
+    expect(chartAlertIndicatorId({ condition_type: 'indicator_above', threshold: '70', parameters: { indicator_id: 'rsi' } })).toBe('rsi');
+    expect(chartAlertIndicatorId({ condition_type: 'price_above', threshold: '1', parameters: {} })).toBeNull();
   });
 });

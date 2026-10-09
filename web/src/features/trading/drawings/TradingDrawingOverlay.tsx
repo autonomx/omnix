@@ -51,6 +51,8 @@ import './TradingDrawingMeasurement.css';
 export type ChartAlertPlacement = DrawingPoint & {
   x: number;
   y: number;
+  /** The chart indicator pane it was placed on, any indicator (TVP-1.3); `indicatorId` is only a legacy one. */
+  chartIndicatorId?: string;
   source: 'tool' | 'context-menu';
   indicatorId?: TradingAlertIndicatorId;
   indicatorPeriod?: number;

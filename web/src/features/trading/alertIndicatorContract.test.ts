@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { alertIndicatorChoices } from './alertIndicatorSources';
 import { indicatorOutputs, type CoreIndicatorId, type IndicatorOutput } from './indicators/coreIndicators';
 import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from './indicators/tradingViewBuiltIns';
-import { newIndicatorInstance } from './tradingStore';
+import { defaultTradingIndicators, newIndicatorInstance } from './tradingStore';
+import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { MarketBar } from './tradingTypes';
 
 // Tests run from the web package directory.
@@ -28,7 +29,7 @@ function bars(count = 400): MarketBar[] {
 
 describe('alert indicator contract (TVP-1.3)', () => {
   it('records each server indicator a chart offers, with its default inputs and lines', () => {
-    const fixture = JSON.parse(readFileSync(FIXTURE, 'utf-8')) as { note: string; ids: string[]; entries: unknown[] };
+    const fixture = JSON.parse(readFileSync(FIXTURE, 'utf-8')) as { note: string; ids: string[]; entries: unknown[]; variants?: unknown[] };
     const series = bars();
     const serverIds = new Set(fixture.ids);
     const entries = fixture.ids.flatMap((id) => {
@@ -45,8 +46,25 @@ describe('alert indicator contract (TVP-1.3)', () => {
       const [choice] = alertIndicatorChoices([instance], outputs, serverIds);
       return choice && !choice.unavailable ? [{ id, inputs: choice.inputs, outputs: choice.outputs.map((output) => output.key) }] : [];
     });
-    if (process.env.UPDATE_ALERT_CONTRACT) writeFileSync(FIXTURE, `${JSON.stringify({ ...fixture, entries }, null, 1)}\n`);
-    expect(entries).toEqual(JSON.parse(readFileSync(FIXTURE, 'utf-8')).entries);
+    // The chart's own starting indicators, and some inputs changed from their defaults.
+    const variantInstances: CoreIndicatorInstance[] = [
+      ...defaultTradingIndicators(),
+      { id: 'macd', period: 5, fastPeriod: 5, slowPeriod: 35, signalPeriod: 5, enabled: true },
+      { id: 'bollinger', period: 10, standardDeviations: 3, enabled: true },
+      { id: 'stochastic-rsi', period: 10, fastPeriod: 5, signalPeriod: 4, enabled: true },
+      { id: 'rsi', period: 21, enabled: true },
+      { id: 'vwap', period: 1, anchorTime: '2026-01-02T15:00:00.000Z', enabled: true },
+    ];
+    const variants = variantInstances.flatMap((instance) => {
+      const outputs = indicatorOutputs(series, instance);
+      const [choice] = alertIndicatorChoices([instance], outputs, serverIds);
+      return choice && !choice.unavailable ? [{ id: instance.id, inputs: choice.inputs, outputs: choice.outputs.map((output) => output.key) }] : [];
+    });
+    if (process.env.UPDATE_ALERT_CONTRACT) writeFileSync(FIXTURE, `${JSON.stringify({ ...fixture, entries, variants }, null, 1)}\n`);
+    const saved = JSON.parse(readFileSync(FIXTURE, 'utf-8'));
+    expect(entries).toEqual(saved.entries);
+    expect(variants).toEqual(saved.variants);
+    expect(variants.length).toBeGreaterThan(4);
     expect(entries.length).toBeGreaterThan(50);
   });
 });

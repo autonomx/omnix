@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
-import { defaultIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
+import { chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, resolveIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
+import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
@@ -25,8 +26,16 @@ import { chartPalette } from './chartPalette';
 type DragState = { alert: TradingAlert; threshold: number };
 type TrendlineMode = NonNullable<TradingAlert['parameters']['trendline_mode']>;
 
-function indicatorIdForAlert(alert: TradingAlert): TradingAlert['parameters']['indicator_id'] {
-  return alert.condition_type.startsWith('indicator_') ? alert.parameters.indicator_id ?? null : null;
+function indicatorIdForAlert(alert: TradingAlert): CoreIndicatorId | null {
+  // Legacy indicator alerts and single "indicator line vs value" conditions alerts (TVP-1.3) are drawn on their pane.
+  return chartAlertIndicatorId(alert) as CoreIndicatorId | null;
+}
+
+/** The update that moves a dragged alert to `threshold`: its condition's value (unrounded) for a conditions alert. */
+function thresholdUpdate(alert: TradingAlert, threshold: number) {
+  if (alert.condition_type !== 'conditions') return chartAlertUpdateInput(alert, { threshold: formatAlertThreshold(threshold) });
+  const input = chartAlertUpdateInput(alert, {});
+  return { ...input, conditions: conditionsAtValue(alert, String(Number(threshold.toPrecision(8)))) as typeof input.conditions };
 }
 
 function trendlineModeForCondition(condition: string): TrendlineMode | null {
@@ -64,7 +73,7 @@ function formattedPrice(value: number): string {
 export function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
   // A drawing whose tool defines a two-anchor alert level offers the line alert.
   const isTrendline = placement.trendlinePoints?.length === 2;
-  const isIndicator = placement.indicatorId !== undefined;
+  const isIndicator = placement.indicatorId !== undefined || placement.chartIndicatorId !== undefined;
   return {
     mode: 'create',
     alertId: null,
@@ -85,6 +94,7 @@ export function editorDefaults(placement: ChartAlertPlacement, latestPrice: numb
     period: String(placement.indicatorPeriod ?? 14),
     lookback: '1',
     trendlinePoints: isTrendline ? placement.trendlinePoints?.map((point) => ({ ...point })) : undefined,
+    ...(placement.chartIndicatorId ? { chartIndicatorId: placement.chartIndicatorId } : {}),
   };
 }
 
@@ -264,7 +274,7 @@ export function TradingChartAlertOverlay({
       trendline_points: isTrendline ? editor.trendlinePoints?.map((point) => ({ ...point, price: String(point.price) })) : null,
       trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null,
     };
-    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at; if (editor.condition.startsWith('indicator_')) withChartIndicatorCondition(input, indicatorChoices, editor.indicatorSelection ?? defaultIndicatorSelection(indicatorChoices ?? []), formatAlertThreshold(threshold));
+    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at; if (editor.condition.startsWith('indicator_') && indicatorChoices?.length && !withChartIndicatorCondition(input, indicatorChoices, resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId), String(threshold))) return void setStatus('error');
     await runMutation(() => tradingApi.createAlert(input));
   };
 
@@ -298,7 +308,7 @@ export function TradingChartAlertOverlay({
     const valueFromCoordinate = (y: number) => indicatorId
       ? adapter.indicatorValueFromCoordinate(indicatorId, y)
       : adapter.priceFromCoordinate(y);
-    setDragging({ alert, threshold: Number(alert.threshold) });
+    setDragging({ alert, threshold: chartAlertThreshold(alert) });
     const move = (pointer: PointerEvent) => {
       const threshold = valueFromCoordinate(pointer.clientY - bounds.top);
       if (threshold !== null) setDragging({ alert, threshold });
@@ -308,8 +318,8 @@ export function TradingChartAlertOverlay({
       window.removeEventListener('pointerup', up);
       const threshold = valueFromCoordinate(pointer.clientY - bounds.top);
       setDragging(null);
-      if (threshold === null || threshold === Number(alert.threshold)) return;
-      await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { threshold: formatAlertThreshold(threshold) })));
+      if (threshold === null || threshold === chartAlertThreshold(alert)) return;
+      await runMutation(() => tradingApi.updateAlert(alert, thresholdUpdate(alert, threshold)));
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -331,7 +341,7 @@ export function TradingChartAlertOverlay({
     <div ref={rootRef} className="trading-chart-alert-overlay" data-status={status}>
       <svg aria-label="Chart alert lines">
         {staticAlerts.map((alert) => {
-          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
           const y = adapter?.priceToCoordinate(threshold);
           if (y === null || y === undefined) return null;
           const state = alertVisualState(alert);
@@ -361,7 +371,7 @@ export function TradingChartAlertOverlay({
           );
         })}
         {indicatorAlerts.map((alert) => {
-          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
           const y = alertCoordinate(alert, threshold);
           if (y === null || y === undefined) return null;
           const state = alertVisualState(alert);
@@ -370,7 +380,7 @@ export function TradingChartAlertOverlay({
       </svg>
 
       {staticAlerts.map((alert) => {
-        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
         const y = adapter?.priceToCoordinate(threshold);
         if (y === null || y === undefined) return null;
         const state = alertVisualState(alert);
@@ -391,7 +401,7 @@ export function TradingChartAlertOverlay({
       })}
 
       {indicatorAlerts.map((alert) => {
-        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
         const y = alertCoordinate(alert, threshold);
         if (y === null || y === undefined) return null;
         const state = alertVisualState(alert);
@@ -402,7 +412,7 @@ export function TradingChartAlertOverlay({
             type="button"
             className={`trading-alert-price-label state-${state}`}
             style={{ top: y }}
-            title={`${state} indicator alert · ${alert.condition_type.replace('indicator_', 'crosses ')} · ${alert.parameters.indicator_id ?? 'indicator'} · revision ${alert.revision}${lastTriggered ? ` · last triggered ${lastTriggered}` : ''}`}
+            title={`${state} indicator alert · ${alert.condition_type.replace('indicator_', 'crosses ')} · ${indicatorIdForAlert(alert) ?? 'indicator'} · revision ${alert.revision}${lastTriggered ? ` · last triggered ${lastTriggered}` : ''}`}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openEditor(alert, y)}
           >

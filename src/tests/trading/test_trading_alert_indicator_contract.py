@@ -25,7 +25,7 @@ def test_the_contract_lists_the_server_indicators() -> None:
 def test_every_line_a_chart_offers_is_a_server_output() -> None:
     contract = json.loads(FIXTURE.read_text(encoding="utf-8"))
     problems = []
-    for entry in contract["entries"]:
+    for entry in [*contract["entries"], *contract.get("variants", [])]:
         for output in entry["outputs"]:
             try:
                 validate_indicator_source(
