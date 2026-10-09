@@ -467,6 +467,7 @@
     "GET /api/trading/execution/observation": "trading",
     "GET /api/trading/execution/providers/alpaca-iex/credentials": "trading",
     "PUT /api/trading/execution/providers/alpaca-iex/credentials": "trading",
+    "GET /api/trading/fundamentals": "trading",
     "GET /api/trading/heatmaps/crypto": "trading",
     "GET /api/trading/heatmaps/stocks": "trading",
     "GET /api/trading/hermes-research/attribution": "trading",
