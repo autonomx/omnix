@@ -8,6 +8,7 @@ import { lineAlertLevel, lineThroughPoint } from '../alertLevels';
 import { booleanProperty, numberListProperty, numberProperty, recordsProperty } from '../properties';
 import { areaFill, constrainToSquare, lineStroke, rayEnd } from '../shapes';
 import {
+  anchorHandle,
   defineDrawingTool,
   type DrawingAlertLevel,
   type DrawingGeometryContext,
@@ -319,6 +320,8 @@ export function gannFixedCorner(points: readonly DrawingPoint[], pricePerBar: nu
   const start = first ? services.barIndexForTime(first.time) : null;
   const end = second ? services.barIndexForTime(second.time) : null;
   if (start === null || end === null) return null;
+  // No scale yet (a click without a drag, or drawn before bars loaded): B as placed.
+  if (!(pricePerBar > 0)) return { time: second.time, price: second.price };
   const direction = second.price >= first.price ? 1 : -1;
   return { time: second.time, price: first.price + direction * Math.abs(end - start) * pricePerBar };
 }
@@ -338,6 +341,25 @@ export const gannSquareFixedTool = defineDrawingTool({
     const end = second ? services.barIndexForTime(second.time) : null;
     const bars = start === null || end === null ? 0 : Math.abs(end - start);
     return { points: [...anchors], properties: { pricePerBar: bars > 0 ? Math.abs(second.price - first.price) / bars : 0 } };
+  },
+  // B's handle sits on the drawn corner; dragging it changes the size (bars) and keeps the scale.
+  handles: (context) => {
+    const pricePerBar = numberProperty(context.properties, 'pricePerBar', 0);
+    const corner = gannFixedCorner(context.rawPoints, pricePerBar, context);
+    const at = (corner ? context.project(corner) : null) ?? context.points[1];
+    return [
+      anchorHandle(0, context.points[0]),
+      {
+        id: 'anchor-1',
+        x: at.x,
+        y: at.y,
+        drag: ({ points, point, properties, services }) => {
+          const moved = [points[0], { ...points[1], ...point }];
+          const next = gannFixedCorner(moved, numberProperty(properties, 'pricePerBar', 0), services);
+          return { points: [points[0], next ? { ...moved[1], price: next.price } : moved[1]] };
+        },
+      },
+    ];
   },
   geometry: (context) => {
     const corner = gannFixedCorner(context.rawPoints, numberProperty(context.properties, 'pricePerBar', 0), context);

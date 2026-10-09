@@ -218,3 +218,32 @@ describe('TVP-3.2/3.3 review fixes', () => {
     expect(runTool('pitchfork', [[100, 300], [200, 200], [200, 400]], access).shapes.length).toBeGreaterThan(0);
   });
 });
+
+describe('TVP-3.2/3.3 follow-ups', () => {
+  it('Gann square fixed: B\'s handle sits on the corner, a drag keeps the scale, no scale keeps B', () => {
+    const { context } = runTool('gann-square-fixed', [[100, 500], [150, 100]], { properties: { pricePerBar: 1 } });
+    const definition = drawingToolDefinition('gann-square-fixed')!;
+    const handles = (definition.handles as (c: typeof context) => readonly { id: string; x: number; y: number; drag: (input: never) => { points?: readonly { price: number }[] } }[])(context!);
+    const corner = handles.find((handle) => handle.id === 'anchor-1')!;
+    expect([corner.x, corner.y]).toEqual([150, 450]);
+    const patch = corner.drag({ points: context!.rawPoints, point: pointAt(200, 10), properties: { pricePerBar: 1 }, services: testServices, screen: { x: 200, y: 10 }, modifiers: { shift: false, alt: false, ctrl: false } } as never);
+    // 100 bars from A at 1 per bar: 100 above A's 500.
+    expect(patch.points?.[1].price).toBe(600);
+    const unscaled = runTool('gann-square-fixed', [[100, 500], [150, 400]], { properties: { pricePerBar: 0 } }).shapes.find((shape) => shape.kind === 'rect');
+    expect(unscaled && unscaled.kind === 'rect' && [unscaled.width, unscaled.height]).toEqual([50, 100]);
+  });
+
+  it('retracement labels on the left read inwards when the levels are extended left', () => {
+    const { shapes } = runTool('fibonacci', [[100, 500], [200, 300]], { properties: { labelSide: 'left', extendLeft: true, levels: [{ value: 0.5, color: '', visible: true }] } });
+    const text = shapes.find((shape) => shape.kind === 'text');
+    expect(text && text.kind === 'text' && [text.x, text.align]).toEqual([4, 'start']);
+  });
+
+  it('a spiral far from its centre is sampled finely', () => {
+    const { shapes } = runTool('fib-spiral', [[-3000, 300], [-2950, 300]]);
+    const spiral = shapes.find((shape) => shape.kind === 'polyline');
+    const points = spiral && spiral.kind === 'polyline' ? spiral.points : [];
+    const longest = Math.max(...points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y)));
+    expect(longest).toBeLessThan(8);
+  });
+});

@@ -431,12 +431,15 @@ export const fibSpiralTool = defineDrawingTool({
     const corners = [[0, 0], [context.viewport.width, 0], [0, context.viewport.height], [context.viewport.width, context.viewport.height]];
     const limit = Math.max(...corners.map(([x, y]) => Math.hypot(x - center.x, y - center.y))) * 1.2;
     const points: ScreenPoint[] = [];
-    for (let turn = -6 * Math.PI; turn <= 40 * Math.PI; turn += Math.PI / 32) {
+    // Steps of at most 4 px along the arm (π/32 near the centre), so a large radius stays smooth; capped in points.
+    for (let turn = -6 * Math.PI; turn <= 40 * Math.PI && points.length < 6_000;) {
       const r = radius * Math.exp(growth * turn);
       if (r > limit) break;
-      if (r < 0.5) continue;
-      const angle = start + direction * turn;
-      points.push({ x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r });
+      if (r >= 0.5) {
+        const angle = start + direction * turn;
+        points.push({ x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r });
+      }
+      turn += Math.min(Math.PI / 32, 4 / Math.max(r, 1));
     }
     return [guide, { kind: 'polyline', points, ...stroke }];
   },
