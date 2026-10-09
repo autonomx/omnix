@@ -42991,6 +42991,83 @@
         "title": "ShadowPortfolioPosition",
         "type": "object"
       },
+      "Snapshot": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "url",
+          "instrument_id",
+          "interval",
+          "created_at"
+        ],
+        "title": "Snapshot",
+        "type": "object"
+      },
+      "SnapshotCreate": {
+        "properties": {
+          "image": {
+            "maxLength": 4194368,
+            "minLength": 16,
+            "title": "Image",
+            "type": "string"
+          },
+          "instrument_id": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "default": "",
+            "maxLength": 16,
+            "title": "Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "SnapshotCreate",
+        "type": "object"
+      },
+      "SnapshotListResponse": {
+        "properties": {
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/Snapshot"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "snapshots"
+        ],
+        "title": "SnapshotListResponse",
+        "type": "object"
+      },
       "SolanaAIMonitorControlResponse": {
         "properties": {
           "configured_enabled": {
@@ -81903,6 +81980,139 @@
         "summary": "Version",
         "tags": [
           "trading-scripts"
+        ]
+      }
+    },
+    "/api/trading/snapshots": {
+      "get": {
+        "operationId": "recent_api_trading_snapshots_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Recent",
+        "tags": [
+          "trading-snapshots"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_trading_snapshots_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnapshotCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "trading-snapshots"
+        ]
+      }
+    },
+    "/api/trading/snapshots/{snapshot_id}": {
+      "delete": {
+        "operationId": "delete_api_trading_snapshots__snapshot_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete",
+        "tags": [
+          "trading-snapshots"
+        ]
+      }
+    },
+    "/api/trading/snapshots/{snapshot_id}.png": {
+      "get": {
+        "operationId": "image_api_trading_snapshots__snapshot_id__png_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Image",
+        "tags": [
+          "trading-snapshots"
         ]
       }
     },

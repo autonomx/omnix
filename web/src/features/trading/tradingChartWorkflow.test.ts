@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  copyChartSnapshotLink,
   barCloseTime,
   barCountdownEnabled,
   barCountdownRemainingMs,
@@ -301,5 +302,16 @@ describe('chart templates', () => {
     expect(parseChartTemplate({ record_id: 'bad-settings', status: 'active', payload: { ...payload, settings: 'yes' } })).toBeNull();
     // A malformed setting inside a template falls back to its default.
     expect(parseChartTemplate({ record_id: 'odd-setting', status: 'active', payload: { ...payload, settings: { extendedHours: 'yes', barCountdown: false } } })?.settings).toEqual({ barCountdown: false });
+  });
+});
+
+describe('chart snapshot links (TVP-2.1/2.5)', () => {
+  it('uploads the image and copies an absolute link to it', async () => {
+    const upload = vi.fn(async () => ({ url: '/api/trading/snapshots/abc.png' }));
+    const writeText = vi.fn(async () => undefined);
+    await expect(copyChartSnapshotLink('data:image/png;base64,AA', upload, { writeText }, 'https://omnix.example')).resolves.toBe('https://omnix.example/api/trading/snapshots/abc.png');
+    expect(upload).toHaveBeenCalledWith('data:image/png;base64,AA');
+    expect(writeText).toHaveBeenCalledWith('https://omnix.example/api/trading/snapshots/abc.png');
+    await expect(copyChartSnapshotLink('data:image/png;base64,AA', upload, undefined, 'https://omnix.example')).rejects.toThrow('clipboard');
   });
 });

@@ -7,7 +7,7 @@ import {
   centeredLogicalRange,
   chartTemplatePayload,
   chartTemplateRecordId,
-  copyImageDataUrlToClipboard,
+  copyChartSnapshotLink, copyImageDataUrlToClipboard,
   dataDelayLabel,
   extendedSessionPriceLine,
   hasExtendedHoursBars,
@@ -174,13 +174,27 @@ function useChartGoToDate(ws: WorkflowInput) {
   return { goToDateOpen, setGoToDateOpen, goToDateError, goToDateLoading, goToDate, openGoToDate, goToDateDefault };
 }
 
-/** Copy chart image. Omnix stores no snapshots server-side, so there is no snapshot link to copy. */
-function useChartImageCopy(adapterRef: WorkflowInput['adapterRef']) {
+/** Copy chart image, and copy a link to a stored snapshot of it (TVP-2.1/2.5). */
+function useChartImageCopy(adapterRef: WorkflowInput['adapterRef'], instrumentId: string, interval: string) {
   const [chartImageCopyStatus, setChartImageCopyStatus] = useState<ChartImageCopyStatus>('idle');
+  const [snapshotLinkStatus, setSnapshotLinkStatus] = useState<ChartImageCopyStatus>('idle');
   const copyStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (copyStatusTimerRef.current) clearTimeout(copyStatusTimerRef.current);
   }, []);
+
+  /** Uploads the chart image and copies its link; resolves to the link, or null when it could not. */
+  const copySnapshotLink = useCallback(async (): Promise<string | null> => {
+    const targetAdapter = adapterRef.current;
+    if (!targetAdapter) return null;
+    setSnapshotLinkStatus('copying');
+    const link = await copyChartSnapshotLink(targetAdapter.snapshotDataUrl(), (image) => tradingApi.createSnapshot(image, instrumentId, interval))
+      .catch(() => null);
+    setSnapshotLinkStatus(link ? 'copied' : 'error');
+    if (copyStatusTimerRef.current) clearTimeout(copyStatusTimerRef.current);
+    copyStatusTimerRef.current = setTimeout(() => setSnapshotLinkStatus('idle'), 2_500);
+    return link;
+  }, [adapterRef, instrumentId, interval]);
 
   /** Copies a PNG of the chart to the clipboard; resolves to whether it was copied. */
   const copyChartImage = useCallback(async (): Promise<boolean> => {
@@ -194,7 +208,7 @@ function useChartImageCopy(adapterRef: WorkflowInput['adapterRef']) {
     return copied;
   }, [adapterRef]);
 
-  return { chartImageCopyStatus, copyChartImage };
+  return { chartImageCopyStatus, copyChartImage, snapshotLinkStatus, copySnapshotLink };
 }
 
 /** Chart templates: a chart's style and indicators, saved with the indicator-preset documents. */
@@ -346,7 +360,7 @@ export function useChartWorkflow(ws: WorkflowInput) {
     extendedPriceLineEnabled,
     handleStageDoubleClick,
     ...goTo,
-    ...useChartImageCopy(adapterRef),
+    ...useChartImageCopy(adapterRef, ws.instrumentId, interval),
     ...useChartTemplates(ws),
     ...marketStatus,
   };

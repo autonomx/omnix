@@ -6,7 +6,7 @@ import { ChartTradeButtons } from './ChartTradeButtons';
 import { DrawingPropertiesButton } from './drawings/DrawingPropertiesButton';
 import { DrawingStyleControls } from './drawings/DrawingStyleControls';
 import { drawingToolDefinition } from './drawings/tools/registry';
-import { ChartCopyImageButton, ChartMarketStatusBadges } from './TradingChartWorkflowControls';
+import { ChartCopyImageButton, ChartMarketStatusBadges, ChartSnapshotLinkButton } from './TradingChartWorkflowControls';
 import { ChartLinkGroupButton } from './ChartLinkGroupButton';
 import { useTradingStore } from './tradingStore';
 
@@ -84,6 +84,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             <button type="button" onClick={() => drawings.redo()} aria-label="Redo drawing">↷</button>
             <button type="button" onClick={() => adapterRef.current && downloadUrl(adapterRef.current.snapshotDataUrl(), `${chartId}.png`)} aria-label="Snapshot chart">PNG</button>
             <ChartCopyImageButton ws={ws} />
+            <ChartSnapshotLinkButton ws={ws} />
             {drawings.hasConflict ? (
               <>
                 <span role="status">Drawing conflict</span>

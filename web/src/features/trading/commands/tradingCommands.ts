@@ -71,7 +71,8 @@ export const TRADING_COMMANDS = [
   { id: 'chart.invertScale', label: 'Invert price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+i'] },
   { id: 'chart.logScale', label: 'Logarithmic price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+l'] },
   { id: 'chart.percentScale', label: 'Percent price scale', group: 'Chart', scope: 'chart', defaultKeys: ['alt+p'] },
-  { id: 'chart.snapshot', label: 'Chart snapshot (download PNG)', group: 'Chart', scope: 'chart', defaultKeys: ['alt+s'] },
+  { id: 'chart.snapshot', label: 'Chart snapshot: copy its link', group: 'Chart', scope: 'chart', defaultKeys: ['alt+s'] },
+  { id: 'chart.snapshotDownload', label: 'Save chart image (download PNG)', group: 'Chart', scope: 'chart', defaultKeys: ['mod+alt+s'] },
   { id: 'chart.addAlert', label: 'Add alert at the last price', group: 'Chart', scope: 'chart', defaultKeys: ['alt+a'] },
   { id: 'chart.goToDate', label: 'Go to date', group: 'Chart', scope: 'chart', defaultKeys: ['alt+g'] },
   // Bar replay (TVP-8.1), TradingView's keys.

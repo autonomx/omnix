@@ -239,6 +239,23 @@ export async function copyImageDataUrlToClipboard(
   await clipboard.write([new ClipboardItemType({ [blob.type || 'image/png']: blob })]);
 }
 
+/**
+ * Uploads a chart image and copies its link (TVP-2.1/2.5, TradingView's Alt+S); resolves to the link. The link opens
+ * for signed-in members of the workspace.
+ */
+export async function copyChartSnapshotLink(
+  dataUrl: string,
+  upload: (image: string) => Promise<{ url: string }>,
+  clipboard: Pick<Clipboard, 'writeText'> | undefined = typeof navigator === 'undefined' ? undefined : navigator.clipboard,
+  origin: string = typeof window === 'undefined' ? '' : window.location.origin,
+): Promise<string> {
+  const snapshot = await upload(dataUrl);
+  const link = new URL(snapshot.url, origin || 'http://localhost').href;
+  if (!clipboard?.writeText) throw new Error('This browser cannot copy to the clipboard.');
+  await clipboard.writeText(link);
+  return link;
+}
+
 // ---------------------------------------------------------------- market status and data delay
 
 export type MarketStatusValue = 'open' | 'pre_market' | 'post_market' | 'closed' | 'unknown';
