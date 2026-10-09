@@ -452,6 +452,7 @@
     "DELETE /api/trading/alerts/{alert_id}": "trading",
     "PUT /api/trading/alerts/{alert_id}": "trading",
     "GET /api/trading/bars": "trading",
+    "GET /api/trading/bars/intrabar": "trading",
     "POST /api/trading/catalysts/classify-shadow": "trading",
     "POST /api/trading/catalysts/evidence": "trading",
     "GET /api/trading/catalysts/evidence/{instrument_id}": "trading",

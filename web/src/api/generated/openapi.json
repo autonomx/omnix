@@ -20737,6 +20737,67 @@
         "title": "InterdayMonitorOperationsStatus",
         "type": "object"
       },
+      "IntrabarResponse": {
+        "properties": {
+          "available_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available From"
+          },
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/MarketBar-Output"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "lower_interval": {
+            "title": "Lower Interval",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "interval",
+          "lower_interval",
+          "start",
+          "end",
+          "bars",
+          "complete",
+          "available_from"
+        ],
+        "title": "IntrabarResponse",
+        "type": "object"
+      },
       "InviteCheckResponse": {
         "properties": {
           "usable": {
@@ -75336,6 +75397,108 @@
           }
         },
         "summary": "Bars",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/bars/intrabar": {
+      "get": {
+        "description": "Lower-timeframe bars inside chart bars (TVP-0.6), for volume delta and sub-bar replay.",
+        "operationId": "bars_intrabar_api_trading_bars_intrabar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval",
+            "required": true,
+            "schema": {
+              "maxLength": 16,
+              "title": "Interval",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lower_interval",
+            "required": true,
+            "schema": {
+              "maxLength": 16,
+              "title": "Lower Interval",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "binding_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntrabarResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bars Intrabar",
         "tags": [
           "trading"
         ]

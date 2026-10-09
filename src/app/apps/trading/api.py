@@ -16,6 +16,7 @@ from app.persistence.errors import RevisionConflict
 
 from .catalog import bindings_for_instrument, instrument_by_id
 from .instrument_catalog_service import ProviderBackedInstrumentCatalog, default_instrument_catalog
+from .intrabar import IntrabarResponse, intrabar_bars
 from .market_session_status import MarketSessionStatus, is_always_open, market_session_status
 from .models import BarsResponse, CanonicalInstrument, ProviderBinding, ProviderPolicy
 from .repositories import TradingDocumentRepository, default_trading_repository
@@ -251,6 +252,37 @@ def create_trading_router(
         except Exception as exc:
             # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
             logger.warning("market_data_failed", exc_info=True)
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "market_data_failed", "message": "The market data provider request failed."},
+            ) from exc
+
+    @router.get("/bars/intrabar", response_model=IntrabarResponse)
+    def bars_intrabar(
+        start: datetime,
+        end: datetime,
+        instrument_id: str = Query(min_length=3, max_length=200),
+        interval: str = Query(max_length=16),
+        lower_interval: str = Query(max_length=16),
+        binding_id: str | None = Query(default=None, max_length=240),
+    ) -> IntrabarResponse:
+        """Lower-timeframe bars inside chart bars (TVP-0.6), for volume delta and sub-bar replay."""
+        try:
+            return intrabar_bars(
+                market_service_factory(),
+                instrument_id=instrument_id,
+                interval=interval,
+                lower_interval=lower_interval,
+                start=start,
+                end=end,
+                now=clock(),
+                binding_id=binding_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
+            logger.warning("intrabar_data_failed", exc_info=True)
             raise HTTPException(
                 status_code=502,
                 detail={"code": "market_data_failed", "message": "The market data provider request failed."},
