@@ -1,7 +1,7 @@
 {
   "schema": "omnix-tradingview-parity-ledger-v1",
   "roadmap": "docs/trading/TRADINGVIEW_PARITY_ROADMAP_2026-10-08.md",
-  "verified": "2026-10-09 (updated after TVP-1.4)",
+  "verified": "2026-10-09 (updated after TVP-11.0)",
   "entries": [
   {"id": "charts.all-21-chart-types", "area": "Charts and layouts", "feature": "All 21 chart types", "tier": "daily", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/chart/chartAdapter.ts#TRADING_CHART_TYPE_OPTIONS"]},
   {"id": "charts.up-to-16-charts-per-tab", "area": "Charts and layouts", "feature": "Up to 16 charts per tab", "tier": "daily", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/tradingStore.ts#MAX_TRADING_CHARTS = 16"]},
@@ -348,7 +348,7 @@
   {"id": "indicators.feature-candlestick-patterns", "area": "Indicators", "feature": "Candlestick pattern recognition", "tier": "weekly", "status": "missing", "level": "equivalent", "wp": "TVP-6.3", "group": "Indicator features"},
   {"id": "indicators.feature-indicator-on-indicator", "area": "Indicators", "feature": "Indicator on indicator", "tier": "weekly", "status": "missing", "level": "equivalent", "wp": "TVP-6.5", "group": "Indicator features"},
   {"id": "scripts.built-in-source-viewer", "area": "User scripts", "feature": "Read-only Pine-compatible source of built-in indicators", "tier": "weekly", "status": "have", "level": "functional", "wp": "baseline", "evidence": ["web/src/features/trading/TradingPinePanel.tsx#Script source (Pine-compatible)", "web/src/features/trading/indicators/indicatorPine.ts#indicatorPineSource"]},
-  {"id": "scripts.write-and-run-your-own-indicators", "area": "User scripts", "feature": "Write and run your own indicators", "tier": "daily", "status": "missing", "level": "equivalent", "wp": "TVP-11.1–11.3", "note": "TradingPinePanel is read-only."},
+  {"id": "scripts.write-and-run-your-own-indicators", "area": "User scripts", "feature": "Write and run your own indicators", "tier": "daily", "status": "missing", "level": "equivalent", "wp": "TVP-11.1–11.3", "note": "TradingPinePanel is read-only. The server interpreter for the Pine-compatible subset exists (TVP-11.0: src/app/apps/trading/scripts, docs/trading/OMNIX_SCRIPTS_SPEC.md); running scripts on charts needs TVP-11.1-11.3."},
   {"id": "scripts.editor", "area": "User scripts", "feature": "Editor: autocomplete, inline errors, hints", "tier": "daily", "status": "missing", "level": "equivalent", "wp": "TVP-11.2"},
   {"id": "scripts.script-versions", "area": "User scripts", "feature": "Script versions", "tier": "weekly", "status": "missing", "level": "equivalent", "wp": "TVP-11.3"},
   {"id": "scripts.script-alerts", "area": "User scripts", "feature": "Script alerts (alertcondition, alert())", "tier": "daily", "status": "missing", "level": "equivalent", "wp": "TVP-11.4"},

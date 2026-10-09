@@ -995,6 +995,8 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 
 #### TVP-11.0 — Spike and language spec
 
+**Done:** the supported subset, results and measurements are in [`OMNIX_SCRIPTS_SPEC.md`](OMNIX_SCRIPTS_SPEC.md).
+
 - **Goal:** prove the runtime choice and fix the supported subset.
 - **Steps:**
   1. Write a spec of the supported subset: Pine v5/v6 indicator scripts first; types, series semantics, `var`/`varip`, history references, `na`, the built-in namespaces, and `request.security` limits.
@@ -1080,7 +1082,7 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 | D-6 | Options data source | Recommended | §7.2 |
 | D-7 | Manual live trading from the chart | Not in this roadmap | Live execution stays with deterministic strategies |
 | D-8 | Native desktop wrapper (Electron/Tauri) | Recommended | Not needed; PWA (TVP-4.5) |
-| D-9 | Server runtime for indicators and scripts | Recommended, to be confirmed by the TVP-11.0 spike | Python only, no Node sidecar; scripts run on the server with a shared result cache (§6, TVP-11) |
+| D-9 | Server runtime for indicators and scripts | **Confirmed 2026-10-09** by the TVP-11.0 spike | Python only, no Node sidecar; scripts run on the server with a shared result cache (§6, TVP-11). Measured on 5,000 bars: median 48 ms per full run (max 285 ms), 0.016 ms per new bar; conditions for TVP-11.1 in `OMNIX_SCRIPTS_SPEC.md` §4 |
 
 ### 7.2 Data source recommendations
 
