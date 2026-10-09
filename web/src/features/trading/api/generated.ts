@@ -847,7 +847,11 @@ export interface paths {
         delete: operations["archive_account_api_trading_paper_accounts__account_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Account Settings
+         * @description Change the account's settings (shorting on or off, TVP-7.2a) at the revision the person saw.
+         */
+        patch: operations["update_account_settings_api_trading_paper_accounts__account_id__patch"];
         trace?: never;
     };
     "/api/trading/paper/accounts/{account_id}/observations": {
@@ -991,7 +995,7 @@ export interface paths {
         put?: never;
         /**
          * Place Risk Order
-         * @description Size and submit a new long entry entirely from server-owned risk rules.
+         * @description Size and submit a new entry (long, or short where the account allows it) from server-owned risk rules.
          */
         post: operations["place_risk_order_api_trading_paper_accounts__account_id__risk_orders_post"];
         delete?: never;
@@ -6236,6 +6240,11 @@ export interface components {
         "PaperAccount-Input": {
             /** Account Id */
             account_id: string;
+            /**
+             * Allow Short
+             * @default false
+             */
+            allow_short?: boolean;
             /** Base Currency */
             base_currency: string;
             /** Commission Bps */
@@ -6261,6 +6270,11 @@ export interface components {
         "PaperAccount-Output": {
             /** Account Id */
             account_id: string;
+            /**
+             * Allow Short
+             * @default false
+             */
+            allow_short: boolean;
             /** Base Currency */
             base_currency: string;
             /** Commission Bps */
@@ -6287,6 +6301,11 @@ export interface components {
             /** Account Id */
             account_id: string;
             /**
+             * Allow Short
+             * @default false
+             */
+            allow_short?: boolean;
+            /**
              * Base Currency
              * @default USD
              */
@@ -6308,6 +6327,14 @@ export interface components {
         PaperAccountListResponse: {
             /** Accounts */
             accounts: components["schemas"]["PaperAccount-Output"][];
+        };
+        /**
+         * PaperAccountSettings
+         * @description Account settings a person changes after creating the account (TVP-7.2a).
+         */
+        PaperAccountSettings: {
+            /** Allow Short */
+            allow_short: boolean;
         };
         /** PaperAccountSnapshot */
         "PaperAccountSnapshot-Input": {
@@ -7230,7 +7257,7 @@ export interface components {
         };
         /**
          * PaperRiskOrderRequest
-         * @description Risk intent for a new long paper entry; quantity is deliberately absent.
+         * @description Risk intent for a new paper entry, long or (TVP-7.2a) short; quantity is deliberately absent.
          */
         PaperRiskOrderRequest: {
             /** Binding Id */
@@ -7256,6 +7283,12 @@ export interface components {
              * @enum {string}
              */
             order_type?: "market" | "limit" | "stop" | "stop_limit";
+            /**
+             * Side
+             * @default buy
+             * @enum {string}
+             */
+            side?: "buy" | "sell";
             /** Stop Loss */
             stop_loss: number | string;
             /** Take Profit */
@@ -7380,6 +7413,12 @@ export interface components {
             entry_price: number | string;
             /** Instrument Id */
             instrument_id: string;
+            /**
+             * Side
+             * @default buy
+             * @enum {string}
+             */
+            side?: "buy" | "sell";
             /** Stop Price */
             stop_price: number | string;
         };
@@ -14200,6 +14239,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperAccountSnapshot-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_account_settings_api_trading_paper_accounts__account_id__patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperAccountSettings"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

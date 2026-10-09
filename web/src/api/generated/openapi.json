@@ -27142,6 +27142,11 @@
             "title": "Account Id",
             "type": "string"
           },
+          "allow_short": {
+            "default": false,
+            "title": "Allow Short",
+            "type": "boolean"
+          },
           "base_currency": {
             "title": "Base Currency",
             "type": "string"
@@ -27213,6 +27218,11 @@
             "title": "Account Id",
             "type": "string"
           },
+          "allow_short": {
+            "default": false,
+            "title": "Allow Short",
+            "type": "boolean"
+          },
           "base_currency": {
             "title": "Base Currency",
             "type": "string"
@@ -27269,7 +27279,8 @@
           "enabled",
           "revision",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "allow_short"
         ],
         "title": "PaperAccount",
         "type": "object"
@@ -27282,6 +27293,11 @@
             "minLength": 1,
             "title": "Account Id",
             "type": "string"
+          },
+          "allow_short": {
+            "default": false,
+            "title": "Allow Short",
+            "type": "boolean"
           },
           "base_currency": {
             "default": "USD",
@@ -27347,6 +27363,21 @@
           "accounts"
         ],
         "title": "PaperAccountListResponse",
+        "type": "object"
+      },
+      "PaperAccountSettings": {
+        "additionalProperties": false,
+        "description": "Account settings a person changes after creating the account (TVP-7.2a).",
+        "properties": {
+          "allow_short": {
+            "title": "Allow Short",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "allow_short"
+        ],
+        "title": "PaperAccountSettings",
         "type": "object"
       },
       "PaperAccountSnapshot-Input": {
@@ -30512,7 +30543,7 @@
       },
       "PaperRiskOrderRequest": {
         "additionalProperties": false,
-        "description": "Risk intent for a new long paper entry; quantity is deliberately absent.",
+        "description": "Risk intent for a new paper entry, long or (TVP-7.2a) short; quantity is deliberately absent.",
         "properties": {
           "binding_id": {
             "anyOf": [
@@ -30596,6 +30627,15 @@
               "stop_limit"
             ],
             "title": "Order Type",
+            "type": "string"
+          },
+          "side": {
+            "default": "buy",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
             "type": "string"
           },
           "stop_loss": {
@@ -30902,6 +30942,15 @@
             "maxLength": 200,
             "minLength": 3,
             "title": "Instrument Id",
+            "type": "string"
+          },
+          "side": {
+            "default": "buy",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
             "type": "string"
           },
           "stop_price": {
@@ -77691,6 +77740,67 @@
         "tags": [
           "trading-paper"
         ]
+      },
+      "patch": {
+        "description": "Change the account's settings (shorting on or off, TVP-7.2a) at the revision the person saw.",
+        "operationId": "update_account_settings_api_trading_paper_accounts__account_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperAccountSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperAccountSnapshot-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Account Settings",
+        "tags": [
+          "trading-paper"
+        ]
       }
     },
     "/api/trading/paper/accounts/{account_id}/observations": {
@@ -78209,7 +78319,7 @@
     },
     "/api/trading/paper/accounts/{account_id}/risk-orders": {
       "post": {
-        "description": "Size and submit a new long entry entirely from server-owned risk rules.",
+        "description": "Size and submit a new entry (long, or short where the account allows it) from server-owned risk rules.",
         "operationId": "place_risk_order_api_trading_paper_accounts__account_id__risk_orders_post",
         "parameters": [
           {

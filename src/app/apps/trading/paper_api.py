@@ -12,6 +12,7 @@ from app.persistence.errors import RevisionConflict
 from .paper import (
     PaperAccount,
     PaperAccountCreate,
+    PaperAccountSettings,
     PaperAccountSnapshot,
     PaperFill,
     PaperMarketObservation,
@@ -107,13 +108,30 @@ def _raw_order_is_reducing_long_exposure(
 ) -> bool:
     """Raw HTTP orders are exit-only; new exposure must use server risk intent.
 
-    The currently supported manual workstation is long-entry only. A raw sell is
-    allowed only when the relational position and reservations prove it cannot
-    increase or reverse exposure. Replacement validation gives the cancelled
-    order's reservation back before checking the new quantity.
+    A raw sell is allowed only when the long position and its reservations
+    prove it cannot increase or reverse exposure; a raw buy only when it buys
+    back no more of a short (TVP-7.2a) than the buys already working leave.
+    A replacement gives the replaced order's quantity back before the check.
     """
-    if request.side != "sell":
-        return False
+    def open_orders(side: str):
+        return [
+            order
+            for order in snapshot.open_orders
+            if order.instrument_id == request.instrument_id
+            and order.side == side
+            and order.status == "open"
+            and order.order_id != replacing_order_id
+        ]
+
+    if request.side == "buy":
+        short = next(
+            (item for item in snapshot.positions if item.instrument_id == request.instrument_id and item.quantity < 0),
+            None,
+        )
+        if short is None:
+            return False
+        working = sum((order.quantity - order.filled_quantity for order in open_orders("buy")), Decimal("0"))
+        return request.quantity <= -short.quantity - working
     position = next(
         (
             item
@@ -204,6 +222,22 @@ def create_trading_paper_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.patch("/accounts/{account_id}", response_model=PaperAccountSnapshot)
+    async def update_account_settings(
+        account_id: str,
+        settings: PaperAccountSettings,
+        if_match: int = Header(alias="If-Match", ge=1),
+    ):
+        """Change the account's settings (shorting on or off, TVP-7.2a) at the revision the person saw."""
+        try:
+            return await asyncio.to_thread(
+                repository_factory().update_account_settings, account_id, settings, expected_revision=if_match
+            )
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @router.get("/accounts/{account_id}", response_model=PaperAccountSnapshot)
     async def account_snapshot(account_id: str):
         try:
@@ -225,7 +259,7 @@ def create_trading_paper_router(
         status_code=201,
     )
     async def place_risk_order(account_id: str, request: PaperRiskOrderRequest):
-        """Size and submit a new long entry entirely from server-owned risk rules."""
+        """Size and submit a new entry (long, or short where the account allows it) from server-owned risk rules."""
         probe_price = request.trigger_price or Decimal("1")
         probe = PaperRiskPreviewRequest(
             instrument_id=request.instrument_id,
@@ -233,10 +267,13 @@ def create_trading_paper_router(
             entry_price=probe_price,
             stop_price=request.stop_loss,
             desired_risk_pct=request.desired_risk_pct,
+            side=request.side,
         )
         snapshot, active_protections, execution, daily_realized = await risk_context(account_id, probe)
+        # A market buy pays the ask; a market short sells at the bid.
+        market_price = execution.bid if request.side == "sell" else execution.ask
         entry_price = (
-            (execution.ask or execution.last)
+            (market_price or execution.last)
             if request.order_type == "market"
             else request.worst_entry_price
         )
@@ -248,6 +285,7 @@ def create_trading_paper_router(
             entry_price=entry_price,
             stop_price=request.stop_loss,
             desired_risk_pct=request.desired_risk_pct,
+            side=request.side,
         )
         preview = preview_paper_risk(
             snapshot=snapshot,
@@ -359,6 +397,7 @@ def create_trading_paper_router(
                 entry_price=entry_price,
                 stop_price=intent.stop_loss,
                 desired_risk_pct=intent.desired_risk_pct,
+                side=intent.side,
             ),
             daily_realized_pnl=daily_realized,
         )

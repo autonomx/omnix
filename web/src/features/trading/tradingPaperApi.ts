@@ -1,6 +1,7 @@
 import type {
   PaperAccount,
   PaperAccountCreateInput,
+  PaperAccountSettingsInput,
   PaperAccountSnapshot,
   PaperOrder,
   PaperOrderInput,
@@ -26,6 +27,12 @@ export const tradingPaperApi = {
     (await paper(api.GET('/api/trading/paper/accounts'))).accounts,
   createAccount: (input: PaperAccountCreateInput): Promise<PaperAccountSnapshot> =>
     paper(api.POST('/api/trading/paper/accounts', { body: input })),
+  /** Account settings (shorting, TVP-7.2a), at the revision this account was read at. */
+  updateAccountSettings: (paperAccount: PaperAccount, settings: PaperAccountSettingsInput): Promise<PaperAccountSnapshot> =>
+    paper(api.PATCH('/api/trading/paper/accounts/{account_id}', {
+      params: { path: account(paperAccount.account_id), header: { 'If-Match': paperAccount.revision } },
+      body: settings,
+    })),
   snapshot: (accountId: string): Promise<PaperAccountSnapshot> =>
     paper(api.GET('/api/trading/paper/accounts/{account_id}', { params: { path: account(accountId) } })),
   riskPreview: (accountId: string, input: PaperRiskPreviewInput): Promise<PaperRiskPreview> =>

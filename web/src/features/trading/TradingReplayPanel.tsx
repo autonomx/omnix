@@ -24,6 +24,7 @@ export function TradingReplayPanel({
   const speed = useTradingReplayStore((state) => state.speed);
   const [fast, setFast] = useState('10');
   const [slow, setSlow] = useState('30');
+  const [allowShort, setAllowShort] = useState(false);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
 
   const refresh = async () => {
@@ -86,6 +87,7 @@ export function TradingReplayPanel({
         initial_cash: '10000',
         commission_bps: '10',
         slippage_bps: '5',
+        allow_short: allowShort,
       });
       setBacktest(result);
       setStatus('ready');
@@ -119,6 +121,7 @@ export function TradingReplayPanel({
       <div className="trading-backtest-form">
         <label>Fast SMA<input inputMode="numeric" value={fast} onChange={(event) => setFast(event.target.value)} /></label>
         <label>Slow SMA<input inputMode="numeric" value={slow} onChange={(event) => setSlow(event.target.value)} /></label>
+        <label><input type="checkbox" checked={allowShort} onChange={(event) => setAllowShort(event.target.checked)} />Allow short</label>
         <button type="button" disabled={!selected || status === 'saving'} onClick={() => void run()}>Run backtest</button>
       </div>
       {backtest ? (

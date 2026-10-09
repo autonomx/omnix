@@ -50,6 +50,8 @@ export const tradingReplayApi = {
     initial_cash: string;
     commission_bps: string;
     slippage_bps: string;
+    /** The strategy may go short on a sell signal (TVP-7.2a). */
+    allow_short?: boolean;
   }): Promise<BacktestRunResult> => replay(api.POST('/api/trading/replay/backtests', {
     body: {
       dataset_id: datasetId,
@@ -64,7 +66,7 @@ export const tradingReplayApi = {
           commission_bps: input.commission_bps,
           slippage_bps: input.slippage_bps,
           position_size_fraction: '1',
-          allow_short: false,
+          allow_short: input.allow_short ?? false,
           use_finalized_bars_only: true,
         },
         initial_cash: input.initial_cash,

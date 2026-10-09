@@ -54,7 +54,10 @@ def movable_entry(
     order = next((item for item in snapshot.open_orders if item.order_id == order_id), None)
     if order is None or order.status != "open":
         raise ValueError("paper_order_not_open")
-    if order.side != "buy" or order.order_type not in MOVABLE_ORDER_TYPES:
+    if order.order_type not in MOVABLE_ORDER_TYPES:
+        raise ValueError("paper_risk_entry_not_movable")
+    # A long or (TVP-7.2a) short entry; a sell against a long position is an exit, moved by replace instead.
+    if order.side == "sell" and any(item.instrument_id == order.instrument_id and item.quantity > 0 for item in snapshot.positions):
         raise ValueError("paper_risk_entry_not_movable")
     if order.filled_quantity > 0:
         raise ValueError("paper_risk_entry_partially_filled")
@@ -95,13 +98,15 @@ def moved_entry_intent(
     stop = protection.stop_loss
     if entry is None or stop is None or equity <= 0:
         raise ValueError("paper_risk_entry_move_risk_unavailable")
-    risk = max(Decimal("0"), entry - stop) * (order.quantity - order.filled_quantity)
+    distance = stop - entry if order.side == "sell" else entry - stop
+    risk = max(Decimal("0"), distance) * (order.quantity - order.filled_quantity)
     percent = min(risk / equity * Decimal("100"), active.max_risk_per_trade_pct)
     percent = percent.quantize(Decimal("0.000001"), rounding=ROUND_DOWN)
     if percent <= 0:
         raise ValueError("paper_risk_entry_move_risk_unavailable")
     return PaperRiskOrderRequest(
         order_id=move.order_id,
+        side=order.side,
         instrument_id=order.instrument_id,
         binding_id=order.binding_id,
         order_type=order.order_type,

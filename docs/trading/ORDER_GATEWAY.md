@@ -9,7 +9,7 @@ Each order carries the reason it may exist:
 | Authority | Used by | May open or add exposure |
 |---|---|---|
 | `reduce_only` | protective exits (strategy monitor, paper protection monitor), the raw `POST .../orders` route, replacements | no |
-| `manual_risk` | `POST .../risk-orders`, after the server's risk preview sized and allowed the entry; `POST .../risk-orders/{order_id}/move` (an entry dragged on the chart), sized again the same way | yes |
+| `manual_risk` | `POST .../risk-orders`, after the server's risk preview sized and allowed the entry (a long, or a short on an account with shorting on, TVP-7.2a); `POST .../risk-orders/{order_id}/move` (an entry dragged on the chart), sized again the same way | yes |
 | `strategy_entry` | strategy entries, after `StrategyEntryAuthorizer` proved the entry for its own trade attempt | yes |
 
 A strategy entry is authorized from its own trade attempt's events: risk decision, universe and profile fingerprint. A later or earlier attempt for the same instrument never authorizes it. The assessment is persisted as a `trade_authorization` strategy event, and a denial raises `trade_authorization_denied:<reason codes>`.
@@ -23,7 +23,7 @@ Under the account row lock, in the transaction that writes the order:
 3. A buy that only covers an open short, and a sell covered by the unreserved long position, reduce exposure and need nothing more.
 4. Any other order opens or adds exposure. It needs `manual_risk` or `strategy_entry` authority (`paper_order_requires_entry_authority`), and no kill switch may be engaged for the workspace, the account or the order's strategy (`trading_kill_switch_engaged:<scope>`).
 5. Accounts are long-only: a sell with no long position is `paper_short_not_allowed` unless the account's `allow_short` is set, and the short is then an entry under step 4. A sell larger than the unreserved position is `insufficient_paper_position`.
-6. Cash for a buy is reserved (`insufficient_paper_cash`).
+6. Cash for a buy is reserved (`insufficient_paper_cash`), and so is cash for a short entry (TVP-7.2a). An entry also needs the cash that open shorts hold: twice their buy-back cost (proceeds and margin). A buy that only covers a short, counting the buys already working on it, is reducing; it is never refused for cash.
 
 A replacement cancels the old order and places the new one in one transaction. If the replacement is rejected, the old order stays open with its reservation.
 

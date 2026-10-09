@@ -18,6 +18,13 @@ describe('chart order lines', () => {
     ]);
   });
 
+  it('moves a short entry with its pending stop as an entry (TVP-7.2a)', () => {
+    const shortEntry = order({ order_id: 'short-1', side: 'sell', limit_price: '12' });
+    const stop = { ...pendingStop, entry_order_id: 'short-1', stop_loss: '13' } as typeof pendingStop;
+    expect(chartOrderLines([shortEntry], INSTRUMENT, [stop])[0].move).toBe('entry');
+    expect(chartOrderLines([shortEntry], INSTRUMENT, [])[0].move).toBe('exit');
+  });
+
   it('leaves what the server would refuse to move undraggable', () => {
     const lines = chartOrderLines([
       order({ order_id: 'manual' }),

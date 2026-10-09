@@ -8,12 +8,14 @@ from decimal import Decimal
 from typing import Any, Protocol, cast
 
 from app.security.tenant_context import RequestTenant, TenantContext
+from app.persistence.errors import RevisionConflict
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 from app.apps.trading.us_equity_calendar import EASTERN
 
 from .paper import (
     PaperAccount,
     PaperAccountCreate,
+    PaperAccountSettings,
     OrderAuthority,
     PaperAccountSnapshot,
     PaperBalance,
@@ -55,6 +57,7 @@ def _account(row) -> PaperAccount:
         revision=int(row[5]),
         created_at=row[6],
         updated_at=row[7],
+        allow_short=bool(row[8]) if len(row) > 8 else False,
     )
 
 
@@ -120,10 +123,10 @@ class TradingPaperRepository:
                 """
                 INSERT INTO omnix_trading_paper_accounts (
                     workspace_id, account_id, owner_user_id, name,
-                    base_currency, commission_bps
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                    base_currency, commission_bps, allow_short
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING account_id, name, base_currency, commission_bps,
-                          enabled, revision, created_at, updated_at
+                          enabled, revision, created_at, updated_at, allow_short
                 """,
                 (
                     self.context.workspace_id,
@@ -132,6 +135,7 @@ class TradingPaperRepository:
                     request.name,
                     request.base_currency,
                     request.commission_bps,
+                    request.allow_short,
                 ),
             ).fetchone()
             uow.connection.execute(
@@ -168,12 +172,64 @@ class TradingPaperRepository:
             uow.commit()
         return self.snapshot(request.account_id, account=_account(account_row))
 
+    def update_account_settings(
+        self, account_id: str, settings: PaperAccountSettings, *, expected_revision: int
+    ) -> PaperAccountSnapshot:
+        """Change an account's settings (shorting, TVP-7.2a) at the revision the person saw.
+
+        Turning shorting off cancels working short entries (their holds are released and their pending
+        stops follow) and leaves open shorts and their exits as they are.
+        """
+        with self.uow_factory() as uow:
+            if not settings.allow_short:
+                locked, _ = self._lock_account(uow, account_id)
+                for short_entry in self._working_short_entries(uow, account_id):
+                    self._cancel_locked(uow, locked, short_entry)
+            row = uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_accounts
+                   SET allow_short = %s, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND revision = %s
+                RETURNING account_id, name, base_currency, commission_bps,
+                          enabled, revision, created_at, updated_at, allow_short
+                """,
+                (settings.allow_short, self.context.workspace_id, account_id, expected_revision),
+            ).fetchone()
+            if row is None:
+                exists = uow.connection.execute(
+                    "SELECT 1 FROM omnix_trading_paper_accounts WHERE workspace_id = %s AND account_id = %s",
+                    (self.context.workspace_id, account_id),
+                ).fetchone()
+                if exists is None:
+                    raise ValueError(f"paper_account_not_found: {account_id}")
+                raise RevisionConflict(f"Paper account expected revision {expected_revision}: {account_id}")
+            uow.commit()
+        return self.snapshot(account_id, account=_account(row))
+
+    def _working_short_entries(self, uow: PostgresUnitOfWork, account_id: str) -> list[str]:
+        """Open sells on instruments with no long position: entries that open or add to a short."""
+        rows = uow.connection.execute(
+            """
+            SELECT orders.order_id
+              FROM omnix_trading_paper_orders AS orders
+              LEFT JOIN omnix_trading_paper_positions AS positions
+                ON positions.workspace_id = orders.workspace_id
+               AND positions.account_id = orders.account_id
+               AND positions.instrument_id = orders.instrument_id
+             WHERE orders.workspace_id = %s AND orders.account_id = %s
+               AND orders.side = 'sell' AND orders.status = 'open'
+               AND COALESCE(positions.quantity, 0) <= 0
+            """,
+            (self.context.workspace_id, account_id),
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+
     def list_accounts(self, limit: int = 100) -> list[PaperAccount]:
         with self.uow_factory() as uow:
             rows = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
+                       enabled, revision, created_at, updated_at, allow_short
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s
                  ORDER BY created_at DESC LIMIT %s
@@ -304,7 +360,7 @@ class TradingPaperRepository:
         return str(row[0]) if row is not None else None
 
     def _covers_short(self, uow: PostgresUnitOfWork, account_id: str, request: PaperOrderRequest) -> bool:
-        """A buy no larger than an open short only reduces exposure."""
+        """A buy no larger than an open short, less the buys already working on it, only reduces exposure."""
         row = uow.connection.execute(
             """
             SELECT quantity
@@ -315,7 +371,67 @@ class TradingPaperRepository:
             (self.context.workspace_id, account_id, request.instrument_id),
         ).fetchone()
         quantity = Decimal(row[0]) if row else Decimal("0")
-        return quantity < 0 and request.quantity <= -quantity
+        if quantity >= 0:
+            return False
+        working = uow.connection.execute(
+            """
+            SELECT COALESCE(SUM(quantity - filled_quantity), 0)
+              FROM omnix_trading_paper_orders
+             WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+               AND side = 'buy' AND status = 'open'
+            """,
+            (self.context.workspace_id, account_id, request.instrument_id),
+        ).fetchone()
+        return request.quantity <= -quantity - Decimal(working[0] if working else 0)
+
+    def _reserve_short_entry(self, uow: PostgresUnitOfWork, account: PaperAccount, request: PaperOrderRequest) -> Decimal:
+        """Hold cash for a working short entry, as a buy holds it, within the buying power (TVP-7.2a).
+
+        The hold is released when the short fills (its proceeds and margin then count through the short
+        liability) or when the order is cancelled or expires.
+        """
+        balance_row = uow.connection.execute(
+            """
+            SELECT available
+              FROM omnix_trading_paper_balances
+             WHERE workspace_id = %s AND account_id = %s AND currency = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account.account_id, account.base_currency),
+        ).fetchone()
+        available = Decimal(balance_row[0]) if balance_row else Decimal("0")
+        hold = paper_buy_reservation(
+            request.model_copy(update={"side": "buy"}),
+            available_cash=available,
+            commission_bps=account.commission_bps,
+        )
+        if hold <= 0 or available - 2 * self._short_liability(uow, account.account_id) < hold:
+            raise ValueError("insufficient_paper_cash")
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_paper_balances
+               SET available = available - %s, reserved = reserved + %s, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s AND currency = %s
+            """,
+            (hold, hold, self.context.workspace_id, account.account_id, account.base_currency),
+        )
+        return hold
+
+    def _short_liability(self, uow: PostgresUnitOfWork, account_id: str) -> Decimal:
+        """What open shorts cost to buy back at their average price (TVP-7.2a).
+
+        Buying power holds twice this: the short sale's proceeds, which sit in
+        the cash balance, and an equal margin (no leverage until TVP-7.2b).
+        """
+        row = uow.connection.execute(
+            """
+            SELECT COALESCE(SUM(-quantity * average_cost), 0)
+              FROM omnix_trading_paper_positions
+             WHERE workspace_id = %s AND account_id = %s AND quantity < 0
+            """,
+            (self.context.workspace_id, account_id),
+        ).fetchone()
+        return Decimal(row[0] if row else 0)
 
     def _require_entry_authority(
         self,
@@ -388,7 +504,8 @@ class TradingPaperRepository:
 
         reserved_cash = Decimal("0")
         if request.side == "buy":
-            if not self._covers_short(uow, account_id, request):
+            covers = self._covers_short(uow, account_id, request)
+            if not covers:
                 self._require_entry_authority(uow, account, authority)
             balance_row = uow.connection.execute(
                 """
@@ -405,7 +522,11 @@ class TradingPaperRepository:
                 available_cash=available,
                 commission_bps=account.commission_bps,
             )
-            if reserved_cash <= 0 or available < reserved_cash:
+            if covers:
+                # Buying back a short is never refused for cash: it holds what there is, and a loss can
+                # leave the balance below zero until margin calls exist (TVP-7.2b).
+                reserved_cash = max(Decimal("0"), min(reserved_cash, available))
+            elif reserved_cash <= 0 or available - 2 * self._short_liability(uow, account_id) < reserved_cash:
                 raise ValueError("insufficient_paper_cash")
             uow.connection.execute(
                 """
@@ -457,6 +578,7 @@ class TradingPaperRepository:
                 if not allow_short:
                     raise ValueError("paper_short_not_allowed")
                 self._require_entry_authority(uow, account, authority)
+                reserved_cash = self._reserve_short_entry(uow, account, request)
 
         row = uow.connection.execute(
             f"""
@@ -602,7 +724,8 @@ class TradingPaperRepository:
         account: PaperAccount,
         order: PaperOrder,
     ) -> None:
-        if order.side == "buy" and order.reserved_cash > 0:
+        # A buy's hold, or a working short entry's (TVP-7.2a).
+        if order.reserved_cash > 0:
             uow.connection.execute(
                 """
                 UPDATE omnix_trading_paper_balances
@@ -619,7 +742,7 @@ class TradingPaperRepository:
                     account.base_currency,
                 ),
             )
-        elif order.side == "sell":
+        if order.side == "sell":
             remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
             uow.connection.execute(
                 """
@@ -648,7 +771,7 @@ class TradingPaperRepository:
             account_row = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
+                       enabled, revision, created_at, updated_at, allow_short
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s AND account_id = %s
                  FOR UPDATE
@@ -753,7 +876,9 @@ class TradingPaperRepository:
                 commission = paper_commission(notional, account.commission_bps)
                 total_cost = notional + commission
                 rejection = None
-                if not paper_fill_is_fundable(
+                # Buying back a short is never refused for cash (TVP-7.2a): a stop must be able to close it.
+                covers_short = order.side == "buy" and position_quantity < 0 and fill_quantity <= -position_quantity
+                if not covers_short and not paper_fill_is_fundable(
                     order,
                     total_cost=total_cost,
                     available_cash=cash_available,
@@ -764,10 +889,10 @@ class TradingPaperRepository:
                 ):
                     rejection = "insufficient_paper_position"
                 if rejection:
-                    if order.side == "buy":
-                        cash_available += order.reserved_cash
-                        cash_reserved -= order.reserved_cash
-                    else:
+                    # A buy's or a short entry's cash hold goes back; an exit gives back its share of the long.
+                    cash_available += order.reserved_cash
+                    cash_reserved -= order.reserved_cash
+                    if order.side == "sell" and order.reserved_cash == 0:
                         remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
                         release_quantity = min(reserved_quantity, remaining)
                         reserved_quantity -= release_quantity
@@ -844,7 +969,15 @@ class TradingPaperRepository:
                     if position_quantity == 0:
                         average_cost = Decimal("0")
                 else:
-                    next_reserved_cash = Decimal("0")
+                    # A short entry's hold is released as it fills: the short liability holds its proceeds and margin.
+                    release = (
+                        order.reserved_cash
+                        if fill_quantity >= remaining_before
+                        else order.reserved_cash * fill_quantity / remaining_before
+                    )
+                    cash_reserved -= release
+                    cash_available += release
+                    next_reserved_cash = order.reserved_cash - release
                     if position_quantity > 0:
                         reserved_quantity -= fill_quantity
                         close_quantity = min(position_quantity, fill_quantity)
@@ -1058,7 +1191,7 @@ class TradingPaperRepository:
                 row = uow.connection.execute(
                     """
                     SELECT account_id, name, base_currency, commission_bps,
-                           enabled, revision, created_at, updated_at
+                           enabled, revision, created_at, updated_at, allow_short
                       FROM omnix_trading_paper_accounts
                      WHERE workspace_id = %s AND account_id = %s
                     """,

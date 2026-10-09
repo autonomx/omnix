@@ -21,6 +21,7 @@ export type PaperProtectionStatus = PaperPositionProtection['status'];
 
 // What the UI sends.
 export type PaperAccountCreateInput = components['schemas']['PaperAccountCreate'];
+export type PaperAccountSettingsInput = components['schemas']['PaperAccountSettings'];
 export type PaperOrderInput = components['schemas']['PaperOrderRequest'];
 export type PaperProtectionInput = components['schemas']['PaperProtectionUpsert'];
 export type PaperRiskPreviewInput = components['schemas']['PaperRiskPreviewRequest'];

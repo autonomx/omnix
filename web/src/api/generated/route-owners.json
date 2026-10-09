@@ -503,6 +503,7 @@
     "POST /api/trading/paper/accounts": "trading",
     "DELETE /api/trading/paper/accounts/{account_id}": "trading",
     "GET /api/trading/paper/accounts/{account_id}": "trading",
+    "PATCH /api/trading/paper/accounts/{account_id}": "trading",
     "POST /api/trading/paper/accounts/{account_id}/observations": "trading",
     "POST /api/trading/paper/accounts/{account_id}/orders": "trading",
     "DELETE /api/trading/paper/accounts/{account_id}/orders/{order_id}": "trading",

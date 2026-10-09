@@ -39,6 +39,8 @@ class PaperRiskPreviewRequest(BaseModel):
     entry_price: Decimal = Field(gt=0)
     stop_price: Decimal = Field(gt=0)
     desired_risk_pct: Decimal = Field(default=Decimal("0.35"), gt=0, le=20)
+    # A sell opens a short (TVP-7.2a): its stop is above the entry.
+    side: Literal["buy", "sell"] = "buy"
 
 
 class PaperRiskPreview(BaseModel):
@@ -68,11 +70,13 @@ class PaperRiskPreview(BaseModel):
 
 
 class PaperRiskOrderRequest(BaseModel):
-    """Risk intent for a new long paper entry; quantity is deliberately absent."""
+    """Risk intent for a new paper entry, long or (TVP-7.2a) short; quantity is deliberately absent."""
 
     model_config = ConfigDict(extra="forbid")
 
     order_id: str = Field(min_length=1, max_length=200)
+    # A sell opens a short; the account must allow shorting.
+    side: Literal["buy", "sell"] = "buy"
     instrument_id: str = Field(min_length=3, max_length=200)
     binding_id: str | None = Field(default=None, max_length=240)
     order_type: Literal["market", "limit", "stop", "stop_limit"] = "market"
@@ -105,7 +109,7 @@ class PaperRiskOrderRequest(BaseModel):
 
     @property
     def worst_entry_price(self) -> Decimal | None:
-        """The highest price this entry can fill at before slippage, for sizing."""
+        """The worst price this entry can fill at before slippage, for sizing (a stop-limit's limit)."""
         if self.order_type == "stop_limit":
             return self.limit_price
         return self.trigger_price
@@ -128,8 +132,9 @@ def paper_account_open_risk(
 ) -> tuple[Decimal, int]:
     """Return known downside risk plus count of exposure that cannot be bounded.
 
-    Long positions and pending long entries are included. A stop at/above cost
-    contributes zero downside risk. Exposure with no server-side stop is not
+    Positions and pending entries on both sides are included: a long risks
+    cost down to its stop, a short (TVP-7.2a) cost up to its stop. A stop past
+    cost contributes zero downside risk. Exposure with no server-side stop is not
     silently treated as zero; it is counted as unprotected so policy can fail
     closed instead of understating account risk.
     """
@@ -142,17 +147,25 @@ def paper_account_open_risk(
     total = Decimal("0")
     unprotected = 0
 
+    long_positions = {item.instrument_id for item in snapshot.positions if item.quantity > 0}
+    short_positions = {item.instrument_id for item in snapshot.positions if item.quantity < 0}
     for position in snapshot.positions:
-        if position.quantity <= 0:
+        if position.quantity == 0:
             continue
         protection = by_instrument.get(position.instrument_id)
         if protection is None or protection.stop_loss is None:
             unprotected += 1
             continue
-        total += max(Decimal("0"), position.average_cost - protection.stop_loss) * position.quantity
+        if position.quantity > 0:
+            total += max(Decimal("0"), position.average_cost - protection.stop_loss) * position.quantity
+        else:
+            total += max(Decimal("0"), protection.stop_loss - position.average_cost) * abs(position.quantity)
 
     for order in snapshot.open_orders:
-        if order.side != "buy":
+        # A sell against a long, or a buy against a short, only reduces it; any other order is an entry.
+        if order.side == "sell" and order.instrument_id in long_positions:
+            continue
+        if order.side == "buy" and order.instrument_id in short_positions:
             continue
         remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
         if remaining <= 0:
@@ -162,7 +175,8 @@ def paper_account_open_risk(
         if protection is None or protection.stop_loss is None or entry is None:
             unprotected += 1
             continue
-        total += max(Decimal("0"), entry - protection.stop_loss) * remaining
+        distance = entry - protection.stop_loss if order.side == "buy" else protection.stop_loss - entry
+        total += max(Decimal("0"), distance) * remaining
 
     return total, unprotected
 
@@ -196,15 +210,23 @@ def preview_paper_risk(
         (item for item in snapshot.balances if item.currency == snapshot.account.base_currency),
         None,
     )
-    buying_power = balance.available if balance is not None else Decimal("0")
+    # Open shorts hold twice what they cost to buy back: their proceeds and an equal margin (TVP-7.2a).
+    short_liability = sum(
+        (-item.quantity * item.average_cost for item in snapshot.positions if item.quantity < 0),
+        Decimal("0"),
+    )
+    buying_power = max(Decimal("0"), (balance.available if balance is not None else Decimal("0")) - 2 * short_liability)
     spread = observation.spread_bps
     reasons: list[str] = []
+    is_short = request.side == "sell"
+    holds_long = any(item.instrument_id == request.instrument_id and item.quantity > 0 for item in snapshot.positions)
     existing_target_exposure = any(
         item.instrument_id == request.instrument_id and item.quantity != 0
         for item in snapshot.positions
     ) or any(
         item.instrument_id == request.instrument_id
-        and item.side == "buy"
+        # A working entry on either side (a sell against a long only reduces it).
+        and (item.side == "buy" or not holds_long)
         and item.status == "open"
         and item.quantity > item.filled_quantity
         for item in snapshot.open_orders
@@ -212,8 +234,12 @@ def preview_paper_risk(
 
     if existing_target_exposure:
         reasons.append("EXISTING_INSTRUMENT_EXPOSURE")
-    if request.stop_price >= request.entry_price:
+    if is_short and not snapshot.account.allow_short:
+        reasons.append("SHORTING_NOT_ALLOWED")
+    if not is_short and request.stop_price >= request.entry_price:
         reasons.append("STOP_NOT_BELOW_ENTRY")
+    if is_short and request.stop_price <= request.entry_price:
+        reasons.append("STOP_NOT_ABOVE_ENTRY")
     if request.desired_risk_pct > active.max_risk_per_trade_pct:
         reasons.append("RISK_PERCENT_EXCEEDS_POLICY")
     if equity <= 0:
@@ -237,7 +263,7 @@ def preview_paper_risk(
     if open_risk_remaining <= 0 and open_risk_limit > 0:
         reasons.append("OPEN_RISK_LIMIT")
 
-    risk_per_share = request.entry_price - request.stop_price
+    risk_per_share = request.stop_price - request.entry_price if is_short else request.entry_price - request.stop_price
     requested_risk = equity * request.desired_risk_pct / Decimal("100") if equity > 0 else Decimal("0")
     risk_budget = min(requested_risk, open_risk_remaining, daily_loss_remaining)
     commission_factor = Decimal("1") + snapshot.account.commission_bps / Decimal("10000")
@@ -301,7 +327,7 @@ def risk_order_request(
         order_id=intent.order_id,
         instrument_id=intent.instrument_id,
         binding_id=intent.binding_id,
-        side="buy",
+        side=intent.side,
         order_type=intent.order_type,
         quantity=quantity,
         limit_price=(
@@ -327,9 +353,15 @@ def risk_protection_request(
     """The bracket for a risk entry; a trailing stop-loss trails by the sized risk distance."""
     trail_amount = None
     if intent.trailing_stop_loss:
-        if entry_price is None or entry_price <= intent.stop_loss:
-            raise ValueError("paper_trailing_stop_requires_stop_below_entry")
-        trail_amount = entry_price - intent.stop_loss
+        if intent.side == "sell":
+            # A short's stop trails above the lowest price.
+            if entry_price is None or entry_price >= intent.stop_loss:
+                raise ValueError("paper_trailing_stop_requires_stop_above_entry")
+            trail_amount = intent.stop_loss - entry_price
+        else:
+            if entry_price is None or entry_price <= intent.stop_loss:
+                raise ValueError("paper_trailing_stop_requires_stop_below_entry")
+            trail_amount = entry_price - intent.stop_loss
     return PaperProtectionUpsert(
         instrument_id=intent.instrument_id,
         binding_id=intent.binding_id,
