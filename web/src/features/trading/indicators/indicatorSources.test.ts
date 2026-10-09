@@ -4,7 +4,7 @@ import { alertIndicatorChoices } from '../alertIndicatorSources';
 import { parseIndicatorInstances } from '../persistence/workspaceDocument';
 import type { MarketBar } from '../tradingTypes';
 import { indicatorOutputs, type CoreIndicatorInstance, type IndicatorOutput } from './coreIndicators';
-import { calculateWithSources, indicatorSourceChoices, orderBySources, sourceBars } from './indicatorSources';
+import { calculateWithSources, indicatorSourceChoices, orderBySources, resolveSourceOutput, sourceBars } from './indicatorSources';
 
 const bars: MarketBar[] = Array.from({ length: 60 }, (_, i) => fixture({
   instrument_id: 'x', interval: '1h', start_time: new Date(Date.UTC(2026, 0, 5, i)).toISOString(), end_time: new Date(Date.UTC(2026, 0, 5, i + 1)).toISOString(),
@@ -51,6 +51,41 @@ describe('indicator on indicator (TVP-6.5)', () => {
     expect(renamed.find((output) => output.key === 'sma:5')?.points.length).toBeGreaterThan(0);
   });
 
+  it('keeps a pane indicator in its own pane, whatever its source', () => {
+    const rsiOfSma: CoreIndicatorInstance = { id: 'rsi', period: 14, enabled: true, source: { indicatorId: 'sma', output: 'sma:20' } };
+    const outputs = calculateWithSources(bars, [rsiOfSma, { id: 'sma', period: 20, enabled: true }], raw);
+    const rsiLine = outputs.find((output) => output.key.startsWith('rsi:'))!;
+    expect(rsiLine.pane).toBe(1);
+    expect(rsiLine.paneOf).toBeUndefined();
+  });
+
+  it('follows a source line by name when the source inputs change its key', () => {
+    const macd: CoreIndicatorInstance = { id: 'macd', period: 9, fastPeriod: 10, slowPeriod: 26, signalPeriod: 9, enabled: true };
+    const computed = calculateWithSources(bars, [macd], raw);
+    expect(resolveSourceOutput({ indicatorId: 'macd', output: 'macd:12:26:histogram' }, computed)?.key).toBe('macd:10:26:histogram');
+    expect(resolveSourceOutput({ indicatorId: 'macd', output: 'macd:12:26:gone' }, computed)?.key).toBe(computed[0].key);
+  });
+
+  it('computes a hidden indicator only when a shown one reads it', () => {
+    const calls: string[] = [];
+    const counting = (source: readonly MarketBar[], indicator: CoreIndicatorInstance) => { calls.push(String(indicator.id)); return raw(source, indicator); };
+    calculateWithSources(bars, [{ ...rsi, visible: false }, { id: 'ema', period: 5, enabled: true }], counting);
+    expect(calls).toEqual(['ema']);
+    calls.length = 0;
+    calculateWithSources(bars, [{ ...rsi, visible: false }, smaOfRsi], counting);
+    expect(calls).toEqual(['rsi', 'sma']);
+  });
+
+  it('offers only continuous lines of indicators the worker computes', () => {
+    const outputs: IndicatorOutput[] = [
+      { key: 'rsi:14', title: 'RSI', pane: 1, kind: 'line', points: [] },
+      { key: 'tv-williams-fractal:up-fractal', title: 'Up', pane: 0, kind: 'line', render: 'markers', points: [] },
+      { key: 'tv-volume-delta:delta', title: 'VD', pane: 1, kind: 'histogram', points: [] },
+    ];
+    const instances: CoreIndicatorInstance[] = [rsi, { id: 'tv-williams-fractal', period: 2, enabled: true } as unknown as CoreIndicatorInstance, { id: 'tv-volume-delta', period: 1, enabled: true } as unknown as CoreIndicatorInstance];
+    expect(indicatorSourceChoices({ id: 'sma', period: 5, enabled: true }, instances, outputs, (id) => id !== 'tv-volume-delta').map((choice) => choice.value)).toEqual(['rsi:14']);
+  });
+
   it('offers the other indicators lines as sources to indicators that take one', () => {
     const outputs = calculateWithSources(bars, [rsi, { id: 'sma', period: 5, enabled: true }], raw);
     expect(indicatorSourceChoices({ id: 'sma', period: 5, enabled: true }, [rsi, { id: 'sma', period: 5, enabled: true }], outputs).map((choice) => choice.value)).toEqual(['rsi:14']);
@@ -64,6 +99,12 @@ describe('indicator on indicator (TVP-6.5)', () => {
     expect(smaChoice.inputs.source).toMatchObject({ indicator_id: 'rsi', output: 'rsi:14', inputs: { period: 14 } });
     const [greyed] = alertIndicatorChoices([smaOfRsi, rsi], outputs, new Set(['sma']));
     expect(greyed.unavailable).toMatch(/source indicator/);
+    // A disabled source: the chart draws the SMA of the close, and so does the alert.
+    const [onClose] = alertIndicatorChoices([smaOfRsi, { ...rsi, enabled: false }], outputs, new Set(['sma', 'rsi']));
+    expect(onClose.inputs.source).toBeNull();
+    // The alert names the source line the chart draws now.
+    const renamed = calculateWithSources(bars, [smaOfRsi, { ...rsi, period: 21 }], raw);
+    expect(alertIndicatorChoices([smaOfRsi, { ...rsi, period: 21 }], renamed, new Set(['sma', 'rsi']))[0].inputs.source?.output).toBe('rsi:21');
   });
 
   it('keeps the source in saved workspaces and rejects a malformed one', () => {

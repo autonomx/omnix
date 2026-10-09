@@ -65,4 +65,11 @@ def compute_on_source(
 
 
 def find_output(outputs: Sequence[IndicatorOutputSeries], key: str) -> IndicatorOutputSeries | None:
-    return next((output for output in outputs if output.key == key), None)
+    """The source output a key names: that key, else the line with the same name (keys carry the inputs, so
+    ``macd:12:26:histogram`` is ``macd:10:26:histogram`` after a change), else the first line, like the browser's
+    ``resolveSourceOutput``."""
+    exact = next((output for output in outputs if output.key == key), None)
+    if exact is not None:
+        return exact
+    name = key.split(":")[-1]
+    return next((output for output in outputs if output.key.split(":")[-1] == name), outputs[0] if outputs else None)

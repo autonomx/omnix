@@ -100,3 +100,13 @@ def test_sources_are_one_level_and_only_on_indicators_that_take_one() -> None:
     )
     with pytest.raises(ValueError, match="has no output"):
         validate_conditions_against_registry([AlertConditionSpec(source=missing, operator="greater_than", target={"kind": "value", "value": "1"})])
+
+
+def test_a_source_line_is_found_by_name_when_its_inputs_change() -> None:
+    from app.apps.trading.indicators.registry import IndicatorOutputSeries
+    from app.apps.trading.indicators.sources import find_output
+
+    outputs = [IndicatorOutputSeries("macd:10:26:line", ()), IndicatorOutputSeries("macd:10:26:histogram", ())]
+    assert find_output(outputs, "macd:12:26:histogram").key == "macd:10:26:histogram"
+    assert find_output(outputs, "macd:10:26:line").key == "macd:10:26:line"
+    assert find_output([], "rsi:14") is None

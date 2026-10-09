@@ -28,6 +28,17 @@ export function acceptsIndicatorSource(id: string): boolean {
   return TARGETS.has(id);
 }
 
+/**
+ * The output a source reference reads among the outputs `computed`: its key, else the source indicator's line with the
+ * same name (keys carry the inputs: `macd:12:26:histogram` is `macd:10:26:histogram` after the fast period changes),
+ * else its first line. `indicators/sources.py` resolves keys the same way.
+ */
+export function resolveSourceOutput(source: IndicatorSourceRef, computed: readonly IndicatorOutput[]): IndicatorOutput | undefined {
+  const own = computed.filter((output) => output.key.split(':', 1)[0] === source.indicatorId);
+  const name = source.output.split(':').at(-1);
+  return own.find((output) => output.key === source.output) ?? own.find((output) => output.key.split(':').at(-1) === name) ?? own[0];
+}
+
 /** The bars an output's values make: open, high, low and close all the value, on the bars where it is finite. */
 export function sourceBars(bars: readonly MarketBar[], points: IndicatorOutput['points']): MarketBar[] {
   const values = new Map(points.filter((point) => Number.isFinite(point.value)).map((point) => [point.time, point.value]));
@@ -69,21 +80,25 @@ export function calculateWithSources(
   raw: (bars: readonly MarketBar[], indicator: CoreIndicatorInstance) => IndicatorOutput[],
   style: (outputs: IndicatorOutput[], indicator: CoreIndicatorInstance) => IndicatorOutput[] = (outputs) => outputs,
 ): IndicatorOutput[] {
-  const computed = new Map<string, IndicatorOutput>();
-  return orderBySources(indicators).flatMap((indicator) => {
+  const computed: IndicatorOutput[] = [];
+  const ordered = orderBySources(indicators);
+  // A hidden indicator is computed only when a shown one reads it.
+  const read = new Set(ordered.filter((indicator) => indicator.source && indicator.visible !== false).map((indicator) => indicator.source!.indicatorId));
+  return ordered.flatMap((indicator) => {
+    if (indicator.visible === false && !read.has(String(indicator.id))) return [];
     let outputs: IndicatorOutput[];
     if (indicator.source) {
-      const { indicatorId, output } = indicator.source;
-      // The key carries the source's inputs (rsi:14); after they change, its first line stands in.
-      const source = computed.get(output) ?? [...computed.values()].find((item) => item.key.split(':', 1)[0] === indicatorId);
+      const source = resolveSourceOutput(indicator.source, computed);
       if (!source) return [];
+      // An indicator keeps its own pane, as in TradingView; an overlay (a moving average) on a pane indicator joins
+      // that indicator's pane, since its values are on that scale.
       outputs = raw(sourceBars(bars, source.points), indicator).map((output) => (
-        source.pane === 1 ? { ...output, pane: 1 as const, paneOf: source.paneOf ?? source.key.split(':', 1)[0] } : { ...output, pane: 0 as const }
+        output.pane === 0 && source.pane === 1 ? { ...output, pane: 1 as const, paneOf: source.paneOf ?? source.key.split(':', 1)[0] } : output
       ));
     } else {
       outputs = raw(bars, indicator);
     }
-    for (const output of outputs) computed.set(output.key, output);
+    computed.push(...outputs);
     return style(outputs, indicator);
   });
 }
@@ -93,12 +108,17 @@ export function indicatorSourceChoices(
   indicator: CoreIndicatorInstance,
   indicators: readonly CoreIndicatorInstance[],
   outputs: readonly IndicatorOutput[],
+  /** Whether the worker computes an indicator; those reading external or intrabar data load separately and can't be sources. */
+  computedLocally: (id: string) => boolean = () => true,
 ): Array<{ value: string; label: string; ref: IndicatorSourceRef }> {
   if (!acceptsIndicatorSource(String(indicator.id))) return [];
-  const others = new Set(indicators.filter((item) => item.id !== indicator.id && item.enabled && !item.source).map((item) => String(item.id)));
+  const others = new Set(indicators.filter((item) => item.id !== indicator.id && item.enabled && !item.source && computedLocally(String(item.id)))
+    .map((item) => String(item.id)));
   return outputs.flatMap((output) => {
     const indicatorId = output.key.split(':', 1)[0];
-    if (!others.has(indicatorId) || output.kind !== 'line' && output.kind !== 'histogram') return [];
+    // Continuous lines only: markers and levels have gaps, which an indicator over them would read across.
+    const continuous = (output.kind === 'line' || output.kind === 'histogram') && (output.render === undefined || output.render === 'line');
+    if (!others.has(indicatorId) || !continuous) return [];
     return [{ value: output.key, label: output.title, ref: { indicatorId, output: output.key } }];
   });
 }

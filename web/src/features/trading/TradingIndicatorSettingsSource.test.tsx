@@ -31,3 +31,24 @@ describe('indicator source input (TVP-6.5)', () => {
     expect(screen.queryByLabelText('Indicator source')).toBeNull();
   });
 });
+
+describe('removing a source indicator (TVP-6.5 review)', () => {
+  it('sets what read it back to the close', async () => {
+    const { useTradingStore } = await import('./tradingStore');
+    const store = useTradingStore.getState();
+    const chartId = store.charts[0].chartId;
+    const enabled = (id: 'rsi' | 'sma') => useTradingStore.getState().charts[0].indicators.some((indicator) => indicator.id === id && indicator.enabled);
+    if (!enabled('rsi')) store.toggleIndicator(chartId, 'rsi');
+    if (!enabled('sma')) store.toggleIndicator(chartId, 'sma');
+    useTradingStore.getState().updateIndicator(chartId, 'sma', { source: { indicatorId: 'rsi', output: 'rsi:14' } });
+    useTradingStore.getState().toggleIndicator(chartId, 'rsi');
+    const sma = useTradingStore.getState().charts[0].indicators.find((indicator) => indicator.id === 'sma');
+    expect(sma?.source).toBeNull();
+  });
+
+  it('draws an alert on an overlay of a pane indicator in that pane', async () => {
+    const { chartAlertSourceIndicatorId } = await import('./alertIndicatorSources');
+    const alert = { condition_type: 'conditions', threshold: 0, parameters: {}, conditions: [{ source: { kind: 'indicator', indicator_id: 'sma', inputs: { period: 5, source: { indicator_id: 'rsi', inputs: { period: 14 }, output: 'rsi:14' } }, output: 'sma:5' }, operator: 'crossing', target: { kind: 'value', value: '50' } }] };
+    expect(chartAlertSourceIndicatorId(alert)).toBe('rsi');
+  });
+});

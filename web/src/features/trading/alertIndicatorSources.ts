@@ -5,6 +5,7 @@
 // conditions alert, so the server evaluates the same indicator, inputs and
 // output on its own bars.
 import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIndicators';
+import { orderBySources, resolveSourceOutput } from './indicators/indicatorSources';
 import { tradingViewBuiltInUsesSessions } from './indicators/tradingViewBuiltIns';
 import { indicatorContextLabel } from './tradingChartPanelModel';
 import type { components } from './api/generated';
@@ -46,12 +47,17 @@ export type AlertIndicatorChoice = {
 /** What the dialog holds for a chart-indicator condition. */
 export type AlertIndicatorSelection = { key: string; output: string; operator: AlertIndicatorOperator };
 
-/** The alert inputs of an instance; with its source's (TVP-6.5) when it reads another indicator on the chart. */
-function inputsOf(instance: CoreIndicatorInstance, instances: readonly CoreIndicatorInstance[] = []): AlertIndicatorChoice['inputs'] {
-  const sourceInstance = instance.source ? instances.find((item) => item.id === instance.source!.indicatorId) : undefined;
+/**
+ * The alert inputs of an instance; with its source's (TVP-6.5) when the chart computes it on another indicator. The
+ * source is resolved as the chart resolves it (`orderBySources`), and its output key is the one the chart draws now.
+ */
+function inputsOf(instance: CoreIndicatorInstance, instances: readonly CoreIndicatorInstance[] = [], outputs: readonly IndicatorOutput[] = []): AlertIndicatorChoice['inputs'] {
+  const resolved = instance.source ? orderBySources(instances.filter((item) => item.enabled)).find((item) => item.id === instance.id)?.source : null;
+  const sourceInstance = resolved ? instances.find((item) => item.id === resolved.indicatorId) : undefined;
+  const output = resolved ? resolveSourceOutput(resolved, outputs)?.key ?? resolved.output : null;
   return {
-    source: instance.source && sourceInstance
-      ? { indicator_id: String(sourceInstance.id), inputs: inputsOf(sourceInstance), output: instance.source.output }
+    source: resolved && sourceInstance && output
+      ? { indicator_id: String(sourceInstance.id), inputs: inputsOf(sourceInstance), output }
       : null,
     period: instance.period,
     fast_period: instance.fastPeriod ?? null,
@@ -91,7 +97,7 @@ export function alertIndicatorChoices(
           : LAGGED_SIGNAL_INDICATORS.has(instance.id)
             ? 'Its marks are confirmed bars later, so server alerts never see them on the latest bar'
             : undefined;
-    return { key: instance.id, label: indicatorContextLabel(instance), outputs: lines, inputs: inputsOf(instance, instances), ...(unavailable ? { unavailable } : {}) };
+    return { key: instance.id, label: indicatorContextLabel(instance), outputs: lines, inputs: inputsOf(instance, instances, outputs), ...(unavailable ? { unavailable } : {}) };
   });
 }
 
@@ -169,6 +175,12 @@ function singleIndicatorCondition(alert: ChartAlert): IndicatorValueCondition | 
 export function isAppearsCondition(condition: { source: { kind: string }; operator?: string; target?: { kind: string; value?: string | number } | null }): boolean {
   return condition.source.kind === 'indicator' && condition.operator === 'greater_than' && condition.target?.kind === 'value'
     && Number(condition.target.value) <= Number(APPEARS_VALUE) / 10;
+}
+
+/** The indicator a single indicator condition reads instead of the close (TVP-6.5), if any. */
+export function chartAlertSourceIndicatorId(alert: ChartAlert): string | null {
+  const condition = singleIndicatorCondition(alert) as (IndicatorValueCondition & { source: { inputs?: { source?: { indicator_id?: string } | null } } }) | null;
+  return condition?.source.inputs?.source?.indicator_id ?? null;
 }
 
 /** The indicator an alert is drawn on: a legacy indicator alert's, or a single "indicator line vs value" condition's. */
