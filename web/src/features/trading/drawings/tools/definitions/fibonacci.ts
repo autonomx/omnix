@@ -52,12 +52,17 @@ export const fibonacciTool = defineDrawingTool({
   alertLevels: ([first, second], properties, services) => {
     if (!first || !second) return [];
     const left = Date.parse(first.time) <= Date.parse(second.time) ? first.time : second.time;
-    // Keyed by position, so editing a level's value keeps its alerts on it.
-    return recordsProperty(properties, 'levels', DEFAULT_LEVELS).flatMap((record, index) => {
+    // Keyed by value: removing or reordering levels keeps each alert on its level; editing a level's value takes
+    // its alerts off it (they are offered for disabling), never onto another level.
+    const seen = new Map<number, number>();
+    return recordsProperty(properties, 'levels', DEFAULT_LEVELS).flatMap((record) => {
       const level = record.value;
       if (typeof level !== 'number' || !Number.isFinite(level) || record.visible === false) return [];
+      const count = (seen.get(level) ?? 0) + 1;
+      seen.set(level, count);
       const price = first.price + (second.price - first.price) * level;
-      const alertLevel = horizontalAlertLevel(`level-${index}`, `Level ${level} (${services.formatPrice(price)})`, { time: left, price }, 'right', services);
+      const key = count === 1 ? `level-${level}` : `level-${level}-${count}`;
+      const alertLevel = horizontalAlertLevel(key, `Level ${level} (${services.formatPrice(price)})`, { time: left, price }, 'right', services);
       return alertLevel ? [alertLevel] : [];
     });
   },

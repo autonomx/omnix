@@ -4,12 +4,14 @@ import type { TradingDrawing } from './drawings/drawingCommands';
 import type { DrawingAlertLevel } from './drawings/tools/types';
 import type { TradingAlert } from './tradingTypes';
 
-const state = vi.hoisted(() => ({ alerts: [] as unknown[], levels: ['upper', 'lower'] }));
+// levels: what this chart offers; keys: the levels the drawing has at all.
+const state = vi.hoisted(() => ({ alerts: [] as unknown[], levels: ['upper', 'lower'], keys: ['upper', 'lower'] }));
 const api = vi.hoisted(() => ({ updateAlert: vi.fn() }));
 const mutations = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn(async () => undefined) }));
 vi.mock('./useTradingAlerts', () => ({ useTradingAlerts: () => ({ data: state.alerts }), useTradingAlertMutations: () => ({ ...mutations }) }));
 vi.mock('./tradingApi', () => ({ tradingApi: api }));
 vi.mock('./drawings/TradingDrawingOverlay', () => ({
+  drawingAlertLevelKeys: () => new Set(state.keys),
   drawingMenuEntries: (drawing: TradingDrawing) => ({
     drawingAlertLevels: [
       { key: 'upper', label: 'Upper', anchors: [drawing.points[0], drawing.points[1]], extend: 'right', interpolation: 'bars' },
@@ -37,6 +39,7 @@ const sync = (props: Props) => <DrawingAlertSync adapter={adapter} instrumentId=
 
 beforeEach(() => {
   state.levels = ['upper', 'lower'];
+  state.keys = ['upper', 'lower'];
   api.updateAlert.mockImplementation(async (item: TradingAlert) => item);
 });
 afterEach(() => {
@@ -103,9 +106,75 @@ describe('drawing alerts follow their drawing (TVP-1.4)', () => {
     vi.useFakeTimers();
     state.alerts = [alert('lower', [{ time: T0, price: '95' }, { time: T1, price: '105' }])];
     state.levels = ['upper'];
+    state.keys = ['upper'];
     render(sync({ drawings: [channel(100)] }));
     await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
     expect(screen.getByRole('alertdialog')).toHaveTextContent('drawing or level that is gone');
+  });
+
+  it('leaves alone a level the drawing has but this chart cannot offer, and does not ask again once kept', async () => {
+    vi.useFakeTimers();
+    state.alerts = [alert('lower', [{ time: T0, price: '95' }, { time: T1, price: '105' }])];
+    state.levels = ['upper'];
+    const view = render(sync({ drawings: [channel(100)] }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(api.updateAlert).not.toHaveBeenCalled();
+    state.keys = ['upper'];
+    view.rerender(sync({ drawings: [channel(101)] }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    view.rerender(sync({ drawings: [channel(102)] }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('asks on the active chart only', async () => {
+    state.alerts = [alert('upper', [])];
+    const view = render(sync({ adapter: null, drawings: [channel(100)], active: false }));
+    view.rerender(sync({ adapter: null, drawings: [], active: false }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    view.rerender(sync({ adapter: null, drawings: [], active: true }));
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+  });
+
+  it('disables the alerts as they are now, and keeps asking only about the ones that failed', async () => {
+    const upper = alert('upper', []);
+    const lower = alert('lower', []);
+    const other = { ...alert('other', []), parameters: { ...lower.parameters, drawing_level: 'upper' } } as TradingAlert;
+    state.alerts = [upper, lower, other];
+    const view = render(sync({ adapter: null, drawings: [channel(100)] }));
+    view.rerender(sync({ adapter: null, drawings: [] }));
+    await screen.findByRole('alertdialog');
+    // Disabled elsewhere meanwhile: nothing to do for it.
+    state.alerts = [upper, { ...lower, enabled: false }, other];
+    view.rerender(sync({ adapter: null, drawings: [] }));
+    api.updateAlert.mockImplementation(async (item: TradingAlert) => {
+      if (item.alert_id === 'a-other') throw new Error('Trading request failed (500)');
+      return { ...item, enabled: false };
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('still armed');
+    expect(api.updateAlert.mock.calls.map((call) => (call[0] as TradingAlert).alert_id).sort()).toEqual(['a-other', 'a-upper']);
+    expect(mutations.replace).toHaveBeenCalledWith(expect.objectContaining({ alert_id: 'a-upper', enabled: false }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('An alert follows');
+  });
+
+  it('tries a failing move again once the drawing moves again', async () => {
+    vi.useFakeTimers();
+    api.updateAlert.mockRejectedValue(new Error('Trading request failed (500)'));
+    state.alerts = [alert('upper', [{ time: T0, price: '100' }, { time: T1, price: '110' }])];
+    const view = render(sync({ drawings: [channel(100)] }));
+    for (const price of [120, 120, 120]) {
+      view.rerender(sync({ drawings: [channel(price)] }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
+    }
+    const tries = api.updateAlert.mock.calls.length;
+    expect(tries).toBeLessThanOrEqual(2);
+    view.rerender(sync({ drawings: [channel(130)] }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(DRAWING_ALERT_SETTLE_MS); });
+    expect(api.updateAlert.mock.calls.length).toBe(tries + 1);
   });
 
   it('never prompts for a drawing it never saw, such as one on another chart', () => {
