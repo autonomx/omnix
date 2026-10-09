@@ -1,4 +1,4 @@
-import { groupSymbol, tabsWithGroupSymbol, withGroupSymbol, type ChartLinkGroup } from './chartLinkGroups';
+import { chartsJoiningGroup, linkedSymbolChange, type ChartLinkGroup } from './chartLinkGroups';
 import { loadDrawingToolSettings, saveDrawingToolSettings, type DrawingToolSettings } from './drawings/drawingToolSettings';
 import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
@@ -297,6 +297,27 @@ function syncActiveTab(
   };
 }
 
+/** A chart change, with the tab's links and the chart's colour group (TVP-4.1) carrying it to other charts. */
+function chartUpdate(state: TradingWorkspaceState, chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) {
+  const instrumentChanged = patch.instrumentId !== undefined;
+  const linkedInstrument = instrumentChanged && state.links.instrument;
+  const linkedInterval = patch.interval !== undefined && state.links.interval;
+  const charts = state.charts.map((chart) => {
+    if (chart.chartId === chartId) {
+      return { ...chart, ...patch, ...(instrumentChanged && patch.bindingId === undefined ? { bindingId: null } : {}) };
+    }
+    return {
+      ...chart,
+      ...(linkedInstrument ? { instrumentId: patch.instrumentId, bindingId: null } : {}),
+      ...(linkedInterval ? { interval: patch.interval } : {}),
+    };
+  });
+  // A chart in a colour group carries its new symbol to the group's charts in every tab.
+  const linked = linkedSymbolChange(state, chartId, patch.instrumentId, charts);
+  const next = syncActiveTab(state, { charts: linked?.charts ?? charts });
+  return linked ? { ...next, tabs: linked.otherTabs(next.tabs) } : next;
+}
+
 export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   activeTabId: 'tab-1',
   tabs: [initialSessionTab()],
@@ -466,42 +487,8 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
     return { drawingToolSettings };
   }),
   setDrawingSnapMode: (drawingSnapMode) => set({ drawingSnapMode }),
-  updateChart: (chartId, patch) => set((state) => {
-    const instrumentChanged = patch.instrumentId !== undefined;
-    const linkedInstrument = instrumentChanged && state.links.instrument;
-    const linkedInterval = patch.interval !== undefined && state.links.interval;
-    const charts = state.charts.map((chart) => {
-        if (chart.chartId === chartId) {
-          return {
-            ...chart,
-            ...patch,
-            ...(instrumentChanged && patch.bindingId === undefined ? { bindingId: null } : {}),
-          };
-        }
-        return {
-          ...chart,
-          ...(linkedInstrument ? { instrumentId: patch.instrumentId, bindingId: null } : {}),
-          ...(linkedInterval ? { interval: patch.interval } : {}),
-        };
-      });
-    // A chart in a colour group carries its new symbol to the group's charts in every tab (TVP-4.1).
-    const group = state.charts.find((chart) => chart.chartId === chartId)?.linkGroup;
-    if (!instrumentChanged || !group || patch.instrumentId === undefined) return syncActiveTab(state, { charts });
-    const symbol = { instrumentId: patch.instrumentId, bindingId: null };
-    const next = syncActiveTab(state, { charts: withGroupSymbol(charts, group, symbol, chartId) });
-    return { ...next, tabs: tabsWithGroupSymbol(next.tabs, state.activeTabId, group, symbol) };
-  }),
-  setChartLinkGroup: (chartId, group) => set((state) => {
-    const symbol = group ? groupSymbol(state.charts, state.tabs, state.activeTabId, group, chartId) : null;
-    return syncActiveTab(state, { charts: state.charts.map((chart) => {
-      if (chart.chartId !== chartId) return chart;
-      const { linkGroup: _previous, ...rest } = chart;
-      if (!group) return rest;
-      return symbol && symbol.instrumentId !== chart.instrumentId
-        ? { ...rest, linkGroup: group, instrumentId: symbol.instrumentId, bindingId: null }
-        : { ...rest, linkGroup: group };
-    }) });
-  }),
+  updateChart: (chartId, patch) => set((state) => chartUpdate(state, chartId, patch)),
+  setChartLinkGroup: (chartId, group) => set((state) => syncActiveTab(state, { charts: chartsJoiningGroup(state, chartId, group) })),
   toggleIndicator: (chartId, id, period) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => {
       if (chart.chartId !== chartId) return chart;
       const existing = chart.indicators.find((indicator) => indicator.id === id);

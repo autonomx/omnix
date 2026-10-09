@@ -47,3 +47,38 @@ export function groupSymbol(
     ?? tabs.filter((tab) => tab.tabId !== activeTabId).flatMap((tab) => tab.charts).find((chart) => chart.linkGroup === group);
   return member ? { instrumentId: member.instrumentId, bindingId: member.bindingId } : null;
 }
+
+type LinkState = { charts: readonly TradingChartState[]; tabs: readonly TradingTabState[]; activeTabId: string };
+
+/**
+ * A symbol change on `chartId` carried to its group: the active tab's charts (after the change) and a function that
+ * applies it to the other tabs. Null when the chart is in no group or the symbol did not change.
+ */
+export function linkedSymbolChange(
+  state: LinkState,
+  chartId: string,
+  instrumentId: string | undefined,
+  charts: readonly TradingChartState[],
+): { charts: TradingChartState[]; otherTabs: (tabs: readonly TradingTabState[]) => TradingTabState[] } | null {
+  const group = state.charts.find((chart) => chart.chartId === chartId)?.linkGroup;
+  if (!group || instrumentId === undefined) return null;
+  const symbol = { instrumentId, bindingId: null };
+  return {
+    charts: withGroupSymbol(charts, group, symbol, chartId),
+    otherTabs: (tabs) => tabsWithGroupSymbol(tabs, state.activeTabId, group, symbol),
+  };
+}
+
+/** The active tab's charts with `chartId` in `group` (taking the group's symbol), or out of any group with null. */
+export function chartsJoiningGroup(state: LinkState, chartId: string, group: ChartLinkGroup | null): TradingChartState[] {
+  const symbol = group ? groupSymbol(state.charts, state.tabs, state.activeTabId, group, chartId) : null;
+  return state.charts.map((chart) => {
+    if (chart.chartId !== chartId) return chart;
+    const rest = { ...chart };
+    delete rest.linkGroup;
+    if (!group) return rest;
+    return symbol && symbol.instrumentId !== chart.instrumentId
+      ? { ...rest, linkGroup: group, instrumentId: symbol.instrumentId, bindingId: null }
+      : { ...rest, linkGroup: group };
+  });
+}
