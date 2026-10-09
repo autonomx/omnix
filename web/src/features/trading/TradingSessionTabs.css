@@ -176,3 +176,12 @@
     background: color-mix(in srgb, var(--c-blue-580) 28%, transparent);
   }
 }
+
+.trading-session-tab{position:relative}
+.trading-session-tab-launcher{position:relative;display:flex}
+.trading-session-tab-menu{position:absolute;z-index:40;top:calc(100% + 4px);left:0;display:flex;min-width:200px;max-height:60vh;overflow:auto;flex-direction:column;padding:4px;border:1px solid var(--c-slate-890);border-radius:6px;background:var(--c-slate-170-2);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.trading-session-tab-launcher .trading-session-tab-menu{left:auto;right:0}
+.trading-session-tab-menu button{padding:6px 10px;border:0;background:none;color:inherit;text-align:left;font:inherit;cursor:pointer;border-radius:4px}
+.trading-session-tab-menu button:hover:not(:disabled),.trading-session-tab-menu button:focus-visible{background:rgba(128,128,128,.18)}
+.trading-session-tab-menu button:disabled{opacity:.45;cursor:default}
+.trading-session-tab-menu small{padding:6px 10px 2px;opacity:.7;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
