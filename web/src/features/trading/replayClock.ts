@@ -1,4 +1,4 @@
-import { tradingIntervalMinutes } from './tradingIntervals';
+import { tradingIntervalDurationMs, tradingIntervalMinutes } from './tradingIntervals';
 import type { MarketBar } from './tradingTypes';
 
 /**
@@ -9,9 +9,9 @@ import type { MarketBar } from './tradingTypes';
  * intervals stay in step. Stepping moves the clock to the close of the next
  * (or previous) bar of the active chart.
  *
- * Sub-bar playback (TVP-8.1, after TVP-0.6) will move the clock in steps
- * smaller than one bar; the clock is already a timestamp, so only the step
- * source changes.
+ * Sub-bar playback (TVP-8.1 with the TVP-0.6 intrabar loader) moves the
+ * clock by an update interval smaller than one bar; each chart then shows its
+ * forming bar as it stood at the clock.
  */
 
 /** The nine replay speeds; 1× plays one bar a second. */
@@ -39,6 +39,36 @@ export function parseReplaySpeed(value: unknown): ReplaySpeed {
   return REPLAY_SPEEDS.reduce<ReplaySpeed>((best, speed) => (
     Math.abs(Math.log(speed / numeric)) < Math.abs(Math.log(best / numeric)) ? speed : best
   ), REPLAY_SPEEDS[0]);
+}
+
+/** Update intervals for sub-bar playback; a chart offers those that fit its interval (see `replayUpdateIntervals`). */
+export const REPLAY_UPDATE_INTERVALS = ['1s', '5s', '15s', '1m', '5m', '15m', '1h', '4h'] as const;
+
+/** The update intervals that fit inside `interval` with at most `maxPerBar` steps a bar (one intrabar request). */
+export function replayUpdateIntervals(interval: string, maxPerBar = 5_000): string[] {
+  const chart = tradingIntervalDurationMs(interval);
+  if (chart === null) return [];
+  return REPLAY_UPDATE_INTERVALS.filter((option) => {
+    const step = tradingIntervalDurationMs(option);
+    return step !== null && step < chart && chart % step === 0 && chart / step <= maxPerBar;
+  });
+}
+
+/** The step in ms of `updateInterval` on bars of `interval`, or null for bar-by-bar playback. */
+export function replaySubBarStepMs(interval: string | undefined, updateInterval: string | null): number | null {
+  if (!updateInterval || !interval || !replayUpdateIntervals(interval).includes(updateInterval)) return null;
+  return tradingIntervalDurationMs(updateInterval);
+}
+
+/**
+ * The clock `steps` update intervals forward, not past the close of the last bar; null when the clock is already
+ * there (or no bar ever closes).
+ */
+export function nextSubBarClock(bars: readonly MarketBar[], clock: number, stepMs: number, steps = 1): number | null {
+  let last = Number.NEGATIVE_INFINITY;
+  for (let index = bars.length - 1; index >= 0 && !Number.isFinite(last); index -= 1) last = barCloseTime(bars[index]);
+  if (!Number.isFinite(last) || clock >= last) return null;
+  return Math.min(last, clock + stepMs * Math.max(1, Math.trunc(steps)));
 }
 
 export function formatReplaySpeed(speed: ReplaySpeed): string {

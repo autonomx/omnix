@@ -74,6 +74,10 @@ export const TRADING_COMMANDS = [
   { id: 'chart.snapshot', label: 'Chart snapshot (download PNG)', group: 'Chart', scope: 'chart', defaultKeys: ['alt+s'] },
   { id: 'chart.addAlert', label: 'Add alert at the last price', group: 'Chart', scope: 'chart', defaultKeys: ['alt+a'] },
   { id: 'chart.goToDate', label: 'Go to date', group: 'Chart', scope: 'chart', defaultKeys: ['alt+g'] },
+  // Bar replay (TVP-8.1), TradingView's keys.
+  { id: 'replay.playPause', label: 'Replay: play or pause', group: 'Replay', scope: 'chart', defaultKeys: ['shift+arrowdown'], keyContext: 'chart' },
+  { id: 'replay.stepForward', label: 'Replay: step forward', group: 'Replay', scope: 'chart', defaultKeys: ['shift+arrowright'], keyContext: 'chart', repeatable: true },
+  { id: 'replay.stepBack', label: 'Replay: step back', group: 'Replay', scope: 'chart', defaultKeys: ['shift+arrowleft'], keyContext: 'chart', repeatable: true },
   // Drawings
   { id: 'drawing.undo', label: 'Undo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+z'] },
   { id: 'drawing.redo', label: 'Redo drawing change', group: 'Drawings', scope: 'chart', defaultKeys: ['mod+shift+z', 'mod+y'] },

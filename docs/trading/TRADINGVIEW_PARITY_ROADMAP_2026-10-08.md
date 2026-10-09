@@ -1132,7 +1132,7 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 | TradingView parity, all features in scope | 92% |
 | TradingView parity, daily + weekly features | 92% |
 | Roadmap work packages merged in full | 54% (36 of 67) |
-| Daily + weekly gap closed since the first count | 82% (123 of 150) |
+| Daily + weekly gap closed since the first count | 83% (125 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1150,19 +1150,19 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Shortcuts | 49 | 1 | 0 / 0 / 0 | 0 | 0 | 99% |
 | Watchlists | 10 | 1 | 0 / 0 / 0 | 0 | 0 | 95% |
 | Screener | 4 | 0 | 0 / 3 / 0 | 0 | 0 | 57% |
-| Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 | 82% |
+| Replay | 11 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
 | Paper and chart trading | 19 | 0 | 0 / 3 / 0 | 0 | 0 | 86% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 5 | 1 | 0 / 0 / 1 | 0 | 0 | 79% |
-| **Total** | 399 | 6 | 4 / 23 / 6 | 55 | 0 | 92% |
+| **Total** | 401 | 6 | 4 / 21 / 6 | 55 | 0 | 92% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
 | Daily | 158 | 1 | 4 | 0 | 0 | 163 | 97% |
-| Weekly | 182 | 5 | 23 | 0 | 0 | 210 | 88% |
+| Weekly | 184 | 5 | 21 | 0 | 0 | 210 | 89% |
 | Rare | 59 | 0 | 6 | 55 | 0 | 120 | 91% |
 
-Missing daily + weekly features: **27**
+Missing daily + weekly features: **25**
 
 Done (have counts 1, partial 0.5, of the features in scope): **92%** overall, **92%** of daily + weekly.
 <!-- parity-report:end -->

@@ -19,14 +19,14 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     active, adapter, adapterRef, allBarsRef, barsRef, chartQuery, chartType, drawings, fittedBarsKeyRef,
     forceLiveRender, fullscreenIndicator, fullscreenMainPane, historyLimit, hostRef, indicators, indicatorSessionRef, indicatorsRef,
     interval, loadedBars, minimizedIndicators, pendingIntervalScrollRef, pendingRangeIntervalRef,
-    refreshIndicatorPanes, replayMode, replayVisible, replayVisibleBarCount, replayWasVisibleRef, rightOffset,
+    refreshIndicatorPanes, replayFormingBar, replayMode, replayVisible, replayVisibleBarCount, replayWasVisibleRef, rightOffset,
     scheduleIndicators, selectedDrawing, drawingsHidden, selectedRangeRef, selectedTimezone, setSelectedRangeLabel, streamDataKeyRef,
     streamRevisionRef, timezoneId,
   } = ws;
 
   // What the adapter last showed in replay, so a step that only reveals new
   // bars appends them instead of resetting the whole series.
-  const replayRenderRef = useRef<{ adapter: TradingChartAdapter; bars: readonly MarketBar[]; count: number } | null>(null);
+  const replayRenderRef = useRef<{ adapter: TradingChartAdapter; bars: readonly MarketBar[]; count: number; forming: boolean } | null>(null);
 
   useEffect(() => {
     const bars = loadedBars;
@@ -62,19 +62,25 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
       setSelectedRangeLabel('All');
     }
     const replayCount = replayVisible ? replayVisibleBarCount : null;
-    const visibleBars = replayCount === null ? bars : bars.slice(0, replayCount);
+    // Sub-bar playback (TVP-8.1): the forming bar follows the closed ones.
+    const forming = replayCount === null ? null : replayFormingBar;
+    const visibleBars = replayCount === null ? bars : forming ? [...bars.slice(0, replayCount), forming] : bars.slice(0, replayCount);
     barsRef.current = visibleBars;
     const targetAdapter = adapterRef.current;
     const previous = replayRenderRef.current;
+    // Appending only ever updates the chart's last bar or adds later ones: a shown forming bar is replaced by its
+    // closed bar or a newer forming bar, never dropped without a reset.
     const appendOnly = targetAdapter !== null && replayCount !== null && previous !== null && !shouldFit && !replayViewChanged
       && previous.adapter === targetAdapter && previous.bars === bars
-      && replayCount > previous.count && replayCount - previous.count <= MAX_APPENDED_REPLAY_BARS;
+      && replayCount >= previous.count && replayCount - previous.count <= MAX_APPENDED_REPLAY_BARS
+      && (replayCount > previous.count || forming !== null || !previous.forming);
     if (appendOnly) {
       for (const bar of bars.slice(previous.count, replayCount)) targetAdapter.updateBar(bar);
+      if (forming) targetAdapter.updateBar(forming);
     } else {
       targetAdapter?.setBars(visibleBars, shouldFit);
     }
-    replayRenderRef.current = replayCount === null || targetAdapter === null ? null : { adapter: targetAdapter, bars, count: replayCount };
+    replayRenderRef.current = replayCount === null || targetAdapter === null ? null : { adapter: targetAdapter, bars, count: replayCount, forming: forming !== null };
     // The active chart keeps the viewport where its start bar was clicked;
     // the other charts in the layout jump to the replay clock.
     if (replayViewChanged && replayVisible && !active && visibleBars.length > 0) targetAdapter?.scrollToLatest();
@@ -92,7 +98,7 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     // Keyed by timezoneId and the loaded data, not by values derived from them (selectedTimezone, historyLimit).
     // Replay re-runs it only when this chart's visible bar count changes, not on every clock tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, loadedBars, chartQuery.data, interval, replayMode, replayVisible, replayVisibleBarCount, rightOffset, scheduleIndicators, timezoneId, adapterRef, allBarsRef, barsRef, fittedBarsKeyRef, forceLiveRender, pendingIntervalScrollRef, pendingRangeIntervalRef, replayWasVisibleRef, selectedRangeRef, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef, indicatorSessionRef]);
+  }, [active, loadedBars, chartQuery.data, interval, replayFormingBar, replayMode, replayVisible, replayVisibleBarCount, rightOffset, scheduleIndicators, timezoneId, adapterRef, allBarsRef, barsRef, fittedBarsKeyRef, forceLiveRender, pendingIntervalScrollRef, pendingRangeIntervalRef, replayWasVisibleRef, selectedRangeRef, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef, indicatorSessionRef]);
 
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);

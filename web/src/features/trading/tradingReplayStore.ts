@@ -4,7 +4,9 @@ import {
   barCloseTime,
   DEFAULT_REPLAY_SPEED,
   nextReplayClock,
+  nextSubBarClock,
   previousReplayClock,
+  replaySubBarStepMs,
   replayTradableBarAtClock,
   replayVisibleCount,
   type ReplaySpeed,
@@ -44,6 +46,10 @@ type TradingReplayState = {
   selecting: boolean;
   playing: boolean;
   speed: ReplaySpeed;
+  /** Sub-bar playback: the clock steps by this interval (TVP-8.1); null steps bar by bar. Ignored where it doesn't fit the active chart. */
+  updateInterval: string | null;
+  /** Where the active chart's intrabar data stops, when the replay is older than it reaches; null when it covers the replay. */
+  intrabarNote: string | null;
   /** The active chart's bars, which step, play and the replay account advance through. */
   activeBars: readonly MarketBar[];
   /** The feed binding the active chart's bars come from; replay orders and bars use it. */
@@ -67,6 +73,8 @@ type TradingReplayState = {
   /** Place a replay order after every queued bar advance, at the current bar. */
   placeOrder: (input: PaperOrderInput) => Promise<ReplayOrderResult>;
   setSpeed: (speed: ReplaySpeed) => void;
+  setUpdateInterval: (updateInterval: string | null) => void;
+  setIntrabarNote: (note: string | null) => void;
   setActiveBars: (bars: readonly MarketBar[], bindingId?: string | null) => void;
   /** Record the active chart's identity; a different instrument, binding or interval restarts replay trading. */
   setActiveChartKey: (key: string) => void;
@@ -76,7 +84,7 @@ type TradingReplayState = {
   chooseStart: (time: number) => void;
   /** Pause and let the active chart choose a new start bar (jump to bar). */
   beginSelecting: () => void;
-  /** Move the clock forward by `steps` bars of the active chart; false when there is no later bar. */
+  /** Move the clock forward by `steps` bars of the active chart (update intervals in sub-bar playback); false at the end. */
   stepForward: (steps?: number) => boolean;
   /**
    * One playback tick. It waits (returns false) while the replay account has
@@ -94,6 +102,12 @@ type TradingReplayState = {
 };
 
 const NO_BARS: readonly MarketBar[] = [];
+
+/** The clock `steps` forward on the active chart: update intervals in sub-bar playback, else bars. */
+function forwardClock(state: Pick<TradingReplayState, 'activeBars' | 'updateInterval'>, clock: number, steps = 1): number | null {
+  const stepMs = replaySubBarStepMs(state.activeBars[0]?.interval, state.updateInterval);
+  return stepMs === null ? nextReplayClock(state.activeBars, clock, steps) : nextSubBarClock(state.activeBars, clock, stepMs, steps);
+}
 
 /** Queued replay-account work that will not run: its session restarted or an earlier bar failed. */
 class ReplayDroppedError extends Error {}
@@ -260,6 +274,8 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
   selecting: true,
   playing: false,
   speed: DEFAULT_REPLAY_SPEED,
+  updateInterval: null,
+  intrabarNote: null,
   activeBars: NO_BARS,
   activeBindingId: null,
   activeChartKey: null,
@@ -271,6 +287,8 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
   seedSnapshot,
   placeOrder,
   setSpeed: (speed) => set({ speed }),
+  setUpdateInterval: (updateInterval) => set({ updateInterval, intrabarNote: null }),
+  setIntrabarNote: (intrabarNote) => set({ intrabarNote }),
   setActiveBars: (activeBars, bindingId = null) => set({ activeBars, activeBindingId: bindingId }),
   setActiveChartKey: (key) => {
     const previous = get().activeChartKey;
@@ -287,7 +305,7 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
       return;
     }
     if (state.clock === null || state.selecting) return;
-    if (nextReplayClock(state.activeBars, state.clock) === null) return;
+    if (forwardClock(state, state.clock) === null) return;
     set({ playing: true, executionError: null });
   },
   togglePlaying: () => get().setPlaying(!get().playing),
@@ -297,15 +315,16 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
   },
   beginSelecting: () => set({ selecting: true, playing: false }),
   stepForward: (steps = 1) => {
-    const { activeBars, clock, playing, selecting } = get();
+    const state = get();
+    const { clock, playing, selecting } = state;
     if (clock === null || selecting) return false;
-    const next = nextReplayClock(activeBars, clock, steps);
+    const next = forwardClock(state, clock, steps);
     if (next === null) {
       if (playing) set({ playing: false });
       return false;
     }
     // Playback stops on the active chart's last bar.
-    set({ clock: next, playing: playing && nextReplayClock(activeBars, next) !== null });
+    set({ clock: next, playing: playing && forwardClock(state, next) !== null });
     advanceToClock();
     return true;
   },
@@ -336,6 +355,7 @@ export const useTradingReplayStore = create<TradingReplayState>((set, get) => ({
     set({
       bar: null,
       clock: null,
+      intrabarNote: null,
       startTime: null,
       selecting: true,
       playing: false,

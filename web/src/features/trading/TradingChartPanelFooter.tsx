@@ -1,6 +1,7 @@
 import { formatTradingTime, formatTradingTimezoneOffset, resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS, writeTradingTimezoneId } from './tradingTime';
 import { ranges } from './tradingChartPanelModel';
 import { TradingReplaySpeedSelect } from './TradingReplaySpeedSelect';
+import { TradingReplayUpdateIntervalSelect } from './TradingReplayUpdateIntervalSelect';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { emitOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
 import { useNow } from '../../shared/timers';
@@ -10,7 +11,7 @@ import { ChartGoToDate } from './TradingChartWorkflowControls';
 export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, allBarsRef, applyCustomRange, chartId, chartQuery, customRangeEnd, customRangeError, customRangeOpen,
-    customRangeRef, customRangeStart, drawings, exitReplay, nextReplayBar, openCustomRange,
+    customRangeRef, customRangeStart, drawings, exitReplay, interval, nextReplayBar, openCustomRange,
     previousReplayBar, provenance, replayChoosingStart, replayCurrentBar, replayHasNextBar, replayHasPreviousBar,
     replayMode, replayPlaying, replayStartTime, replayVisibleBarCount, resetReplay, selectReplayStart,
     selectedRangeLabel, selectedTimezone, selectedTimezoneOption, setCustomRangeEnd, setCustomRangeOpen,
@@ -28,6 +29,7 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
             <button type="button" className="trading-replay-play" onClick={toggleReplayPlaying} disabled={!replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
             <button type="button" onClick={nextReplayBar} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Replay next bar">›|</button>
             <TradingReplaySpeedSelect />
+            <TradingReplayUpdateIntervalSelect interval={interval} />
             <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayVisibleBarCount}/{allBarsRef.current.length}</span>
             <button type="button" className="trading-replay-exit" onClick={exitReplay} aria-label="Exit replay and return to real time" title="Exit replay and return to real time">Real time</button>
           </div>
