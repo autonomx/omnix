@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { alertLevelPriceAt } from '../alertLevels';
 import { drawingToolDefinition, drawingPropertiesWithDefaults } from '../registry';
 import { pointAt, runTool, testServices } from '../testing';
 import type { DrawingShape } from '../types';
@@ -50,23 +51,23 @@ describe('Fibonacci tools (TVP-3.2)', () => {
 
   it('fib speed resistance fan draws rays from A through the box divisions', () => {
     const { shapes } = runTool('fib-speed-fan', [[100, 400], [200, 300]]);
-    expect(segments(shapes)).toHaveLength(11);
+    expect(segments(shapes).filter((shape) => shape.hit !== 'none')).toHaveLength(11);
     expect(shapes.some((shape) => shape.kind === 'rect')).toBe(true);
   });
 
   it('arcs, circles, spiral and wedge scale with their anchors', () => {
     const arcs = runTool('fib-arcs', [[300, 300], [300, 200]]);
-    const halves = arcs.shapes.filter((shape) => shape.kind === 'polyline');
+    const halves = arcs.shapes.filter((shape) => shape.kind === 'path');
     expect(halves).toHaveLength(6);
-    // Opening upwards (towards B), the largest arc's top is B.
-    const largest = halves[halves.length - 1];
-    expect(largest.kind === 'polyline' && Math.min(...largest.points.map((point) => point.y))).toBeCloseTo(200);
+    // Opening upwards (towards B): the largest arc passes through B.
+    expect(arcs.hit(300, 200)).not.toBeNull();
+    expect(arcs.hit(300, 400)).toBeNull();
     const circles = runTool('fib-circles', [[200, 300], [400, 300]]);
     expect(circles.shapes.filter((shape) => shape.kind === 'ellipse').map((shape) => (shape.kind === 'ellipse' ? round(shape.rx) : 0))).toContain(100);
     const spiral = runTool('fib-spiral', [[300, 300], [350, 300]]);
     expect(spiral.shapes.some((shape) => shape.kind === 'polyline' && shape.points.length > 50)).toBe(true);
     const wedge = runTool('fib-wedge', [[100, 300], [300, 300], [300, 100]]);
-    expect(wedge.shapes.filter((shape) => shape.kind === 'polyline')).toHaveLength(6);
+    expect(wedge.shapes.filter((shape) => shape.kind === 'path')).toHaveLength(6);
     expect(wedge.hit(200, 300)).not.toBeNull();
   });
 });
@@ -110,12 +111,11 @@ describe('pitchforks and Gann (TVP-3.3)', () => {
     expect(square).toEqual({ x: 300, y: 300 });
   });
 
-  it('Gann square fixed is always square; Gann square only with Shift', () => {
+  it('Gann square keeps square only with Shift', () => {
     const none = { shift: false, alt: false, ctrl: false };
-    expect(drawingToolDefinition('gann-square-fixed')!.constrain!({ x: 300, y: 200 }, [{ x: 100, y: 100 }], none)).toEqual({ x: 300, y: 300 });
     expect(drawingToolDefinition('gann-square')!.constrain!({ x: 300, y: 200 }, [{ x: 100, y: 100 }], none)).toEqual({ x: 300, y: 200 });
     const { shapes } = runTool('gann-square', [[100, 100], [300, 300]]);
-    expect(shapes.filter((shape) => shape.kind === 'polyline')).toHaveLength(4);
+    expect(shapes.filter((shape) => shape.kind === 'polyline')).toHaveLength(6);
   });
 
   it('Gann fan: nine angles, 1x1 through B', () => {
@@ -126,5 +126,95 @@ describe('pitchforks and Gann (TVP-3.3)', () => {
     // Through B: the 1x1 ray keeps B's slope.
     expect((oneByOne.y2 - oneByOne.y1) / (oneByOne.x2 - oneByOne.x1)).toBeCloseTo(-1);
     expect(texts(shapes)).toEqual(['1x8', '1x4', '1x3', '1x2', '1x1', '2x1', '3x1', '4x1', '8x1']);
+  });
+});
+
+describe('TVP-3.2/3.3 review fixes', () => {
+  // A log price scale: equal price ratios are equal distances.
+  const logProject = (point: { time: string; price: number }) => {
+    const index = testServices.barIndexForTime(point.time);
+    return index === null || point.price <= 0 ? null : { x: index, y: 1000 - 200 * Math.log(point.price) };
+  };
+  const distanceToLine = (point: { x: number; y: number }, shape: DrawingShape) => {
+    if (shape.kind !== 'segment') return Number.POSITIVE_INFINITY;
+    const dx = shape.x2 - shape.x1;
+    const dy = shape.y2 - shape.y1;
+    return Math.abs(dy * (point.x - shape.x1) - dx * (point.y - shape.y1)) / Math.hypot(dx, dy);
+  };
+
+  it('pitchfork tines are drawn through the lines they alert on, on a log scale too', () => {
+    // A at price 60, B at 120, C at 80 (y = 1000 - price in pixels for the anchors).
+    const pixels: [number, number][] = [[100, 940], [200, 880], [260, 920]];
+    const { shapes } = runTool('pitchfork', pixels, { access: { project: logProject } });
+    const levels = alertLevels('pitchfork', pixels);
+    const upper = levels.find((item) => item.key === 'level-1-upper')!;
+    expect(upper.label).toBe('B side 1');
+    // The B-side tine at level 1 starts at B and passes, one median length (130 bars: A to M) later, through the alert line.
+    const at = (index: number) => logProject({ time: testServices.timeForBarIndex(index)!, price: alertLevelPriceAt(upper, index, testServices.barIndexForTime, true)! })!;
+    const start = at(200);
+    const tine = segments(shapes).find((shape) => Math.abs(shape.x1 - start.x) < 1e-6 && Math.abs(shape.y1 - start.y) < 1e-6 && shape.x2 > 300)!;
+    expect(tine).toBeDefined();
+    expect(distanceToLine(at(330), tine)).toBeLessThan(0.01);
+  });
+
+  it('fib channel keeps its base line when it has no width', () => {
+    const vertical = runTool('fib-channel', [[100, 500], [100, 400], [150, 450]]);
+    expect(segments(vertical.shapes)).toHaveLength(1);
+    const noBars = runTool('fib-channel', [[100, 500], [200, 400], [100, 450]], { access: { barIndexForTime: () => null } });
+    expect(segments(noBars.shapes)).toHaveLength(1);
+  });
+
+  it('extended levels label at the edge, reading inwards', () => {
+    const { shapes } = runTool('fib-extension', [[100, 500], [200, 300], [300, 400]], { properties: { extendRight: true } });
+    const labels = shapes.filter((shape) => shape.kind === 'text');
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.every((shape) => shape.kind === 'text' && shape.align === 'end' && shape.x <= 800)).toBe(true);
+  });
+
+  it('the spiral reaches the view from an off-screen centre, and a click without a drag still shows', () => {
+    const far = runTool('fib-spiral', [[-3000, 300], [-2950, 300]]);
+    const spiral = far.shapes.find((shape) => shape.kind === 'polyline');
+    // Its arm reaches past the view's farthest corner from the centre.
+    const reach = spiral && spiral.kind === 'polyline' ? Math.max(...spiral.points.map((point) => Math.hypot(point.x + 3000, point.y - 300))) : 0;
+    expect(reach).toBeGreaterThan(Math.hypot(3800, 300));
+    expect(runTool('fib-spiral', [[300, 300], [300, 300]]).shapes.length).toBeGreaterThan(0);
+  });
+
+  it('Gann square fixed keeps the price per bar it was drawn with', () => {
+    const definition = drawingToolDefinition('gann-square-fixed')!;
+    const created = definition.onCreate!([pointAt(100, 500), pointAt(200, 400)], testServices);
+    expect(created.properties).toEqual({ pricePerBar: 1 });
+    // Moved to 50 bars wide, it is 50 price units tall, whatever B's price.
+    const { shapes } = runTool('gann-square-fixed', [[100, 500], [150, 100]], { properties: { pricePerBar: 1 } });
+    const box = shapes.find((shape) => shape.kind === 'rect');
+    expect(box && box.kind === 'rect' && [box.width, box.height]).toEqual([50, 50]);
+  });
+
+  it('Gann fan angles run from flattest to steepest', () => {
+    const rays = segments(runTool('gann-fan', [[100, 400], [200, 300]]).shapes);
+    const slopes = rays.map((ray) => Math.abs((ray.y2 - ray.y1) / (ray.x2 - ray.x1)));
+    expect([...slopes].sort((a, b) => a - b)).toEqual(slopes);
+    expect(slopes[0]).toBeCloseTo(1 / 8);
+    expect(slopes[8]).toBeCloseTo(8);
+  });
+
+  it('fib retracement: reverse, prices or percents, labels on the left', () => {
+    const zero = [{ value: 0, color: '', visible: true }];
+    expect(segments(runTool('fibonacci', [[100, 500], [200, 300]], { properties: { levels: zero } }).shapes)[0].y1).toBe(500);
+    expect(segments(runTool('fibonacci', [[100, 500], [200, 300]], { properties: { reverse: true, levels: zero } }).shapes)[0].y1).toBe(300);
+    const prices = runTool('fibonacci', [[100, 500], [200, 300]], { properties: { labelContent: 'prices', labelSide: 'left', levels: [{ value: 0.5, color: '', visible: true }] } });
+    const text = prices.shapes.find((shape) => shape.kind === 'text');
+    expect(text && text.kind === 'text' && [text.text, text.align, text.x]).toEqual(['600', 'end', 96]);
+    const percents = runTool('fibonacci', [[100, 500], [200, 300]], { properties: { labelContent: 'percents', levels: [{ value: 0.618, color: '', visible: true }] } });
+    expect(texts(percents.shapes)).toEqual(['61.8%']);
+    const reversedAlerts = alertLevels('fibonacci', [[100, 500], [200, 300]], { reverse: true, levels: zero });
+    expect(reversedAlerts[0].anchors[0].price).toBe(700);
+  });
+
+  it('tools that measure in bars still draw something without bars', () => {
+    const access = { access: { barIndexForTime: () => null, timeForBarIndex: () => null } };
+    expect(runTool('fib-time-zone', [[100, 300], [110, 300]], access).shapes.length).toBeGreaterThan(0);
+    expect(runTool('fib-time', [[0, 300], [10, 200], [100, 250]], access).shapes.length).toBeGreaterThan(0);
+    expect(runTool('pitchfork', [[100, 300], [200, 200], [200, 400]], access).shapes.length).toBeGreaterThan(0);
   });
 });
