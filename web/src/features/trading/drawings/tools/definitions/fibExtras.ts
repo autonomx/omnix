@@ -16,6 +16,7 @@ import {
   type DrawingPropertyRecord,
   type DrawingShape,
   type DrawingToolServices,
+  type PathCommand,
   type ScreenPoint,
 } from '../types';
 import { linePriceAt } from './channels';
@@ -109,7 +110,8 @@ export const fibExtensionTool = defineDrawingTool({
       const at = price === null ? null : context.project({ time: context.rawPoints[2].time, price });
       if (!at) return [];
       const line: DrawingShape = { kind: 'segment', x1, y1: at.y, x2, y2: at.y, ...stroke, stroke: color };
-      return showLabels ? [line, label(`${value} (${context.formatPrice(price as number)})`, { x: x2, y: at.y }, color)] : [line];
+      const atEdge = x2 >= context.viewport.width - 1;
+      return showLabels ? [line, label(`${value} (${context.formatPrice(price as number)})`, { x: x2, y: at.y }, color, atEdge ? 'end' : 'start')] : [line];
     });
     return [...trend, ...shapes];
   },
@@ -229,7 +231,9 @@ export const fibChannelTool = defineDrawingTool({
     const extendLeft = booleanProperty(context.properties, 'extendLeft', false);
     const extendRight = booleanProperty(context.properties, 'extendRight', false);
     const base = extendedSegment(first, second, context.viewport, extendLeft, extendRight);
-    if (context.points.length < 3) return [{ kind: 'segment', x1: base[0].x, y1: base[0].y, x2: base[1].x, y2: base[1].y, ...stroke }];
+    const baseOnly: DrawingShape[] = [{ kind: 'segment', x1: base[0].x, y1: base[0].y, x2: base[1].x, y2: base[1].y, ...stroke }];
+    // Without a width (fewer anchors, A and B on one bar, no bars yet) the base line still shows.
+    if (context.points.length < 3 || !fibChannelLine(context.rawPoints, 0, context)) return baseOnly;
     const showLabels = booleanProperty(context.properties, 'showLabels', true);
     return visibleLevels(context.properties, CHANNEL_LEVELS, stroke.stroke ?? context.style.color).flatMap(({ value, color }): DrawingShape[] => {
       const line = fibChannelLine(context.rawPoints, value, context);
@@ -239,7 +243,7 @@ export const fibChannelTool = defineDrawingTool({
       const [from, to] = extendedSegment(start, end, context.viewport, extendLeft, extendRight);
       const segment: DrawingShape = { kind: 'segment', x1: from.x, y1: from.y, x2: to.x, y2: to.y, ...stroke, stroke: color };
       const right = from.x >= to.x ? from : to;
-      return showLabels ? [segment, label(String(value), right, color)] : [segment];
+      return showLabels ? [segment, label(String(value), right, color, right.x >= context.viewport.width - 1 ? 'end' : 'start')] : [segment];
     });
   },
   alertLevels: (points, properties, services) => {
@@ -275,37 +279,71 @@ export const fibSpeedFanTool = defineDrawingTool({
   displayName: 'Fib Speed Resistance Fan',
   group: 'fibonacci',
   creation: { gesture: 'drag' },
-  defaultProperties: { levels: FAN_LEVELS, showGrid: true },
+  defaultProperties: { priceLevels: FAN_LEVELS, timeLevels: FAN_LEVELS, showGrid: true },
   propertySchema: [
-    { key: 'levels', label: 'Levels', type: 'number-list', min: 0, max: 1 },
+    { key: 'priceLevels', label: 'Price levels', type: 'number-list', min: 0, max: 1 },
+    { key: 'timeLevels', label: 'Time levels', type: 'number-list', min: 0, max: 1 },
     { key: 'showGrid', label: 'Grid', type: 'boolean' },
   ],
   geometry: (context) => {
     const [first, second] = context.points;
     const stroke = lineStroke(context);
     const color = stroke.stroke ?? context.style.color;
-    const levels = numberListProperty(context.properties, 'levels', FAN_LEVELS);
+    const priceLevels = numberListProperty(context.properties, 'priceLevels', FAN_LEVELS);
+    const timeLevels = numberListProperty(context.properties, 'timeLevels', FAN_LEVELS);
     const dx = second.x - first.x;
     const dy = second.y - first.y;
     const shapes: DrawingShape[] = [];
     if (booleanProperty(context.properties, 'showGrid', true)) {
-      shapes.push({ kind: 'rect', x: Math.min(first.x, second.x), y: Math.min(first.y, second.y), width: Math.abs(dx), height: Math.abs(dy), ...stroke, ...areaFill(color), strokeWidth: 1, hit: 'none' });
+      const left = Math.min(first.x, second.x);
+      const top = Math.min(first.y, second.y);
+      shapes.push({ kind: 'rect', x: left, y: top, width: Math.abs(dx), height: Math.abs(dy), ...stroke, ...areaFill(color), strokeWidth: 1, hit: 'none' });
+      for (const level of priceLevels) {
+        const y = first.y + dy * level;
+        shapes.push({ kind: 'segment', x1: left, y1: y, x2: left + Math.abs(dx), y2: y, ...stroke, strokeWidth: 1, dash: [2, 3], hit: 'none' });
+      }
+      for (const level of timeLevels) {
+        const x = first.x + dx * level;
+        shapes.push({ kind: 'segment', x1: x, y1: top, x2: x, y2: top + Math.abs(dy), ...stroke, strokeWidth: 1, dash: [2, 3], hit: 'none' });
+      }
     }
     const targets = [
       { at: second, text: '1' },
-      ...levels.map((level) => ({ at: { x: second.x, y: first.y + dy * level }, text: String(level) })),
-      ...levels.map((level) => ({ at: { x: first.x + dx * level, y: second.y }, text: String(level) })),
+      ...priceLevels.map((level) => ({ at: { x: second.x, y: first.y + dy * level }, text: String(level) })),
+      ...timeLevels.map((level) => ({ at: { x: first.x + dx * level, y: second.y }, text: String(level) })),
     ];
     return [...shapes, ...rays(context, first, targets, color)];
   },
 });
 
-/** Points of a circular arc around `center` from `from` to `to` radians (screen y grows down). */
-function arcPoints(center: ScreenPoint, radius: number, from: number, to: number, steps = 48): ScreenPoint[] {
-  return Array.from({ length: steps + 1 }, (_, index) => {
-    const angle = from + (to - from) * index / steps;
-    return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
-  });
+/** A circular arc around `center` from `from` to `to` radians (screen y grows down), as cubic Beziers of at most 90 degrees. */
+export function arcCommands(center: ScreenPoint, radius: number, from: number, to: number): PathCommand[] {
+  const at = (angle: number): ScreenPoint => ({ x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius });
+  const pieces = Math.max(1, Math.ceil(Math.abs(to - from) / (Math.PI / 2)));
+  const sweep = (to - from) / pieces;
+  const handle = (4 / 3) * Math.tan(sweep / 4) * radius;
+  const start = at(from);
+  const commands: PathCommand[] = [{ op: 'M', x: start.x, y: start.y }];
+  for (let piece = 0; piece < pieces; piece += 1) {
+    const a0 = from + sweep * piece;
+    const a1 = a0 + sweep;
+    const p0 = at(a0);
+    const p3 = at(a1);
+    commands.push({
+      op: 'C',
+      c1x: p0.x - Math.sin(a0) * handle,
+      c1y: p0.y + Math.cos(a0) * handle,
+      c2x: p3.x + Math.sin(a1) * handle,
+      c2y: p3.y - Math.cos(a1) * handle,
+      x: p3.x,
+      y: p3.y,
+    });
+  }
+  return commands;
+}
+
+function arcPoint(center: ScreenPoint, radius: number, angle: number): ScreenPoint {
+  return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
 }
 
 const ARC_LEVELS: readonly number[] = [0.236, 0.382, 0.5, 0.618, 0.786, 1];
@@ -331,9 +369,11 @@ export const fibArcsTool = defineDrawingTool({
     const [from, to] = full ? [0, 2 * Math.PI] : edge.y <= center.y ? [Math.PI, 2 * Math.PI] : [0, Math.PI];
     const shapes: DrawingShape[] = [{ kind: 'segment', x1: center.x, y1: center.y, x2: edge.x, y2: edge.y, ...stroke, dash: [4, 4], strokeWidth: 1 }];
     for (const level of numberListProperty(context.properties, 'levels', ARC_LEVELS)) {
-      if (radius * level <= 0) continue;
-      const points = arcPoints(center, radius * level, from, to);
-      shapes.push({ kind: 'polyline', points, ...stroke }, label(String(level), points[Math.floor(points.length / 2)], color));
+      const r = radius * level;
+      if (r <= 0) continue;
+      if (full) shapes.push({ kind: 'ellipse', cx: center.x, cy: center.y, rx: r, ry: r, ...stroke });
+      else shapes.push({ kind: 'path', commands: arcCommands(center, r, from, to), ...stroke });
+      shapes.push(label(String(level), arcPoint(center, r, (from + to) / 2), color));
     }
     return shapes;
   },
@@ -381,20 +421,24 @@ export const fibSpiralTool = defineDrawingTool({
     const [center, edge] = context.points;
     const stroke = lineStroke(context);
     const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
-    if (radius < 1) return [];
+    const guide: DrawingShape = { kind: 'segment', x1: center.x, y1: center.y, x2: edge.x, y2: edge.y, ...stroke, dash: [4, 4], strokeWidth: 1 };
+    // A click without a drag still leaves something to see and select.
+    if (radius < 1) return [guide, { kind: 'marker', x: center.x, y: center.y, radius: 3, fill: context.style.color }];
     const start = Math.atan2(edge.y - center.y, edge.x - center.x);
     const direction = booleanProperty(context.properties, 'counterClockwise', false) ? -1 : 1;
     const growth = Math.log(GOLDEN_RATIO) / (Math.PI / 2);
-    const limit = Math.hypot(context.viewport.width, context.viewport.height) * 2;
+    // Out to the farthest viewport corner from the centre (the centre may be off-screen), plus a margin.
+    const corners = [[0, 0], [context.viewport.width, 0], [0, context.viewport.height], [context.viewport.width, context.viewport.height]];
+    const limit = Math.max(...corners.map(([x, y]) => Math.hypot(x - center.x, y - center.y))) * 1.2;
     const points: ScreenPoint[] = [];
-    for (let turn = -6 * Math.PI; turn <= 6 * Math.PI; turn += Math.PI / 32) {
+    for (let turn = -6 * Math.PI; turn <= 40 * Math.PI; turn += Math.PI / 32) {
       const r = radius * Math.exp(growth * turn);
       if (r > limit) break;
       if (r < 0.5) continue;
       const angle = start + direction * turn;
       points.push({ x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r });
     }
-    return [{ kind: 'segment', x1: center.x, y1: center.y, x2: edge.x, y2: edge.y, ...stroke, dash: [4, 4], strokeWidth: 1 }, { kind: 'polyline', points, ...stroke }];
+    return [guide, { kind: 'polyline', points, ...stroke }];
   },
 });
 
@@ -426,8 +470,7 @@ export const fibWedgeTool = defineDrawingTool({
     if (from - to > Math.PI) to += 2 * Math.PI;
     for (const level of numberListProperty(context.properties, 'levels', WEDGE_LEVELS)) {
       if (radius * level <= 0) continue;
-      const points = arcPoints(apex, radius * level, from, to, 24);
-      shapes.push({ kind: 'polyline', points, ...stroke }, label(String(level), points[points.length - 1], color));
+      shapes.push({ kind: 'path', commands: arcCommands(apex, radius * level, from, to), ...stroke }, label(String(level), arcPoint(apex, radius * level, to), color));
     }
     return shapes;
   },

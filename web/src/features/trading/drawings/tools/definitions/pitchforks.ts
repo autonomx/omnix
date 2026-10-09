@@ -5,7 +5,7 @@
 // the origin only: A (Andrews), A moved halfway to B in price (Schiff), or the midpoint of A-B (modified Schiff).
 // Lines are built in bar index/price and projected, so the drawing and its alerts agree.
 import { lineAlertLevel, lineThroughPoint } from '../alertLevels';
-import { booleanProperty, numberListProperty, recordsProperty } from '../properties';
+import { booleanProperty, numberListProperty, numberProperty, recordsProperty } from '../properties';
 import { areaFill, constrainToSquare, lineStroke, rayEnd } from '../shapes';
 import {
   defineDrawingTool,
@@ -71,6 +71,19 @@ function tinePoint(points: readonly DrawingPoint[], middle: DrawingPoint, value:
   return toward ? between(middle, toward, value, services) : null;
 }
 
+/**
+ * The point one median-length further along the median from `point`, in bar index/price: a tine is the line through
+ * its start and this point, exactly the line its alert follows (`lineThroughPoint`), on any price scale.
+ */
+function alongMedian(point: DrawingPoint, fork: { origin: DrawingPoint; middle: DrawingPoint }, services: Services): DrawingPoint | null {
+  const start = services.barIndexForTime(point.time);
+  const origin = services.barIndexForTime(fork.origin.time);
+  const middle = services.barIndexForTime(fork.middle.time);
+  if (start === null || origin === null || middle === null || middle === origin) return null;
+  const time = services.timeForBarIndex(start + (middle - origin));
+  return time ? { time, price: point.price + (fork.middle.price - fork.origin.price) } : null;
+}
+
 function pitchforkGeometry(kind: PitchforkKind, context: DrawingGeometryContext): DrawingShape[] {
   const [a, b, c] = context.points;
   const stroke = lineStroke(context);
@@ -89,7 +102,10 @@ function pitchforkGeometry(kind: PitchforkKind, context: DrawingGeometryContext)
   const projected = tines(context.properties, color).flatMap((tine) => {
     const point = tinePoint(context.rawPoints, fork.middle, tine.value, tine.side, context);
     const start = point ? context.project(point) : null;
-    return start ? [{ ...tine, start, end: ray(start) }] : [];
+    if (!point || !start) return [];
+    const further = alongMedian(point, fork, context);
+    const through = further ? context.project(further) : null;
+    return [{ ...tine, start, end: through ? rayEnd(start, through, context.viewport) : ray(start) }];
   });
   // Fill between the outermost tines on each side.
   if (booleanProperty(context.properties, 'fill', true)) {
@@ -109,7 +125,7 @@ function pitchforkAlertLevels(kind: PitchforkKind, points: readonly DrawingPoint
   const levels: DrawingAlertLevel[] = [median];
   for (const tine of tines(properties, '')) {
     const point = tinePoint(points, fork.middle, tine.value, tine.side, services);
-    const level = point ? lineThroughPoint(tine.key, `${tine.side === 1 ? 'Upper' : 'Lower'} ${tine.value}`, median, point, services) : null;
+    const level = point ? lineThroughPoint(tine.key, `${tine.side === 1 ? 'B' : 'C'} side ${tine.value}`, median, point, services) : null;
     if (level) levels.push(level);
   }
   return levels;
@@ -180,8 +196,13 @@ export const pitchfanTool = defineDrawingTool({
 
 const GANN_LEVELS: readonly number[] = [0, 0.25, 0.382, 0.5, 0.618, 0.75, 1];
 
-function gannGrid(context: DrawingGeometryContext, priceLevels: readonly number[], timeLevels: readonly number[], labels: boolean): DrawingShape[] {
-  const [first, second] = context.points;
+function gannGrid(
+  context: DrawingGeometryContext,
+  priceLevels: readonly number[],
+  timeLevels: readonly number[],
+  labels: boolean,
+  [first, second]: readonly ScreenPoint[] = context.points,
+): DrawingShape[] {
   const stroke = lineStroke(context);
   const color = stroke.stroke ?? context.style.color;
   const left = Math.min(first.x, second.x);
@@ -233,20 +254,33 @@ export const gannBoxTool = defineDrawingTool({
   },
 });
 
-/** A Gann square: quarter grid, both diagonals, and arcs from the first corner at quarter radii. */
-function gannSquareGeometry(context: DrawingGeometryContext): DrawingShape[] {
-  const [first, second] = context.points;
+const SQUARE_LEVELS: readonly number[] = [0.25, 0.382, 0.5, 0.618, 0.75];
+
+/** A Gann square from A to the corner: level grid, diagonals, fans from A through the levels, and arcs from A. */
+function gannSquareGeometry(context: DrawingGeometryContext, corner: ScreenPoint): DrawingShape[] {
+  const first = context.points[0];
+  const second = corner;
   const stroke = lineStroke(context);
-  const shapes = gannGrid(context, [0.25, 0.5, 0.75], [0.25, 0.5, 0.75], false);
+  const levels = numberListProperty(context.properties, 'levels', SQUARE_LEVELS);
+  const shapes = gannGrid(context, levels, levels, booleanProperty(context.properties, 'showLabels', true), [first, second]);
   shapes.push(
     { kind: 'segment', x1: first.x, y1: first.y, x2: second.x, y2: second.y, ...stroke, strokeWidth: 1 },
     { kind: 'segment', x1: first.x, y1: second.y, x2: second.x, y2: first.y, ...stroke, strokeWidth: 1 },
   );
+  const width = second.x - first.x;
+  const height = second.y - first.y;
+  if (booleanProperty(context.properties, 'showFans', true)) {
+    // From A to each level on the far sides.
+    for (const level of levels) {
+      shapes.push(
+        { kind: 'segment', x1: first.x, y1: first.y, x2: second.x, y2: first.y + height * level, ...stroke, strokeWidth: 1, dash: [2, 3] },
+        { kind: 'segment', x1: first.x, y1: first.y, x2: first.x + width * level, y2: second.y, ...stroke, strokeWidth: 1, dash: [2, 3] },
+      );
+    }
+  }
   if (booleanProperty(context.properties, 'showArcs', true)) {
-    const width = second.x - first.x;
-    const height = second.y - first.y;
-    for (const share of [0.25, 0.5, 0.75, 1]) {
-      // A quarter ellipse from the first corner, spanning the box's share in time and in price.
+    for (const share of [...levels, 1]) {
+      // A quarter ellipse from A, spanning the box's share in time and in price.
       const points = Array.from({ length: 25 }, (_, index) => {
         const angle = (Math.PI / 2) * index / 24;
         return { x: first.x + width * share * Math.cos(angle), y: first.y + height * share * Math.sin(angle) };
@@ -257,6 +291,13 @@ function gannSquareGeometry(context: DrawingGeometryContext): DrawingShape[] {
   return shapes;
 }
 
+const SQUARE_FIELDS = [
+  { key: 'levels', label: 'Levels', type: 'number-list', min: 0, max: 1 },
+  { key: 'showLabels', label: 'Labels', type: 'boolean' },
+  { key: 'showFans', label: 'Fans', type: 'boolean' },
+  { key: 'showArcs', label: 'Arcs', type: 'boolean' },
+] as const;
+
 export const gannSquareTool = defineDrawingTool({
   id: 'gann-square',
   label: 'Gann square',
@@ -264,14 +305,22 @@ export const gannSquareTool = defineDrawingTool({
   group: 'gann',
   creation: { gesture: 'drag' },
   constrain: constrainToSquare,
-  defaultProperties: { showArcs: true },
-  propertySchema: [{ key: 'showArcs', label: 'Arcs', type: 'boolean' }],
-  geometry: gannSquareGeometry,
+  defaultProperties: { levels: SQUARE_LEVELS, showLabels: true, showFans: true, showArcs: true },
+  propertySchema: SQUARE_FIELDS,
+  geometry: (context) => gannSquareGeometry(context, context.points[1]),
 });
 
-/** Always square on the screen (the fixed 1x1 scale), not only with Shift. */
-function alwaysSquare(candidate: ScreenPoint, others: readonly ScreenPoint[]): ScreenPoint {
-  return constrainToSquare(candidate, others, { shift: true, alt: false, ctrl: false });
+/**
+ * Gann square fixed: its scale (price per bar) is fixed when it is drawn, so it stays a true square in price and
+ * time on any zoom; moving B changes only its size (bars), the price side follows the scale.
+ */
+export function gannFixedCorner(points: readonly DrawingPoint[], pricePerBar: number, services: Pick<DrawingToolServices, 'barIndexForTime'>): DrawingPoint | null {
+  const [first, second] = points;
+  const start = first ? services.barIndexForTime(first.time) : null;
+  const end = second ? services.barIndexForTime(second.time) : null;
+  if (start === null || end === null) return null;
+  const direction = second.price >= first.price ? 1 : -1;
+  return { time: second.time, price: first.price + direction * Math.abs(end - start) * pricePerBar };
 }
 
 export const gannSquareFixedTool = defineDrawingTool({
@@ -280,10 +329,21 @@ export const gannSquareFixedTool = defineDrawingTool({
   displayName: 'Gann Square Fixed',
   group: 'gann',
   creation: { gesture: 'drag' },
-  constrain: alwaysSquare,
-  defaultProperties: { showArcs: true },
-  propertySchema: [{ key: 'showArcs', label: 'Arcs', type: 'boolean' }],
-  geometry: gannSquareGeometry,
+  defaultProperties: { pricePerBar: 0, levels: SQUARE_LEVELS, showLabels: true, showFans: true, showArcs: true },
+  propertySchema: [{ key: 'pricePerBar', label: 'Price per bar', type: 'number', min: 0 }, ...SQUARE_FIELDS],
+  // The scale is taken from the drag: B's price over its bars from A.
+  onCreate: (anchors, services) => {
+    const [first, second] = anchors;
+    const start = first ? services.barIndexForTime(first.time) : null;
+    const end = second ? services.barIndexForTime(second.time) : null;
+    const bars = start === null || end === null ? 0 : Math.abs(end - start);
+    return { points: [...anchors], properties: { pricePerBar: bars > 0 ? Math.abs(second.price - first.price) / bars : 0 } };
+  },
+  geometry: (context) => {
+    const corner = gannFixedCorner(context.rawPoints, numberProperty(context.properties, 'pricePerBar', 0), context);
+    const projected = corner ? context.project(corner) : null;
+    return gannSquareGeometry(context, projected ?? context.points[1]);
+  },
 });
 
 /** Gann fan angles as (time units, price units) per step; 1x1 passes through B. */
