@@ -90,3 +90,16 @@ describe('chart indicator alerts stay what the dialog showed (TVP-1.3 review)', 
     expect(chartAlertIndicatorId({ condition_type: 'price_above', threshold: '1', parameters: {} })).toBeNull();
   });
 });
+
+describe('pane alerts on indicators the server cannot alert on (TVP-1.3 review 2)', () => {
+  it('asks for a choice instead of standing in another indicator, and keeps the pane value precise', () => {
+    const choices = alertIndicatorChoices(
+      [{ id: 'sma', period: 20, enabled: true }, { id: 'golden-cross', period: 50, enabled: true }],
+      [line('sma:20', 'SMA'), line('golden-cross:50', 'GC')],
+      new Set(['sma']),
+    );
+    expect(defaultIndicatorSelection(choices, 'golden-cross')).toBeUndefined();
+    expect(defaultIndicatorSelection(choices)?.key).toBe('sma');
+    expect(editorDefaults({ time: 't', price: 0.00423456789, x: 0, y: 0, source: 'context-menu', chartIndicatorId: 'macd' }, 1).threshold).toBe('0.0042345679');
+  });
+});

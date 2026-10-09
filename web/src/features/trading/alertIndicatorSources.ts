@@ -101,6 +101,8 @@ export function withChartIndicatorCondition(
 
 /** The selection a dialog starts with: the indicator the alert was placed on, else the first the server can alert on. */
 export function defaultIndicatorSelection(choices: readonly AlertIndicatorChoice[], preferKey?: string): AlertIndicatorSelection | undefined {
+  // Placed on a pane whose indicator can't be alerted on: no stand-in (its value is on another scale); the user picks.
+  if (preferKey && choices.some((item) => item.key === preferKey && item.unavailable)) return undefined;
   const choice = choices.find((item) => item.key === preferKey && !item.unavailable) ?? choices.find((item) => !item.unavailable);
   return choice ? { key: choice.key, output: choice.outputs[0].key, operator: 'crossing' } : undefined;
 }

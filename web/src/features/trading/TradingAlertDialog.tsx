@@ -111,7 +111,8 @@ export function TradingAlertDialog({
   indicatorChoices?: readonly AlertIndicatorChoice[];
 }) {
   // On a chart with indicators, an indicator alert is on one of them (unless editing a legacy alert).
-  const chartIndicators = indicatorChoices && indicatorChoices.length > 0 && editor.mode === 'create'
+  const usesChartIndicators = Boolean(indicatorChoices?.length) && editor.mode === 'create' && editor.condition.startsWith('indicator_');
+  const chartIndicators = indicatorChoices && usesChartIndicators
     ? resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId)
     : undefined;
   const [showConditionNote, setShowConditionNote] = useState(false);
@@ -156,7 +157,7 @@ export function TradingAlertDialog({
             >
               {(isTrendline ? [{ value: 'trendline_crossing', label: 'Trendline' }] : priceConditionOptions).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            {isIndicator && chartIndicators ? null : (
+            {usesChartIndicators ? null : (
             <select
               aria-label="Alert crossing"
               value={isTrendline ? editor.condition : direction}
@@ -187,9 +188,9 @@ export function TradingAlertDialog({
           {isPercent ? (
             <label className="trading-alert-inline-field">Lookback bars<input inputMode="numeric" value={editor.lookback} onChange={(event) => onChange({ lookback: event.target.value })} /></label>
           ) : null}
-          {isIndicator && indicatorChoices && indicatorChoices.length > 0 && editor.mode === 'create' && !chartIndicators ? (
+          {usesChartIndicators && !indicatorChoices?.some((choice) => !choice.unavailable) ? (
             <small className="trading-alert-condition-note" role="alert">None of this chart&apos;s indicators can be alerted on by the server yet.</small>
-          ) : isIndicator && chartIndicators ? (
+          ) : usesChartIndicators ? (
             <AlertIndicatorPicker choices={indicatorChoices ?? []} selection={chartIndicators} onChange={(indicatorSelection) => onChange({ indicatorSelection })} />
           ) : isIndicator ? (
             <div className="trading-alert-condition-row">

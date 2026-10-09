@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, resolveIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
-import type { CoreIndicatorId } from './indicators/coreIndicators';
+import { indicatorUsesSeparatePane, type CoreIndicatorId } from './indicators/coreIndicators';
+import { tradingViewBuiltInUsesSeparatePane } from './indicators/tradingViewBuiltIns';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
@@ -29,6 +30,12 @@ type TrendlineMode = NonNullable<TradingAlert['parameters']['trendline_mode']>;
 function indicatorIdForAlert(alert: TradingAlert): CoreIndicatorId | null {
   // Legacy indicator alerts and single "indicator line vs value" conditions alerts (TVP-1.3) are drawn on their pane.
   return chartAlertIndicatorId(alert) as CoreIndicatorId | null;
+}
+
+/** The indicator pane an alert sits on; null when its indicator is drawn on the price pane (it moves in prices). */
+function paneIndicatorId(alert: TradingAlert): CoreIndicatorId | null {
+  const indicatorId = indicatorIdForAlert(alert);
+  return indicatorId && (indicatorUsesSeparatePane(indicatorId) || tradingViewBuiltInUsesSeparatePane(indicatorId)) ? indicatorId : null;
 }
 
 /** The update that moves a dragged alert to `threshold`: its condition's value (unrounded) for a conditions alert. */
@@ -79,7 +86,8 @@ export function editorDefaults(placement: ChartAlertPlacement, latestPrice: numb
     alertId: null,
     x: placement.x,
     y: placement.y,
-    threshold: isTrendline ? '0' : formatAlertThreshold(placement.price),
+    // A value read from an indicator pane keeps its precision (MACD on FX is well below 0.01).
+    threshold: isTrendline ? '0' : isIndicator ? String(Number(placement.price.toPrecision(8))) : formatAlertThreshold(placement.price),
     condition: isTrendline
       ? 'trendline_crossing'
       : isIndicator
@@ -304,7 +312,7 @@ export function TradingChartAlertOverlay({
     event.stopPropagation();
     if (!alert.enabled || alertVisualState(alert) === 'expired' || !adapter || !rootRef.current) return;
     const bounds = rootRef.current.getBoundingClientRect();
-    const indicatorId = indicatorIdForAlert(alert);
+    const indicatorId = paneIndicatorId(alert);
     const valueFromCoordinate = (y: number) => indicatorId
       ? adapter.indicatorValueFromCoordinate(indicatorId, y)
       : adapter.priceFromCoordinate(y);
@@ -326,7 +334,7 @@ export function TradingChartAlertOverlay({
   };
 
   const alertCoordinate = (alert: TradingAlert, threshold: number): number | null | undefined => {
-    const indicatorId = indicatorIdForAlert(alert);
+    const indicatorId = paneIndicatorId(alert);
     return indicatorId
       ? adapter?.indicatorValueToCoordinateForId(indicatorId, threshold)
       : adapter?.priceToCoordinate(threshold);
