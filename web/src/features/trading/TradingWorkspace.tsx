@@ -27,6 +27,7 @@ import { TradingChartLayoutPicker } from './TradingChartLayoutPicker';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { duplicateTradingWorkspace } from './persistence/duplicateWorkspace';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
+import { WorkspaceImportButton } from './persistence/WorkspaceImportButton';
 import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
 import { isIntervalAvailable } from './tradingIntervals';
 import { TradingIntervalMenu } from './TradingIntervalMenu';
@@ -513,6 +514,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={panels.right} onClick={() => setPanel('right', !panels.right)} disabled={!workspaceHydrated}>Right panel</button>
           <button type="button" aria-pressed={panels.bottom} onClick={() => setPanel('bottom', !panels.bottom)} disabled={!workspaceHydrated}>Bottom dock</button>
           <button type="button" onClick={exportWorkspace}>Export</button>
+          <WorkspaceImportButton disabled={!workspaceHydrated} onImport={persistence.importWorkspace} />
           <TradingKeyboardLayer persistence={persistence} supportedIntervals={supportedIntervals} onOpenSymbolSearch={(typed) => openSymbolSearch(activeChartId, typed)} onCloseTab={closeTabSession} />
           <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus'}</button>
       </div>

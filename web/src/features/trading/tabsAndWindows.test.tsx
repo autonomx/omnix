@@ -6,6 +6,7 @@ import { tradingDraftRecovery } from './persistence/draftRecovery';
 import { parseTradingWorkspace, serializeTradingWorkspace } from './persistence/workspaceDocument';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { tradingApi } from './tradingApi';
+import { buildTradingWorkspaceExport } from './tradingExport';
 import { TradingSessionTabs } from './TradingSessionTabs';
 import { useTradingStore } from './tradingStore';
 import type { TradingDocument } from './tradingTypes';
@@ -256,6 +257,34 @@ describe('workspace persistence across windows', () => {
     const dirty = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(dirty);
     expect(dirty.defaultPrevented).toBe(true);
+  });
+
+  it('imports an exported workspace as a new workspace, keeping the favourites, and refuses other files', async () => {
+    const created = vi.spyOn(tradingApi, 'createDocument').mockImplementation(async (_kind, recordId, payload) => ({
+      record_id: recordId, record_type: 'workspace', revision: 1, status: 'active', updated_at: null, payload,
+    }));
+    const { result } = renderHook(() => useTradingWorkspacePersistence());
+    await waitFor(() => expect(result.current.status).toBe('saved'));
+    act(() => useTradingStore.setState({ favoriteInstrumentIds: ['alpaca:stock:SPY'] }));
+    const state = useTradingStore.getState();
+    const exported = buildTradingWorkspaceExport({
+      layout: 'columns-2', activeChartId: state.activeChartId,
+      charts: [state.charts[0], { ...state.charts[0], chartId: 'chart-imported', interval: '1h' }], links: state.links,
+    });
+
+    expect(await result.current.importWorkspace({ hello: 'world' }, 'Nope')).toBe('invalid');
+    expect(created).not.toHaveBeenCalled();
+    let outcome = '';
+    await act(async () => { outcome = await result.current.importWorkspace(JSON.parse(JSON.stringify(exported)), ' From file '); });
+    expect(outcome).toBe('imported');
+    const [, recordId, payload] = created.mock.calls[0];
+    expect(recordId).toMatch(/^from-file-/);
+    expect(parseTradingWorkspace(payload)?.name).toBe('From file');
+    expect(result.current.activeWorkspaceId).toBe(recordId);
+    expect(result.current.workspaces.map((workspace) => workspace.name)).toContain('From file');
+    expect(useTradingStore.getState().layout).toBe('columns-2');
+    expect(useTradingStore.getState().charts.map((chart) => chart.chartId)).toContain('chart-imported');
+    expect(useTradingStore.getState().favoriteInstrumentIds).toEqual(['alpaca:stock:SPY']);
   });
 });
 
