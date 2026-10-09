@@ -7,6 +7,8 @@ const tradingApi = vi.hoisted(() => ({
   updateAlert: vi.fn(),
   archiveAlert: vi.fn(),
   createAlert: vi.fn(),
+  documents: vi.fn(async () => [{ record_id: 'wl-1', payload: { name: 'Tech' } }]),
+  watchlistAlertCapacity: vi.fn(async () => ({ watchlist_id: 'wl-1', symbol_count: 150, provider_cap: 45, default_limit: 100 })),
 }));
 
 vi.mock('./tradingApi', () => ({ tradingApi }));
@@ -147,5 +149,25 @@ describe('TradingAlertsPanel conditions it cannot edit (TVP-1.6)', () => {
     fireEvent.change(screen.getByLabelText('Condition 1 value'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Each condition needs a value.');
+  });
+});
+
+describe('TradingAlertsPanel watchlist alerts (TVP-1.7)', () => {
+  it('creates an alert on every symbol of a watchlist, on each symbol own feed', async () => {
+    tradingApi.alerts.mockResolvedValue([]);
+    tradingApi.alertTriggers.mockResolvedValue([]);
+    tradingApi.createAlert.mockImplementation(async (input) => ({ ...input, enabled: true, revision: 1, definition_revision: 1 }));
+    render(<TradingAlertsPanel instrumentId="equity:NASDAQ:AAPL" bindingId="alpaca:AAPL" interval="1h" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add alert' }));
+    const target = await screen.findByLabelText('Alert applies to');
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Watchlist: Tech' })).toBeTruthy());
+    fireEvent.change(target, { target: { value: 'watchlist:wl-1' } });
+    expect(await screen.findByText(/Runs on 45 of the list's 150 symbols \(at most 45 within its providers' request budgets\)/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Alert value'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create alert' }));
+    await waitFor(() => expect(tradingApi.createAlert).toHaveBeenCalled());
+    const input = tradingApi.createAlert.mock.calls.at(-1)![0];
+    expect(input.instrument_id).toBe('watchlist:wl-1');
+    expect(input.binding_id ?? null).toBeNull();
   });
 });
