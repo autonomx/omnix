@@ -66,7 +66,7 @@ export function screenerHistoryNeeded(rules: readonly ScreenerRuleInput[]): numb
 export function screenerValue(result: TradingScannerResult, rule: TradingScannerRule): number | null {
   const legacy = rule.metric === 'percent_change' ? `percent_change:${rule.lookback_bars}`
     : ['sma', 'ema', 'rsi', 'atr'].includes(rule.metric) ? `${rule.metric}:${rule.period}` : rule.metric;
-  const raw = result.metrics[`rule:${rule.rule_id}`] ?? result.metrics[legacy];
+  const raw = result.metrics?.[`rule:${rule.rule_id}`] ?? result.metrics?.[legacy];
   const value = raw === undefined || raw === null ? Number.NaN : Number(raw);
   return Number.isFinite(value) ? value : null;
 }

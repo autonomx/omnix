@@ -86,6 +86,42 @@ describe('screener auto-refresh (TVP-9.2)', () => {
     expect(api.create).not.toHaveBeenCalled();
   });
 
+  it('keeps the screen settings it does not edit, and shows a run with its own columns (TVP-9.1 review)', async () => {
+    const rules = [{ rule_id: 'up', metric: 'percent_change', operator: 'gte', threshold: '1', period: 14, lookback_bars: 5, role: 'filter', source: null }];
+    const saved = { scanner_id: 's1', name: 'Movers', instrument_ids: ['crypto:X:spot:AAA-USD'], interval: '1h', revision: 4, rules,
+      binding_ids: { 'crypto:X:spot:AAA-USD': 'feed' }, history_limit: 300, max_concurrency: 2, request_timeout_seconds: 7, run_timeout_seconds: 90, enabled: false };
+    api.definitions.mockResolvedValue([{ ...saved, rules: [{ ...rules[0], metric: 'rsi' }] }]);
+    // The run on screen was made by the earlier version: change % columns, not RSI.
+    api.runs.mockResolvedValue([{ run_id: 'run-1', scanner_id: 's1', status: 'completed', completed_count: 1, universe_count: 1, matched_count: 1, definition_snapshot: { rules } }]);
+    api.results.mockResolvedValueOnce([result('crypto:X:spot:AAA-USD')]);
+    api.update.mockResolvedValue({ ...saved, revision: 5 });
+    api.start.mockResolvedValue({});
+    render(<TradingScannerPanel instruments={[]} />);
+    expect(await screen.findByRole('button', { name: 'change % 5' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Movers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Movers and run' }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith(expect.objectContaining({
+      binding_ids: { 'crypto:X:spot:AAA-USD': 'feed' }, history_limit: 300, max_concurrency: 2, request_timeout_seconds: 7, run_timeout_seconds: 90, enabled: false,
+    })));
+  });
+
+  it('keeps the edits when the screen changed elsewhere, and saves over the new version', async () => {
+    const rules = [{ rule_id: 'up', metric: 'percent_change', operator: 'gte', threshold: '1', period: 14, lookback_bars: 5, role: 'filter', source: null }];
+    const saved = { scanner_id: 's1', name: 'Movers', instrument_ids: ['crypto:X:spot:AAA-USD'], interval: '1h', revision: 4, rules, history_limit: 100 };
+    api.definitions.mockResolvedValue([saved]);
+    api.runs.mockResolvedValue([]);
+    api.update.mockRejectedValueOnce(new Error('Trading scanner request failed (409): revision'));
+    render(<TradingScannerPanel instruments={[]} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Movers' }));
+    fireEvent.change(screen.getByLabelText('Value of up'), { target: { value: '7' } });
+    api.definitions.mockResolvedValue([{ ...saved, revision: 9 }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Movers and run' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('changed elsewhere');
+    api.update.mockResolvedValue({ ...saved, revision: 10 });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Movers and run' }));
+    await waitFor(() => expect(api.update).toHaveBeenLastCalledWith(expect.objectContaining({ revision: 9, rules: [expect.objectContaining({ threshold: '7' })] })));
+  });
+
   it('never compares results of different screens', async () => {
     api.definitions.mockResolvedValue([{ scanner_id: 's1', name: 'Movers', instrument_ids: ['a'], interval: '1d', revision: 1 }, { scanner_id: 's2', name: 'Gaps', instrument_ids: ['x'], interval: '1d', revision: 1 }]);
     api.runs.mockResolvedValue([{ run_id: 'run-1', scanner_id: 's1', status: 'completed', completed_count: 2, universe_count: 2, matched_count: 2 }]);

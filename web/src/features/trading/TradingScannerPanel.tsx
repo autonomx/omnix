@@ -11,6 +11,12 @@ import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
 
+/** The rules of a run's own definition snapshot (stored rules from before TVP-9.1 have no role: filters). */
+function snapshotRules(run: TradingScannerRun): TradingScannerDefinition['rules'] {
+  const rules = (run.definition_snapshot as { rules?: TradingScannerDefinition['rules'] } | undefined)?.rules ?? [];
+  return rules.map((rule) => ({ ...rule, role: rule.role ?? 'filter' }));
+}
+
 /** The screen a definition starts from: one filter, change % over a bar at or above 1. */
 function defaultRules(): ScreenerRuleInput[] {
   return [newScreenerRule('filter')];
@@ -30,7 +36,9 @@ export function TradingScannerPanel({ instruments, onShowInstrument }: {
   const [interval, setScanInterval] = useState('1d');
   // A saved screen loaded into the editor: saving updates it (at its revision) instead of adding one.
   const [editing, setEditing] = useState<TradingScannerDefinition | null>(null);
-  const [resultsScannerId, setResultsScannerId] = useState<string | null>(null);
+  // The rules of the run on screen (its own snapshot): a screen edited since keeps its old columns until it runs again.
+  const [resultRules, setResultRules] = useState<TradingScannerDefinition['rules']>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const serverIndicators = useAlertIndicatorIds();
   const indicatorIds = useMemo(() => [...(serverIndicators ?? [])], [serverIndicators]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -60,7 +68,7 @@ export function TradingScannerPanel({ instruments, onShowInstrument }: {
         // Changes only compare runs of the same screen.
         setChanges(previous.scannerId === latest.scanner_id ? resultChanges(previous.results, next) : resultChanges(null, next));
         shown.current = { runId: latest.run_id, scannerId: latest.scanner_id, results: next };
-        setResultsScannerId(latest.scanner_id);
+        setResultRules(snapshotRules(latest));
         setResults(next);
       }
     } catch {
@@ -89,34 +97,36 @@ export function TradingScannerPanel({ instruments, onShowInstrument }: {
   const available = useMemo(() => instruments.slice(0, 200), [instruments]);
   const save = async () => {
     const thresholdsValid = rules.every((rule) => rule.role === 'column' || Number.isFinite(Number(rule.threshold)));
-    if (!selectedIds.length || !thresholdsValid || !rules.some((rule) => rule.role !== 'column')) {
+    const indicatorsChosen = rules.every((rule) => rule.metric !== 'indicator' || Boolean((rule.source as { output?: string } | null)?.output));
+    if (!selectedIds.length || !thresholdsValid || !indicatorsChosen || !rules.some((rule) => rule.role !== 'column')) {
       setStatus('error');
+      setNotice(!indicatorsChosen ? 'Choose a line for each indicator rule.' : 'A screen needs symbols, at least one filter, and a value for each filter.');
       return;
     }
-    const definition: TradingScannerDefinitionInput = {
-      scanner_id: editing?.scanner_id ?? `scanner-${Date.now()}`,
-      name,
-      instrument_ids: selectedIds,
-      binding_ids: {},
-      interval,
-      // The history every rule needs (the indicator rules the most), within the server's 500-bar limit.
-      history_limit: Math.min(500, Math.max(100, rules.some((rule) => rule.metric === 'indicator') ? 500 : screenerHistoryNeeded(rules))),
-      rules,
-      max_concurrency: 4,
-      request_timeout_seconds: 10,
-      run_timeout_seconds: 120,
-      formula_version: 'omnix-indicators-v2',
-      enabled: true,
-      revision: editing?.revision ?? 1,
-    };
+    setNotice(null);
+    // The history every rule needs (the indicator rules the most), within the server's 500-bar limit; an edit never
+    // shortens a screen's history (EMA/RSI/ATR values depend on it).
+    const needed = Math.min(500, Math.max(100, rules.some((rule) => rule.metric === 'indicator') ? 500 : screenerHistoryNeeded(rules)));
+    const definition: TradingScannerDefinitionInput = editing
+      ? { ...editing, name, instrument_ids: selectedIds, interval, rules, history_limit: Math.max(editing.history_limit, needed) }
+      : {
+        scanner_id: `scanner-${Date.now()}`, name, instrument_ids: selectedIds, binding_ids: {}, interval, history_limit: needed, rules,
+        max_concurrency: 4, request_timeout_seconds: 10, run_timeout_seconds: 120, formula_version: 'omnix-indicators-v2', enabled: true, revision: 1,
+      };
     setStatus('saving');
     try {
       const saved = editing ? await tradingScannerApi.update({ ...definition, revision: editing.revision }) : await tradingScannerApi.create(definition);
       setEditing(saved);
       if (!working(saved.scanner_id)) await tradingScannerApi.start(saved.scanner_id);
       await refresh();
-    } catch {
+    } catch (error) {
       setStatus('error');
+      if (editing && error instanceof Error && error.message.includes('(409)')) {
+        // Changed elsewhere: take its new revision and keep these edits, so saving again applies them.
+        const fresh = (await tradingScannerApi.definitions().catch(() => [])).find((item) => item.scanner_id === editing.scanner_id);
+        if (fresh) setEditing(fresh);
+        setNotice('This screen changed elsewhere. Your edits are kept: save again to apply them over the new version.');
+      }
     }
   };
 
@@ -130,7 +140,6 @@ export function TradingScannerPanel({ instruments, onShowInstrument }: {
 
   const symbolOf = (instrumentId: string) => instruments.find((item) => item.instrument_id === instrumentId)?.display_symbol
     ?? instrumentId.split(':').at(-1) ?? instrumentId;
-  const resultRules = definitions.find((definition) => definition.scanner_id === resultsScannerId)?.rules ?? [];
 
   const start = async (scannerId: string) => {
     setStatus('saving');
@@ -151,6 +160,7 @@ export function TradingScannerPanel({ instruments, onShowInstrument }: {
         <label>Interval<select value={interval} onChange={(event) => setScanInterval(event.target.value)}>{['1m', '5m', '15m', '1h', '4h', '1d'].map((item) => <option key={item}>{item}</option>)}</select></label>
       </div>
       <ScreenerRuleEditor rules={rules} indicatorIds={indicatorIds} onChange={setRules} />
+      {notice ? <p className="trading-scanner-changes" role="alert">{notice}</p> : null}
       <fieldset className="trading-scanner-universe">
         <legend>Instrument allowlist ({selectedIds.length}/200)</legend>
         {available.map((instrument) => (

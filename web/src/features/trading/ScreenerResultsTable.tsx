@@ -24,6 +24,7 @@ export function ScreenerResultsTable({
   onShow: (instrumentId: string) => void;
 }) {
   const [sort, setSort] = useState<ScreenerSort>({ key: 'rank', direction: 'asc' });
+  const [addNote, setAddNote] = useState<string | null>(null);
   const sorted = useMemo(() => sortScreenerResults(results, rules, sort), [results, rules, sort]);
   const header = (key: string, label: string) => {
     const active = sort.key === key;
@@ -38,9 +39,16 @@ export function ScreenerResultsTable({
   return (
     <>
       <div className="trading-screener-results-actions">
-        <button type="button" disabled={results.length === 0} onClick={() => requestWatchlistAdd(sorted.map((result) => result.instrument_id))}>
+        <button
+          type="button"
+          disabled={results.length === 0}
+          onClick={() => setAddNote(requestWatchlistAdd(sorted.map((result) => result.instrument_id))
+            ? `Added to the open watchlist.`
+            : 'Open an editable watchlist (Watchlist tab) to add them.')}
+        >
           Add {results.length} to the watchlist
         </button>
+        {addNote ? <small role="status">{addNote}</small> : null}
       </div>
       <table className="trading-scanner-results">
         <thead>

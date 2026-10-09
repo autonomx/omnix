@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { indicatorOutputsFor } from './indicatorOutputKeys';
+import { tradingViewBuiltInUsesSessions } from './indicators/tradingViewBuiltIns';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { newScreenerRule, SCREENER_METRICS, SCREENER_OPERATORS, type ScreenerMetric, type ScreenerRuleInput } from './screenerRules';
 import { newIndicatorInstance } from './tradingStore';
@@ -43,12 +44,17 @@ function IndicatorFields({ rule, indicatorIds, onChange }: { rule: ScreenerRuleI
 
 /** The screen's filters and columns (TVP-9.1): metric, comparison and value; columns are shown only. */
 export function ScreenerRuleEditor({
-  rules, indicatorIds, onChange,
+  rules, indicatorIds: serverIds, onChange,
 }: {
   rules: readonly ScreenerRuleInput[];
   indicatorIds: readonly string[];
   onChange: (rules: ScreenerRuleInput[]) => void;
 }) {
+  // Session-based indicators run on UTC days on the server (see alertIndicatorSources); one without lines can't be used.
+  const indicatorIds = useMemo(
+    () => serverIds.filter((id) => !tradingViewBuiltInUsesSessions(id) && indicatorLines(id, 14).length > 0),
+    [serverIds],
+  );
   const update = (index: number, rule: ScreenerRuleInput) => onChange(rules.map((item, at) => (at === index ? rule : item)));
   const setMetric = (index: number, metric: ScreenerMetric) => {
     const rule = rules[index];

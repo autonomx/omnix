@@ -5,7 +5,8 @@ import { ScreenerResultsTable } from './ScreenerResultsTable';
 import { ScreenerRuleEditor } from './ScreenerRuleEditor';
 import { newScreenerRule, screenerHistoryNeeded, screenerRuleLabel, screenerValue, sortScreenerResults, type ScreenerRuleInput } from './screenerRules';
 import type { TradingScannerResult, TradingScannerRule } from './scannerTypes';
-import './tradingWatchlistEvents';
+import { requestWatchlistAdd, useWatchlistAddRequests } from './tradingWatchlistEvents';
+import { renderHook } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -65,5 +66,18 @@ describe('screener editor and results (TVP-9.1)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add 2 to the watchlist' }));
     expect(added).toEqual([['c', 'a']]);
     stop();
+  });
+});
+
+describe('watchlist add requests (TVP-9.1)', () => {
+  it('reach the open, editable watchlist and say whether one took them', () => {
+    expect(requestWatchlistAdd(['a'])).toBe(false);
+    const add = vi.fn();
+    const hook = renderHook(({ enabled }) => useWatchlistAddRequests(add, enabled), { initialProps: { enabled: true } });
+    expect(requestWatchlistAdd(['a', 'b'])).toBe(true);
+    expect(add).toHaveBeenCalledWith(['a', 'b']);
+    hook.rerender({ enabled: false });
+    expect(requestWatchlistAdd(['c'])).toBe(false);
+    hook.unmount();
   });
 });

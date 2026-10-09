@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -22,6 +24,8 @@ from .scanner import (
 class UnitOfWorkFactory(Protocol):
     def __call__(self) -> AbstractContextManager[PostgresUnitOfWork]: ...
 
+
+logger = logging.getLogger(__name__)
 
 # A run lasts at most 300 s (TradingScannerDefinition.run_timeout_seconds); one older than this was abandoned.
 STALE_RUN_SECONDS = 600
@@ -121,7 +125,15 @@ class TradingScannerRepository:
                 f"SELECT {_DEFINITION_COLUMNS} FROM omnix_trading_scanners WHERE workspace_id = %s ORDER BY updated_at DESC LIMIT %s",
                 (self.context.workspace_id, limit),
             ).fetchall()
-            return [_definition(row) for row in rows]
+            # A stored screen a newer rule refuses (a duplicate rule id, a renamed indicator line) is left out
+            # of the list rather than failing it; it can still be read and fixed by id.
+            definitions = []
+            for row in rows:
+                try:
+                    definitions.append(_definition(row))
+                except ValueError:
+                    logger.warning("trading_scanner_definition_unreadable scanner_id=%s", row[0])
+            return definitions
 
     def get_definition(self, scanner_id: str) -> TradingScannerDefinition | None:
         with self.uow_factory() as uow:

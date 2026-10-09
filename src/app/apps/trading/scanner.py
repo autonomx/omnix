@@ -163,7 +163,9 @@ def scanner_rule_history(rule: TradingScannerRule) -> int:
         from .alerts_evaluation import _source_lookback
 
         return _source_lookback(rule.source)
-    if rule.metric in {"relative_volume", "high_distance_percent", "low_distance_percent"}:
+    if rule.metric == "relative_volume":
+        return rule.period + 1
+    if rule.metric in {"high_distance_percent", "low_distance_percent"}:
         return rule.period
     if rule.metric == "gap_percent":
         return 2
@@ -192,7 +194,7 @@ def scanner_metric_formula(rule: TradingScannerRule) -> str:
     if rule.metric == "indicator" and rule.source is not None:
         return f"{CORE_INDICATOR_FORMULA_VERSION}:{rule.source.indicator_id}:{rule.source.output}"
     if rule.metric == "relative_volume":
-        return f"volume[t] / mean(volume[t-{rule.period}+1..t])"
+        return f"volume[t] / mean(volume[t-{rule.period}..t-1])"
     if rule.metric == "gap_percent":
         return "((open[t] / close[t-1]) - 1) * 100"
     if rule.metric == "high_distance_percent":
@@ -208,7 +210,7 @@ def scanner_metric_formula(rule: TradingScannerRule) -> str:
     return f"{CORE_INDICATOR_FORMULA_VERSION}:{rule.metric}:{rule.period}"
 
 
-def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar]) -> Decimal | None:
+def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar], values: Any = None) -> Decimal | None:
     if not bars:
         return None
     closes = [Decimal(bar.close) for bar in bars]
@@ -223,7 +225,7 @@ def scanner_metric_value(rule: TradingScannerRule, bars: Sequence[MarketBar]) ->
     if rule.metric == "indicator" and rule.source is not None:
         from .alerts_evaluation import _BarValues
 
-        return _BarValues(bars).value(rule.source, len(bars) - 1)
+        return (values or _BarValues(bars)).value(rule.source, len(bars) - 1)
     if rule.metric in {"relative_volume", "high_distance_percent", "low_distance_percent", "gap_percent"}:
         return _bar_metric(rule, bars, closes)
     if rule.metric == "sma":
@@ -248,12 +250,16 @@ def _bar_metric(rule: TradingScannerRule, bars: Sequence[MarketBar], closes: lis
         if len(bars) < 2 or closes[-2] == 0:
             return None
         return (Decimal(bars[-1].open) / closes[-2] - Decimal("1")) * Decimal("100")
+    if rule.metric == "relative_volume":
+        # Against the average of the N bars before this one, as TradingView's relative volume does.
+        if len(bars) < rule.period + 1:
+            return None
+        prior = bars[-rule.period - 1:-1]
+        average = sum((Decimal(bar.volume) for bar in prior), Decimal("0")) / Decimal(rule.period)
+        return Decimal(bars[-1].volume) / average if average > 0 else None
     if len(bars) < rule.period:
         return None
     window = bars[-rule.period:]
-    if rule.metric == "relative_volume":
-        average = sum((Decimal(bar.volume) for bar in window), Decimal("0")) / Decimal(rule.period)
-        return Decimal(bars[-1].volume) / average if average > 0 else None
     extreme = (
         max(Decimal(bar.high) for bar in window)
         if rule.metric == "high_distance_percent"
@@ -291,8 +297,13 @@ def evaluate_scanner_dataset(
     matched: list[str] = []
     score = Decimal("0")
     filters = [rule for rule in definition.rules if rule.role == "filter"]
+    shared = None
+    if any(rule.metric == "indicator" for rule in definition.rules):
+        from .alerts_evaluation import _BarValues
+
+        shared = _BarValues(bars)
     for rule in definition.rules:
-        value = scanner_metric_value(rule, bars)
+        value = scanner_metric_value(rule, bars, shared)
         if value is None:
             if rule.role == "column":
                 continue  # a column without the history shows no value; it never drops a result
@@ -351,7 +362,9 @@ async def execute_scanner(
                 ),
                 timeout=definition.request_timeout_seconds,
             )
-            result = evaluate_scanner_dataset(
+            # Indicator rules are CPU work: off the event loop (TVP-9.1).
+            result = await asyncio.to_thread(
+                evaluate_scanner_dataset,
                 definition,
                 run_id,
                 response,

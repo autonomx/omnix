@@ -28,7 +28,8 @@ def test_new_metrics_compute_on_the_bars() -> None:
     result = evaluate_scanner_dataset(scanner, "run", response(SYMBOL), None)
     assert result is not None
     metrics = result.metrics
-    assert metrics["rule:rvol"] == Decimal(1029) / (sum(Decimal(v) for v in range(1010, 1030)) / 20)
+    # Against the 20 bars before the last one.
+    assert metrics["rule:rvol"] == Decimal(1029) / (sum(Decimal(v) for v in range(1009, 1029)) / 20)
     assert metrics["rule:gap"] == (Decimal(129) / Decimal(128) - 1) * 100
     assert metrics["rule:high"] == (Decimal(129) / Decimal(130) - 1) * 100
     assert metrics["rule:low"] == (Decimal(129) / Decimal(109) - 1) * 100

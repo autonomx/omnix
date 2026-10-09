@@ -7,12 +7,16 @@ import { emitOmnixEvent, onOmnixEvent } from '../../events/bus';
 
 declare module '../../events/bus' {
   interface OmnixEventMap {
-    'omnix:trading-watchlist-add': { instrumentIds: string[] };
+    'omnix:trading-watchlist-add': { instrumentIds: string[]; taken: { value: boolean } };
   }
 }
 
-export function requestWatchlistAdd(instrumentIds: readonly string[]): void {
-  if (instrumentIds.length > 0) emitOmnixEvent('omnix:trading-watchlist-add', { instrumentIds: [...instrumentIds] });
+/** Asks the open watchlist to add the symbols; false when no editable list is open to take them. */
+export function requestWatchlistAdd(instrumentIds: readonly string[]): boolean {
+  if (instrumentIds.length === 0) return false;
+  const taken = { value: false };
+  emitOmnixEvent('omnix:trading-watchlist-add', { instrumentIds: [...instrumentIds], taken });
+  return taken.value;
 }
 
 /** The open watchlist's side: `add` receives the requested symbols while `enabled` (a list is open and editable). */
@@ -21,5 +25,8 @@ export function useWatchlistAddRequests(add: (instrumentIds: string[]) => void, 
   useEffect(() => {
     handler.current = add;
   });
-  useEffect(() => (enabled ? onOmnixEvent('omnix:trading-watchlist-add', ({ instrumentIds }) => handler.current(instrumentIds)) : undefined), [enabled]);
+  useEffect(() => (enabled ? onOmnixEvent('omnix:trading-watchlist-add', ({ instrumentIds, taken }) => {
+    taken.value = true;
+    handler.current(instrumentIds);
+  }) : undefined), [enabled]);
 }
