@@ -12,6 +12,7 @@ import {
 } from './workspaceDocument';
 
 export type WorkspacePersistenceStatus = 'loading' | 'saved' | 'saving' | 'draft' | 'conflict' | 'error';
+export type WorkspaceImportResult = 'imported' | 'invalid' | 'error';
 export type TradingWorkspaceSummary = { workspaceId: string; name: string; revision: number };
 
 type ConflictState = {
@@ -27,8 +28,10 @@ export type TradingWorkspacePersistence = {
   activeWorkspaceName: string;
   hasConflict: boolean;
   selectWorkspace: (workspaceId: string) => Promise<void>;
-  /** `prepare` runs after the new workspace document exists and before it becomes active (TVP-2.5 duplicates drawings there). */
-  createWorkspace: (name: string, prepare?: (workspaceId: string) => Promise<void>) => Promise<void>;
+  /** `prepare` runs after the new workspace document exists and before it becomes active (TVP-2.5 duplicates drawings there); false when it was not created. */
+  createWorkspace: (name: string, prepare?: (workspaceId: string) => Promise<void>) => Promise<boolean>;
+  /** Saves an exported workspace file as a new workspace and opens it: 'invalid' when it is not one. */
+  importWorkspace: (value: unknown, name: string) => Promise<WorkspaceImportResult>;
   renameWorkspace: (name: string) => Promise<void>;
   deleteWorkspace: () => Promise<void>;
   resolveConflict: (resolution: 'reload' | 'overwrite') => Promise<void>;
@@ -99,6 +102,21 @@ function applyWorkspace(value: unknown, applyingRef: { current: boolean }, keepS
   });
   applyingRef.current = false;
   return true;
+}
+
+/** An exported workspace file as a workspace named `name`, or null when it is not one. An export carries the charts,
+ * not the favourites: those stay this window's. */
+function importedWorkspacePayload(value: unknown, name: string): TradingWorkspacePayload | null {
+  const cleanName = name.trim();
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  const parsed = source && cleanName ? parseTradingWorkspace({ ...source, name: cleanName }) : null;
+  if (!source || !parsed) return null;
+  const state = useTradingStore.getState();
+  return {
+    ...parsed,
+    favoriteInstrumentIds: Array.isArray(source.favoriteInstrumentIds) ? parsed.favoriteInstrumentIds : state.favoriteInstrumentIds,
+    favoriteIntervals: parsed.favoriteIntervals ?? state.favoriteIntervals,
+  };
 }
 
 /** The workspace a window starts on: the one it was opened on (`?workspace=`, TVP-4.3), else the main one. */
@@ -337,27 +355,41 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     setStatus('saved');
   }, [hydrate, saveNow]);
 
-  const createWorkspace = useCallback(async (name: string, prepare?: (workspaceId: string) => Promise<void>) => {
+  /** Saves the open workspace, then opens a new one: a copy of it, or `imported` (a workspace file). */
+  const createWorkspace = useCallback(async (
+    name: string,
+    prepare?: (workspaceId: string) => Promise<void>,
+    imported?: TradingWorkspacePayload,
+  ): Promise<boolean> => {
     const cleanName = name.trim();
-    if (!cleanName) return;
+    if (!cleanName) return false;
     await saveNow();
     setStatus('saving');
     try {
       const id = workspaceId(cleanName);
-      const payload = currentPayload(cleanName) as unknown as Record<string, unknown>;
-      const created = await tradingApi.createDocument('workspaces', id, payload);
+      const payload = imported ?? currentPayload(cleanName);
+      const created = await tradingApi.createDocument('workspaces', id, payload as unknown as Record<string, unknown>);
       await prepare?.(id).catch(() => undefined);
       recordsRef.current.set(id, created);
       activeIdRef.current = id;
       setTradingWorkspaceScopeId(id);
+      if (imported) hydrate(imported);
       setActiveWorkspaceId(id);
       conflictRef.current = null;
       refreshSummaries();
       setStatus('saved');
+      return true;
     } catch {
       setStatus('error');
+      return false;
     }
-  }, [currentPayload, refreshSummaries, saveNow]);
+  }, [currentPayload, hydrate, refreshSummaries, saveNow]);
+
+  const importWorkspace = useCallback(async (value: unknown, name: string): Promise<WorkspaceImportResult> => {
+    const payload = importedWorkspacePayload(value, name);
+    if (!payload) return 'invalid';
+    return (await createWorkspace(payload.name, undefined, payload)) ? 'imported' : 'error';
+  }, [createWorkspace]);
 
   const renameWorkspace = useCallback(async (name: string) => {
     const cleanName = name.trim();
@@ -419,6 +451,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     hasConflict: status === 'conflict',
     selectWorkspace,
     createWorkspace,
+    importWorkspace,
     renameWorkspace,
     deleteWorkspace,
     resolveConflict, saveNow,
