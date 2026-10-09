@@ -1076,9 +1076,9 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 |---|---|---|---|
 | D-1 | Script language and runtime | **Decided 2026-10-08** | TradingView-compatible (Pine) subset so users can paste existing scripts; product name "Omnix Scripts" |
 | D-2 | Paper shorting model | **Decided 2026-10-08** | Like TradingView: short any instrument, leverage per asset class, long/short margin %, margin calls, % or fixed commission, no borrow fees (TVP-7.2a, TVP-7.2b) |
-| D-3 | Breadth, classification and macro sources | Recommended | §7.2 |
+| D-3 | Breadth, classification and macro sources | **Decided 2026-10-09** | §7.2 as recommended: breadth computed from Alpaca SIP over the SEC ticker universe, sectors from SEC SIC codes, US macro and the economic calendar from FRED (a free key the owner enters in settings), US Treasury yield curves |
 | D-4 | On-chain data provider | Recommended | Defer; §7.2 |
-| D-5 | Fundamentals and earnings-date sources | Recommended | §7.2 |
+| D-5 | Fundamentals and earnings-date sources | **Decided 2026-10-09** | Free sources only: SEC XBRL company facts (statements, ratios, screener fundamentals), Alpaca corporate actions (dividends, splits), SEC 8-K item 2.02 (past earnings dates). Upcoming earnings dates wait for a paid calendar vendor the owner may choose later |
 | D-6 | Options data source | Recommended | §7.2 |
 | D-7 | Manual live trading from the chart | Not in this roadmap | Live execution stays with deterministic strategies |
 | D-8 | Native desktop wrapper (Electron/Tauri) | Recommended | Not needed; PWA (TVP-4.5) |
