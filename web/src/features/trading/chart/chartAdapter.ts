@@ -553,6 +553,8 @@ function indicatorLineStyle(value: IndicatorOutput['lineStyle']): LineStyle | un
  * on bar times. Raw bar times, not the plotted times: indicators compute on the bars on every chart type.
  */
 export function indicatorOutputOnBars(output: IndicatorOutput, barTimes: readonly UTCTimestamp[], stepSeconds: number | null): IndicatorOutput {
+  // Per-bar colours and labels are on bar times already (they paint those bars).
+  if (output.kind === 'background' || output.kind === 'bar-colors') return output;
   const points = output.points.map((point) => ({ time: timestamp(point.time), value: point.value }));
   const aligned = alignIndicatorPoints(points, barTimes, stepSeconds);
   if (aligned.length === points.length && aligned.every((point, index) => point.time === points[index].time)) return output;
@@ -564,14 +566,47 @@ export function indicatorLineData(
   barTimes: readonly UTCTimestamp[],
   multiplier = 1,
 ): Array<LineData<UTCTimestamp> | WhitespaceData<UTCTimestamp>> {
-  const scale = output.pane === 0 ? multiplier : 1;
-  const points = output.points.map((point) => ({ time: timestamp(point.time), value: point.value * scale }));
+  const scale = output.pane === 0 && output.kind !== 'background' ? multiplier : 1;
+  const points = output.points.map((point) => ({ time: timestamp(point.time), value: point.value * scale, ...(point.color ? { color: point.color } : {}) }));
   if (output.render !== 'levels' || points.length < 2) return points;
   const first = points[0].time;
   const last = points[points.length - 1].time;
   const valued = new Set<number>(points.map((point) => point.time));
   const gaps = barTimes.filter((time) => time > first && time < last && !valued.has(time)).map((time) => ({ time }));
   return [...points, ...gaps].sort((left, right) => left.time - right.time);
+}
+
+/** A background output's labels (Trading Sessions' names) as text marks at the top of the pane. */
+export function backgroundLabelMarkers(output: IndicatorOutput): SeriesMarker<UTCTimestamp>[] {
+  return output.points.flatMap((point) => (point.label ? [{
+    time: timestamp(point.time),
+    position: 'aboveBar' as const,
+    shape: 'square' as const,
+    size: 0,
+    color: point.color ?? output.color ?? '#787b86',
+    text: point.label,
+  }] : []));
+}
+
+/** The bar colours of `bar-colors` outputs, by bar time (TVP-6.2). A later output wins on a bar both colour. */
+export function indicatorBarColors(outputs: readonly IndicatorOutput[]): Map<number, string> {
+  const colors = new Map<number, string>();
+  for (const output of outputs) {
+    if (output.kind !== 'bar-colors' || output.visible === false) continue;
+    for (const point of output.points) if (point.color) colors.set(timestamp(point.time), point.color);
+  }
+  return colors;
+}
+
+/** The average close of the bars in a visible logical range (Visible Average Price), or null without bars in view. */
+export function visibleAverageClose(bars: readonly MarketBar[], range: { from: number; to: number } | null): number | null {
+  if (!range || bars.length === 0) return null;
+  const from = Math.max(0, Math.ceil(range.from));
+  const to = Math.min(bars.length - 1, Math.floor(range.to));
+  if (to < from) return null;
+  let total = 0;
+  for (let index = from; index <= to; index += 1) total += Number(bars[index].close);
+  return total / (to - from + 1);
 }
 
 /** Point signals (divergences, reversals, fractals) as series markers at their price. */
@@ -620,7 +655,15 @@ export class TradingChartAdapter {
   private readonly revisions = new Map<number, number>();
   private readonly viewportListeners = new Set<() => void>();
   private readonly priceSeriesPrimitives = new Set<ISeriesPrimitive<Time>>();
-  private readonly comparisonViewportHandler = () => this.renderComparisonSeries();
+  private readonly comparisonViewportHandler = () => {
+    this.renderComparisonSeries();
+    this.renderViewportAverage();
+  };
+  /** Bar colours from `bar-colors` outputs (Bollinger Bars), applied to the price series' data. */
+  private barColors = new Map<number, string>();
+  /** The Visible Average Price output and its price line. */
+  private viewportAverageOutput: IndicatorOutput | null = null;
+  private viewportAverageLine: { series: PriceSeries; line: IPriceLine } | null = null;
   private comparisonRenderInProgress = false;
   private comparisonRenderPending = false;
   private bars: MarketBar[] = [];
@@ -719,12 +762,54 @@ export class TradingChartAdapter {
     // Synthetic bars (Renko, range, line break, Kagi, P&F) plot their own times.
     this.priceTimes = visibleBars.map((bar) => timestamp(bar.start_time));
     this.noteSeriesTimes('price', this.priceTimes.map((time) => ({ time })));
-    if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).setData(visibleBars.map((bar) => this.chartType === 'volume-candles' ? volumeCandleData(bar, visibleBars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier)));
-    else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).setData(visibleBars.map((bar) => candlestickData(bar, this.priceScaleMultiplier)));
+    if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).setData(visibleBars.map((bar) => this.coloredBar(this.chartType === 'volume-candles' ? volumeCandleData(bar, visibleBars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier))));
+    else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).setData(visibleBars.map((bar) => this.coloredBar(candlestickData(bar, this.priceScaleMultiplier))));
     else if (isColumnType(this.chartType)) (this.priceSeries as ISeriesApi<'Histogram'>).setData(visibleBars.map((bar) => isVolumeColumnType(this.chartType) ? volumeData(bar) : columnData(bar, this.priceScaleMultiplier)));
     else if (isAreaType(this.chartType)) (this.priceSeries as ISeriesApi<'Area'>).setData(visibleBars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
     else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).setData(visibleBars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
     else (this.priceSeries as ISeriesApi<'Line'>).setData(visibleBars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
+  }
+
+  /** A candle or bar with the colour an indicator gave it (TVP-6.2), else as it is. */
+  private coloredBar<T extends CandlestickData<UTCTimestamp>>(data: T): T {
+    const color = this.barColors.size > 0 ? this.barColors.get(data.time as number) : undefined;
+    return color ? { ...data, color, wickColor: color, borderColor: color } : data;
+  }
+
+  /** Applies the `bar-colors` outputs; redraws the bars only when the colours changed. */
+  private applyIndicatorBarColors(outputs: readonly IndicatorOutput[]): void {
+    const next = indicatorBarColors(outputs);
+    const same = next.size === this.barColors.size && [...next].every(([time, color]) => this.barColors.get(time) === color);
+    if (same) return;
+    this.barColors = next;
+    if (this.bars.length > 0) this.setPriceData(this.bars);
+  }
+
+  /** The Visible Average Price line: the average close of the bars in view, kept as the view moves (TVP-6.2). */
+  private renderViewportAverage(): void {
+    if (this.destroyed) return;
+    const output = this.viewportAverageOutput;
+    const average = output ? visibleAverageClose(this.bars, this.chart.timeScale().getVisibleLogicalRange()) : null;
+    const current = this.viewportAverageLine;
+    if (average === null || !output) {
+      if (current) current.series.removePriceLine(current.line);
+      this.viewportAverageLine = null;
+      return;
+    }
+    const options = {
+      price: average * this.priceScaleMultiplier,
+      color: output.color ?? '#ff9800',
+      lineWidth: 1 as const,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: output.title,
+    };
+    if (current && current.series === this.priceSeries) {
+      current.line.applyOptions(options);
+      return;
+    }
+    if (current) current.series.removePriceLine(current.line);
+    this.viewportAverageLine = { series: this.priceSeries, line: this.priceSeries.createPriceLine(options) };
   }
 
   private updatePriceData(bar: MarketBar): void {
@@ -732,7 +817,7 @@ export class TradingChartAdapter {
       this.setPriceData(this.bars);
       return;
     }
-    if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).update(this.chartType === 'volume-candles' ? volumeCandleData(bar, this.bars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier));
+    if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).update(this.coloredBar(this.chartType === 'volume-candles' ? volumeCandleData(bar, this.bars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier)));
     else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).update(candlestickData(bar, this.priceScaleMultiplier));
     else if (isColumnType(this.chartType)) (this.priceSeries as ISeriesApi<'Histogram'>).update(isVolumeColumnType(this.chartType) ? volumeData(bar) : columnData(bar, this.priceScaleMultiplier));
     else if (isAreaType(this.chartType)) (this.priceSeries as ISeriesApi<'Area'>).update(lineData(bar, this.priceScaleMultiplier));
@@ -751,7 +836,9 @@ export class TradingChartAdapter {
     this.priceSeries.applyOptions({ lastValueVisible: this.latestValueLabelVisible });
     for (const primitive of this.priceSeriesPrimitives) this.priceSeries.attachPrimitive(primitive);
     this.renderSessionPriceLine();
+    this.viewportAverageLine = null;
     this.setBars(bars, false);
+    this.renderViewportAverage();
   }
 
   setAppearance(appearance: TradingChartAppearance): void {
@@ -947,14 +1034,20 @@ export class TradingChartAdapter {
       }
     }
     const barTimes = this.bars.map((bar) => timestamp(bar.start_time));
+    this.applyIndicatorBarColors(outputs);
+    this.viewportAverageOutput = outputs.find((output) => output.kind === 'viewport-average' && output.visible !== false) ?? null;
+    this.renderViewportAverage();
     for (const output of outputs) {
-      if (output.visible === false) continue;
+      // Bar colours and the visible average have no series of their own.
+      if (output.visible === false || output.kind === 'bar-colors' || output.kind === 'viewport-average') continue;
+      const columns = output.kind === 'histogram' || output.kind === 'background';
       const paneId = indicatorPaneId(output);
       const paneIndex = paneId === null ? 0 : paneIds.indexOf(paneId) + 1;
       // A custom price-scale ID creates an overlay scale in Lightweight Charts.
       // Pane indicators must use the pane's native right scale for its labels
       // and tick marks to render inside that pane.
-      const priceScaleId = paneId === null ? this.priceScaleSide : 'right';
+      // A background has its own hidden scale, so its columns (value 1) fill the pane's height.
+      const priceScaleId = output.kind === 'background' ? `background:${output.key}` : paneId === null ? this.priceScaleSide : 'right';
       let series = this.indicatorSeries.get(output.key);
       if (!series) {
         const color = output.color ?? indicatorColor(output);
@@ -966,19 +1059,20 @@ export class TradingChartAdapter {
           priceLineVisible: false,
           ...indicatorPriceFormat(output.precision),
         };
-        series = output.kind === 'histogram'
-          ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId }, paneIndex)
+        series = columns
+          ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId, ...(output.kind === 'background' ? { title: '', base: 0 } : {}) }, paneIndex)
           : this.chart.addSeries(LineSeries, { ...commonOptions, ...indicatorLineShape(output), ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 1, priceScaleId }, paneIndex);
+        if (output.kind === 'background') series.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
         this.indicatorSeries.set(output.key, series);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {
         series.moveToPane(paneIndex);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       }
-      if (output.kind === 'histogram') {
+      if (columns) {
         (series as ISeriesApi<'Histogram'>).applyOptions({
           color: output.color ?? indicatorColor(output),
-          title: output.valuesInStatusLine === false ? '' : output.title,
+          title: output.valuesInStatusLine === false || output.kind === 'background' ? '' : output.title,
           lastValueVisible: output.labelsOnPriceScale === true,
           priceLineVisible: false,
           priceScaleId,
@@ -1000,8 +1094,13 @@ export class TradingChartAdapter {
       }
       const data = indicatorLineData(indicatorOutputOnBars(output, barTimes, this.intervalStepSeconds()), barTimes, this.priceScaleMultiplier);
       this.noteSeriesTimes(`indicator:${output.key}`, data);
-      if (output.kind === 'histogram') {
+      if (columns) {
         (series as ISeriesApi<'Histogram'>).setData(data);
+        const labels = output.kind === 'background' ? backgroundLabelMarkers(output) : [];
+        const labelPlugin = this.indicatorMarkerPlugins.get(output.key);
+        if (labels.length > 0 && labelPlugin) labelPlugin.setMarkers(labels);
+        else if (labels.length > 0) this.indicatorMarkerPlugins.set(output.key, createSeriesMarkers(series as ISeriesApi<'Histogram'>, labels) as ISeriesMarkersPluginApi<Time>);
+        else if (labelPlugin) { labelPlugin.detach(); this.indicatorMarkerPlugins.delete(output.key); }
         continue;
       }
       (series as ISeriesApi<'Line'>).setData(data);

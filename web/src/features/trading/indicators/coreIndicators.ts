@@ -4,7 +4,14 @@ import { autoChartPatternLines, isAutoChartPatternId, type AutoChartPatternId } 
 
 export const CORE_INDICATOR_FORMULA_VERSION = 'omnix-indicators-v2';
 
-export type IndicatorPoint = { time: string; value: number };
+/** A value at a bar; `color` paints that bar's column, line segment, bar or background (TVP-6.2); `label` marks it. */
+export type IndicatorPoint = { time: string; value: number; color?: string; label?: string };
+/**
+ * How an output is drawn: a line or histogram series; `bar-colors` recolours the chart's own bars; `background`
+ * shades the price pane behind the bars (full height, per bar); `viewport-average` is a price line at the average close
+ * of the bars in view (Visible Average Price) and has no points of its own.
+ */
+export type IndicatorOutputKind = 'line' | 'histogram' | 'bar-colors' | 'background' | 'viewport-average';
 export type IndicatorLineStyle = 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
 export type IndicatorPaneScale = {
   min: number;
@@ -41,7 +48,7 @@ export type IndicatorOutput = {
   key: string;
   title: string;
   pane: 0 | 1;
-  kind: 'line' | 'histogram';
+  kind: IndicatorOutputKind;
   points: IndicatorPoint[];
   visible?: boolean;
   color?: string;
