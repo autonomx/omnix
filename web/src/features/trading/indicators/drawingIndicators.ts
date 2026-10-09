@@ -182,6 +182,7 @@ export function chopZoneColors(high: readonly number[], low: readonly number[], 
 
 const SYNODIC_DAYS = 29.530588861;
 const RADIANS = Math.PI / 180;
+const DAY_MS = 86_400_000;
 // [coefficient for the new moon, for the full moon, power of E, then the multipliers of M, M', F and Omega].
 const PHASE_TERMS: ReadonlyArray<[number, number, number, number, number, number, number]> = [
   [-0.40720, -0.40614, 0, 0, 1, 0, 0], [0.17241, 0.17302, 1, 1, 0, 0, 0], [0.01608, 0.01614, 0, 0, 2, 0, 0], [0.01039, 0.01043, 0, 0, 0, 2, 0],
@@ -276,9 +277,10 @@ export function tradingSessionShading(times: readonly number[]): Array<{ name: s
 /**
  * Seasonality: each year's change since its first bar, at the current year's dates (daily bars only). Dates align by
  * month and day, so 1 March is 1 March in a leap year too; a year whose first bar is after 15 January (history starting
- * mid-year) is left out rather than measured from that bar.
+ * mid-year) is left out rather than measured from that bar. Earlier years go on past the last bar (`ahead`) to the end
+ * of the year, one point a trading day (weekdays, or every day when the bars trade at weekends).
  */
-export function seasonality(bars: readonly MarketBar[], years: number): Array<{ year: number; values: MaybeNumber[] }> {
+export function seasonality(bars: readonly MarketBar[], years: number): Array<{ year: number; values: MaybeNumber[]; ahead: Point[] }> {
   const times = startTimes(bars);
   if (bars.length < 2) return [];
   const gaps = times.slice(1).map((time, i) => time - times[i]).filter((gap) => gap > 0).sort((x, y) => x - y);
@@ -290,7 +292,8 @@ export function seasonality(bars: readonly MarketBar[], years: number): Array<{ 
     const date = new Date(time);
     return (date.getUTCMonth() + 1) * 100 + date.getUTCDate();
   };
-  const current = yearOf(times[times.length - 1]);
+  const lastTime = times[times.length - 1];
+  const current = yearOf(lastTime);
   const byYear = new Map<number, Array<{ day: number; close: number }>>();
   times.forEach((time, i) => {
     const year = yearOf(time);
@@ -299,23 +302,32 @@ export function seasonality(bars: readonly MarketBar[], years: number): Array<{ 
     list.push({ day: dayOf(time), close: close[i] });
     byYear.set(year, list);
   });
-  const result: Array<{ year: number; values: MaybeNumber[] }> = [];
+  const weekends = times.slice(-30).some((time) => [0, 6].includes(new Date(time).getUTCDay()));
+  const aheadTimes: number[] = [];
+  for (let time = lastTime + DAY_MS; yearOf(time) === current; time += DAY_MS) {
+    if (weekends || ![0, 6].includes(new Date(time).getUTCDay())) aheadTimes.push(time);
+  }
+  const result: Array<{ year: number; values: MaybeNumber[]; ahead: Point[] }> = [];
   for (let year = current; year >= current - years; year -= 1) {
     const list = byYear.get(year);
     if (!list || list.length === 0 || list[0].day > 115) continue;
     const base = list[0].close;
-    const values = times.map((time) => {
-      if (yearOf(time) !== current) return null;
+    // The year's change at its last bar on or before this day of the year.
+    const changeAt = (time: number): number | null => {
       const day = dayOf(time);
-      // The year's last bar on or before this day of the year.
       let found: number | null = null;
       for (const item of list) {
         if (item.day > day) break;
         found = item.close;
       }
       return found === null || base === 0 ? null : (found / base - 1) * 100;
+    };
+    const values = times.map((time) => (yearOf(time) === current ? changeAt(time) : null));
+    const ahead = year === current ? [] : aheadTimes.flatMap((time) => {
+      const value = changeAt(time);
+      return value === null ? [] : [{ time: new Date(time).toISOString(), value }];
     });
-    result.push({ year, values });
+    result.push({ year, values, ahead });
   }
   return result;
 }
@@ -433,7 +445,10 @@ export function drawingIndicatorOutputs(
     case 'All Candlestick Patterns':
       return candlestickPatternOutputs(id, bars, String(params.patterns), String(params.trend));
     case 'Seasonality':
-      return seasonality(bars, period).map(({ year, values }, index) => ({ ...line(id, String(year), String(year), values, bars, SEASON_COLORS[index % SEASON_COLORS.length]), pane: 1 as const }));
+      return seasonality(bars, period).map(({ year, values, ahead }, index) => {
+        const output = line(id, String(year), String(year), values, bars, SEASON_COLORS[index % SEASON_COLORS.length]);
+        return { ...output, points: [...output.points, ...ahead], pane: 1 as const };
+      });
     default:
       return null;
   }
