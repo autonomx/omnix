@@ -90,6 +90,13 @@ describe('pitchforks and Gann (TVP-3.3)', () => {
     expect(modified.some((shape) => round(shape.x1) === 150 && round(shape.y1) === 250 && shape.x2 > 200)).toBe(true);
   });
 
+  it('the inside pitchfork starts halfway between A and B in price and time, as TradingView documents it', () => {
+    const inside = segments(runTool('inside-pitchfork', [[100, 300], [200, 200], [200, 400]]).shapes);
+    expect(inside.some((shape) => round(shape.x1) === 150 && round(shape.y1) === 250 && shape.x2 > 200)).toBe(true);
+    expect(inside.some((shape) => shape.x1 === 100 && shape.y1 === 300 && round(shape.x2) === 150 && shape.dash)).toBe(true);
+    expect(alertLevels('inside-pitchfork', [[100, 300], [200, 200], [200, 400]]).map((level) => level.key)[0]).toBe('median');
+  });
+
   it('pitchfork alerts on the median and each visible tine, as the lines are drawn', () => {
     const levels = alertLevels('pitchfork', [[100, 300], [200, 200], [200, 400]]);
     expect(levels.map((level) => level.key)).toEqual(['median', 'level-0.5-upper', 'level-0.5-lower', 'level-1-upper', 'level-1-lower']);

@@ -17,7 +17,7 @@ import { horizontalLineTool, horizontalRayTool } from './definitions/horizontalL
 import { extendedLineTool, infoLineTool, trendAngleTool } from './definitions/lineVariants';
 import { measurementTool } from './definitions/measurement';
 import {
-  gannBoxTool, gannFanTool, gannSquareFixedTool, gannSquareTool, modifiedSchiffPitchforkTool, pitchfanTool, pitchforkTool, schiffPitchforkTool,
+  gannBoxTool, gannFanTool, gannSquareFixedTool, gannSquareTool, insidePitchforkTool, modifiedSchiffPitchforkTool, pitchfanTool, pitchforkTool, schiffPitchforkTool,
 } from './definitions/pitchforks';
 import {
   abcdPatternTool, cyclicLinesTool, cypherPatternTool, elliottCorrectionTool, elliottDoubleComboTool, elliottImpulseTool, elliottTriangleTool,
@@ -81,6 +81,7 @@ export const DRAWING_TOOL_DEFINITIONS = [
   pitchforkTool,
   schiffPitchforkTool,
   modifiedSchiffPitchforkTool,
+  insidePitchforkTool,
   pitchfanTool,
   gannBoxTool,
   gannSquareFixedTool,
