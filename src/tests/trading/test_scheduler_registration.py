@@ -17,9 +17,9 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
     assert FEATURE.background_workers == ()
-    # 23 monitors (with the alert notification outbox, TVP-0.5a), the generic strategy runner and the
+    # 24 monitors (with the alert notification outbox, TVP-0.5a, and market breadth, TVP-6.6), the generic strategy runner and the
     # prospective-gap input import (WP-8.3).
-    assert len(FEATURE.scheduled_tasks) == 25
+    assert len(FEATURE.scheduled_tasks) == 26
     config = RuntimeConfig()
     context = FeatureContext(
         feature_id="trading",
@@ -41,7 +41,7 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
 
     assert all(isinstance(task, ScheduledTaskSpec) for task in tasks)
     task_ids = [task.task_id for task in tasks]
-    assert len(task_ids) == len(set(task_ids)) == 23
+    assert len(task_ids) == len(set(task_ids)) == 24
     assert all(task.interval_seconds > 0 for task in tasks)
     assert any(task.executor.value == "async" for task in tasks)
     assert any(task.executor.value == "thread" for task in tasks)
@@ -122,7 +122,7 @@ def test_monitors_share_the_scheduled_base_and_have_no_loops_of_their_own(monkey
     for factory in FEATURE.scheduled_tasks[:-2]:
         factory(context)
     monitors = list(vars(state).values())
-    assert len(monitors) == 23
+    assert len(monitors) == 24
     # Stream owners keep a connection open under their task; they are not loops.
     streams = {"AlpacaIexStatusMonitor"}
     for monitor in monitors:

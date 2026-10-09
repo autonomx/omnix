@@ -3,7 +3,7 @@ import type { CoreIndicatorInstance, IndicatorOutput } from './coreIndicators';
 import type { components } from '../api/generated';
 import { api } from '../api/gateway';
 
-export type ExternalIndicatorScope = 'binance-crypto' | 'equity' | 'bitcoin';
+export type ExternalIndicatorScope = 'binance-crypto' | 'equity' | 'bitcoin' | 'market';
 export type ExternalIndicatorDefinition = {
   id: string;
   metric: string;
@@ -27,6 +27,7 @@ type MetricResponse = components['schemas']['MarketMetricResponse'];
 const BINANCE_REQUIREMENT = 'Available on Binance crypto symbols using public USD-M Futures market data.';
 const EQUITY_REQUIREMENT = 'Available on equity symbols with a Yahoo market-data binding.';
 const BITCOIN_REQUIREMENT = 'Available on BTC instruments using Blockchain.com public on-chain charts.';
+const BREADTH_REQUIREMENT = 'Market breadth of NYSE and Nasdaq stocks, computed by Omnix from Alpaca daily bars after each close; on any symbol.';
 
 const EXTERNAL_INDICATORS: Record<string, ExternalIndicatorDefinition> = {
   'tv-open-interest': { id: 'tv-open-interest', metric: 'binance.open_interest', pane: 1, scope: 'binance-crypto', refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
@@ -47,6 +48,11 @@ const EXTERNAL_INDICATORS: Record<string, ExternalIndicatorDefinition> = {
   'tv-analyst-price-forecast': { id: 'tv-analyst-price-forecast', metric: 'yahoo.analyst_price_forecast', pane: 0, scope: 'equity', refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical analyst-target snapshots are not fabricated.` },
   'tv-price-target-indicator': { id: 'tv-price-target-indicator', metric: 'yahoo.price_target', pane: 0, scope: 'equity', refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical price-target snapshots are not fabricated.` },
   'tv-dividend-yield': { id: 'tv-dividend-yield', metric: 'yahoo.dividend_yield', pane: 1, scope: 'equity', refreshMs: 60 * 60_000, requirement: `${EQUITY_REQUIREMENT} Omnix calculates trailing-12-month dividends divided by current price.` },
+
+  // TVP-6.6: market breadth (breadth.py), one line per exchange, on any chart.
+  'tv-advance-decline-line': { id: 'tv-advance-decline-line', metric: 'breadth.ad_line', pane: 1, scope: 'market', refreshMs: 60 * 60_000, requirement: BREADTH_REQUIREMENT },
+  'tv-advance-decline-ratio': { id: 'tv-advance-decline-ratio', metric: 'breadth.ad_ratio', pane: 1, scope: 'market', refreshMs: 60 * 60_000, requirement: BREADTH_REQUIREMENT },
+  'tv-cumulative-volume-index-cvi': { id: 'tv-cumulative-volume-index-cvi', metric: 'breadth.cvi', pane: 1, scope: 'market', refreshMs: 60 * 60_000, requirement: BREADTH_REQUIREMENT },
 
   'tv-hash-rate': { id: 'tv-hash-rate', metric: 'blockchain.hash_rate', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
   'tv-difficulty': { id: 'tv-difficulty', metric: 'blockchain.difficulty', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
@@ -73,6 +79,7 @@ export function externalIndicatorAvailableForInstrument(id: string, instrumentId
   if (!definition) return false;
   if (definition.scope === 'binance-crypto') return /^crypto:BINANCE:/i.test(instrumentId);
   if (definition.scope === 'equity') return /^equity:/i.test(instrumentId);
+  if (definition.scope === 'market') return true;
   return /^crypto:[^:]+:(?:spot|perpetual):BTC-/i.test(instrumentId);
 }
 

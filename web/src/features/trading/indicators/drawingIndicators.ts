@@ -320,10 +320,29 @@ export function seasonality(bars: readonly MarketBar[], years: number): Array<{ 
   return result;
 }
 
+/** Rising bars (close above open) over falling bars in each window of `period` bars; the rising count when none fell. */
+export function advanceDeclineBarsRatio(bars: readonly MarketBar[], period: number): MaybeNumber[] {
+  const length = Math.max(1, Math.round(period));
+  let up = 0;
+  let down = 0;
+  return bars.map((bar, index) => {
+    const direction = Math.sign(Number(bar.close) - Number(bar.open));
+    if (direction > 0) up += 1;
+    if (direction < 0) down += 1;
+    if (index >= length) {
+      const old = Math.sign(Number(bars[index - length].close) - Number(bars[index - length].open));
+      if (old > 0) up -= 1;
+      if (old < 0) down -= 1;
+    }
+    if (index < length - 1) return null;
+    return down === 0 ? up : up / down;
+  });
+}
+
 const DRAWING_NAMES = new Set([
   'Auto Fib Retracement', 'Auto Fib Extension', 'Auto Pitchfork', 'Auto Trendlines', 'Auto key levels', 'VWAP Auto Anchored',
   'Visible Average Price', 'Bollinger Bars', 'Chop Zone', 'Moon Phases', 'Trading Sessions', 'Multi-Time Period Charts indicator', 'Seasonality',
-  'All Candlestick Patterns',
+  'All Candlestick Patterns', 'Advance/Decline Ratio (Bars)',
 ]);
 const SEASON_COLORS = ['#2962ff', '#f23645', '#ff9800', '#4caf50', '#9c27b0', '#00bcd4'];
 
@@ -363,6 +382,9 @@ export function drawingIndicatorOutputs(
         { ...line(id, 'lower', 'Lower', bands.lower, bars, '#787b86'), lineStyle: 'dashed' },
       ];
     }
+    case 'Advance/Decline Ratio (Bars)':
+      // TVP-6.6: the chart's rising bars over its falling bars in the last `period` bars (TradingView's definition).
+      return [line(id, 'ratio', 'A/D Ratio (Bars)', advanceDeclineBarsRatio(bars, period), bars, '#2962ff')];
     case 'Chop Zone': {
       const colors = chopZoneColors(high, low, close, period);
       return [pointsOutput(id, 'zone', 'Chop Zone', 1, 'histogram', colors.flatMap((color, i) => (color ? [{ time: at(i), value: 1, color }] : [])))];
