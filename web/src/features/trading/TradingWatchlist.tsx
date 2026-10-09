@@ -1,4 +1,5 @@
 import { useWatchlistAddRequests } from './tradingWatchlistEvents';
+import { requestAdvancedView } from './advancedView';
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument, ProviderBinding } from './tradingTypes';
@@ -229,6 +230,7 @@ export function TradingWatchlist({
               onDelete={() => { setOptionsOpen(false); void archive(); }}
               onImport={() => { setOptionsOpen(false); importer.openFilePicker(); }}
               onExport={exportList}
+              onAdvancedView={() => { setOptionsOpen(false); requestAdvancedView(flagColor ? null : selected?.record_id ?? null); }}
               onToggleColumn={view.toggleColumn}
             />
           ) : null}

@@ -11,6 +11,7 @@ export function TradingWatchlistOptionsMenu({
   onDelete,
   onImport,
   onExport,
+  onAdvancedView,
   onToggleColumn,
 }: {
   /** False while a generated flag list is shown. */
@@ -23,10 +24,13 @@ export function TradingWatchlistOptionsMenu({
   onDelete: () => void;
   onImport: () => void;
   onExport: () => void;
+  /** Opens the advanced view (TVP-5.4) on this list. */
+  onAdvancedView: () => void;
   onToggleColumn: (id: WatchlistColumnId) => void;
 }) {
   return (
     <div className="trading-watchlist-options-menu" role="menu">
+      <button type="button" role="menuitem" onClick={onAdvancedView}>Advanced view</button>
       <button type="button" role="menuitem" onClick={onCreate}>New watchlist</button>
       <button type="button" role="menuitem" onClick={onAddSection} disabled={!canEdit}>Add section</button>
       <button type="button" role="menuitem" onClick={onRename} disabled={!canEdit}>Rename watchlist</button>
