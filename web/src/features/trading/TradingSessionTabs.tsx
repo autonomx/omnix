@@ -113,6 +113,10 @@ type SessionTabsProps = {
   workspaces?: ReadonlyArray<{ workspaceId: string; name: string }>;
   onSelectWorkspace?: (workspaceId: string) => void;
   onOpenTool?: (tool: TradingLauncherTool) => void;
+  /** Moves a tab into a browser window of its own (TVP-4.6). */
+  onPopOut?: (tabId: string) => void;
+  /** In a popped-out window: moves a tab back to the main window. */
+  onMoveToMain?: (tabId: string) => void;
 };
 
 /** The "+" launcher's entries (TVP-4.4): new, duplicate, reopen, a new window, saved layouts and tools. */
@@ -137,7 +141,7 @@ function launcherItems(props: SessionTabsProps, closedTabs: number): MenuItem[] 
 }
 
 export function TradingSessionTabs(props: SessionTabsProps) {
-  const { tabs, activeTabId, canAdd, getTabLabel, onSelect, onClose, workspaceId } = props;
+  const { tabs, activeTabId, canAdd, getTabLabel, onSelect, onClose, workspaceId, onPopOut, onMoveToMain } = props;
   const renameTab = useTradingStore((state) => state.renameTab);
   const reopenClosedTab = useTradingStore((state) => state.reopenClosedTab);
   const closedTabs = useTradingStore((state) => state.closedTabs.length);
@@ -155,6 +159,8 @@ export function TradingSessionTabs(props: SessionTabsProps) {
   const tabMenuItems = (tab: TradingTabState, fallbackLabel: string): MenuItem[] => [
     { label: 'Duplicate', onSelect: () => void duplicateTradingTab(tab.tabId), disabled: !canAdd },
     ...(workspaceId ? [{ label: 'Open in a new window', onSelect: () => openTradingWindow(workspaceId, tab.tabId) }] : []),
+    ...(onPopOut ? [{ label: 'Pop out to a new window', onSelect: () => onPopOut(tab.tabId), disabled: tabs.length <= 1 && !onMoveToMain }] : []),
+    ...(onMoveToMain ? [{ label: 'Move to the main window', onSelect: () => onMoveToMain(tab.tabId) }] : []),
     { label: 'Rename…', onSelect: () => renameSession(tab, fallbackLabel) },
     { label: 'Close', onSelect: () => onClose(tab), disabled: tabs.length <= 1 },
     { label: 'Reopen closed tab', onSelect: () => reopenClosedTab(), disabled: !canAdd || closedTabs === 0 },

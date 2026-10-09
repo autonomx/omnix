@@ -1,5 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useInstalledAppCommandKeys } from './installedApp';
+import { useWindowTabs } from './tradingWindowSets';
+import { TradingWindowRestore } from './TradingWindowRestore';
 import { useAdvancedViewRequests } from './advancedView';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -151,6 +153,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const favoriteInstrumentIds = useTradingStore((state) => state.favoriteInstrumentIds);
   const setLayout = useTradingStore((state) => state.setLayout);
   const setActiveTab = useTradingStore((state) => state.setActiveTab);
+  const windowTabs = useWindowTabs({ workspaceId: persistence.activeWorkspaceId, tabs, activeTabId, setActiveTab, ready: persistence.status !== 'loading' });
   const removeTab = useTradingStore((state) => state.removeTab);
   const setChartCount = useTradingStore((state) => state.setChartCount);
   const addChart = useTradingStore((state) => state.addChart);
@@ -633,10 +636,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </section>
       </header>
 
+      <TradingWindowRestore windows={windowTabs.goneWindows} tabs={tabs} tabLabel={sessionTabLabel} onReopen={windowTabs.reopen} onBringBack={windowTabs.bringBack} />
       <TradingSessionTabs
-        tabs={tabs}
+        tabs={windowTabs.visibleTabs}
         activeTabId={activeTabId}
         canAdd={tabs.length < MAX_TRADING_TABS}
+        onPopOut={windowTabs.popOut} onMoveToMain={windowTabs.moveToMain}
         getTabLabel={sessionTabLabel}
         onSelect={setActiveTab}
         onClose={closeTabSession}
