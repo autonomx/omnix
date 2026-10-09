@@ -54,6 +54,8 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
 
   // The chart instrument's session calendar, for session-aware indicators.
   const indicatorSessionRef = useRef<TradingSessionSpec>(UTC_SESSION);
+  /** The feed binding the chart's bars come from, once loaded; intrabar indicators read the same feed. */
+  const indicatorBindingRef = useRef<string | null>(null);
 
   const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -179,7 +181,7 @@ export function useChartPanelState(ws: TradingChartPanelProps) {
   return {
     hostRef, panelRef, adapterRef, onActivateRef, barsRef, allBarsRef, replayWasVisibleRef, fittedBarsKeyRef,
     streamDataKeyRef, streamRevisionRef, previousIntervalRef, pendingIntervalScrollRef, forceLiveRender,
-    selectedRangeRef, pendingRangeIntervalRef, indicatorsRef, indicatorSchedulerRef, indicatorSessionRef, indicatorTimerRef, drawingTool,
+    selectedRangeRef, pendingRangeIntervalRef, indicatorsRef, indicatorSchedulerRef, indicatorSessionRef, indicatorBindingRef, indicatorTimerRef, drawingTool,
     setDrawingTool, drawingSnapMode, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, replayMode, replaySessionId, setReplayMode, restartReplaySession, drawings,
     selectedDrawing, adapter, setAdapter, streamStatus, setStreamStatus, streamError,
     setStreamError, indicatorError, setIndicatorError, alertPlacement, setAlertPlacement, contextMenu,

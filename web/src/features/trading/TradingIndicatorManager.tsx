@@ -1,3 +1,4 @@
+import { INTRABAR_REQUIREMENT, isIntrabarIndicatorId } from './indicators/intrabarIndicators';
 import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
@@ -59,12 +60,12 @@ const omnixIndicatorDefinitions: IndicatorDefinition[] = [
 ];
 
 const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => {
-  const externalRequirement = externalIndicatorRequirement(definition.id);
-  const external = isExternalIndicatorId(definition.id);
+  const externalRequirement = externalIndicatorRequirement(definition.id) ?? (isIntrabarIndicatorId(definition.id) ? INTRABAR_REQUIREMENT : undefined);
+  const external = isExternalIndicatorId(definition.id) || isIntrabarIndicatorId(definition.id);
   return indicatorDefinition({
     id: definition.id as CoreIndicatorId,
     name: definition.name,
-    author: external ? 'External market data' : 'TradingView built-in',
+    author: isIntrabarIndicatorId(definition.id) ? 'Intrabar data' : external ? 'External market data' : 'TradingView built-in',
     boosts: definition.available ? 'Built-in' : external ? 'Live data' : 'Needs data',
     section: 'technicals',
     // Like TradingView, candlestick patterns are listed with the chart patterns.

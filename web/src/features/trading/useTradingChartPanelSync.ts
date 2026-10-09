@@ -17,7 +17,7 @@ const MAX_APPENDED_REPLAY_BARS = 50;
 export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle>) {
   const {
     active, adapter, adapterRef, allBarsRef, barsRef, chartQuery, chartType, drawings, fittedBarsKeyRef,
-    forceLiveRender, fullscreenIndicator, fullscreenMainPane, historyLimit, hostRef, indicators, indicatorSessionRef, indicatorsRef,
+    forceLiveRender, fullscreenIndicator, fullscreenMainPane, historyLimit, hostRef, indicators, indicatorBindingRef, indicatorSessionRef, indicatorsRef,
     interval, loadedBars, minimizedIndicators, pendingIntervalScrollRef, pendingRangeIntervalRef,
     refreshIndicatorPanes, replayFormingBar, replayMode, replayVisible, replayVisibleBarCount, replayWasVisibleRef, rightOffset,
     scheduleIndicators, selectedDrawing, drawingsHidden, selectedRangeRef, selectedTimezone, setSelectedRangeLabel, streamDataKeyRef,
@@ -94,6 +94,7 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
     if (keepSelectedRange) pendingRangeIntervalRef.current = null;
     if (dataKey !== null && bars.length > 0) fittedBarsKeyRef.current = dataKey;
     indicatorSessionRef.current = sessionForInstrument(chartQuery.data?.instrument);
+    indicatorBindingRef.current = chartQuery.data?.binding.binding_id ?? ws.bindingId ?? null;
     scheduleIndicators();
     // Keyed by timezoneId and the loaded data, not by values derived from them (selectedTimezone, historyLimit).
     // Replay re-runs it only when this chart's visible bar count or forming bar changes, not on every clock tick.

@@ -1,3 +1,4 @@
+import { calculateIntrabarIndicatorOutputs, isIntrabarIndicatorId } from './intrabarIndicators';
 import type { MarketBar } from '../tradingTypes';
 import {
   indicatorDefaultBackgroundColor,
@@ -27,8 +28,11 @@ type WorkerFactory = () => Worker;
  */
 export type CompareBarsLoader = (instrumentId: string, interval: string, range: { from: number; to: number }) => Promise<readonly MarketBar[]>;
 type CompareBars = Record<string, MarketBar[]>;
-/** What the chart knows beyond its bars: the instrument's session calendar. */
-export type IndicatorCalculationContext = { session?: TradingSessionSpec };
+/**
+ * The chart's session calendar, the feed binding its bars come from (intrabar indicators read the same feed), and the
+ * replay clock while the chart replays (intrabar indicators use no lower bar after it).
+ */
+export type IndicatorCalculationContext = { session?: TradingSessionSpec; bindingId?: string | null; clock?: number | null };
 
 function defaultWorkerFactory(): Worker {
   return new Worker(new URL('./indicator.worker.ts', import.meta.url), { type: 'module' });
@@ -106,12 +110,16 @@ export class TradingIndicatorScheduler {
     const activeIndicators = indicators
       .filter((indicator) => indicator.enabled && indicator.visible !== false)
       .map((indicator) => ({ ...indicator }));
-    const externalIndicators = activeIndicators.filter((indicator) => isExternalIndicatorId(String(indicator.id)));
-    const localIndicators = activeIndicators.filter((indicator) => !isExternalIndicatorId(String(indicator.id)));
+    // External-data and intrabar indicators (TVP-6.4) load their data, then compute here rather than in the worker.
+    const asynchronous = (indicator: CoreIndicatorInstance) => isExternalIndicatorId(String(indicator.id)) || isIntrabarIndicatorId(String(indicator.id));
+    const externalIndicators = activeIndicators.filter(asynchronous);
+    const localIndicators = activeIndicators.filter((indicator) => !asynchronous(indicator));
     const symbols = compareSymbols(localIndicators);
 
     const externalPromise = Promise.all(
-      externalIndicators.map((indicator) => calculateExternalIndicatorOutputs(clonedBars, indicator)),
+      externalIndicators.map((indicator) => (isIntrabarIndicatorId(String(indicator.id))
+        ? calculateIntrabarIndicatorOutputs(clonedBars, indicator, context)
+        : calculateExternalIndicatorOutputs(clonedBars, indicator))),
     ).then((groups) => groups.flat());
 
     if (!this.worker) {
