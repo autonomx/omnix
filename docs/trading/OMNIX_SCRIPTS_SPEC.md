@@ -45,7 +45,7 @@ Scripts run only on the server, in a Python interpreter.
   - in v6, `/` always returns the fraction (`7 / 2 == 3.5`).
 - `and` and `or` follow the version too: v5 evaluates both sides on every bar (a `ta.*` call on the right still advances), v6 evaluates them lazily.
 - `indicator(...)` with constant arguments is required. Recorded: `title`, `shorttitle`, `overlay`, `format`, `precision`, `max_*_count` and the rest.
-- `strategy()` and `library()` are refused as unsupported. Strategies arrive with TVP-11.5.
+- `strategy(...)` (TVP-11.5) declares a strategy; see [Strategies](#strategies). `library()` is refused as unsupported.
 
 ### Syntax
 
@@ -161,7 +161,7 @@ Scripts run only on the server, in a Python interpreter.
 | Feature | Arrives with |
 |---|---|
 | `request.*` (`request.security` and other symbols/timeframes) | TVP-11.1, within the request budget |
-| `strategy()` and `strategy.*` | TVP-11.5 |
+| `strategy.risk.*`, `strategy.margin_liquidation_price`, margin calls, intrabar (bar magnifier) fills | Later |
 | `import`/`export` libraries, user-defined types, methods, enums | Later; refused with a reason |
 | `matrix.*`, `polyline.*`, `chart.point` | Later |
 | `indicator(timeframe=...)` | TVP-11.1 |
@@ -170,6 +170,36 @@ Scripts run only on the server, in a Python interpreter.
 | `ta.alma`, `ta.swma`, `ta.wpr`, `ta.cog`, `ta.tsi`, `ta.kcw` and other rarely used functions | TVP-11.1 |
 
 Unsupported names are refused at compile time with "not supported yet" and the line. Unknown names are reported as unknown.
+
+### Strategies
+
+`strategy()` scripts (TVP-11.5) trade a simulated account on the bars they run on (`scripts/strategy.py`). They are a
+research backtest only: nothing reaches an order gateway, a paper account or a broker.
+
+- **Declaration:** `initial_capital`, `pyramiding`, `default_qty_type` (`strategy.fixed`, `strategy.cash`,
+  `strategy.percent_of_equity`), `default_qty_value`, `commission_type` (`strategy.commission.percent`, `cash_per_contract`,
+  `cash_per_order`), `commission_value`, `slippage` (ticks), `process_orders_on_close`, `risk_free_rate`. `overlay` defaults
+  to true. Other arguments are accepted and recorded.
+- **Orders:** `strategy.entry` (reverses an opposite position; `pyramiding` limits entries in one direction, 0 meaning one),
+  `strategy.order` (buys or sells; closes first in, first out), `strategy.exit` (per matching trade: `profit`/`limit`,
+  `loss`/`stop`, trailing with `trail_price` or `trail_points` and `trail_offset`; `qty`, `qty_percent`), `strategy.close`,
+  `strategy.close_all` (with `immediately`), `strategy.cancel`, `strategy.cancel_all`; `limit` and `stop` (and both: a
+  stop-limit); OCA groups with `strategy.oca.cancel` and `strategy.oca.reduce`.
+- **Fills, like TradingView's broker emulator:** the script runs at a bar's close, and its orders fill from the next bar
+  on. Within a bar, price moves open, then the extreme nearer the open, then the other, then close. Market orders fill
+  at the open; limits at their price, or the open when it is better; stops at their price, or the open when it gapped
+  past. Slippage worsens market and stop fills. `process_orders_on_close` fills market orders at the bar's close.
+  Ticks are 0.01 (`syminfo.mintick`).
+- **What the script reads:** `strategy.position_size`, `position_avg_price`, `position_entry_name`, `equity`, `netprofit`,
+  `openprofit`, `grossprofit`, `grossloss`, `closedtrades`, `opentrades`, `wintrades`, `losstrades`, `eventrades`,
+  `initial_capital`, `max_drawdown`, `max_runup`, and `strategy.closedtrades.*(i)` / `strategy.opentrades.*(i)` (profit, prices,
+  bar indexes, times, size, ids, commission, run-up, drawdown, comments).
+- **Report** (the run's `strategy`): every closed trade (the newest 5,000 listed), open trades, fills, equity, drawdown
+  and buy and hold per bar, and a performance summary for all, long and short trades (net profit, profit factor, percent
+  profitable, averages, largest trades, bars in trades, max drawdown and run-up, commission, Sharpe and Sortino from
+  monthly returns).
+- **Deep backtest:** `POST /api/trading/scripts/backtest` runs a strategy on up to 20,000 of the latest bars the provider
+  serves, with 30 s instead of 5 s.
 
 ### Limits (`ScriptLimits`)
 
@@ -216,7 +246,7 @@ Scripts have no file, network or OS access: the interpreter only exposes the fun
 - The Stochastic RSI template hard-coded its stochastic length and smoothing (14, 3, 3). The chart uses the instance's period and smoothing, so the template now uses those inputs.
 - A drawing cap read the wrong declaration key.
 
-### Community-idiom corpus: 17 of 20 run unchanged
+### Community-idiom corpus: 18 of 20 run unchanged
 
 `resources/trading/script_corpus/idioms` holds 20 scripts written for Omnix in the idioms of popular community indicators, among them:
 - Supertrend (built-in and manual), Squeeze Momentum, RSI with MA type and a dashboard table;
@@ -224,7 +254,7 @@ Scripts have no file, network or OS access: the interpreter only exposes the fun
 - Hull (with v5 integer lengths), DMI, Chandelier Exit, Williams %R, ATR trailing stop;
 - Keltner, OBV oscillator with CCI, Heikin Ashi with SAR, ZigZag with arrays and lines.
 
-Seventeen run; the three that fail use features outside the subset on purpose: `request.security`, `strategy()` and a user-defined type. Cross-checks in the tests:
+Eighteen run (the EMA-cross strategy since TVP-11.5); the two that fail use features outside the subset on purpose: `request.security` and a user-defined type. Cross-checks in the tests:
 - The session VWAP computed by hand equals `ta.vwap`.
 - A hand-written Hull MA equals `ta.hma`.
 

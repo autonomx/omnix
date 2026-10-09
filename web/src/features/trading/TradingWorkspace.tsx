@@ -61,6 +61,7 @@ import './TradingChartLayoutPicker.css';
 const TradingReplayPanel = lazy(() => import('./TradingReplayPanel').then((module) => ({ default: module.TradingReplayPanel })));
 const TradingScannerPanel = lazy(() => import('./TradingScannerPanel').then((module) => ({ default: module.TradingScannerPanel })));
 const TradingStrategiesPanel = lazy(() => import('./TradingStrategiesPanel').then((module) => ({ default: module.TradingStrategiesPanel })));
+const TradingStrategyTester = lazy(() => import('./scripts/TradingStrategyTester').then((module) => ({ default: module.TradingStrategyTester })));
 const TradingTerminalDock = lazy(() => import('./TradingTerminalDock').then((module) => ({ default: module.TradingTerminalDock })));
 
 const gridOptions: Array<{ id: TradingLayout; label: string }> = [
@@ -71,7 +72,7 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'columns-4', label: '4 columns' },
 ];
 
-type ToolPanel = 'scanner' | 'replay' | 'strategies';
+type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'tester';
 type FormulaResolution = TradingFormulaSearchPreview & { operands: Record<string, string> };
 
 // TradingSidePanel mounts TradingPaperPanel in the dedicated Trade tab.
@@ -583,6 +584,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={toolPanel === 'scanner'} onClick={() => toggleToolPanel('scanner')}>Scanner</button>
           <button type="button" aria-pressed={toolPanel === 'replay'} onClick={() => toggleToolPanel('replay')}>Backtest</button>
           <button type="button" aria-pressed={toolPanel === 'strategies'} onClick={() => toggleToolPanel('strategies')}>Strategies</button>
+          <button type="button" aria-pressed={toolPanel === 'tester'} onClick={() => toggleToolPanel('tester')}>Strategy Tester</button>
           <button type="button" aria-pressed={sidePanelTab === 'paper' && panels.right} onClick={openPaperTrading}>Trade</button>
           <button type="button" aria-pressed={sidePanelTab === 'research' && panels.right} onClick={openResearchPanel}>AI Research</button>
         </div>
@@ -650,8 +652,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   ? 'Market scanner'
                   : toolPanel === 'replay'
                     ? 'Replay & backtest'
-                    : toolPanel === 'strategies'
-                      ? 'Automated strategies'
+                    : toolPanel === 'tester'
+                      ? 'Strategy tester'
                       : 'Automated strategies'}</strong>
                 <div className="trading-tool-drawer-actions">
                   <button type="button" onClick={() => setToolPanelFullscreen((value) => !value)} aria-pressed={toolPanelFullscreen} aria-label={toolPanelFullscreen ? 'Restore analysis tool' : 'Fullscreen analysis tool'}>{toolPanelFullscreen ? 'Restore' : 'Fullscreen'}</button>
@@ -665,6 +667,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
                 ) : null}
                 {toolPanel === 'strategies' ? <TradingStrategiesPanel /> : null}
+                {toolPanel === 'tester' ? <TradingStrategyTester indicators={activeChart.indicators} instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} /> : null}
                 </Suspense>
               </div>
             </section>

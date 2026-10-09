@@ -9,12 +9,13 @@ function isGeneratedTabName(name: string): boolean {
 }
 
 /** Tools the new-tab launcher opens (TVP-4.4). */
-export type TradingLauncherTool = 'scanner' | 'replay' | 'strategies' | 'paper';
+export type TradingLauncherTool = 'scanner' | 'replay' | 'strategies' | 'tester' | 'paper';
 
 const LAUNCHER_TOOLS: ReadonlyArray<{ tool: TradingLauncherTool; label: string }> = [
   { tool: 'scanner', label: 'Screener' },
   { tool: 'replay', label: 'Backtest and replay' },
   { tool: 'strategies', label: 'Strategies' },
+  { tool: 'tester', label: 'Strategy tester' },
   { tool: 'paper', label: 'Paper trading' },
 ];
 

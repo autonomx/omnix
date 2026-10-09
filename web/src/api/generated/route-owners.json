@@ -546,6 +546,7 @@
     "POST /api/trading/scanners/{scanner_id}/runs": "trading",
     "GET /api/trading/scripts": "trading",
     "POST /api/trading/scripts": "trading",
+    "POST /api/trading/scripts/backtest": "trading",
     "POST /api/trading/scripts/check": "trading",
     "GET /api/trading/scripts/reference": "trading",
     "POST /api/trading/scripts/run": "trading",
