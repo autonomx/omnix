@@ -141,7 +141,19 @@ describe('TradingPaperPanel', () => {
     expect(await screen.findByRole('textbox', { name: 'Limit price' })).toHaveValue('80');
     expect(screen.getByRole('textbox', { name: 'Order quantity' })).toHaveValue('2');
     expect(screen.queryByRole('textbox', { name: 'Stop loss price' })).toBeNull();
-    expect(screen.getByText(/opening a short is not available yet/)).toBeInTheDocument();
+    expect(screen.getByText(/turn shorting on in the account settings/)).toBeInTheDocument();
+  });
+
+  it('on a shorting account, a sell with nothing long held is a risk-sized short entry (TVP-7.2a)', async () => {
+    paperApi.accounts.mockResolvedValue([{ ...account, allow_short: true }]);
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await screen.findByRole('switch', { name: 'Enable stop loss' });
+    act(() => requestPaperTicket({ instrumentId: 'crypto:BINANCE:spot:SOL-USDT', side: 'sell', orderType: 'limit' as const, entry: 80, stop: 85, target: 70, quantity: 2 }));
+    expect(await screen.findByRole('textbox', { name: 'Stop loss price' })).toHaveValue('85');
+    await waitFor(() => expect(paperApi.riskPreview).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+      entry_price: '80', stop_price: '85', side: 'sell',
+    })));
+    expect(screen.getByText(/risk rule sizes the quantity/)).toBeInTheDocument();
   });
 
   it('a market buy hotkey fills the ticket and asks for the stop the risk rule needs (TVP-7.4)', async () => {

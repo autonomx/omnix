@@ -42,8 +42,7 @@ class BacktestExecutionPolicy(BaseModel):
 
     @model_validator(mode="after")
     def validate_policy(self):
-        if self.allow_short:
-            raise ValueError("short selling is not supported in OTT-12")
+        # allow_short (TVP-7.2a): a cross down closes a long and opens a short; a cross up covers it and goes long.
         if not self.use_finalized_bars_only:
             raise ValueError("OTT-12 backtests require finalized bars")
         return self
@@ -265,16 +264,37 @@ def _fill_price(open_price: Decimal, side: str, slippage_bps: Decimal) -> Decima
     )
 
 
-def _round_trip_win_rate(trades: list[BacktestTrade]) -> Decimal:
-    entry_cost: Decimal | None = None
-    closed_results: list[Decimal] = []
+def _round_trips(
+    trades: list[BacktestTrade] | tuple[BacktestTrade, ...],
+) -> tuple[list[Decimal], Decimal, Decimal]:
+    """Closed round trips' results, and the open trip's cash out (a long's cost) or in (a short's credit).
+
+    A trade that starts from flat opens a trip: a buy pays its notional plus commission, a short sale
+    (TVP-7.2a) receives its notional less commission. The next trade closes it.
+    """
+    results: list[Decimal] = []
+    open_cost = Decimal("0")
+    open_credit = Decimal("0")
+    position = Decimal("0")
     for trade in trades:
         notional = trade.quantity * trade.fill_price
-        if trade.side == "buy":
-            entry_cost = notional + trade.commission
-        elif entry_cost is not None:
-            closed_results.append(notional - trade.commission - entry_cost)
-            entry_cost = None
+        if position == 0:
+            if trade.side == "buy":
+                open_cost = notional + trade.commission
+            else:
+                open_credit = notional - trade.commission
+        elif position > 0:
+            results.append(notional - trade.commission - open_cost)
+            open_cost = Decimal("0")
+        else:
+            results.append(open_credit - notional - trade.commission)
+            open_credit = Decimal("0")
+        position = trade.position_after
+    return results, open_cost, open_credit
+
+
+def _round_trip_win_rate(trades: list[BacktestTrade]) -> Decimal:
+    closed_results, _, _ = _round_trips(trades)
     if not closed_results:
         return Decimal("0")
     wins = sum(1 for value in closed_results if value > 0)
@@ -284,7 +304,7 @@ def _round_trip_win_rate(trades: list[BacktestTrade]) -> Decimal:
 def _exposure_percent(equity_curve: list[BacktestEquityPoint]) -> Decimal:
     if not equity_curve:
         return Decimal("0")
-    exposed = sum(1 for point in equity_curve if point.position > 0)
+    exposed = sum(1 for point in equity_curve if point.position != 0)
     return Decimal(exposed) / Decimal(len(equity_curve)) * Decimal("100")
 
 
@@ -296,18 +316,13 @@ def backtest_economic_breakdown(
     ending_mark_price: Decimal | None,
     trades: list[BacktestTrade] | tuple[BacktestTrade, ...],
 ) -> BacktestEconomicBreakdown:
-    open_cost_basis = Decimal("0")
-    realized_pnl = Decimal("0")
-    for trade in trades:
-        notional = trade.quantity * trade.fill_price
-        if trade.side == "buy":
-            open_cost_basis = notional + trade.commission
-        else:
-            realized_pnl += notional - trade.commission - open_cost_basis
-            open_cost_basis = Decimal("0")
+    closed, open_cost_basis, open_credit = _round_trips(trades)
+    realized_pnl = sum(closed, Decimal("0"))
     unrealized_pnl = Decimal("0")
     if ending_position > 0 and ending_mark_price is not None:
         unrealized_pnl = ending_position * ending_mark_price - open_cost_basis
+    elif ending_position < 0 and ending_mark_price is not None:
+        unrealized_pnl = open_credit - abs(ending_position) * ending_mark_price
     if not trades and ending_position == 0:
         realized_pnl = ending_cash - initial_cash
     return BacktestEconomicBreakdown(
@@ -489,34 +504,7 @@ def run_backtest(
                 side,
                 request.execution_policy.slippage_bps,
             )
-            if side == "buy" and position == 0:
-                budget = cash * request.execution_policy.position_size_fraction
-                commission_rate = (
-                    request.execution_policy.commission_bps / Decimal("10000")
-                )
-                quantity = budget / (
-                    open_price * (Decimal("1") + commission_rate)
-                )
-                notional = quantity * open_price
-                commission = _commission(
-                    notional,
-                    request.execution_policy.commission_bps,
-                )
-                cash -= notional + commission
-                position += quantity
-            elif side == "sell" and position > 0:
-                quantity = position
-                notional = quantity * open_price
-                commission = _commission(
-                    notional,
-                    request.execution_policy.commission_bps,
-                )
-                cash += notional - commission
-                position = Decimal("0")
-            else:
-                quantity = Decimal("0")
-                commission = Decimal("0")
-            if quantity > 0:
+            def record(quantity: Decimal, commission: Decimal, side: str = side) -> None:
                 trades.append(
                     BacktestTrade(
                         trade_index=len(trades),
@@ -545,6 +533,37 @@ def run_backtest(
                         },
                     )
                 )
+
+            commission_bps = request.execution_policy.commission_bps
+            if side == "buy" and position < 0:
+                # Cover the short first (TVP-7.2a).
+                quantity = abs(position)
+                commission = _commission(quantity * open_price, commission_bps)
+                cash -= quantity * open_price + commission
+                position = Decimal("0")
+                record(quantity, commission)
+            elif side == "sell" and position > 0:
+                quantity = position
+                notional = quantity * open_price
+                commission = _commission(notional, commission_bps)
+                cash += notional - commission
+                position = Decimal("0")
+                record(quantity, commission)
+            if position == 0 and (side == "buy" or request.execution_policy.allow_short):
+                # A long buys with the budget; a short sells the same notional (no margin model until TVP-7.2b).
+                budget = cash * request.execution_policy.position_size_fraction
+                commission_rate = commission_bps / Decimal("10000")
+                quantity = budget / (open_price * (Decimal("1") + commission_rate))
+                notional = quantity * open_price
+                commission = _commission(notional, commission_bps)
+                if side == "buy":
+                    cash -= notional + commission
+                    position += quantity
+                else:
+                    cash += notional - commission
+                    position -= quantity
+                if quantity > 0:
+                    record(quantity, commission)
             pending = None
 
         equity = cash + position * bar.close
@@ -579,9 +598,10 @@ def run_backtest(
             fast[previous_index] >= slow[previous_index]
             and fast[index] < slow[index]
         )
-        if crossed_above and position == 0:
+        allow_short = request.execution_policy.allow_short
+        if crossed_above and (position == 0 or (allow_short and position < 0)):
             pending = ("buy", index, bar.end_time)
-        elif crossed_below and position > 0:
+        elif crossed_below and (position > 0 or (allow_short and position == 0)):
             pending = ("sell", index, bar.end_time)
 
     final_equity = equity_curve[-1].equity

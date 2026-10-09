@@ -26,7 +26,7 @@ describe('order ticket from a position drawing (TVP-3.6)', () => {
   it('a sell (or any replay order) gets the quantity and no protection it could not send', () => {
     const fields = form();
     const prefill = { instrumentId: 'crypto:BTC', side: 'sell' as const, orderType: 'limit' as const, entry: 100, stop: 105, target: 90, quantity: 1.234567891 };
-    expect(applyPaperTicketPrefill(prefill, 'crypto:BTC', fields, { riskManaged: false, riskPercent: '0.35' }).message).toContain('opening a short is not available yet');
+    expect(applyPaperTicketPrefill(prefill, 'crypto:BTC', fields, { riskManaged: false, riskPercent: '0.35' }).message).toContain('turn shorting on in the account settings');
     expect(fields.setSide).toHaveBeenCalledWith('sell');
     expect(fields.setTriggerPrice).toHaveBeenCalledWith('100');
     expect(fields.setStopLossEnabled).toHaveBeenCalledWith(false);

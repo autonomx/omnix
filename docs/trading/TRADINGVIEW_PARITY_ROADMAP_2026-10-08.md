@@ -1127,10 +1127,10 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 <!-- parity-completion:start -->
 | Measure | Done |
 |---|---|
-| TradingView parity, all features in scope | 72% |
+| TradingView parity, all features in scope | 73% |
 | TradingView parity, daily + weekly features | 82% |
 | Roadmap work packages merged in full | 34% (23 of 67) |
-| Daily + weekly gap closed since the first count | 60% (90 of 150) |
+| Daily + weekly gap closed since the first count | 61% (92 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1149,20 +1149,20 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Watchlists | 9 | 1 | 1 / 0 / 0 | 0 | 0 | 86% |
 | Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 | 21% |
 | Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 | 82% |
-| Paper and chart trading | 16 | 1 | 1 / 4 / 0 | 0 | 0 | 75% |
+| Paper and chart trading | 19 | 0 | 0 / 3 / 0 | 0 | 0 | 86% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 1 | 0 / 4 / 1 | 0 | 0 | 21% |
-| **Total** | 309 | 17 | 10 / 50 / 52 | 55 | 0 | 72% |
+| **Total** | 312 | 16 | 9 / 49 / 52 | 55 | 0 | 73% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
-| Daily | 143 | 10 | 10 | 0 | 0 | 163 | 91% |
-| Weekly | 153 | 7 | 50 | 0 | 0 | 210 | 75% |
+| Daily | 145 | 9 | 9 | 0 | 0 | 163 | 92% |
+| Weekly | 154 | 7 | 49 | 0 | 0 | 210 | 75% |
 | Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
-Missing daily + weekly features: **60**
+Missing daily + weekly features: **58**
 
-Done (have counts 1, partial 0.5, of the features in scope): **72%** overall, **82%** of daily + weekly.
+Done (have counts 1, partial 0.5, of the features in scope): **73%** overall, **82%** of daily + weekly.
 <!-- parity-report:end -->
 
 **How the work runs.**

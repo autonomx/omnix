@@ -274,3 +274,52 @@ def test_entries_stop_once_the_daily_loss_limit_is_reached_but_exits_continue(pa
     # Exits are never stopped by the loss limit.
     exit_order = OrderGateway(repository).place_reducing(account_id, _order(instrument_id, "sell", "5", uuid.uuid4().hex))
     assert exit_order.side == "sell"
+
+
+def test_shorting_is_an_account_setting_changed_at_its_revision(paper) -> None:
+    from app.apps.trading.paper import PaperAccountSettings
+    from app.persistence.errors import RevisionConflict
+
+    repository, _, account_id, instrument_id, _ = paper
+    account = repository.snapshot(account_id).account
+    assert account.allow_short is False
+    updated = repository.update_account_settings(account_id, PaperAccountSettings(allow_short=True), expected_revision=account.revision)
+    assert (updated.account.allow_short, updated.account.revision) == (True, account.revision + 1)
+    with pytest.raises(RevisionConflict):
+        repository.update_account_settings(account_id, PaperAccountSettings(allow_short=False), expected_revision=account.revision)
+    assert any(item.allow_short for item in repository.list_accounts() if item.account_id == account_id)
+    created = repository.create_account(
+        PaperAccountCreate(account_id=f"{account_id}-short", name="Shorts", initial_cash=Decimal("1000"), allow_short=True)
+    )
+    assert created.account.allow_short is True
+
+
+def test_a_short_opens_adds_reduces_and_covers(paper) -> None:
+    from app.apps.trading.paper import PaperAccountSettings
+
+    repository, _, account_id, instrument_id, _ = paper
+    revision = repository.snapshot(account_id).account.revision
+    repository.update_account_settings(account_id, PaperAccountSettings(allow_short=True), expected_revision=revision)
+    gateway = OrderGateway(repository)
+
+    def position() -> Decimal:
+        return next((item.quantity for item in repository.snapshot(account_id).positions if item.instrument_id == instrument_id), Decimal("0"))
+
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "3", "short-open"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("-3")
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "2", "short-add"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("-5")
+    # A buy within the short only reduces it: no entry authority needed.
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "2", "short-reduce"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("-3")
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "3", "short-cover"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("0")
+    # Turning shorting off stops new shorts.
+    revision = repository.snapshot(account_id).account.revision
+    repository.update_account_settings(account_id, PaperAccountSettings(allow_short=False), expected_revision=revision)
+    with pytest.raises(ValueError, match="paper_short_not_allowed"):
+        gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "1", "short-again"))

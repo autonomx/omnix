@@ -6,7 +6,7 @@ import { tradingApi, type TradingQuote } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
 import { createReplaySnapshot } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
-import { applyPaperTicketPrefill, usePaperTicketPrefill } from './paperTicketRequests';
+import { applyPaperTicketPrefill, isRiskEntry, usePaperTicketPrefill } from './paperTicketRequests';
 import { useTradingStore } from './tradingStore';
 import './TradingPaper.css';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
@@ -103,7 +103,7 @@ export function TradingPaperPanel({
   // A long or short position drawing's "Create order" fills the ticket (TVP-3.6); the user still confirms it.
   usePaperTicketPrefill((prefill) => setNotice(applyPaperTicketPrefill(prefill, instrumentId, {
     setTicketTab, setSide, setOrderType, setTriggerPrice, setLimitPrice, setStopLossEnabled, setStopLoss, setTakeProfitEnabled, setTakeProfit, setQuantity,
-  }, { riskManaged: !replayMode && prefill.side === 'buy', riskPercent: riskPct, longQuantity: Number(position?.quantity) > 0 ? Number(position?.quantity) : null }, displaySymbol)));
+  }, { riskManaged: !replayMode && isRiskEntry(prefill.side, activeAccount, position), riskPercent: riskPct, longQuantity: Number(position?.quantity) > 0 ? Number(position?.quantity) : null }, displaySymbol)));
   const replayMode = useTradingStore((state) => state.replayMode);
   const replaySessionId = useTradingStore((state) => state.replaySessionId);
   const replayBar = useTradingReplayStore((state) => state.bar);
@@ -127,7 +127,7 @@ export function TradingPaperPanel({
   const quotePrice = referencePrice === null ? '—' : number(String(referencePrice), 2);
   const bidLabel = bidPrice === null ? '—' : number(String(bidPrice), 2);
   const askLabel = askPrice === null ? '—' : number(String(askPrice), 2);
-  const riskManagedEntry = !replayMode && side === 'buy';
+  const riskManagedEntry = !replayMode && isRiskEntry(side, activeAccount, position);
   const orderTypes = ticketOrderTypes({ replay: replayMode, entry: riskManagedEntry });
   // Time in force applies to resting orders; replay has no session clock.
   const timeInForceEnabled = !replayMode && orderType !== 'market';
@@ -215,7 +215,7 @@ export function TradingPaperPanel({
     }
     // A stop-limit entry is sized at its limit, the most it can pay.
     const entryPrice = orderType === 'market'
-      ? askPrice
+      ? (side === 'sell' ? bidPrice : askPrice)
       : parsePositive(orderType === 'stop_limit' ? limitPrice : triggerPrice);
     const stopPrice = parsePositive(stopLoss);
     const desiredRisk = parsePositive(riskPct);
@@ -230,7 +230,7 @@ export function TradingPaperPanel({
         binding_id: bindingId,
         entry_price: String(entryPrice),
         stop_price: String(stopPrice),
-        desired_risk_pct: String(desiredRisk),
+        desired_risk_pct: String(desiredRisk), side,
       }).then((preview) => {
         if (!cancelled) setRiskPreview(preview);
       }).catch(() => {
@@ -241,7 +241,7 @@ export function TradingPaperPanel({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeAccount, askPrice, bindingId, instrumentId, limitPrice, orderType, riskManagedEntry, riskPct, stopLoss, stopLossEnabled, triggerPrice]);
+  }, [activeAccount, askPrice, bidPrice, bindingId, instrumentId, limitPrice, orderType, riskManagedEntry, riskPct, side, stopLoss, stopLossEnabled, triggerPrice]);
 
   useEffect(() => {
     if (!notice && !confirmation) return;
@@ -347,7 +347,7 @@ export function TradingPaperPanel({
       let submittedQuantity = quantity;
       if (riskManagedEntry) {
         const result = await tradingPaperApi.placeRiskOrder(activeAccount.account_id, {
-          order_id: orderId,
+          order_id: orderId, side,
           instrument_id: instrumentId,
           binding_id: bindingId,
           // Entries never offer a trailing stop order (see ticketOrderTypes).

@@ -41,9 +41,10 @@ function remaining(order: PaperOrder): number {
 
 function lineMove(order: PaperOrder, protections: readonly PaperPositionProtection[]): OrderLineMove {
   if (!MOVABLE_TYPES.has(order.order_type) || (order.order_type === 'stop_limit' && order.stop_triggered_at)) return null;
-  if (order.side === 'sell') return 'exit';
+  // A risk entry (a buy, or a short's sell, TVP-7.2a) carries a pending stop; any other sell is an exit.
   const armed = protections.some((item) => item.entry_order_id === order.order_id && item.status === 'pending_entry' && num(item.stop_loss) !== null);
-  return armed && Number(order.filled_quantity ?? 0) === 0 ? 'entry' : null;
+  if (armed) return Number(order.filled_quantity ?? 0) === 0 ? 'entry' : null;
+  return order.side === 'sell' ? 'exit' : null;
 }
 
 /** The chart's working orders for one instrument, as lines. */

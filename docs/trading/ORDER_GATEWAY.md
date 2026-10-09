@@ -9,7 +9,7 @@ Each order carries the reason it may exist:
 | Authority | Used by | May open or add exposure |
 |---|---|---|
 | `reduce_only` | protective exits (strategy monitor, paper protection monitor), the raw `POST .../orders` route, replacements | no |
-| `manual_risk` | `POST .../risk-orders`, after the server's risk preview sized and allowed the entry; `POST .../risk-orders/{order_id}/move` (an entry dragged on the chart), sized again the same way | yes |
+| `manual_risk` | `POST .../risk-orders`, after the server's risk preview sized and allowed the entry (a long, or a short on an account with shorting on, TVP-7.2a); `POST .../risk-orders/{order_id}/move` (an entry dragged on the chart), sized again the same way | yes |
 | `strategy_entry` | strategy entries, after `StrategyEntryAuthorizer` proved the entry for its own trade attempt | yes |
 
 A strategy entry is authorized from its own trade attempt's events: risk decision, universe and profile fingerprint. A later or earlier attempt for the same instrument never authorizes it. The assessment is persisted as a `trade_authorization` strategy event, and a denial raises `trade_authorization_denied:<reason codes>`.
