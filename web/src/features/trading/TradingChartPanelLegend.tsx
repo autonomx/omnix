@@ -2,6 +2,7 @@ import { isExternalIndicatorId } from './indicators/externalIndicatorData';
 import { isIntrabarIndicatorId } from './indicators/intrabarIndicators';
 import { indicatorSourceChoices } from './indicators/indicatorSources';
 import { indicatorUsesSeparatePane } from './indicators/coreIndicators';
+import { isScriptIndicatorId, scriptIndicatorName } from './scripts/scriptIndicators';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 import { TradingIndicatorObjectToolbar } from './TradingIndicatorObjectToolbar';
 import { TradingIndicatorSettings } from './TradingIndicatorSettings';
@@ -25,7 +26,7 @@ export function ChartPanelLegend({ ws }: { ws: TradingChartPanelModel }) {
           onPointerDown={(event) => event.stopPropagation()}
         >
           {!indicatorLegendCollapsed ? legendIndicators.map((indicator) => {
-            const label = `${indicator.id.toUpperCase()} ${indicator.period}`;
+            const label = scriptIndicatorName(indicator) ?? `${indicator.id.toUpperCase()} ${indicator.period}`;
             const visible = indicator.visible !== false;
             const docked = indicatorUsesSeparatePane(indicator.id);
             const kind = docked ? 'indicator' : 'overlay';
@@ -167,7 +168,7 @@ export function ChartPanelPaneControls({ ws }: { ws: TradingChartPanelModel }) {
         <TradingIndicatorSettings
           indicator={settingsIndicator}
           instrumentId={instrumentId}
-          sourceChoices={indicatorSourceChoices(settingsIndicator, ws.indicators, ws.indicatorOutputs, (id) => !isExternalIndicatorId(id) && !isIntrabarIndicatorId(id))}
+          sourceChoices={indicatorSourceChoices(settingsIndicator, ws.indicators, ws.indicatorOutputs, (id) => !isExternalIndicatorId(id) && !isIntrabarIndicatorId(id) && !isScriptIndicatorId(id))}
           onApply={(patch) => onUpdateIndicator(settingsIndicator.id, patch)}
           onClose={() => setSettingsIndicator(null)}
         />

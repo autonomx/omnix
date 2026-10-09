@@ -15,7 +15,7 @@ from typing import Any
 
 from . import ta
 from .errors import ScriptLimitError, ScriptRuntimeError, ScriptSyntaxError, ScriptUnsupportedError
-from .runtime import SERIES_NAMES, Closure, Context, Drawing, ScriptInput, _na, allocate, check_string, current_limits, truthy
+from .runtime import CURRENT_RUN, SERIES_NAMES, Closure, Context, Drawing, ScriptInput, _na, allocate, check_string, current_limits, truthy
 from .syntax import Call, ColorLiteral, Literal, Name, Node, TupleExpr, Unary
 
 Factory = Callable[[Any, Call], Closure]
@@ -96,6 +96,8 @@ def pure(spec: str, function: Callable[..., Any]) -> Factory:
             return lambda ctx: function(a(ctx), b(ctx))
         return lambda ctx: function(*[closure(ctx) for closure in closures])
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 
@@ -134,6 +136,8 @@ def site(spec: str, step: ta.Step, bar: BarInputs | None = None) -> Factory:
     def factory(c: Any, node: Call) -> Closure:
         return _site_closure(node.id, step, _bind(c, node, params, defaults), bar)
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 
@@ -149,6 +153,8 @@ def site_with_optional_source(spec: str, step: ta.Step, source: str) -> Factory:
             return _site_closure(node.id, step, closures, lambda run, t: (run.series(source, t),))
         return _site_closure(node.id, step, _bind(c, node, full_params, defaults), None)
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 
@@ -691,6 +697,8 @@ def _drawing_factory(kind: str) -> Factory:
 
         return create
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = DRAWING_FIELDS[kind]  # type: ignore[attr-defined]
     return factory
 
 
@@ -891,6 +899,8 @@ def _output(kind: str, spec: str) -> Factory:
 
         return emit
 
+    # Its parameters, for the editor's hover and signature help (TVP-11.2).
+    factory.signature = spec  # type: ignore[attr-defined]
     return factory
 
 
@@ -1250,6 +1260,13 @@ def _timeframe_change(c: Any, node: Call) -> Closure:
     return call
 
 
+def _log(level: str, message: Any) -> None:
+    """log.info/warning/error: kept on the run for the editor's console (TVP-11.2)."""
+    run = CURRENT_RUN.get()
+    if run is not None:
+        run.log(level, message)
+
+
 FUNCTIONS: dict[str, Factory] = {
     # ta
     "ta.sma": site("source, length", ta.sma),
@@ -1370,9 +1387,9 @@ FUNCTIONS: dict[str, Factory] = {
     "strategy": _declaration("strategy"),
     "library": _declaration("library"),
     "runtime.error": pure("message", _runtime_error),
-    "log.info": pure("message", lambda message: None),
-    "log.warning": pure("message", lambda message: None),
-    "log.error": pure("message", lambda message: None),
+    "log.info": pure("message", lambda message: _log("info", message)),
+    "log.warning": pure("message", lambda message: _log("warning", message)),
+    "log.error": pure("message", lambda message: _log("error", message)),
     # arrays and maps
     "array.from": variadic(_array_from),
     "array.new": pure("size=0, initial_value=na", _array_new()),

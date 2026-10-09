@@ -16,7 +16,7 @@ import { unwrapLabelled } from '../../api/http';
 import { parseJson, tradingStreamMessageSchema } from '../../api/schemas/streams';
 import { api } from './api/gateway';
 
-export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'watchlist-flags' | 'drawings' | 'indicator-presets';
+export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'watchlist-flags' | 'drawings' | 'indicator-presets' | 'scripts';
 
 export type TradingCurrencyRate = components['schemas']['CurrencyRateResponse'];
 export type TradingQuote = components['schemas']['QuoteResponse'];
@@ -24,13 +24,14 @@ export type TradingMarketStatus = components['schemas']['MarketStatusResponse'];
 
 const trading = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading');
 
-// The four trading document families share one contract.
+// The trading document families share one contract.
 const DOCUMENT_PATHS = {
   workspaces: { list: '/api/trading/workspaces', record: '/api/trading/workspaces/{record_id}' },
   watchlists: { list: '/api/trading/watchlists', record: '/api/trading/watchlists/{record_id}' },
   'watchlist-flags': { list: '/api/trading/watchlist-flags', record: '/api/trading/watchlist-flags/{record_id}' },
   drawings: { list: '/api/trading/drawings', record: '/api/trading/drawings/{record_id}' },
   'indicator-presets': { list: '/api/trading/indicator-presets', record: '/api/trading/indicator-presets/{record_id}' },
+  scripts: { list: '/api/trading/scripts', record: '/api/trading/scripts/{record_id}' },
 } as const;
 
 export function tradingStreamUrl(instrumentId: string, interval: string, bindingId?: string | null): string {
@@ -246,6 +247,8 @@ export const tradingApi = {
       cursor = { after_updated_at: last.updated_at, after_record_id: last.record_id };
     }
   },
+  document: (kind: TradingDocumentKind, recordId: string): Promise<TradingDocument> =>
+    trading(api.GET(DOCUMENT_PATHS[kind].record, { params: { path: { record_id: recordId } }, cache: 'no-store' })),
   createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>): Promise<TradingDocument> =>
     trading(api.POST(DOCUMENT_PATHS[kind].list, { body: { record_id: recordId, payload } })),
   updateDocument: (kind: TradingDocumentKind, record: TradingDocument, payload: Record<string, unknown>): Promise<TradingDocument> =>

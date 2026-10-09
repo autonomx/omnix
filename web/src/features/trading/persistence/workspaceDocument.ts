@@ -139,7 +139,7 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<CoreIndicatorInstance>;
   const ids = ['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap', 'bull-market-band', 'death-cross', 'ema-stack', 'fair-value-gap', 'golden-cross', 'ideal-bb', 'log-macd', 'macd-dema', 'rsi-divergence', 'stochastic-rsi', 'swing-liquidity', 'volume-profile'];
-  if (!item.id || (!ids.includes(item.id) && !isAutoChartPatternId(item.id) && !isTradingViewBuiltInId(item.id))) return false;
+  if (!item.id || (!ids.includes(item.id) && !isAutoChartPatternId(item.id) && !isTradingViewBuiltInId(item.id) && !/^script-[A-Za-z0-9_-]{1,190}$/.test(item.id))) return false;
   if (typeof item.period !== 'number' || !Number.isInteger(item.period) || item.period < 1) return false;
   if (typeof item.enabled !== 'boolean') return false;
   if (item.visible !== undefined && typeof item.visible !== 'boolean') return false;

@@ -25,6 +25,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
     from app.apps.trading.replay_api import create_trading_replay_router
     from app.apps.trading.research_api import create_trading_research_router
     from app.apps.trading.scanner_api import create_trading_scanner_router
+    from app.apps.trading.scripts_api import create_trading_scripts_router
     from app.apps.trading.strategy_api import create_trading_strategy_router
     from app.apps.trading.strategy_operations_api import create_trading_strategy_operations_router
     from app.apps.trading.strategy_prospective_economic_api import (
@@ -34,6 +35,8 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
 
     router = APIRouter()
     for factory in (
+        # Before the base router: its script documents' GET /scripts/{record_id} would take /scripts/reference.
+        create_trading_scripts_router,
         create_trading_base_router,
         create_trading_metric_router,
         create_trading_execution_router,

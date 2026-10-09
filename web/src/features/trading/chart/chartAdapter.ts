@@ -624,16 +624,19 @@ export function indicatorMarkers(output: IndicatorOutput, multiplier = 1): Serie
   // Above or below the bar (candlestick patterns), with the pattern's short name.
   if (position) {
     return output.points.map((point) => ({
-      time: timestamp(point.time), position, shape: output.marker ?? 'circle', color: output.color ?? indicatorColor(output), size: 1, ...(text ? { text } : {}),
+      time: timestamp(point.time), position, shape: output.marker ?? 'circle', color: point.color ?? output.color ?? indicatorColor(output), size: 1,
+      ...(point.label ?? text ? { text: point.label ?? text } : {}),
     }));
   }
+  // A point's own colour and label win (script shapes coloured per bar, script labels; TVP-11.1).
   return output.points.map((point) => ({
     time: timestamp(point.time),
     position: 'atPriceMiddle',
     price: point.value * scale,
     shape: output.marker ?? 'circle',
-    color: output.color ?? indicatorColor(output),
+    color: point.color ?? output.color ?? indicatorColor(output),
     size: 1,
+    ...(point.label ? { text: point.label } : {}),
   }));
 }
 

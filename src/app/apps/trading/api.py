@@ -475,4 +475,6 @@ def create_trading_router(
     register_documents("/watchlist-flags", "watchlist_flag_set")
     register_documents("/drawings", "drawing")
     register_documents("/indicator-presets", "indicator_preset")
+    # Omnix Scripts (TVP-11.3): the source and its saved versions.
+    register_documents("/scripts", "script")
     return router

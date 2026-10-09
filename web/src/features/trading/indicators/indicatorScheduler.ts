@@ -1,5 +1,6 @@
 import { calculateWithSources } from './indicatorSources';
 import { calculateIntrabarIndicatorOutputs, isIntrabarIndicatorId } from './intrabarIndicators';
+import { calculateScriptIndicatorOutputs, isScriptIndicatorId } from '../scripts/scriptIndicators';
 import type { MarketBar } from '../tradingTypes';
 import {
   indicatorDefaultBackgroundColor,
@@ -111,8 +112,11 @@ export class TradingIndicatorScheduler {
     const activeIndicators = indicators
       .filter((indicator) => indicator.enabled)
       .map((indicator) => ({ ...indicator }));
-    // External-data and intrabar indicators (TVP-6.4) load their data, then compute here rather than in the worker.
-    const asynchronous = (indicator: CoreIndicatorInstance) => isExternalIndicatorId(String(indicator.id)) || isIntrabarIndicatorId(String(indicator.id));
+    // External-data, intrabar (TVP-6.4) and script (TVP-11.1, run on the server) indicators load their data here, not in the worker.
+    const asynchronous = (indicator: CoreIndicatorInstance) => {
+      const id = String(indicator.id);
+      return isExternalIndicatorId(id) || isIntrabarIndicatorId(id) || isScriptIndicatorId(id);
+    };
     const externalIndicators = activeIndicators.filter((indicator) => asynchronous(indicator) && indicator.visible !== false);
     // Hidden local indicators still go to the worker: another indicator may read them (TVP-6.5).
     const localIndicators = activeIndicators.filter((indicator) => !asynchronous(indicator));
@@ -121,7 +125,9 @@ export class TradingIndicatorScheduler {
     const externalPromise = Promise.all(
       externalIndicators.map((indicator) => (isIntrabarIndicatorId(String(indicator.id))
         ? calculateIntrabarIndicatorOutputs(clonedBars, indicator, context)
-        : calculateExternalIndicatorOutputs(clonedBars, indicator))),
+        : isScriptIndicatorId(String(indicator.id))
+          ? calculateScriptIndicatorOutputs(clonedBars, indicator, context)
+          : calculateExternalIndicatorOutputs(clonedBars, indicator))),
     ).then((groups) => groups.flat());
 
     if (!this.worker) {

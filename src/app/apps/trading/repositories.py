@@ -12,8 +12,10 @@ from app.runtime.pagination import MAX_PAGE_SIZE
 
 
 TRADING_MODULE = "trading"
+# Script versions kept per script (TVP-11.3); older ones are dropped as new ones are saved.
+SCRIPT_VERSIONS_KEPT = 200
 SUPPORTED_DOCUMENT_TYPES = frozenset(
-    {"workspace", "watchlist", "watchlist_flag_set", "drawing", "indicator_preset"}
+    {"workspace", "watchlist", "watchlist_flag_set", "drawing", "indicator_preset", "script"}
 )
 
 
@@ -112,6 +114,8 @@ class TradingDocumentRepository:
                 record_id=record_id,
                 payload=payload,
             )
+            if clean_type == "script":
+                self._record_script_version(uow.connection, record)
             uow.commit()
             return record
 
@@ -133,8 +137,77 @@ class TradingDocumentRepository:
                 payload=payload,
                 expected_revision=expected_revision,
             )
+            if clean_type == "script":
+                self._record_script_version(uow.connection, record)
             uow.commit()
             return record
+
+    def _record_script_version(self, connection: Any, record: dict[str, Any]) -> None:
+        """A script saved with a new source or name gets a version, in the save's transaction (TVP-11.3)."""
+        payload = record["payload"]
+        source = payload.get("source")
+        if not isinstance(source, str):
+            return
+        name = str(payload.get("name") or "")
+        workspace_id = self.context.workspace_id
+        latest = connection.execute(
+            """
+            SELECT name, source FROM omnix_trading_script_versions
+             WHERE workspace_id = %s AND script_id = %s
+             ORDER BY revision DESC LIMIT 1
+            """,
+            (workspace_id, record["record_id"]),
+        ).fetchone()
+        if latest is not None and latest[0] == name and latest[1] == source:
+            return
+        connection.execute(
+            """
+            INSERT INTO omnix_trading_script_versions (workspace_id, script_id, revision, name, source)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (workspace_id, script_id, revision) DO UPDATE SET name = EXCLUDED.name, source = EXCLUDED.source
+            """,
+            (workspace_id, record["record_id"], record["revision"], name, source),
+        )
+        connection.execute(
+            """
+            DELETE FROM omnix_trading_script_versions
+             WHERE workspace_id = %s AND script_id = %s AND revision <= (
+                   SELECT revision FROM omnix_trading_script_versions
+                    WHERE workspace_id = %s AND script_id = %s
+                    ORDER BY revision DESC OFFSET %s LIMIT 1)
+            """,
+            (workspace_id, record["record_id"], workspace_id, record["record_id"], SCRIPT_VERSIONS_KEPT),
+        )
+
+    def script_versions(self, script_id: str) -> list[dict[str, Any]]:
+        """A script's versions, newest first, without their source."""
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(
+                """
+                SELECT revision, name, saved_at, length(source), array_length(string_to_array(source, E'\\n'), 1)
+                  FROM omnix_trading_script_versions
+                 WHERE workspace_id = %s AND script_id = %s
+                 ORDER BY revision DESC
+                """,
+                (self.context.workspace_id, script_id),
+            ).fetchall()
+        return [
+            {"revision": int(row[0]), "name": str(row[1]), "saved_at": row[2].isoformat(), "characters": int(row[3] or 0), "lines": int(row[4] or 0)}
+            for row in rows
+        ]
+
+    def script_version(self, script_id: str, revision: int) -> dict[str, Any] | None:
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                """
+                SELECT revision, name, saved_at, source FROM omnix_trading_script_versions
+                 WHERE workspace_id = %s AND script_id = %s AND revision = %s
+                """,
+                (self.context.workspace_id, script_id, revision),
+            ).fetchone()
+        if row is None:
+            return None
+        return {"revision": int(row[0]), "name": str(row[1]), "saved_at": row[2].isoformat(), "source": str(row[3])}
 
     def archive(
         self,
