@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignIndicatorPoints, alignSeriesToTimes, candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, DrawingTimeIndex, heikinAshiBars, indicatorLineData, indicatorMarkers, lineData, normalizeChartBars, renkoBars, TradingChartAdapter, TRADING_CHART_TYPE_OPTIONS, upsertChartBar, volumeData } from './chartAdapter';
+import { alignIndicatorPoints, alignSeriesToTimes, backgroundLabelMarkers, candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, DrawingTimeIndex, heikinAshiBars, indicatorBarColors, indicatorLineData, indicatorMarkers, indicatorOutputOnBars, lineData, normalizeChartBars, renkoBars, TradingChartAdapter, opaqueColor, TRADING_CHART_TYPE_OPTIONS, upsertChartBar, visibleAverageClose, volumeData } from './chartAdapter';
 import type { IndicatorOutput } from '../indicators/coreIndicators';
 import type { UTCTimestamp } from 'lightweight-charts';
 import type { MarketBar } from '../tradingTypes';
@@ -381,5 +381,46 @@ describe('indicator points on the chart bars', () => {
     expect(alignIndicatorPoints(ahead, bars, day)).toEqual(ahead);
     expect(alignIndicatorPoints([{ time: t(3_600), value: 1 }, { time: t(4 * day), value: 4 }], bars, day))
       .toEqual([{ time: 0, value: 1 }, { time: 4 * day, value: 4 }]);
+  });
+});
+
+describe('indicators that draw (TVP-6.2)', () => {
+  const colors = (key: string, points: Array<{ time: string; color?: string }>, visible = true): IndicatorOutput => ({
+    key, title: key, pane: 0, kind: 'bar-colors', visible, points: points.map((point) => ({ ...point, value: 1 })),
+  });
+
+  it('collects bar colours by bar time, a later output winning, hidden outputs and other kinds ignored', () => {
+    const line: IndicatorOutput = { key: 'line', title: 'line', pane: 0, kind: 'line', points: [{ time: bar.start_time, value: 1, color: '#000000' }] };
+    const result = indicatorBarColors([
+      colors('a', [{ time: bar.start_time, color: '#111111' }, { time: secondBar.start_time, color: '#222222' }]),
+      colors('b', [{ time: secondBar.start_time, color: '#333333' }]),
+      colors('hidden', [{ time: bar.start_time, color: '#444444' }], false),
+      line,
+    ]);
+    expect([...result]).toEqual([[Date.parse(bar.start_time) / 1000, '#111111'], [Date.parse(secondBar.start_time) / 1000, '#333333']]);
+  });
+
+  it('averages the closes of the bars in the visible logical range', () => {
+    const bars = [bar, secondBar, { ...secondBar, close: '20' }];
+    expect(visibleAverageClose(bars, { from: 0, to: 2 })).toBeCloseTo((102.75 + 14 + 20) / 3);
+    expect(visibleAverageClose(bars, { from: 0.5, to: 1.5 })).toBe(14);
+    expect(visibleAverageClose(bars, { from: -10, to: 0 })).toBe(102.75);
+    expect(visibleAverageClose(bars, { from: 5, to: 9 })).toBeNull();
+    expect(visibleAverageClose(bars, null)).toBeNull();
+    expect(visibleAverageClose([], { from: 0, to: 1 })).toBeNull();
+  });
+
+  it('labels background outputs at their labelled bars and keeps them on bar times', () => {
+    const background: IndicatorOutput = {
+      key: 'sessions', title: 'Trading Sessions', pane: 0, kind: 'background', color: '#123456',
+      points: [{ time: bar.start_time, value: 1, color: 'rgba(1, 2, 3, 0.1)', label: 'Tokyo' }, { time: secondBar.start_time, value: 1 }],
+    };
+    expect(backgroundLabelMarkers(background)).toEqual([
+      { time: Date.parse(bar.start_time) / 1000, position: 'aboveBar', shape: 'square', size: 0, color: 'rgb(1, 2, 3)', text: 'Tokyo' },
+    ]);
+    expect(indicatorOutputOnBars(background, [], 60)).toBe(background);
+    expect(opaqueColor('rgba(255, 152, 0, 0.10)')).toBe('rgb(255, 152, 0)');
+    expect(opaqueColor('#ff9800')).toBe('#ff9800');
+    expect(indicatorLineData(background, [], 100).map((point) => ('value' in point ? point.value : null))).toEqual([1, 1]);
   });
 });

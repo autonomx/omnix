@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import type { MarketBar } from '../tradingTypes';
 import { findPatternPivots } from './autoPatterns';
+import { drawingIndicatorOutputs } from './drawingIndicators';
 import { UTC_SESSION, sessionClock, sessionPeriods, type SessionPeriod, type TradingSessionSpec } from './tradingSessions';
 
 export type TradingViewBuiltInId = `tv-${string}`;
@@ -16,8 +17,8 @@ export type TradingViewBuiltInOutput = {
   key: string;
   title: string;
   pane: 0 | 1;
-  kind: 'line' | 'histogram';
-  points: Array<{ time: string; value: number }>;
+  kind: 'line' | 'histogram' | 'bar-colors' | 'background' | 'viewport-average';
+  points: Array<{ time: string; value: number; color?: string; label?: string }>;
   color?: string;
   lineStyle?: 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
   lineWidth?: 1 | 2 | 3 | 4;
@@ -57,7 +58,7 @@ export type TradingViewBuiltInSeries = {
   compareBars?: readonly MarketBar[];
 };
 
-type MaybeNumber = number | null;
+export type MaybeNumber = number | null;
 type SupportedConfig = { defaultPeriod: number; pane: 0 | 1 };
 
 const BUILTIN_NAMES = `
@@ -384,22 +385,23 @@ const SUPPORTED: Record<string, SupportedConfig> = {
   'Williams Fractal': { defaultPeriod: 2, pane: 0 },
   'Woodies CCI': { defaultPeriod: 14, pane: 1 },
   'Zig Zag': { defaultPeriod: 5, pane: 0 },
+  // TVP-6.2: indicators that draw (drawingIndicators.ts).
+  'Auto Fib Extension': { defaultPeriod: 10, pane: 0 },
+  'Auto Fib Retracement': { defaultPeriod: 10, pane: 0 },
+  'Auto key levels': { defaultPeriod: 200, pane: 0 },
+  'Auto Pitchfork': { defaultPeriod: 10, pane: 0 },
+  'Auto Trendlines': { defaultPeriod: 5, pane: 0 },
+  'Bollinger Bars': { defaultPeriod: 20, pane: 0 },
+  'Chop Zone': { defaultPeriod: 30, pane: 1 },
+  'Moon Phases': { defaultPeriod: 1, pane: 0 },
+  'Multi-Time Period Charts indicator': { defaultPeriod: 1, pane: 0 },
+  'Seasonality': { defaultPeriod: 3, pane: 1 },
+  'Trading Sessions': { defaultPeriod: 1, pane: 0 },
+  'Visible Average Price': { defaultPeriod: 1, pane: 0 },
+  'VWAP Auto Anchored': { defaultPeriod: 200, pane: 0 },
 };
 
 const SPECIALIZED_REQUIREMENTS: Record<string, string> = {
-  'Auto Fib Extension': 'Requires the dedicated auto-drawing renderer and configurable swing anchors.',
-  'Auto Fib Retracement': 'Requires the dedicated auto-drawing renderer and configurable swing anchors.',
-  'Auto key levels': 'Requires session-aware level aggregation and a dedicated labels renderer.',
-  'Auto Pitchfork': 'Requires the dedicated auto-drawing renderer and three swing anchors.',
-  'Auto Trendlines': 'Use the Auto Trend Detector in Patterns; TradingView-style multi-trendline rendering is not yet available.',
-  'Bollinger Bars': 'Requires candle/bar recoloring rather than a numeric indicator series.',
-  'Chop Zone': 'Requires candle/background trend-zone coloring rather than a numeric indicator series.',
-  'Moon Phases': 'Requires an event-marker renderer rather than a numeric price series.',
-  'Multi-Time Period Charts indicator': 'Requires secondary-timeframe aggregation and a dedicated multi-period renderer.',
-  'Seasonality': 'Requires multi-year seasonal alignment and a dedicated seasonal comparison view.',
-  'Trading Sessions': 'Requires session shading and session labels rather than a numeric indicator series.',
-  'Visible Average Price': 'Depends on the current visible viewport rather than the loaded bar set.',
-  'VWAP Auto Anchored': 'Requires TradingView-style automatic anchor selection and corporate-event/session context.',
 };
 
 const PERIOD_OPTIONS = { D: 'Day', W: 'Week', M: 'Month' } as const;
@@ -424,7 +426,25 @@ const BUILTIN_INPUTS: Record<string, TradingViewBuiltInInputs> = {
   },
   'Rob Booker Ziv Ghost Pivots': { periodLabel: null, params: [select('pivotPeriod', 'Pivot period', 'W', { 240: '4 hours', 480: '8 hours (next day)', W: 'Next week', M: 'Next month' })] },
 };
-const QUICK_WINS = new Set(Object.keys(BUILTIN_INPUTS));
+/** Inputs of the TVP-6.2 indicators that draw (drawingIndicators.ts). */
+const DRAWING_INPUTS: Record<string, TradingViewBuiltInInputs> = {
+  'Auto Fib Extension': { periodLabel: 'Depth', params: [{ key: 'deviation', label: 'Deviation (x ATR)', kind: 'number', default: 3, min: 0, step: 0.5 }] },
+  'Auto Fib Retracement': { periodLabel: 'Depth', params: [{ key: 'deviation', label: 'Deviation (x ATR)', kind: 'number', default: 3, min: 0, step: 0.5 }] },
+  'Auto key levels': { periodLabel: 'Lookback', params: [integer('count', 'Levels', 5)] },
+  'Auto Pitchfork': { periodLabel: 'Depth', params: [{ key: 'deviation', label: 'Deviation (x ATR)', kind: 'number', default: 3, min: 0, step: 0.5 }] },
+  'Auto Trendlines': { periodLabel: 'Pivot length', params: [] },
+  'Bollinger Bars': { periodLabel: 'Length', params: [{ key: 'deviations', label: 'StdDev', kind: 'number', default: 2, min: 0.1, step: 0.1 }] },
+  'Chop Zone': { periodLabel: 'Length', params: [] },
+  'Moon Phases': { periodLabel: null, params: [] },
+  'Multi-Time Period Charts indicator': { periodLabel: null, params: [select('period', 'Period', 'D', PERIOD_OPTIONS)] },
+  'Seasonality': { periodLabel: 'Years', params: [] },
+  'Trading Sessions': { periodLabel: null, params: [] },
+  'Visible Average Price': { periodLabel: null, params: [] },
+  'VWAP Auto Anchored': { periodLabel: 'Length', params: [select('anchor', 'Anchor', 'highest-high', { 'highest-high': 'Highest high', 'lowest-low': 'Lowest low', 'highest-volume': 'Highest volume' })] },
+};
+const DRAWING_INDICATORS = new Set(Object.keys(DRAWING_INPUTS));
+Object.assign(BUILTIN_INPUTS, DRAWING_INPUTS);
+const QUICK_WINS = new Set(Object.keys(BUILTIN_INPUTS).filter((name) => !DRAWING_INDICATORS.has(name)));
 const SESSION_INDICATORS = new Set(['Time Weighted Average Price', 'Relative Volume at Time', 'Rob Booker Intraday Pivot Points', 'Rob Booker Missed Pivot Points', 'Rob Booker Ziv Ghost Pivots']);
 
 function slugify(name: string): string {
@@ -506,20 +526,20 @@ export function tradingViewBuiltInUsesCompareSeries(id: string): boolean {
   return name !== undefined && COMPARE_SERIES_INDICATORS.has(name);
 }
 
-function nums(bars: readonly MarketBar[], key: 'open' | 'high' | 'low' | 'close' | 'volume'): number[] {
+export function nums(bars: readonly MarketBar[], key: 'open' | 'high' | 'low' | 'close' | 'volume'): number[] {
   return bars.map((bar) => {
     const value = Number(bar[key]);
     return Number.isFinite(value) ? value : 0;
   });
 }
 
-function full(length: number): MaybeNumber[] { return Array.from({ length }, () => null); }
+export function full(length: number): MaybeNumber[] { return Array.from({ length }, () => null); }
 function safePeriod(period: number, fallback = 14): number { return Number.isInteger(period) && period > 0 ? period : fallback; }
 function sum(values: readonly number[]): number { return values.reduce((total, value) => total + value, 0); }
 function mean(values: readonly number[]): number { return values.length ? sum(values) / values.length : 0; }
-function finite(value: MaybeNumber): value is number { return value !== null && Number.isFinite(value); }
+export function finite(value: MaybeNumber): value is number { return value !== null && Number.isFinite(value); }
 
-function sma(values: readonly number[], period: number): MaybeNumber[] {
+export function sma(values: readonly number[], period: number): MaybeNumber[] {
   const p = safePeriod(period);
   const result = full(values.length);
   if (values.length < p) return result;
@@ -532,7 +552,7 @@ function sma(values: readonly number[], period: number): MaybeNumber[] {
   return result;
 }
 
-function ema(values: readonly number[], period: number): MaybeNumber[] {
+export function ema(values: readonly number[], period: number): MaybeNumber[] {
   const p = safePeriod(period);
   const result = full(values.length);
   if (values.length < p) return result;
@@ -546,7 +566,7 @@ function ema(values: readonly number[], period: number): MaybeNumber[] {
   return result;
 }
 
-function rma(values: readonly number[], period: number): MaybeNumber[] {
+export function rma(values: readonly number[], period: number): MaybeNumber[] {
   const p = safePeriod(period);
   const result = full(values.length);
   if (values.length < p) return result;
@@ -578,8 +598,8 @@ function rolling(values: readonly number[], period: number, reducer: (window: re
   return result;
 }
 
-function highest(values: readonly number[], period: number): MaybeNumber[] { return rolling(values, period, (window) => Math.max(...window)); }
-function lowest(values: readonly number[], period: number): MaybeNumber[] { return rolling(values, period, (window) => Math.min(...window)); }
+export function highest(values: readonly number[], period: number): MaybeNumber[] { return rolling(values, period, (window) => Math.max(...window)); }
+export function lowest(values: readonly number[], period: number): MaybeNumber[] { return rolling(values, period, (window) => Math.min(...window)); }
 function median(values: readonly number[], period: number): MaybeNumber[] {
   return rolling(values, period, (window) => {
     const sorted = [...window].sort((a, b) => a - b);
@@ -599,7 +619,7 @@ function trueRange(high: readonly number[], low: readonly number[], close: reado
   return high.map((value, i) => i === 0 ? value - low[i] : Math.max(value - low[i], Math.abs(value - close[i - 1]), Math.abs(low[i] - close[i - 1])));
 }
 
-function atr(high: readonly number[], low: readonly number[], close: readonly number[], period: number): MaybeNumber[] {
+export function atr(high: readonly number[], low: readonly number[], close: readonly number[], period: number): MaybeNumber[] {
   return rma(trueRange(high, low, close), period);
 }
 
@@ -622,7 +642,7 @@ function roc(values: readonly number[], period: number): MaybeNumber[] {
   return values.map((value, i) => i < p || values[i - p] === 0 ? null : (value / values[i - p] - 1) * 100);
 }
 
-function bollinger(values: readonly number[], period: number, deviations = 2): { middle: MaybeNumber[]; upper: MaybeNumber[]; lower: MaybeNumber[] } {
+export function bollinger(values: readonly number[], period: number, deviations = 2): { middle: MaybeNumber[]; upper: MaybeNumber[]; lower: MaybeNumber[] } {
   const middle = sma(values, period);
   const dev = stdev(values, period);
   return {
@@ -985,7 +1005,7 @@ function technicalRating(high: readonly number[], low: readonly number[], close:
 // TVP-6.1 helpers. Times are epoch milliseconds of bar starts; sessions come from `tradingSessions.ts`.
 const DAY_MS = 86_400_000;
 
-function startTimes(bars: readonly MarketBar[]): number[] { return bars.map((bar) => Date.parse(bar.start_time)); }
+export function startTimes(bars: readonly MarketBar[]): number[] { return bars.map((bar) => Date.parse(bar.start_time)); }
 
 /** A built-in's `params` value: a finite number at least `min` (whole when `integer`), else the default. */
 function numberParam(instance: TradingViewBuiltInInstance, key: string, fallback: number, min: number, integer: boolean): number {
@@ -999,7 +1019,7 @@ function selectParam<T extends string>(instance: TradingViewBuiltInInstance, key
 }
 
 /** Reads every param of a built-in from its declared inputs, falling back to the declared defaults. */
-function builtInParams(name: string, instance: TradingViewBuiltInInstance): Record<string, ParamValue> {
+export function builtInParams(name: string, instance: TradingViewBuiltInInstance): Record<string, ParamValue> {
   const values: Record<string, ParamValue> = {};
   for (const spec of BUILTIN_INPUTS[name]?.params ?? []) {
     values[spec.key] = spec.kind === 'number'
@@ -1338,8 +1358,8 @@ export function calculateTradingViewBuiltInOutputs(
 ): TradingViewBuiltInOutput[] {
   const definition = definitionById.get(instance.id);
   if (!definition?.available || !isTradingViewBuiltInId(instance.id) || bars.length === 0) return [];
-  const name = definition.name;
-  const period = safePeriod(instance.period, definition.defaultPeriod);
+  const name = definition.name; const period = safePeriod(instance.period, definition.defaultPeriod);
+  if (DRAWING_INDICATORS.has(name)) return drawingIndicatorOutputs(name, instance.id, period, builtInParams(name, instance), bars, instance.session ?? UTC_SESSION) ?? [];
   const open = nums(bars, 'open'); const high = nums(bars, 'high'); const low = nums(bars, 'low'); const close = nums(bars, 'close'); const volume = nums(bars, 'volume');
   const hl2 = close.map((_, i) => (high[i] + low[i]) / 2);
   const typical = close.map((value, i) => (high[i] + low[i] + value) / 3);
@@ -1627,6 +1647,16 @@ export function tradingViewBuiltInPlotDefinitions(instance: TradingViewBuiltInIn
     'Williams Alligator': [['jaw', 'Jaw'], ['teeth', 'Teeth'], ['lips', 'Lips']],
     'Williams Fractal': [['up-fractal', 'Up Fractal'], ['down-fractal', 'Down Fractal']],
     'Woodies CCI': [['trend-cci', 'Trend CCI'], ['entry-cci', 'Entry CCI']],
+    // TVP-6.2 indicators that draw (drawingIndicators.ts); the auto fibs', key levels' and seasonality's plots vary with the bars.
+    'Auto Pitchfork': [['median', 'Median'], ['upper', 'Upper'], ['lower', 'Lower']],
+    'Auto Trendlines': [['resistance', 'Resistance'], ['support', 'Support']],
+    'Bollinger Bars': [['bars', 'Bar colors'], ['upper', 'Upper'], ['lower', 'Lower']],
+    'Chop Zone': [['zone', 'Chop Zone']],
+    'Moon Phases': [['full', 'Full moon'], ['new', 'New moon']],
+    'Multi-Time Period Charts indicator': [['candles', 'Period candles'], ['high', 'Period high'], ['low', 'Period low'], ['open', 'Period open']],
+    'Trading Sessions': [['sessions', 'Trading Sessions']],
+    'Visible Average Price': [['average', 'Visible Average Price']],
+    'VWAP Auto Anchored': [['vwap', 'Auto Anchored VWAP']],
   };
   if (name === 'Moving Average Ribbon') return [20, 50, 100, 200].map((p) => ({ key: `${id}:sma-${p}`, title: `SMA ${p}` }));
   if (name === 'Moving Averages') return [{ key: `${id}:sma`, title: 'SMA' }, { key: `${id}:ema`, title: 'EMA' }];

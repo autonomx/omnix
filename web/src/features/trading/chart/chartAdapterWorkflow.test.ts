@@ -20,7 +20,7 @@ function seriesMock() {
 
 const chartMock = {
   applyOptions: vi.fn(),
-  timeScale: () => ({ subscribeVisibleLogicalRangeChange: vi.fn(), unsubscribeVisibleLogicalRangeChange: vi.fn() }),
+  timeScale: () => ({ subscribeVisibleLogicalRangeChange: vi.fn(), unsubscribeVisibleLogicalRangeChange: vi.fn(), getVisibleLogicalRange: () => null }),
   addSeries: vi.fn(() => {
     const created = seriesMock();
     series.push(created);
@@ -73,6 +73,23 @@ describe('chart adapter workflow hooks (TVP-2.5)', () => {
     expect(price.createPriceLine).toHaveBeenCalledTimes(2);
     adapter.setSessionPriceLine(null);
     expect(price.removePriceLine).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps indicator bar colours on live updates, for candles and bars (TVP-6.2)', () => {
+    const adapter = new TradingChartAdapter(document.createElement('div'));
+    const bar = {
+      instrument_id: 'fixture', interval: '1m', start_time: '2026-08-05T12:00:00+00:00', end_time: '2026-08-05T12:01:00+00:00',
+      open: '10', high: '12', low: '9', close: '11', volume: '5', is_final: false, adjustment_mode: 'raw', session: '24x7',
+      provider: 'fixture', ingestion_revision: 1, received_at: '2026-08-05T12:01:00+00:00',
+    } as never;
+    (adapter as unknown as { barColors: Map<number, string> }).barColors = new Map([[Date.parse('2026-08-05T12:00:00Z') / 1000, '#26a69a']]);
+    adapter.updateBar(bar);
+    expect(series[0].update.mock.calls.at(-1)?.[0]).toMatchObject({ color: '#26a69a', wickColor: '#26a69a', borderColor: '#26a69a' });
+    // The Bars chart type takes the bar-series branch on the same series.
+    (adapter as unknown as { chartType: string }).chartType = 'bar';
+    series[0].update.mockClear();
+    adapter.updateBar({ ...(bar as object), ingestion_revision: 2 } as never);
+    expect(series[0].update.mock.calls.at(-1)?.[0]).toMatchObject({ color: '#26a69a' });
   });
 
   it('tells which pane a double-click landed on', () => {

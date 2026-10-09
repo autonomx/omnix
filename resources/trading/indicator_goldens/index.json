@@ -43,6 +43,31 @@
    "default_period": 14
   },
   {
+   "id": "tv-auto-fib-extension",
+   "name": "Auto Fib Extension",
+   "default_period": 10
+  },
+  {
+   "id": "tv-auto-fib-retracement",
+   "name": "Auto Fib Retracement",
+   "default_period": 10
+  },
+  {
+   "id": "tv-auto-key-levels",
+   "name": "Auto key levels",
+   "default_period": 200
+  },
+  {
+   "id": "tv-auto-pitchfork",
+   "name": "Auto Pitchfork",
+   "default_period": 10
+  },
+  {
+   "id": "tv-auto-trendlines",
+   "name": "Auto Trendlines",
+   "default_period": 5
+  },
+  {
    "id": "tv-average-daily-range-adr-indicator",
    "name": "Average Daily Range (ADR) indicator",
    "default_period": 14
@@ -88,6 +113,11 @@
    "default_period": 20
   },
   {
+   "id": "tv-bollinger-bars",
+   "name": "Bollinger Bars",
+   "default_period": 20
+  },
+  {
    "id": "tv-bull-bear-power",
    "name": "Bull Bear Power",
    "default_period": 13
@@ -116,6 +146,11 @@
    "id": "tv-chandelier-exit",
    "name": "Chandelier Exit",
    "default_period": 22
+  },
+  {
+   "id": "tv-chop-zone",
+   "name": "Chop Zone",
+   "default_period": 30
   },
   {
    "id": "tv-choppiness-index-chop",
@@ -263,6 +298,11 @@
    "default_period": 14
   },
   {
+   "id": "tv-moon-phases",
+   "name": "Moon Phases",
+   "default_period": 1
+  },
+  {
    "id": "macd",
    "name": "Moving average convergence divergence (MACD) indicator",
    "default_period": 9
@@ -286,6 +326,11 @@
    "id": "tv-movingavg2line-cross",
    "name": "MovingAvg2Line Cross",
    "default_period": 9
+  },
+  {
+   "id": "tv-multi-time-period-charts-indicator",
+   "name": "Multi-Time Period Charts indicator",
+   "default_period": 1
   },
   {
    "id": "tv-negative-volume-index-nvi",
@@ -423,6 +468,11 @@
    "default_period": 14
   },
   {
+   "id": "tv-seasonality",
+   "name": "Seasonality",
+   "default_period": 3
+  },
+  {
    "id": "sma",
    "name": "Simple Moving Average",
    "default_period": 20
@@ -473,6 +523,11 @@
    "default_period": 1
   },
   {
+   "id": "tv-trading-sessions",
+   "name": "Trading Sessions",
+   "default_period": 1
+  },
+  {
    "id": "tv-trend-strength-index",
    "name": "Trend Strength Index",
    "default_period": 20
@@ -508,6 +563,11 @@
    "default_period": 1
   },
   {
+   "id": "tv-visible-average-price",
+   "name": "Visible Average Price",
+   "default_period": 1
+  },
+  {
    "id": "tv-volatility-stop",
    "name": "Volatility Stop",
    "default_period": 20
@@ -531,6 +591,11 @@
    "id": "tv-vortex-indicator",
    "name": "Vortex Indicator",
    "default_period": 14
+  },
+  {
+   "id": "tv-vwap-auto-anchored",
+   "name": "VWAP Auto Anchored",
+   "default_period": 200
   },
   {
    "id": "tv-weighted-moving-average",
