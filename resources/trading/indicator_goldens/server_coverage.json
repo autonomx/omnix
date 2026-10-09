@@ -9,6 +9,7 @@
  "stochastic-rsi",
  "tv-24-hour-volume",
  "tv-accumulation-distribution-adl",
+ "tv-all-candlestick-patterns",
  "tv-arnaud-legoux-moving-average",
  "tv-aroon-indicator",
  "tv-aroon-oscillator",

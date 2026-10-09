@@ -35,7 +35,7 @@ from .alert_conditions import (
     condition_sources,
     indicator_output_profile,
 )
-from .indicators.registry import BarSeries, compute_indicator
+from .indicators.registry import BarSeries, compute_indicator, server_indicator
 
 HISTORY_LIMIT_MAX = 1000
 _HUNDRED = Decimal("100")
@@ -395,6 +395,10 @@ def _source_lookback(source: Any) -> int:
         )
     if inputs.anchor_bars_ago is not None:
         required = max(required, inputs.anchor_bars_ago + 1)
+    indicator = server_indicator(source.indicator_id)
+    if indicator is not None and indicator.signal_warmup is not None:
+        # A signal output's first value on the synthetic series is when it happens to appear, not its warm-up.
+        return max(required, indicator.signal_warmup)
     try:
         # The first bar this output has a value on, measured on a synthetic series,
         # covers indicators whose warm-up is not a simple function of the period.
@@ -438,7 +442,10 @@ def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec]) -> No
                 value = getattr(inputs, name)
                 if value is not None and value > MAX_INDICATOR_PERIOD:
                     raise ValueError(f"indicator {name} must be at most {MAX_INDICATOR_PERIOD}")
-            if dict(indicator_output_profile(source)).get(source.output) is None:
+            indicator = server_indicator(source.indicator_id)
+            signal = indicator is not None and indicator.signal_warmup is not None
+            # A signal (a candlestick pattern) has a value only where it appears, which a series may never show.
+            if not signal and dict(indicator_output_profile(source)).get(source.output) is None:
                 raise ValueError(f"indicator output {source.output!r} never has a value with these inputs")
     required = required_bars(conditions)
     if required + 2 > HISTORY_LIMIT_MAX:

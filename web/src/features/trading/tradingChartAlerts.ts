@@ -10,6 +10,7 @@ import type {
   TradingAlertUpdateInput,
 } from './tradingTypes';
 import { emitOmnixEvent, TRADING_ALERTS_CHANGED_EVENT } from '../../events/bus';
+import { isAppearsCondition } from './alertIndicatorSources';
 
 export const TRADING_ALERT_TRIGGER_HIGHLIGHT_MS = 15_000;
 
@@ -95,6 +96,7 @@ function conditionPartLabel(part: ConditionPart): string {
 /** A one-line description of an alert's conditions, e.g. "Price crossing up 100.00 and rsi:14 greater than 70.00". */
 export function alertConditionsSummary(alert: Pick<TradingAlert, 'conditions'>): string {
   return (alert.conditions ?? []).map((condition) => {
+    if (isAppearsCondition(condition)) return `${conditionPartLabel(condition.source)} appears`;
     const operator = operatorLabels[condition.operator] ?? condition.operator;
     const tail = condition.target
       ? conditionPartLabel(condition.target)

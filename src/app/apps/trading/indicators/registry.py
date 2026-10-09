@@ -178,6 +178,9 @@ class ServerIndicator:
     numeric_class: NumericClass
     compute: ComputeFunction
     compare_compute: CompareComputeFunction | None = None
+    # Signal indicators (candlestick patterns): outputs with a value only on the bars where the signal appears,
+    # so a series may never show one. Alerts take this warm-up (bars) instead of measuring the first value.
+    signal_warmup: int | None = None
 
     @property
     def uses_compare_series(self) -> bool:
@@ -194,9 +197,11 @@ def _add(indicator: ServerIndicator) -> None:
     _REGISTRY[indicator.id] = indicator
 
 
-def register(indicator_id: str, name: str, numeric_class: NumericClass) -> Callable[[ComputeFunction], ComputeFunction]:
+def register(
+    indicator_id: str, name: str, numeric_class: NumericClass, signal_warmup: int | None = None
+) -> Callable[[ComputeFunction], ComputeFunction]:
     def decorate(compute: ComputeFunction) -> ComputeFunction:
-        _add(ServerIndicator(indicator_id, name, numeric_class, compute))
+        _add(ServerIndicator(indicator_id, name, numeric_class, compute, signal_warmup=signal_warmup))
         return compute
 
     return decorate

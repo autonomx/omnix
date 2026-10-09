@@ -67,7 +67,8 @@ const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILT
     author: external ? 'External market data' : 'TradingView built-in',
     boosts: definition.available ? 'Built-in' : external ? 'Live data' : 'Needs data',
     section: 'technicals',
-    kind: 'indicator',
+    // Like TradingView, candlestick patterns are listed with the chart patterns.
+    kind: definition.name === 'All Candlestick Patterns' ? 'pattern' : 'indicator',
     available: definition.available || external,
     requirement: externalRequirement ?? definition.requirement,
   });

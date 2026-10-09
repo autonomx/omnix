@@ -1,10 +1,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AlertIndicatorPicker } from './AlertIndicatorPicker';
-import { alertIndicatorChoices, chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, defaultIndicatorSelection, resolveIndicatorSelection, withChartIndicatorCondition } from './alertIndicatorSources';
+import { alertIndicatorChoices, APPEARS_VALUE, chartAlertIndicatorId, chartAlertThreshold, conditionsAtValue, defaultIndicatorSelection, resolveIndicatorSelection, withChartIndicatorCondition } from './alertIndicatorSources';
 import { editorDefaults } from './TradingChartAlertOverlay';
 import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIndicators';
-import { chartAlertCreateInput } from './tradingChartAlerts';
+import { alertConditionsSummary, chartAlertCreateInput } from './tradingChartAlerts';
 
 afterEach(cleanup);
 
@@ -54,6 +54,48 @@ describe('alerts on chart indicators (TVP-1.3)', () => {
     expect(onChange).toHaveBeenLastCalledWith({ key: 'macd', output: 'macd:12:26:signal', operator: 'crossing' });
     fireEvent.change(screen.getByLabelText('Alert indicator comparison'), { target: { value: 'less_than' } });
     expect(onChange).toHaveBeenLastCalledWith({ key: 'macd', output: 'macd:12:26:line', operator: 'less_than' });
+  });
+});
+
+describe('alerts on signal outputs (TVP-6.3)', () => {
+  const marker = (key: string, title: string) => ({ ...line(key, title), pane: 0, render: 'markers' }) as unknown as IndicatorOutput;
+  const patterns = alertIndicatorChoices(
+    [{ id: 'tv-all-candlestick-patterns', period: 1, enabled: true } as unknown as CoreIndicatorInstance, { id: 'sma', period: 20, enabled: true }],
+    [marker('tv-all-candlestick-patterns:hammer', 'Hammer - Bullish'), marker('tv-all-candlestick-patterns:doji', 'Doji'), line('sma:20', 'SMA')],
+    new Set(['tv-all-candlestick-patterns', 'sma']),
+  );
+
+  it('offers "appears" on a pattern, stored as the output above 0 whatever the value field says', () => {
+    expect(patterns[0].outputs[0]).toEqual({ key: 'tv-all-candlestick-patterns:hammer', title: 'Hammer - Bullish', signal: true });
+    const selection = defaultIndicatorSelection(patterns)!;
+    expect(selection).toEqual({ key: 'tv-all-candlestick-patterns', output: 'tv-all-candlestick-patterns:hammer', operator: 'appears' });
+    const input = chartAlertCreateInput({ alertId: 'a', instrumentId: 'btc', bindingId: null, interval: '1h', threshold: 0, latestPrice: 1, expiration: 'never' });
+    expect(withChartIndicatorCondition(input, patterns, selection, '187.5')).toBe(true);
+    expect(input.conditions?.[0]).toMatchObject({ operator: 'greater_than', target: { kind: 'value', value: APPEARS_VALUE }, source: { output: 'tv-all-candlestick-patterns:hammer' } });
+    // No line to draw or drag on the chart, and it reads as "appears".
+    const alert = { condition_type: 'conditions', threshold: 0, parameters: {}, conditions: input.conditions };
+    expect(chartAlertIndicatorId(alert)).toBeNull();
+    expect(conditionsAtValue(alert, '187.5')).toBe(input.conditions);
+    expect(alertConditionsSummary({ conditions: input.conditions as never })).toBe('tv-all-candlestick-patterns:hammer appears');
+    // Back on a line, the comparison is a line's again.
+    expect(resolveIndicatorSelection(patterns, { ...selection, key: 'sma' })).toEqual({ key: 'sma', output: 'sma:20', operator: 'crossing' });
+  });
+
+  it('greys out fractals: they are confirmed bars after the bar alerts evaluate', () => {
+    const fractals = alertIndicatorChoices(
+      [{ id: 'tv-williams-fractal', period: 2, enabled: true } as unknown as CoreIndicatorInstance],
+      [marker('tv-williams-fractal:up-fractal', 'Up Fractal')],
+      new Set(['tv-williams-fractal']),
+    );
+    expect(fractals[0].unavailable).toMatch(/confirmed bars later/);
+  });
+
+  it('shows only "Appears" for a pattern and switches the comparison with the indicator', () => {
+    const onChange = vi.fn();
+    render(<AlertIndicatorPicker choices={patterns} selection={defaultIndicatorSelection(patterns)} onChange={onChange} />);
+    expect(Array.from((screen.getByLabelText('Alert indicator comparison') as HTMLSelectElement).options).map((option) => option.text)).toEqual(['Appears']);
+    fireEvent.change(screen.getByLabelText('Alert chart indicator'), { target: { value: 'sma' } });
+    expect(onChange).toHaveBeenLastCalledWith({ key: 'sma', output: 'sma:20', operator: 'crossing' });
   });
 });
 

@@ -11,6 +11,7 @@
   "stochastic-rsi",
   "tv-24-hour-volume",
   "tv-accumulation-distribution-adl",
+  "tv-all-candlestick-patterns",
   "tv-arnaud-legoux-moving-average",
   "tv-aroon-indicator",
   "tv-aroon-oscillator",
@@ -265,6 +266,64 @@
    },
    "outputs": [
     "tv-accumulation-distribution-adl:adl"
+   ]
+  },
+  {
+   "id": "tv-all-candlestick-patterns",
+   "inputs": {
+    "period": 1,
+    "fast_period": null,
+    "slow_period": null,
+    "signal_period": null,
+    "standard_deviations": null,
+    "anchor_time": null,
+    "anchor_bars_ago": null
+   },
+   "outputs": [
+    "tv-all-candlestick-patterns:abandoned-baby-bearish",
+    "tv-all-candlestick-patterns:abandoned-baby-bullish",
+    "tv-all-candlestick-patterns:dark-cloud-cover",
+    "tv-all-candlestick-patterns:doji",
+    "tv-all-candlestick-patterns:doji-star-bearish",
+    "tv-all-candlestick-patterns:doji-star-bullish",
+    "tv-all-candlestick-patterns:downside-tasuki-gap",
+    "tv-all-candlestick-patterns:dragonfly-doji",
+    "tv-all-candlestick-patterns:engulfing-bearish",
+    "tv-all-candlestick-patterns:engulfing-bullish",
+    "tv-all-candlestick-patterns:evening-doji-star",
+    "tv-all-candlestick-patterns:evening-star",
+    "tv-all-candlestick-patterns:falling-three-methods",
+    "tv-all-candlestick-patterns:falling-window",
+    "tv-all-candlestick-patterns:gravestone-doji",
+    "tv-all-candlestick-patterns:hammer",
+    "tv-all-candlestick-patterns:hanging-man",
+    "tv-all-candlestick-patterns:harami-bearish",
+    "tv-all-candlestick-patterns:harami-bullish",
+    "tv-all-candlestick-patterns:harami-cross-bearish",
+    "tv-all-candlestick-patterns:harami-cross-bullish",
+    "tv-all-candlestick-patterns:inverted-hammer",
+    "tv-all-candlestick-patterns:kicking-bearish",
+    "tv-all-candlestick-patterns:kicking-bullish",
+    "tv-all-candlestick-patterns:long-lower-shadow",
+    "tv-all-candlestick-patterns:long-upper-shadow",
+    "tv-all-candlestick-patterns:marubozu-black",
+    "tv-all-candlestick-patterns:marubozu-white",
+    "tv-all-candlestick-patterns:morning-doji-star",
+    "tv-all-candlestick-patterns:morning-star",
+    "tv-all-candlestick-patterns:on-neck",
+    "tv-all-candlestick-patterns:piercing",
+    "tv-all-candlestick-patterns:rising-three-methods",
+    "tv-all-candlestick-patterns:rising-window",
+    "tv-all-candlestick-patterns:shooting-star",
+    "tv-all-candlestick-patterns:spinning-top-black",
+    "tv-all-candlestick-patterns:spinning-top-white",
+    "tv-all-candlestick-patterns:three-black-crows",
+    "tv-all-candlestick-patterns:three-white-soldiers",
+    "tv-all-candlestick-patterns:tri-star-bearish",
+    "tv-all-candlestick-patterns:tri-star-bullish",
+    "tv-all-candlestick-patterns:tweezer-bottom",
+    "tv-all-candlestick-patterns:tweezer-top",
+    "tv-all-candlestick-patterns:upside-tasuki-gap"
    ]
   },
   {
@@ -1646,22 +1705,6 @@
     "tv-williams-alligator:jaw",
     "tv-williams-alligator:teeth",
     "tv-williams-alligator:lips"
-   ]
-  },
-  {
-   "id": "tv-williams-fractal",
-   "inputs": {
-    "period": 2,
-    "fast_period": null,
-    "slow_period": null,
-    "signal_period": null,
-    "standard_deviations": null,
-    "anchor_time": null,
-    "anchor_bars_ago": null
-   },
-   "outputs": [
-    "tv-williams-fractal:up-fractal",
-    "tv-williams-fractal:down-fractal"
    ]
   },
   {
