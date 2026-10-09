@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AUTO_REFRESH_OPTIONS, resultChanges, useScannerAutoRefresh, type AutoRefresh } from './scannerAutoRefresh';
 import type { CanonicalInstrument } from './tradingTypes';
 import type {
   TradingScannerDefinition,
@@ -25,6 +26,10 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
   const [interval, setScanInterval] = useState('1d');
   const [historyLimit, setHistoryLimit] = useState('100');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
+  const [autoRefresh, setAutoRefresh] = useState<AutoRefresh | null>(null);
+  const [changes, setChanges] = useState<ReturnType<typeof resultChanges>>({ added: new Set(), removed: [] });
+  // The results shown before the latest run, and which run they came from, to say what changed.
+  const shown = useRef<{ runId: string | null; results: TradingScannerResult[] | null }>({ runId: null, results: null });
 
   const refresh = async () => {
     try {
@@ -36,8 +41,11 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
       setRuns(nextRuns);
       setStatus('ready');
       const latest = nextRuns[0];
-      if (latest?.status === 'completed') {
-        setResults(await tradingScannerApi.results(latest.run_id));
+      if (latest?.status === 'completed' && latest.run_id !== shown.current.runId) {
+        const next = await tradingScannerApi.results(latest.run_id);
+        setChanges(resultChanges(shown.current.results, next));
+        shown.current = { runId: latest.run_id, results: next };
+        setResults(next);
       }
     } catch {
       setStatus('error');
@@ -49,6 +57,16 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
     if (!runs.some((run) => !terminalStatuses.has(run.status))) return;
     return startPolling(refresh, POLL_INTERVALS_MS.scanner);
   }, [runs]);
+
+  // Auto-refresh (TVP-9.2): a new run only when none of the screen's runs is still working.
+  useScannerAutoRefresh(
+    autoRefresh,
+    (scannerId) => runs.some((run) => run.scanner_id === scannerId && !terminalStatuses.has(run.status)),
+    async (scannerId) => {
+      await tradingScannerApi.start(scannerId);
+      await refresh();
+    },
+  );
 
   const available = useMemo(() => instruments.slice(0, 200), [instruments]);
   const create = async () => {
@@ -134,6 +152,17 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
           <li key={definition.scanner_id}>
             <div><strong>{definition.name}</strong><small>{definition.instrument_ids.length} instruments · {definition.interval} · revision {definition.revision}</small></div>
             <button type="button" onClick={() => void start(definition.scanner_id)}>Run</button>
+            <select
+              aria-label={`Auto-refresh ${definition.name}`}
+              value={autoRefresh?.scannerId === definition.scanner_id ? autoRefresh.everyMs : 0}
+              onChange={(event) => {
+                const everyMs = Number(event.target.value);
+                setAutoRefresh(everyMs > 0 ? { scannerId: definition.scanner_id, everyMs } : null);
+                if (everyMs > 0) void start(definition.scanner_id);
+              }}
+            >
+              {AUTO_REFRESH_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
           </li>
         ))}
       </ul>
@@ -145,9 +174,14 @@ export function TradingScannerPanel({ instruments }: { instruments: CanonicalIns
           </li>
         ))}
       </ul>
+      {changes.added.size > 0 || changes.removed.length > 0 ? (
+        <p className="trading-scanner-changes" role="status">
+          Since the previous run: {changes.added.size} new, {changes.removed.length} dropped{changes.removed.length > 0 ? ` (${changes.removed.join(', ')})` : ''}.
+        </p>
+      ) : null}
       <table className="trading-scanner-results">
         <thead><tr><th>Rank</th><th>Instrument</th><th>Provider</th><th>Score</th><th>Dataset</th></tr></thead>
-        <tbody>{results.map((result) => <tr key={`${result.run_id}:${result.instrument_id}`}><td>{result.rank}</td><td>{result.instrument_id}</td><td>{result.provider}</td><td>{result.score}</td><td title={result.dataset_fingerprint}>{result.dataset_fingerprint.slice(0, 8)}</td></tr>)}</tbody>
+        <tbody>{results.map((result) => <tr key={`${result.run_id}:${result.instrument_id}`} className={changes.added.has(result.instrument_id) ? 'is-new' : undefined} title={changes.added.has(result.instrument_id) ? 'New since the previous run' : undefined}><td>{result.rank}</td><td>{result.instrument_id}</td><td>{result.provider}</td><td>{result.score}</td><td title={result.dataset_fingerprint}>{result.dataset_fingerprint.slice(0, 8)}</td></tr>)}</tbody>
       </table>
     </section>
   );

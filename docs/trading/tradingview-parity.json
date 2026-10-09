@@ -1,7 +1,7 @@
 {
   "schema": "omnix-tradingview-parity-ledger-v1",
   "roadmap": "docs/trading/TRADINGVIEW_PARITY_ROADMAP_2026-10-08.md",
-  "verified": "2026-10-09 (updated after TVP-4.1)",
+  "verified": "2026-10-09 (updated after TVP-9.2)",
   "entries": [
   {"id": "charts.all-21-chart-types", "area": "Charts and layouts", "feature": "All 21 chart types", "tier": "daily", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/chart/chartAdapter.ts#TRADING_CHART_TYPE_OPTIONS"]},
   {"id": "charts.up-to-16-charts-per-tab", "area": "Charts and layouts", "feature": "Up to 16 charts per tab", "tier": "daily", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/tradingStore.ts#MAX_TRADING_CHARTS = 16"]},
@@ -444,7 +444,7 @@
   {"id": "screener.more-metrics", "area": "Screener", "feature": "Metrics beyond close, % change, volume, SMA, EMA, RSI, ATR", "tier": "daily", "status": "missing", "level": "equivalent", "wp": "TVP-9.1"},
   {"id": "screener.fundamental-fields", "area": "Screener", "feature": "Fundamental fields", "tier": "weekly", "status": "missing", "level": "equivalent", "wp": "TVP-9.1"},
   {"id": "screener.columns-sorting-saved", "area": "Screener", "feature": "Result columns, sorting, saved screens", "tier": "daily", "status": "partial", "level": "equivalent", "wp": "TVP-9.1", "evidence": ["web/src/features/trading/TradingScannerPanel.tsx#tradingScannerApi.create"], "note": "Screen definitions are saved server-side; result columns are fixed and not sortable."},
-  {"id": "screener.auto-refresh", "area": "Screener", "feature": "Auto-refresh (10 s / 1 min)", "tier": "daily", "status": "missing", "level": "equivalent", "wp": "TVP-9.2"},
+  {"id": "screener.auto-refresh", "area": "Screener", "feature": "Auto-refresh (10 s / 1 min)", "tier": "daily", "status": "have", "level": "equivalent", "wp": "TVP-9.2", "verified": "code", "evidence": ["web/src/features/trading/scannerAutoRefresh.ts#useScannerAutoRefresh", "web/src/features/trading/TradingScannerPanel.tsx#Auto-refresh"], "note": "A saved screen re-runs every 10 s or every minute while the screener is open. A new run starts only when none of its runs is working, and the server bounds each run. Results new since the previous run are highlighted, and the screen says how many are new or dropped."},
   {"id": "screener.heatmaps", "area": "Screener", "feature": "Heatmaps (stocks by sector, crypto)", "tier": "weekly", "status": "missing", "level": "equivalent", "wp": "TVP-9.3"},
   {"id": "screener.natural-language-screener", "area": "Screener", "feature": "Natural-language screener", "tier": "weekly", "status": "missing", "level": "equivalent", "wp": "TVP-9.4"},
   {"id": "replay.select-start-bar", "area": "Replay", "feature": "Select start bar", "tier": "weekly", "status": "have", "level": "equivalent", "wp": "baseline", "evidence": ["web/src/features/trading/TradingChartPanelFooter.tsx#Choose replay start"]},

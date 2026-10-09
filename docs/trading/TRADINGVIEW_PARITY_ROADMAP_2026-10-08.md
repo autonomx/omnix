@@ -1130,7 +1130,7 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 | TradingView parity, all features in scope | 74% |
 | TradingView parity, daily + weekly features | 84% |
 | Roadmap work packages merged in full | 39% (26 of 67) |
-| Daily + weekly gap closed since the first count | 63% (95 of 150) |
+| Daily + weekly gap closed since the first count | 64% (96 of 150) |
 
 Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
 <!-- parity-completion:end -->
@@ -1147,20 +1147,20 @@ Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parit
 | Alerts | 18 | 2 | 2 / 2 / 0 | 0 | 0 | 79% |
 | Shortcuts | 49 | 1 | 0 / 0 / 0 | 0 | 0 | 99% |
 | Watchlists | 9 | 2 | 0 / 0 / 0 | 0 | 0 | 91% |
-| Screener | 1 | 1 | 2 / 3 / 0 | 0 | 0 | 21% |
+| Screener | 2 | 1 | 1 / 3 / 0 | 0 | 0 | 36% |
 | Replay | 9 | 0 | 0 / 2 / 0 | 0 | 0 | 82% |
 | Paper and chart trading | 19 | 0 | 0 / 3 / 0 | 0 | 0 | 86% |
 | Research data | 3 | 1 | 0 / 2 / 2 | 1 | 0 | 44% |
 | Tabs and windows | 1 | 2 | 0 / 3 / 1 | 0 | 0 | 29% |
-| **Total** | 319 | 12 | 7 / 48 / 52 | 55 | 0 | 74% |
+| **Total** | 320 | 12 | 6 / 48 / 52 | 55 | 0 | 74% |
 
 | Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
 |---|---|---|---|---|---|---|---|
-| Daily | 152 | 4 | 7 | 0 | 0 | 163 | 94% |
+| Daily | 153 | 4 | 6 | 0 | 0 | 163 | 95% |
 | Weekly | 154 | 8 | 48 | 0 | 0 | 210 | 75% |
 | Rare | 13 | 0 | 52 | 55 | 0 | 120 | 20% |
 
-Missing daily + weekly features: **55**
+Missing daily + weekly features: **54**
 
 Done (have counts 1, partial 0.5, of the features in scope): **74%** overall, **84%** of daily + weekly.
 <!-- parity-report:end -->
