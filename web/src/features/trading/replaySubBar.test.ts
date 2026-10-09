@@ -39,9 +39,9 @@ afterEach(() => {
 
 describe('sub-bar replay (TVP-8.1)', () => {
   it('offers update intervals that fit the chart interval and one intrabar request a bar', () => {
-    expect(replayUpdateIntervals('1h')).toEqual(['1s', '5s', '15s', '1m', '5m', '15m']);
+    expect(replayUpdateIntervals('1h')).toEqual(['1m', '5m', '15m']);
     expect(replayUpdateIntervals('1d')).toEqual(['1m', '5m', '15m', '1h', '4h']);
-    expect(replayUpdateIntervals('1m')).toEqual(['1s', '5s', '15s']);
+    expect(replayUpdateIntervals('1m')).toEqual([]);
     expect(replaySubBarStepMs('1h', '15m')).toBe(15 * MINUTE);
     expect(replaySubBarStepMs('1h', '4h')).toBeNull();
     expect(replaySubBarStepMs('1h', null)).toBeNull();
@@ -53,6 +53,19 @@ describe('sub-bar replay (TVP-8.1)', () => {
     expect(nextSubBarClock(hours, T0 + HOUR, 15 * MINUTE, 3)).toBe(T0 + HOUR + 45 * MINUTE);
     expect(nextSubBarClock(hours, last - MINUTE, 15 * MINUTE)).toBe(last);
     expect(nextSubBarClock(hours, last, 15 * MINUTE)).toBeNull();
+    // A gap between bars (overnight) is skipped: steps start from the next bar's open.
+    const gapped = [hours[0], bar(T0 + 10 * HOUR, 60, 110, '1h')];
+    expect(nextSubBarClock(gapped, T0 + HOUR, 15 * MINUTE)).toBe(T0 + 10 * HOUR + 15 * MINUTE);
+  });
+
+  it('refuses replay orders placed inside a bar in sub-bar playback', async () => {
+    act(() => {
+      replay().setActiveBars(hours);
+      replay().chooseStart(barCloseTime(hours[0]));
+      replay().setUpdateInterval('15m');
+      replay().stepForward();
+    });
+    await expect(replay().placeOrder(fixture({ order_id: 'o', instrument_id: 'crypto:BINANCE:spot:BTC-USDT' }))).rejects.toThrow(/step to the bar close/);
   });
 
   it('moves the shared clock by update intervals, and bar by bar when it does not fit the chart', () => {
@@ -92,6 +105,29 @@ describe('sub-bar replay (TVP-8.1)', () => {
     act(() => { replay().setUpdateInterval(null); });
     expect(hook.result.current.replayFormingBar).toBeNull();
     hook.unmount();
+  });
+
+  it('builds the forming bar from the sessions the chart shows, and retries a failed load', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const extended = quarters.map((item, i) => (i === 4 ? { ...item, session: 'extended_pre', high: '999' } : item));
+    const spy = vi.spyOn(tradingApi, 'intrabars').mockRejectedValueOnce(new Error('down')).mockResolvedValue({ bars: extended, complete: true } as never);
+    const hook = renderHook(() => useChartReplayClock({
+      active: true, replayMode: true, bars: hours, chartKey: 'BTC||1h', reloadBars: () => undefined, instrumentId: 'x', interval: '1h', showExtendedHours: false,
+    }));
+    act(() => {
+      replay().chooseStart(barCloseTime(hours[0]));
+      replay().setUpdateInterval('15m');
+      replay().stepForward(2);
+    });
+    await waitFor(() => expect(replay().intrabarNote).toMatch(/Couldn't load 15m data/));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await waitFor(() => expect(hook.result.current.replayFormingBar).not.toBeNull());
+    // The pre-market quarter is left out: the bar forms from the 10:15 quarter alone.
+    expect(hook.result.current.replayFormingBar).toMatchObject({ open: '204', high: '206', volume: '10' });
+    // The range is the chart bars one request covers, from the forming bar's own start.
+    expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ start: T0 + HOUR, end: T0 + 4 * HOUR }));
+    hook.unmount();
+    vi.useRealTimers();
   });
 
   it('notes where the intrabar data stops', async () => {

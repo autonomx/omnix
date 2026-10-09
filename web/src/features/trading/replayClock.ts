@@ -42,7 +42,8 @@ export function parseReplaySpeed(value: unknown): ReplaySpeed {
 }
 
 /** Update intervals for sub-bar playback; a chart offers those that fit its interval (see `replayUpdateIntervals`). */
-export const REPLAY_UPDATE_INTERVALS = ['1s', '5s', '15s', '1m', '5m', '15m', '1h', '4h'] as const;
+// No seconds: the providers' bar intervals start at one minute.
+export const REPLAY_UPDATE_INTERVALS = ['1m', '5m', '15m', '1h', '4h'] as const;
 
 /** The update intervals that fit inside `interval` with at most `maxPerBar` steps a bar (one intrabar request). */
 export function replayUpdateIntervals(interval: string, maxPerBar = 5_000): string[] {
@@ -62,13 +63,17 @@ export function replaySubBarStepMs(interval: string | undefined, updateInterval:
 
 /**
  * The clock `steps` update intervals forward, not past the close of the last bar; null when the clock is already
- * there (or no bar ever closes).
+ * there (or no bar ever closes). Time between bars (overnight, weekends) is skipped: the steps start from the next
+ * bar's open.
  */
 export function nextSubBarClock(bars: readonly MarketBar[], clock: number, stepMs: number, steps = 1): number | null {
   let last = Number.NEGATIVE_INFINITY;
   for (let index = bars.length - 1; index >= 0 && !Number.isFinite(last); index -= 1) last = barCloseTime(bars[index]);
   if (!Number.isFinite(last) || clock >= last) return null;
-  return Math.min(last, clock + stepMs * Math.max(1, Math.trunc(steps)));
+  const next = bars[replayVisibleCount(bars, clock)];
+  const nextStart = next ? Date.parse(next.start_time) : Number.NaN;
+  const from = Number.isFinite(nextStart) && nextStart > clock ? nextStart : clock;
+  return Math.min(last, from + stepMs * Math.max(1, Math.trunc(steps)));
 }
 
 export function formatReplaySpeed(speed: ReplaySpeed): string {

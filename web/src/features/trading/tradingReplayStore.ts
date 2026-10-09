@@ -247,7 +247,19 @@ function orderBar(): MarketBar | null {
   return bar;
 }
 
+/**
+ * Whether the clock is inside a bar in sub-bar playback. Replay orders fill against whole bars, so an order placed
+ * mid-bar would be priced at the last closed bar and then meet the part of the forming bar before it existed.
+ */
+function clockMidBar(): boolean {
+  const { activeBars, clock, updateInterval } = useTradingReplayStore.getState();
+  if (clock === null || replaySubBarStepMs(activeBars[0]?.interval, updateInterval) === null) return false;
+  const count = replayVisibleCount(activeBars, clock);
+  return count === 0 || barCloseTime(activeBars[count - 1]) !== clock;
+}
+
 function placeOrder(input: PaperOrderInput): Promise<ReplayOrderResult> {
+  if (clockMidBar()) return Promise.reject(new Error('Replay orders fill on whole bars: step to the bar close to trade during sub-bar playback.'));
   const bar = orderBar();
   if (!bar) return Promise.reject(new Error('Select a replay bar before trading.'));
   // Replay orders trade on the replay session's feed, the one its bars come from.

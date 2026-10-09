@@ -39,15 +39,16 @@ def minute_bar(start: datetime) -> MarketBar:
 class Service:
     """The latest ``limit`` 1m bars up to NOW, from at most ``history`` minutes back."""
 
-    def __init__(self, history: int = 10_000) -> None:
+    def __init__(self, history: int = 10_000, history_complete: bool = False) -> None:
         self.history = history
+        self.history_complete = history_complete
         self.calls: list[tuple[str, str, int, str | None, dict]] = []
 
     def bars(self, instrument_id, interval, limit=500, binding_id=None, *args, **kwargs):
         self.calls.append((instrument_id, interval, limit, binding_id, kwargs))
         count = min(limit, self.history)
         bars = [minute_bar(NOW - timedelta(minutes=count - i)) for i in range(count)]
-        return SimpleNamespace(bars=list(reversed(bars)), provenance=SimpleNamespace(history_complete=False))
+        return SimpleNamespace(bars=list(reversed(bars)), provenance=SimpleNamespace(history_complete=self.history_complete))
 
 
 def test_returns_the_lower_bars_inside_the_range_asking_for_enough_to_reach_its_start() -> None:
@@ -77,10 +78,18 @@ def test_a_range_older_than_the_provider_reach_is_partial() -> None:
 def test_a_provider_without_older_history_is_complete() -> None:
     start = NOW - timedelta(hours=3)
     result = intrabar_bars(
-        Service(history=30), instrument_id="x:y", interval="1h", lower_interval="1m", start=start, end=NOW, now=NOW,
+        Service(history=30, history_complete=True), instrument_id="x:y", interval="1h", lower_interval="1m", start=start, end=NOW, now=NOW,
     )
     assert result.complete is True
     assert len(result.bars) == 30
+
+
+def test_a_provider_that_caps_its_history_is_partial() -> None:
+    # Fewer bars than asked for, but the provider keeps only a window (Yahoo's week of 1m bars): not complete.
+    start = NOW - timedelta(hours=3)
+    result = intrabar_bars(Service(history=30), instrument_id="x:y", interval="1h", lower_interval="1m", start=start, end=NOW, now=NOW)
+    assert result.complete is False
+    assert result.available_from == NOW - timedelta(minutes=30)
 
 
 @pytest.mark.parametrize(
@@ -91,6 +100,8 @@ def test_a_provider_without_older_history_is_complete() -> None:
         ("1h", "1m", NOW, NOW, "end must be after start"),
         ("1d", "1m", NOW - timedelta(days=5), NOW, "more than 5000"),
         ("1h", "bogus", NOW - timedelta(hours=1), NOW, ""),
+        # Bar intervals start at one minute.
+        ("1m", "1s", NOW - timedelta(minutes=1), NOW, ""),
     ],
 )
 def test_invalid_requests_are_rejected(interval, lower, start, end, message) -> None:
