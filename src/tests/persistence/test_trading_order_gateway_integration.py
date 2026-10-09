@@ -376,3 +376,26 @@ def test_turning_shorting_off_cancels_working_short_entries(paper) -> None:
     snapshot = repository.snapshot(account_id)
     assert next(item for item in snapshot.order_history if item.order_id == entry.order_id).status == "cancelled"
     assert (snapshot.balances[0].available, snapshot.balances[0].reserved) == (available_before, Decimal("0"))
+
+
+def test_a_short_is_bought_back_even_when_the_cash_does_not_cover_it(paper) -> None:
+    repository, _, account_id, instrument_id, _ = paper
+    _shorting_account(repository, account_id)
+    gateway = OrderGateway(repository)
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "6000", "short-gap"))
+    _fill(repository, account_id, instrument_id)
+    # The price gaps from 10 to 40: buying back 6,000 costs 240,000, more than the 160,000 the account holds.
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "6000", "cover-gap", reference_price=Decimal("40")))
+    now = datetime.now(timezone.utc) + timedelta(seconds=2)
+    repository.process_observation(
+        account_id,
+        PaperMarketObservation(
+            instrument_id=instrument_id, provider="integration", price=Decimal("40"), bid=Decimal("39.99"), ask=Decimal("40.01"),
+            bid_size=Decimal("100000"), ask_size=Decimal("100000"), source_time=now, evaluated_at=now,
+            execution_eligible=True, freshness_mode="live",
+        ),
+    )
+    snapshot = repository.snapshot(account_id)
+    assert next(item for item in snapshot.order_history if item.order_id == "order-cover-gap").status == "filled"
+    assert all(item.quantity == 0 for item in snapshot.positions if item.instrument_id == instrument_id)
+    assert snapshot.balances[0].available < 0

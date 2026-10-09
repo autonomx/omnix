@@ -876,7 +876,9 @@ class TradingPaperRepository:
                 commission = paper_commission(notional, account.commission_bps)
                 total_cost = notional + commission
                 rejection = None
-                if not paper_fill_is_fundable(
+                # Buying back a short is never refused for cash (TVP-7.2a): a stop must be able to close it.
+                covers_short = order.side == "buy" and position_quantity < 0 and fill_quantity <= -position_quantity
+                if not covers_short and not paper_fill_is_fundable(
                     order,
                     total_cost=total_cost,
                     available_cash=cash_available,
@@ -887,10 +889,10 @@ class TradingPaperRepository:
                 ):
                     rejection = "insufficient_paper_position"
                 if rejection:
-                    if order.side == "buy":
-                        cash_available += order.reserved_cash
-                        cash_reserved -= order.reserved_cash
-                    else:
+                    # A buy's or a short entry's cash hold goes back; an exit gives back its share of the long.
+                    cash_available += order.reserved_cash
+                    cash_reserved -= order.reserved_cash
+                    if order.side == "sell" and order.reserved_cash == 0:
                         remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
                         release_quantity = min(reserved_quantity, remaining)
                         reserved_quantity -= release_quantity

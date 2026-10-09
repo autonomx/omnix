@@ -435,7 +435,7 @@ export function TradingTerminalDock({
                     const pnl = Number(position.unrealized_pnl);
                     const notional = Number(position.average_cost) * Math.abs(Number(position.quantity));
                     const pnlPercent = notional ? (pnl / notional) * 100 : 0;
-                    const side = position.pendingSide === 'sell' ? 'Short' : position.pending ? 'Long' : Number(position.quantity) < 0 ? 'Short' : 'Long';
+                    const side = position.pendingSide === 'sell' ? (positions.some((item) => item.instrument_id === position.instrument_id && Number(item.quantity) > 0) ? 'Exit' : 'Short') : position.pending ? 'Long' : Number(position.quantity) < 0 ? 'Short' : 'Long';
                     return <tr key={`${position.instrument_id}-${position.pending ? position.pendingOrderId : 'open'}`}><td><MarketBadge instrumentId={position.instrument_id} /></td><td className="positive">{side}</td><td>{quantity(position.quantity)}</td><td>{number(position.average_cost)}</td><td>—</td><td>—</td><td>{number(position.last_price)}</td><td className={signedClass(pnl)}>{signedNumber(pnl)} <small>{activeAccount?.base_currency}</small></td><td className={signedClass(pnlPercent)}>{signedNumber(pnlPercent)}%</td><td className="trading-row-actions"><span className={position.pending ? 'trading-pending-position' : 'trading-open-position'}>{position.pending ? 'Working' : 'Open'}</span><button type="button" aria-label={`Edit ${symbol(position.instrument_id)} position`}>⌑</button><button type="button" aria-label={`Close ${symbol(position.instrument_id)} position`}>×</button></td></tr>;
                   })}
                   {displayedPositions.length === 0 ? <tr><td colSpan={10}>No open positions.</td></tr> : null}
