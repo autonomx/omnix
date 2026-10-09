@@ -25,7 +25,7 @@ describe('alert levels of rectangles and fib retracements (TVP-1.4)', () => {
     const levels = fibonacciTool.alertLevels!([{ time: T0, price: 100 }, { time: T1, price: 200 }], properties, services);
     expect(levels.map((level) => [level.key, level.label, level.anchors[0].price, level.anchors[1].price])).toEqual([
       ['level-0', 'Level 0 (100.00)', 100, 100],
-      ['level-0.5', 'Level 0.5 (150.00)', 150, 150],
+      ['level-1', 'Level 0.5 (150.00)', 150, 150],
     ]);
   });
 });

@@ -75,7 +75,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         onPlacementConsumed={clearAlertPlacement}
         indicatorChoices={indicatorChoices}
       />
-      <DrawingAlertSync adapter={adapter} instrumentId={instrumentId} instrument={drawingInstrumentOf(chartQuery.data?.instrument)} drawings={drawings.state.drawings} />
+      <DrawingAlertSync adapter={adapter} instrumentId={instrumentId} instrument={drawingInstrumentOf(chartQuery.data?.instrument)} drawings={drawings.state.drawings} active={active} replayMode={replayMode} />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
       <TradingOrderLinesOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} tickSize={tickSize} disabled={replayMode} />
       {active ? (

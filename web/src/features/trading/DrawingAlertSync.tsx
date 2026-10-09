@@ -11,48 +11,79 @@ import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
 
 /** How long a drawing must stay still before its alerts follow it (a drag sends many moves). */
 export const DRAWING_ALERT_SETTLE_MS = 600;
+/** Failed updates of one alert after which the sync leaves it until the page reloads. */
+const MAX_SYNC_FAILURES = 2;
 
 type Point = { time: string; price: number };
 
-const samePoints = (left: readonly Point[] | undefined, right: readonly Point[]) => (
-  left?.length === right.length && left.every((point, index) => (
-    Date.parse(point.time) === Date.parse(right[index].time) && Math.abs(Number(point.price) - right[index].price) <= Math.abs(right[index].price) * 1e-9
-  ))
-);
+/** The line's price at `time`, as the server evaluates a trendline: straight in time, extended both ways. */
+function lineAt(points: readonly Point[], time: string): number | null {
+  const [first, second] = points;
+  if (!first || !second) return null;
+  const t0 = Date.parse(first.time);
+  const t1 = Date.parse(second.time);
+  if (!Number.isFinite(t0) || !Number.isFinite(t1) || t0 === t1) return null;
+  return first.price + (second.price - first.price) * ((Date.parse(time) - t0) / (t1 - t0));
+}
+
+/**
+ * Whether two lines are the same line for the server. Anchors can differ without the line changing: a flat level's
+ * second anchor is one bar after the first, so charts on different intervals place it differently.
+ */
+export function sameAlertLine(current: readonly Point[], next: readonly Point[]): boolean {
+  if (current.length !== 2 || next.length !== 2) return false;
+  return next.every((point) => {
+    const value = lineAt(current, point.time);
+    return value !== null && Math.abs(value - point.price) <= Math.max(Math.abs(point.price) * 1e-9, 1e-12);
+  });
+}
 
 /** The alerts on this chart's instrument that follow a drawing (TVP-1.4). */
 export function drawingLinkedAlerts(alerts: readonly TradingAlert[], instrumentId: string): TradingAlert[] {
   return alerts.filter((alert) => alert.instrument_id === instrumentId && alert.parameters.drawing_id && alert.condition_type.startsWith('trendline_'));
 }
 
-/** The line each linked alert should have now: those whose drawing level moved, with the level's anchors. */
+/**
+ * What the linked alerts need now: the line of each whose drawing level moved, and the alerts whose drawing is here
+ * but no longer has their level (a level that went away is treated like a deleted drawing).
+ */
 export function drawingAlertUpdates(
   alerts: readonly TradingAlert[],
   drawings: readonly TradingDrawing[],
   levelsOf: (drawing: TradingDrawing) => readonly DrawingAlertLevel[],
-): Array<{ alert: TradingAlert; points: Point[] }> {
-  return alerts.flatMap((alert) => {
+): { moved: Array<{ alert: TradingAlert; points: Point[] }>; lost: TradingAlert[] } {
+  const moved: Array<{ alert: TradingAlert; points: Point[] }> = [];
+  const lost: TradingAlert[] = [];
+  for (const alert of alerts) {
     const drawing = drawings.find((item) => item.drawingId === alert.parameters.drawing_id);
-    if (!drawing) return [];
-    const level = levelsOf(drawing).find((item) => item.key === alert.parameters.drawing_level) ?? (alert.parameters.drawing_level ? undefined : levelsOf(drawing)[0]);
-    if (!level) return [];
+    if (!drawing) continue;
+    const levels = levelsOf(drawing);
+    const level = levels.find((item) => item.key === alert.parameters.drawing_level) ?? (alert.parameters.drawing_level ? undefined : levels[0]);
+    if (!level) {
+      lost.push(alert);
+      continue;
+    }
     const points = level.anchors.map((point) => ({ time: point.time, price: point.price }));
     const current = (alert.parameters.trendline_points ?? []).map((point) => ({ time: point.time, price: Number(point.price) }));
-    return samePoints(current, points) ? [] : [{ alert, points }];
-  });
+    if (!sameAlertLine(current, points)) moved.push({ alert, points });
+  }
+  return { moved, lost };
 }
 
 /**
- * Keeps a drawing's line alerts on the drawing (TVP-1.4): once a drawing on this chart settles after a move, its
- * alerts take the level's new line; when a drawing on this chart is deleted, its alerts are offered for disabling.
+ * Keeps a drawing's line alerts on the drawing (TVP-1.4). Only the active chart writes, and never in replay (its
+ * bars are a replay's): once a drawing settles after a move, its alerts take the level's new line. A drawing deleted
+ * on this chart, or a level that went away, offers its alerts for disabling.
  */
 export function DrawingAlertSync({
-  adapter, instrumentId, instrument, drawings,
+  adapter, instrumentId, instrument, drawings, active, replayMode,
 }: {
   adapter: TradingChartAdapter | null;
   instrumentId: string;
   instrument: DrawingInstrument;
   drawings: readonly TradingDrawing[];
+  active: boolean;
+  replayMode: boolean;
 }) {
   const alerts = useTradingAlerts().data;
   const mutationsHook = useTradingAlertMutations();
@@ -62,51 +93,78 @@ export function DrawingAlertSync({
     mutationsRef.current = mutationsHook;
   });
   const linked = useMemo(() => drawingLinkedAlerts(alerts ?? [], instrumentId), [alerts, instrumentId]);
-  const [orphans, setOrphans] = useState<TradingAlert[]>([]);
+  // Alerts whose drawing was deleted here, or whose level the drawing no longer has.
+  const [orphans, setOrphans] = useState<Array<{ alert: TradingAlert; reason: 'deleted' | 'level' }>>([]);
+  const [error, setError] = useState<string | null>(null);
   const seen = useRef<Set<string>>(new Set());
+  const failures = useRef(new Map<string, number>());
+  const { tickSize, pointValue } = instrument;
 
   useEffect(() => {
-    if (!adapter || linked.length === 0) return;
+    if (!adapter || !active || replayMode || linked.length === 0) return;
     const timer = window.setTimeout(() => {
-      const access = chartAccessFor(adapter, instrument);
+      const access = chartAccessFor(adapter, { tickSize, pointValue });
       const matches = adapter.drawingBarIndexMatchesBars();
-      const updates = drawingAlertUpdates(linked, drawings, (drawing) => drawingMenuEntries(drawing, access, matches).drawingAlertLevels ?? []);
-      for (const { alert, points } of updates) {
+      const { moved, lost } = drawingAlertUpdates(linked, drawings, (drawing) => drawingMenuEntries(drawing, access, matches).drawingAlertLevels ?? []);
+      // The level orphans are what this pass found: a level that came back takes its alert off the prompt.
+      const lostEnabled = lost.filter((alert) => alert.enabled);
+      setOrphans((current) => {
+        const deleted = current.filter((item) => item.reason === 'deleted');
+        const next = [...deleted, ...lostEnabled.filter((alert) => !deleted.some((item) => item.alert.alert_id === alert.alert_id)).map((alert) => ({ alert, reason: 'level' as const }))];
+        return next.length === current.length && next.every((item, index) => item.alert === current[index].alert) ? current : next;
+      });
+      for (const { alert, points } of moved) {
+        if ((failures.current.get(alert.alert_id) ?? 0) >= MAX_SYNC_FAILURES) continue;
         const input = chartAlertUpdateInput(alert, {});
         input.parameters = { ...input.parameters, trendline_points: points.map((point) => ({ ...point, price: String(point.price) })) };
         void tradingApi.updateAlert(alert, input).then((updated) => {
+          failures.current.delete(alert.alert_id);
           mutationsRef.current.replace(updated);
           notifyTradingAlertsChanged();
-        }).catch(() => undefined);
+        }).catch(() => {
+          // A conflict (another edit got there first) retries against the refreshed alert; a lasting failure stops.
+          failures.current.set(alert.alert_id, (failures.current.get(alert.alert_id) ?? 0) + 1);
+          void mutationsRef.current.refresh();
+        });
       }
     }, DRAWING_ALERT_SETTLE_MS);
     return () => window.clearTimeout(timer);
-  }, [adapter, drawings, instrument, linked]);
+  }, [active, adapter, drawings, linked, pointValue, replayMode, tickSize]);
 
   // Only a deletion seen here counts: a drawing that was on this chart and is gone (another chart's drawing never is).
+  // A drawing that comes back (undo) takes its alerts off the prompt.
   useEffect(() => {
     const now = new Set(drawings.map((drawing) => drawing.drawingId));
     const gone = linked.filter((alert) => alert.enabled && seen.current.has(alert.parameters.drawing_id as string) && !now.has(alert.parameters.drawing_id as string));
-    if (gone.length > 0) setOrphans((current) => [...current, ...gone.filter((alert) => !current.some((item) => item.alert_id === alert.alert_id))]);
+    setOrphans((current) => {
+      const kept = current.filter((item) => item.reason === 'level' || !now.has(item.alert.parameters.drawing_id as string));
+      const next = [...kept, ...gone.filter((alert) => !kept.some((item) => item.alert.alert_id === alert.alert_id)).map((alert) => ({ alert, reason: 'deleted' as const }))];
+      return next.length === current.length && next.every((item, index) => item.alert === current[index].alert) ? current : next;
+    });
     seen.current = now;
   }, [drawings, linked]);
 
   if (orphans.length === 0) return null;
   const disable = () => {
-    const pending = orphans;
-    setOrphans([]);
+    const pending = orphans.map((item) => item.alert);
+    setError(null);
     void Promise.all(pending.map((alert) => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { enabled: false }))))
       .then((updated) => {
+        setOrphans([]);
         updated.forEach((alert) => mutationsRef.current.replace(alert));
         notifyTradingAlertsChanged();
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setError('Could not disable them; they are still armed. Try again.');
+        void mutationsRef.current.refresh();
+      });
   };
   return (
     <div className="trading-drawing-alert-prompt" role="alertdialog" aria-label="Alerts of a deleted drawing" onPointerDown={(event) => event.stopPropagation()}>
-      <span>{orphans.length === 1 ? 'An alert follows' : `${orphans.length} alerts follow`} the deleted drawing. Disable {orphans.length === 1 ? 'it' : 'them'}?</span>
+      <span>{orphans.length === 1 ? 'An alert follows' : `${orphans.length} alerts follow`} a drawing or level that is gone. Disable {orphans.length === 1 ? 'it' : 'them'}?</span>
+      {error ? <small role="alert">{error}</small> : null}
       <button type="button" onClick={disable}>Disable</button>
-      <button type="button" onClick={() => setOrphans([])}>Keep</button>
+      <button type="button" onClick={() => { setOrphans([]); setError(null); }}>Keep</button>
     </div>
   );
 }
