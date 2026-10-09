@@ -18,6 +18,9 @@ const DRAWING_TOOLS = [
   // TVP-3.6 positions and measurement
   'date-range', 'date-price-range', 'long-position', 'short-position', 'position-forecast', 'bars-pattern',
   'ghost-feed', 'sector', 'fixed-range-volume-profile',
+  // TVP-3.2 Fibonacci, TVP-3.3 pitchforks and Gann
+  'fib-extension', 'fib-time-zone', 'fib-time', 'fib-channel', 'fib-speed-fan', 'fib-arcs', 'fib-circles', 'fib-spiral', 'fib-wedge',
+  'pitchfork', 'schiff-pitchfork', 'modified-schiff-pitchfork', 'pitchfan', 'gann-box', 'gann-square-fixed', 'gann-square', 'gann-fan',
 ] as const satisfies readonly Exclude<DrawingTool, 'cursor' | 'alert' | 'eraser'>[];
 
 describe('drawing tool registry', () => {
@@ -74,7 +77,8 @@ describe('drawing tool registry', () => {
     expect(drawingDisplayName({ toolType: 'ray' })).toBe('Ray');
     expect(drawingDisplayName({ toolType: 'text', text: '' })).toBe('Text note');
     expect(drawingDisplayName({ toolType: 'text', text: 'Breakout' })).toBe('Breakout');
-    expect(drawingDisplayName({ toolType: 'pitchfork' })).toBe('pitchfork (unsupported)');
+    expect(drawingDisplayName({ toolType: 'pitchfork' })).toBe('Pitchfork');
+    expect(drawingDisplayName({ toolType: 'warp-drive' })).toBe('warp-drive (unsupported)');
   });
 });
 
