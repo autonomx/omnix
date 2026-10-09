@@ -1,3 +1,4 @@
+import type { indicatorSourceChoices } from './indicators/indicatorSources';
 import { useCallback, useMemo, useState } from 'react';
 import {
   indicatorPlotDefinitions,
@@ -178,12 +179,15 @@ function Field({
 export function TradingIndicatorSettings({
   indicator,
   instrumentId = '',
+  sourceChoices = [],
   onApply,
   onClose,
 }: {
   indicator: CoreIndicatorInstance;
   /** The chart's instrument, left out of compare-symbol choices. */
   instrumentId?: string;
+  /** Other indicators' lines this one can read instead of the close (TVP-6.5); none when it takes no source. */
+  sourceChoices?: ReturnType<typeof indicatorSourceChoices>;
   onApply: (patch: Partial<CoreIndicatorInstance>) => void;
   onClose: () => void;
 }) {
@@ -259,6 +263,20 @@ export function TradingIndicatorSettings({
             <Field label="Fast period" value={draft.fastPeriod ?? 50} onChange={(value) => setNumber('fastPeriod', value)} />
             <Field label="Slow period" value={draft.slowPeriod ?? 200} onChange={(value) => setNumber('slowPeriod', value)} />
           </>
+        ) : null}
+        {sourceChoices.length > 0 || draft.source ? (
+          <label className="trading-indicator-settings-field">
+            <span>Source</span>
+            <select
+              aria-label="Indicator source"
+              value={draft.source?.output ?? ''}
+              onChange={(event) => setDraft((current) => ({ ...current, source: sourceChoices.find((choice) => choice.value === event.target.value)?.ref ?? null }))}
+            >
+              <option value="">Close</option>
+              {sourceChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+              {draft.source && !sourceChoices.some((choice) => choice.value === draft.source?.output) ? <option value={draft.source.output}>{draft.source.output}</option> : null}
+            </select>
+          </label>
         ) : null}
         <TradingBuiltInInputs draft={draft} currentInstrumentId={instrumentId} setDraft={setDraft} onValidityChange={onInputsValidity} />
         {draft.id === 'vwap' ? (

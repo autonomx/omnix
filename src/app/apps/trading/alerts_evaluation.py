@@ -32,10 +32,11 @@ from .alert_conditions import (
     SourceTarget,
     TrendlineSource,
     ValueTarget,
+    compute_source_indicator,
     condition_sources,
     indicator_output_profile,
 )
-from .indicators.registry import BarSeries, compute_indicator, server_indicator
+from .indicators.registry import BarSeries, server_indicator
 
 HISTORY_LIMIT_MAX = 1000
 _HUNDRED = Decimal("100")
@@ -269,7 +270,7 @@ class _BarValues:
 
     def _compute_indicator(self, source: IndicatorSource, anchor_time: str | None) -> dict[int, float]:
         try:
-            outputs = compute_indicator(source.indicator_id, self.series(), source.inputs.registry_inputs(anchor_time))
+            outputs = compute_source_indicator(source.indicator_id, self.series(), source.inputs, anchor_time)
         except Exception:  # an indicator that cannot compute these bars has no value: the condition is false
             return {}
         chosen = next((output for output in outputs if output.key == source.output), None)
@@ -395,6 +396,11 @@ def _source_lookback(source: Any) -> int:
         )
     if inputs.anchor_bars_ago is not None:
         required = max(required, inputs.anchor_bars_ago + 1)
+    if inputs.source is not None:
+        # Indicator on indicator: the source's warm-up comes first, then the indicator's own.
+        reference = inputs.source
+        inner = IndicatorSource(kind="indicator", indicator_id=reference.indicator_id, inputs=reference.inputs, output=reference.output)
+        required += _source_lookback(inner)
     indicator = server_indicator(source.indicator_id)
     if indicator is not None and indicator.signal_warmup is not None:
         # A signal output's first value on the synthetic series is when it happens to appear, not its warm-up.

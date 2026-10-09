@@ -2197,7 +2197,7 @@ export interface components {
              */
             operator: "crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than" | "entering_channel" | "exiting_channel" | "inside_channel" | "outside_channel" | "moving_up" | "moving_down" | "moving_up_percent" | "moving_down_percent";
             /** Source */
-            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource"] | components["schemas"]["TrendlineSource-Output"];
+            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource-Output"] | components["schemas"]["TrendlineSource-Output"];
             /** Target */
             target: components["schemas"]["ValueTarget-Output"] | components["schemas"]["SourceTarget-Output"] | components["schemas"]["ChannelTarget-Output"] | null;
         };
@@ -5494,16 +5494,25 @@ export interface components {
         IbkrSettingsStatus: core["schemas"]["IbkrSettingsStatus"];
         /** IbkrSettingsUpdate */
         IbkrSettingsUpdate: core["schemas"]["IbkrSettingsUpdate"];
-        /** IndicatorSource */
-        IndicatorSource: {
+        /**
+         * IndicatorOutputRef
+         * @description Another indicator's output on the same chart, as an indicator's source (TVP-6.5).
+         */
+        "IndicatorOutputRef-Input": {
             /** Indicator Id */
             indicator_id: string;
-            inputs: components["schemas"]["IndicatorSourceInputs"];
-            /**
-             * Kind
-             * @constant
-             */
-            kind: "indicator";
+            inputs?: components["schemas"]["IndicatorSourceInputs-Input"];
+            /** Output */
+            output: string;
+        };
+        /**
+         * IndicatorOutputRef
+         * @description Another indicator's output on the same chart, as an indicator's source (TVP-6.5).
+         */
+        "IndicatorOutputRef-Output": {
+            /** Indicator Id */
+            indicator_id: string;
+            inputs: components["schemas"]["IndicatorSourceInputs-Output"];
             /** Output */
             output: string;
         };
@@ -5520,31 +5529,18 @@ export interface components {
             /** Output */
             output: string;
         };
-        /**
-         * IndicatorSourceInputs
-         * @description Indicator inputs as the chart stores them.
-         *
-         *     ``anchor_bars_ago`` anchors an anchored indicator (VWAP) that many bars
-         *     before the bar being evaluated, so the anchor moves with the bar.
-         */
-        IndicatorSourceInputs: {
-            /** Anchor Bars Ago */
-            anchor_bars_ago: number | null;
-            /** Anchor Time */
-            anchor_time: string | null;
-            /** Fast Period */
-            fast_period: (number) | null;
+        /** IndicatorSource */
+        "IndicatorSource-Output": {
+            /** Indicator Id */
+            indicator_id: string;
+            inputs: components["schemas"]["IndicatorSourceInputs-Output"];
             /**
-             * Period
-             * @default 14
+             * Kind
+             * @constant
              */
-            period: number;
-            /** Signal Period */
-            signal_period: (number) | null;
-            /** Slow Period */
-            slow_period: (number) | null;
-            /** Standard Deviations */
-            standard_deviations: number | null;
+            kind: "indicator";
+            /** Output */
+            output: string;
         };
         /**
          * IndicatorSourceInputs
@@ -5569,8 +5565,36 @@ export interface components {
             signal_period?: (number) | null;
             /** Slow Period */
             slow_period?: (number) | null;
+            source?: components["schemas"]["IndicatorOutputRef-Input"] | null;
             /** Standard Deviations */
             standard_deviations?: number | null;
+        };
+        /**
+         * IndicatorSourceInputs
+         * @description Indicator inputs as the chart stores them.
+         *
+         *     ``anchor_bars_ago`` anchors an anchored indicator (VWAP) that many bars
+         *     before the bar being evaluated, so the anchor moves with the bar.
+         */
+        "IndicatorSourceInputs-Output": {
+            /** Anchor Bars Ago */
+            anchor_bars_ago: number | null;
+            /** Anchor Time */
+            anchor_time: string | null;
+            /** Fast Period */
+            fast_period: (number) | null;
+            /**
+             * Period
+             * @default 14
+             */
+            period: number;
+            /** Signal Period */
+            signal_period: (number) | null;
+            /** Slow Period */
+            slow_period: (number) | null;
+            source: components["schemas"]["IndicatorOutputRef-Output"] | null;
+            /** Standard Deviations */
+            standard_deviations: number | null;
         };
         /** InstrumentSearchResponse */
         InstrumentSearchResponse: {
@@ -9308,7 +9332,7 @@ export interface components {
              */
             kind: "source";
             /** Source */
-            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource"] | components["schemas"]["TrendlineSource-Output"];
+            source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource-Output"] | components["schemas"]["TrendlineSource-Output"];
         };
         /** StartTradingResearchInput */
         StartTradingResearchInput: {
@@ -11726,7 +11750,7 @@ export interface components {
             role: "filter" | "column";
             /** Rule Id */
             rule_id: string;
-            source: components["schemas"]["IndicatorSource"] | null;
+            source: components["schemas"]["IndicatorSource-Output"] | null;
             /** Threshold */
             threshold: string;
         };

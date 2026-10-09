@@ -116,6 +116,7 @@
   {
    "id": "atr",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -131,6 +132,7 @@
   {
    "id": "bollinger",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -148,6 +150,7 @@
   {
    "id": "ema",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -163,6 +166,7 @@
   {
    "id": "macd",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -180,6 +184,7 @@
   {
    "id": "rsi",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -195,6 +200,7 @@
   {
    "id": "rsi-divergence",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": 5,
     "slow_period": null,
@@ -210,6 +216,7 @@
   {
    "id": "sma",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -225,6 +232,7 @@
   {
    "id": "stochastic-rsi",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": 3,
     "slow_period": null,
@@ -241,6 +249,7 @@
   {
    "id": "tv-24-hour-volume",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -256,6 +265,7 @@
   {
    "id": "tv-accumulation-distribution-adl",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -271,6 +281,7 @@
   {
    "id": "tv-all-candlestick-patterns",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -329,6 +340,7 @@
   {
    "id": "tv-arnaud-legoux-moving-average",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -344,6 +356,7 @@
   {
    "id": "tv-aroon-indicator",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -360,6 +373,7 @@
   {
    "id": "tv-aroon-oscillator",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -375,6 +389,7 @@
   {
    "id": "tv-average-daily-range-adr-indicator",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -390,6 +405,7 @@
   {
    "id": "tv-average-directional-index-adx",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -405,6 +421,7 @@
   {
    "id": "tv-awesome-oscillator-ao",
    "inputs": {
+    "source": null,
     "period": 34,
     "fast_period": null,
     "slow_period": null,
@@ -420,6 +437,7 @@
   {
    "id": "tv-balance-of-power-bop",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -435,6 +453,7 @@
   {
    "id": "tv-bbtrend",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -450,6 +469,7 @@
   {
    "id": "tv-bollinger-bands-b-b",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -465,6 +485,7 @@
   {
    "id": "tv-bollinger-bandwidth-bbw",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -480,6 +501,7 @@
   {
    "id": "tv-bull-bear-power",
    "inputs": {
+    "source": null,
     "period": 13,
     "fast_period": null,
     "slow_period": null,
@@ -496,6 +518,7 @@
   {
    "id": "tv-chaikin-money-flow-cmf",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -511,6 +534,7 @@
   {
    "id": "tv-chaikin-oscillator",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -526,6 +550,7 @@
   {
    "id": "tv-chande-kroll-stop",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -542,6 +567,7 @@
   {
    "id": "tv-chande-momentum-oscillator-cmo",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -557,6 +583,7 @@
   {
    "id": "tv-chandelier-exit",
    "inputs": {
+    "source": null,
     "period": 22,
     "fast_period": null,
     "slow_period": null,
@@ -573,6 +600,7 @@
   {
    "id": "tv-choppiness-index-chop",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -588,6 +616,7 @@
   {
    "id": "tv-commodity-channel-index-cci",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -603,6 +632,7 @@
   {
    "id": "tv-connors-rsi-crsi",
    "inputs": {
+    "source": null,
     "period": 100,
     "fast_period": null,
     "slow_period": null,
@@ -618,6 +648,7 @@
   {
    "id": "tv-coppock-curve",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -633,6 +664,7 @@
   {
    "id": "tv-correlation-coefficient-cc",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -648,6 +680,7 @@
   {
    "id": "tv-detrended-price-oscillator-dpo",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -663,6 +696,7 @@
   {
    "id": "tv-directional-movement-dmi",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -680,6 +714,7 @@
   {
    "id": "tv-donchian-channels-dc",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -697,6 +732,7 @@
   {
    "id": "tv-double-exponential-moving-average-ema",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -712,6 +748,7 @@
   {
    "id": "tv-ease-of-movement-eom",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -727,6 +764,7 @@
   {
    "id": "tv-elder-s-force-index-efi",
    "inputs": {
+    "source": null,
     "period": 13,
     "fast_period": null,
     "slow_period": null,
@@ -742,6 +780,7 @@
   {
    "id": "tv-envelope-env",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -759,6 +798,7 @@
   {
    "id": "tv-fisher-transform",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -774,6 +814,7 @@
   {
    "id": "tv-historical-volatility",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -789,6 +830,7 @@
   {
    "id": "tv-hull-moving-average",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -804,6 +846,7 @@
   {
    "id": "tv-ichimoku-cloud",
    "inputs": {
+    "source": null,
     "period": 26,
     "fast_period": null,
     "slow_period": null,
@@ -823,6 +866,7 @@
   {
    "id": "tv-kaufman-s-adaptive-moving-average-kama",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -838,6 +882,7 @@
   {
    "id": "tv-keltner-channels-kc",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -855,6 +900,7 @@
   {
    "id": "tv-klinger-oscillator",
    "inputs": {
+    "source": null,
     "period": 55,
     "fast_period": null,
     "slow_period": null,
@@ -871,6 +917,7 @@
   {
    "id": "tv-know-sure-thing-kst",
    "inputs": {
+    "source": null,
     "period": 30,
     "fast_period": null,
     "slow_period": null,
@@ -887,6 +934,7 @@
   {
    "id": "tv-least-squares-moving-average",
    "inputs": {
+    "source": null,
     "period": 25,
     "fast_period": null,
     "slow_period": null,
@@ -902,6 +950,7 @@
   {
    "id": "tv-linear-regression",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -917,6 +966,7 @@
   {
    "id": "tv-ma-cross",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -933,6 +983,7 @@
   {
    "id": "tv-mass-index",
    "inputs": {
+    "source": null,
     "period": 25,
     "fast_period": null,
     "slow_period": null,
@@ -948,6 +999,7 @@
   {
    "id": "tv-mcginley-dynamic",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -963,6 +1015,7 @@
   {
    "id": "tv-median",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -978,6 +1031,7 @@
   {
    "id": "tv-momentum",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -993,6 +1047,7 @@
   {
    "id": "tv-money-flow-mfi",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1008,6 +1063,7 @@
   {
    "id": "tv-moving-average-ribbon",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1026,6 +1082,7 @@
   {
    "id": "tv-moving-averages",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1042,6 +1099,7 @@
   {
    "id": "tv-movingavg-cross",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1058,6 +1116,7 @@
   {
    "id": "tv-movingavg2line-cross",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1074,6 +1133,7 @@
   {
    "id": "tv-negative-volume-index-nvi",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1089,6 +1149,7 @@
   {
    "id": "tv-net-volume",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1104,6 +1165,7 @@
   {
    "id": "tv-on-balance-volume-obv",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1119,6 +1181,7 @@
   {
    "id": "tv-parabolic-sar-sar",
    "inputs": {
+    "source": null,
     "period": 2,
     "fast_period": null,
     "slow_period": null,
@@ -1134,6 +1197,7 @@
   {
    "id": "tv-percentage-price-oscillator-ppo",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1150,6 +1214,7 @@
   {
    "id": "tv-percentage-volume-oscillator-pvo",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1166,6 +1231,7 @@
   {
    "id": "tv-performance",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1181,6 +1247,7 @@
   {
    "id": "tv-pivot-points-high-low",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -1197,6 +1264,7 @@
   {
    "id": "tv-pivot-points-standard",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1214,6 +1282,7 @@
   {
    "id": "tv-positive-volume-index-pvi",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1229,6 +1298,7 @@
   {
    "id": "tv-price-momentum-oscillator-pmo",
    "inputs": {
+    "source": null,
     "period": 35,
     "fast_period": null,
     "slow_period": null,
@@ -1245,6 +1315,7 @@
   {
    "id": "tv-price-volume-trend-pvt",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1260,6 +1331,7 @@
   {
    "id": "tv-pring-s-special-k",
    "inputs": {
+    "source": null,
     "period": 30,
     "fast_period": null,
     "slow_period": null,
@@ -1275,6 +1347,7 @@
   {
    "id": "tv-rank-correlation-index-rci",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1290,6 +1363,7 @@
   {
    "id": "tv-rate-of-change-roc",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1305,6 +1379,7 @@
   {
    "id": "tv-rci-ribbon",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1322,6 +1397,7 @@
   {
    "id": "tv-relative-vigor-index",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -1338,6 +1414,7 @@
   {
    "id": "tv-relative-volatility-index",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1353,6 +1430,7 @@
   {
    "id": "tv-rob-booker-adx-breakout",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1371,6 +1449,7 @@
   {
    "id": "tv-rob-booker-knoxville-divergence",
    "inputs": {
+    "source": null,
     "period": 150,
     "fast_period": null,
     "slow_period": null,
@@ -1387,6 +1466,7 @@
   {
    "id": "tv-rob-booker-reversal",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1403,6 +1483,7 @@
   {
    "id": "tv-smi-ergodic-indicator",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1419,6 +1500,7 @@
   {
    "id": "tv-smi-ergodic-oscillator",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1434,6 +1516,7 @@
   {
    "id": "tv-smoothed-moving-average",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1449,6 +1532,7 @@
   {
    "id": "tv-stochastic-momentum-index-smi",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1465,6 +1549,7 @@
   {
    "id": "tv-stochastic-stoch",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1481,6 +1566,7 @@
   {
    "id": "tv-supertrend",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -1496,6 +1582,7 @@
   {
    "id": "tv-technical-ratings",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1511,6 +1598,7 @@
   {
    "id": "tv-trend-strength-index",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1526,6 +1614,7 @@
   {
    "id": "tv-triple-ema",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1541,6 +1630,7 @@
   {
    "id": "tv-trix",
    "inputs": {
+    "source": null,
     "period": 18,
     "fast_period": null,
     "slow_period": null,
@@ -1556,6 +1646,7 @@
   {
    "id": "tv-true-strength-index",
    "inputs": {
+    "source": null,
     "period": 25,
     "fast_period": null,
     "slow_period": null,
@@ -1572,6 +1663,7 @@
   {
    "id": "tv-ulcer-index",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1587,6 +1679,7 @@
   {
    "id": "tv-ultimate-oscillator-uo",
    "inputs": {
+    "source": null,
     "period": 28,
     "fast_period": null,
     "slow_period": null,
@@ -1602,6 +1695,7 @@
   {
    "id": "tv-up-down-volume",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1617,6 +1711,7 @@
   {
    "id": "tv-volatility-stop",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1632,6 +1727,7 @@
   {
    "id": "tv-volume",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,
@@ -1647,6 +1743,7 @@
   {
    "id": "tv-volume-weighted-moving-average-vwma",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1662,6 +1759,7 @@
   {
    "id": "tv-vortex-indicator",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1678,6 +1776,7 @@
   {
    "id": "tv-weighted-moving-average",
    "inputs": {
+    "source": null,
     "period": 9,
     "fast_period": null,
     "slow_period": null,
@@ -1693,6 +1792,7 @@
   {
    "id": "tv-williams-alligator",
    "inputs": {
+    "source": null,
     "period": 13,
     "fast_period": null,
     "slow_period": null,
@@ -1710,6 +1810,7 @@
   {
    "id": "tv-williams-r-r",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1725,6 +1826,7 @@
   {
    "id": "tv-woodies-cci",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1741,6 +1843,7 @@
   {
    "id": "tv-zig-zag",
    "inputs": {
+    "source": null,
     "period": 5,
     "fast_period": null,
     "slow_period": null,
@@ -1756,6 +1859,7 @@
   {
    "id": "vwap",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1773,6 +1877,7 @@
   {
    "id": "sma",
    "inputs": {
+    "source": null,
     "period": 20,
     "fast_period": null,
     "slow_period": null,
@@ -1788,6 +1893,7 @@
   {
    "id": "rsi",
    "inputs": {
+    "source": null,
     "period": 14,
     "fast_period": null,
     "slow_period": null,
@@ -1803,6 +1909,7 @@
   {
    "id": "macd",
    "inputs": {
+    "source": null,
     "period": 5,
     "fast_period": 5,
     "slow_period": 35,
@@ -1820,6 +1927,7 @@
   {
    "id": "bollinger",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": null,
     "slow_period": null,
@@ -1837,6 +1945,7 @@
   {
    "id": "stochastic-rsi",
    "inputs": {
+    "source": null,
     "period": 10,
     "fast_period": 5,
     "slow_period": null,
@@ -1853,6 +1962,7 @@
   {
    "id": "rsi",
    "inputs": {
+    "source": null,
     "period": 21,
     "fast_period": null,
     "slow_period": null,
@@ -1868,6 +1978,7 @@
   {
    "id": "vwap",
    "inputs": {
+    "source": null,
     "period": 1,
     "fast_period": null,
     "slow_period": null,

@@ -38,7 +38,7 @@ export type AlertIndicatorChoice = {
   label: string;
   /** `signal`: drawn as markers, valued (at the bar's price) only on the bars where it appears. */
   outputs: Array<{ key: string; title: string; signal?: true }>;
-  inputs: components['schemas']['IndicatorSourceInputs'];
+  inputs: components['schemas']['IndicatorSourceInputs-Input'];
   /** Why the server can't alert on it, when it can't. */
   unavailable?: string;
 };
@@ -46,8 +46,13 @@ export type AlertIndicatorChoice = {
 /** What the dialog holds for a chart-indicator condition. */
 export type AlertIndicatorSelection = { key: string; output: string; operator: AlertIndicatorOperator };
 
-function inputsOf(instance: CoreIndicatorInstance): AlertIndicatorChoice['inputs'] {
+/** The alert inputs of an instance; with its source's (TVP-6.5) when it reads another indicator on the chart. */
+function inputsOf(instance: CoreIndicatorInstance, instances: readonly CoreIndicatorInstance[] = []): AlertIndicatorChoice['inputs'] {
+  const sourceInstance = instance.source ? instances.find((item) => item.id === instance.source!.indicatorId) : undefined;
   return {
+    source: instance.source && sourceInstance
+      ? { indicator_id: String(sourceInstance.id), inputs: inputsOf(sourceInstance), output: instance.source.output }
+      : null,
     period: instance.period,
     fast_period: instance.fastPeriod ?? null,
     slow_period: instance.slowPeriod ?? null,
@@ -65,6 +70,7 @@ export function alertIndicatorChoices(
   serverIds: ReadonlySet<string> | null,
 ): AlertIndicatorChoice[] {
   return instances.filter((instance) => instance.enabled).map((instance) => {
+    const source = instance.source ? instances.find((item) => item.id === instance.source!.indicatorId) : undefined;
     const lines = outputs.filter((output) => output.key.split(':', 1)[0] === instance.id)
       .map((output) => ({ key: output.key, title: output.title, ...(output.render === 'markers' ? { signal: true as const } : {}) }));
     const unavailable = serverIds === null
@@ -76,12 +82,16 @@ export function alertIndicatorChoices(
           ? 'It uses the market sessions, which server alerts do not follow yet'
           : instance.compareSymbol || (instance.params && Object.keys(instance.params).length > 0)
         ? 'Its extra inputs are not evaluated by server alerts yet'
+        // An indicator on another indicator needs the server to compute its source the same way.
+        : instance.source && (!source || !serverIds.has(String(source.id)) || tradingViewBuiltInUsesSessions(String(source.id))
+          || source.compareSymbol || (source.params && Object.keys(source.params).length > 0))
+          ? 'Its source indicator is not evaluated by server alerts yet'
         : lines.length === 0
           ? 'It draws no line to alert on'
           : LAGGED_SIGNAL_INDICATORS.has(instance.id)
             ? 'Its marks are confirmed bars later, so server alerts never see them on the latest bar'
             : undefined;
-    return { key: instance.id, label: indicatorContextLabel(instance), outputs: lines, inputs: inputsOf(instance), ...(unavailable ? { unavailable } : {}) };
+    return { key: instance.id, label: indicatorContextLabel(instance), outputs: lines, inputs: inputsOf(instance, instances), ...(unavailable ? { unavailable } : {}) };
   });
 }
 

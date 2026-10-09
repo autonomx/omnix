@@ -149,6 +149,10 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
   if (item.standardDeviations !== undefined && (!Number.isFinite(item.standardDeviations) || item.standardDeviations <= 0)) return false;
   if (item.anchorTime !== undefined && item.anchorTime !== null && typeof item.anchorTime !== 'string') return false;
   if (item.compareSymbol !== undefined && item.compareSymbol !== null && typeof item.compareSymbol !== 'string') return false;
+  if (item.source !== undefined && item.source !== null) {
+    const source = item.source as { indicatorId?: unknown; output?: unknown };
+    if (typeof source !== 'object' || typeof source.indicatorId !== 'string' || typeof source.output !== 'string') return false;
+  }
   if (item.params !== undefined) {
     if (!item.params || typeof item.params !== 'object' || Array.isArray(item.params)) return false;
     for (const [key, value] of Object.entries(item.params)) {

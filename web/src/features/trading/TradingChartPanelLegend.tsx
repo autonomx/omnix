@@ -1,3 +1,4 @@
+import { indicatorSourceChoices } from './indicators/indicatorSources';
 import { indicatorUsesSeparatePane } from './indicators/coreIndicators';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 import { TradingIndicatorObjectToolbar } from './TradingIndicatorObjectToolbar';
@@ -164,6 +165,7 @@ export function ChartPanelPaneControls({ ws }: { ws: TradingChartPanelModel }) {
         <TradingIndicatorSettings
           indicator={settingsIndicator}
           instrumentId={instrumentId}
+          sourceChoices={indicatorSourceChoices(settingsIndicator, ws.indicators, ws.indicatorOutputs)}
           onApply={(patch) => onUpdateIndicator(settingsIndicator.id, patch)}
           onClose={() => setSettingsIndicator(null)}
         />
