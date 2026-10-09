@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.persistence.errors import RevisionConflict
 
@@ -12,6 +14,13 @@ from .scanner_repository import ScannerRunActive
 from .scanner import TradingScannerDefinition, TradingScannerResult, TradingScannerRun
 from .scanner_manager import TradingScannerManager, default_scanner_manager
 from .scanner_repository import TradingScannerRepository, default_scanner_repository
+from .screener_words import ScreenProposal, propose_screen
+
+logger = logging.getLogger(__name__)
+
+
+class ScreenFromWordsRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
 
 
 class ScannerDefinitionListResponse(BaseModel):
@@ -39,8 +48,20 @@ ManagerFactory = Callable[[], TradingScannerManager]
 def create_trading_scanner_router(
     repository_factory: RepositoryFactory = default_scanner_repository,
     manager_factory: ManagerFactory = default_scanner_manager,
+    propose: Callable[[str], ScreenProposal] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/scanners", tags=["trading-scanners"])
+
+    @router.post("/propose", response_model=ScreenProposal)
+    async def propose_from_words(request: ScreenFromWordsRequest) -> Any:
+        """Screener rules for a description (TVP-9.4): a proposal for the user to edit and run, never run here."""
+        try:
+            return await asyncio.to_thread(propose or propose_screen, request.text)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.warning("screen_from_words_failed", exc_info=True)
+            raise HTTPException(status_code=502, detail="the research model could not propose a screen; try again or write the rules") from exc
 
     @router.get("", response_model=ScannerDefinitionListResponse)
     def list_scanners(limit: int = Query(default=100, ge=1, le=200)):
