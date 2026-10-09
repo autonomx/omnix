@@ -6,13 +6,15 @@ import { autoChartPatternLines, isAutoChartPatternId, type AutoChartPatternId } 
 export const CORE_INDICATOR_FORMULA_VERSION = 'omnix-indicators-v2';
 
 /** A value at a bar; `color` paints that bar's column, line segment, bar or background (TVP-6.2); `label` marks it. */
-export type IndicatorPoint = { time: string; value: number; color?: string; label?: string };
+/** A value per bar; a `candles` output's points also carry the candle's open, high and low (`value` is its close). */
+export type IndicatorPoint = { time: string; value: number; color?: string; label?: string; open?: number; high?: number; low?: number };
 /**
  * How an output is drawn: a line or histogram series; `bar-colors` recolours the chart's own bars; `background`
  * shades the price pane behind the bars (full height, per bar); `viewport-average` is a price line at the average close
- * of the bars in view (Visible Average Price) and has no points of its own.
+ * of the bars in view (Visible Average Price) and has no points of its own; `candles` draws each point as a candle in
+ * its pane (Volume Delta, CVD).
  */
-export type IndicatorOutputKind = 'line' | 'histogram' | 'bar-colors' | 'background' | 'viewport-average';
+export type IndicatorOutputKind = 'line' | 'histogram' | 'bar-colors' | 'background' | 'viewport-average' | 'candles';
 export type IndicatorLineStyle = 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
 export type IndicatorPaneScale = {
   min: number;

@@ -45,6 +45,8 @@ describe('volume delta (TVP-6.4)', () => {
     expect(deltas.get(T0 + HOUR)).toEqual({ delta: -11, max: 0, min: -11 });
     expect(deltas.get(T0 + 2 * HOUR)?.delta).toBe(24);
     expect(volumeDeltaPoints(hours, deltas).map((point) => [point.value, point.color])).toEqual([[11, '#089981'], [-11, '#f23645'], [24, '#089981']]);
+    // Candles from 0 to the delta, the wicks at the running delta's extremes (TradingView draws Volume Delta so).
+    expect(volumeDeltaPoints(hours, deltas).map((point) => [point.open, point.high, point.low, point.value])).toEqual([[0, 11, 0, 11], [0, 0, -11, -11], [0, 24, 0, 24]]);
     // Leading unchanged bars count as buying, as in TradingView.
     expect(intrabarDeltas(hours.slice(0, 1), [bar(T0, 15, 100, 100, 7, '15m')], '1h').get(T0)?.delta).toBe(7);
   });
@@ -52,6 +54,8 @@ describe('volume delta (TVP-6.4)', () => {
   it('adds the deltas up within each anchor period', () => {
     const deltas = intrabarDeltas(hours, quarters, '1h');
     expect(cumulativeVolumeDeltaPoints(hours, deltas, 'D').map((point) => [point.value, point.color])).toEqual([[11, '#089981'], [0, '#f23645'], [24, '#089981']]);
+    // Each CVD candle opens at the total before its bar (0 again on a new day).
+    expect(cumulativeVolumeDeltaPoints(hours, deltas, 'D').map((point) => [point.open, point.high, point.low])).toEqual([[0, 11, 0], [11, 11, 0], [0, 24, 0]]);
     expect(cumulativeVolumeDeltaPoints(hours, deltas, 'M').map((point) => point.value)).toEqual([11, 0, 24]);
     // Chart bars without lower bars have no value.
     expect(volumeDeltaPoints([...hours, bar(T0 + 3 * HOUR, 60, 1, 1, 0, '1h')], deltas)).toHaveLength(3);
@@ -66,11 +70,11 @@ describe('volume delta (TVP-6.4)', () => {
     expect(tradingViewBuiltInPlotDefinitions({ id: 'tv-volume-delta', period: 1 })).toEqual([{ key: 'tv-volume-delta:delta', title: 'Volume Delta' }]);
   });
 
-  it('loads the lower bars on the chart feed and draws a histogram in its own pane', async () => {
+  it('loads the lower bars on the chart feed and draws candles in its own pane', async () => {
     const spy = vi.spyOn(tradingApi, 'intrabars').mockResolvedValue({ bars: quarters, complete: true } as never);
     const indicator = { id: 'tv-cumulative-volume-delta', period: 1, enabled: true, params: { lowerInterval: '15m' } } as unknown as CoreIndicatorInstance;
     const [output] = await calculateIntrabarIndicatorOutputs(hours, indicator, { bindingId: 'binance:spot' });
-    expect(output).toMatchObject({ key: 'tv-cumulative-volume-delta:cvd', title: 'CVD (15m)', pane: 1, kind: 'histogram' });
+    expect(output).toMatchObject({ key: 'tv-cumulative-volume-delta:cvd', title: 'CVD (15m)', pane: 1, kind: 'candles' });
     expect(output.points.map((point) => point.value)).toEqual([11, 0, 24]);
     // The closed bars' lower bars: the range ends at the last bar's close and spans 5,000 lower bars.
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ bindingId: 'binance:spot', interval: '1h', lowerInterval: '15m', start: T0 + 3 * HOUR - 5_000 * 15 * MINUTE, end: T0 + 3 * HOUR }));
