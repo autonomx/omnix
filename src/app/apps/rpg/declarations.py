@@ -199,7 +199,7 @@ def _restore_history(work: Any, context: Any, campaign_id: str, item: dict[str, 
             """
             INSERT INTO omnix_rpg_foreground_submissions (
                 workspace_id, session_id, submission_id, status, claim_token,
-                job_id, response_interaction_id, response, error, lease_expires_at,
+                job_id, interaction_id, response, error, lease_expires_at,
                 execution_started_at, created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s,
