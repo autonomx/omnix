@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TradingSymbolSearch } from './TradingSymbolSearch';
 import type { CanonicalInstrument } from './tradingTypes';
 import { parseTradingFormula } from './tradingFormula';
+import { chartKeyContextActive, noteTradingPointerDown, resetTradingPointerContext } from './commands/chartKeyContext';
 
 const crypto: CanonicalInstrument = {
   instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
@@ -51,6 +52,23 @@ const commodity: CanonicalInstrument = {
   price_scale: 100,
   minimum_tick: '0.01',
   status: 'active',
+};
+
+const unemployment: CanonicalInstrument = {
+  instrument_id: 'economic:FRED:UNRATE',
+  asset_class: 'economic',
+  instrument_type: 'index',
+  venue: 'FRED',
+  venue_symbol: 'UNRATE',
+  display_symbol: 'UNRATE',
+  base_currency: null,
+  quote_currency: null,
+  exchange_timezone: 'America/New_York',
+  session_calendar: '24x7',
+  price_scale: 10_000,
+  minimum_tick: '0.0001',
+  status: 'active',
+  name: 'Unemployment rate',
 };
 
 function SearchHarness({ onSelect, onClose }: { onSelect: (instrument: CanonicalInstrument) => void; onClose: () => void }) {
@@ -122,6 +140,28 @@ describe('TradingSymbolSearch', () => {
     expect(onSelect).toHaveBeenCalledWith(commodity);
   });
 
+  it('lists FRED series under Economy by their title (TVP-10.5)', () => {
+    const onSelect = vi.fn();
+    render(
+      <TradingSymbolSearch
+        open
+        query="unemployment"
+        instruments={[crypto, stock, unemployment]}
+        activeInstrumentId={crypto.instrument_id}
+        onQueryChange={vi.fn()}
+        onSelect={onSelect}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Economy' }));
+    const result = screen.getByRole('button', { name: /UNRATE/ });
+    expect(result).toHaveTextContent('Unemployment rate');
+    expect(result).toHaveTextContent('economic');
+    expect(screen.queryByRole('button', { name: /AAPL/ })).not.toBeInTheDocument();
+    fireEvent.click(result);
+    expect(onSelect).toHaveBeenCalledWith(unemployment);
+  });
+
   it('offers a resolved arithmetic chart and accepts Enter', () => {
     const onSelectFormula = vi.fn();
     const formula = parseTradingFormula('BTCUSDT / ETHUSDT');
@@ -167,5 +207,21 @@ describe('TradingSymbolSearch', () => {
     expect(result).toBeEnabled();
     fireEvent.click(result);
     expect(onSelectFormula).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TradingSymbolSearch and chart keys', () => {
+  it('returns the keyboard to the chart when a symbol is chosen', () => {
+    const header = document.createElement('button');
+    document.body.append(header);
+    noteTradingPointerDown(header);
+    header.remove();
+    expect(chartKeyContextActive('chart')).toBe(false);
+    const props = { query: 'AAPL', instruments: [crypto, stock], activeInstrumentId: crypto.instrument_id, onQueryChange: vi.fn(), onSelect: vi.fn(), onClose: vi.fn() };
+    const view = render(<TradingSymbolSearch open {...props} />);
+    fireEvent.click(screen.getByRole('option', { name: /AAPL/ }).querySelector('button')!);
+    view.rerender(<TradingSymbolSearch open={false} {...props} />);
+    expect(chartKeyContextActive('chart')).toBe(true);
+    resetTradingPointerContext();
   });
 });

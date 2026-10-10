@@ -274,3 +274,128 @@ def test_entries_stop_once_the_daily_loss_limit_is_reached_but_exits_continue(pa
     # Exits are never stopped by the loss limit.
     exit_order = OrderGateway(repository).place_reducing(account_id, _order(instrument_id, "sell", "5", uuid.uuid4().hex))
     assert exit_order.side == "sell"
+
+
+def test_shorting_is_an_account_setting_changed_at_its_revision(paper) -> None:
+    from app.apps.trading.paper import PaperAccountSettings
+    from app.persistence.errors import RevisionConflict
+
+    repository, _, account_id, instrument_id, _ = paper
+    account = repository.snapshot(account_id).account
+    assert account.allow_short is False
+    updated = repository.update_account_settings(account_id, PaperAccountSettings(allow_short=True), expected_revision=account.revision)
+    assert (updated.account.allow_short, updated.account.revision) == (True, account.revision + 1)
+    with pytest.raises(RevisionConflict):
+        repository.update_account_settings(account_id, PaperAccountSettings(allow_short=False), expected_revision=account.revision)
+    assert any(item.allow_short for item in repository.list_accounts() if item.account_id == account_id)
+    created = repository.create_account(
+        PaperAccountCreate(account_id=f"{account_id}-short", name="Shorts", initial_cash=Decimal("1000"), allow_short=True)
+    )
+    assert created.account.allow_short is True
+
+
+def test_a_short_opens_adds_reduces_and_covers(paper) -> None:
+    from app.apps.trading.paper import PaperAccountSettings
+
+    repository, _, account_id, instrument_id, _ = paper
+    revision = repository.snapshot(account_id).account.revision
+    repository.update_account_settings(account_id, PaperAccountSettings(allow_short=True), expected_revision=revision)
+    gateway = OrderGateway(repository)
+
+    def position() -> Decimal:
+        return next((item.quantity for item in repository.snapshot(account_id).positions if item.instrument_id == instrument_id), Decimal("0"))
+
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "3", "short-open"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("-3")
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "2", "short-add"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("-5")
+    # A buy within the short only reduces it: no entry authority needed.
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "2", "short-reduce"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("-3")
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "3", "short-cover"))
+    _fill(repository, account_id, instrument_id)
+    assert position() == Decimal("0")
+    # Turning shorting off stops new shorts.
+    revision = repository.snapshot(account_id).account.revision
+    repository.update_account_settings(account_id, PaperAccountSettings(allow_short=False), expected_revision=revision)
+    with pytest.raises(ValueError, match="paper_short_not_allowed"):
+        gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "1", "short-again"))
+
+
+def _shorting_account(repository, account_id: str) -> None:
+    from app.apps.trading.paper import PaperAccountSettings
+
+    revision = repository.snapshot(account_id).account.revision
+    repository.update_account_settings(account_id, PaperAccountSettings(allow_short=True), expected_revision=revision)
+
+
+def test_shorts_hold_buying_power_and_cannot_compound(paper) -> None:
+    repository, _, account_id, instrument_id, _ = paper
+    _shorting_account(repository, account_id)
+    gateway = OrderGateway(repository)
+    # 100,000 cash: a 4,000-share short at 10 holds 40,000 while working, then 80,000 (proceeds and margin) once filled.
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "4000", "short-big"))
+    assert repository.snapshot(account_id).balances[0].reserved == Decimal("40000")
+    _fill(repository, account_id, instrument_id)
+    balance = repository.snapshot(account_id).balances[0]
+    assert balance.reserved == Decimal("0")
+    # Its proceeds don't buy more: 140,000 available, 80,000 held for the short, so about 60,000 is left (the short filled at the bid).
+    other = f"{instrument_id}X"
+    with pytest.raises(ValueError, match="insufficient_paper_cash"):
+        gateway.place_manual_entry(account_id, _order(other, "buy", "6100", "long-too-big"))
+    with pytest.raises(ValueError, match="insufficient_paper_cash"):
+        gateway.place_manual_entry(account_id, _order(other, "sell", "6100", "short-too-big"))
+    gateway.place_manual_entry(account_id, _order(other, "buy", "5000", "long-fits"))
+
+
+def test_a_short_is_bought_back_by_hand_without_flipping_long(paper) -> None:
+    repository, _, account_id, instrument_id, _ = paper
+    _shorting_account(repository, account_id)
+    gateway = OrderGateway(repository)
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "5", "short-5"))
+    _fill(repository, account_id, instrument_id)
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "3", "cover-3", limit_price=Decimal("9")))
+    # Only 2 are left to buy back: a 3-share reducing buy would flip the account long.
+    with pytest.raises(ValueError, match="paper_order_requires_entry_authority"):
+        gateway.place_reducing(account_id, _order(instrument_id, "buy", "3", "cover-3-again", limit_price=Decimal("9")))
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "2", "cover-2", limit_price=Decimal("9")))
+
+
+def test_turning_shorting_off_cancels_working_short_entries(paper) -> None:
+    from app.apps.trading.paper import PaperAccountSettings
+
+    repository, _, account_id, instrument_id, _ = paper
+    _shorting_account(repository, account_id)
+    available_before = repository.snapshot(account_id).balances[0].available
+    entry = OrderGateway(repository).place_manual_entry(account_id, _order(instrument_id, "sell", "10", "short-working", limit_price=Decimal("12")))
+    revision = repository.snapshot(account_id).account.revision
+    repository.update_account_settings(account_id, PaperAccountSettings(allow_short=False), expected_revision=revision)
+    snapshot = repository.snapshot(account_id)
+    assert next(item for item in snapshot.order_history if item.order_id == entry.order_id).status == "cancelled"
+    assert (snapshot.balances[0].available, snapshot.balances[0].reserved) == (available_before, Decimal("0"))
+
+
+def test_a_short_is_bought_back_even_when_the_cash_does_not_cover_it(paper) -> None:
+    repository, _, account_id, instrument_id, _ = paper
+    _shorting_account(repository, account_id)
+    gateway = OrderGateway(repository)
+    gateway.place_manual_entry(account_id, _order(instrument_id, "sell", "6000", "short-gap"))
+    _fill(repository, account_id, instrument_id)
+    # The price gaps from 10 to 40: buying back 6,000 costs 240,000, more than the 160,000 the account holds.
+    gateway.place_reducing(account_id, _order(instrument_id, "buy", "6000", "cover-gap", reference_price=Decimal("40")))
+    now = datetime.now(timezone.utc) + timedelta(seconds=2)
+    repository.process_observation(
+        account_id,
+        PaperMarketObservation(
+            instrument_id=instrument_id, provider="integration", price=Decimal("40"), bid=Decimal("39.99"), ask=Decimal("40.01"),
+            bid_size=Decimal("100000"), ask_size=Decimal("100000"), source_time=now, evaluated_at=now,
+            execution_eligible=True, freshness_mode="live",
+        ),
+    )
+    snapshot = repository.snapshot(account_id)
+    assert next(item for item in snapshot.order_history if item.order_id == "order-cover-gap").status == "filled"
+    assert all(item.quantity == 0 for item in snapshot.positions if item.instrument_id == instrument_id)
+    assert snapshot.balances[0].available < 0

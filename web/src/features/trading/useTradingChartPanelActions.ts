@@ -141,7 +141,7 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
   const {
     active, adapterRef, allBarsRef, barsRef, chartQuery, contextMenu, customRangeEnd, customRangeStart, drawingTool,
     drawings, hostRef, indicatorPaneGeometry, indicators, interval, onActivate, onChangeInterval, onClearIndicators,
-    onToggleIndicator, paneIndicators, pendingRangeIntervalRef, replayCursorIndex, replayMode, rightOffset,
+    onToggleIndicator, paneIndicators, pendingRangeIntervalRef, replayChoosingStart, rightOffset,
     selectedRangeRef, selectedTimezone, setAlertPlacement, setContextMenu, setCustomRangeEnd, setCustomRangeError,
     setCustomRangeOpen, setCustomRangeStart, setHoveredIndicatorPane, setPriceScaleHovered, setReplaySelectionIndex,
     setRightOffset, setSelectedIndicator, setSelectedRangeLabel, setTimezoneMenuOpen,
@@ -243,6 +243,7 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
       ...point,
       contextIndicatorId: resolvedIndicatorId,
       indicatorId: alertIndicatorId,
+      chartIndicatorId: resolvedIndicatorId,
       indicatorPeriod: resolvedIndicator?.period,
       x: Math.max(6, Math.min(point.x, Math.max(6, width - 286))),
       y: Math.max(6, Math.min(point.y, Math.max(6, height - 420))),
@@ -296,7 +297,7 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
       return;
     }
     const bounds = event.currentTarget.getBoundingClientRect();
-    if (replayMode && active && replayCursorIndex === null && !target.closest('button, input, select, textarea, [role="dialog"]')) {
+    if (replayChoosingStart && !target.closest('button, input, select, textarea, [role="dialog"]')) {
       const x = event.clientX - bounds.left;
       if (!targetAdapter.isPriceScaleCoordinate(x)) {
         const index = targetAdapter.barIndexAtCoordinate(x, allBarsRef.current.length);
@@ -339,7 +340,8 @@ export function useChartRangeActions(ws: TradingChartPanelProps & ReturnType<typ
   };
 
   const contextMenuAlert = () => {
-    if (contextMenu?.indicatorId || !contextMenu?.contextIndicatorId) setAlertPlacement(contextMenu);
+    // Any pane's indicator can be alerted on from the dialog's chart indicators (TVP-1.3).
+    if (contextMenu) setAlertPlacement(contextMenu);
   };
 
   return {

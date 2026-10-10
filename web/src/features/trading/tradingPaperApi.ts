@@ -1,11 +1,14 @@
 import type {
   PaperAccount,
   PaperAccountCreateInput,
+  PaperAccountSettingsInput,
   PaperAccountSnapshot,
   PaperOrder,
   PaperOrderInput,
   PaperPositionProtection,
   PaperProtectionInput,
+  PaperRiskEntryMoveInput,
+  PaperRiskEntryMoveResult,
   PaperRiskOrderInput,
   PaperRiskOrderResult,
   PaperRiskPreview,
@@ -24,6 +27,12 @@ export const tradingPaperApi = {
     (await paper(api.GET('/api/trading/paper/accounts'))).accounts,
   createAccount: (input: PaperAccountCreateInput): Promise<PaperAccountSnapshot> =>
     paper(api.POST('/api/trading/paper/accounts', { body: input })),
+  /** Account settings (shorting, TVP-7.2a), at the revision this account was read at. */
+  updateAccountSettings: (paperAccount: PaperAccount, settings: PaperAccountSettingsInput): Promise<PaperAccountSnapshot> =>
+    paper(api.PATCH('/api/trading/paper/accounts/{account_id}', {
+      params: { path: account(paperAccount.account_id), header: { 'If-Match': paperAccount.revision } },
+      body: settings,
+    })),
   snapshot: (accountId: string): Promise<PaperAccountSnapshot> =>
     paper(api.GET('/api/trading/paper/accounts/{account_id}', { params: { path: account(accountId) } })),
   riskPreview: (accountId: string, input: PaperRiskPreviewInput): Promise<PaperRiskPreview> =>
@@ -40,6 +49,12 @@ export const tradingPaperApi = {
     paper(api.POST('/api/trading/paper/accounts/{account_id}/orders/{order_id}/replace', {
       params: { path: { account_id: accountId, order_id: orderId }, header: orderManagement },
       body: { replacement },
+    })),
+  /** Re-prices a working risk entry: the server sizes it again and replaces it atomically (TVP-7.3). */
+  moveRiskEntry: (accountId: string, orderId: string, input: PaperRiskEntryMoveInput): Promise<PaperRiskEntryMoveResult> =>
+    paper(api.POST('/api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move', {
+      params: { path: { account_id: accountId, order_id: orderId }, header: orderManagement },
+      body: input,
     })),
   protections: async (accountId: string): Promise<PaperPositionProtection[]> =>
     (await paper(api.GET('/api/trading/paper/accounts/{account_id}/protections', {

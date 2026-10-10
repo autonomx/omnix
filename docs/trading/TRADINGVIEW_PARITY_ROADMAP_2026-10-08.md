@@ -1,12 +1,12 @@
 # TradingView parity roadmap: feature gaps and the plan to close them
 
-Date: 2026-10-08. Baseline branch: `architecture-hardening` (commit `08cae4129`). Revision 3: applies two code reviews and the owner's decisions D-1 and D-2 (see §11).
+Date: 2026-10-08. Baseline branch: `architecture-hardening` (commit `08cae4129`). Revision 4 (2026-10-09): the work packages are merged into `tradingview-parity`, and a completeness review recorded what is still open (§9, §11).
 
 Goal:
 
 > **A trader who knows TradingView can do the same analysis, alerting, replay, scripting and paper-trading work in Omnix, with the same tools, shortcuts and workflow, without missing a feature they use daily.**
 
-TradingView features come from its public documentation (features page, plan comparison, Advanced Charts and Trading Platform docs, Help Center) and from inspecting the TradingView Desktop 3.4.1 package (see §10). Omnix status comes from a code search of `web/src/features/trading` and `src/app/apps/trading` on the baseline branch, checked a second time by a review. Rows still marked *verify* need a hands-on check in the running app, done in TVP-0.1.
+TradingView features come from its public documentation (features page, plan comparison, Advanced Charts and Trading Platform docs, Help Center) and from inspecting the TradingView Desktop 3.4.1 package (see §10). Omnix status comes from a code search of `web/src/features/trading` and `src/app/apps/trading` on the baseline branch, checked a second time by a review. The rows first marked *verify* were checked against the code in TVP-0.1.
 
 TradingView is a reference for **features and behaviour only**. No TradingView code, assets, icons or text are copied into Omnix. Omnix implements each feature its own way, on its own stack (lightweight-charts 5, React, FastAPI, PostgreSQL).
 
@@ -72,27 +72,29 @@ TradingView is a reference for **features and behaviour only**. No TradingView c
 
 Status key: **Have** · **Partial** · **Missing**. The WP column says which work package closes the gap.
 
+This section is the inventory as it stood at the first ledger count (TVP-0.1, 2026-10-08, after the work packages that had merged by then), and its statuses are kept as they were then so the plan below still reads against them. Current statuses are in the parity ledger and §9.
+
 ### 2.1 Summary
 
-| Area | Omnix today | TradingView | Main WPs |
+| Area | Omnix at the first count | TradingView | Main WPs |
 |---|---|---|---|
 | Chart types | 21 | 21 | — |
 | Charts per tab | 16 (12 tabs) | 16 | — |
 | Drawing tools | 14 | 110+ | TVP-3 |
 | Built-in indicators | 125 of 208 tracked | ~208 + community | TVP-6 |
 | User scripts | Read-only source viewer | Pine Script IDE, strategies, screener | TVP-11 |
-| Alert conditions | 15 condition types, 3 frequencies, 3 channels | 13 operators on any source, 4 frequencies, push/email/webhook, watchlist and multi-condition | TVP-1 |
-| Keyboard shortcuts | Undo, Escape/Enter | ~70 | TVP-2 |
-| Watchlists | Multiple lists, add/remove/reorder | Sections, flags, columns, import/export, advanced view | TVP-5 |
+| Alert conditions | 15 condition types, 3 frequencies, 3 channels (sound plays nothing); none fire on the baseline (§2.6) | 13 operators on any source, 4 frequencies, push/email/webhook, watchlist and multi-condition | TVP-1 |
+| Keyboard shortcuts | Command layer (TVP-0.3) with drawing undo/redo/delete; Escape/Enter; watchlist keys | ~70 | TVP-2 |
+| Watchlists | Multiple lists, add/remove/reorder, sections, colour flags, columns and sorting, `.txt` import/export, keyboard navigation | Sections, flags, columns, import/export, advanced view | TVP-5 |
 | Screener fields | 7 metrics × 4 operators | 400+ fields, 6 screeners, heatmaps | TVP-9 |
-| Replay | Start bar, step, two disagreeing speed controls, trading | 9 speeds, sub-bar update interval, synced multi-chart | TVP-8 |
-| Paper trading | Market, limit, stop, long-side brackets, commission/slippage bps, server-side shorting (nothing can turn it on) | + stop-limit, trailing, TIF, shorting, leverage, margin calls, drag-to-modify | TVP-7 |
-| Research data | News, economic calendar | + financials, options, seasonals, macro, heatmaps | TVP-10 |
+| Replay | Start bar, step, one 9-speed control, one replay clock for all charts, jump to bar, trading | 9 speeds, sub-bar update interval, synced multi-chart | TVP-8 |
+| Paper trading | Market, limit, stop, stop-limit, trailing stop, DAY/GTC/GTD, long-side brackets, commission/slippage bps, server-side shorting (nothing can turn it on) | + shorting, leverage, margin calls, drag-to-modify | TVP-7 |
+| Research data | News (no economic calendar, see §2.12) | + economic calendar, financials, options, seasonals, macro, heatmaps | TVP-10 |
 | Windows | Tabs in one browser tab | Tabs, multiple windows, colour link groups | TVP-4 |
 
 ### 2.2 Charts and layouts
 
-**Have:** all 21 chart types (`TRADING_CHART_TYPE_OPTIONS` in `chart/chartAdapter.ts`); 16 charts per tab and 12 tabs; symbol, interval, crosshair and visible-range sync (`links` in `tradingStore.ts`); tick, second, minute, hour, day, week, month and range intervals; compare and spread/formula symbols; log, percent and inverted scales; timezone selector; PNG snapshot download; undo/redo; object tree; indicator presets; save, load, rename and delete layouts; workspace JSON export/import; command center.
+**Have:** all 21 chart types (`TRADING_CHART_TYPE_OPTIONS` in `chart/chartAdapter.ts`); 16 charts per tab and 12 tabs; symbol, interval, crosshair and visible-range sync (`links` in `tradingStore.ts`); tick, second, minute, hour, day, week, month and range intervals; compare and spread/formula symbols; log, percent and inverted scales; timezone selector; PNG snapshot download; undo/redo; object tree; indicator presets; save, load, rename and delete layouts; workspace JSON export. `TradingCommandCenter` is a strategy operations panel, not a command palette (TVP-0.3 finding).
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
@@ -104,14 +106,16 @@ Status key: **Have** · **Partial** · **Missing**. The WP column says which wor
 | Go to date (jump to a bar) | Weekly | Partial | TVP-2.5 |
 | Copy chart image; copy snapshot link | Weekly | Missing | TVP-2.5 |
 | Duplicate layout | Weekly | Missing | TVP-2.5 |
-| Maximise / collapse pane by double-click | Daily | *verify* | TVP-2.5 |
+| Maximise / collapse pane by double-click | Daily | Partial (a header button focuses one chart and panes have fullscreen/minimise buttons; no double-click gesture) | TVP-2.5 |
 | Pre/post-market toggle and price line | Daily | Partial | TVP-2.5 |
 | Chart templates | Weekly | Partial | TVP-2.5 |
-| Market status and data-delay marker in legend | Daily | *verify* | TVP-2.5 |
+| Market status and data-delay marker in legend | Daily | Partial (feed-status dot; freshness only in a tooltip; no market open/closed status) | TVP-2.5 |
+| Command palette (quick search) | Daily | Missing | TVP-2.1 |
+| Workspace JSON import (export exists) | Rare | Missing | unassigned |
 
 ### 2.3 Drawing tools
 
-**Have (14):** trend line, ray, horizontal line, horizontal ray, vertical line, cross line, arrow, rectangle, circle, ellipse, fib retracement, text, measurement, dot. Also eraser, lock/hide, magnet snapping (time/price/OHLC), colour/width/dash styles, undo, trendline alerts. All rendering is in one 649-line SVG component (`drawings/TradingDrawingOverlay.tsx`).
+**Have (14):** trend line, ray, horizontal line, horizontal ray, vertical line, cross line, arrow, rectangle, circle, ellipse, fib retracement, text, measurement, dot. Also eraser, lock/hide, magnet snapping (time/price/OHLC), colour, undo, trendline alerts. Width and dash styles are stored and drawn but have no editor (Partial, TVP-0.4). All rendering is in one 649-line SVG component (`drawings/TradingDrawingOverlay.tsx`).
 
 | Missing group | Tools | Tier | WP |
 |---|---|---|---|
@@ -136,15 +140,16 @@ Status key: **Have** · **Partial** · **Missing**. The WP column says which wor
 
 These external-data indicators exist only in the browser path. The server's alerts and scanner can't use them yet (see §3).
 
-**83 are missing:**
+**83 are not available yet:** 1 partial, 28 missing and 54 waiting on a decision.
 
 | Missing group | Count | Data available? | Tier | WP |
 |---|---|---|---|---|
 | OHLCV-only, wrongly listed as data-dependent: Rob Booker ADX Breakout, Knoxville Divergence, Intraday Pivot Points, Missed Pivot Points, Reversal, Ziv Ghost Pivots; Relative Volume at Time; Correlation Coefficient; 24-hour Volume | 9 | Yes | Weekly | TVP-6.1 |
-| Need a chart renderer: Auto Fib Retracement/Extension, Auto Pitchfork, Auto Trendlines, Auto key levels, Bollinger Bars, Chop Zone, Trading Sessions, Seasonality, Visible Average Price, VWAP Auto Anchored, Multi-Time Period Charts, Moon Phases | 13 | Yes | Weekly | TVP-6.2 |
+| Need a chart renderer: Auto Fib Retracement/Extension, Auto Pitchfork, Auto Trendlines (Partial: the Auto Trend Detector chart pattern draws one trend), Auto key levels, Bollinger Bars, Chop Zone, Trading Sessions, Seasonality, Visible Average Price, VWAP Auto Anchored, Multi-Time Period Charts, Moon Phases | 13 | Yes | Weekly | TVP-6.2 |
 | Intrabar volume: Volume Delta, Cumulative Volume Delta | 2 | Needs a new intrabar loader (none exists; footprint is synthetic) | Weekly | TVP-6.4 |
 | Market breadth: Advance/Decline Line, Advance/Decline Ratio, Advance/Decline Ratio (Bars), Cumulative Volume Index | 4 | Derived from Alpaca SIP (§7.2) | Weekly | TVP-6.6 |
-| Other crypto data: Ethereum staking and deposits, address balances, UTXO detail, gas, SOPR, realized cap, RVT, stock-to-flow, power-law model, ETF flows and balances, El Salvador balance | 55 | Needs an on-chain provider (D-4) | Rare | TVP-6.7 |
+| Seasonals guide ("Learn using seasonals"), delivered by the Seasonality indicator and the seasonals panel | 1 | Yes | Weekly | TVP-6.2, TVP-10.3 |
+| Other crypto data: Ethereum staking and deposits, address balances, UTXO detail, gas, SOPR, realized cap, RVT, stock-to-flow, power-law model, ETF flows and balances, El Salvador balance | 54 | Needs an on-chain provider (pending D-4) | Rare | TVP-6.7 |
 
 Also missing: candlestick pattern recognition (TVP-6.3, weekly) and indicator-on-indicator (TVP-6.5, weekly).
 
@@ -162,7 +167,7 @@ Also missing: candlestick pattern recognition (TVP-6.3, weekly) and indicator-on
 
 ### 2.6 Alerts
 
-**Have:** price above/below, percent change, volume above/below; indicator above/below/cross for 8 indicators; trendline crossing/up/down/above/below; frequencies `once`, `once_per_bar`, `every_time` plus cooldown; expiration; custom message; in-app, toast and sound delivery; alert manager and log. Alerts are evaluated server-side (`alerts_monitor.py`), but nothing leaves the process.
+**Have:** price above/below, percent change, volume above/below; indicator above/below/cross for 8 indicators; trendline crossing/up/down/above/below; frequencies `once`, `once_per_bar`, `every_time` plus cooldown; expiration; custom message; in-app and toast delivery; alert manager and log. Alerts are evaluated server-side (`alerts_monitor.py`), but nothing leaves the process. On the baseline they never fire: the lifecycle trigger from `0027_trading_alert_lifecycle_history.sql` reverts the evaluator's own state update, so the condition types count as partial in the ledger until the TVP-1.2 fix merges.
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
@@ -173,7 +178,8 @@ Also missing: candlestick pattern recognition (TVP-6.3, weekly) and indicator-on
 | Moving up/down by amount or % within N bars | Weekly | Partial | TVP-1.2 |
 | Alerts on any indicator and any output line | Daily | Partial (8) | TVP-1.3 |
 | Alerts on horizontal lines/rays, rectangles, channels, fib levels | Daily | Missing | TVP-1.4 |
-| Message placeholders (`{{ticker}}`, `{{close}}`, …) | Daily | *verify* | TVP-1.5 |
+| Message placeholders (`{{ticker}}`, `{{close}}`, …) | Daily | Missing (messages are stored and shown verbatim) | TVP-1.5 |
+| Sound delivery | Daily | Partial (the channel can be chosen, but no code plays a sound) | TVP-1.5 |
 | Email and browser/OS push delivery | Weekly | Missing | TVP-0.5b, TVP-0.5c, TVP-1.5 |
 | Multi-condition alerts (up to 5) | Weekly | Missing | TVP-1.2 (schema), TVP-1.6 |
 | Watchlist alerts (one alert over a whole list) | Weekly | Missing | TVP-1.7 |
@@ -181,14 +187,18 @@ Also missing: candlestick pattern recognition (TVP-6.3, weekly) and indicator-on
 
 ### 2.7 Keyboard shortcuts
 
-Omnix has no shortcut layer. Trading code binds Ctrl+Z and Escape/Enter in dialogs. Missing (TVP-2), all daily tier:
+The command layer exists (TVP-0.3: command catalogue, dispatcher, key overrides, conflict checks) and runs drawing undo (Ctrl+Z), redo (Ctrl+Shift+Z) and delete. Dialogs bind Escape/Enter, and the watchlist grid binds its own navigation keys (TVP-5.3). Most shortcuts are still missing (TVP-2), all daily tier:
 
-- **Chart:** type to change symbol; digits to change interval; `/` indicators; Ctrl+K quick search; Ctrl+S save layout; `.` load layout; Ctrl+Y redo; ←/→ one bar; Ctrl+←/→ further; Ctrl+↑/↓ zoom; Alt+G go to date; Alt+S snapshot; Alt+R reset; Alt+I invert; Alt+L log; Alt+P percent; Ctrl+/ shortcut list.
+- **Chart:** type to change symbol; digits to change interval; `/` indicators; Ctrl+K quick search; Ctrl+S save layout; `.` load layout; Ctrl+Y redo; ←/→ one bar; Ctrl+←/→ further; Ctrl+↑/↓ zoom; Alt+G go to date; Alt+S snapshot; Alt+R reset; Alt+I invert; Alt+L log; Alt+P percent; Alt+A add alert; Ctrl+/ shortcut list.
 - **Drawing:** Alt+T, Alt+H, Alt+V, Alt+C, Alt+F, Alt+Shift+R; Ctrl+C/V; Ctrl+drag clone; Ctrl+click multi-select; Ctrl+Alt+H hide all; arrows nudge; Shift constrains.
 - **Layout:** Tab/Shift+Tab switch chart; Alt+Enter maximise; Alt+W add to watchlist.
-- **Watchlist:** ↑/↓ or Space/Shift+Space move; Shift+↑/↓ extend selection; Ctrl+A select all.
+- **Watchlist (Have, TVP-5.3):** ↑/↓ or Space/Shift+Space move; Shift+↑/↓ extend selection; Ctrl+A select all.
 - **Tabs:** Ctrl+T new; Ctrl+U duplicate; Ctrl+Tab / Ctrl+PgDn next; Ctrl+1–8 go to tab; Ctrl+9 last; Ctrl+Shift+T reopen closed.
 - **Trading:** Shift+B / Shift+S market buy/sell; Shift+Alt+B/S limit.
+
+Notes from the TVP-0.1 verification:
+- Alt+R, Alt+I, Alt+L, Alt+P, Alt+A and the drawing keys Alt+T, Alt+H, Alt+J, Alt+V, Alt+C, Alt+F, Alt+Shift+R are shown as hints in menus, but nothing binds them.
+- Ctrl+Y redo is partial: redo is bound to Ctrl+Shift+Z.
 
 ### 2.8 Watchlists
 
@@ -196,11 +206,11 @@ Omnix has no shortcut layer. Trading code binds Ctrl+Z and Escape/Enter in dialo
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
-| Sections (named, collapsible) | Daily | Missing | TVP-5.1 |
-| Colour flags (7) and flagged lists | Daily | Missing | TVP-5.1 |
-| Column choice and sorting | Daily | Missing | TVP-5.2 |
-| Import/export `.txt` | Weekly | Missing | TVP-5.3 |
-| Keyboard navigation | Daily | Missing | TVP-5.3 |
+| Sections (named, collapsible) | Daily | Have | TVP-5.1 |
+| Colour flags (7) and flagged lists | Daily | Have (flagging from the chart and screener is a follow-up) | TVP-5.1 |
+| Column choice and sorting | Daily | Have (indicator columns are a follow-up) | TVP-5.2 |
+| Import/export `.txt` | Weekly | Have | TVP-5.3 |
+| Keyboard navigation | Daily | Have | TVP-5.3 |
 | Advanced view (overview, earnings, dividends, news tabs) | Weekly | Partial | TVP-5.4 |
 | Sync across tabs and windows | Daily | Missing | TVP-4.1, TVP-4.3 |
 
@@ -221,10 +231,10 @@ Omnix has no shortcut layer. Trading code binds Ctrl+Z and Escape/Enter in dialo
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
-| One consistent speed control: the footer has 0.5/1/2/4/8× (`TradingChartPanelFooter.tsx:29`), while `TradingReplayPanel.tsx` accepts free text from 0.25 to 100× | Weekly | Partial | TVP-8.1 |
-| Multi-chart sync: replay mode and session are global, but the cursor is per panel (`useTradingChartPanelState.ts:151`) | Weekly | Partial | TVP-8.1 |
+| One consistent speed control (9 speeds) | Weekly | Have | TVP-8.1 |
+| Multi-chart sync (one replay clock for all charts) | Weekly | Have | TVP-8.1 |
 | Update interval (sub-bar playback, down to 1 s) | Weekly | Missing | TVP-8.1 |
-| Jump to bar during playback; jump to real time | Weekly | Partial | TVP-8.1 |
+| Jump to bar during playback; jump to real time | Weekly | Have | TVP-8.1 |
 | Replay shortcuts | Weekly | Missing | TVP-8.1 |
 
 ### 2.11 Paper trading and chart trading
@@ -248,25 +258,26 @@ Omnix has no shortcut layer. Trading code binds Ctrl+Z and Escape/Enter in dialo
 | Leverage per asset class and margin % for longs and shorts | Weekly | Missing | TVP-7.2b |
 | Margin calls (forced partial or full liquidation) | Weekly | Missing | TVP-7.2b |
 | Fixed-amount commission per order (only % today) | Weekly | Missing | TVP-7.2b |
-| Stop-limit orders | Daily | Missing | TVP-7.1 |
-| Trailing stop | Daily | Missing | TVP-7.1 |
-| Time in force (DAY / GTC / GTD) | Weekly | Missing | TVP-7.1 |
+| Stop-limit orders | Daily | Have | TVP-7.1 |
+| Trailing stop | Daily | Have | TVP-7.1 |
+| Time in force (DAY / GTC / GTD) | Weekly | Have | TVP-7.1 |
 | Drag orders and brackets on the chart | Daily | Missing | TVP-7.3 |
 | Price-scale "+" menu to place orders | Daily | Missing | TVP-7.3 |
 | Buy/sell buttons in the chart legend | Daily | Missing | TVP-7.3 |
 | Trading hotkeys | Daily | Missing | TVP-7.4 |
-| Trading notifications on chart and notifications log | Weekly | *verify* | TVP-7.4 |
+| Trading notifications on chart and notifications log | Weekly | Partial (the ticket shows a confirmation toast for its own orders; fills, rejects and protective exits are not announced on the chart; no notifications log) | TVP-7.4 |
 
 ### 2.12 Research data
 
-**Have:** news; economic calendar; analyst targets and dividend yield (Yahoo); SEC filings in research (`research/adapters/sec_edgar.py`).
+**Have:** news; analyst targets and dividend yield (Yahoo); SEC filings in research (`research/adapters/sec_edgar.py`).
 
 | Gap | Tier | Status | WP |
 |---|---|---|---|
+| Economic calendar | Weekly | Missing (none exists; the "prospective" side tab is the prospective economic-SHADOW strategy panel) | TVP-10.5 |
 | Earnings and dividends calendar, chart markers | Weekly | Partial | TVP-10.1 |
 | Financial statements and ratios panel | Weekly | Missing | TVP-10.2 |
 | Seasonals | Rare | Missing | TVP-10.3 |
-| Options chain, Greeks, volatility curves, strategy builder | Rare | Missing | TVP-10.4 |
+| Options chain, Greeks, volatility curves, strategy builder | Rare | Excluded pending D-6 | TVP-10.4 |
 | Macro: yield curves, economic indicators, maps | Rare | Missing | TVP-10.5 |
 
 ### 2.13 Tabs, windows and app shell
@@ -310,7 +321,7 @@ These shape the foundations phase. Ignoring them would mean building the same th
    - Research and scripts never gain trading execution authority.
    - LLM output is a proposal; deterministic code decides.
    - PostgreSQL is authoritative for alert, delivery and order state.
-   - Schema changes need a forward migration under `src/app/apps/trading/migrations` plus persistence tests. Two existing migrations share the number `0036`; a new migration takes the next free number, checked again before merge, and the doc cites migrations by full filename.
+   - Schema changes need a forward migration under `src/app/apps/trading/migrations` plus persistence tests. Two existing migrations share the number `0036`. This roadmap's migrations use the reserved range 0140–0179, assigned per WP and checked again before merge; the doc cites migrations by full filename.
    - Order work changes paper behaviour only. A WP that touches `order_gateway.py` or `execution*.py` is out of scope unless D-7 is decided.
    - Changing defaults must not change the behaviour of existing paper accounts, especially strategy-owned ones.
 2. **Clean-room implementation.** Use TradingView's public docs and the app's visible behaviour as the spec. Do not copy TradingView code, icons, images, sounds or help text. Name things in Omnix terms where a TradingView name is a trademark: the product is "Omnix Scripts", described as Pine-compatible.
@@ -355,8 +366,8 @@ TVP-11.0 spike (needs TVP-0.2 first batch) ─► TVP-11.1 interpreter ─► 11
 | Wave | WPs | Why |
 |---|---|---|
 | 1 | TVP-0.1, 0.3, 1.2 → 0.5a, 0.2 (first batch), 1.1, 2.1, 2.3–2.5, 5.1–5.3, 7.1, 8.1 (speed and sync part) | Small, used every day; webhooks make server alerts useful; 0.2 is the longest pole and starts now |
-| 2 | TVP-0.2 (rest), 0.4, 0.5b, 0.6, 1.3, 1.5, 1.6, 2.2, 3.1, 3.6, 4.1, 6.1, 7.2a, 9.4, 11.0 | Foundations, the most-used drawing tools, shorting, cheap Hermes screener, script spike |
-| 3 | TVP-0.5c, 1.4, 1.7, 3.2–3.5, 3.8, 4.2–4.5, 7.2b, 7.3, 7.4, 8.1 (rest), 9.1, 9.2, 11.1–11.3 | Fill out drawings, alerts and chart trading; margin modelling; scripts on charts |
+| 2 | TVP-0.2 (rest), 0.4, 0.5b, 0.6, 1.3, 1.5, 1.6, 2.2, 3.1, 3.6, 3.8, 4.1, 6.1, 7.2a, 9.4, 11.0 | Foundations, the most-used drawing tools, shorting, cheap Hermes screener, script spike |
+| 3 | TVP-0.5c, 1.4, 1.7, 3.2–3.5, 4.2–4.5, 7.2b, 7.3, 7.4, 8.1 (rest), 9.1, 9.2, 11.1–11.3 | Fill out drawings, alerts and chart trading; margin modelling; scripts on charts |
 | 4 | TVP-3.7, 5.4, 6.2–6.6, 9.3, 10.1–10.3, 11.4, 11.5 | Depth: auto-drawings, intrabar, breadth, research panels, script alerts and strategies |
 | 5 | TVP-4.6, 6.7, 10.4, 10.5, 11.6 | Rare-tier or vendor-gated |
 
@@ -444,6 +455,7 @@ The rest of wave 1 (0.1, 0.2 first batch, 1.1, 5.1–5.3, 7.1, 8.1 speed and syn
 - **Goal:** triggered alerts leave the process reliably, starting with webhooks (Discord, Slack, Telegram bots, automation tools).
 - **Design:**
   - **Outbox:** a delivery table (`omnix_trading_notification_deliveries`) with one row per trigger × channel: status, attempts, next attempt time, last error and an idempotency key. A delivery monitor sends with retries and exponential backoff. Triggers stay authoritative, and delivery is at-least-once.
+  - **Storage:** webhook URL and secret come from the provider secret store by the alert's key (TVP-1.2). That store is DPAPI-encrypted, which ties webhooks to one Windows user and host; decide before deploying elsewhere whether to move alert credentials to a portable encrypted store.
   - **Webhook rules:**
     - HTTPS only;
     - destinations checked with `app.security.url_policy` after DNS resolution, rejecting private, loopback and link-local addresses unless `OMNIX_ALLOWED_PRIVATE_NETWORKS` allows them;
@@ -507,7 +519,7 @@ The rest of wave 1 (0.1, 0.2 first batch, 1.1, 5.1–5.3, 7.1, 8.1 speed and syn
     - The target is a value, a second source, or a channel of two values or sources.
     - Moving operators take an amount and a bar count.
   - **Child table:** conditions live in `omnix_trading_alert_conditions` (ordered, at most 5 per alert).
-  - **Channels in the same migration:** `notification_channels` accepts `webhook`, `email` and `push` as well as `app`, `toast` and `sound`. A per-alert channel settings column holds the webhook destination (the secret itself goes through `provider_secret_store`), email recipient and sound choice. The API rejects a channel whose sender isn't deployed yet, so TVP-0.5a–c each switch theirs on without another migration.
+  - **Channels in the same migration:** `notification_channels` accepts `webhook`, `email` and `push` as well as `app`, `toast` and `sound`. Message, channels and delivery settings live in their own `notification_settings` column, so editing them doesn't reset trigger state. A webhook's URL and signing secret are credentials: both are stored together in the provider secret store under a versioned key, and the alert row keeps only that key, a masked URL and `has_secret`. The API rejects a channel whose sender isn't deployed yet, so TVP-0.5a–c each switch theirs on without another migration.
   - **Migration:** existing alerts become one-condition rows, following the `0036_trading_trendline_alerts.sql` constraint-replacement precedent. The old `condition_type` column stays readable until a later cleanup.
 - **Tests:** a truth table per operator, including touches and gaps across a boundary; migration of every existing condition type and channel list; channel settings validation; round-trip through the API.
 - **Size:** M.
@@ -722,11 +734,11 @@ All TVP-3 WPs depend on TVP-0.4. Each tool ships with geometry and hit-test test
 - **Design:** a PWA manifest with a trading start URL, standalone display mode and Omnix icons. Must work with sign-in on, the existing SSE and WebSocket streams, and service-worker scope rules. No native wrapper (D-8).
 - **Size:** M.
 
-#### TVP-4.6 — Full multi-window (deferred)
+#### TVP-4.6 — Full multi-window
 
 - **Goal:** pop a tab out of a window and move it back, restoring window sets on reload.
 - **Design:** `window.open` per popped tab, `BroadcastChannel` coordination, leader election, and reconciliation by document revision.
-- **Note:** low value for the cost, because TVP-4.3 covers most of it. Revisit after wave 4.
+- **Note:** deferred until after wave 4 (TVP-4.3 covers most of it); built 2026-10-09 with window sets kept per computer.
 - **Size:** L.
 
 ---
@@ -813,7 +825,7 @@ All TVP-3 WPs depend on TVP-0.4. Each tool ships with geometry and hit-test test
 #### TVP-6.7 — Remaining on-chain and crypto data
 
 - **Gate:** D-4.
-- **Goal:** the 55 crypto data series in §2.4, through the adapter pattern in `metric_data.py` and `externalIndicatorData.ts`.
+- **Goal:** the 54 crypto data series in §2.4, through the adapter pattern in `metric_data.py` and `externalIndicatorData.ts`.
 - **Size:** L.
 
 ---
@@ -969,8 +981,8 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 
 #### TVP-10.5 — Macro
 
-- **Goal:** the US Treasury yield curve and other economic series as chart symbols, plus a map of selected indicators for the countries covered.
-- **Data:** FRED and US Treasury (§7.2). Other countries' curves need a vendor and are rare tier.
+- **Goal:** the US Treasury yield curve and other economic series as chart symbols; an economic calendar of past and upcoming releases (weekly tier); plus a map of selected indicators for the countries covered.
+- **Data:** FRED (series, and its release calendar `fred/releases/dates` for the economic calendar) and US Treasury (§7.2). Global calendar events need a vendor. Other countries' curves need a vendor and are rare tier.
 - **Size:** L.
 
 ---
@@ -979,11 +991,13 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 
 **Decided (D-1):** Omnix supports a TradingView-compatible subset of Pine Script, so users can paste existing scripts. The product name is "Omnix Scripts", described as Pine-compatible.
 
-**Runtime (D-9, to be confirmed by the TVP-11.0 spike):** scripts run only on the server, in a Python interpreter. The chart sends the script and its inputs and receives plots, shapes and drawings, and the server pushes updates on each new bar through the existing stream. This writes the interpreter once and serves charts, alerts, the screener and strategies from the same code. The cost is server CPU: sign-in is on, so several users may run the same community script on the same symbol. Two controls keep that bounded:
+**Runtime (D-9, confirmed by the TVP-11.0 spike on 2026-10-09):** scripts run only on the server, in a Python interpreter. The chart sends the script and its inputs and receives plots, shapes and drawings, and the server pushes updates on each new bar through the existing stream. This writes the interpreter once and serves charts, alerts, the screener and strategies from the same code. The cost is server CPU: sign-in is on, so several users may run the same community script on the same symbol. Two controls keep that bounded:
 - every run has CPU, memory and bar limits;
 - results are cached by script hash, inputs, instrument, interval, last bar and formula version, so identical runs are computed once and new bars extend a cached run incrementally.
 
 #### TVP-11.0 — Spike and language spec
+
+**Done:** the supported subset, results and measurements are in [`OMNIX_SCRIPTS_SPEC.md`](OMNIX_SCRIPTS_SPEC.md).
 
 - **Goal:** prove the runtime choice and fix the supported subset.
 - **Steps:**
@@ -1064,13 +1078,13 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 |---|---|---|---|
 | D-1 | Script language and runtime | **Decided 2026-10-08** | TradingView-compatible (Pine) subset so users can paste existing scripts; product name "Omnix Scripts" |
 | D-2 | Paper shorting model | **Decided 2026-10-08** | Like TradingView: short any instrument, leverage per asset class, long/short margin %, margin calls, % or fixed commission, no borrow fees (TVP-7.2a, TVP-7.2b) |
-| D-3 | Breadth, classification and macro sources | Recommended | §7.2 |
-| D-4 | On-chain data provider | Recommended | Defer; §7.2 |
-| D-5 | Fundamentals and earnings-date sources | Recommended | §7.2 |
-| D-6 | Options data source | Recommended | §7.2 |
+| D-3 | Breadth, classification and macro sources | **Decided 2026-10-09** | §7.2 as recommended: breadth computed from Alpaca SIP over the SEC ticker universe, sectors from SEC SIC codes, US macro and the economic calendar from FRED (a free key the owner enters in settings), US Treasury yield curves |
+| D-4 | On-chain data provider | **Decided 2026-10-09** | Defer: the 54 remaining on-chain and crypto series stay excluded (TVP-6.7 is not built); Bitcoin's 8 on-chain series stay on blockchain.info |
+| D-5 | Fundamentals and earnings-date sources | **Decided 2026-10-09** | Free sources only: SEC XBRL company facts (statements, ratios, screener fundamentals), Alpaca corporate actions (dividends, splits), SEC 8-K item 2.02 (past earnings dates). Upcoming earnings dates wait for a paid calendar vendor the owner may choose later |
+| D-6 | Options data source | **Decided 2026-10-09** | Alpaca options market data (snapshots with Greeks and implied volatility; real-time OPRA needs Alpaca's paid data plan). Research only: no options orders |
 | D-7 | Manual live trading from the chart | Not in this roadmap | Live execution stays with deterministic strategies |
-| D-8 | Native desktop wrapper (Electron/Tauri) | Recommended | Not needed; PWA (TVP-4.5) |
-| D-9 | Server runtime for indicators and scripts | Recommended, to be confirmed by the TVP-11.0 spike | Python only, no Node sidecar; scripts run on the server with a shared result cache (§6, TVP-11) |
+| D-8 | Native desktop wrapper (Electron/Tauri) | Recommended, not formally decided | Not needed; TVP-4.5 shipped the installable PWA on this recommendation |
+| D-9 | Server runtime for indicators and scripts | **Confirmed 2026-10-09** by the TVP-11.0 spike | Python only, no Node sidecar; scripts run on the server with a shared result cache (§6, TVP-11). Measured on 5,000 bars: median 48 ms per full run (max 285 ms), 0.016 ms per new bar; conditions for TVP-11.1 in `OMNIX_SCRIPTS_SPEC.md` §4 |
 
 ### 7.2 Data source recommendations
 
@@ -1087,12 +1101,12 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 | Earnings dates | Past: **SEC 8-K item 2.02** filings. Upcoming: **a paid calendar vendor** (decide in D-5 when TVP-10.1 starts) | Past: SEC adapter | There is no official free source for future earnings dates |
 | Crypto derivatives (OI, funding, basis, mark/index, liquidations) | **Keep Binance futures** (`metric_data.py`) and add **Hyperliquid** as a fallback | Binance yes; Hyperliquid for prices | `fapi.binance.com` refuses requests from US IP addresses; Hyperliquid's public `info` API has funding, open interest and mark prices without that restriction |
 | Bitcoin on-chain | **Keep blockchain.info** | Yes (8 metrics live) | |
-| Ethereum and other on-chain metrics (D-4) | **Defer.** If needed later, evaluate Coin Metrics (check its licence: the community tier is non-commercial) or a paid provider | No | Rare tier; 55 indicators, low daily use |
+| Ethereum and other on-chain metrics (D-4) | **Defer.** If needed later, evaluate Coin Metrics (check its licence: the community tier is non-commercial) or a paid provider | No | Rare tier; 54 indicators, low daily use |
 | Options chains, Greeks, IV (D-6) | **Alpaca options market data** first; **IBKR** as fallback | Alpaca and IBKR integrated | Alpaca option snapshots include Greeks and implied volatility; real-time OPRA needs the paid data plan. Check the account's plan before starting TVP-10.4 |
 | US macro series | **FRED API** (free key) | No | Official; thousands of US series |
 | US Treasury yield curve | **US Treasury daily par yield curve rates** | No | Official, free |
 | Other countries' yield curves and macro maps | **Defer** (rare tier); vendor if needed | No | |
-| Economic calendar | **Keep the existing source** | Yes | |
+| Economic calendar | **None today.** US releases from FRED's release calendar (`fred/releases/dates`); global events need a vendor | No | Weekly tier |
 | News | **Keep the existing source** | Yes | |
 
 ---
@@ -1110,26 +1124,182 @@ Principle: **use what Omnix already integrates and licenses first, prefer offici
 
 ## 9. Progress
 
-Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this table with the ledger report.
+**Status on 2026-10-10.**
+- Every work package is merged into `tradingview-parity` and done in full, except TVP-6.7, which D-4 defers.
+- The goal items the 2026-10-09 review found unbuilt (TVP-0.2, 1.3, 3.8, 5.1, 5.2, 6.6, 7.2b, 9.1, 11.1) are built; see **Completed open items** below.
+- Every feature in the ledger's scope is have: missing daily- and weekly-tier features fell from 150 at the first ledger count to **0**, and nothing is partial.
+- The checks that needed the running app were done in a browser on 2026-10-10 (**Browser checks** below). They found and fixed seven bugs, one of them making the time link do nothing, and the gaps that kept the canvas renderer from being the default.
+- Nothing is on `main` yet. The integration branch merges there as one reviewed change when the owner decides.
 
-| Area | Have | Partial | Missing (daily / weekly / rare) | Done WPs |
-|---|---|---|---|---|
-| Charts and layouts | 14 | 4 | 3 / 5 / 0 (+2 *verify*) | — |
-| Drawing tools | 14 tools | — | ~22 / ~25 / ~48 tools | — |
-| Indicators | 125 | — | 0 / 28 / 55 | — |
-| User scripts | 0 | 1 | 3 / 3 / 1 | — |
-| Alerts | 9 | 3 | 4 / 5 / 0 (+1 *verify*) | — |
-| Shortcuts | 1 | — | ~65 / 0 / 0 | — |
-| Watchlists | 4 | 1 | 4 / 1 / 0 | — |
-| Screener | 1 | 1 | 2 / 2 / 0 | — |
-| Replay | 6 | 3 | 0 / 2 / 0 | — |
-| Paper and chart trading | 9 | 1 | 7 / 5 / 0 (+1 *verify*) | — |
-| Research data | 4 | 1 | 0 / 1 / 3 | — |
-| Tabs and windows | 1 | 1 | 0 / 4 / 1 | — |
+**Completion.**
 
-| WP | Status | PR / commit | Notes |
+<!-- parity-completion:start -->
+| Measure | Done |
+|---|---|
+| TradingView parity, all features in scope | 100% |
+| TradingView parity, daily + weekly features | 100% |
+| Roadmap work packages merged in full | 99% (66 of 67) |
+| Daily + weekly gap closed since the first count | 100% (150 of 150) |
+
+Features: have counts 1, partial 0.5, missing 0, and 100% means every feature is have; features excluded or waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: those whose rows in the status table below are all marked **Done**, of every TVP work package in this roadmap; not done: TVP-6.7. Gap: missing daily + weekly features against 150 at the first ledger count. Refreshed by `python scripts/tradingview_parity_progress.py`.
+<!-- parity-completion:end -->
+
+Counts come from the parity ledger [`tradingview-parity.json`](tradingview-parity.json) (`python scripts/tradingview_parity_report.py`). The ledger was checked against the code in TVP-0.1 and updated after each merge. On 2026-10-09 it was checked again against the code and each work package's goal (revision 4). On 2026-10-10 the open items were built and the remaining checks run in a browser (revision 5).
+
+<!-- parity-report:start -->
+| Area | Have | Partial | Missing (daily / weekly / rare) | Pending decision | Excluded | Done |
+|---|---|---|---|---|---|---|
+| Charts and layouts | 33 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Drawing tools | 101 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Indicators | 156 | 0 | 0 / 0 / 0 | 0 | 54 | 100% |
+| User scripts | 8 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Alerts | 24 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Shortcuts | 50 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Watchlists | 11 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Screener | 7 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Replay | 11 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Paper and chart trading | 22 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Research data | 9 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| Tabs and windows | 7 | 0 | 0 / 0 / 0 | 0 | 0 | 100% |
+| **Total** | 439 | 0 | 0 / 0 / 0 | 0 | 54 | 100% |
+
+| Tier | Have | Partial | Missing | Pending decision | Excluded | Total | Done |
+|---|---|---|---|---|---|---|---|
+| Daily | 163 | 0 | 0 | 0 | 0 | 163 | 100% |
+| Weekly | 210 | 0 | 0 | 0 | 0 | 210 | 100% |
+| Rare | 66 | 0 | 0 | 0 | 54 | 120 | 100% |
+
+Missing daily + weekly features: **0**
+
+Done (have counts 1, partial 0.5, of the features in scope): **100%** overall, **100%** of daily + weekly.
+<!-- parity-report:end -->
+
+**How the work runs.**
+- Integration branch `tradingview-parity`, checked out in the worktree `F:/LLM/omnix-tvp`.
+- Each work package is built on its own `tvp/<wp>` branch in its own worktree, reviewed, then merged into the integration branch.
+- Since 2026-10-08 development happens in the main session only (running many development agents cost too many tokens). Review agents reviewed the earlier work packages; the later ones were reviewed inline in the main session, and their rows say "Reviewed inline".
+- Migrations for this roadmap use the reserved range **0140–0179**:
+  - 0140 TVP-7.1, 0141 TVP-1.1 + 1.2, 0142 TVP-0.5a, 0143 TVP-7.2b, 0144 TVP-1.7, 0145 TVP-11.1–11.3, 0146 TVP-0.5b/c;
+  - 0147 snapshot links, 0148 TVP-6.6, 0149 TVP-9.3, 0150 TVP-10.2, 0151 TVP-9.1 fundamentals, 0152 TVP-10.1;
+  - 0153 TVP-7.2b margin-call notifications;
+  - 0154–0179 are free.
+- PostgreSQL tests run against scratch databases in the `omnix-architecture-test` container, never the live database.
+- `api:generate` needs the locked FastAPI 0.141.1 and Starlette 1.7.0 (`requirements/gateway.lock.txt`); the local interpreters have 0.133.1. Install the locked versions into a scratch directory (`pip install --target <dir> fastapi==0.141.1 starlette==1.7.0`) and put it first on `PYTHONPATH` for that command. Don't change shared environments.
+
+| WP | Status | Branch / commit | Notes |
 |---|---|---|---|
-| — | — | — | No WPs started |
+| TVP-0.1 | **Done** | merged `6996ba5832` | Ledger of 493 features (`docs/trading/tradingview-parity.json`) with evidence for every have/partial entry, a report script that fails on stale or missing evidence, verification of every *verify* row by code, "Omnix Scripts" naming (D-1), §2 corrected. The ledger caught 16 entries made stale by the TVP-0.4 merge |
+| TVP-0.2 | **Done** | scaffold `451eda57b`/`47b8b9aac`; batches `2f608d201`, `295483749`; consolidation and review fixes `f4545ca7d`; external data `a2ac4029ad`; indicators that draw `cd66783169`; Volume Delta and CVD `3bb107ca98` | **All 100 available chart indicators have server implementations**, verified against browser goldens (8 datasets including empty, constant, gaps, negative prices; input variants; anchored VWAP). They are bit-exact except the transcendental ones (ALMA, Choppiness, Fisher, Historical Volatility, McGinley), which differ by at most a few hundred ulps through `exp`/`log`.<br>Two reviews:<br>• the scaffold review tightened the tests;<br>• the port review fuzzed 13,832 extra cases against the browser engine and found 3 indicators raising where JS yields Infinity/NaN, now fixed with `js_div`/`js_log`.<br>All 100 run in 0.7 s on 5,000 bars; the slowest is RCI Ribbon at 80 ms.<br>The alert monitor moved to the registry in TVP-1.2 and the scanner in TVP-9.1.<br>**Completed 2026-10-10:** the 28 external-data indicators have a server table (`indicators/external.py`, checked against the chart's by a contract fixture) and read their metric through the loader `/metrics` uses (`metric_sources.py`); the indicators that draw are on the server (`server_indicators/drawing.py`, against the goldens) except Visible Average Price (the bars in view) and Seasonality (a line per year); Volume Delta and CVD read lower-timeframe bars (`indicators/intrabar.py`, matched to the chart by a contract fixture). Alerts, the screener and watchlist columns can use all of them. Follow-up: a screener rule's indicator periods other than its own `period` aren't capped |
+| TVP-0.3 | **Done** | `41d5410a3`, `14af59bf62` | Command catalogue and dispatcher (text fields ignored, most specific scope wins, Alt by physical key, exact modifiers), key overrides, conflict detection; drawing undo/redo/delete moved onto it. Finding: `TradingCommandCenter` is a strategy operations panel, not a command palette, so TVP-2.1's Ctrl+K needs a new palette. Overrides are kept per browser (decision TVP-0.3 rev) |
+| TVP-0.4 | **Done** | first part `e1a0dae44a`; readiness round `f295ebdb05` | Registry with renderer-agnostic geometry, creation gestures, generic properties dialog, gap-aware time index, safe document upgrades; SVG host pixel-identical; canvas behind a switch, the default since the TVP-3.4 eye check (2026-10-10). Readiness round: bar-index alert-level contract shared with the server (`barTimeline.ts`, shared cases), handles that edit any anchor or property, `onCreate`, an action bus with source and error isolation, guarded tool callbacks. Decision TVP-0.4 (alerts): comparisons and indicator data on their own clock are plotted on the main series' bars, so a drawing and its alert share one bar index; brick charts and lines starting before the loaded bars offer only flat levels. Three review rounds. **The TVP-3 drawing tools can start** |
+| TVP-0.5a | **Done** | merged `bcdef91340` | Outbox table (migration `0142_trading_notification_deliveries.sql`) written in the trigger's transaction; delivery monitor across workspaces (system operation `notifications.delivery`) with leases, fencing and backoff (30 s to 1 h, 8 attempts); webhook sender: HTTPS only, strict URL policy after DNS with the connection pinned to the checked address, one deadline per send, no redirects, proxies or body reads, URL never logged, HMAC-SHA256 signature; `GET /api/trading/alerts/deliveries` (status only). Two review rounds (the first found token logging, unbounded sends and CGNAT addresses; all fixed). The webhook editor and message placeholders came with TVP-1.5. Open: throughput is about 24 sends a minute |
+| TVP-0.5b, 0.5c | **Done** | merged `5846193b6a` | Alert email and web push through the outbox: the workspace's SMTP server (STARTTLS/TLS, password in the protected secret store, server address checked like a webhook's) and web push to every device that allowed notifications (`webpush.py`: RFC 8291 encryption matching the RFC's test vector, RFC 8292 VAPID with a key made once in the secret store; subscriptions per user and device in migration `0146_trading_alert_email_and_push.sql`, row-level secured; gone subscriptions removed). The dialog sets both up inline with test sends; `/omnix-push-sw.js` shows OS notifications with Omnix open or closed, which completes TVP-4.5. Reviewed inline. |
+| TVP-0.6 + 8.1 (wave 3) | **Done** | merged `f74d74de2f` | Intrabar data loader: `GET /api/trading/bars/intrabar` returns the lower-timeframe bars (1m and up) inside a range of chart bars from the latest 5,000 the provider serves, saying where its data starts; browser cache and helpers in `intrabarData.ts`. Sub-bar replay: an update interval (1m to 4h, where it fits) steps the shared clock, skipping the time between bars, and every chart draws its forming bar (and indicators on it) from intrabar chunks, in the sessions it shows; replay orders are placed at bar closes. Replay keys: Shift+Down play/pause, Shift+Right/Left step. |
+| TVP-1.1 + 1.2 | **Done** | merged `0331302776` | Server-side frequency (once / every time / once per bar / once per bar close / once per minute; intrabar derived from frequency); conditions child table (≤5, 13 operators, price/change/indicator/trendline sources, value/source/channel targets, RLS, `definition_revision`); bar-based evaluation on the server indicator registry; legacy adapter for all 15 types; channel schema with webhook URL and secret stored together in the protected store (write-only, masked URL, atomic with the row, advisory lock per alert); unreadable alerts reported, not fatal; migration `0141_trading_alert_conditions.sql`. Fixed pre-existing: server alerts never fired (0027 trigger); a decrypt failure made credential saves wipe all stored credentials; saves dropped other providers' keys after a failed read. Five review rounds. Message placeholders and delivery senders came with TVP-1.5 and TVP-0.5a–c. Open: monitor indicator cache and per-workspace limits; backfilling bars missed while the monitor is down |
+| TVP-1.3 | **Done** | merged `3eff3c2743`; line targets `7ad12108e4`; every indicator and its inputs `cd66783169` | The chart's alert dialog offers the chart's indicators, with their output lines. The alert is a conditions alert that the server evaluates with the same inputs and line. A pane's alert starts on that pane's indicator. Such alerts are drawn and dragged on their pane, and values aren't rounded. A cross-language contract (fixture written by a web test, checked by a server test) keeps every offered line a valid server output and savable. Two review rounds (wrong indicator from a pane, stale selection fallback, sessions, drawing, rounding; fixed).<br>**Completed 2026-10-10:** a target can be a value or another line: a price field or one of the chart's indicator lines (Close crossing up SMA 50, MACD crossing its signal, entering a channel whose bounds are lines); stored line targets reopen in the dialog. Indicators with params, session hours or a compare symbol are no longer greyed out: alerts carry the inputs and the server takes the session from the catalog and compare bars through its own fetch. Every chart indicator with a line can be alerted on except Visible Average Price and Seasonality (see TVP-0.2). Follow-ups: show the server's error text; worker-lag edge case |
+| TVP-1.4 | **Done** | merged `d2d32e8baf` | Line alerts from horizontal lines and rays, trend lines and rays, channels, rectangles (top and bottom) and fib levels; the dialog picks the level, and the server stores the drawing and level with the alert. An alert follows its drawing: once a moved drawing settles on the active live chart (not in replay, and only once the chart has bars), it takes the level's new line, compared as the server evaluates it so charts on other intervals agree. A failing update retries when the drawing moves again. Deleting the drawing, or a level that goes away (fib levels are keyed by value), asks on the active chart whether to disable its alerts; each is disabled at its current revision, and Keep is remembered on every chart until the page reloads. Three review rounds (sync loops, level identity, no-bars false orphans; fixed). Follow-ups: choosing the level in edit mode, and the editor writing back the line it opened with |
+| TVP-1.5 | **Done** | merged `7ae97432e5` | Message placeholders rendered by the server at trigger time and stored with the trigger: `{{ticker}}`, `{{exchange}}`, `{{interval}}`, `{{open}}`…`{{volume}}`, `{{time}}`, `{{timenow}}`, `{{alert_name}}`, `{{plot_N}}`, `{{plot("name")}}`. Unknown placeholders stay as written. The app, the toast and the webhook all show the same text. Also: alert names; Webhook channel in the alert dialog with a write-only URL and signing secret (a stored webhook shows only its host); sound picker kept from follow-ups batch 1. One review round (webhook edits with the channel unticked, legacy volume, ticker parsing; fixed). Email and push came with TVP-0.5b/c |
+| TVP-1.6 | **Done** | merged `d024db865b` | Multi-condition alerts: up to 5 conditions combined with AND, one frequency and one message. The dialog edits each condition (price fields, change %, chart indicator lines; crossing, greater/less than, channels, moving by an amount or percent within bars) and adds conditions to price, volume, change and chart-indicator alerts, which become conditions alerts with their own condition first (its legacy meaning). Drawing alerts keep one condition. Errors are shown in the dialog; a stored indicator keeps its inputs when the chart has it with others. Server test: at bar close every condition reads the closed bar. Two review rounds. Open: source-to-source targets (SMA crossing EMA) in the dialog (see TVP-1.3) |
+| TVP-1.7 | **Done** | merged `7031e2dc84` | Watchlist alerts: an alert's "Applies to" picks a watchlist (instrument `watchlist:<record id>`); one definition runs on every member, read each pass, with per-symbol state (migration `0144_trading_alert_symbol_states.sql`, row-level secured) so once, cooldown and history apply per symbol and `{{ticker}}` names the symbol that fired. The monitor plans the list fetches against one request budget per pass (`alerts_watchlist.plan_watchlist_pass`: half each provider's budget, 25 a pass for Yahoo), sharing histories with ordinary alerts; diagnostics show each list alert's evaluated and skipped symbols. Review fixes: RLS, a message edit no longer re-fires once alerts, an orphaned list alert can be disabled. |
+| TVP-2.1 + 2.3 + 2.4 | **Done** | merged `d7e84f2f5d` | Chart shortcuts (type-to-search, interval box, `/`, Ctrl+K palette, Ctrl+S, `.`, arrows, zoom, Alt+R/I/L/P/S, Ctrl+Y), layout shortcuts (Tab between charts, Alt+Enter, Alt+W), tab shortcuts (Alt-based in the browser, TradingView's Ctrl keys for the installed app), closed-tab stack, shortcut dialog with rebinding and conflict checks. Own hotkey matcher for keyboard layouts (decision TVP-0.3 rev). Three review rounds. Alt+G bound with the TVP-2.5 merge. Alt+A came with follow-ups batch 1 |
+| TVP-2.1, 2.5 (snapshot links) | **Done** | merged `2800500a3c` | Chart snapshot links: PNGs stored per workspace (migration `0147_trading_chart_snapshots.sql`, row-level secured, newest 200 kept) behind random `/api/trading/snapshots/<id>.png` links that open for signed-in members of the workspace; Alt+S copies a link as TradingView's does, Ctrl+Alt+S downloads, a Link button sits beside Copy. Public links would be an owner decision. Reviewed inline. |
+| TVP-2.2 | **Done** | merged `638dd4a1b7` | Multi-select (Ctrl+click; group move and delete; locked drawings stay), Ctrl+drag clone with a ghost preview, Ctrl+C/V copy and paste (also onto another chart or symbol), arrow-key nudge (shadows the chart's arrows only while a movable drawing is selected), Alt+T/H/V/C/F and Alt+Shift+R tool keys, Ctrl+Alt+H hide all, Shift constrain (45 degrees, square, circle). One review round: undo left stale selection flags, no drag threshold, canvas mode ignored hide-all; all fixed. Decision TVP-2.2 (keys) |
+| TVP-2.5 | **Done** | merged `a4275fd16c` | Custom intervals with favourites (the keyboard interval box uses the same parser), countdown, go to date (Alt+G), copy image, duplicate layout, double-click maximise/collapse, extended-hours toggle and price line, chart templates, market status and delay badges (new `/api/trading/market-status`). Review fixes: **clock-aligned chart aggregation** (`providers/clock_aggregation.py`; the strategy runner's count mode is unchanged and pinned by goldens), multi-day equity buckets count trading days, a bucket is final only when its last base bar is, comparison series and the data window use the chart's alignment and extended-hours setting. Two review rounds. Snapshot links came later (row TVP-2.1, 2.5) |
+| TVP-3.1 | **Done** | merged `8a4fc72997` | Eight tools: info line (price change, percent, bars, angle), extended line, trend angle, parallel channel (middle line, fill, width-keeping handles), flat top/bottom, disjoint channel, regression trend (least squares of closes on bar index, deviation bands), anchored VWAP (the indicator's formula). Channel lines are built in time/price and both drawn and alerted on, so drawings and alerts agree on a log scale too; alert levels on every line. One review round. Follow-ups: regression deviation is the population one (TradingView may use n-1); info line shows no time span or distance |
+| TVP-3.2 + 3.3 | **Done** | merged `edcd9f11d5`; inside pitchfork `e3f87c77c4` | Seventeen tools (eighteen with the inside pitchfork, merged 2026-10-09): trend-based fib extension and time, fib time zone, channel, speed resistance fan and arcs, circles, spiral, wedge; Andrews, Schiff and modified Schiff pitchforks, pitchfan; Gann box, square, square fixed (a fixed price-per-bar scale) and fan. Extension, channel and pitchfork lines are built in bar index/price, so drawings and their alerts agree on any scale (alertable: extension levels, channel levels, median and tines). Retracement gains reverse, labels left or right, and levels, percents or prices. Two review rounds. The inside pitchfork came later (row TVP-3.3). Open: pitchfan level convention to verify; small follow-ups (Gann fixed handle at the corner, left labels with Extend left, adaptive spiral sampling) go with TVP-3.4/3.5/3.7 |
+| TVP-3.3 (inside pitchfork) | **Done** | merged `e3f87c77c4` | Inside pitchfork tool, built as TradingView's support article documents it: the origin halfway between A and B in price and time (the modified Schiff's origin), median through the B-C midpoint, tines and alert levels as the other pitchforks. Reviewed inline. |
+| TVP-3.4 + 3.5 + 3.7 | **Done** | merged `4ab46f3b33` | Thirty-eight tools. Shapes and freehand: brush and highlighter (simplified time/price strokes, drawn smoothed), path, polyline, curve, double curve, triangle, rotated rectangle, arc. Annotations: note, anchored note (fixed to the screen), price note, callout, comment, signpost, price label, flag mark, arrow marks (up, down, left, right), arrow marker, icons (Omnix's own shapes) and emojis (system font; no TradingView artwork). Patterns and waves: XABCD, Cypher, ABCD, triangle, three drives, head and shoulders (with ratios and neckline), five Elliott waves; cycles: cyclic lines, time cycles, sine line, counted from the view. Also fixed: the SVG renderer let the stylesheet override a text shape's own size and colour, and styled every circle as an edit handle. Two review rounds. Eye check (2026-10-10, `a9d8e0f856`): 21 tools in both renderers, dark and light; the canvas now takes text colour, halo, selected text, font and selection glow from the overlay stylesheet, boxed labels draw without a halo, and the canvas is the default renderer (SVG stays behind the storage key). It also found the SVG light theme hiding measurement and range labels and hollowing the dot tool; fixed |
+| TVP-3.6 | **Done** | merged `33bd518334` | Long and short position (one click; entry, stop and target zones with amounts, quantity from account size and risk %, risk/reward, P&L once a bar reaches the entry; "Create buy/sell order" fills the paper ticket, which the user places), date range and date-and-price range (TradingView's labels: change, percent, ticks; bars, span; volume), price range with ticks, position forecast, bars pattern, ghost feed, sector, fixed range volume profile. One review round: the ticket's limit price and protection were wrong (entry went to the stop-limit field; stop and target shown but not sent for sells and replay); fixed and tested against the real panel. Follow-ups: protection for sell and replay orders in the paper panel; the panel's risk % is used, not the drawing's |
+| TVP-3.8 | **Done** | merged `5397246fba`; object tree `a70533dd1a` | Drawing toolbar behaviour: stay in drawing mode, lock all, hide all, drawing sync between a tab's charts (off: each chart keeps its own), favourites toolbar; per-interval visibility (TradingView's Visibility tab, "only this interval"); each tool remembers its last style; named drawing templates per tool (saved with the preset documents). One review round: lock all didn't stop nudges, templates copied per-drawing data, duplicates lost per-chart drawings; fixed. Follow-up: the favourites toolbar isn't draggable.<br>**Completed 2026-10-10:** the object tree lists drawings top-most first in named groups; a drawing can be renamed, brought forward, sent backward or dragged to another drawing's place and group; selected drawings can be grouped or ungrouped, and a group shown, hidden, renamed or deleted at once. Names and groups are drawing fields (no schema change); the order is the paint order; each change is one undo step |
+| TVP-4.1 | **Done** | merged `9a065982d7`; colours `8720821691` | Colour link groups: a chart joins one of six groups from its header (taking the group's symbol). A symbol change reaches every member in every tab in one store update. Groups and tab-wide instrument links reach each other both ways, bounded by the groups and tabs. Reopened tabs take their groups' current symbols. The group is saved with the chart. The watchlist and screener reach the group through the active chart. Groups share the symbol; the interval stays with the tab link (decision TVP-4.1). One review round (clipped menu and overridden styles, link interplay, reopened tabs, keyboard menu; fixed). Browser check (2026-10-10): the menu is on top in both themes, focus starts on the checked item, arrows wrap, Enter chooses and focus returns; two charts in a group change symbol together. It found the Orange and Yellow groups drawn red and brown (design tokens named off their hue); fixed |
+| TVP-4.2 + 4.3 + 4.4 | **Done** | merged `2b9deace3e`; time link clicks `c844a8b258` | Time link: clicking a bar scrolls the tab's other charts to its time (loading older history), whatever their interval. Workspaces and tabs open in new browser windows (?workspace=&tab=); windows talk on a BroadcastChannel: a window without edits reloads a workspace or watchlist another one saved (keeping its replay, closed tabs and shown tab; an edit made meanwhile meets the revision conflict), changes that leave the workspace as saved save nothing, and alert sounds and toasts play in the most recently focused shown window only (heartbeats expire closed, crashed or frozen windows). Tabs: a + launcher (new, duplicate, reopen, new window, saved layouts, tools), a tab menu (right-click or ...), duplicates carry their drawings, and leaving with unsaved edits asks first. Three review rounds. Browser check with two windows (2026-10-10): a tab opens in a new window on itself; an interval change saved in one window reaches the other; an alert toasts only in the window focused last. **It found the time link never fired with a mouse**: the chart's pan handling takes every press, so the chart's click event never came; a press that doesn't drag is now reported as a click (`TradingChartAdapter.clickAt`), and clicking a bar scrolls the other chart |
+| TVP-4.5 | **Done** | merged `7942715292` | Web app manifest (Omnix Trading, start URL /trading, standalone, icons). In the app window (standalone or window-controls-overlay display mode) the trading commands use TradingView's browser-reserved keys (Ctrl+T/U/W, Ctrl+Tab, Ctrl+1…9, Ctrl+Shift+T). A claimed key with nothing to run is kept from the browser, so Ctrl+W never closes the window. The install prompt is captured from the first page and offered in the shortcut dialog. One review round (fall-through keys, fullscreen tabs, prompt capture; fixed). OS notifications came with TVP-0.5c. Browser check (2026-10-10): Chrome parses the manifest with no errors and reports no installability errors; with the app's display mode, Ctrl+T opens a trading tab, Ctrl+1 and Ctrl+Tab switch, Ctrl+W asks and closes, and in a browser tab the app leaves those keys alone. A window installed on the desktop hasn't been tried |
+| TVP-4.6 | **Done** | merged `e6a8194350` | Full multi-window: a tab pops out into a browser window of its own and moves back (tab menu); each popped window (`?window=`) shows its own tabs and the main window the rest; new tabs stay in the window they were made in; window sets live on this computer (`tradingWindowSets.ts`, localStorage and storage events) and are restored on reload, with the main window offering to reopen a closed window or bring its tabs back. Full web suite 2,509 passes. Reviewed inline. |
+| TVP-5.1 + 5.2 | **Done** | merged `cf37311dbc`; flags and indicator columns `21c0524ffc` | Payload v2 with sections (v2 keeps writing `instrumentIds` for stale old-client tabs; unknown versions read-only), colour flags (`watchlist_flag_set`), column choice and sorting, `.txt` import/export (1 MB / 2,000 symbols, exact-spelling preference, class-share symbols), keyboard navigation as an ARIA tree grid. Edits are saved one at a time per list as operations on the last server revision. Three review rounds. The TradingView-listed watchlist shortcuts joined the command catalogue in TVP-2.3 (grid navigation keys stay local). Follow-up: incremental quote refresh for large lists.<br>**Completed 2026-10-10:** flags are one store for the page, set from the chart's context menu (Flag) and each screener result as well as the watchlist; watchlist columns can be any indicator line the server computes (at most eight), valued on the latest bar by `POST /api/trading/indicators/latest` as alerts compute them, refreshed every minute and sortable |
+| TVP-5.3 | **Done** | merged `cf37311dbc` | `.txt` import/export and keyboard navigation, merged with TVP-5.1 + 5.2 (row above) |
+| TVP-5.4 | **Done** | merged `faa057368c` | Advanced view: a full-width tool (also Advanced view in the watchlist menu) listing a watchlist's or the open charts' symbols beside the chosen one's overview (key statistics, valuation, dividend yield, next earnings), performance (1W to All), earnings with reported diluted EPS per quarter, dividends by year with splits, financials and news. Reviewed inline. |
+| TVP-6.1 | **Done** | merged `fe21951c71` | 9 indicators in browser and server, bit-exact: Rob Booker ADX Breakout, Knoxville Divergence, Intraday Pivot Points, Missed Pivot Points, Reversal, Ziv Ghost Pivots; Relative Volume at Time; 24-hour Volume; Correlation Coefficient with a second series. Review fixes: definitions aligned with TradingView's help pages, sessions in the exchange timezone (futures roll at 18:00 ET despite the catalog's 24x7 tag), levels and markers rendering, compare-symbol loading. Two review rounds. Follow-ups: alerts pass `params`/session/compare bars (TVP-1.x); Intraday Pivot Points period as a 1/4/8 select; unlabelled US-equity bars count as regular |
+| TVP-6.2 | **Done** | merged `e7cd9b9017` | Thirteen indicators that draw, in `indicators/drawingIndicators.ts`: Auto Fib Retracement and Extension, Auto Pitchfork and Auto Trendlines from zigzag swings (depth, deviation x ATR); Auto key levels; VWAP Auto Anchored (highest high, lowest low or highest volume); Visible Average Price (a price line kept on the bars in view); Bollinger Bars (bar colours); Chop Zone; Moon Phases (Meeus); Trading Sessions (Tokyo, London, New York shading with labels); Multi-Time Period Charts; Seasonality (daily bars, earlier years up to today's date only; drawn to year end since the Seasonality axis row). Indicator outputs gain per-point colours and labels and the kinds bar-colors, background and viewport-average. Shared goldens for all 13. Browser-only at first; on the server since 2026-10-10 except Visible Average Price and Seasonality (row TVP-0.2). |
+| TVP-6.2 (Seasonality axis) | **Done** | merged `21948fecbc` | The Seasonality indicator draws earlier years past the last bar to 31 December (one point a trading day), so the time axis covers the whole year; the weekly Seasonality entry is have. Reviewed inline. |
+| TVP-6.3 | **Done** | merged `1167d7f0e0` | All Candlestick Patterns (`indicators/candlestickPatterns.ts`, server `candlestick_patterns.py`): TradingView's 44 built-in pattern definitions with trend SMA50, SMA50+SMA200 or none; labelled markers above or below the completing bar; a Patterns input for all, one direction or one pattern; listed under Patterns. Every pattern is an output and a server alert source through the new "Appears" comparison (stored as greater than -1e18; no overlay line); signal indicators declare their warm-up to alert validation. Shared goldens include a hand-built dataset that completes the rarer patterns. Williams Fractal is greyed out for alerts (confirmed bars later). |
+| TVP-6.4 | **Done** | merged `3883109fa9` | Volume Delta and Cumulative Volume Delta (`indicators/intrabarIndicators.ts`) from the TVP-0.6 intrabar loader on the chart's feed: each lower bar's volume is buying or selling by its close (unchanged bars by the previous close, else the previous direction); CVD restarts each day, week or month. Live the forming bar updates once per lower interval; in replay no lower bar after the clock is read; a 1m chart reads its own bars. Drawn as candles since 2026-10-09 (row below). Computed off the worker like the external-data indicators; on the server for alerts and the screener since 2026-10-10 (row TVP-0.2). |
+| TVP-6.4 (candles) | **Done** | merged `a197cdbe23` | Volume Delta and CVD draw as candles like TradingView's (a new candles output kind with open, high and low): VD from 0 to the bar's delta, CVD from the total before the bar, wicks at the running extremes. Equivalent since the intrabars row below. Reviewed inline. |
+| TVP-6.4 (intrabars) | **Done** | merged `e9e4aa098c` | Owner's choice (option 3): on auto, Volume Delta and CVD read TradingView's lower interval for the latest bars (1m intraday, 5m daily, 1h above); above 1h, older bars beyond its 5,000-bar reach read a coarser one (5m, 1h, 1d) instead of having no value. Two requests. With the candles merged earlier, TVP-6.4 is equivalent. Reviewed inline. |
+| TVP-6.5 | **Done** | merged `07c2480917` | Indicator on indicator (`indicators/indicatorSources.ts`, server `indicators/sources.py`): a Source input on the 30 close-only indicators picks another indicator's continuous line; the indicator runs on that series in the worker and in the server alert evaluator alike (shared fixture `indicator_goldens/sources.json`). Pane indicators keep their pane; overlays on a pane indicator join it. Alert inputs carry the source (`IndicatorSourceInputs.source`, one level). |
+| TVP-6.6 | **Done** | merged `d03312f786`; breadth on the server `a2ac4029ad` | Market breadth (D-3): `breadth.py` collects NYSE and Nasdaq advances, declines and their volume from Alpaca daily bars over the active listed universe (400-session backfill, then each session after its close, within the Alpaca budget; migration `0148_trading_market_breadth.sql`). A/D Line, A/D Ratio and CVI are market-wide external indicators on any chart (a line per exchange at each close); A/D Ratio (Bars) is computed from the chart's bars. Daily only, and today's listed stocks (survivorship noted). Reviewed inline.<br>**Completed 2026-10-10:** the breadth series are server indicators (TVP-0.2's external table), so alerts can use them and the screener offers them as indicator rules and columns. Breadth is market-wide, so a screener column shows the same value on every row |
+| TVP-7.1 | **Done** | merged `8ea2f9bcf9` | Stop-limit, trailing stop (amount or %), DAY/GTC/GTD, `expired` status, trailing bracket stop-loss; migration `0140_trading_paper_order_types.sql`; live gateway untouched (empty diff, tested). Three review rounds:<br>• trailing stops trust only bars that start after their last move (`trail_moved_at` = later of quote time and bar start, `clock_timestamp()`), for orders and bracket legs, plain legs included;<br>• chart edits keep the trail;<br>• expired DAY entries cancel their bracket without market data;<br>• tick rounding against the trader;<br>• stop-through-market warning.<br>Follow-ups: DAY for futures/forex at venue close; new order types in replay; keep the bar low at move time to catch a real dip later in the same bar |
+| TVP-7.2a | **Done** | merged `93840a9ffe` | Paper shorting. Accounts have `allow_short`: off by default and for strategy accounts, on in the account form, changed in settings at the account's revision. Turning it off cancels working short entries. Shorts are risk entries: sized from a stop above the entry, `manual_risk` authority, kill switches and daily loss as for longs. Short brackets are mirrored. Shorts are unleveraged until TVP-7.2b: a working short holds cash like a buy, and an open short holds twice its buy-back cost, checked under the account lock. Shorts can be bought back by hand (a buy within the short, counting working buys, so a cover never flips long) and are never refused for cash. Replay backtest has Allow short (crosses reverse; long-only results unchanged). Correction: `backtest.py` refused shorts before. Two review rounds (manual cover, compounding buying power, shorting off, backtest sign, fill-time covers, rejected holds; all fixed) |
+| TVP-7.2b | **Done** | merged `83de411b8f`; margin-call notifications `f655a7dd72` | Paper margin by asset class for longs and shorts (migration `0143_trading_paper_margin.sql`; 100% default, so existing long and strategy accounts are unchanged), set from the account dialog's leverage ratios: leveraged buys hold their margin share and borrow the rest; buying power (equity less margin and holds, at market) drives order placement and the risk preview. The paper monitor margin-calls accounts with leverage or shorts, closing the most margin-heavy positions only as far as needed with reducing market orders. Fixed commission once per order. **Behaviour change:** accounts already holding shorts are now margin-called at 100% short margin (D-2). Replay trading stays cash-only. Margin-call orders are marked in order history and in the paper notifications.<br>**Completed 2026-10-10:** a margin call can also go out by email and web push through the notification outbox (migration `0153_trading_margin_call_notifications.sql`: the outbox's event kind; an account's Margin calls setting, off by default). The paper monitor queues each margin-call order once per channel by an idempotency key from the order; the order gateway is unchanged. Not by webhook (decision TVP-7.2b, 2026-10-10). PostgreSQL integration tests on a scratch database |
+| TVP-7.3 | **Done** | merged `24eadc9899` | Working orders drawn on the chart (side, type, quantity), moved by drag plus a Move confirmation or cancelled from the line. A buy entry is re-priced by a new server route (`risk-orders/{id}/move`): it is re-sized to the original dollar risk and replaced with its pending stop re-pointed, all in one transaction with `manual_risk` authority. Sells use the existing reduce-only replace. Also: a shared chart handle primitive; a price-scale "+" menu (limit or stop toward or away from the market, Add alert); legend Sell/Buy with bid/ask. The "+" orders and the Buy/Sell buttons fill the paper ticket (decision TVP-7.3). Two review rounds (DAY expiry, protection re-pointing race, trails, triggered stop-limits, drag cleanup, reused order ids; all fixed). Shorting came with TVP-7.2a |
+| TVP-7.4 | **Done** | merged `91d3f12e93` | Shift+B/S and Shift+Alt+B/S fill the paper order ticket (market, or limit at the crosshair price) while the ticket is open; the user places the order and the server's risk rules apply (decision TVP-7.4). Paper order notifications: fills, partial fills, rejections, cancellations and expiries as a toast and in the dock's Notifications tab, watched by the workspace. One review round: leaving replay flooded the log, notifications were lost while the dock was hidden, Shift+letters were taken from symbol typing; fixed. Since the 2026-10-09 review, orders placed by a margin call (TVP-7.2b) are labelled "Margin call" in the toast and the log |
+| TVP-8.1 (wave 1 part) | **Done** | merged `421e588670` | One speed control (9 speeds) and one replay clock for all charts; jump to bar during playback; one "Real time" exit; bars streamed during replay backfilled; charts redraw only when their visible bar count changes. Replay paper trading runs through a sequential per-session queue: every bar once and in order, flat bars without server calls, orders at the clock's bar on the session feed. Fixed older bugs: replay orders with a feed binding never filled; replay bars marked positions in other instruments. Three review rounds. Sub-bar playback and replay shortcuts came with TVP-0.6 + 8.1 (wave 3) |
+| TVP-9.1 | **Done** | merged `47c15d23af`; breadth fields `a2ac4029ad` | Screener rules can be filters or columns, and every rule is a sortable result column. New metrics: any server registry indicator and line, relative volume (against the N prior bars), gap %, and distance from the N-bar high or low; plus price, change %, volume, SMA, EMA, RSI, ATR. Indicator rules share one cached bar series per instrument and are evaluated off the event loop. A run's results show the columns of that run's own snapshot. Saved screens load into the editor and save back at their revision; a conflict keeps the edits and takes the new revision. A result opens on the active chart and its link group; results can be added to the open watchlist, and flagged (2026-10-10). Two review rounds. Fundamentals came later (row below). Breadth (TVP-6.6) and the other external series are indicator rules since 2026-10-10. Follow-up: tests for skipping an unreadable stored screen |
+| TVP-9.1 (fundamental fields) | **Done** | merged `5d81cf25f8` | Screener fundamentals (D-5): `fundamental_snapshots.py` keeps every US filer's trailing revenue, net income, EPS and equity from SEC XBRL frames (weekly, migration `0151_trading_fundamental_snapshots.sql`); the screener gains market cap, P/E, P/S, P/B, EPS (TTM), revenue growth and net margin at each instrument's last close, and the natural-language screener's prompt (v2) knows them. Reviewed inline. |
+| TVP-9.2 | **Done** | merged `47c15d23af` | A saved screen re-runs every 10 s or every minute while the screener is open. A new run starts only when none of the screen's runs is working: the server locks the screen and answers 409 while one runs, and an abandoned run neither locks it nor stays (runs pruned to the last 50). The panel backs off after three failures. Results new since the previous run are highlighted, with counts of new and dropped. PostgreSQL integration test for the lock and pruning. Two review rounds |
+| TVP-9.3 | **Done** | merged `48cb1e5a82` | Heatmaps: US stocks (the most traded active NYSE and Nasdaq stocks from Alpaca snapshots, grouped by SEC SIC sector and sized by market cap from SEC shares outstanding or by dollar volume) and crypto (Binance USDT pairs by 24-hour volume), as a squarified treemap coloured by the day's change; a tile opens its symbol. SEC company profiles (`company_profiles.py`, migration `0149_trading_company_profiles.sql`) are shared with the fundamentals work. Reviewed inline. |
+| TVP-9.4 | **Done** | merged `30603b34df` | Natural-language screener: describe a screen and the research provider proposes rules (`screener_words.py`, versioned prompt `trading.screener_from_words`; the model sees the description and the indicator catalog only). Every rule goes through the scanner's validation, what doesn't validate is reported, and the rules fill the editor for the user to change, save and run; nothing runs without the user. Reviewed inline. |
+| TVP-10.1 | **Done** | merged `cd2f650c54` | Earnings, dividends and splits (D-5): `corporate_events.py` reads each company's SEC 8-K item 2.02 filings (date, session, fiscal quarter, filing link) and Alpaca corporate actions (dividends, splits, past and declared), cached per ticker for a day (migration `0152_trading_corporate_events.sql`); stock charts show E/D/S markers (a chart setting), and an Earnings & dividends tool lists the open charts' or a watchlist's events by day. Upcoming earnings dates are estimates from the same quarter a year earlier, marked as such, until a vendor is chosen. Reviewed inline. |
+| TVP-10.2 | **Done** | merged `19cfbf311d` | Financials (D-5): `fundamentals.py` normalises a company's SEC XBRL facts to income-statement, balance-sheet and cash-flow lines (annual and quarterly; year-to-date and fourth quarters derived; cached a day, migration `0150_trading_company_financials.sql`) with trailing-twelve-month ratios; a Financials tool shows ratios, revenue and net income bars and each statement by period. US filers only. Reviewed inline. |
+| TVP-10.3 | **Done** | merged `3aa13e2a2d` | Seasonals panel (a tool for the active symbol, `TradingSeasonals.tsx`, `seasonals.ts`): each calendar year's change from its first close on one January–December axis, the current year highlighted, the average of past years, and a monthly-returns table with each month's average and how often it rose. The chart's Seasonality indicator stays partial (it stops at today's date). Reviewed inline. |
+| TVP-10.4 | **Done** | merged `74ab5354d1` | Options (D-6): `options.py` reads Alpaca option contracts and snapshots (indicative feed) into expirations and chains by strike, with IV and Greeks from Black-Scholes on the quote mid (Treasury rate, trailing dividend yield); the Options tool shows the chain, the volatility smile and a strategy builder (P&L at expiry and at a chosen date with a volatility shift, max profit and loss, breakevens, net Greeks). Research only, no options orders. Reviewed inline. |
+| TVP-10.5 (economic calendar) | **Done** | merged `7bd9523962` | Economic calendar (D-3): `economic_calendar.py` reads FRED's release calendar (past and scheduled US releases), marks the market-moving ones and gives their headline as first published and the value before it from FRED vintage data; a Calendar tool lists them by day. The FRED key is a market-data credential (settings or `OMNIX_FRED_API_KEY`). Treasury yield curves and global events are not built. Reviewed inline. |
+| TVP-10.5 (macro) | **Done** | merged `d1ef27ee88` | US macro (D-3): FRED series chart as `economic:FRED:<series>` symbols (a new economic asset class, an Economy category in symbol search by id or title, `providers/fred.py` serving observations as daily bars; refused any execution binding), and a Yield curve tool (`macro.py`, the Treasury's daily par curve with week, month and year comparisons, 10Y-2Y and 10Y-3M spreads, each maturity chartable from FRED). Other countries and country maps need a vendor. Reviewed inline. |
+| TVP-11.0 | **Done** | merged `bdf44a540d` | Omnix Scripts spike: a Pine v5/v6 subset interpreted on the server (`src/app/apps/trading/scripts`: indentation-aware lexer, parser, compiler to closures, per-call-site series, incremental `ta.*` following the registry's order of operations). Every Pine template matches its chart indicator on the golden datasets within 1e-11 (one documented exception: Stochastic RSI on a flat window); ten `ta.*` functions match TradingView's reference implementations run through the interpreter; 17 of 20 community-idiom scripts run (the 3 others use request.security, strategy() and a user-defined type). Limits bound time, ints, strings, collections, alerts and nesting; every failure is a ScriptError with a line. Cost on 5,000 bars: median 52 ms per full run, 0.017 ms per new bar. D-9 confirmed with conditions (separate worker process with rlimits). Spec: `OMNIX_SCRIPTS_SPEC.md`. Two review rounds. Follow-ups: request.security, realtime rollback, const folding for v5 division, history only for referenced series, a real community-script corpus (owner-approved list) |
+| TVP-11.1 | **Done** | merged `03b4d038cc`; outputs and request.security `b85d9d99ba`; browser-check fixes `502781f0ff` | The interpreter runs on charts, alerts and the screener (rows TVP-11.2 + 11.3, 11.4, 11.6).<br>**Completed 2026-10-10:** `fill` shades between plots or levels (a band primitive under the lines), `plotcandle` and `plotbar` draw candles and OHLC bars in the script's pane, and `table.new` tables are drawn in the script's pane at their position. `request.security(symbol, timeframe, expression, gaps, lookahead)` runs the script once per context on that context's bars, aligned like Pine's (decision TVP-11.1, 2026-10-10); chart runs, backtests, script alerts and the script screener load the contexts. A browser check with the real interpreter found tables over the wrong pane, fill colours written as `color.new(...)` dropped, and an automatic band between any script's two plots; fixed. `OMNIX_SCRIPTS_SPEC.md` updated |
+| TVP-11.2 + 11.3 | **Done** | merged `03b4d038cc` | Omnix Scripts you write and run. Server: scripts run in worker processes (`scripts_service.py`: 5 s limit, killed and replaced on overrun, two runs per person, shared result cache), `/api/trading/scripts` check, run and reference (names and signatures), scripts as trading documents with a version per save (migration `0145_trading_script_versions.sql`, written in the save's transaction). Web: a CodeMirror 6 editor replaces the read-only viewer (highlighting, completion, hover, inline problems, console, profiler, save as, import and export, history with diff and restore); saved scripts go on charts as `script-<id>` indicators run on the server, with plots, shapes, backgrounds, bar colours, levels, lines, boxes and labels mapped to chart outputs and their inputs in the indicator settings. Fill, plotcandle, plotbar and table came with TVP-11.1 (2026-10-10). Reviewed inline. |
+| TVP-11.4 | **Done** | merged `1b391179d1` | Script alerts: a `script` alert source (`alert_conditions.ScriptSource`) reads a script indicator's plot, `alertcondition()` or `alert()` calls from the script version saved when the alert was made; the alert monitor runs it in a script worker on its bars (`alerts_scripts.py`), with the browser closed. Signals have values only where they fire, so the dialog's Appears works on them; an alert without its own message takes the `alert()` or alertcondition message. The API rejects a missing version, a script that doesn't compile or lacks the call; watchlist alerts can't use scripts. Reviewed inline. |
+| TVP-11.5 | **Done** | merged `5cd5b17b78` | Strategy scripts and the strategy tester: `strategy()` with entry, order, exit (brackets, trailing stops), close, cancel, OCA, pyramiding, commission and slippage, filled like TradingView's broker emulator (`scripts/strategy.py`); a Strategy Tester tool (overview with equity, buy and hold and drawdown; performance summary for all, long and short; list of trades; properties); a deep backtest over up to 20,000 bars (`POST /api/trading/scripts/backtest`); fills drawn on the chart. Research only: a simulated account, never an order (the optional paper-signal link is not built). Reviewed inline. |
+| TVP-11.6 | **Done** | merged `68e0f04399` | Script screener: `scripts_screener.py` runs a saved script on each symbol of a watchlist or the open charts (up to 50, two at a time in script workers, within 90 s; `POST /api/trading/scripts/screen`) and returns each plot's and alertcondition's last two values; the tool filters (above, below, crossing, fires) and sorts them without re-running. Also fixes TVP-10.1's earnings session to use the exchange calendar's close. Full web suite 2,499 and Python trading suite pass. Reviewed inline. |
+| Follow-ups batch 1 | **Done** | merged `8eec19e1f2` | Alert sounds (chime, beep, alarm; Web Audio; picked and previewed in the alert dialog, saved in `delivery.sound`, unknown stored sounds kept); Alt+A opens the alert dialog at the last price (off in replay); line width and dash editor for the selected drawing; ledger corrected for the Ctrl+K command palette. One review round (stale progress, simultaneous triggers, suspended audio, replay Alt+A, unknown sounds; all fixed). |
+| Rare: workspace import | **Done** | merged `00cab2c78f` | Import beside Export saves a workspace file as a new workspace (validated like a stored one); the rare Seasonals entry is have (TVP-10.3 panel). Web trading tests 1,185 pass. |
+
+
+**Completed open items** (completeness review 2026-10-09, built 2026-10-10). Smaller follow-ups stay in each row's notes.
+
+| Item | WP | Merge | Ledger effect |
+|---|---|---|---|
+| Another line as the alert's target (price crossing an SMA, SMA crossing EMA, channels with line bounds) | TVP-1.3 | `7ad12108e4` | `alerts.any-indicator` have |
+| Server adapters for the external-data indicators (the `/metrics` series and market breadth) | TVP-0.2, 1.3, 6.6 | `a2ac4029ad` | `alerts.any-indicator` have |
+| The indicators that draw, and indicators with params, sessions or a compare symbol, on the server for alerts and the screener | TVP-0.2, 1.3 | `cd66783169` | `alerts.any-indicator` have |
+| Volume Delta and CVD on the server | TVP-0.2, 6.4 | `3bb107ca98` | `alerts.any-indicator` have |
+| Object tree grouping, rename and reorder | TVP-3.8 | `a70533dd1a` | `charts.object-tree` have |
+| Flagging a symbol from the chart and the screener | TVP-5.1 | `21c0524ffc` | `watchlists.colour-flags` equivalent |
+| Registry indicator columns in the watchlist | TVP-5.2 | `21c0524ffc` | note |
+| Breadth in the screener (as indicator rules and columns) | TVP-6.6, 9.1 | `a2ac4029ad` | none |
+| A margin-call notification through the outbox (email and push) | TVP-7.2b | `f655a7dd72` | note |
+| Drawing `fill`, `plotcandle`, `plotbar` and `table`; `request.security` | TVP-11.1 | `b85d9d99ba`, `502781f0ff` | note |
+
+**Browser checks** (2026-10-10). The web app ran on the Vite dev server against a mocked trading API, driven by Playwright (Chromium); script runs used the real interpreter. Each check's findings were fixed and tested on their own branch:
+
+| Check | Result | Fixed in |
+|---|---|---|
+| Canvas drawing renderer (TVP-0.4, 3.4): 21 tools, SVG and canvas, dark and light, a selected drawing; drag, context menu and delete on the canvas | Canvas text lacked the halo and used a fixed light grey (unreadable in light); boxed labels need no halo; SVG light theme hid measurement and range labels and hollowed the dot; glow strength measured across the line. Canvas made the default | `a9d8e0f856` |
+| Script outputs (TVP-11.1) with the real interpreter: fill, request.security, tables, plotcandle, plotbar | Tables sat over the whole stage, not their pane; `fill` and `hline` dropped non-literal colours; the background overlay shaded between any script's first two plots (since TVP-11.2) | `502781f0ff` |
+| Link-group menu (TVP-4.1), both themes, keyboard | Orange and Yellow drawn red and brown | `8720821691` |
+| Time link (TVP-4.2) | Never fired with a mouse | `c844a8b258` |
+| Two windows (TVP-4.3, 4.4): tab in a new window, a save reaching the other window, alert toasts | As designed | n/a |
+| Installed app (TVP-4.5): manifest, installability, app-window keys | As designed; a desktop-installed window not tried | n/a |
+
+Deferred by decision, so not counted as open:
+- the on-chain series of TVP-6.7 (D-4);
+- upcoming earnings dates from a vendor (D-5; estimates are shown until then);
+- other countries' yield curves, macro maps and global calendar events (D-3, §7.2);
+- public snapshot links (an owner decision, TVP-2.1, 2.5 row);
+- manual live trading from the chart (D-7);
+- the optional link from strategy scripts to a paper account (TVP-11.5).
+
+**Pre-existing issues found during this work** (outside any WP's scope unless noted):
+
+| Issue | Status |
+|---|---|
+| Server alerts could never fire: the 0027 lifecycle trigger reverted the evaluator's own state update | Fixed in TVP-1.2 (migration 0141, merged) |
+| A protected-store decrypt failure made the next credential save overwrite every stored provider and trading credential | Fixed in TVP-1.2 (strict reads; unreadable store never overwritten; merged) |
+| Architecture inventory still named `TradingWatchlist.tsx` for `WatchlistPayload` after TVP-5.1 moved it, failing the architecture metrics scan | Fixed (`4cb7540f9d`) |
+| Replay orders with a feed binding never filled; replay bars marked positions in other instruments | Fixed in TVP-8.1 (merged) |
+| Drawings: anchor projection scanned every bar per anchor (~52 ms/frame); anchors between bars drew at x=0 | Fixed in TVP-0.4 (merged) |
+| Drawing anchors resolve against the adapter's bar list, not the chart's time scale (comparison series with extra timestamps, Renko-type charts store wrong times) | Fixed in TVP-0.4 (merged) |
+| **Count-mode bar aggregation splits sessions on the UTC date**, so in winter a group with missing minutes can absorb the next morning's pre-market bars (`aggregation.py` ~71-77). The **strategy runner** uses this path | **Open — owner decision needed**: fixing it changes strategy inputs and evidence, so it's not changed as a side effect. Charts use the separate clock-aligned mode since TVP-2.5 |
+| Restored dynamic equities get the XNYS calendar for every venue (`catalog.py` ~484) | Market-status badge hides it for non-US venues (TVP-2.5, merged); the catalog itself is unchanged |
 
 ---
 
@@ -1165,3 +1335,5 @@ Counts are from §2, before the TVP-0.1 verification pass. TVP-0.1 replaces this
 | 1 | 2026-10-08 | First version: gap inventory and 54 WPs |
 | 2 | 2026-10-08 | Applied the code review of rev 1 and the owner's decisions. **Corrections:**<br>• Indicators: 125 of 208 available, counting the 25 data-backed ones (the review's count of 97 was wrong; there are 91 `SUPPORTED` entries).<br>• Paper: shorting exists server-side; commission and slippage exist; TIF is missing.<br>• Replay: two speed controls and a per-panel cursor.<br>• No intrabar loader exists (new TVP-0.6).<br>• The constraint-replacement precedent is `0036`.<br>• DECISIONS.md gets its own section.<br>**Plan changes:**<br>• D-9 decided once, Python-only, scripts on the server (P1).<br>• TVP-0.2 uses Python `float` with per-class tolerances; first batch of ~20 (P2).<br>• TVP-1.2 owns the one condition-schema migration; TVP-1.6 needs none (P3).<br>• TVP-0.5 split into 0.5a webhook (wave 1), 0.5b email and 0.5c push; TVP-4.5 resized to M (P4).<br>• TVP-4.3 cut to "open in new window"; full multi-window deferred to TVP-4.6 (P5).<br>• TVP-0.4 includes a canvas renderer spike (P6).<br>• TVP-1.7 cap derived from the request budget, default 100 (P7).<br>• Usage tiers and `excluded-pending-decision` added to the ledger and progress (P8).<br>• "Pine Script source" label renamed in TVP-0.1, and the generated Pine scripts used as the TVP-11.0 test corpus (P9).<br>• TVP-0.3 built on `@mantine/hooks`; TVP-7.3 uses a chart-handle primitive; TVP-9.4 moved to wave 2; TVP-0.2 starts in wave 1.<br>• §10 states exactly what was read from the desktop package.<br>**Decisions:** D-1 (Pine-compatible scripts) and D-2 (TradingView-style paper shorting) decided; data-source recommendations added (§7.2). |
 | 3 | 2026-10-08 | Applied the review of rev 2 (all checked against the code).<br>**Corrections:**<br>• The shorting gap is that nothing writes `allow_short`: it isn't in `PaperAccountCreate`, the paper API or the account form. The hardcoded `allow_short: false` in `tradingReplayApi.ts` is the replay backtest's `execution_policy`, now its own row.<br>• Two migrations share `0036`; the doc cites full filenames, and new migrations must check numbering.<br>• D-9 is "to be confirmed by" the spike.<br>• TVP-2.2 moved to wave 2 (needs TVP-0.4).<br>• TVP-1.2's migration now definitely widens `notification_channels` and adds channel settings; TVP-0.5a depends on it, and TVP-1.5 needs no migration.<br>• The numpy note now gives float parity as the reason.<br>• §9 replay and paper counts fixed.<br>• The TVP-11.0 corpus covers only indicators with a Pine template.<br>**Plan changes:**<br>• TVP-7.2 split into 7.2a shorting (daily, S–M, wave 2) and 7.2b leverage, margin calls and fixed commission (weekly, M–L, wave 3).<br>• Script result cache added to D-9, TVP-11.0 (measured) and TVP-11.1.<br>• The serial chains in wave 1 are shown explicitly.<br>**Follow-up from the review of rev 3:**<br>• Shorting defaults to on only in the account form; the model and database default stay off, because strategies create accounts through `PaperAccountCreate`. Added a test that a strategy-created account has shorting off, and updated D-2 in DECISIONS.md to match.<br>• §9 paper weekly missing count corrected to 5. |
+| 4 | 2026-10-09 | Completeness review after the work packages merged. **Corrections:**<br>• Nine work packages marked done had goal items that weren't built (TVP-0.2, 1.3, 3.8, 5.1, 5.2, 6.6, 7.2b, 9.1, 11.1); they are now **Partly done**, and §9 lists their open items. TVP-5.3 and TVP-11.2–11.3 got their own rows.<br>• TVP-4.2–4.4 were done but not counted: their status cell carried a note.<br>• Ledger: alerts on any indicator and the object tree are partial; the replay update interval (1 min, not 1 s) and the earnings calendar (estimated upcoming dates) are functional, as is flagging (watchlist only). The report shows 100% only when every feature in scope is have.<br>• Fixed: the on-chain count (54, not 55); TVP-3.8 listed in two waves; D-9 shown as unconfirmed; D-8 shown as decided; §2 labelled as the first-count inventory; §9 status rows now give their merge commits, are in work-package order, and the malformed workspace-import row was repaired; how reviews ran; the migration list.<br>• Code: paper notifications now label margin-call orders (TVP-7.4's goal).<br>• DECISIONS.md: D-3 to D-6, the D-9 confirmation and the TVP-6.4 intrabar choice were logged; the broken TVP-7.3 row was repaired. |
+| 5 | 2026-10-10 | Built the open items of revision 4 and ran the browser checks. **Done:** TVP-0.2, 1.3, 3.8, 5.1 + 5.2, 6.6, 7.2b, 9.1 and 11.1 are done in full (merges in §9); alerts on any indicator and the object tree are have, so every feature in scope is have. **Checks:** the canvas renderer, script outputs, link groups, the time link, two windows and the installed app were checked in a browser; seven bugs found and fixed (§9, Browser checks), among them the time link never firing with a mouse. Canvas is the default drawing renderer. Migration 0153 (TVP-7.2b). **DECISIONS.md:** line targets, external-series alignment, time look-backs, margin calls by email and push, request.security, the canvas default, Volume Delta and CVD on the server. |

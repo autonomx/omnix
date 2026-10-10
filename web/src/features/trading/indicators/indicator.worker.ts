@@ -8,6 +8,7 @@ import {
 } from './coreIndicators';
 import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from './tradingViewBuiltIns';
 import type { IndicatorWorkerRequest, IndicatorWorkerResponse } from './indicatorWorkerProtocol';
+import { calculateWithSources } from './indicatorSources';
 
 const workerScope: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -33,14 +34,17 @@ function styleOutputs(outputs: IndicatorOutput[], indicator: CoreIndicatorInstan
 workerScope.addEventListener('message', (event: MessageEvent<IndicatorWorkerRequest>) => {
   const request = event.data;
   try {
-    const outputs = request.indicators
-      .filter((indicator) => indicator.enabled && indicator.visible !== false)
-      .flatMap((indicator) => {
-        const raw = isTradingViewBuiltInId(indicator.id)
-          ? calculateTradingViewBuiltInOutputs(request.bars, indicator) as IndicatorOutput[]
-          : indicatorOutputs(request.bars, indicator);
-        return styleOutputs(raw, indicator);
-      });
+    // Hidden indicators still compute: another indicator may read them (TVP-6.5); only their plots are left out.
+    const outputs = calculateWithSources(
+      request.bars,
+      request.indicators.filter((indicator) => indicator.enabled),
+      (bars, indicator) => (isTradingViewBuiltInId(indicator.id)
+        ? calculateTradingViewBuiltInOutputs(bars, { ...indicator, session: request.session }, {
+          compareBars: indicator.compareSymbol ? request.compareBars?.[indicator.compareSymbol] : undefined,
+        }) as IndicatorOutput[]
+        : indicatorOutputs(bars, indicator)),
+      (raw, indicator) => (indicator.visible === false ? [] : styleOutputs(raw, indicator)),
+    );
     const response: IndicatorWorkerResponse = { requestId: request.requestId, outputs };
     workerScope.postMessage(response);
   } catch (error) {

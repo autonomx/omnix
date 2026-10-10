@@ -1,7 +1,10 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import type { BacktestRunResult, FrozenDatasetSnapshot } from './replayTypes';
+import { replayTickPlan } from './replayClock';
+import { TradingReplaySpeedSelect } from './TradingReplaySpeedSelect';
 import { tradingReplayApi } from './tradingReplayApi';
+import { useTradingReplayStore } from './tradingReplayStore';
 import { startTicker } from '../../shared/timers';
 
 export function TradingReplayPanel({
@@ -18,9 +21,10 @@ export function TradingReplayPanel({
   const [backtest, setBacktest] = useState<BacktestRunResult | null>(null);
   const [replayIndex, setReplayIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState('1');
+  const speed = useTradingReplayStore((state) => state.speed);
   const [fast, setFast] = useState('10');
   const [slow, setSlow] = useState('30');
+  const [allowShort, setAllowShort] = useState(false);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
 
   const refresh = async () => {
@@ -42,16 +46,16 @@ export function TradingReplayPanel({
 
   useEffect(() => {
     if (!playing || !selected) return;
-    const numericSpeed = Math.max(0.25, Math.min(100, Number(speed) || 1));
+    const { intervalMs, barsPerTick } = replayTickPlan(speed);
     return startTicker(() => {
       setReplayIndex((current) => {
         if (current + 1 >= selected.bars.length) {
           setPlaying(false);
           return current;
         }
-        return current + 1;
+        return Math.min(selected.bars.length - 1, current + barsPerTick);
       });
-    }, Math.max(25, 1_000 / numericSpeed));
+    }, intervalMs);
   }, [playing, selected, speed]);
 
   const freeze = async () => {
@@ -83,6 +87,7 @@ export function TradingReplayPanel({
         initial_cash: '10000',
         commission_bps: '10',
         slippage_bps: '5',
+        allow_short: allowShort,
       });
       setBacktest(result);
       setStatus('ready');
@@ -108,7 +113,7 @@ export function TradingReplayPanel({
           <button type="button" onClick={() => setPlaying((value) => !value)}>{playing ? 'Pause' : 'Play'}</button>
           <button type="button" onClick={() => setReplayIndex((current) => Math.min(selected.bars.length - 1, current + 1))}>Step</button>
           <button type="button" onClick={() => { setPlaying(false); setReplayIndex(-1); }}>Reset</button>
-          <label>Speed<input inputMode="decimal" value={speed} onChange={(event) => setSpeed(event.target.value)} /></label>
+          <TradingReplaySpeedSelect />
           <span>{Math.max(0, replayIndex + 1)}/{selected.bars.length}</span>
         </div>
       ) : null}
@@ -116,6 +121,7 @@ export function TradingReplayPanel({
       <div className="trading-backtest-form">
         <label>Fast SMA<input inputMode="numeric" value={fast} onChange={(event) => setFast(event.target.value)} /></label>
         <label>Slow SMA<input inputMode="numeric" value={slow} onChange={(event) => setSlow(event.target.value)} /></label>
+        <label><input type="checkbox" checked={allowShort} onChange={(event) => setAllowShort(event.target.checked)} />Allow short</label>
         <button type="button" disabled={!selected || status === 'saving'} onClick={() => void run()}>Run backtest</button>
       </div>
       {backtest ? (

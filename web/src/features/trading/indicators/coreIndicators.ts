@@ -1,10 +1,28 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
+import type { IndicatorSourceRef } from './indicatorSources';
 import type { MarketBar } from '../tradingTypes';
 import { autoChartPatternLines, isAutoChartPatternId, type AutoChartPatternId } from './autoPatterns';
 
 export const CORE_INDICATOR_FORMULA_VERSION = 'omnix-indicators-v2';
 
-export type IndicatorPoint = { time: string; value: number };
+/** A value at a bar; `color` paints that bar's column, line segment, bar or background (TVP-6.2); `label` marks it. */
+/** A value per bar; a `candles` output's points also carry the candle's open, high and low (`value` is its close). */
+export type IndicatorPoint = { time: string; value: number; color?: string; label?: string; open?: number; high?: number; low?: number };
+/** A table an Omnix Script draws over the chart (TVP-11.1), at one of nine positions; cells by row, then column. */
+export type IndicatorTable = {
+  position: string;
+  rows: Array<Array<{ text: string; color?: string; background?: string } | null>>;
+  background?: string;
+  border?: string;
+};
+/**
+ * How an output is drawn: a line or histogram series; `bar-colors` recolours the chart's own bars; `background`
+ * shades the price pane behind the bars (full height, per bar); `viewport-average` is a price line at the average close
+ * of the bars in view (Visible Average Price) and has no points of its own; `candles` draws each point as a candle in
+ * its pane (Volume Delta, CVD); `fill` shades between two values per bar (each point's `high` and `low`, in its colour);
+ * `table` has no points and is drawn over the chart from its `table` (Omnix Scripts, TVP-11.1).
+ */
+export type IndicatorOutputKind = 'line' | 'histogram' | 'bar-colors' | 'background' | 'viewport-average' | 'candles' | 'fill' | 'table';
 export type IndicatorLineStyle = 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
 export type IndicatorPaneScale = {
   min: number;
@@ -41,7 +59,7 @@ export type IndicatorOutput = {
   key: string;
   title: string;
   pane: 0 | 1;
-  kind: 'line' | 'histogram';
+  kind: IndicatorOutputKind;
   points: IndicatorPoint[];
   visible?: boolean;
   color?: string;
@@ -54,6 +72,18 @@ export type IndicatorOutput = {
   valuesInStatusLine?: boolean;
   inputsInStatusLine?: boolean;
   volumeProfile?: VolumeProfileData;
+  /** Line outputs: joined (default), horizontal levels with gaps on bars without a value, or point markers. */
+  render?: 'line' | 'levels' | 'markers';
+  marker?: 'arrowUp' | 'arrowDown' | 'circle';
+  /** Markers: text beside each marker, and above or below the bar instead of at the point's price (candlestick patterns). */
+  markerText?: string;
+  markerPosition?: 'aboveBar' | 'belowBar';
+  /** A pane-1 output drawn in another indicator's pane (an indicator on that indicator, TVP-6.5). */
+  paneOf?: string;
+  /** Candles: drawn as OHLC bars instead (an Omnix Script's plotbar). */
+  barStyle?: 'candles' | 'bars';
+  /** `table` outputs: the table to draw. */
+  table?: IndicatorTable;
 };
 export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'
@@ -70,6 +100,12 @@ export type CoreIndicatorInstance = {
   signalPeriod?: number;
   standardDeviations?: number;
   anchorTime?: string | null;
+  /** Instrument id of the second series, for indicators that read one (Correlation Coefficient). */
+  compareSymbol?: string | null;
+  /** Built-in inputs beyond the period (`tradingViewBuiltInInputs`), by key. */
+  params?: Record<string, number | string>;
+  /** Another chart indicator's output read instead of the close (TVP-6.5, `indicatorSources.ts`); none reads the close. */
+  source?: IndicatorSourceRef | null;
   style?: CoreIndicatorStyle;
 };
 
@@ -362,7 +398,7 @@ function fairValueGapPoints(bars: readonly MarketBar[]): { upper: IndicatorPoint
   return { upper, lower };
 }
 
-function volumeProfileData(bars: readonly MarketBar[], period: number): VolumeProfileData | null {
+export function volumeProfileData(bars: readonly MarketBar[], period: number): VolumeProfileData | null {
   validatePeriod(period);
   const window = bars.slice(Math.max(0, bars.length - period));
   if (!window.length) return null;

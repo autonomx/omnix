@@ -2,14 +2,22 @@ import { downloadUrl } from '../../shared/download';
 import { convertedPrice, intervalLabel } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { chartPalette } from './chartPalette';
+import { ChartTradeButtons } from './ChartTradeButtons';
+import { DrawingPropertiesButton } from './drawings/DrawingPropertiesButton';
+import { DrawingStyleControls } from './drawings/DrawingStyleControls';
+import { drawingToolDefinition } from './drawings/tools/registry';
+import { ChartCopyImageButton, ChartMarketStatusBadges, ChartSnapshotLinkButton } from './TradingChartWorkflowControls';
+import { ChartLinkGroupButton } from './ChartLinkGroupButton';
+import { useTradingStore } from './tradingStore';
 
 /** The chart's header: symbol, quote, interval and chart controls. */
 export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapterRef, change, changePercent, chartFocusMode, chartId, chartNumber, chartQuery, direction, drawings,
-    instrumentId, interval, latest, onOpenSymbolSearch, priceScaleMultiplier, provenance, resolvedBinding,
+    instrumentId, interval, latest, latestClose, onOpenSymbolSearch, priceScaleMultiplier, provenance, replayMode, resolvedBinding,
     selectedDrawing, setCompareDialogOpen, streamStatus, toggleFullscreen,
   } = ws;
+  const linkGroup = useTradingStore((state) => state.charts.find((chart) => chart.chartId === chartId)?.linkGroup);
   return (
     <>
       <header className="trading-chart-header">
@@ -36,6 +44,8 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             >+</button>
             <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
             <i className={`trading-stream-dot ${streamStatus}`} role="img" aria-label={`Feed ${streamStatus}`} />
+            <ChartMarketStatusBadges ws={ws} />
+            <ChartLinkGroupButton chartId={chartId} group={linkGroup} />
           </div>
           {latest ? (
             <div className="trading-chart-ohlc">
@@ -44,6 +54,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
               <span>L <b>{convertedPrice(latest.low, priceScaleMultiplier)}</b></span>
               <span>C <b>{convertedPrice(latest.close, priceScaleMultiplier)}</b></span>
               <span className={direction}>{change >= 0 ? '+' : ''}{convertedPrice(change, priceScaleMultiplier)} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+              <ChartTradeButtons instrumentId={instrumentId} bindingId={resolvedBinding?.binding_id ?? null} lastPrice={latestClose > 0 ? latestClose : null} replayMode={replayMode} />
             </div>
           ) : null}
         </div>
@@ -72,6 +83,8 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             <button type="button" onClick={() => drawings.undo()} aria-label="Undo drawing">↶</button>
             <button type="button" onClick={() => drawings.redo()} aria-label="Redo drawing">↷</button>
             <button type="button" onClick={() => adapterRef.current && downloadUrl(adapterRef.current.snapshotDataUrl(), `${chartId}.png`)} aria-label="Snapshot chart">PNG</button>
+            <ChartCopyImageButton ws={ws} />
+            <ChartSnapshotLinkButton ws={ws} />
             {drawings.hasConflict ? (
               <>
                 <span role="status">Drawing conflict</span>
@@ -82,10 +95,19 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
             {selectedDrawing ? (
               <>
                 <input aria-label="Drawing color" type="color" value={selectedDrawing.style?.color ?? chartPalette.cyan} onChange={(event) => drawings.updateSelected({ style: { ...(selectedDrawing.style ?? { lineWidth: 2, lineStyle: 'solid' }), color: event.target.value } })} />
+                <DrawingStyleControls drawing={selectedDrawing} onChange={(style) => drawings.updateSelected({ style })} />
                 <button type="button" aria-pressed={Boolean(selectedDrawing.locked)} onClick={() => drawings.updateSelected({ locked: !selectedDrawing.locked })}>{selectedDrawing.locked ? 'Unlock' : 'Lock'}</button>
                 <button type="button" aria-pressed={Boolean(selectedDrawing.hidden)} onClick={() => drawings.updateSelected({ hidden: !selectedDrawing.hidden })}>{selectedDrawing.hidden ? 'Show' : 'Hide'}</button>
-                {selectedDrawing.toolType === 'text' ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}
-                <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawing">×</button>
+                {drawingToolDefinition(selectedDrawing.toolType)?.editableText ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}
+                <DrawingPropertiesButton
+                  key={selectedDrawing.drawingId}
+                  drawing={selectedDrawing}
+                  interval={interval}
+                  onChange={(properties, mergeKey) => drawings.updateSelected({ properties }, mergeKey)}
+                  onVisibilityChange={(visibility, mergeKey) => drawings.updateSelected({ visibility }, mergeKey && `visibility:${mergeKey}`)}
+                  onApplyTemplate={(style, properties) => drawings.updateSelected({ style, properties })}
+                />
+                <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawings" title="Delete selected drawings">×</button>
               </>
             ) : null}
           </div>

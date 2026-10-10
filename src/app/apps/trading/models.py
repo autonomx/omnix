@@ -14,6 +14,8 @@ class AssetClass(StrEnum):
     EQUITY = "equity"
     FOREX = "forex"
     COMMODITY = "commodity"
+    # Economic series (TVP-10.5): research data to chart, never traded.
+    ECONOMIC = "economic"
 
 
 class InstrumentType(StrEnum):
@@ -61,6 +63,8 @@ class CanonicalInstrument(BaseModel):
     price_scale: int = Field(default=100, gt=0)
     minimum_tick: Decimal = Field(default=Decimal("0.01"), gt=0)
     status: Literal["active", "inactive", "delisted"] = "active"
+    # A descriptive name where the symbol alone says little (an economic series' title).
+    name: str | None = Field(default=None, max_length=200)
 
     @field_validator("venue", "venue_symbol", "display_symbol", "base_currency", "quote_currency")
     @classmethod

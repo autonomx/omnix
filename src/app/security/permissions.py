@@ -251,6 +251,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/trading/paper/accounts/{account_id}/risk-orders"): "trading:paper:order",
     ("DELETE", "/api/trading/paper/accounts/{account_id}/orders/{order_id}"): "trading:paper:order",
     ("POST", "/api/trading/paper/accounts/{account_id}/orders/{order_id}/replace"): "trading:paper:order",
+    ("POST", "/api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move"): "trading:paper:order",
     ("POST", "/api/trading/replay/execution/orders"): "trading:paper:order",
     ("POST", "/api/trading/strategies"): "trading:strategies:admin",
     ("PUT", "/api/trading/strategies/{strategy_id}"): "trading:strategies:admin",

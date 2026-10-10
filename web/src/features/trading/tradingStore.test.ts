@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  MAX_CLOSED_TRADING_TABS,
   MAX_TRADING_CHARTS,
+  MAX_TRADING_TABS,
+  freshTradingSessionState,
   defaultTradingIndicators,
   useTradingStore,
   type TradingChartState,
@@ -40,6 +43,8 @@ beforeEach(() => {
     links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
     panels: { right: true, bottom: true },
     favoriteInstrumentIds: [],
+    closedTabs: [],
+    favoriteIntervals: ['1h', '2h', '4h'],
   });
 });
 
@@ -91,6 +96,25 @@ describe('Trading multi-chart store', () => {
     useTradingStore.getState().setLink('interval', true);
     useTradingStore.getState().updateChart('chart-4', { interval: '2h' });
     expect(useTradingStore.getState().charts.every((item) => item.interval === '2h')).toBe(true);
+  });
+
+  it('keeps interval favourites sorted and distinct (TVP-2.5)', () => {
+    const store = useTradingStore.getState();
+    store.addFavoriteInterval('7m');
+    store.addFavoriteInterval('7m');
+    store.toggleFavoriteInterval('1d');
+    expect(useTradingStore.getState().favoriteIntervals).toEqual(['7m', '1h', '2h', '4h', '1d']);
+    useTradingStore.getState().toggleFavoriteInterval('2h');
+    expect(useTradingStore.getState().favoriteIntervals).toEqual(['7m', '1h', '4h', '1d']);
+  });
+
+  it('copies chart settings with the chart it was added from', () => {
+    useTradingStore.getState().updateChart('chart-1', { settings: { extendedHours: false } });
+    useTradingStore.getState().setActiveChart('chart-1');
+    useTradingStore.getState().addChart();
+    const added = useTradingStore.getState().charts.at(-1);
+    expect(added?.settings).toEqual({ extendedHours: false });
+    expect(added?.settings).not.toBe(useTradingStore.getState().charts[0].settings);
   });
 
   it('stores panel visibility and canonical instrument favorites', () => {
@@ -175,5 +199,51 @@ describe('Trading multi-chart store', () => {
 
     useTradingStore.getState().moveIndicator('chart-1', 'macd', 'down');
     expect(useTradingStore.getState().charts[0].indicators.map((item) => item.id)).toEqual(before);
+  });
+});
+
+describe('closed tab stack (TVP-2.3)', () => {
+  const tabIds = () => useTradingStore.getState().tabs.map((tab) => tab.tabId);
+
+  it('reopens closed tabs newest first, in their old place, with their charts', () => {
+    const store = useTradingStore.getState;
+    const second = store().addTab('Second')!;
+    const third = store().addTab('Third')!;
+    store().updateChart(store().activeChartId, { interval: '4h' });
+    store().setActiveTab(second);
+    store().removeTab(second);
+    store().removeTab(third);
+    expect(tabIds()).toEqual(['tab-1']);
+    expect(store().closedTabs.map((entry) => entry.tab.tabId)).toEqual([second, third]);
+
+    expect(store().reopenClosedTab()).toBe(third);
+    expect(store().activeTabId).toBe(third);
+    expect(store().charts[0].interval).toBe('4h');
+    expect(store().reopenClosedTab()).toBe(second);
+    expect(tabIds()).toEqual(['tab-1', second, third]);
+    expect(store().reopenClosedTab()).toBeNull();
+  });
+
+  it('keeps the last ten closed tabs and does nothing when the tab bar is full', () => {
+    const store = useTradingStore.getState;
+    for (let index = 0; index < MAX_CLOSED_TRADING_TABS + 2; index += 1) {
+      const id = store().addTab(`Tab ${index}`)!;
+      store().removeTab(id);
+    }
+    expect(store().closedTabs).toHaveLength(MAX_CLOSED_TRADING_TABS);
+    expect(store().closedTabs[0].tab.name).toBe('Tab 2');
+
+    while (store().tabs.length < MAX_TRADING_TABS) store().addTab();
+    expect(store().reopenClosedTab()).toBeNull();
+    expect(store().closedTabs).toHaveLength(MAX_CLOSED_TRADING_TABS);
+  });
+
+  it('starts a loaded workspace without closed tabs from another one', () => {
+    const store = useTradingStore.getState;
+    const id = store().addTab()!;
+    store().removeTab(id);
+    useTradingStore.setState(freshTradingSessionState());
+    expect(store().closedTabs).toEqual([]);
+    expect(store().reopenClosedTab()).toBeNull();
   });
 });

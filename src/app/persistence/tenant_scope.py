@@ -31,6 +31,7 @@ SYSTEM_OPERATIONS: dict[str, str] = {
     "audit.write": "Audit events record actions before a tenant is bound (sign-in) and for system work.",
     "retention": "Retention deletes rows by age and state across every workspace.",
     "outbox.relay": "The outbox relay claims and delivers committed events of every workspace.",
+    "notifications.delivery": "One alert notification monitor claims and records the deliveries of every workspace.",
 }
 
 _SYSTEM_OPERATION: ContextVar[str | None] = ContextVar("omnix_system_operation", default=None)

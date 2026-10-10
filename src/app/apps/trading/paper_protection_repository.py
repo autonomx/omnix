@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from app.security.tenant_context import RequestTenant, TenantContext
@@ -12,7 +13,36 @@ from typing import Any, cast
 
 _COLUMNS = """
     account_id, instrument_id, binding_id, binding_purpose, entry_order_id, exit_order_id,
-    take_profit, stop_loss, status, trigger_reason, revision, created_at, updated_at
+    take_profit, stop_loss, status, trigger_reason, revision, created_at, updated_at,
+    trail_amount, trail_percent, trail_water_mark, trail_moved_at
+"""
+
+
+# When an active leg's stop last moved (``trail_moved_at``; for any leg, not
+# only a trailing one). Saving an active leg with a new stop, or making a leg
+# active, stamps the database's wall clock (``clock_timestamp()``, not the
+# transaction start), so a bar that began before the edit cannot trigger the
+# new stop by its range. An unchanged stop on an active leg keeps its stamp.
+_STOP_MOVED_AT = """
+    CASE
+        WHEN EXCLUDED.status <> 'active' THEN NULL
+        WHEN omnix_trading_paper_protections.status <> 'active'
+            OR omnix_trading_paper_protections.stop_loss IS DISTINCT FROM EXCLUDED.stop_loss
+            THEN clock_timestamp()
+        ELSE omnix_trading_paper_protections.trail_moved_at
+    END
+"""
+
+# An edit of an active trailing leg that keeps its trail (a take-profit move,
+# or the chart sending the levels back) keeps its water mark. A changed stop
+# counts as a move of the trailed stop now; a stop looser than the trail
+# implies is tightened back to it by the monitor's next update. Changing the
+# trail itself, or re-arming, starts a fresh trail.
+_KEEP_TRAIL = """
+    omnix_trading_paper_protections.status = 'active' AND EXCLUDED.status = 'active'
+    AND num_nonnulls(EXCLUDED.trail_amount, EXCLUDED.trail_percent) = 1
+    AND omnix_trading_paper_protections.trail_amount IS NOT DISTINCT FROM EXCLUDED.trail_amount
+    AND omnix_trading_paper_protections.trail_percent IS NOT DISTINCT FROM EXCLUDED.trail_percent
 """
 
 
@@ -31,6 +61,10 @@ def _protection(row) -> PaperPositionProtection:
         revision=int(row[10]),
         created_at=row[11],
         updated_at=row[12],
+        trail_amount=Decimal(row[13]) if row[13] is not None else None,
+        trail_percent=Decimal(row[14]) if row[14] is not None else None,
+        trail_water_mark=Decimal(row[15]) if row[15] is not None else None,
+        trail_moved_at=row[16],
     )
 
 
@@ -132,14 +166,19 @@ class TradingPaperProtectionRepository:
                 INSERT INTO omnix_trading_paper_protections (
                     workspace_id, account_id, instrument_id, binding_id, binding_purpose,
                     entry_order_id, take_profit, stop_loss, status,
-                    exit_order_id, trigger_reason
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_entry', NULL, 'entry_armed')
+                    exit_order_id, trigger_reason, trail_amount, trail_percent,
+                    trail_water_mark
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_entry', NULL, 'entry_armed', %s, %s, NULL)
                 ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                    SET binding_id = EXCLUDED.binding_id,
                        binding_purpose = EXCLUDED.binding_purpose,
                        entry_order_id = EXCLUDED.entry_order_id,
                        take_profit = EXCLUDED.take_profit,
                        stop_loss = EXCLUDED.stop_loss,
+                       trail_amount = EXCLUDED.trail_amount,
+                       trail_percent = EXCLUDED.trail_percent,
+                       trail_water_mark = NULL,
+                       trail_moved_at = NULL,
                        status = 'pending_entry',
                        exit_order_id = NULL,
                        trigger_reason = 'entry_armed',
@@ -156,6 +195,8 @@ class TradingPaperProtectionRepository:
                     request.entry_order_id,
                     request.take_profit,
                     request.stop_loss,
+                    request.trail_amount,
+                    request.trail_percent,
                 ),
             ).fetchone()
             uow.commit()
@@ -255,14 +296,23 @@ class TradingPaperProtectionRepository:
                 INSERT INTO omnix_trading_paper_protections (
                     workspace_id, account_id, instrument_id, binding_id, binding_purpose,
                     entry_order_id, take_profit, stop_loss, status,
-                    exit_order_id, trigger_reason
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL)
+                    exit_order_id, trigger_reason, trail_amount, trail_percent,
+                    trail_water_mark, trail_moved_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, NULL,
+                    CASE WHEN %s::text = 'active' THEN clock_timestamp() END
+                )
                 ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                    SET binding_id = EXCLUDED.binding_id,
                        binding_purpose = EXCLUDED.binding_purpose,
                        entry_order_id = EXCLUDED.entry_order_id,
                        take_profit = EXCLUDED.take_profit,
                        stop_loss = EXCLUDED.stop_loss,
+                       trail_amount = EXCLUDED.trail_amount,
+                       trail_percent = EXCLUDED.trail_percent,
+                       trail_water_mark = CASE WHEN {_KEEP_TRAIL}
+                           THEN omnix_trading_paper_protections.trail_water_mark END,
+                       trail_moved_at = {_STOP_MOVED_AT},
                        status = EXCLUDED.status,
                        exit_order_id = NULL,
                        trigger_reason = NULL,
@@ -280,10 +330,56 @@ class TradingPaperProtectionRepository:
                     request.take_profit,
                     request.stop_loss,
                     status,
+                    request.trail_amount,
+                    request.trail_percent,
+                    status,
                 ),
             ).fetchone()
             uow.commit()
         return _protection(row)
+
+    def trail_stop(
+        self,
+        account_id: str,
+        instrument_id: str,
+        *,
+        water_mark: Decimal,
+        stop_loss: Decimal,
+        expected_revision: int,
+        moved_at: datetime | None = None,
+    ) -> PaperPositionProtection | None:
+        """Persist a trailing stop-loss leg's new water mark and stop.
+
+        Only an active trailing leg at ``expected_revision`` moves, so a user's
+        edit or a trigger in between wins. The water mark is monitor state: the
+        revision and ``updated_at`` (the leg's activation evidence) are left as
+        they are. ``moved_at`` records when the stop moved, so a bar that began
+        earlier cannot trigger it by its range. Returns None when the leg
+        changed underneath.
+        """
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                f"""
+                UPDATE omnix_trading_paper_protections
+                   SET trail_water_mark = %s, stop_loss = %s,
+                       trail_moved_at = COALESCE(%s, trail_moved_at)
+                 WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+                   AND status = 'active' AND revision = %s
+                   AND (trail_amount IS NOT NULL OR trail_percent IS NOT NULL)
+                RETURNING {_COLUMNS}
+                """,
+                (
+                    water_mark,
+                    stop_loss,
+                    moved_at,
+                    self.context.workspace_id,
+                    account_id,
+                    instrument_id,
+                    expected_revision,
+                ),
+            ).fetchone()
+            uow.commit()
+        return _protection(row) if row is not None else None
 
     def clear(self, account_id: str, instrument_id: str) -> PaperPositionProtection:
         return self.transition(

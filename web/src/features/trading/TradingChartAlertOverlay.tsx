@@ -1,9 +1,14 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
+import { applyConditionDrafts, conditionEditorFields, isPriceLineAlert, withPriceLineCondition } from './alertConditionDrafts';
+import { chartAlertIndicatorId, chartAlertSourceIndicatorId, chartAlertThreshold, conditionsAtValue, resolveIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
+import { indicatorUsesSeparatePane, type CoreIndicatorId } from './indicators/coreIndicators';
+import { tradingViewBuiltInUsesSeparatePane } from './indicators/tradingViewBuiltIns';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
 import type { ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import {
+  alertFrequency,
   alertLastTriggeredLabel,
   alertVisualState,
   chartAlertCreateInput,
@@ -13,6 +18,7 @@ import {
   notifyTradingAlertsChanged,
   type TradingChartAlertState,
 } from './tradingChartAlerts';
+import { deliveryCreateFields, deliveryEditorOf, deliveryUpdatePatch } from './alertDelivery';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
 import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
@@ -22,8 +28,26 @@ import { chartPalette } from './chartPalette';
 type DragState = { alert: TradingAlert; threshold: number };
 type TrendlineMode = NonNullable<TradingAlert['parameters']['trendline_mode']>;
 
-function indicatorIdForAlert(alert: TradingAlert): TradingAlert['parameters']['indicator_id'] {
-  return alert.condition_type.startsWith('indicator_') ? alert.parameters.indicator_id ?? null : null;
+function indicatorIdForAlert(alert: TradingAlert): CoreIndicatorId | null {
+  // Legacy indicator alerts and single "indicator line vs value" conditions alerts (TVP-1.3) are drawn on their pane.
+  return chartAlertIndicatorId(alert) as CoreIndicatorId | null;
+}
+
+/** The indicator pane an alert sits on; null when its indicator is drawn on the price pane (it moves in prices). */
+function paneIndicatorId(alert: TradingAlert): CoreIndicatorId | null {
+  const indicatorId = indicatorIdForAlert(alert);
+  const separate = (id: string) => indicatorUsesSeparatePane(id as CoreIndicatorId) || tradingViewBuiltInUsesSeparatePane(id);
+  if (indicatorId && separate(indicatorId)) return indicatorId;
+  // An overlay on a pane indicator (SMA of RSI, TVP-6.5) is drawn in that indicator's pane.
+  const sourceId = indicatorId ? chartAlertSourceIndicatorId(alert) : null;
+  return sourceId && separate(sourceId) ? sourceId as CoreIndicatorId : null;
+}
+
+/** The update that moves a dragged alert to `threshold`: its condition's value (unrounded) for a conditions alert. */
+function thresholdUpdate(alert: TradingAlert, threshold: number) {
+  if (alert.condition_type !== 'conditions') return chartAlertUpdateInput(alert, { threshold: formatAlertThreshold(threshold) });
+  const input = chartAlertUpdateInput(alert, {});
+  return { ...input, conditions: conditionsAtValue(alert, String(Number(threshold.toPrecision(8)))) as typeof input.conditions };
 }
 
 function trendlineModeForCondition(condition: string): TrendlineMode | null {
@@ -59,14 +83,16 @@ function formattedPrice(value: number): string {
 }
 
 export function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
-  const isTrendline = placement.drawingTool === 'trend-line' && placement.trendlinePoints?.length === 2;
-  const isIndicator = placement.indicatorId !== undefined;
+  // A drawing whose tool defines a two-anchor alert level offers the line alert.
+  const isTrendline = placement.trendlinePoints?.length === 2;
+  const isIndicator = placement.indicatorId !== undefined || placement.chartIndicatorId !== undefined;
   return {
     mode: 'create',
     alertId: null,
     x: placement.x,
     y: placement.y,
-    threshold: isTrendline ? '0' : formatAlertThreshold(placement.price),
+    // A value read from an indicator pane keeps its precision (MACD on FX is well below 0.01).
+    threshold: isTrendline ? '0' : isIndicator ? String(Number(placement.price.toPrecision(8))) : formatAlertThreshold(placement.price),
     condition: isTrendline
       ? 'trendline_crossing'
       : isIndicator
@@ -81,6 +107,11 @@ export function editorDefaults(placement: ChartAlertPlacement, latestPrice: numb
     period: String(placement.indicatorPeriod ?? 14),
     lookback: '1',
     trendlinePoints: isTrendline ? placement.trendlinePoints?.map((point) => ({ ...point })) : undefined,
+    // A drawing's line alert follows the drawing (TVP-1.4): it starts on the first level the menu offers.
+    ...(isTrendline && placement.drawingId && placement.drawingAlertLevels?.length
+      ? { drawingId: placement.drawingId, drawingLevels: placement.drawingAlertLevels, drawingLevel: placement.drawingAlertLevels[0].key }
+      : {}),
+    ...(placement.chartIndicatorId ? { chartIndicatorId: placement.chartIndicatorId } : {}),
   };
 }
 
@@ -92,7 +123,7 @@ export function TradingChartAlertOverlay({
   latestPrice,
   symbol,
   placement,
-  onPlacementConsumed,
+  onPlacementConsumed, indicatorChoices,
 }: {
   adapter: TradingChartAdapter | null;
   instrumentId: string;
@@ -101,7 +132,7 @@ export function TradingChartAlertOverlay({
   latestPrice: number;
   symbol: string;
   placement: ChartAlertPlacement | null;
-  onPlacementConsumed: () => void;
+  onPlacementConsumed: () => void; /** The chart's indicators, for indicator alerts (TVP-1.3). */ indicatorChoices?: readonly AlertIndicatorChoice[];
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const alertsQuery = useTradingAlerts({ poll: true });
@@ -216,8 +247,8 @@ export function TradingChartAlertOverlay({
       lookback_bars: Number(editor.lookback) || 1,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
-      message: editor.message,
-      notification_channels: editor.notifications,
+      message: editor.message, notification_channels: editor.notifications,
+      ...deliveryUpdatePatch(editor),
     });
     if (isTrendline) {
       input.parameters = {
@@ -226,13 +257,13 @@ export function TradingChartAlertOverlay({
         trendline_mode: trendlineModeForCondition(editor.condition),
       };
     }
-    await runMutation(() => tradingApi.updateAlert(alert, input));
+    if (applyConditionDrafts(input, editor, (problem) => setEditor((current) => current && { ...current, conditionError: problem }))) return void setStatus('error'); await runMutation(() => tradingApi.updateAlert(alert, input));
   };
 
   const createAlert = async () => {
     if (!editor || editor.mode !== 'create') return;
     const isTrendline = editor.condition.startsWith('trendline_');
-    const threshold = isTrendline ? 0 : Number(editor.threshold);
+    const threshold = isTrendline || isPriceLineAlert(editor.condition, editor.priceLine) ? 0 : Number(editor.threshold);
     if (!Number.isFinite(threshold) || (isTrendline && editor.trendlinePoints?.length !== 2)) {
       setStatus('error');
       return;
@@ -248,7 +279,7 @@ export function TradingChartAlertOverlay({
       expiration: editor.expiration,
       triggerPolicy: editor.triggerPolicy,
       message: editor.message,
-      notificationChannels: editor.notifications,
+      notificationChannels: editor.notifications, ...deliveryCreateFields(editor),
     });
     input.condition_type = editor.condition;
     input.threshold = isTrendline ? '0' : formatAlertThreshold(threshold);
@@ -258,9 +289,9 @@ export function TradingChartAlertOverlay({
       period: Number(editor.period) || 14,
       lookback_bars: Number(editor.lookback) || 1,
       trendline_points: isTrendline ? editor.trendlinePoints?.map((point) => ({ ...point, price: String(point.price) })) : null,
-      trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null,
+      trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null, ...(isTrendline && editor.drawingId ? { drawing_id: editor.drawingId, drawing_level: editor.drawingLevel ?? null } : {}),
     };
-    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at;
+    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at; if (editor.condition.startsWith('indicator_') && indicatorChoices?.length && !withChartIndicatorCondition(input, indicatorChoices, resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId), String(threshold))) return void setStatus('error'); withPriceLineCondition(input, editor.condition, editor.priceLine); if (applyConditionDrafts(input, editor, (problem) => setEditor((current) => current && { ...current, conditionError: problem }))) return void setStatus('error');
     await runMutation(() => tradingApi.createAlert(input));
   };
 
@@ -274,14 +305,14 @@ export function TradingChartAlertOverlay({
       condition: alert.condition_type,
       expiresAt: localDateTime(alert.expires_at),
       expiration: alert.expires_at ? '1d' : 'never',
-      triggerPolicy: alert.parameters.trigger_policy
-        ?? (alert.cooldown_seconds > 0 ? 'once_per_bar' : 'every_time'),
+      triggerPolicy: alertFrequency(alert),
       message: alert.parameters.message ?? '',
       notifications: alert.parameters.notification_channels ?? ['app', 'toast'],
+      ...deliveryEditorOf(alert),
       indicator: alert.parameters.indicator_id ?? 'rsi',
       period: String(alert.parameters.period ?? 14),
       lookback: String(alert.parameters.lookback_bars ?? 1),
-      trendlinePoints: alert.parameters.trendline_points?.map((point) => ({ time: point.time, price: Number(point.price) })),
+      trendlinePoints: alert.parameters.trendline_points?.map((point) => ({ time: point.time, price: Number(point.price) })), ...conditionEditorFields(alert),
     });
   };
 
@@ -290,11 +321,11 @@ export function TradingChartAlertOverlay({
     event.stopPropagation();
     if (!alert.enabled || alertVisualState(alert) === 'expired' || !adapter || !rootRef.current) return;
     const bounds = rootRef.current.getBoundingClientRect();
-    const indicatorId = indicatorIdForAlert(alert);
+    const indicatorId = paneIndicatorId(alert);
     const valueFromCoordinate = (y: number) => indicatorId
       ? adapter.indicatorValueFromCoordinate(indicatorId, y)
       : adapter.priceFromCoordinate(y);
-    setDragging({ alert, threshold: Number(alert.threshold) });
+    setDragging({ alert, threshold: chartAlertThreshold(alert) });
     const move = (pointer: PointerEvent) => {
       const threshold = valueFromCoordinate(pointer.clientY - bounds.top);
       if (threshold !== null) setDragging({ alert, threshold });
@@ -304,15 +335,15 @@ export function TradingChartAlertOverlay({
       window.removeEventListener('pointerup', up);
       const threshold = valueFromCoordinate(pointer.clientY - bounds.top);
       setDragging(null);
-      if (threshold === null || threshold === Number(alert.threshold)) return;
-      await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { threshold: formatAlertThreshold(threshold) })));
+      if (threshold === null || threshold === chartAlertThreshold(alert)) return;
+      await runMutation(() => tradingApi.updateAlert(alert, thresholdUpdate(alert, threshold)));
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
 
   const alertCoordinate = (alert: TradingAlert, threshold: number): number | null | undefined => {
-    const indicatorId = indicatorIdForAlert(alert);
+    const indicatorId = paneIndicatorId(alert);
     return indicatorId
       ? adapter?.indicatorValueToCoordinateForId(indicatorId, threshold)
       : adapter?.priceToCoordinate(threshold);
@@ -327,7 +358,7 @@ export function TradingChartAlertOverlay({
     <div ref={rootRef} className="trading-chart-alert-overlay" data-status={status}>
       <svg aria-label="Chart alert lines">
         {staticAlerts.map((alert) => {
-          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
           const y = adapter?.priceToCoordinate(threshold);
           if (y === null || y === undefined) return null;
           const state = alertVisualState(alert);
@@ -357,7 +388,7 @@ export function TradingChartAlertOverlay({
           );
         })}
         {indicatorAlerts.map((alert) => {
-          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
           const y = alertCoordinate(alert, threshold);
           if (y === null || y === undefined) return null;
           const state = alertVisualState(alert);
@@ -366,7 +397,7 @@ export function TradingChartAlertOverlay({
       </svg>
 
       {staticAlerts.map((alert) => {
-        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
         const y = adapter?.priceToCoordinate(threshold);
         if (y === null || y === undefined) return null;
         const state = alertVisualState(alert);
@@ -387,7 +418,7 @@ export function TradingChartAlertOverlay({
       })}
 
       {indicatorAlerts.map((alert) => {
-        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : chartAlertThreshold(alert);
         const y = alertCoordinate(alert, threshold);
         if (y === null || y === undefined) return null;
         const state = alertVisualState(alert);
@@ -398,7 +429,7 @@ export function TradingChartAlertOverlay({
             type="button"
             className={`trading-alert-price-label state-${state}`}
             style={{ top: y }}
-            title={`${state} indicator alert · ${alert.condition_type.replace('indicator_', 'crosses ')} · ${alert.parameters.indicator_id ?? 'indicator'} · revision ${alert.revision}${lastTriggered ? ` · last triggered ${lastTriggered}` : ''}`}
+            title={`${state} indicator alert · ${alert.condition_type.replace('indicator_', 'crosses ')} · ${indicatorIdForAlert(alert) ?? 'indicator'} · revision ${alert.revision}${lastTriggered ? ` · last triggered ${lastTriggered}` : ''}`}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openEditor(alert, y)}
           >
@@ -411,7 +442,7 @@ export function TradingChartAlertOverlay({
         <div style={editorStyle} className="trading-chart-alert-editor-positioner">
           <TradingAlertDialog
             editor={editor}
-            symbol={symbol}
+            symbol={symbol} indicatorChoices={indicatorChoices}
             latestPrice={latestPrice}
             status={status}
             onChange={(patch) => setEditor((current) => current ? { ...current, ...patch } : current)}

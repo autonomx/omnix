@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,7 +16,7 @@ from .paper import (
     PaperOrderRequest,
     PaperPosition,
     paper_buy_reservation,
-    paper_commission,
+    paper_order_commission,
     paper_fill_decision,
     paper_realized_pnl,
     paper_unrealized_pnl,
@@ -57,6 +57,9 @@ class ReplayOrderRequest(BaseModel):
     snapshot: PaperAccountSnapshot
     bar: ReplayExecutionBar
     order: PaperOrderRequest
+    # False when the snapshot has already been advanced through ``bar``: the
+    # bar is then not applied to working orders a second time.
+    advance_bar: bool = True
 
 
 class ReplayOrderResult(BaseModel):
@@ -134,6 +137,11 @@ def _replace_order(snapshot: PaperAccountSnapshot, order: PaperOrder) -> PaperAc
 
 
 def _mark(snapshot: PaperAccountSnapshot, bar: ReplayExecutionBar) -> PaperAccountSnapshot:
+    """Mark positions in the bar's instrument at its close.
+
+    Positions in other instruments keep their last mark: a bar never prices
+    another instrument.
+    """
     positions = [
         position.model_copy(
             update={
@@ -141,6 +149,8 @@ def _mark(snapshot: PaperAccountSnapshot, bar: ReplayExecutionBar) -> PaperAccou
                 "unrealized_pnl": paper_unrealized_pnl(position.quantity, position.average_cost, bar.close),
             }
         )
+        if position.instrument_id == bar.instrument_id
+        else position
         for position in snapshot.positions
     ]
     return snapshot.model_copy(update={"positions": positions})
@@ -171,6 +181,8 @@ def _reserve(snapshot: PaperAccountSnapshot, request: PaperOrderRequest, order: 
             request,
             available_cash=balance.available,
             commission_bps=snapshot.account.commission_bps,
+            # Replay trades on cash alone, but charges the account's fixed commission where it has one (TVP-7.2b).
+            fixed_commission=snapshot.account.commission_fixed if snapshot.account.commission_type == "fixed_per_order" else None,
         )
         if reserved_cash <= 0 or reserved_cash > balance.available:
             return _reject(snapshot, order, "insufficient_paper_cash")
@@ -221,7 +233,8 @@ def _apply_fill(
 
     fill_price = decision.fill_price
     notional = fill_quantity * fill_price
-    commission = paper_commission(notional, snapshot.account.commission_bps)
+    # The account's commission: bps, or its fixed amount once per order (TVP-7.2b).
+    commission = paper_order_commission(snapshot.account, notional, first_fill=order.filled_quantity == 0)
     balance = _balance(snapshot)
     position = _position(snapshot, order.instrument_id)
     if balance is None:
@@ -392,9 +405,16 @@ def place_replay_order(
     bar: ReplayExecutionBar,
     *,
     policy: PaperExecutionPolicy | None = None,
+    advance_bar: bool = True,
 ) -> ReplayOrderResult:
+    """Place a replay order at ``bar``.
+
+    By default the snapshot is first advanced through ``bar``. Pass
+    ``advance_bar=False`` when the caller has already advanced it, so working
+    orders see each bar exactly once.
+    """
     active = policy or PaperExecutionPolicy()
-    prepared = advance_replay_snapshot(source, bar, policy=active)
+    prepared = advance_replay_snapshot(source, bar, policy=active) if advance_bar else _mark(source, bar)
     # Place the order just before the immutable bar close so the same execution
     # policy latency check remains meaningful without using wall-clock time.
     created_at = bar.end_time - timedelta(milliseconds=active.latency_ms)
@@ -407,6 +427,13 @@ def place_replay_order(
         created_at=created_at,
         updated_at=created_at,
     )
+    # Replay snapshots are detached and do not carry trigger/trailing state or
+    # a session clock, so the TVP-7.1 order types and time in force are live
+    # paper only for now.
+    if request.order_type in {"stop_limit", "trailing_stop"}:
+        return _reject(prepared, order, "replay_order_type_unsupported")
+    if request.time_in_force != "gtc":
+        return _reject(prepared, order, "replay_time_in_force_unsupported")
     reserved = _reserve(prepared, request, order)
     if reserved.order.status == "rejected":
         return reserved

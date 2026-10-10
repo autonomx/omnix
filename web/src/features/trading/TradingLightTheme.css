@@ -133,11 +133,17 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-watchlist li.active,
-  :root[data-omnix-appearance='light'] .trading-watchlist li > button:first-child:hover {
+  :root[data-omnix-appearance='light'] .trading-watchlist-symbol-cell > button:hover,
+  :root[data-omnix-appearance='light'] .trading-watchlist-section-cell > button:hover {
     background: var(--c-slate-970-2);
   }
 
-  :root[data-omnix-appearance='light'] .trading-watchlist li > button:first-child strong {
+  :root[data-omnix-appearance='light'] .trading-watchlist li.selected {
+    background: color-mix(in srgb, var(--c-blue-630) 14%, transparent);
+  }
+
+  :root[data-omnix-appearance='light'] .trading-watchlist-symbol-cell > button strong,
+  :root[data-omnix-appearance='light'] .trading-watchlist-section-cell > button strong {
     color: var(--trading-light-text);
   }
 
@@ -445,7 +451,8 @@
     background: radial-gradient(circle at center, var(--c-slate-970-2) 0 2px, var(--c-blue-510) 2px 3px, var(--c-slate-970-2) 3px 5px, transparent 5px), var(--c-slate-970-2);
   }
 
-  :root[data-omnix-appearance='light'] .trading-drawing-overlay circle {
+  /* Edit handles only: a drawing's own markers (the dot tool) keep their colour, as in the dark theme. */
+  :root[data-omnix-appearance='light'] .trading-drawing-overlay circle[data-handle-id] {
     fill: var(--c-neutral-1000);
   }
 

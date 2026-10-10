@@ -10,6 +10,8 @@ import { api } from './api/gateway';
 const scanner = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading scanner');
 
 export const tradingScannerApi = {
+  /** Rules proposed for a description (TVP-9.4); a proposal to edit, never a run. */
+  propose: (text: string) => scanner(api.POST('/api/trading/scanners/propose', { body: { text } })),
   definitions: async (): Promise<TradingScannerDefinition[]> =>
     (await scanner(api.GET('/api/trading/scanners'))).scanners,
   create: (definition: TradingScannerDefinitionInput): Promise<TradingScannerDefinition> =>

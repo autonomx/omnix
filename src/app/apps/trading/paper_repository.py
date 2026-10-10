@@ -8,29 +8,41 @@ from decimal import Decimal
 from typing import Any, Protocol, cast
 
 from app.security.tenant_context import RequestTenant, TenantContext
+from app.persistence.errors import RevisionConflict
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 from app.apps.trading.us_equity_calendar import EASTERN
 
 from .paper import (
     PaperAccount,
     PaperAccountCreate,
+    PaperAccountSettings,
     OrderAuthority,
     PaperAccountSnapshot,
     PaperBalance,
     PaperFill,
     PaperLedgerEntry,
+    PaperMargin,
+    PaperMarginPosition,
     PaperMarketObservation,
     PaperOrder,
     PaperOrderRequest,
+    PaperOrderStateUpdate,
     PaperPosition,
+    TIME_IN_FORCE_EXPIRED,
     paper_buy_reservation,
-    paper_commission,
+    paper_buying_power,
     paper_fill_is_fundable,
     paper_fill_decision,
     paper_fill_key,
     paper_liquidity_allocation,
+    paper_margin_fraction,
+    paper_margin_status,
     paper_observation_key,
+    paper_order_commission,
+    paper_order_expiry,
     paper_order_request_matches,
+    paper_order_state_update,
+    paper_price_tick,
     paper_realized_pnl,
     paper_unrealized_pnl,
 )
@@ -50,7 +62,22 @@ def _account(row) -> PaperAccount:
         revision=int(row[5]),
         created_at=row[6],
         updated_at=row[7],
+        allow_short=bool(row[8]) if len(row) > 8 else False,
+        margin=_margin_settings(row[9]) if len(row) > 9 else {},
+        commission_type=str(row[10]) if len(row) > 10 and row[10] else "percent",
+        commission_fixed=Decimal(row[11]) if len(row) > 11 and row[11] is not None else Decimal("0"),
+        notify_margin_calls=bool(row[12]) if len(row) > 12 else False,
     )
+
+
+def _margin_settings(raw: Any) -> dict[str, PaperMargin]:
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    return {str(key): PaperMargin.model_validate(value) for key, value in dict(raw or {}).items()}
+
+
+def _margin_json(margin: dict[str, PaperMargin]) -> str:
+    return json.dumps({key: {"long_pct": str(value.long_pct), "short_pct": str(value.short_pct)} for key, value in sorted(margin.items())})
 
 
 def _order(row) -> PaperOrder:
@@ -73,6 +100,13 @@ def _order(row) -> PaperOrder:
         reserved_cash=Decimal(row[15]),
         created_at=row[16],
         updated_at=row[17],
+        time_in_force=cast(Any, str(row[18])),
+        expires_at=row[19],
+        trail_amount=Decimal(row[20]) if row[20] is not None else None,
+        trail_percent=Decimal(row[21]) if row[21] is not None else None,
+        trail_water_mark=Decimal(row[22]) if row[22] is not None else None,
+        stop_triggered_at=row[23],
+        trail_moved_at=row[24],
     )
 
 
@@ -80,7 +114,9 @@ _ORDER_COLUMNS = """
     account_id, order_id, instrument_id, binding_id, side, order_type,
     quantity, limit_price, stop_price, reference_price, status,
     filled_quantity, average_fill_price, idempotency_key, rejection_reason,
-    reserved_cash, created_at, updated_at
+    reserved_cash, created_at, updated_at, time_in_force, expires_at,
+    trail_amount, trail_percent, trail_water_mark, stop_triggered_at,
+    trail_moved_at
 """
 
 
@@ -91,9 +127,14 @@ class TradingPaperRepository:
         *,
         context: TenantContext | None = None,
         uow_factory: UnitOfWorkFactory = unit_of_work,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.context = context
         self.uow_factory = uow_factory
+        self._clock = clock
+
+    def _now(self) -> datetime:
+        return self._clock() if self._clock is not None else datetime.now(timezone.utc)
 
     def create_account(self, request: PaperAccountCreate) -> PaperAccountSnapshot:
         with self.uow_factory() as uow:
@@ -101,10 +142,12 @@ class TradingPaperRepository:
                 """
                 INSERT INTO omnix_trading_paper_accounts (
                     workspace_id, account_id, owner_user_id, name,
-                    base_currency, commission_bps
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                    base_currency, commission_bps, allow_short,
+                    margin_settings, commission_type, commission_fixed, notify_margin_calls
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
                 RETURNING account_id, name, base_currency, commission_bps,
-                          enabled, revision, created_at, updated_at
+                          enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                 """,
                 (
                     self.context.workspace_id,
@@ -113,6 +156,11 @@ class TradingPaperRepository:
                     request.name,
                     request.base_currency,
                     request.commission_bps,
+                    request.allow_short,
+                    _margin_json(request.margin),
+                    request.commission_type,
+                    request.commission_fixed,
+                    request.notify_margin_calls,
                 ),
             ).fetchone()
             uow.connection.execute(
@@ -149,12 +197,82 @@ class TradingPaperRepository:
             uow.commit()
         return self.snapshot(request.account_id, account=_account(account_row))
 
+    def update_account_settings(
+        self, account_id: str, settings: PaperAccountSettings, *, expected_revision: int
+    ) -> PaperAccountSnapshot:
+        """Change an account's settings (shorting, TVP-7.2a; margin and commission, TVP-7.2b) at the revision the person saw.
+
+        Turning shorting off cancels working short entries (their holds are released and their pending
+        stops follow) and leaves open shorts and their exits as they are.
+        """
+        with self.uow_factory() as uow:
+            if settings.allow_short is False:
+                locked, _ = self._lock_account(uow, account_id)
+                for short_entry in self._working_short_entries(uow, account_id):
+                    self._cancel_locked(uow, locked, short_entry)
+            row = uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_accounts
+                   SET allow_short = COALESCE(%s, allow_short),
+                       margin_settings = COALESCE(%s::jsonb, margin_settings),
+                       commission_type = COALESCE(%s, commission_type),
+                       commission_bps = COALESCE(%s, commission_bps),
+                       commission_fixed = COALESCE(%s, commission_fixed),
+                       notify_margin_calls = COALESCE(%s, notify_margin_calls),
+                       revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND revision = %s
+                RETURNING account_id, name, base_currency, commission_bps,
+                          enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
+                """,
+                (
+                    settings.allow_short,
+                    _margin_json(settings.margin) if settings.margin is not None else None,
+                    settings.commission_type,
+                    settings.commission_bps,
+                    settings.commission_fixed,
+                    settings.notify_margin_calls,
+                    self.context.workspace_id,
+                    account_id,
+                    expected_revision,
+                ),
+            ).fetchone()
+            if row is None:
+                exists = uow.connection.execute(
+                    "SELECT 1 FROM omnix_trading_paper_accounts WHERE workspace_id = %s AND account_id = %s",
+                    (self.context.workspace_id, account_id),
+                ).fetchone()
+                if exists is None:
+                    raise ValueError(f"paper_account_not_found: {account_id}")
+                raise RevisionConflict(f"Paper account expected revision {expected_revision}: {account_id}")
+            uow.commit()
+        return self.snapshot(account_id, account=_account(row))
+
+    def _working_short_entries(self, uow: PostgresUnitOfWork, account_id: str) -> list[str]:
+        """Open sells on instruments with no long position: entries that open or add to a short."""
+        rows = uow.connection.execute(
+            """
+            SELECT orders.order_id
+              FROM omnix_trading_paper_orders AS orders
+              LEFT JOIN omnix_trading_paper_positions AS positions
+                ON positions.workspace_id = orders.workspace_id
+               AND positions.account_id = orders.account_id
+               AND positions.instrument_id = orders.instrument_id
+             WHERE orders.workspace_id = %s AND orders.account_id = %s
+               AND orders.side = 'sell' AND orders.status = 'open'
+               AND COALESCE(positions.quantity, 0) <= 0
+            """,
+            (self.context.workspace_id, account_id),
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+
     def list_accounts(self, limit: int = 100) -> list[PaperAccount]:
         with self.uow_factory() as uow:
             rows = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
+                       enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s
                  ORDER BY created_at DESC LIMIT %s
@@ -205,11 +323,54 @@ class TradingPaperRepository:
             uow.commit()
             return cancelled, placed
 
+    def replace_entry(
+        self,
+        account_id: str,
+        order_id: str,
+        replacement: PaperOrderRequest,
+        *,
+        authority: OrderAuthority,
+    ) -> tuple[PaperOrder, PaperOrder]:
+        """Move a working entry (TVP-7.3): cancel it, place ``replacement`` and point its pending protection at
+        the new order, in one transaction. Without a pending protection for ``order_id`` nothing changes, so an
+        entry never ends up without its stop and a stop never points at a cancelled entry.
+        """
+        with self.uow_factory() as uow:
+            account, allow_short = self._lock_account(uow, account_id)
+            used = uow.connection.execute(
+                """
+                SELECT 1 FROM omnix_trading_paper_orders
+                 WHERE workspace_id = %s AND account_id = %s AND (order_id = %s OR idempotency_key = %s)
+                 LIMIT 1
+                """,
+                (self.context.workspace_id, account.account_id, replacement.order_id, replacement.idempotency_key),
+            ).fetchone()
+            if used is not None:
+                # A moved entry is always a new order: an old one returned by its key would carry the stop to a dead order.
+                raise ValueError("paper_order_id_not_new")
+            cancelled = self._cancel_locked(uow, account, order_id)
+            placed = self._place_locked(uow, account, allow_short, replacement, authority)
+            moved = uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_protections
+                   SET entry_order_id = %s, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s
+                   AND entry_order_id = %s AND status = 'pending_entry'
+                RETURNING instrument_id
+                """,
+                (placed.order_id, self.context.workspace_id, account.account_id, order_id),
+            ).fetchone()
+            if moved is None or placed.order_id == order_id:
+                raise ValueError("paper_risk_entry_not_movable")
+            uow.commit()
+            return cancelled, placed
+
     def _lock_account(self, uow: PostgresUnitOfWork, account_id: str) -> tuple[PaperAccount, bool]:
         row = uow.connection.execute(
             """
             SELECT account_id, name, base_currency, commission_bps,
-                   enabled, revision, created_at, updated_at, allow_short
+                   enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
               FROM omnix_trading_paper_accounts
              WHERE workspace_id = %s AND account_id = %s
              FOR UPDATE
@@ -243,7 +404,7 @@ class TradingPaperRepository:
         return str(row[0]) if row is not None else None
 
     def _covers_short(self, uow: PostgresUnitOfWork, account_id: str, request: PaperOrderRequest) -> bool:
-        """A buy no larger than an open short only reduces exposure."""
+        """A buy no larger than an open short, less the buys already working on it, only reduces exposure."""
         row = uow.connection.execute(
             """
             SELECT quantity
@@ -254,7 +415,70 @@ class TradingPaperRepository:
             (self.context.workspace_id, account_id, request.instrument_id),
         ).fetchone()
         quantity = Decimal(row[0]) if row else Decimal("0")
-        return quantity < 0 and request.quantity <= -quantity
+        if quantity >= 0:
+            return False
+        working = uow.connection.execute(
+            """
+            SELECT COALESCE(SUM(quantity - filled_quantity), 0)
+              FROM omnix_trading_paper_orders
+             WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+               AND side = 'buy' AND status = 'open'
+            """,
+            (self.context.workspace_id, account_id, request.instrument_id),
+        ).fetchone()
+        return request.quantity <= -quantity - Decimal(working[0] if working else 0)
+
+    def _reserve_short_entry(self, uow: PostgresUnitOfWork, account: PaperAccount, request: PaperOrderRequest) -> Decimal:
+        """Hold cash for a working short entry, as a buy holds it, within the buying power (TVP-7.2a).
+
+        The hold is released when the short fills (its proceeds and margin then count through the short
+        liability) or when the order is cancelled or expires.
+        """
+        balance_row = uow.connection.execute(
+            """
+            SELECT available
+              FROM omnix_trading_paper_balances
+             WHERE workspace_id = %s AND account_id = %s AND currency = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account.account_id, account.base_currency),
+        ).fetchone()
+        available = Decimal(balance_row[0]) if balance_row else Decimal("0")
+        hold = paper_buy_reservation(
+            request.model_copy(update={"side": "buy"}),
+            available_cash=available,
+            commission_bps=account.commission_bps,
+            margin=paper_margin_fraction(account, request.instrument_id, short=True),
+            fixed_commission=account.commission_fixed if account.commission_type == "fixed_per_order" else None,
+        )
+        if hold <= 0 or paper_buying_power(account, available, self._margin_positions(uow, account.account_id)) < hold:
+            raise ValueError("insufficient_paper_cash")
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_paper_balances
+               SET available = available - %s, reserved = reserved + %s, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s AND currency = %s
+            """,
+            (hold, hold, self.context.workspace_id, account.account_id, account.base_currency),
+        )
+        return hold
+
+    def _margin_positions(self, uow: PostgresUnitOfWork, account_id: str) -> list[PaperMarginPosition]:
+        """The open positions, for buying power and margin (TVP-7.2b): a short holds its proceeds and its margin,
+        a leveraged long only its margin share."""
+        rows = uow.connection.execute(
+            """
+            SELECT instrument_id, quantity, average_cost, last_price
+              FROM omnix_trading_paper_positions
+             WHERE workspace_id = %s AND account_id = %s AND quantity <> 0
+             ORDER BY instrument_id
+            """,
+            (self.context.workspace_id, account_id),
+        ).fetchall()
+        return [
+            PaperMarginPosition(str(row[0]), Decimal(row[1]), Decimal(row[2]), Decimal(row[3]) if row[3] is not None else None)
+            for row in rows
+        ]
 
     def _require_entry_authority(
         self,
@@ -320,9 +544,15 @@ class TradingPaperRepository:
                 raise ValueError("paper_idempotency_payload_mismatch")
             return existing
 
+        placed_at = self._now()
+        expires_at = paper_order_expiry(request, placed_at)
+        if expires_at is not None and expires_at <= placed_at:
+            raise ValueError("paper_order_expiry_in_past")
+
         reserved_cash = Decimal("0")
         if request.side == "buy":
-            if not self._covers_short(uow, account_id, request):
+            covers = self._covers_short(uow, account_id, request)
+            if not covers:
                 self._require_entry_authority(uow, account, authority)
             balance_row = uow.connection.execute(
                 """
@@ -338,8 +568,15 @@ class TradingPaperRepository:
                 request,
                 available_cash=available,
                 commission_bps=account.commission_bps,
+                # A long holds its margin share; buying back a short holds its whole cost, as before.
+                margin=Decimal("1") if covers else paper_margin_fraction(account, request.instrument_id, short=False),
+                fixed_commission=account.commission_fixed if account.commission_type == "fixed_per_order" else None,
             )
-            if reserved_cash <= 0 or available < reserved_cash:
+            if covers:
+                # Buying back a short is never refused for cash: it holds what there is, and a loss can
+                # leave the balance below zero (margin calls close shorts before that, TVP-7.2b).
+                reserved_cash = max(Decimal("0"), min(reserved_cash, available))
+            elif reserved_cash <= 0 or paper_buying_power(account, available, self._margin_positions(uow, account_id)) < reserved_cash:
                 raise ValueError("insufficient_paper_cash")
             uow.connection.execute(
                 """
@@ -391,14 +628,16 @@ class TradingPaperRepository:
                 if not allow_short:
                     raise ValueError("paper_short_not_allowed")
                 self._require_entry_authority(uow, account, authority)
+                reserved_cash = self._reserve_short_entry(uow, account, request)
 
         row = uow.connection.execute(
             f"""
             INSERT INTO omnix_trading_paper_orders (
                 workspace_id, account_id, order_id, instrument_id, binding_id,
                 side, order_type, quantity, limit_price, stop_price,
-                reference_price, status, idempotency_key, reserved_cash
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)
+                reference_price, status, idempotency_key, reserved_cash,
+                time_in_force, expires_at, trail_amount, trail_percent
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s, %s, %s, %s, %s)
             RETURNING {_ORDER_COLUMNS}
             """,
             (
@@ -415,6 +654,10 @@ class TradingPaperRepository:
                 request.reference_price,
                 request.idempotency_key,
                 reserved_cash,
+                request.time_in_force,
+                expires_at,
+                request.trail_amount,
+                request.trail_percent,
             ),
         ).fetchone()
         return _order(row)
@@ -446,13 +689,93 @@ class TradingPaperRepository:
         ).fetchone()
         return _order(row)
 
+    def expire_orders(self, account_id: str, *, now: datetime | None = None) -> list[PaperOrder]:
+        """Expire the account's due DAY/GTD orders and release their holds.
+
+        Expiry runs on the server clock, so an order expires even when its
+        instrument has no market data after the close.
+        """
+        with self.uow_factory() as uow:
+            account, _ = self._lock_account(uow, account_id)
+            expired = self._expire_locked(uow, account, now or self._now())
+            uow.commit()
+            return expired
+
+    def _expire_locked(self, uow: PostgresUnitOfWork, account: PaperAccount, now: datetime) -> list[PaperOrder]:
+        rows = uow.connection.execute(
+            f"""
+            SELECT {_ORDER_COLUMNS}
+              FROM omnix_trading_paper_orders
+             WHERE workspace_id = %s AND account_id = %s
+               AND status = 'open' AND expires_at IS NOT NULL AND expires_at <= %s
+             ORDER BY expires_at, order_id
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account.account_id, now),
+        ).fetchall()
+        expired: list[PaperOrder] = []
+        for row in rows:
+            order = _order(row)
+            self._release_order_reservation(uow, account, order)
+            updated = uow.connection.execute(
+                f"""
+                UPDATE omnix_trading_paper_orders
+                   SET status = 'expired', rejection_reason = %s, reserved_cash = 0,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND order_id = %s
+                RETURNING {_ORDER_COLUMNS}
+                """,
+                (TIME_IN_FORCE_EXPIRED, self.context.workspace_id, account.account_id, order.order_id),
+            ).fetchone()
+            if order.filled_quantity == 0:
+                # Nothing filled, so no position will ever activate the entry's
+                # bracket; cancel it here rather than waiting for market data.
+                uow.connection.execute(
+                    """
+                    UPDATE omnix_trading_paper_protections
+                       SET status = 'cancelled', trigger_reason = 'entry_expired',
+                           revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND account_id = %s
+                       AND entry_order_id = %s AND status = 'pending_entry'
+                    """,
+                    (self.context.workspace_id, account.account_id, order.order_id),
+                )
+            expired.append(_order(updated))
+        return expired
+
+    def _save_order_state(
+        self,
+        uow: PostgresUnitOfWork,
+        account_id: str,
+        order_id: str,
+        state: PaperOrderStateUpdate,
+    ) -> None:
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_paper_orders
+               SET stop_price = %s, trail_water_mark = %s, stop_triggered_at = %s,
+                   trail_moved_at = %s, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s AND order_id = %s
+            """,
+            (
+                state.stop_price,
+                state.trail_water_mark,
+                state.stop_triggered_at,
+                state.trail_moved_at,
+                self.context.workspace_id,
+                account_id,
+                order_id,
+            ),
+        )
+
     def _release_order_reservation(
         self,
         uow: PostgresUnitOfWork,
         account: PaperAccount,
         order: PaperOrder,
     ) -> None:
-        if order.side == "buy" and order.reserved_cash > 0:
+        # A buy's hold, or a working short entry's (TVP-7.2a).
+        if order.reserved_cash > 0:
             uow.connection.execute(
                 """
                 UPDATE omnix_trading_paper_balances
@@ -469,7 +792,7 @@ class TradingPaperRepository:
                     account.base_currency,
                 ),
             )
-        elif order.side == "sell":
+        if order.side == "sell":
             remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
             uow.connection.execute(
                 """
@@ -498,7 +821,8 @@ class TradingPaperRepository:
             account_row = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
-                       enabled, revision, created_at, updated_at
+                       enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s AND account_id = %s
                  FOR UPDATE
@@ -508,6 +832,9 @@ class TradingPaperRepository:
             if account_row is None:
                 raise ValueError(f"paper_account_not_found: {account_id}")
             account = _account(account_row)
+            # Due DAY/GTD orders expire, releasing their holds, before the
+            # balance and position this observation works on are read.
+            self._expire_locked(uow, account, self._now())
             balance_row = uow.connection.execute(
                 """
                 SELECT available, reserved
@@ -544,6 +871,7 @@ class TradingPaperRepository:
                 (self.context.workspace_id, account_id, observation.instrument_id),
             ).fetchall()
             observation_key = paper_observation_key(observation)
+            tick_size = paper_price_tick(observation.instrument_id)
             existing_liquidity_rows = uow.connection.execute(
                 """
                 SELECT side, COALESCE(SUM(quantity), 0)
@@ -570,7 +898,12 @@ class TradingPaperRepository:
 
             for row in order_rows:
                 order = _order(row)
-                decision = paper_fill_decision(order, observation)
+                # The decision uses the order's state from before this
+                # observation; the observation then moves that state.
+                decision = paper_fill_decision(order, observation, tick_size=tick_size)
+                state = paper_order_state_update(order, observation, tick_size=tick_size)
+                if state is not None:
+                    self._save_order_state(uow, account_id, order.order_id, state)
                 if (
                     not decision.should_fill
                     or decision.fill_price is None
@@ -591,12 +924,17 @@ class TradingPaperRepository:
                 if fill_quantity <= 0:
                     continue
                 notional = fill_quantity * decision.fill_price
-                commission = paper_commission(notional, account.commission_bps)
+                # A fixed commission is charged once per order, on its first fill (TVP-7.2b).
+                commission = paper_order_commission(account, notional, first_fill=order.filled_quantity == 0)
                 total_cost = notional + commission
                 rejection = None
-                if not paper_fill_is_fundable(
+                # Buying back a short is never refused for cash (TVP-7.2a): a stop must be able to close it.
+                covers_short = order.side == "buy" and position_quantity < 0 and fill_quantity <= -position_quantity
+                # A long needs its margin share in cash; the rest is borrowed and leaves the cash below zero.
+                margin_cost = notional * paper_margin_fraction(account, order.instrument_id, short=False) + commission
+                if not covers_short and not paper_fill_is_fundable(
                     order,
-                    total_cost=total_cost,
+                    total_cost=margin_cost,
                     available_cash=cash_available,
                 ):
                     rejection = "insufficient_paper_cash"
@@ -605,10 +943,10 @@ class TradingPaperRepository:
                 ):
                     rejection = "insufficient_paper_position"
                 if rejection:
-                    if order.side == "buy":
-                        cash_available += order.reserved_cash
-                        cash_reserved -= order.reserved_cash
-                    else:
+                    # A buy's or a short entry's cash hold goes back; an exit gives back its share of the long.
+                    cash_available += order.reserved_cash
+                    cash_reserved -= order.reserved_cash
+                    if order.side == "sell" and order.reserved_cash == 0:
                         remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
                         release_quantity = min(reserved_quantity, remaining)
                         reserved_quantity -= release_quantity
@@ -661,7 +999,9 @@ class TradingPaperRepository:
 
                 remaining_before = max(Decimal("0"), order.quantity - order.filled_quantity)
                 if order.side == "buy":
-                    reservation_spend = min(order.reserved_cash, total_cost)
+                    # The hold covers the margin share and the commission; the rest of a leveraged buy is borrowed,
+                    # taken from the cash (TVP-7.2b). At 100% margin the share is the whole cost, as before.
+                    reservation_spend = min(order.reserved_cash, total_cost if covers_short else margin_cost)
                     cash_reserved -= reservation_spend
                     cash_available -= total_cost - reservation_spend
                     next_reserved_cash = max(
@@ -685,7 +1025,15 @@ class TradingPaperRepository:
                     if position_quantity == 0:
                         average_cost = Decimal("0")
                 else:
-                    next_reserved_cash = Decimal("0")
+                    # A short entry's hold is released as it fills: the short liability holds its proceeds and margin.
+                    release = (
+                        order.reserved_cash
+                        if fill_quantity >= remaining_before
+                        else order.reserved_cash * fill_quantity / remaining_before
+                    )
+                    cash_reserved -= release
+                    cash_available += release
+                    next_reserved_cash = order.reserved_cash - release
                     if position_quantity > 0:
                         reserved_quantity -= fill_quantity
                         close_quantity = min(position_quantity, fill_quantity)
@@ -885,6 +1233,15 @@ class TradingPaperRepository:
                         account.base_currency,
                     ),
                 )
+            # The instrument's open position is marked at every observation (TVP-7.2b): buying power and margin read it.
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_positions
+                   SET last_price = %s, unrealized_pnl = (%s - average_cost) * quantity
+                 WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s AND quantity <> 0
+                """,
+                (observation.price, observation.price, self.context.workspace_id, account_id, observation.instrument_id),
+            )
             uow.commit()
         return fills
 
@@ -899,7 +1256,8 @@ class TradingPaperRepository:
                 row = uow.connection.execute(
                     """
                     SELECT account_id, name, base_currency, commission_bps,
-                           enabled, revision, created_at, updated_at
+                           enabled, revision, created_at, updated_at, allow_short,
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                       FROM omnix_trading_paper_accounts
                      WHERE workspace_id = %s AND account_id = %s
                     """,
@@ -983,6 +1341,12 @@ class TradingPaperRepository:
                     (self.context.workspace_id, account_id),
                 ).fetchall()
             ]
+            base = next((balance for balance in balances if balance.currency == account.base_currency), None)
+            margin_positions = [
+                PaperMarginPosition(position.instrument_id, position.quantity, position.average_cost, position.last_price)
+                for position in positions
+                if position.quantity != 0
+            ]
             return PaperAccountSnapshot(
                 account=account,
                 balances=balances,
@@ -991,6 +1355,12 @@ class TradingPaperRepository:
                 order_history=order_history,
                 recent_fills=fills,
                 recent_ledger=ledger,
+                margin_status=paper_margin_status(
+                    account,
+                    base.available if base else Decimal("0"),
+                    base.reserved if base else Decimal("0"),
+                    margin_positions,
+                ),
             )
 
 

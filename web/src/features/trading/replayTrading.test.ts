@@ -37,6 +37,7 @@ const snapshot = (): PaperAccountSnapshot => ({
     enabled: true, revision: 1,
   }),
   balances: [{ currency: 'USD', available: '1000', reserved: '25' }],
+  margin_status: null,
   positions: [],
   open_orders: [],
   order_history: [fixture({
@@ -84,7 +85,7 @@ describe('replay trading', () => {
       reference_price: '101', idempotency_key: 'replay-order-1',
     }, bar('101'));
 
-    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(source, expect.any(Object), expect.objectContaining({ close: '101' }));
+    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(source, expect.any(Object), expect.objectContaining({ close: '101' }), true);
     expect(result.order.average_fill_price).toBe('101.101');
   });
 

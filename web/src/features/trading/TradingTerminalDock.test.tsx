@@ -146,4 +146,57 @@ describe('TradingTerminalDock', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('Insufficient available paper cash at the fill price.');
     expect(screen.getByTitle('Insufficient available paper cash at the fill price.')).toBeInTheDocument();
   });
+
+  it('labels the new order types and filters expired orders', async () => {
+    const account = {
+      account_id: 'paper-1', name: 'Paper account', base_currency: 'USD', commission_bps: '0',
+      enabled: true, revision: 1,
+    };
+    const base = {
+      account_id: account.account_id, instrument_id: 'crypto:BINANCE:spot:SOL-USDT', binding_id: null,
+      quantity: '2', reference_price: null, filled_quantity: '0', average_fill_price: null,
+      rejection_reason: null, reserved_cash: '0', expires_at: null, trail_amount: null, trail_percent: null,
+      trail_water_mark: null, stop_triggered_at: null,
+    };
+    const trailing = {
+      ...base, order_id: 'trail-1', idempotency_key: 'trail-1', side: 'sell', order_type: 'trailing_stop',
+      limit_price: null, stop_price: '72.5', status: 'open', time_in_force: 'gtc', trail_percent: '2.5',
+      trail_water_mark: '74.36',
+    };
+    const expired = {
+      ...base, order_id: 'stop-limit-1', idempotency_key: 'stop-limit-1', side: 'buy', order_type: 'stop_limit',
+      limit_price: '76', stop_price: '75.5', status: 'expired', time_in_force: 'day',
+      expires_at: '2026-10-08T00:00:00Z', rejection_reason: 'time_in_force_expired',
+    };
+    paperApi.accounts.mockResolvedValue([account]);
+    paperApi.snapshot.mockResolvedValue({
+      account,
+      balances: [{ currency: 'USD', available: '100000', reserved: '0' }],
+      positions: [],
+      open_orders: [trailing],
+      order_history: [trailing, expired],
+      recent_fills: [],
+      recent_ledger: [],
+    });
+
+    render(<TradingTerminalDock instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await waitFor(() => expect(paperApi.snapshot).toHaveBeenCalledWith(account.account_id));
+    await act(async () => {
+      screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
+    });
+    await act(async () => {
+      screen.getByRole('tab', { name: 'Orders' }).click();
+    });
+
+    expect(screen.getByText('Trailing stop')).toBeInTheDocument();
+    expect(screen.getByText('GTC · trail 2.5%')).toBeInTheDocument();
+    expect(screen.getByText('Stop limit')).toBeInTheDocument();
+    await act(async () => {
+      screen.getByRole('tab', { name: 'Expired 1' }).click();
+    });
+    expect(screen.queryByText('Trailing stop')).not.toBeInTheDocument();
+    const row = screen.getByRole('row', { name: /Stop limit/ });
+    expect(row).toHaveTextContent('DAY');
+    expect(row).toHaveTextContent('Expired');
+  });
 });

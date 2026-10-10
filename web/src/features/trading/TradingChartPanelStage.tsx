@@ -37,10 +37,10 @@ export function ChartPanelIndicatorPanes({ ws }: { ws: TradingChartPanelModel })
 
 /** Replay selection and position markers. */
 export function ChartPanelReplayMarkers({ ws }: { ws: TradingChartPanelModel }) {
-  const { active, replayCursorIndex, replayMarkerX, replayMode, replaySelectionIndex, replaySelectionX, replayStartBar } = ws;
+  const { active, replayChoosingStart, replayMarkerX, replayMode, replaySelectionIndex, replaySelectionX, replayStartBar } = ws;
   return (
     <>
-      {replayMode && active && replayCursorIndex === null && replaySelectionX !== null ? (
+      {replayChoosingStart && replaySelectionX !== null ? (
         <div
           className="trading-replay-future-overlay"
           style={{ left: `${replaySelectionX}px` }}
@@ -52,7 +52,7 @@ export function ChartPanelReplayMarkers({ ws }: { ws: TradingChartPanelModel }) 
           <span>Replay start</span>
         </div>
       ) : null}
-      {replayMode && active && replayCursorIndex === null && replaySelectionX !== null ? (
+      {replayChoosingStart && replaySelectionX !== null ? (
         <div className="trading-replay-selection-divider" style={{ left: `${replaySelectionX}px` }} aria-hidden="true">
           <span>✂</span>
           <small>{replaySelectionIndex === null ? 'Select replay start' : 'Replay start'}</small>

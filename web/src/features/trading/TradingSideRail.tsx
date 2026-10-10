@@ -2,7 +2,7 @@ import type { TradingSideTab } from './TradingSidePanel';
 import './TradingSideRail.css';
 
 const railTabs: Array<{ id: TradingSideTab; label: string; glyph: string }> = [
-  { id: 'pine', label: 'Pine Editor', glyph: '{}' },
+  { id: 'pine', label: 'Omnix Scripts', glyph: '{}' },
   { id: 'objects', label: 'Object tree', glyph: '▱' },
   { id: 'paper', label: 'Trade', glyph: '⇄' },
   { id: 'intelligence', label: 'Symbol Intelligence', glyph: '◎' },

@@ -40,6 +40,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.apps.desktop_companion.observation",
     "app.providers.chatgpt_codex_provider",
     "app.providers.desktop_vision",
+    "app.apps.trading.screener_words",
     "app.apps.rpg.session.action_intelligence",
     "app.apps.rpg.session.compact_dialogue",
     "app.apps.rpg.narration.ai.conversation_prompt_builder",

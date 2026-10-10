@@ -62,6 +62,7 @@ export function TradingSidePanel({
   onRemoveChart,
   onSetLink,
   onSetSnapMode,
+  onDuplicateLayout,
 }: {
   sessionId?: string;
   instruments: CanonicalInstrument[];
@@ -92,6 +93,7 @@ export function TradingSidePanel({
   onRemoveChart: () => void;
   onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   onSetSnapMode: (mode: DrawingSnapMode) => void;
+  onDuplicateLayout?: () => void;
 }) {
   const [internalTab, setInternalTab] = useState<TradingSideTab>('watchlist');
   const activeTab = selectedTab ?? internalTab;
@@ -119,12 +121,16 @@ export function TradingSidePanel({
   }
   if (activeTab === 'pine') {
     return (
-      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Pine Editor">
-        <Suspense fallback={<p role="status">Loading Pine Editor…</p>}>
+      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Omnix Scripts editor">
+        <Suspense fallback={<p role="status">Loading Omnix Scripts editor…</p>}>
         <TradingPinePanel
           indicators={indicators}
           activeIndicatorId={pineIndicatorId}
           onActiveIndicatorChange={onPineIndicatorChange}
+          instrumentId={activeInstrumentId}
+          bindingId={bindingId}
+          interval={interval}
+          onSetIndicators={onSetIndicators}
         />
         </Suspense>
       </aside>
@@ -220,6 +226,7 @@ export function TradingSidePanel({
             onRemoveChart={onRemoveChart}
             onSetLink={onSetLink}
             onSetSnapMode={onSetSnapMode}
+            onDuplicateLayout={onDuplicateLayout}
           />
         ) : null}
         </Suspense>

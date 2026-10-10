@@ -1,10 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperRiskPreview, PaperSide } from './paperTypes';
+import { useEffect, useMemo, useState } from 'react';
+import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperRiskOrderInput, PaperRiskPreview, PaperSide, PaperTimeInForce } from './paperTypes';
+import { localDateTimeToIso, paperOrderTerms, paperOrderTypeLabel, ticketOrderTypes, timeInForceLabels } from './paperOrderTypes';
 import { tradingApi, type TradingQuote } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
-import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from './replayTrading';
+import { createReplaySnapshot } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
+import { applyPaperTicketPrefill, isRiskEntry, usePaperTicketPrefill } from './paperTicketRequests';
 import { useTradingStore } from './tradingStore';
 import './TradingPaper.css';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
@@ -84,6 +86,12 @@ export function TradingPaperPanel({
   const [riskPct, setRiskPct] = useState('0.35');
   const [riskPreview, setRiskPreview] = useState<PaperRiskPreview | null>(null);
   const [triggerPrice, setTriggerPrice] = useState('');
+  const [limitPrice, setLimitPrice] = useState('');
+  const [trailValue, setTrailValue] = useState('');
+  const [trailUnit, setTrailUnit] = useState<'amount' | 'percent'>('amount');
+  const [timeInForce, setTimeInForce] = useState<PaperTimeInForce>('gtc');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [trailingStopLoss, setTrailingStopLoss] = useState(false);
   const [takeProfitEnabled, setTakeProfitEnabled] = useState(false);
   const [stopLossEnabled, setStopLossEnabled] = useState(false);
   const [takeProfit, setTakeProfit] = useState('');
@@ -91,14 +99,17 @@ export function TradingPaperPanel({
   const [quote, setQuote] = useState<TradingQuote | null>(null);
   const [notice, setNotice] = useState<PaperNotice | null>(null);
   const [confirmation, setConfirmation] = useState<PaperConfirmation | null>(null);
+
+  // A long or short position drawing's "Create order" fills the ticket (TVP-3.6); the user still confirms it.
+  usePaperTicketPrefill((prefill) => setNotice(applyPaperTicketPrefill(prefill, instrumentId, {
+    setTicketTab, setSide, setOrderType, setTriggerPrice, setLimitPrice, setStopLossEnabled, setStopLoss, setTakeProfitEnabled, setTakeProfit, setQuantity,
+  }, { riskManaged: !replayMode && isRiskEntry(prefill.side, activeAccount, position), riskPercent: riskPct, longQuantity: Number(position?.quantity) > 0 ? Number(position?.quantity) : null }, displaySymbol)), accounts.length > 0);
   const replayMode = useTradingStore((state) => state.replayMode);
   const replaySessionId = useTradingStore((state) => state.replaySessionId);
   const replayBar = useTradingReplayStore((state) => state.bar);
   const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
-  const setReplaySnapshot = useTradingReplayStore((state) => state.setSnapshot);
-  const replayContextRef = useRef<string | null>(null);
-  const replayBarContextRef = useRef<string | null>(null);
-  const replaySeedPendingRef = useRef(false);
+  const seedReplaySnapshot = useTradingReplayStore((state) => state.seedSnapshot);
+  const replayExecutionError = useTradingReplayStore((state) => state.executionError);
 
   const activeAccount = useMemo(
     () => accounts.find((account) => account.account_id === accountId) ?? accounts[0] ?? null,
@@ -116,7 +127,20 @@ export function TradingPaperPanel({
   const quotePrice = referencePrice === null ? '—' : number(String(referencePrice), 2);
   const bidLabel = bidPrice === null ? '—' : number(String(bidPrice), 2);
   const askLabel = askPrice === null ? '—' : number(String(askPrice), 2);
-  const riskManagedEntry = !replayMode && side === 'buy';
+  const riskManagedEntry = !replayMode && isRiskEntry(side, activeAccount, position);
+  const orderTypes = ticketOrderTypes({ replay: replayMode, entry: riskManagedEntry });
+  // Time in force applies to resting orders; replay has no session clock.
+  const timeInForceEnabled = !replayMode && orderType !== 'market';
+  const effectiveTimeInForce: PaperTimeInForce = timeInForceEnabled ? timeInForce : 'gtc';
+  const usesTriggerPrice = orderType === 'limit' || orderType === 'stop' || orderType === 'stop_limit';
+  // A stop already through the market is accepted, as plain stops always
+  // were: it triggers on the next price. The ticket says so before placing.
+  const stopTrigger = orderType === 'stop' || orderType === 'stop_limit' ? parsePositive(triggerPrice) : null;
+  const stopThroughMarket = stopTrigger !== null && (
+    side === 'buy'
+      ? askPrice !== null && stopTrigger <= askPrice
+      : bidPrice !== null && stopTrigger >= bidPrice
+  );
   const displayedQuantity = riskManagedEntry ? riskPreview?.recommended_quantity ?? '' : quantity;
   const tradeValue = riskManagedEntry
     ? (riskPreview ? Number(riskPreview.estimated_notional) : null)
@@ -146,41 +170,17 @@ export function TradingPaperPanel({
   }, [preferredAccountId]);
 
   useEffect(() => {
-    if (!replayMode) {
-      replayContextRef.current = null;
-      replayBarContextRef.current = null;
-      replaySeedPendingRef.current = false;
-      return;
-    }
-    if (!snapshot || !activeAccount) return;
-    const context = `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`;
-    if (replayContextRef.current === context) return;
-    replayContextRef.current = context;
-    replaySeedPendingRef.current = true;
-    setReplaySnapshot(createReplaySnapshot(snapshot));
-  }, [activeAccount, instrumentId, replayMode, replaySessionId, setReplaySnapshot, snapshot]);
+    // The replay store owns the replay account and advances it bar by bar;
+    // the ticket only seeds it from the live account (once per session).
+    if (!replayMode || !snapshot || !activeAccount) return;
+    seedReplaySnapshot(createReplaySnapshot(snapshot), `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`);
+  }, [activeAccount, instrumentId, replayMode, replaySessionId, seedReplaySnapshot, snapshot]);
 
   useEffect(() => {
-    if (!replayMode || !replaySnapshot || !replayBar || !activeAccount) return;
-    if (replayContextRef.current !== `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`) return;
-    if (replaySeedPendingRef.current) {
-      replaySeedPendingRef.current = false;
-      return;
-    }
-    const context = `${replaySessionId}:${replayBar.start_time}:${replayBar.end_time}`;
-    if (replayBarContextRef.current === context) return;
-    replayBarContextRef.current = context;
-    let cancelled = false;
-    void advanceReplaySnapshot(replaySnapshot, replayBar).then((nextSnapshot) => {
-      if (!cancelled) setReplaySnapshot(nextSnapshot);
-    }).catch((error) => {
-      if (!cancelled) {
-        setStatus('error');
-        setNotice({ kind: 'error', message: paperErrorMessage(error, 'Replay execution') });
-      }
-    });
-    return () => { cancelled = true; };
-  }, [activeAccount, instrumentId, replayBar, replayMode, replaySessionId, replaySnapshot, setReplaySnapshot]);
+    if (!replayMode || !replayExecutionError) return;
+    setStatus('error');
+    setNotice({ kind: 'error', message: paperErrorMessage(new Error(replayExecutionError), 'Replay execution') });
+  }, [replayExecutionError, replayMode]);
 
   useEffect(() => {
     if (!accountId) return;
@@ -205,11 +205,18 @@ export function TradingPaperPanel({
   }, [bindingId, instrumentId, replayMode]);
 
   useEffect(() => {
+    if (!orderTypes.includes(orderType)) setOrderType('market');
+  }, [orderTypes.join(','), orderType]);
+
+  useEffect(() => {
     if (!riskManagedEntry || !activeAccount || !stopLossEnabled) {
       setRiskPreview(null);
       return;
     }
-    const entryPrice = orderType === 'market' ? askPrice : parsePositive(triggerPrice);
+    // A stop-limit entry is sized at its limit, the most it can pay.
+    const entryPrice = orderType === 'market'
+      ? (side === 'sell' ? bidPrice : askPrice)
+      : parsePositive(orderType === 'stop_limit' ? limitPrice : triggerPrice);
     const stopPrice = parsePositive(stopLoss);
     const desiredRisk = parsePositive(riskPct);
     if (entryPrice === null || stopPrice === null || desiredRisk === null) {
@@ -223,7 +230,7 @@ export function TradingPaperPanel({
         binding_id: bindingId,
         entry_price: String(entryPrice),
         stop_price: String(stopPrice),
-        desired_risk_pct: String(desiredRisk),
+        desired_risk_pct: String(desiredRisk), side,
       }).then((preview) => {
         if (!cancelled) setRiskPreview(preview);
       }).catch(() => {
@@ -234,7 +241,7 @@ export function TradingPaperPanel({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeAccount, askPrice, bindingId, instrumentId, orderType, riskManagedEntry, riskPct, stopLoss, stopLossEnabled, triggerPrice]);
+  }, [activeAccount, askPrice, bidPrice, bindingId, instrumentId, limitPrice, orderType, riskManagedEntry, riskPct, side, stopLoss, stopLossEnabled, triggerPrice]);
 
   useEffect(() => {
     if (!notice && !confirmation) return;
@@ -290,16 +297,29 @@ export function TradingPaperPanel({
     const numericTakeProfit = takeProfitEnabled ? parsePositive(takeProfit) : null;
     const numericStopLoss = stopLossEnabled ? parsePositive(stopLoss) : null;
     const numericRiskPct = parsePositive(riskPct);
+    const numericLimit = parsePositive(limitPrice);
+    const numericTrail = parsePositive(trailValue);
+    const expiresIso = effectiveTimeInForce === 'gtd' ? localDateTimeToIso(expiresAt) : null;
+    const pricesMissing = (usesTriggerPrice && numericTrigger === null)
+      || (orderType === 'stop_limit' && numericLimit === null)
+      || (orderType === 'trailing_stop' && (numericTrail === null || (trailUnit === 'percent' && numericTrail >= 100)));
+    const expiryMissing = effectiveTimeInForce === 'gtd'
+      && (expiresIso === null || new Date(expiresIso).getTime() <= Date.now());
     if (riskManagedEntry) {
       if (
         !stopLossEnabled
         || numericStopLoss === null
         || numericRiskPct === null
-        || (orderType !== 'market' && numericTrigger === null)
+        || pricesMissing
         || (takeProfitEnabled && numericTakeProfit === null)
       ) {
         setStatus('error');
         setNotice({ kind: 'error', message: 'New paper entries require a valid stop loss, risk %, order price, and optional take-profit.' });
+        return;
+      }
+      if (expiryMissing) {
+        setStatus('error');
+        setNotice({ kind: 'error', message: 'Choose a future time for a good-till-date order to expire.' });
         return;
       }
       if (!riskPreview?.allowed) {
@@ -309,12 +329,13 @@ export function TradingPaperPanel({
       }
     } else if (
       numericQuantity === null
-      || (orderType !== 'market' && numericTrigger === null)
+      || pricesMissing
+      || expiryMissing
       || (takeProfitEnabled && numericTakeProfit === null)
       || (stopLossEnabled && numericStopLoss === null)
     ) {
       setStatus('error');
-      setNotice({ kind: 'error', message: 'Enter a valid order quantity, price, take-profit, and stop-loss value.' });
+      setNotice({ kind: 'error', message: 'Enter a valid order quantity, price, trail, expiry, take-profit, and stop-loss value.' });
       return;
     }
     const orderId = `paper-order-${Date.now()}`;
@@ -326,15 +347,20 @@ export function TradingPaperPanel({
       let submittedQuantity = quantity;
       if (riskManagedEntry) {
         const result = await tradingPaperApi.placeRiskOrder(activeAccount.account_id, {
-          order_id: orderId,
+          order_id: orderId, side,
           instrument_id: instrumentId,
           binding_id: bindingId,
-          order_type: orderType,
+          // Entries never offer a trailing stop order (see ticketOrderTypes).
+          order_type: orderType as NonNullable<PaperRiskOrderInput['order_type']>,
           trigger_price: orderType === 'market' ? null : triggerPrice,
+          limit_price: orderType === 'stop_limit' ? limitPrice : null,
           stop_loss: stopLoss,
           take_profit: takeProfitEnabled ? takeProfit : null,
+          trailing_stop_loss: stopLossEnabled && trailingStopLoss,
           desired_risk_pct: riskPct,
           idempotency_key: orderId,
+          time_in_force: effectiveTimeInForce,
+          expires_at: expiresIso,
         });
         order = result.order;
         submittedQuantity = result.order.quantity;
@@ -348,19 +374,22 @@ export function TradingPaperPanel({
           side,
           order_type: orderType,
           quantity,
-          limit_price: orderType === 'limit' ? triggerPrice : null,
-          stop_price: orderType === 'stop' ? triggerPrice : null,
+          limit_price: orderType === 'limit' ? triggerPrice : orderType === 'stop_limit' ? limitPrice : null,
+          stop_price: orderType === 'stop' || orderType === 'stop_limit' ? triggerPrice : null,
+          trail_amount: orderType === 'trailing_stop' && trailUnit === 'amount' ? trailValue : null,
+          trail_percent: orderType === 'trailing_stop' && trailUnit === 'percent' ? trailValue : null,
           reference_price: orderType === 'market'
             ? (side === 'buy' ? askPrice : bidPrice) === null
               ? null
               : String(side === 'buy' ? askPrice : bidPrice)
             : null,
           idempotency_key: orderId,
+          time_in_force: effectiveTimeInForce,
+          expires_at: expiresIso,
         };
         if (replayMode) {
           if (!replaySnapshot || !replayBar) throw new Error('Replay account is still loading. Select a replay bar and try again.');
-          const result = await placeReplayOrder(replaySnapshot, input, replayBar);
-          setReplaySnapshot(result.snapshot);
+          const result = await useTradingReplayStore.getState().placeOrder(input);
           order = result.order;
           setStatus('ready');
         } else {
@@ -374,7 +403,7 @@ export function TradingPaperPanel({
         ?? order.reference_price
         ?? (side === 'buy' ? askPrice : bidPrice);
       setConfirmation({
-        title: `${orderType[0].toUpperCase()}${orderType.slice(1)} order ${order.status === 'filled' ? 'executed' : 'submitted'} on`,
+        title: `${paperOrderTypeLabel(orderType)} order ${order.status === 'filled' ? 'executed' : 'submitted'} on`,
         market: displayMarket(instrumentId),
         side,
         quantity: submittedQuantity,
@@ -453,7 +482,7 @@ export function TradingPaperPanel({
           </div>
 
           <div className="trading-paper-order-types" role="tablist" aria-label="Paper order type">
-            {(['market', 'limit', 'stop'] as PaperOrderType[]).map((type) => (
+            {orderTypes.map((type) => (
               <button
                 key={type}
                 type="button"
@@ -461,7 +490,7 @@ export function TradingPaperPanel({
                 aria-selected={orderType === type}
                 onClick={() => setOrderType(type)}
               >
-                {type[0].toUpperCase() + type.slice(1)}
+                {type === 'trailing_stop' ? 'Trailing' : paperOrderTypeLabel(type)}
               </button>
             ))}
           </div>
@@ -488,11 +517,53 @@ export function TradingPaperPanel({
             </label>
           ) : null}
 
-          {orderType !== 'market' ? (
+          {usesTriggerPrice ? (
             <label className="trading-paper-price-field">
               {orderType === 'limit' ? 'Limit price' : 'Stop price'}
               <input aria-label={orderType === 'limit' ? 'Limit price' : 'Stop price'} inputMode="decimal" value={triggerPrice} onChange={(event) => setTriggerPrice(event.target.value)} placeholder={quotePrice} />
             </label>
+          ) : null}
+
+          {orderType === 'stop_limit' ? (
+            <label className="trading-paper-price-field">
+              Limit price
+              <input aria-label="Limit price" inputMode="decimal" value={limitPrice} onChange={(event) => setLimitPrice(event.target.value)} placeholder={quotePrice} />
+            </label>
+          ) : null}
+
+          {orderType === 'trailing_stop' ? (
+            <div className="trading-paper-field-pair">
+              <label className="trading-paper-price-field">
+                {trailUnit === 'percent' ? 'Trail, %' : 'Trail, price'}
+                <input aria-label="Trail distance" inputMode="decimal" value={trailValue} onChange={(event) => setTrailValue(event.target.value)} />
+              </label>
+              <label className="trading-paper-price-field">
+                Trail by
+                <select aria-label="Trail unit" value={trailUnit} onChange={(event) => setTrailUnit(event.target.value as 'amount' | 'percent')}>
+                  <option value="amount">Price</option>
+                  <option value="percent">Percent</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          {timeInForceEnabled ? (
+            <div className="trading-paper-field-pair">
+              <label className="trading-paper-price-field">
+                Time in force
+                <select aria-label="Time in force" value={timeInForce} onChange={(event) => setTimeInForce(event.target.value as PaperTimeInForce)}>
+                  <option value="gtc">{timeInForceLabels.gtc} · until cancelled</option>
+                  <option value="day">{timeInForceLabels.day} · session close</option>
+                  <option value="gtd">{timeInForceLabels.gtd} · until a date</option>
+                </select>
+              </label>
+              {timeInForce === 'gtd' ? (
+                <label className="trading-paper-price-field">
+                  Expires
+                  <input aria-label="Order expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
+                </label>
+              ) : null}
+            </div>
           ) : null}
 
           <dl className="trading-paper-metrics">
@@ -515,7 +586,19 @@ export function TradingPaperPanel({
               <label><span>Stop loss, price{riskManagedEntry ? ' · required' : ''}</span>{stopLossEnabled ? <input aria-label="Stop loss price" inputMode="decimal" value={stopLoss} onChange={(event) => setStopLoss(event.target.value)} placeholder={quotePrice} /> : null}</label>
               <button type="button" role="switch" aria-checked={stopLossEnabled} aria-label="Enable stop loss" className={stopLossEnabled ? 'active' : undefined} onClick={() => setStopLossEnabled((value) => !value)}><i /></button>
             </div>
+            {riskManagedEntry && stopLossEnabled ? (
+              <label className="trading-paper-trailing-toggle">
+                <input type="checkbox" aria-label="Trailing stop loss" checked={trailingStopLoss} onChange={(event) => setTrailingStopLoss(event.target.checked)} />
+                <span>Trailing · follows the best price by the entry-to-stop distance</span>
+              </label>
+            ) : null}
           </details>
+
+          {stopThroughMarket ? (
+            <div className="trading-paper-notice warning" role="note">
+              The stop is already {side === 'buy' ? 'at or below the ask' : 'at or above the bid'}: the order triggers at the next price.
+            </div>
+          ) : null}
 
           {riskManagedEntry && riskPreview && !riskPreview.allowed ? (
             <div className="trading-paper-notice error" role="alert">Risk blocked: {riskPreview.reason_codes.join(' · ')}</div>
@@ -523,9 +606,9 @@ export function TradingPaperPanel({
 
           <button type="button" className={`trading-paper-submit ${side}`} disabled={status === 'saving' || (riskManagedEntry && !riskPreview?.allowed)} onClick={() => void placeOrder()}>
             <strong>{side === 'buy' ? 'Buy' : 'Sell'}</strong>
-            <span>{displayedQuantity || '0'} {symbol} {orderType.toUpperCase()}</span>
+            <span>{displayedQuantity || '0'} {symbol} {paperOrderTypeLabel(orderType).toUpperCase()}</span>
           </button>
-          {notice?.kind === 'error' ? <div className="trading-paper-notice error" role="alert" aria-live="polite">{notice.message}</div> : null}
+          {notice ? <div className={`trading-paper-notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'} aria-live="polite">{notice.message}</div> : null}
           <small className="trading-paper-disclaimer">Paper only · server-authoritative risk · no live brokerage execution</small>
         </div>
       ) : (
@@ -553,9 +636,9 @@ export function TradingPaperPanel({
             <ul className="trading-paper-list">
               {displayedSnapshot.open_orders.map((order) => (
                 <li key={order.order_id}>
-                  <strong>{order.side} {order.quantity} · {order.order_type}</strong>
-                  <span>{displaySymbol(order.instrument_id)}</span>
-                  <span>Awaiting fill</span>
+                  <strong>{order.side} {order.quantity} · {paperOrderTypeLabel(order.order_type)}</strong>
+                  <span>{displaySymbol(order.instrument_id)} · {paperOrderTerms(order)}</span>
+                  <span>{order.order_type === 'trailing_stop' && order.stop_price ? `Stop ${number(order.stop_price)}` : 'Awaiting fill'}</span>
                 </li>
               ))}
               {displayedSnapshot.open_orders.length === 0 ? <li className="empty">No open orders.</li> : null}

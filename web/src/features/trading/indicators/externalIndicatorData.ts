@@ -3,13 +3,14 @@ import type { CoreIndicatorInstance, IndicatorOutput } from './coreIndicators';
 import type { components } from '../api/generated';
 import { api } from '../api/gateway';
 
-export type ExternalIndicatorScope = 'binance-crypto' | 'equity' | 'bitcoin';
+export type ExternalIndicatorScope = 'binance-crypto' | 'equity' | 'bitcoin' | 'market';
 export type ExternalIndicatorDefinition = {
   id: string;
   metric: string;
   pane: 0 | 1;
   scope: ExternalIndicatorScope;
-  seriesKeys?: readonly string[];
+  /** Every series the indicator draws, by the metric's series keys; its output keys are `<id>:<series key>`. */
+  seriesKeys: readonly string[];
   refreshMs: number;
   requirement: string;
 };
@@ -27,35 +28,41 @@ type MetricResponse = components['schemas']['MarketMetricResponse'];
 const BINANCE_REQUIREMENT = 'Available on Binance crypto symbols using public USD-M Futures market data.';
 const EQUITY_REQUIREMENT = 'Available on equity symbols with a Yahoo market-data binding.';
 const BITCOIN_REQUIREMENT = 'Available on BTC instruments using Blockchain.com public on-chain charts.';
+const BREADTH_REQUIREMENT = 'Market breadth of NYSE and Nasdaq stocks, computed by Omnix from Alpaca daily bars after each close; on any symbol.';
 
 const EXTERNAL_INDICATORS: Record<string, ExternalIndicatorDefinition> = {
-  'tv-open-interest': { id: 'tv-open-interest', metric: 'binance.open_interest', pane: 1, scope: 'binance-crypto', refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
-  'tv-understanding-crypto-open-interest': { id: 'tv-understanding-crypto-open-interest', metric: 'binance.open_interest', pane: 1, scope: 'binance-crypto', refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
-  'tv-funding-rate-a-guide-to-market-sentiment': { id: 'tv-funding-rate-a-guide-to-market-sentiment', metric: 'binance.funding_rate', pane: 1, scope: 'binance-crypto', refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
-  'tv-liquidation-data-what-to-watch-and-why-it-matters': { id: 'tv-liquidation-data-what-to-watch-and-why-it-matters', metric: 'binance.liquidations', pane: 1, scope: 'binance-crypto', refreshMs: 5_000, requirement: `${BINANCE_REQUIREMENT} Liquidation history starts when the Omnix runtime collector starts.` },
+  'tv-open-interest': { id: 'tv-open-interest', metric: 'binance.open_interest', pane: 1, scope: 'binance-crypto', seriesKeys: ['open-interest'], refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
+  'tv-understanding-crypto-open-interest': { id: 'tv-understanding-crypto-open-interest', metric: 'binance.open_interest', pane: 1, scope: 'binance-crypto', seriesKeys: ['open-interest'], refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
+  'tv-funding-rate-a-guide-to-market-sentiment': { id: 'tv-funding-rate-a-guide-to-market-sentiment', metric: 'binance.funding_rate', pane: 1, scope: 'binance-crypto', seriesKeys: ['funding-rate'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
+  'tv-liquidation-data-what-to-watch-and-why-it-matters': { id: 'tv-liquidation-data-what-to-watch-and-why-it-matters', metric: 'binance.liquidations', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-liquidations', 'short-liquidations'], refreshMs: 5_000, requirement: `${BINANCE_REQUIREMENT} Liquidation history starts when the Omnix runtime collector starts.` },
   'tv-long-short-ratio-accounts': { id: 'tv-long-short-ratio-accounts', metric: 'binance.global_long_short_accounts', pane: 1, scope: 'binance-crypto', seriesKeys: ['ratio'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
   'tv-long-short-accounts': { id: 'tv-long-short-accounts', metric: 'binance.global_long_short_accounts', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-percent', 'short-percent'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
   'tv-top-trader-long-short-accounts': { id: 'tv-top-trader-long-short-accounts', metric: 'binance.top_long_short_accounts', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-percent', 'short-percent'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
   'tv-top-trader-long-short-accounts-ratio': { id: 'tv-top-trader-long-short-accounts-ratio', metric: 'binance.top_long_short_accounts', pane: 1, scope: 'binance-crypto', seriesKeys: ['ratio'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
   'tv-top-trader-long-short-positions': { id: 'tv-top-trader-long-short-positions', metric: 'binance.top_long_short_positions', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-percent', 'short-percent'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
   'tv-top-trader-long-short-positions-ratio': { id: 'tv-top-trader-long-short-positions-ratio', metric: 'binance.top_long_short_positions', pane: 1, scope: 'binance-crypto', seriesKeys: ['ratio'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
-  'tv-basis': { id: 'tv-basis', metric: 'binance.basis', pane: 1, scope: 'binance-crypto', refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
-  'tv-mark-price': { id: 'tv-mark-price', metric: 'binance.mark_price', pane: 0, scope: 'binance-crypto', refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
-  'tv-index-price': { id: 'tv-index-price', metric: 'binance.index_price', pane: 0, scope: 'binance-crypto', refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
-  'tv-premium': { id: 'tv-premium', metric: 'binance.premium', pane: 1, scope: 'binance-crypto', refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
+  'tv-basis': { id: 'tv-basis', metric: 'binance.basis', pane: 1, scope: 'binance-crypto', seriesKeys: ['basis'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
+  'tv-mark-price': { id: 'tv-mark-price', metric: 'binance.mark_price', pane: 0, scope: 'binance-crypto', seriesKeys: ['mark'], refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
+  'tv-index-price': { id: 'tv-index-price', metric: 'binance.index_price', pane: 0, scope: 'binance-crypto', seriesKeys: ['index'], refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
+  'tv-premium': { id: 'tv-premium', metric: 'binance.premium', pane: 1, scope: 'binance-crypto', seriesKeys: ['premium'], refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
 
-  'tv-analyst-price-forecast': { id: 'tv-analyst-price-forecast', metric: 'yahoo.analyst_price_forecast', pane: 0, scope: 'equity', refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical analyst-target snapshots are not fabricated.` },
-  'tv-price-target-indicator': { id: 'tv-price-target-indicator', metric: 'yahoo.price_target', pane: 0, scope: 'equity', refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical price-target snapshots are not fabricated.` },
-  'tv-dividend-yield': { id: 'tv-dividend-yield', metric: 'yahoo.dividend_yield', pane: 1, scope: 'equity', refreshMs: 60 * 60_000, requirement: `${EQUITY_REQUIREMENT} Omnix calculates trailing-12-month dividends divided by current price.` },
+  'tv-analyst-price-forecast': { id: 'tv-analyst-price-forecast', metric: 'yahoo.analyst_price_forecast', pane: 0, scope: 'equity', seriesKeys: ['target-low', 'target-mean', 'target-high'], refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical analyst-target snapshots are not fabricated.` },
+  'tv-price-target-indicator': { id: 'tv-price-target-indicator', metric: 'yahoo.price_target', pane: 0, scope: 'equity', seriesKeys: ['target-low', 'target-mean', 'target-high'], refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical price-target snapshots are not fabricated.` },
+  'tv-dividend-yield': { id: 'tv-dividend-yield', metric: 'yahoo.dividend_yield', pane: 1, scope: 'equity', seriesKeys: ['dividend-yield'], refreshMs: 60 * 60_000, requirement: `${EQUITY_REQUIREMENT} Omnix calculates trailing-12-month dividends divided by current price.` },
 
-  'tv-hash-rate': { id: 'tv-hash-rate', metric: 'blockchain.hash_rate', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
-  'tv-difficulty': { id: 'tv-difficulty', metric: 'blockchain.difficulty', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
-  'tv-total-utxos': { id: 'tv-total-utxos', metric: 'blockchain.total_utxos', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
-  'tv-transaction-fees': { id: 'tv-transaction-fees', metric: 'blockchain.transaction_fees', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
-  'tv-transaction-rate': { id: 'tv-transaction-rate', metric: 'blockchain.transaction_rate', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
-  'tv-blocks-mined': { id: 'tv-blocks-mined', metric: 'blockchain.blocks_mined', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
-  'tv-mean-block-size-in-bytes': { id: 'tv-mean-block-size-in-bytes', metric: 'blockchain.mean_block_size_bytes', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
-  'tv-total-block-size-in-bytes': { id: 'tv-total-block-size-in-bytes', metric: 'blockchain.total_block_size_bytes', pane: 1, scope: 'bitcoin', refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  // TVP-6.6: market breadth (breadth.py), one line per exchange, on any chart.
+  'tv-advance-decline-line': { id: 'tv-advance-decline-line', metric: 'breadth.ad_line', pane: 1, scope: 'market', seriesKeys: ['nyse', 'nasdaq'], refreshMs: 60 * 60_000, requirement: BREADTH_REQUIREMENT },
+  'tv-advance-decline-ratio': { id: 'tv-advance-decline-ratio', metric: 'breadth.ad_ratio', pane: 1, scope: 'market', seriesKeys: ['nyse', 'nasdaq'], refreshMs: 60 * 60_000, requirement: BREADTH_REQUIREMENT },
+  'tv-cumulative-volume-index-cvi': { id: 'tv-cumulative-volume-index-cvi', metric: 'breadth.cvi', pane: 1, scope: 'market', seriesKeys: ['nyse', 'nasdaq'], refreshMs: 60 * 60_000, requirement: BREADTH_REQUIREMENT },
+
+  'tv-hash-rate': { id: 'tv-hash-rate', metric: 'blockchain.hash_rate', pane: 1, scope: 'bitcoin', seriesKeys: ['hash-rate'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  'tv-difficulty': { id: 'tv-difficulty', metric: 'blockchain.difficulty', pane: 1, scope: 'bitcoin', seriesKeys: ['difficulty'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  'tv-total-utxos': { id: 'tv-total-utxos', metric: 'blockchain.total_utxos', pane: 1, scope: 'bitcoin', seriesKeys: ['utxo-count'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  'tv-transaction-fees': { id: 'tv-transaction-fees', metric: 'blockchain.transaction_fees', pane: 1, scope: 'bitcoin', seriesKeys: ['transaction-fees'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  'tv-transaction-rate': { id: 'tv-transaction-rate', metric: 'blockchain.transaction_rate', pane: 1, scope: 'bitcoin', seriesKeys: ['transactions-per-second'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  'tv-blocks-mined': { id: 'tv-blocks-mined', metric: 'blockchain.blocks_mined', pane: 1, scope: 'bitcoin', seriesKeys: ['n-blocks-mined'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  'tv-mean-block-size-in-bytes': { id: 'tv-mean-block-size-in-bytes', metric: 'blockchain.mean_block_size_bytes', pane: 1, scope: 'bitcoin', seriesKeys: ['avg-block-size'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
+  'tv-total-block-size-in-bytes': { id: 'tv-total-block-size-in-bytes', metric: 'blockchain.total_block_size_bytes', pane: 1, scope: 'bitcoin', seriesKeys: ['blocks-size'], refreshMs: 15 * 60_000, requirement: BITCOIN_REQUIREMENT },
 };
 
 const responseCache = new Map<string, { expiresAt: number; promise: Promise<MetricResponse | null> }>();
@@ -73,7 +80,13 @@ export function externalIndicatorAvailableForInstrument(id: string, instrumentId
   if (!definition) return false;
   if (definition.scope === 'binance-crypto') return /^crypto:BINANCE:/i.test(instrumentId);
   if (definition.scope === 'equity') return /^equity:/i.test(instrumentId);
+  if (definition.scope === 'market') return true;
   return /^crypto:[^:]+:(?:spot|perpetual):BTC-/i.test(instrumentId);
+}
+
+/** An external indicator's output keys (`<id>:<series key>`), as the chart names its lines and the server evaluates them. */
+export function externalIndicatorOutputKeys(id: string): string[] {
+  return (externalIndicatorDefinition(id)?.seriesKeys ?? []).map((key) => `${id}:${key}`);
 }
 
 export function externalIndicatorRequirement(id: string): string | undefined {
@@ -146,9 +159,9 @@ export async function calculateExternalIndicatorOutputs(
   const response = await requestMetric(definition, instrumentId, interval, Math.max(100, bars.length), endTime);
   if (!response) return [];
 
-  const allowed = definition.seriesKeys ? new Set(definition.seriesKeys) : null;
+  const allowed = new Set(definition.seriesKeys);
   return response.series
-    .filter((series) => !allowed || allowed.has(series.key))
+    .filter((series) => allowed.has(series.key))
     .map((series, index) => {
       const key = `${id}:${series.key}`;
       return {

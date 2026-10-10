@@ -5,7 +5,7 @@ import logging
 from contextlib import aclosing
 from collections.abc import Callable
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal, cast
 
@@ -14,8 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
-from .catalog import bindings_for_instrument
+from .catalog import bindings_for_instrument, instrument_by_id
 from .instrument_catalog_service import ProviderBackedInstrumentCatalog, default_instrument_catalog
+from .intrabar import IntrabarResponse, intrabar_bars
+from .market_session_status import MarketSessionStatus, is_always_open, market_session_status
 from .models import BarsResponse, CanonicalInstrument, ProviderBinding, ProviderPolicy
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .service import TradingMarketDataService, default_market_data_service
@@ -87,6 +89,18 @@ class CurrencyRateResponse(BaseModel):
 class TradingDiagnosticsResponse(BaseModel):
     ok: bool = True
     diagnostics: dict[str, Any]
+
+
+class MarketStatusResponse(BaseModel):
+    """An instrument's market session right now, for the chart legend (TVP-2.5)."""
+
+    model_config = ConfigDict(extra="forbid")
+    instrument_id: str
+    session_calendar: str
+    exchange_timezone: str
+    status: MarketSessionStatus
+    always_open: bool
+    as_of: datetime
 
 
 class TradingDocumentRequest(BaseModel):
@@ -168,7 +182,7 @@ def _rehydrate_persisted_bindings(
     path in sync on a fresh process.
     """
     instrument_ids: set[str] = set()
-    for record_type in ("workspace", "watchlist", "drawing", "indicator_preset"):
+    for record_type in ("workspace", "watchlist", "watchlist_flag_set", "drawing", "indicator_preset"):
         try:
             records = list(repository_factory().iter(record_type))
         except Exception:
@@ -186,6 +200,7 @@ def create_trading_router(
     repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
     market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
     instrument_catalog_factory: Callable[[], ProviderBackedInstrumentCatalog] = default_instrument_catalog,
+    clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
@@ -214,9 +229,21 @@ def create_trading_router(
         interval: str = Query(default="1m", max_length=16),
         limit: int = Query(default=500, ge=1, le=5_000),
         binding_id: str | None = Query(default=None, max_length=240),
+        alignment: Literal["count", "clock"] = Query(default="count"),
+        extended_hours: bool = Query(default=True),
     ) -> BarsResponse:
         try:
             service = market_service_factory()
+            if alignment == "clock":
+                # Charts ask for clock-aligned derived intervals (TVP-2.5).
+                return service.bars(
+                    instrument_id,
+                    interval,
+                    limit,
+                    binding_id,
+                    alignment="clock",
+                    include_extended_hours=extended_hours,
+                )
             if binding_id is None:
                 return service.bars(instrument_id, interval, limit)
             return service.bars(instrument_id, interval, limit, binding_id)
@@ -229,6 +256,55 @@ def create_trading_router(
                 status_code=502,
                 detail={"code": "market_data_failed", "message": "The market data provider request failed."},
             ) from exc
+
+    @router.get("/bars/intrabar", response_model=IntrabarResponse)
+    def bars_intrabar(
+        start: datetime,
+        end: datetime,
+        instrument_id: str = Query(min_length=3, max_length=200),
+        interval: str = Query(max_length=16),
+        lower_interval: str = Query(max_length=16),
+        binding_id: str | None = Query(default=None, max_length=240),
+    ) -> IntrabarResponse:
+        """Lower-timeframe bars inside chart bars (TVP-0.6), for volume delta and sub-bar replay."""
+        try:
+            return intrabar_bars(
+                market_service_factory(),
+                instrument_id=instrument_id,
+                interval=interval,
+                lower_interval=lower_interval,
+                start=start,
+                end=end,
+                now=clock(),
+                binding_id=binding_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
+            logger.warning("intrabar_data_failed", exc_info=True)
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "market_data_failed", "message": "The market data provider request failed."},
+            ) from exc
+
+    @router.get("/market-status", response_model=MarketStatusResponse)
+    def market_status(
+        instrument_id: str = Query(min_length=3, max_length=200),
+    ) -> MarketStatusResponse:
+        instrument = instrument_by_id(instrument_id)
+        if instrument is None:
+            raise HTTPException(status_code=404, detail="instrument_not_found")
+        now = clock().astimezone(timezone.utc)
+        asset_class = str(instrument.asset_class)
+        return MarketStatusResponse(
+            instrument_id=instrument.instrument_id,
+            session_calendar=instrument.session_calendar,
+            exchange_timezone=instrument.exchange_timezone,
+            status=market_session_status(instrument.session_calendar, asset_class, now, instrument.venue),
+            always_open=is_always_open(instrument.session_calendar, asset_class),
+            as_of=now,
+        )
 
     @router.get("/quotes", response_model=QuoteResponse)
     def quote(
@@ -312,8 +388,20 @@ def create_trading_router(
 
     def register_documents(path: str, record_type: str) -> None:
         @router.get(path, response_model=TradingDocumentListResponse, name=f"list_trading_{record_type}s")
-        def list_documents(limit: int = Query(default=100, ge=1, le=500)) -> TradingDocumentListResponse:
-            records = repository_factory().list(record_type, limit=limit)
+        def list_documents(
+            limit: int = Query(default=100, ge=1, le=500),
+            after_updated_at: str | None = Query(default=None, max_length=64),
+            after_record_id: str | None = Query(default=None, max_length=200),
+        ) -> TradingDocumentListResponse:
+            # Pages run newest first; a page's last (updated_at, record_id) asks for the next one.
+            if after_updated_at is not None and after_record_id is not None:
+                records = repository_factory().list(
+                    record_type,
+                    limit=limit,
+                    after=(after_updated_at, after_record_id),
+                )
+            else:
+                records = repository_factory().list(record_type, limit=limit)
             return TradingDocumentListResponse(records=[_document_response(record) for record in records])
 
         @router.post(path, response_model=TradingDocumentResponse, status_code=201, name=f"create_trading_{record_type}")
@@ -383,6 +471,10 @@ def create_trading_router(
 
     register_documents("/workspaces", "workspace")
     register_documents("/watchlists", "watchlist")
+    # One user-level document holds the colour flags shared by every watchlist (TVP-5.1).
+    register_documents("/watchlist-flags", "watchlist_flag_set")
     register_documents("/drawings", "drawing")
     register_documents("/indicator-presets", "indicator_preset")
+    # Omnix Scripts (TVP-11.3): the source and its saved versions.
+    register_documents("/scripts", "script")
     return router

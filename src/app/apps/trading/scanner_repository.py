@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -21,6 +23,17 @@ from .scanner import (
 
 class UnitOfWorkFactory(Protocol):
     def __call__(self) -> AbstractContextManager[PostgresUnitOfWork]: ...
+
+
+logger = logging.getLogger(__name__)
+
+# A run lasts at most 300 s (TradingScannerDefinition.run_timeout_seconds); one older than this was abandoned.
+STALE_RUN_SECONDS = 600
+RUNS_KEPT_PER_SCANNER = 50
+
+
+class ScannerRunActive(ValueError):
+    """A run of the scanner is still queued or running."""
 
 
 def _definition(row) -> TradingScannerDefinition:
@@ -112,7 +125,15 @@ class TradingScannerRepository:
                 f"SELECT {_DEFINITION_COLUMNS} FROM omnix_trading_scanners WHERE workspace_id = %s ORDER BY updated_at DESC LIMIT %s",
                 (self.context.workspace_id, limit),
             ).fetchall()
-            return [_definition(row) for row in rows]
+            # A stored screen a newer rule refuses (a duplicate rule id, a renamed indicator line) is left out
+            # of the list rather than failing it; it can still be read and fixed by id.
+            definitions = []
+            for row in rows:
+                try:
+                    definitions.append(_definition(row))
+                except ValueError:
+                    logger.warning("trading_scanner_definition_unreadable scanner_id=%s", row[0])
+            return definitions
 
     def get_definition(self, scanner_id: str) -> TradingScannerDefinition | None:
         with self.uow_factory() as uow:
@@ -194,7 +215,52 @@ class TradingScannerRepository:
             return _definition(row)
 
     def create_run(self, run: TradingScannerRun) -> TradingScannerRun:
+        """Record a new run; one at a time per scanner (TVP-9.2), and only the latest finished runs are kept.
+
+        A run still queued or running blocks a new one unless it is older than any run may last (a process that
+        stopped mid-run leaves its run behind). Finished runs past the newest RUNS_KEPT_PER_SCANNER are deleted
+        with their results, so an auto-refreshing screen does not pile up runs.
+        """
         with self.uow_factory() as uow:
+            locked = uow.connection.execute(
+                "SELECT 1 FROM omnix_trading_scanners WHERE workspace_id = %s AND scanner_id = %s FOR UPDATE",
+                (self.context.workspace_id, run.scanner_id),
+            ).fetchone()
+            if locked is None:
+                raise ValueError(f"scanner_not_found: {run.scanner_id}")
+            active = uow.connection.execute(
+                """
+                SELECT 1 FROM omnix_trading_scanner_runs
+                 WHERE workspace_id = %s AND scanner_id = %s AND status IN ('queued', 'running')
+                   AND created_at > CURRENT_TIMESTAMP - make_interval(secs => %s)
+                 LIMIT 1
+                """,
+                (self.context.workspace_id, run.scanner_id, STALE_RUN_SECONDS),
+            ).fetchone()
+            if active is not None:
+                raise ScannerRunActive(f"scanner_run_active: {run.scanner_id}")
+            uow.connection.execute(
+                """
+                DELETE FROM omnix_trading_scanner_runs
+                 WHERE workspace_id = %s AND scanner_id = %s
+                   AND (
+                       -- Abandoned runs (a process stopped mid-run) go too.
+                       (status IN ('queued', 'running') AND created_at <= CURRENT_TIMESTAMP - make_interval(secs => %s))
+                       OR (
+                           status NOT IN ('queued', 'running')
+                           AND run_id NOT IN (
+                               SELECT run_id FROM omnix_trading_scanner_runs
+                                WHERE workspace_id = %s AND scanner_id = %s AND status NOT IN ('queued', 'running')
+                                ORDER BY created_at DESC LIMIT %s
+                           )
+                       )
+                   )
+                """,
+                (
+                    self.context.workspace_id, run.scanner_id, STALE_RUN_SECONDS,
+                    self.context.workspace_id, run.scanner_id, RUNS_KEPT_PER_SCANNER - 1,
+                ),
+            )
             row = uow.connection.execute(
                 f"""
                 INSERT INTO omnix_trading_scanner_runs (

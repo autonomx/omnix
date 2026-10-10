@@ -630,5 +630,9 @@
   "trading.research.market_research.generate_market_research": {
     "sha256": "55c5c304c36384203edc2b03e20dba3d1e974a4dd3f62ae062e22362f9c508f0",
     "version": "1"
+  },
+  "trading.screener_from_words": {
+    "sha256": "fdff6211b860d9d67a443ae1607910b44542bec866ee4d2b94139787623f5d6e",
+    "version": "2"
   }
 }

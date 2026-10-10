@@ -16,19 +16,22 @@ import { unwrapLabelled } from '../../api/http';
 import { parseJson, tradingStreamMessageSchema } from '../../api/schemas/streams';
 import { api } from './api/gateway';
 
-export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
+export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'watchlist-flags' | 'drawings' | 'indicator-presets' | 'scripts';
 
 export type TradingCurrencyRate = components['schemas']['CurrencyRateResponse'];
 export type TradingQuote = components['schemas']['QuoteResponse'];
+export type TradingMarketStatus = components['schemas']['MarketStatusResponse'];
 
 const trading = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Trading');
 
-// The four trading document families share one contract.
+// The trading document families share one contract.
 const DOCUMENT_PATHS = {
   workspaces: { list: '/api/trading/workspaces', record: '/api/trading/workspaces/{record_id}' },
   watchlists: { list: '/api/trading/watchlists', record: '/api/trading/watchlists/{record_id}' },
+  'watchlist-flags': { list: '/api/trading/watchlist-flags', record: '/api/trading/watchlist-flags/{record_id}' },
   drawings: { list: '/api/trading/drawings', record: '/api/trading/drawings/{record_id}' },
   'indicator-presets': { list: '/api/trading/indicator-presets', record: '/api/trading/indicator-presets/{record_id}' },
+  scripts: { list: '/api/trading/scripts', record: '/api/trading/scripts/{record_id}' },
 } as const;
 
 export function tradingStreamUrl(instrumentId: string, interval: string, bindingId?: string | null): string {
@@ -57,13 +60,25 @@ export function subscribeTradingStream(
   return () => socket.close(1000, 'chart disposed');
 }
 
-function barsQuery(instrumentId: string, interval: string, limit: number, bindingId?: string | null) {
-  return { instrument_id: instrumentId, interval, limit, ...(bindingId ? { binding_id: bindingId } : {}) };
+/** Chart-only bar options (TVP-2.5): clock-aligned derived intervals, with or without extended hours. */
+export type TradingBarsOptions = { alignment?: 'clock'; extendedHours?: boolean };
+
+function barsQuery(instrumentId: string, interval: string, limit: number, bindingId?: string | null, options?: TradingBarsOptions) {
+  return {
+    instrument_id: instrumentId,
+    interval,
+    limit,
+    ...(bindingId ? { binding_id: bindingId } : {}),
+    ...(options?.alignment ? { alignment: options.alignment, extended_hours: options.extendedHours ?? true } : {}),
+  };
 }
 
-function formulaInstrument(instrumentId: string, expression: string, source: CanonicalInstrument): CanonicalInstrument {
+const DOCUMENT_PAGE_SIZE = 500;
+
+function formulaInstrument(instrumentId: string, expression: string, source: CanonicalInstrument): CanonicalInstrument & { name: string | null } {
   return {
     ...source,
+    name: null,
     instrument_id: instrumentId,
     display_symbol: expression,
     venue_symbol: expression,
@@ -191,19 +206,53 @@ export const tradingApi = {
     (await trading(api.GET('/api/trading/providers/status'))).providers,
   instruments: async (query = ''): Promise<CanonicalInstrument[]> =>
     (await trading(api.GET('/api/trading/instruments/search', { params: { query: { query } } }))).instruments,
-  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null): Promise<BarsResponse> => {
+  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null, options?: TradingBarsOptions): Promise<BarsResponse> => {
     if (decodeTradingFormula(instrumentId)) return formulaBars(instrumentId, interval, limit);
-    return trading(api.GET('/api/trading/bars', { params: { query: barsQuery(instrumentId, interval, limit, bindingId) } }));
+    return trading(api.GET('/api/trading/bars', { params: { query: barsQuery(instrumentId, interval, limit, bindingId, options) } }));
   },
+  /** Lower-timeframe bars inside chart bars (TVP-0.6); see intrabarData.ts. */
+  intrabars: (request: { instrumentId: string; bindingId?: string | null; interval: string; lowerInterval: string; start: number; end: number }) =>
+    trading(api.GET('/api/trading/bars/intrabar', {
+      params: {
+        query: {
+          instrument_id: request.instrumentId,
+          interval: request.interval,
+          lower_interval: request.lowerInterval,
+          start: new Date(request.start).toISOString(),
+          end: new Date(request.end).toISOString(),
+          ...(request.bindingId ? { binding_id: request.bindingId } : {}),
+        },
+      },
+    })),
   quote: (instrumentId: string, bindingId?: string | null): Promise<TradingQuote> =>
     trading(api.GET('/api/trading/quotes', {
       params: { query: { instrument_id: instrumentId, ...(bindingId ? { binding_id: bindingId } : {}) } },
     })),
   currencyRate: (baseCurrency: string, quoteCurrency: string): Promise<TradingCurrencyRate> =>
     trading(api.GET('/api/trading/currency-rates', { params: { query: { base_currency: baseCurrency, quote_currency: quoteCurrency } } })),
+  marketStatus: (instrumentId: string): Promise<TradingMarketStatus> =>
+    trading(api.GET('/api/trading/market-status', { params: { query: { instrument_id: instrumentId } } })),
   diagnostics: () => trading(api.GET('/api/trading/diagnostics')),
   documents: async (kind: TradingDocumentKind): Promise<TradingDocument[]> =>
     (await trading(api.GET(DOCUMENT_PATHS[kind].list))).records,
+  /** Every document of a kind, page by page (newest first). */
+  allDocuments: async (kind: TradingDocumentKind): Promise<TradingDocument[]> => {
+    const records: TradingDocument[] = [];
+    let cursor: { after_updated_at: string; after_record_id: string } | null = null;
+    for (;;) {
+      const query = { limit: DOCUMENT_PAGE_SIZE, ...(cursor ?? {}) };
+      const page: TradingDocument[] = (await trading(api.GET(DOCUMENT_PATHS[kind].list, { params: { query } }))).records;
+      records.push(...page);
+      const last = page.at(-1);
+      if (page.length < DOCUMENT_PAGE_SIZE || !last?.updated_at) return records;
+      cursor = { after_updated_at: last.updated_at, after_record_id: last.record_id };
+    }
+  },
+  /** A chart image behind a link (TVP-2.1/2.5): the link opens for signed-in members of the workspace. */
+  createSnapshot: (image: string, instrumentId: string, interval: string): Promise<components['schemas']['Snapshot']> =>
+    trading(api.POST('/api/trading/snapshots', { body: { image, instrument_id: instrumentId, interval } })),
+  document: (kind: TradingDocumentKind, recordId: string): Promise<TradingDocument> =>
+    trading(api.GET(DOCUMENT_PATHS[kind].record, { params: { path: { record_id: recordId } }, cache: 'no-store' })),
   createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>): Promise<TradingDocument> =>
     trading(api.POST(DOCUMENT_PATHS[kind].list, { body: { record_id: recordId, payload } })),
   updateDocument: (kind: TradingDocumentKind, record: TradingDocument, payload: Record<string, unknown>): Promise<TradingDocument> =>
@@ -217,8 +266,27 @@ export const tradingApi = {
     })),
   alerts: async (): Promise<TradingAlert[]> =>
     (await trading(api.GET('/api/trading/alerts', { cache: 'no-store' }))).alerts,
+  /** The indicators the server evaluates for alerts (TVP-1.3). */
+  alertIndicators: async (): Promise<string[]> =>
+    (await trading(api.GET('/api/trading/alerts/indicators'))).indicator_ids,
+  /** The latest value of indicator lines for a list of symbols: the watchlist's indicator columns (TVP-5.2). */
+  indicatorValues: async (
+    instrumentIds: readonly string[],
+    interval: string,
+    lines: ReadonlyArray<{ indicator_id: string; period: number; output: string }>,
+  ): Promise<Record<string, Array<string | number | null>>> =>
+    (await trading(api.POST('/api/trading/indicators/latest', {
+      body: {
+        instrument_ids: [...instrumentIds],
+        interval,
+        lines: lines.map((line) => ({ kind: 'indicator' as const, indicator_id: line.indicator_id, inputs: { period: line.period }, output: line.output })),
+      },
+    }))).values,
   alertTriggers: async (): Promise<TradingAlertTrigger[]> =>
     (await trading(api.GET('/api/trading/alerts/triggers', { cache: 'no-store' }))).triggers,
+  /** How many of a watchlist's symbols an alert on it evaluates (TVP-1.7). */
+  watchlistAlertCapacity: (watchlistId: string) =>
+    trading(api.GET('/api/trading/alerts/watchlist-capacity', { params: { query: { watchlist_id: watchlistId } } })),
   createAlert: (input: TradingAlertCreateInput): Promise<TradingAlert> =>
     trading(api.POST('/api/trading/alerts', { body: input })),
   updateAlert: (alert: TradingAlert, input: TradingAlertUpdateInput): Promise<TradingAlert> =>
