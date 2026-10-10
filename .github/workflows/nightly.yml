@@ -51,7 +51,7 @@ jobs:
       OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: {python-version: "3.11", cache: pip}
       - run: python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Apply PostgreSQL migrations
@@ -98,7 +98,7 @@ jobs:
       OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_rolling_test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: {python-version: "3.11", cache: pip}
       - run: python -m pip install --require-hashes -r requirements/gateway.lock.txt
       - name: Apply PostgreSQL migrations (version N)
@@ -172,7 +172,7 @@ jobs:
       - name: Choose the blob root
         run: echo "OMNIX_BLOB_ROOT=$RUNNER_TEMP/blobs-source" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: {python-version: "3.11", cache: pip}
       - run: python -m pip install --require-hashes -r requirements/gateway.lock.txt
       - name: Install PostgreSQL 17 client tools (pg_dump must match the server)
