@@ -20,7 +20,11 @@ const npm = existsSync(adjacentNpm) ? adjacentNpm : process.env.npm_execpath;
 if (args[0] !== '--version' && (!npm || !existsSync(npm))) {
   throw new Error('Node toolchain has no npm CLI. Run python scripts/install_node_toolchain.py or configure OMNIX_NODE_EXECUTABLE.');
 }
-const command = args[0] === '--version' ? ['--version'] : [npm, '--prefix', join(root, 'web'), 'run', ...args];
+// Arguments after the script name are the script's (npm would otherwise read --host and the like as its own).
+const [script, ...scriptArgs] = args;
+const command = args[0] === '--version'
+  ? ['--version']
+  : [npm, '--prefix', join(root, 'web'), 'run', script, ...(scriptArgs.length && scriptArgs[0] !== '--' ? ['--'] : []), ...scriptArgs];
 const child = spawn(node, command, {
   cwd: root, stdio: 'inherit', windowsHide: true,
   env: { ...process.env, PATH: `${dirname(node)}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH || ''}` },
