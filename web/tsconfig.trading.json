@@ -5,6 +5,7 @@
     "noEmit": true
   },
   "include": [
+    "src/*.d.ts",
     "src/features/trading/**/*.ts",
     "src/features/trading/**/*.tsx"
   ],
