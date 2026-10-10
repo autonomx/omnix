@@ -124,7 +124,7 @@ jobs:
             -q --tb=short 2>&1 | tee postgresql-pytest-output.txt
       - name: Upload PostgreSQL pytest diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: postgresql-pytest-output
           path: postgresql-pytest-output.txt

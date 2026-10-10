@@ -73,7 +73,7 @@ jobs:
           python scripts/check_architecture_benchmark.py             --baseline resources/benchmarks/gateway/refactor-baseline.json             --measured artifacts/gateway-baseline.json
       - name: Upload architecture benchmark
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: architecture-gateway-benchmark
           path: artifacts/gateway-baseline.json
@@ -161,7 +161,7 @@ jobs:
           python -m pytest -n auto -m "not gpu and not live_provider and not playwright and not live_codex" --junitxml artifacts/full-python-suite.xml
       - name: Upload full-suite triage inventory
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: full-python-suite-triage
           path: artifacts/full-python-suite.xml
