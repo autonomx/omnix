@@ -25,10 +25,7 @@ FetchBars = Callable[[str, int], Sequence[Any]]
 
 def instrument_session(instrument_id: str) -> TradingSession | None:
     """The instrument's session calendar, as the chart sets it; None (UTC days) for an instrument the catalog lacks."""
-    try:
-        instrument = instrument_by_id(instrument_id)
-    except Exception:  # a malformed id: no catalog entry
-        return None
+    instrument = instrument_by_id(instrument_id)
     if instrument is None:
         return None
     return session_for_instrument(
