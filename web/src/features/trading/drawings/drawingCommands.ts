@@ -23,6 +23,10 @@ export type TradingDrawing = {
   properties?: DrawingProperties;
   /** Which intervals the drawing shows on (TVP-3.8); every interval when absent. */
   visibility?: DrawingVisibility;
+  /** The name the object tree shows instead of the tool's (TVP-3.8). */
+  name?: string;
+  /** The object tree group the drawing is in, by its name (TVP-3.8); a group is the drawings that share it. */
+  group?: string;
 };
 
 export type DrawingState = {
@@ -245,6 +249,91 @@ export function deleteDrawing(state: DrawingState, drawingId: string): DrawingSt
   const next = snapshot(state);
   const remaining = { ...next, drawings: next.drawings.filter((drawing) => drawing.drawingId !== drawingId) };
   return withSelection(remaining, selectedDrawingIds(state).filter((id) => id !== drawingId), state.selectedId === drawingId ? null : state.selectedId);
+}
+
+/** Patches the given drawings in one undo step; nothing when none of them exists. */
+function patchDrawings(state: DrawingState, ids: ReadonlySet<string>, patch: (drawing: TradingDrawing) => Partial<TradingDrawing>): DrawingState {
+  if (!state.drawings.some((drawing) => ids.has(drawing.drawingId))) return state;
+  const next = snapshot(state);
+  return {
+    ...next,
+    drawings: next.drawings.map((drawing) => (ids.has(drawing.drawingId) ? { ...drawing, ...patch(drawing), revision: drawing.revision + 1 } : drawing)),
+  };
+}
+
+const cleanName = (name: string | null | undefined): string | undefined => {
+  const trimmed = (name ?? '').trim().slice(0, 80);
+  return trimmed || undefined;
+};
+
+/** Object tree (TVP-3.8): a drawing's own name; an empty name goes back to the tool's. */
+export function renameDrawing(state: DrawingState, drawingId: string, name: string): DrawingState {
+  return patchDrawings(state, new Set([drawingId]), () => ({ name: cleanName(name) }));
+}
+
+/** Object tree (TVP-3.8): puts drawings in a group, by name, or takes them out of theirs (null). */
+export function groupDrawings(state: DrawingState, drawingIds: readonly string[], group: string | null): DrawingState {
+  return patchDrawings(state, new Set(drawingIds), () => ({ group: cleanName(group) }));
+}
+
+/** Object tree (TVP-3.8): renames a group; a name another group has merges the two. */
+export function renameDrawingGroup(state: DrawingState, from: string, to: string): DrawingState {
+  const name = cleanName(to);
+  if (!name || name === from) return state;
+  const ids = new Set(state.drawings.filter((drawing) => drawing.group === from).map((drawing) => drawing.drawingId));
+  return patchDrawings(state, ids, () => ({ group: name }));
+}
+
+/** Object tree (TVP-3.8): shows or hides several drawings (a group) in one undo step. */
+export function setDrawingsHidden(state: DrawingState, drawingIds: readonly string[], hidden: boolean): DrawingState {
+  return patchDrawings(state, new Set(drawingIds), () => ({ hidden }));
+}
+
+/** Object tree (TVP-3.8): deletes several drawings (a group) in one undo step. */
+export function deleteDrawings(state: DrawingState, drawingIds: readonly string[]): DrawingState {
+  const ids = new Set(drawingIds);
+  if (!state.drawings.some((drawing) => ids.has(drawing.drawingId))) return state;
+  const next = snapshot(state);
+  const remaining = { ...next, drawings: next.drawings.filter((drawing) => !ids.has(drawing.drawingId)) };
+  return withSelection(remaining, selectedDrawingIds(state).filter((id) => !ids.has(id)), state.selectedId && ids.has(state.selectedId) ? null : state.selectedId);
+}
+
+/** A name for a new group that no drawing uses yet: "Group 1", "Group 2"... */
+export function nextDrawingGroupName(drawings: readonly TradingDrawing[]): string {
+  const used = new Set(drawings.map((drawing) => drawing.group));
+  let number = 1;
+  while (used.has(`Group ${number}`)) number += 1;
+  return `Group ${number}`;
+}
+
+/**
+ * Object tree (TVP-3.8): moves a drawing in the drawing order, which is the order they are painted in (later ones on
+ * top): one step `up` (towards the top) or `down`, or to the `front` or `back`.
+ */
+export function reorderDrawing(state: DrawingState, drawingId: string, move: 'up' | 'down' | 'front' | 'back'): DrawingState {
+  const index = state.drawings.findIndex((drawing) => drawing.drawingId === drawingId);
+  if (index < 0) return state;
+  const last = state.drawings.length - 1;
+  const target = move === 'front' ? last : move === 'back' ? 0 : Math.max(0, Math.min(last, index + (move === 'up' ? 1 : -1)));
+  if (target === index) return state;
+  const next = snapshot(state);
+  const drawings = [...next.drawings];
+  const [moved] = drawings.splice(index, 1);
+  drawings.splice(target, 0, moved);
+  return { ...next, drawings };
+}
+
+/** Object tree drag and drop (TVP-3.8): moves a drawing to another's place in the order, taking that drawing's group. */
+export function moveDrawingTo(state: DrawingState, drawingId: string, targetId: string): DrawingState {
+  const index = state.drawings.findIndex((drawing) => drawing.drawingId === drawingId);
+  const target = state.drawings.findIndex((drawing) => drawing.drawingId === targetId);
+  if (index < 0 || target < 0 || index === target) return state;
+  const next = snapshot(state);
+  const drawings = [...next.drawings];
+  const [moved] = drawings.splice(index, 1);
+  const group = drawings[target > index ? target - 1 : target]?.group;
+  drawings.splice(target, 0, { ...moved, group, revision: moved.revision + 1 });
+  return { ...next, drawings };
 }
 
 export function deleteAllDrawings(state: DrawingState): DrawingState {

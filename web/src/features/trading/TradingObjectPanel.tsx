@@ -8,7 +8,8 @@ import { useTradingStore } from './tradingStore';
 import { drawingScopeId } from './drawings/drawingToolSettings';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { TradingDrawing } from './drawings/drawingCommands';
-import { drawingDisplayName, drawingToolDefinition } from './drawings/tools/registry';
+import { drawingToolDefinition } from './drawings/tools/registry';
+import { TradingObjectTreeDrawings } from './TradingObjectTreeDrawings';
 import { indicatorOutputs, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from './indicators/coreIndicators';
 import './TradingObjectPanel.css';
 import { chartPalette } from './chartPalette';
@@ -161,28 +162,17 @@ function TradingObjectTree({
             <strong>{symbol} · {venue}, {intervalCompactLabel(interval)}</strong>
           </button>
           {chartExpanded ? (
-            <ul className="trading-object-list">
-              {drawings.state.drawings.map((drawing) => {
-                const selected = drawings.state.selectedId === drawing.drawingId;
-                const name = drawingDisplayName(drawing);
-                return (
-                  <li key={drawing.drawingId} className={`${selected ? 'is-selected ' : ''}${drawing.hidden ? 'is-hidden' : ''}`}>
-                    <button type="button" className="trading-object-row-main" onClick={() => drawings.select(drawing.drawingId)}>
-                      <DrawingIcon drawing={drawing} />
-                      <span>{name}<small>{drawing.locked ? 'Locked' : drawing.hidden ? 'Hidden' : 'Drawing'}</small></span>
-                    </button>
-                    <div className="trading-object-row-actions">
-                      <button type="button" aria-label={`${drawing.hidden ? 'Show' : 'Hide'} ${name}`} title={`${drawing.hidden ? 'Show' : 'Hide'} ${name}`} onClick={() => { drawings.select(drawing.drawingId); drawings.updateSelected({ hidden: !drawing.hidden }); }}><EyeIcon hidden={Boolean(drawing.hidden)} /></button>
-                      <button type="button" aria-label={`Delete ${name}`} title={`Delete ${name}`} onClick={() => drawings.remove(drawing.drawingId)}><TrashIcon /></button>
-                    </div>
-                  </li>
-                );
-              })}
-              {drawings.state.drawings.length === 0 ? <li className="trading-object-empty">No drawings on this chart</li> : null}
-              {drawings.preservedCount > 0 ? (
-                <li className="trading-object-empty">{drawings.preservedCount} unsupported {drawings.preservedCount === 1 ? 'drawing is' : 'drawings are'} kept but not shown</li>
+            <>
+              <TradingObjectTreeDrawings drawings={drawings} eyeIcon={(hidden) => <EyeIcon hidden={hidden} />} trashIcon={<TrashIcon />} drawingIcon={(drawing) => <DrawingIcon drawing={drawing} />} />
+              {drawings.state.drawings.length === 0 || drawings.preservedCount > 0 ? (
+                <ul className="trading-object-list">
+                  {drawings.state.drawings.length === 0 ? <li className="trading-object-empty">No drawings on this chart</li> : null}
+                  {drawings.preservedCount > 0 ? (
+                    <li className="trading-object-empty">{drawings.preservedCount} unsupported {drawings.preservedCount === 1 ? 'drawing is' : 'drawings are'} kept but not shown</li>
+                  ) : null}
+                </ul>
               ) : null}
-            </ul>
+            </>
           ) : null}
         </section>
 

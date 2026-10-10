@@ -41,3 +41,16 @@
 
   :root[data-omnix-appearance='dark'] .trading-object-toolbar,:root:not([data-omnix-appearance]) .trading-object-toolbar,:root[data-omnix-appearance='dark'] .trading-object-empty,:root:not([data-omnix-appearance]) .trading-object-empty{color:var(--c-slate-680)}
 }
+@layer features {
+  /* Object tree groups, names and order (TVP-3.8). */
+  .trading-object-tree-tools{display:flex;gap:6px;padding:4px 8px 4px 36px}
+  .trading-object-tree-tools button{border:1px solid color-mix(in srgb, var(--c-blue-710) 22%, transparent);border-radius:4px;background:transparent;padding:3px 7px;color:var(--c-slate-660);font-size:10px}
+  .trading-object-tree-tools button:disabled{opacity:.45}
+  .trading-object-list li.trading-object-tree-group{display:block;padding:0;border-left:0}
+  .trading-object-list li.trading-object-tree-group:hover{background:transparent}
+  .trading-object-group-row{display:flex;align-items:center;min-height:36px;padding:4px 8px 4px 22px}
+  .trading-object-group-row:hover .trading-object-row-actions{opacity:1}
+  .trading-object-tree-group > .trading-object-list li{padding-left:52px}
+  .trading-object-rename{min-width:0;flex:1;padding:3px 6px;font-size:12px}
+  .trading-object-list li[draggable=true]{cursor:grab}
+}
