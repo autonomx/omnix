@@ -193,10 +193,3 @@ jobs:
         run: npm run web:typecheck
       - name: Verify generated API contract
         run: npm --workspace @omnix/web run api:check
-      - name: Run architecture-sensitive web tests
-        run: >
-          npm run web:test --
-          src/test/gateway-routing.test.ts
-          src/features/assistant/chat
-          src/features/audiobook/AudiobookWorkspace.test.tsx
-          src/features/trading

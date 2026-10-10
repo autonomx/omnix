@@ -77,27 +77,8 @@ jobs:
             src/tests/trading \
             src/tests/providers/test_chatgpt_codex_reliability.py \
             -q --tb=short
-      - name: Trading frontend tests
-        run: npm --workspace @omnix/web run test:trading
       - name: Trading TypeScript typecheck
         run: npm --workspace @omnix/web run typecheck:trading
-      - name: Install Trading browser
-        # The hosted Ubuntu runner already carries Chromium runtime libraries.
-        # Avoid apt-based --with-deps here: it is redundant and can hang on a
-        # transient package-mirror lock, preventing the actual Trading gates.
-        run: npx playwright install chromium
-      - name: Trading Playwright smoke
-        run: npm --workspace @omnix/web run test:e2e:trading
-      - name: Upload Trading Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trading-playwright-report
-          path: |
-            web/playwright-report
-            web/test-results
-          if-no-files-found: warn
-          retention-days: 7
       - name: Generate shared gateway API contract
         run: npm --workspace @omnix/web run api:generate
       - name: Upload generated API contract

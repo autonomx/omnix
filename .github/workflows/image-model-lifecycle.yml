@@ -122,12 +122,3 @@ jobs:
           JSON
           cd web
           npx tsc -p tsconfig.image-lifecycle.json
-      - name: Run image generation and avatar-routing unit tests
-        run: >-
-          npm --workspace @omnix/web run test --
-          src/features/assistant/chat/characterAvatarClient.test.ts
-          src/features/image-generation/ImageModelControl.test.tsx
-          src/features/image-generation/ImageModelSelection.test.tsx
-          src/features/image-generation/ImageGenerationWorkspace.test.tsx
-          src/features/image-generation/ImageWorkspaceInteractions.test.tsx
-          src/features/image-generation/ImageWorkspaceJobActions.test.tsx

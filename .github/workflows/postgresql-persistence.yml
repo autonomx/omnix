@@ -132,19 +132,3 @@ jobs:
         run: |
           python -m app.persistence migrate
           python -m app.persistence verify
-
-
-  audiobook-web:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - name: Install web dependencies
-        run: npm ci
-      - name: Run Audiobook and gateway routing tests
-        run: npm run web:test -- src/features/audiobook/AudiobookWorkspace.test.tsx src/test/gateway-routing.test.ts

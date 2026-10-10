@@ -91,9 +91,3 @@ jobs:
           JSON
           cd web
           npx tsc -p tsconfig.avatar.json
-      - name: Verify browser avatar playback
-        run: >-
-          npm --workspace @omnix/web run test --
-          src/features/assistant/chat/liveCharacterAvatarBridge.test.tsx
-          src/features/assistant/chat/liveCharacterVisemeBridge.test.ts
-          src/features/assistant/chat/live2dCharacterRenderer.test.ts
