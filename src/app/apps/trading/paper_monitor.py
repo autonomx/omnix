@@ -35,6 +35,8 @@ from .paper_protection_repository import (
     TradingPaperProtectionRepository,
     default_paper_protection_repository,
 )
+from .paper import MARGIN_CALL_ORDER_PREFIX
+from .paper_margin_notifications import PaperMarginCallNotifier, default_margin_call_notifier, margin_call_orders
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
@@ -42,7 +44,6 @@ from .service import TradingMarketDataService, default_market_data_service
 
 _MONITOR_STATE_KEY = "_omnix_trading_paper_monitor"
 # Orders a margin call places (TVP-7.2b) carry this prefix, so the account shows them as margin calls.
-MARGIN_CALL_ORDER_PREFIX = "paper-margin-call-"
 
 
 def _uses_margin(snapshot: PaperAccountSnapshot) -> bool:
@@ -128,10 +129,12 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         interval_seconds: float | None = None,
         active_interval_seconds: float | None = None,
+        margin_call_notifier_factory: Callable[[], PaperMarginCallNotifier] = default_margin_call_notifier,
     ) -> None:
         self.repository_factory = repository_factory
         self.protection_repository_factory = protection_repository_factory
         self.market_service_factory = market_service_factory
+        self.margin_call_notifier_factory = margin_call_notifier_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
         self.active_interval_seconds = active_interval_seconds or _active_interval_seconds()
         self.last_error: str | None = None
@@ -421,6 +424,22 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
                 continue
             self.margin_call_count += 1
             self.wake()
+        await self._notify_margin_calls(snapshot.account, account_id, repository)
+
+    async def _notify_margin_calls(self, account: Any, account_id: str, repository: TradingPaperRepository) -> None:
+        """Queue email and push notifications of the account's recent margin calls (TVP-7.2b), once each.
+
+        Outside the order's transaction (the order gateway is not changed): a pass that misses one queues it on the next.
+        """
+        if not account.notify_margin_calls:
+            return
+        try:
+            snapshot = await asyncio.to_thread(repository.snapshot, account_id)
+            orders = margin_call_orders([*snapshot.open_orders, *snapshot.order_history], datetime.now(timezone.utc))
+            if orders:
+                await asyncio.to_thread(self.margin_call_notifier_factory().notify, snapshot.account, orders)
+        except Exception as exc:  # notifications never stop the margin call itself
+            self.last_error = f"paper_margin_call_notify: {type(exc).__name__}: {exc}"
 
     async def run_once(self) -> int:
         repository = self.repository_factory()

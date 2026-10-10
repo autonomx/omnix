@@ -335,12 +335,18 @@ def default_smtp_factory(settings: EmailSettings, address: str) -> smtplib.SMTP:
     return client
 
 
-def alert_email(settings: EmailSettings, message: str, *, alert_id: str = "", test: bool = False) -> EmailMessage:
+def alert_email(settings: EmailSettings, message: str, *, alert_id: str = "", test: bool = False, event_kind: str = "alert") -> EmailMessage:
     first_line = (message.strip().splitlines() or [""])[0][:120]
+    margin_call = event_kind == "margin_call"
     email = EmailMessage()
-    email["Subject"] = "Omnix test notification" if test else f"Omnix alert: {first_line or alert_id}"
+    email["Subject"] = "Omnix test notification" if test else f"Omnix {'margin call' if margin_call else 'alert'}: {first_line or alert_id}"
     email["From"] = settings.from_address
     email["To"] = ", ".join(settings.to_addresses)
+    if margin_call:
+        # A paper margin call (TVP-7.2b): no alert behind it.
+        email["X-Omnix-Event"] = "margin-call"
+        email.set_content(f"{message.strip()}\n\n\u2014 Omnix paper trading\n")
+        return email
     email["X-Omnix-Alert"] = alert_id or "test"
     email.set_content(f"{message.strip()}\n\n— Omnix alerts{f' ({alert_id})' if alert_id else ''}\n")
     return email
@@ -366,7 +372,8 @@ class EmailSender:
         settings = self.repository_factory().email(delivery.workspace_id)
         if settings is None:
             return DeliveryResult("failed", "email_not_configured")
-        return self.deliver(settings, delivery.workspace_id, alert_email(settings, delivery.message, alert_id=delivery.alert_id))
+        email = alert_email(settings, delivery.message, alert_id=delivery.alert_id, event_kind=delivery.event_kind)
+        return self.deliver(settings, delivery.workspace_id, email)
 
     def deliver(self, settings: EmailSettings, workspace_id: str, message: EmailMessage) -> DeliveryResult:
         password = None
@@ -468,7 +475,8 @@ class PushSender:
         subscriptions = repository.subscriptions(delivery.workspace_id)
         if not subscriptions:
             return DeliveryResult("failed", "no_push_subscriptions")
-        payload = push_payload(delivery.message, alert_id=delivery.alert_id, trigger_id=delivery.trigger_id)
+        title = "Omnix margin call" if delivery.event_kind == "margin_call" else "Omnix alert"
+        payload = push_payload(delivery.message, alert_id=delivery.alert_id, trigger_id=delivery.trigger_id, title=title)
         return self.deliver(repository, delivery.workspace_id, subscriptions, payload)
 
     def deliver(self, repository: NotificationSettingsRepository, workspace_id: str, subscriptions: list[StoredSubscription], payload: bytes) -> DeliveryResult:

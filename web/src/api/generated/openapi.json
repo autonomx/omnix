@@ -27551,11 +27551,18 @@
         "type": "object"
       },
       "NotificationDelivery": {
-        "description": "A delivery as the API shows it: status only, never a destination.",
+        "description": "A delivery as the API shows it: status only, never a destination.\n\n``event_kind``: an alert trigger, or a paper margin call (TVP-7.2b), which has no trigger or alert.",
         "properties": {
           "alert_id": {
-            "title": "Alert Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Id"
           },
           "attempts": {
             "title": "Attempts",
@@ -27589,6 +27596,15 @@
           },
           "delivery_id": {
             "title": "Delivery Id",
+            "type": "string"
+          },
+          "event_kind": {
+            "default": "alert",
+            "enum": [
+              "alert",
+              "margin_call"
+            ],
+            "title": "Event Kind",
             "type": "string"
           },
           "last_attempt_at": {
@@ -27652,8 +27668,15 @@
             "type": "string"
           },
           "trigger_id": {
-            "title": "Trigger Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
           }
         },
         "required": [
@@ -27669,7 +27692,8 @@
           "last_error",
           "last_status_code",
           "delivered_at",
-          "created_at"
+          "created_at",
+          "event_kind"
         ],
         "title": "NotificationDelivery",
         "type": "object"
@@ -28671,6 +28695,11 @@
             "title": "Name",
             "type": "string"
           },
+          "notify_margin_calls": {
+            "default": false,
+            "title": "Notify Margin Calls",
+            "type": "boolean"
+          },
           "revision": {
             "default": 1,
             "title": "Revision",
@@ -28762,6 +28791,11 @@
             "title": "Name",
             "type": "string"
           },
+          "notify_margin_calls": {
+            "default": false,
+            "title": "Notify Margin Calls",
+            "type": "boolean"
+          },
           "revision": {
             "default": 1,
             "title": "Revision",
@@ -28792,7 +28826,8 @@
           "allow_short",
           "margin",
           "commission_type",
-          "commission_fixed"
+          "commission_fixed",
+          "notify_margin_calls"
         ],
         "title": "PaperAccount",
         "type": "object"
@@ -28883,6 +28918,11 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "notify_margin_calls": {
+            "default": false,
+            "title": "Notify Margin Calls",
+            "type": "boolean"
           }
         },
         "required": [
@@ -28985,6 +29025,17 @@
               }
             ],
             "title": "Margin"
+          },
+          "notify_margin_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Margin Calls"
           }
         },
         "title": "PaperAccountSettings",
