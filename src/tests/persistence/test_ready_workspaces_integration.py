@@ -41,6 +41,8 @@ def database():
 def _workspace(database, owner: str, label: str):
     workspace = f"workspace:ready-jobs:{label}:{secrets.token_urlsafe(8)}"
     with database.transaction() as connection:
+        # Creating a workspace is a system operation (the runtime role is row-level secured).
+        connection.execute("SELECT set_config('omnix.system', 'on', true)")
         connection.execute("INSERT INTO omnix_workspaces (id, name, created_by) VALUES (%s, %s, %s)",
                            (workspace, f"Ready jobs {label}", owner))
         connection.execute(

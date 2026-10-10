@@ -52,7 +52,9 @@ def _email() -> str:
 
 
 def _session_lifetime(database, token_session_id: str) -> float:
-    with database.connection() as connection:
+    # Sessions are row-level secured: the test reads as the system, not as a tenant.
+    with database.transaction() as connection:
+        connection.execute("SELECT set_config('omnix.system', 'on', true)")
         return float(connection.execute(
             "SELECT EXTRACT(EPOCH FROM absolute_expires_at - created_at) FROM omnix_auth_sessions WHERE id = %s",
             (token_session_id,),

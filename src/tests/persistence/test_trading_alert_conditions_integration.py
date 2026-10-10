@@ -11,6 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -65,6 +66,16 @@ def alerts():
                 repository.archive(alert.alert_id, alert.revision)
     finally:
         database.close()
+
+
+def _owner_connection() -> psycopg.Connection:
+    """The migration's DDL needs the table owner (the migrator); the runtime role has DML only."""
+    url = (
+        os.environ.get("OMNIX_TEST_ADMIN_DATABASE_URL")
+        or os.environ.get("OMNIX_MIGRATION_DATABASE_URL")
+        or os.environ["OMNIX_TEST_DATABASE_URL"]
+    )
+    return psycopg.connect(url)
 
 
 def _create(env, alert_id: str, **data):
@@ -315,8 +326,8 @@ def test_migration_backfills_legacy_alerts(alerts) -> None:
     }
     policies = {"price_above": "once", "price_below": "once_per_bar", "volume_above": "every_time"}
     workspace = alerts.context.workspace_id
-    with alerts.uow() as uow:
-        connection = uow.connection
+    # One transaction as the migrator, rolled back at the end: legacy rows, the migration twice, and the checks.
+    with _owner_connection() as connection:
         for index, (condition_type, (parameters, threshold)) in enumerate(legacy.items()):
             stored = TradingAlertParameters(**parameters, trigger_policy=policies.get(condition_type, "every_time"))
             connection.execute(
@@ -361,7 +372,7 @@ def test_migration_backfills_legacy_alerts(alerts) -> None:
             assert not {"message", "notification_channels", "delivery"} & set(row[4])
             assert row[5]["notification_channels"] == ["app", "toast"] and row[5]["message"] == ""
             assert row[6]["allow_partial_bars"] is (row[1] != "once_per_bar_close")
-        uow.rollback()
+        connection.rollback()
 
 
 class MemoryWebhooks:
@@ -676,8 +687,9 @@ def test_migrated_legacy_alerts_ignore_bars_closed_before_the_migration(alerts) 
             " VALUES (%s, %s, %s, 'price_above', 100, %s::jsonb, %s, %s)",
             (workspace, alert_id, alerts.instrument, json.dumps({"message": "old", "trigger_policy": "every_time"}), month_ago, month_ago),
         )
-        uow.connection.execute(MIGRATION.read_text(encoding="utf-8"))
         uow.commit()
+    with _owner_connection() as owner:
+        owner.execute(MIGRATION.read_text(encoding="utf-8"))
     alert = next(item for item in alerts.repository.list_alerts(500) if item.alert_id == alert_id)
     assert alert.updated_at > month_ago + timedelta(days=29)
     assert alert.parameters.message == "old" and alert.evaluation_policy.allow_partial_bars is True
