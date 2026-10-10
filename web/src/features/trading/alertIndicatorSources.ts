@@ -11,6 +11,7 @@ import { indicatorContextLabel } from './tradingChartPanelModel';
 import { isScriptIndicatorId, scriptAlertOutput, scriptIdOf, scriptIndicatorName, scriptInputValues, scriptRunStatus } from './scripts/scriptIndicators';
 import type { components } from './api/generated';
 import type { TradingAlertCreateInput } from './tradingTypes';
+import { lineSource, type DraftLine } from './alertConditionDrafts';
 
 type ConditionInput = NonNullable<TradingAlertCreateInput['conditions']>[number];
 
@@ -63,8 +64,8 @@ function scriptChoice(instance: CoreIndicatorInstance, outputs: readonly Indicat
   };
 }
 
-/** What the dialog holds for a chart-indicator condition. */
-export type AlertIndicatorSelection = { key: string; output: string; operator: AlertIndicatorOperator };
+/** What the dialog holds for a chart-indicator condition; `target` compares against another line instead of the value. */
+export type AlertIndicatorSelection = { key: string; output: string; operator: AlertIndicatorOperator; target?: DraftLine };
 
 /**
  * The alert inputs of an instance; with its source's (TVP-6.5) when the chart computes it on another indicator. The
@@ -121,7 +122,10 @@ export function alertIndicatorChoices(
   });
 }
 
-/** The condition an indicator selection describes: the output against a value; "appears" is the output above 0. */
+/**
+ * The condition an indicator selection describes: the output against a value or another line (TVP-1.3); "appears" is
+ * the output above APPEARS_VALUE.
+ */
 export function indicatorConditionSpec(choice: AlertIndicatorChoice, selection: AlertIndicatorSelection, value: string): ConditionInput {
   const appears = selection.operator === 'appears';
   const output = choice.script ? scriptAlertOutput(selection.output) : null;
@@ -130,7 +134,9 @@ export function indicatorConditionSpec(choice: AlertIndicatorChoice, selection: 
       ? { kind: 'script', script_id: choice.script.scriptId, revision: choice.script.revision, inputs: choice.script.inputs, output }
       : { kind: 'indicator', indicator_id: choice.key, inputs: choice.inputs, output: selection.output },
     operator: selection.operator === 'appears' ? 'greater_than' : selection.operator,
-    target: { kind: 'value', value: appears ? APPEARS_VALUE : value },
+    target: appears ? { kind: 'value', value: APPEARS_VALUE }
+      : selection.target ? { kind: 'source', source: lineSource(selection.target) }
+      : { kind: 'value', value },
   };
 }
 

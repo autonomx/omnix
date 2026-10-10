@@ -11,7 +11,8 @@ import { AlertDeliveryFields } from './AlertDeliveryFields';
 import { AlertIndicatorPicker } from './AlertIndicatorPicker';
 import { resolveIndicatorSelection, type AlertIndicatorChoice, type AlertIndicatorSelection } from './alertIndicatorSources';
 import { AlertConditionRows } from './AlertConditionRows';
-import { MAX_ALERT_CONDITIONS, acceptsExtraConditions, newConditionDraft, type ConditionDraft } from './alertConditionDrafts';
+import { MAX_ALERT_CONDITIONS, acceptsExtraConditions, newConditionDraft, type ConditionDraft, type DraftLine } from './alertConditionDrafts';
+import { AlertLineField } from './AlertLineField';
 import './TradingChartAlertOpaque.css';
 
 export type TradingAlertEditorState = AlertDeliveryEditor & {
@@ -32,6 +33,8 @@ export type TradingAlertEditorState = AlertDeliveryEditor & {
   trendlinePoints?: Array<{ time: string; price: number }>;
   /** A chart indicator, line and comparison (TVP-1.3), when the alert is on one. */
   indicatorSelection?: AlertIndicatorSelection;
+  /** A new price alert's line to cross instead of the value (TVP-1.3): a price field or a chart indicator line. */
+  priceLine?: DraftLine;
   /** The chart indicator the alert was placed on (its pane), any indicator id. */
   chartIndicatorId?: string;
   /** The drawing a line alert follows, its levels and the chosen one (TVP-1.4). */
@@ -157,6 +160,8 @@ export function TradingAlertDialog({
   const isTrendline = editor.condition.startsWith('trendline_');
   const isIndicator = family === 'indicator_above';
   const isPercent = family === 'percent_change_above';
+  // A new price alert can cross another line instead of a value (TVP-1.3), on a chart that offers lines.
+  const priceLines = family === 'price_above' && editor.mode === 'create' && indicatorChoices !== undefined;
 
   return (
     <form
@@ -230,18 +235,23 @@ export function TradingAlertDialog({
             </div>
           ) : isTrendline ? (
             <div className="trading-alert-value-row"><span>Line</span><strong>{editor.drawingLevels?.[0]?.label ?? 'Selected trendline'}</strong></div>
-          ) : chartIndicators?.operator === 'appears' ? null : (
+          ) : chartIndicators?.operator === 'appears' || chartIndicators?.target ? null : (
             <div className="trading-alert-value-row">
-              <span>Value</span>
-              <input
-                aria-label="Alert value"
-                autoFocus
-                inputMode="decimal"
-                value={editor.threshold}
-                placeholder={Number.isFinite(latestPrice) ? String(latestPrice) : 'Value'}
-                onChange={(event) => onChange({ threshold: event.target.value })}
-                onBlur={(event) => onChange({ threshold: formatAlertThreshold(event.target.value) })}
-              />
+              <span>{priceLines ? 'Target' : 'Value'}</span>
+              {priceLines ? (
+                <AlertLineField label="Alert price" value="" line={editor.priceLine} choices={indicatorChoices ?? []} withInput={false} onValue={() => undefined} onLine={(priceLine) => onChange({ priceLine })} />
+              ) : null}
+              {editor.priceLine && priceLines ? null : (
+                <input
+                  aria-label="Alert value"
+                  autoFocus
+                  inputMode="decimal"
+                  value={editor.threshold}
+                  placeholder={Number.isFinite(latestPrice) ? String(latestPrice) : 'Value'}
+                  onChange={(event) => onChange({ threshold: event.target.value })}
+                  onBlur={(event) => onChange({ threshold: formatAlertThreshold(event.target.value) })}
+                />
+              )}
             </div>
           )}
           {isPercent ? (

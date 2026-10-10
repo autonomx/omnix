@@ -144,6 +144,19 @@ def test_channel_bounds_may_be_sources_and_are_order_independent() -> None:
     assert met(band, [10, 12])
 
 
+def test_a_line_target_moves_with_each_bar() -> None:
+    """Close crossing an SMA (TVP-1.3): both sides are read on the same two bars, as the dialog's line targets send."""
+    sma = {"kind": "source", "source": {"kind": "indicator", "indicator_id": "sma", "inputs": {"period": 3}, "output": "sma:3"}}
+    crossing = spec(source=CLOSE, operator="crossing_up", target=sma)
+    # SMA(3) is 9.67 then 10.33: the close goes from below it (9) to above it (12).
+    assert met(crossing, [10, 10, 10, 9, 12])
+    # Above the SMA on both bars: no cross, though greater_than holds.
+    assert not met(crossing, [10, 10, 10, 12, 13])
+    assert met(spec(source=CLOSE, operator="greater_than", target=sma), [10, 10, 10, 12, 13])
+    # Before the SMA has two values there is nothing to cross.
+    assert not met(crossing, [10, 10, 12])
+
+
 @pytest.mark.parametrize(
     ("operator", "amount", "closes", "expected"),
     [

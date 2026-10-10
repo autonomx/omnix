@@ -1,5 +1,6 @@
-/** The dialog's condition rows (TVP-1.6): source, operator and its value, channel or move, each removable. */
+/** The dialog's condition rows (TVP-1.6): source, operator and its value or line, channel or move, each removable. */
 import type { AlertIndicatorChoice } from './alertIndicatorSources';
+import { AlertLineField } from './AlertLineField';
 import {
   OPERATOR_OPTIONS,
   choiceMatchesDraft,
@@ -68,13 +69,21 @@ function ConditionRow({
         </div>
       ) : null}
       {takes === 'value' ? (
-        <div className="trading-alert-value-row"><span>Value</span><input aria-label={`Condition ${number} value`} inputMode="decimal" value={draft.value} onChange={(event) => update({ value: event.target.value })} /></div>
-      ) : takes === 'channel' ? (
         <div className="trading-alert-value-row">
-          <span>Channel</span>
-          <input aria-label={`Condition ${number} upper`} inputMode="decimal" placeholder="Upper" value={draft.upper} onChange={(event) => update({ upper: event.target.value })} />
-          <input aria-label={`Condition ${number} lower`} inputMode="decimal" placeholder="Lower" value={draft.lower} onChange={(event) => update({ lower: event.target.value })} />
+          <span>Target</span>
+          <AlertLineField label={`Condition ${number} value`} value={draft.value} line={draft.targetLine} choices={choices} onValue={(value) => update({ value })} onLine={(targetLine) => update({ targetLine })} />
         </div>
+      ) : takes === 'channel' ? (
+        <>
+          <div className="trading-alert-value-row">
+            <span>Upper</span>
+            <AlertLineField label={`Condition ${number} upper`} placeholder="Upper" value={draft.upper} line={draft.upperLine} choices={choices} onValue={(upper) => update({ upper })} onLine={(upperLine) => update({ upperLine })} />
+          </div>
+          <div className="trading-alert-value-row">
+            <span>Lower</span>
+            <AlertLineField label={`Condition ${number} lower`} placeholder="Lower" value={draft.lower} line={draft.lowerLine} choices={choices} onValue={(lower) => update({ lower })} onLine={(lowerLine) => update({ lowerLine })} />
+          </div>
+        </>
       ) : (
         <div className="trading-alert-value-row">
           <span>By</span>

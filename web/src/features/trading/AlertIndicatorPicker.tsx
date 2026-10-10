@@ -1,6 +1,7 @@
+import { AlertLineField } from './AlertLineField';
 import { ALERT_INDICATOR_OPERATORS, ALERT_SIGNAL_OPERATORS, operatorForOutput, type AlertIndicatorChoice, type AlertIndicatorOperator, type AlertIndicatorSelection } from './alertIndicatorSources';
 
-/** The chart's indicators, their output lines and the comparison, for an indicator alert (TVP-1.3). */
+/** The chart's indicators, their output lines, the comparison and its target (a value or another line), for an indicator alert (TVP-1.3). */
 export function AlertIndicatorPicker({
   choices, selection, onChange,
 }: {
@@ -42,6 +43,17 @@ export function AlertIndicatorPicker({
         >
           {(selection?.operator === 'appears' ? ALERT_SIGNAL_OPERATORS : ALERT_INDICATOR_OPERATORS).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
+        {selection && selection.operator !== 'appears' ? (
+          <AlertLineField
+            label="Alert indicator"
+            value=""
+            line={selection.target}
+            choices={choices}
+            withInput={false}
+            onValue={() => undefined}
+            onLine={(target) => onChange({ ...selection, target })}
+          />
+        ) : null}
       </div>
     </>
   );

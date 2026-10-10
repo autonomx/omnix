@@ -148,7 +148,7 @@ describe('TradingAlertsPanel conditions it cannot edit (TVP-1.6)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit alert' }));
     fireEvent.change(screen.getByLabelText('Condition 1 value'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('Each condition needs a value.');
+    expect((await screen.findByRole('alert')).textContent).toBe('Each condition needs a value or a line.');
   });
 });
 
