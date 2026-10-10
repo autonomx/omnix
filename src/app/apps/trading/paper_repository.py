@@ -64,7 +64,7 @@ def _account(row) -> PaperAccount:
         updated_at=row[7],
         allow_short=bool(row[8]) if len(row) > 8 else False,
         margin=_margin_settings(row[9]) if len(row) > 9 else {},
-        commission_type=str(row[10]) if len(row) > 10 and row[10] else "percent",
+        commission_type=cast(Any, str(row[10])) if len(row) > 10 and row[10] else "percent",
         commission_fixed=Decimal(row[11]) if len(row) > 11 and row[11] is not None else Decimal("0"),
         notify_margin_calls=bool(row[12]) if len(row) > 12 else False,
     )

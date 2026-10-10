@@ -226,7 +226,7 @@ def intrabar_values(
     starts = [_ms(bar.start_time) for bar in bars]
     if indicator_id == "tv-volume-delta":
         return {index: deltas[start][0] for index, start in enumerate(starts) if start in deltas}
-    anchor = params.get("anchor") if params.get("anchor") in ("W", "M") else "D"
+    anchor = str(params.get("anchor")) if params.get("anchor") in ("W", "M") else "D"
     series = BarSeries(
         start_times=tuple(bar.start_time for bar in bars), open=(0.0,) * len(bars), high=(0.0,) * len(bars),
         low=(0.0,) * len(bars), close=(0.0,) * len(bars), volume=(0.0,) * len(bars),

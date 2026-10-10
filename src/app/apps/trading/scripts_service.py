@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import queue
 import subprocess
 import sys
@@ -21,6 +20,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from app.config.env import environment_copy
 from .scripts import ScriptError, ScriptLimits, compile_script
 
 # A run's budget: wall time inside the worker, and how long the server waits for the worker before killing it.
@@ -94,7 +94,7 @@ class _Worker:
     def __init__(self, command: Sequence[str]) -> None:
         self.process = subprocess.Popen(
             list(command), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            text=True, encoding="utf-8", bufsize=1, env=dict(os.environ),
+            text=True, encoding="utf-8", bufsize=1, env=environment_copy(),
         )
         self.answers: queue.Queue[str | None] = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
@@ -217,7 +217,8 @@ class ScriptRunService:
             answer = worker.ask(job, timeout=limits.max_seconds + self.grace_seconds)
         except queue.Empty:
             # Overran: the worker goes, a new one starts on the next job.
-            worker.kill()
+            if worker is not None:
+                worker.kill()
             worker = None
             self.killed_runs += 1
             raise ScriptServiceError("limit", f"the script ran for more than {limits.max_seconds:g} s and was stopped") from None

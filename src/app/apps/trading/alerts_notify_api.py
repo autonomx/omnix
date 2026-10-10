@@ -7,6 +7,7 @@ Push subscriptions are per signed-in user and device; their endpoints and keys a
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from typing import Literal
 
@@ -32,6 +33,8 @@ from .alerts_notify import (
     vapid_key,
 )
 from .webpush import vapid_public_key
+
+logger = logging.getLogger(__name__)
 
 
 class EmailSettingsResponse(BaseModel):
@@ -101,7 +104,7 @@ def create_trading_notification_router(
         try:
             secrets.delete(smtp_password_secret(workspace()))
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "delete_email", exc_info=True)
         return Response(status_code=204)
 
     @router.post("/email/test", response_model=DeliveryTestResponse)

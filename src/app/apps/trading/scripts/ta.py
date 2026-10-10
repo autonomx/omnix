@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from ..indicators.server_indicators._helpers import js_max, js_min, js_sum
 from .errors import ScriptRuntimeError
@@ -308,8 +308,10 @@ def cross(state: Any, a: Value, b: Value, direction: int) -> tuple[Any, Value]:
     now = (a, b)
     if any(is_na(item) for item in (*previous, a, b)):
         return now, False
-    up = a > b and previous[0] <= previous[1]
-    down = a < b and previous[0] >= previous[1]
+    # Neither side is na past the check above.
+    last = cast(Any, previous)
+    up = a > b and last[0] <= last[1]
+    down = a < b and last[0] >= last[1]
     return now, up if direction > 0 else down if direction < 0 else up or down
 
 
@@ -435,7 +437,8 @@ def correlation(state: Any, a: Value, b: Value, length: Value) -> tuple[Any, Val
     if n is None:
         return None, None
     pairs_state = _window(state, None if is_na(a) or is_na(b) else (a, b), n)
-    pairs = _full(pairs_state)
+    # The window holds (a, b) pairs.
+    pairs: Any = _full(pairs_state)
     if pairs is None:
         return pairs_state, None
     mean_a = js_sum([p[0] for p in pairs]) / n

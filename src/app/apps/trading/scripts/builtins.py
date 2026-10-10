@@ -82,7 +82,11 @@ def _bind(c: Any, node: Call, params: list[str], defaults: dict[str, Any], stric
             closures.append(bound[name])
         elif name in defaults:
             value = defaults[name]
-            closures.append(lambda ctx, value=value: value)
+
+            def constant(ctx: Any, value: Any = value) -> Any:
+                return value
+
+            closures.append(constant)
         else:
             raise ScriptSyntaxError(f"{node.callee}() needs a value for {name!r}", node.line)
     return closures
@@ -1149,7 +1153,7 @@ def _input(name: str) -> Factory:
         if source:
             if not (isinstance(default_node, Name) and default_node.name in SERIES_NAMES):
                 raise ScriptSyntaxError(f"{name}() takes a built-in series (close, hl2, ...) as its default", node.line)
-            default = default_node.name
+            default: Any = default_node.name
             c.inputs.append(ScriptInput(title, "source", default, options))
 
             def read_source(ctx: Context) -> Any:
@@ -1304,8 +1308,8 @@ def builtin_variable(c: Any, node: Name) -> Closure | None:
             return None
         return lambda ctx: _timeframe_value(name, ctx.run.timeframe)
     if name.startswith("strategy.") and name in STRATEGY_VARIABLES:
-        read = STRATEGY_VARIABLES[name]
-        return lambda ctx: read(_broker(ctx.run))
+        read_strategy = STRATEGY_VARIABLES[name]
+        return lambda ctx: read_strategy(_broker(ctx.run))
     if name == "ta.tr":
         return _site_closure(node.id, lambda state, h, l, cl: ta.tr(state, h, l, cl, False), [], _hlc)
     if name == "ta.obv":
@@ -1394,6 +1398,7 @@ def _trade_field(source: str, name: str) -> Callable[[Any], Any]:
             return trade.entry_commission + trade.exit_commission
         if name == "profit" and source == "opentrades":
             run = CURRENT_RUN.get()
+            assert run is not None, "a strategy trade is read inside a script run"
             return trade.unrealized(run.close[run.t])
         if name in ("max_runup", "max_drawdown"):
             return getattr(trade, name)

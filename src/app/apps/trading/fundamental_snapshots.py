@@ -216,6 +216,7 @@ class FundamentalSnapshotMonitor(ScheduledTradingMonitor):
                 try:
                     payload = source._json(FRAME_URL.format(concept=concept, unit=unit, period=period))
                 except Exception:  # a period not published yet
+                    logger.debug("suppressed error in %s", "frames", exc_info=True)
                     continue
                 values = frames.setdefault(concept, {}).setdefault(period, {})
                 for row in (payload.get("data") or []) if isinstance(payload, dict) else []:

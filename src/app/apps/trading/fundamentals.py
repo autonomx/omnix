@@ -165,10 +165,10 @@ def normalise_company_facts(payload: dict[str, Any]) -> dict[str, Any]:
         for statement, periods in result[frequency].items():
             rows = []
             for end in sorted(periods)[-keep:]:
-                values = dict(periods[end])
-                if statement == "cash_flow" and "operating_cash_flow" in values and "capital_expenditure" in values:
-                    values["free_cash_flow"] = values["operating_cash_flow"] - values["capital_expenditure"]
-                rows.append({"end": end.isoformat(), "values": values})
+                period_values = dict(periods[end])
+                if statement == "cash_flow" and "operating_cash_flow" in period_values and "capital_expenditure" in period_values:
+                    period_values["free_cash_flow"] = period_values["operating_cash_flow"] - period_values["capital_expenditure"]
+                rows.append({"end": end.isoformat(), "values": period_values})
             output[frequency][statement] = rows
     return output
 
@@ -224,7 +224,7 @@ def ratios(statements: dict[str, Any], *, price: float | None, shares: float | N
         "return_on_assets": divide(net_income, assets),
         "current_ratio": divide(current_assets, current_liabilities),
         "debt_to_equity": divide(liabilities, equity) if equity and equity > 0 else None,
-        "revenue_growth": divide(revenue, previous_revenue) - 1 if divide(revenue, previous_revenue) is not None else None,
+        "revenue_growth": growth - 1 if (growth := divide(revenue, previous_revenue)) is not None else None,
         "eps_growth": (eps / previous_eps - 1) if eps is not None and previous_eps and previous_eps > 0 else None,
     }
 
@@ -318,6 +318,7 @@ def default_last_close(instrument_id: str) -> float | None:
         bars = default_market_data_service().bars(instrument_id, "1d", 2).bars
         return float(bars[-1].close) if bars else None
     except Exception:  # valuation ratios need a price; statements don't
+        logger.debug("suppressed error in %s", "default_last_close", exc_info=True)
         return None
 
 

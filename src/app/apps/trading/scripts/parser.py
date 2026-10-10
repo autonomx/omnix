@@ -144,6 +144,7 @@ class _Parser:
 
     def statement(self) -> Node:
         token = self.token
+        node: Node
         if token.kind == "KEYWORD":
             word = token.value
             if word in _UNSUPPORTED_KEYWORDS:
@@ -193,9 +194,9 @@ class _Parser:
         i = self.pos + 1
         while i < len(self.tokens):
             token = self.tokens[i]
-            if token.kind == "OP" and token.value in "([":
+            if token.kind == "OP" and str(token.value) in "([":
                 depth += 1
-            elif token.kind == "OP" and token.value in ")]":
+            elif token.kind == "OP" and str(token.value) in ")]":
                 depth -= 1
                 if depth == 0:
                     following = self.tokens[i + 1] if i + 1 < len(self.tokens) else token

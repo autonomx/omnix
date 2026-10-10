@@ -211,7 +211,7 @@ class AlpacaOptionsSource:
             page = self.runtime.get(url, params={**params, **({"page_token": token} if token else {})}, headers=self._headers(), timeout=30).json()
             items = page.get(key) if isinstance(page, dict) else None
             if isinstance(items, list):
-                collected = [*(collected or []), *items]  # type: ignore[misc]
+                collected = [*(collected or []), *items]
             elif isinstance(items, dict):
                 collected = {**(collected or {}), **items}  # type: ignore[dict-item]
             token = page.get("next_page_token") if isinstance(page, dict) else None
@@ -240,7 +240,7 @@ def default_spot(instrument_id: str) -> float | None:
         if bars:
             return float(bars[-1].close)
     except Exception:  # a closed market or a feed without minute bars: the daily close
-        pass
+        logger.debug("suppressed error in %s", "default_spot", exc_info=True)
     from .fundamentals import default_last_close
 
     return default_last_close(instrument_id)

@@ -11,7 +11,7 @@ import functools
 import json
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -64,7 +64,7 @@ class ScreenProposal(BaseModel):
 
 
 def _output_keys(indicator_id: str, inputs: dict[str, Any] | None = None) -> list[str]:
-    source = IndicatorSource(kind="indicator", indicator_id=indicator_id, inputs=inputs or {}, output="_")
+    source = IndicatorSource(kind="indicator", indicator_id=indicator_id, inputs=cast(Any, inputs or {}), output="_")
     return [key for key, _first in indicator_output_profile(source)]
 
 
@@ -77,6 +77,7 @@ def _indicator_catalog() -> tuple[dict[str, Any], ...]:
         try:
             keys = _output_keys(indicator_id)
         except Exception:  # an indicator that needs inputs the catalog doesn't give is left out
+            logger.debug("suppressed error in %s", "_indicator_catalog", exc_info=True)
             continue
         if keys and indicator is not None:
             catalog.append({"id": indicator_id, "name": indicator.name, "outputs": keys[:6]})
@@ -92,7 +93,7 @@ def _fit_output(source: dict[str, Any]) -> dict[str, Any]:
         if source.get("output") in keys:
             return source
         defaults = _output_keys(indicator_id)
-        position = defaults.index(source.get("output")) if source.get("output") in defaults else 0
+        position = defaults.index(str(source.get("output"))) if source.get("output") in defaults else 0
         return {**source, "output": keys[min(position, len(keys) - 1)]} if keys else source
     except Exception:
         return source
@@ -126,7 +127,7 @@ def validated_proposal(payload: dict[str, Any], *, provider: str = "") -> Screen
     interval = payload.get("interval") if payload.get("interval") in INTERVALS else "1d"
     unsupported = [str(item)[:300] for item in payload.get("unsupported") or [] if str(item).strip()][:10]
     rules: list[TradingScannerRule] = []
-    raw_rules = payload.get("rules") if isinstance(payload.get("rules"), list) else []
+    raw_rules: list[Any] = cast(list[Any], payload["rules"]) if isinstance(payload.get("rules"), list) else []
     for position, raw in enumerate(raw_rules[: MAX_PROPOSED_RULES * 2]):
         if not isinstance(raw, dict) or len(rules) >= MAX_PROPOSED_RULES:
             continue

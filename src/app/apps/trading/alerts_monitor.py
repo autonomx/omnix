@@ -156,9 +156,10 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                 # instrument's session hours and their compare symbols' bars on this interval, as on the chart.
                 external = self.external_series_factory(instrument_id, interval)
                 session = instrument_session(instrument_id)
-                compare = compare_bars_loader(
-                    lambda symbol, limit, interval=interval: service.bars(symbol, interval, limit, None).bars
-                )
+                def load_compare_bars(symbol: str, limit: int, interval: str = interval) -> Any:
+                    return service.bars(symbol, interval, limit, None).bars
+
+                compare = compare_bars_loader(load_compare_bars)
                 scripts = ScriptAlertContext(instrument_id, interval, service)
                 # Volume Delta and CVD read lower-timeframe bars on the target's feed, each range once a pass (TVP-6.4).
                 intrabar = intrabar_loader(service, instrument_id, interval, requested_binding_id)

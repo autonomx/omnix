@@ -57,7 +57,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import httpcore
@@ -216,7 +216,7 @@ def _delivery(row: Any) -> NotificationDelivery:
         delivery_id=str(row[0]),
         trigger_id=str(row[1]) if row[1] is not None else None,
         alert_id=str(row[2]) if row[2] is not None else None,
-        event_kind=str(row[13]) if len(row) > 13 and row[13] else "alert",
+        event_kind=cast(Any, str(row[13])) if len(row) > 13 and row[13] else "alert",
         channel=row[3],
         status=row[4],
         attempts=int(row[5]),

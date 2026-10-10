@@ -12,6 +12,8 @@ runs it and the order gateway enforces the entry authority.
 """
 from __future__ import annotations
 
+from typing import Any, cast
+
 from decimal import ROUND_DOWN, Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -109,7 +111,8 @@ def moved_entry_intent(
         side=order.side,
         instrument_id=order.instrument_id,
         binding_id=order.binding_id,
-        order_type=order.order_type,
+        # movable_entry admits only MOVABLE_ORDER_TYPES (limit, stop, stop_limit).
+        order_type=cast(Any, order.order_type),
         trigger_price=move.trigger_price,
         limit_price=(move.limit_price or order.limit_price) if order.order_type == "stop_limit" else None,
         stop_loss=stop,

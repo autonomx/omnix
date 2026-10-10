@@ -18,6 +18,7 @@ import json
 import logging
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
+from datetime import date as _Date
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -53,8 +54,9 @@ class CorporateEvent(BaseModel):
     link: str | None = None
     amount: float | None = None
     special: bool = False
-    record_date: date | None = None
-    payable_date: date | None = None
+    # The field named date shadows the type inside the class.
+    record_date: _Date | None = None
+    payable_date: _Date | None = None
     split_from: float | None = None
     split_to: float | None = None
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager
+import builtins
 from typing import Any, Protocol
 
 from app.persistence.errors import RevisionConflict
@@ -179,7 +180,8 @@ class TradingDocumentRepository:
             (workspace_id, record["record_id"], workspace_id, record["record_id"], SCRIPT_VERSIONS_KEPT),
         )
 
-    def script_versions(self, script_id: str) -> list[dict[str, Any]]:
+    # The class's own list() method shadows the builtin in annotations here.
+    def script_versions(self, script_id: str) -> builtins.list[dict[str, Any]]:
         """A script's versions, newest first, without their source."""
         with self.uow_factory() as uow:
             rows = uow.connection.execute(

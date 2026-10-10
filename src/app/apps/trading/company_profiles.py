@@ -255,7 +255,10 @@ class CompanyProfiles:
         wanted = [ticker.upper() for ticker in tickers]
         stored = repository.get(wanted)
         now = self.clock()
-        stale = [ticker for ticker in wanted if ticker not in stored or stored[ticker].profile_fetched_at is None or now - stored[ticker].profile_fetched_at > PROFILE_MAX_AGE]
+        stale = [
+        ticker for ticker in wanted
+        if ticker not in stored or (fetched := stored[ticker].profile_fetched_at) is None or now - fetched > PROFILE_MAX_AGE
+    ]
         source = None
         if stale[:max_new]:
             source = self.source_factory()

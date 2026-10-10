@@ -8,6 +8,8 @@ chart knows, and Seasonality's lines are named by year, so an alert or a screen 
 
 from __future__ import annotations
 
+from typing import cast
+
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -200,7 +202,7 @@ def _marks(chart: Chart, suffix: str, marked: list[bool]) -> IndicatorOutputSeri
 def bollinger_bars(chart: Chart) -> Outputs:
     _, upper, lower = bollinger(chart.close, chart.period, chart.number_param("deviations", 2, 0.1))
     marked = [
-        (finite(upper[i]) and value > upper[i]) or (finite(lower[i]) and value < lower[i])
+        (finite(upper[i]) and value > cast(float, upper[i])) or (finite(lower[i]) and value < cast(float, lower[i]))
         for i, value in enumerate(chart.close)
     ]
     return [_marks(chart, "bars", marked), chart.out("upper", upper), chart.out("lower", lower)]

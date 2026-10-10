@@ -85,7 +85,7 @@ def plan_watchlist_pass(
         limit = alert.evaluation_policy.symbol_limit or WATCHLIST_SYMBOL_DEFAULT
         evaluated = skipped = 0
         for symbol in symbols[:limit]:
-            target: Target = (symbol, None, alert.evaluation_policy.interval)
+            target = (symbol, None, alert.evaluation_policy.interval)
             if target not in planned:
                 upstream = upstream_for(symbol)
                 if upstream is None or spent[upstream] >= provider_symbol_cap(upstream, pass_seconds):

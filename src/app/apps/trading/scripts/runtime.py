@@ -19,7 +19,7 @@ import time as clock
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from ..indicators.registry import BarSeries
 from .errors import ScriptError, ScriptLimitError, ScriptRuntimeError, ScriptSyntaxError, ScriptUnsupportedError
@@ -1063,7 +1063,7 @@ class _Compiler:
             items = iterable(ctx)
             if items is None:
                 return None
-            values = list(getattr(items, "items", items))
+            values = list(cast(Any, getattr(items, "items", items)))
             value = None
             for index, item in enumerate(values):
                 ctx.run.count_loop()
@@ -1351,12 +1351,12 @@ class _Compiler:
                 self.fail(node, f"{function.name}() has no argument {key!r}")
             values[names.index(key)] = self.expression(arg)
         params: list[tuple[int, Closure]] = []
-        for (name, key, default), value in zip(function.params, values, strict=True):
+        for (name, slot, default), value in zip(function.params, values, strict=True):
             chosen = value or default
             if chosen is None:
                 self.fail(node, f"{function.name}() needs a value for {name!r}")
             assert chosen is not None
-            params.append((key, chosen))
+            params.append((slot, chosen))
         site = node.id
         body = function
 

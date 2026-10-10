@@ -218,6 +218,7 @@ def create_trading_alert_router(
             try:
                 return registry.resolve_binding(symbol).provider
             except Exception:
+                logger.debug("suppressed error in %s", "provider_of", exc_info=True)
                 return None
 
         return WatchlistAlertCapacity(
