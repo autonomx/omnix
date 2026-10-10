@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { indicatorOutputsFor } from './indicatorOutputKeys';
+import { externalIndicatorOutputKeys, isExternalIndicatorId } from './indicators/externalIndicatorData';
 import { tradingViewBuiltInUsesSessions } from './indicators/tradingViewBuiltIns';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { newScreenerRule, SCREENER_METRICS, SCREENER_OPERATORS, type ScreenerMetric, type ScreenerRuleInput } from './screenerRules';
@@ -7,8 +8,12 @@ import { newIndicatorInstance } from './tradingStore';
 
 type IndicatorSource = { kind: 'indicator'; indicator_id: string; inputs: { period: number }; output: string };
 
-/** The lines an indicator draws with this period (the server registry computes the same keys). */
+/**
+ * The lines an indicator draws with this period (the server registry computes the same keys); an external-data
+ * indicator's lines are its data series (TVP-0.2), the same at any period.
+ */
 function indicatorLines(indicatorId: string, period: number): Array<{ key: string; title: string }> {
+  if (isExternalIndicatorId(indicatorId)) return externalIndicatorOutputKeys(indicatorId).map((key) => ({ key, title: key.slice(indicatorId.length + 1) }));
   try {
     const instance = { ...newIndicatorInstance(indicatorId as CoreIndicatorId), period };
     return indicatorOutputsFor(instance).map((output) => ({ key: output.key, title: output.title }));
@@ -33,7 +38,7 @@ function IndicatorFields({ rule, indicatorIds, onChange }: { rule: ScreenerRuleI
       <select aria-label={`Indicator of ${rule.rule_id}`} value={indicatorId} onChange={(event) => set({ indicator_id: event.target.value })}>
         {indicatorIds.map((id) => <option key={id} value={id}>{id}</option>)}
       </select>
-      <input aria-label={`Indicator period of ${rule.rule_id}`} inputMode="numeric" value={period} onChange={(event) => set({ period: Number(event.target.value) || 1 })} />
+      {isExternalIndicatorId(indicatorId) ? null : <input aria-label={`Indicator period of ${rule.rule_id}`} inputMode="numeric" value={period} onChange={(event) => set({ period: Number(event.target.value) || 1 })} />}
       <select aria-label={`Indicator line of ${rule.rule_id}`} value={source?.output ?? ''} onChange={(event) => set({ output: event.target.value })}>
         {source?.output ? null : <option value="" disabled>Choose a line</option>}
         {lines.map((line) => <option key={line.key} value={line.key}>{line.title} ({line.key})</option>)}

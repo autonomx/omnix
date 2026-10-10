@@ -81,3 +81,14 @@ describe('watchlist add requests (TVP-9.1)', () => {
     hook.unmount();
   });
 });
+
+describe('external-data indicators in the screener (TVP-0.2)', () => {
+  it('offers their data series as lines, without a period', () => {
+    const onChange = vi.fn();
+    const rule = { ...newScreenerRule('filter'), metric: 'indicator', source: { kind: 'indicator', indicator_id: 'tv-advance-decline-line', inputs: { period: 14 }, output: 'tv-advance-decline-line:nyse' } } as ScreenerRuleInput;
+    render(<ScreenerRuleEditor rules={[rule]} indicatorIds={['rsi', 'tv-advance-decline-line']} onChange={onChange} />);
+    const lines = within(screen.getByLabelText(`Indicator line of ${rule.rule_id}`)).getAllByRole('option').map((option) => option.getAttribute('value'));
+    expect(lines).toEqual(['tv-advance-decline-line:nyse', 'tv-advance-decline-line:nasdaq']);
+    expect(screen.queryByLabelText(`Indicator period of ${rule.rule_id}`)).toBeNull();
+  });
+});

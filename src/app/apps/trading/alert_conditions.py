@@ -22,6 +22,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .indicators.external import external_available_for, external_indicator, external_scope_name
 from .indicators.registry import BarSeries, IndicatorInputs, IndicatorOutputSeries, compute_indicator, server_indicator
 from .indicators.sources import accepts_source, compute_on_source, find_output
 
@@ -330,6 +331,19 @@ def indicator_output_profile(source: IndicatorSource) -> tuple[tuple[str, int | 
 
 
 def validate_indicator_source(source: IndicatorSource) -> None:
+    external = external_indicator(source.indicator_id)
+    if external is not None:
+        # An external-data series (TVP-0.2): no formula, no inputs that matter, its outputs fixed by its metric.
+        if source.inputs.source is not None:
+            raise ValueError(f"indicator {source.indicator_id!r} is a data series and does not take a source")
+        if source.output not in external.output_keys:
+            raise ValueError(
+                f"indicator {source.indicator_id!r} has no output {source.output!r}; outputs: {', '.join(external.output_keys)}"
+            )
+        return
+    reference = source.inputs.source
+    if reference is not None and external_indicator(reference.indicator_id) is not None:
+        raise ValueError(f"indicator {source.indicator_id!r} cannot read the data series {reference.indicator_id!r} as its source yet")
     if server_indicator(source.indicator_id) is None:
         raise ValueError(f"indicator {source.indicator_id!r} is not available on the server")
     reference = source.inputs.source
@@ -355,6 +369,17 @@ def validate_conditions_against_registry(conditions: list[AlertConditionSpec]) -
         for source in condition_sources(condition):
             if isinstance(source, IndicatorSource):
                 validate_indicator_source(source)
+
+
+def validate_external_scope(instrument_id: str, conditions: list[AlertConditionSpec]) -> None:
+    """External-data indicators only on the instruments their data exists for (open interest on Binance crypto...)."""
+    for condition in conditions:
+        for source in condition_sources(condition):
+            if isinstance(source, IndicatorSource) and external_indicator(source.indicator_id) is not None:
+                if not external_available_for(source.indicator_id, instrument_id):
+                    raise ValueError(
+                        f"indicator {source.indicator_id!r} has data for {external_scope_name(source.indicator_id)} only"
+                    )
 
 
 # --- Legacy adapter ------------------------------------------------------------
@@ -485,5 +510,6 @@ __all__ = [
     "legacy_conditions",
     "legacy_indicator_source",
     "validate_conditions_against_registry",
+    "validate_external_scope",
     "validate_indicator_source",
 ]

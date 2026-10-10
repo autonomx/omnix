@@ -145,3 +145,14 @@ describe('pane alerts on indicators the server cannot alert on (TVP-1.3 review 2
     expect(editorDefaults({ time: 't', price: 0.00423456789, x: 0, y: 0, source: 'context-menu', chartIndicatorId: 'macd' }, 1).threshold).toBe('0.0042345679');
   });
 });
+
+describe('external-data indicators as alert sources (TVP-0.2)', () => {
+  it('offers them when the server evaluates them, but not an indicator computed on one', () => {
+    const oi = { id: 'tv-open-interest', period: 14, enabled: true } as unknown as CoreIndicatorInstance;
+    const smaOfOi = { id: 'sma', period: 5, enabled: true, source: { indicatorId: 'tv-open-interest', output: 'open-interest' } } as unknown as CoreIndicatorInstance;
+    const choices = alertIndicatorChoices([oi, smaOfOi], [line('tv-open-interest:open-interest', 'Open Interest'), line('sma:5', 'SMA')], new Set(['tv-open-interest', 'sma']));
+    expect(choices[0]).toMatchObject({ key: 'tv-open-interest', outputs: [{ key: 'tv-open-interest:open-interest' }] });
+    expect(choices[0].unavailable).toBeUndefined();
+    expect(choices[1].unavailable).toMatch(/source indicator/);
+  });
+});
