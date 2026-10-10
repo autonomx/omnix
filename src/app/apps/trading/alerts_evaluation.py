@@ -229,11 +229,14 @@ class _BarValues:
         external: ExternalValues | None = None,
         session: TradingSession | None = None,
         compare: CompareBars | None = None,
+        script_context: Any = None,
     ) -> None:
         self.bars = bars
         self.external = external
         self.session = session
         self.compare = compare
+        # A script alert's instrument, interval and market data (alerts_scripts.ScriptAlertContext).
+        self.script_context = script_context
         self._series: BarSeries | None = None
         self._indicator_cache: dict[tuple[Any, ...], dict[int, float]] = {}
         self._script_cache: dict[str, Any] = {}
@@ -273,7 +276,7 @@ class _BarValues:
         if series is None:
             from .alerts_scripts import script_alert_series
 
-            series = script_alert_series(source, self.bars)
+            series = script_alert_series(source, self.bars, context=self.script_context)
             self._script_cache[key] = series
         return series
 
@@ -401,6 +404,7 @@ def evaluate_conditions(
     external: ExternalValues | None = None,
     session: TradingSession | None = None,
     compare: CompareBars | None = None,
+    script_context: Any = None,
 ) -> AlertConditionOutcome | None:
     """Evaluate every condition at the evaluation bar; ``None`` when there is no bar to evaluate.
 
@@ -411,7 +415,7 @@ def evaluate_conditions(
     if index is None:
         return None
     # Indicators see bars up to the evaluated bar only, so a forming bar after it cannot leak in.
-    values = _BarValues(bars[: index + 1], external, session, compare)
+    values = _BarValues(bars[: index + 1], external, session, compare, script_context)
     observations = tuple(_evaluate_condition(values, position, condition, index) for position, condition in enumerate(conditions))
     bar = bars[index]
     return AlertConditionOutcome(

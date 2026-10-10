@@ -8,13 +8,21 @@ export const CORE_INDICATOR_FORMULA_VERSION = 'omnix-indicators-v2';
 /** A value at a bar; `color` paints that bar's column, line segment, bar or background (TVP-6.2); `label` marks it. */
 /** A value per bar; a `candles` output's points also carry the candle's open, high and low (`value` is its close). */
 export type IndicatorPoint = { time: string; value: number; color?: string; label?: string; open?: number; high?: number; low?: number };
+/** A table an Omnix Script draws over the chart (TVP-11.1), at one of nine positions; cells by row, then column. */
+export type IndicatorTable = {
+  position: string;
+  rows: Array<Array<{ text: string; color?: string; background?: string } | null>>;
+  background?: string;
+  border?: string;
+};
 /**
  * How an output is drawn: a line or histogram series; `bar-colors` recolours the chart's own bars; `background`
  * shades the price pane behind the bars (full height, per bar); `viewport-average` is a price line at the average close
  * of the bars in view (Visible Average Price) and has no points of its own; `candles` draws each point as a candle in
- * its pane (Volume Delta, CVD).
+ * its pane (Volume Delta, CVD); `fill` shades between two values per bar (each point's `high` and `low`, in its colour);
+ * `table` has no points and is drawn over the chart from its `table` (Omnix Scripts, TVP-11.1).
  */
-export type IndicatorOutputKind = 'line' | 'histogram' | 'bar-colors' | 'background' | 'viewport-average' | 'candles';
+export type IndicatorOutputKind = 'line' | 'histogram' | 'bar-colors' | 'background' | 'viewport-average' | 'candles' | 'fill' | 'table';
 export type IndicatorLineStyle = 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
 export type IndicatorPaneScale = {
   min: number;
@@ -72,6 +80,10 @@ export type IndicatorOutput = {
   markerPosition?: 'aboveBar' | 'belowBar';
   /** A pane-1 output drawn in another indicator's pane (an indicator on that indicator, TVP-6.5). */
   paneOf?: string;
+  /** Candles: drawn as OHLC bars instead (an Omnix Script's plotbar). */
+  barStyle?: 'candles' | 'bars';
+  /** `table` outputs: the table to draw. */
+  table?: IndicatorTable;
 };
 export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'

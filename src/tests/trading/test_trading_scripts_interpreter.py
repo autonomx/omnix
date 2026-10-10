@@ -22,6 +22,7 @@ from app.apps.trading.scripts import (
     run_script,
 )
 from app.apps.trading.scripts.errors import ScriptRuntimeError
+from app.apps.trading.scripts.runtime import SecurityBars, resolve_security_key
 
 ROOT = Path(__file__).resolve().parents[3]
 IDIOMS = ROOT / "resources" / "trading" / "script_corpus" / "idioms"
@@ -67,7 +68,8 @@ def test_errors_name_their_line() -> None:
     with pytest.raises(ScriptSyntaxError, match="indicator"):
         compile_script("//@version=6\nplot(close)\n")
     for source, feature in (
-        ('x = request.security(syminfo.tickerid, "D", close)', "request.security"),
+        # request.security() runs (TVP-11.1), but its context must be known before the run.
+        ('tf = close > open ? "D" : "W"\nx = request.security(syminfo.tickerid, tf, close)', "request.security"),
         ("import user/lib/1", "libraries"),
         ("type Point\n    float x", "user-defined types"),
     ):
@@ -269,9 +271,15 @@ def _random_walk() -> BarSeries:
 
 
 OUTSIDE_THE_SUBSET = {
-    "mtf_ema": "request.security",
     "order_blocks_udt": "user-defined types",
 }
+
+
+def _contexts(source: str, bars: BarSeries) -> dict[str, SecurityBars]:
+    """request.security() contexts on the same bars, so idioms that request one have values to plot."""
+    program = compile_script(source)
+    keys = {resolve_security_key(template, program, {}) for template in program.securities}
+    return {key: SecurityBars(bars, "", "60") for key in keys}
 
 
 @pytest.mark.parametrize("path", sorted(IDIOMS.glob("*.pine")), ids=lambda path: path.stem)
@@ -281,7 +289,7 @@ def test_community_idioms_run(path: Path) -> None:
         with pytest.raises(ScriptUnsupportedError, match=OUTSIDE_THE_SUBSET[path.stem]):
             run_script(source, _random_walk(), timeframe="60")
         return
-    result = run_script(source, _random_walk(), timeframe="60")
+    result = run_script(source, _random_walk(), timeframe="60", securities=_contexts(source, _random_walk()))
     produced = sum(1 for plot in result.plots for value in plot.values if value is not None) + len(result.drawings)
     # A strategy (TVP-11.5) produces trades.
     produced += len((result.strategy or {}).get("trades", [])) + len((result.strategy or {}).get("open_trades", []))

@@ -15,6 +15,8 @@ function seriesMock() {
     removePriceLine: vi.fn(),
     lastValueData: vi.fn(() => ({ noData: false, price: 101, color: '#20c997' })),
     priceToCoordinate: vi.fn(() => 120),
+    attachPrimitive: vi.fn(),
+    setSeriesOrder: vi.fn(),
   };
 }
 
@@ -114,6 +116,33 @@ describe('chart adapter workflow hooks (TVP-2.5)', () => {
     adapter.setIndicatorOutputs([{ ...output, kind: 'histogram' }]);
     expect(chartMock.removeSeries).toHaveBeenCalledWith(series[candleCall]);
     expect(chartMock.addSeries.mock.calls.at(-1)?.[0]).toBe(HistogramSeries);
+  });
+
+  it("draws a script's fill as a band on a hidden line, its plotbar as OHLC bars, and no series for a table (TVP-11.1)", async () => {
+    const { BarSeries, LineSeries } = await import('lightweight-charts');
+    const { FillBandPrimitive } = await import('./fillBandPrimitive');
+    chartMock.addSeries.mockClear();
+    const adapter = new TradingChartAdapter(document.createElement('div'));
+    const before = chartMock.addSeries.mock.calls.length;
+    const t0 = '2026-08-05T12:00:00.000Z';
+    const t1 = '2026-08-05T12:01:00.000Z';
+    adapter.setIndicatorOutputs([
+      { key: 's:f0', title: 'Band', pane: 1, kind: 'fill', color: '#08998133', points: [
+        { time: t0, value: 2, high: 3, low: 1 }, { time: t1, value: Number.NaN, high: Number.NaN, low: Number.NaN },
+      ] },
+      { key: 's:p0', title: 'B', pane: 1, kind: 'candles', barStyle: 'bars', points: [{ time: t0, value: 4, open: 1, high: 5, low: 0, color: '#F23645' }] },
+      { key: 's:t1', title: 'table 1', pane: 0, kind: 'table', points: [], table: { position: 'top_right', rows: [] } },
+    ]);
+    const added = chartMock.addSeries.mock.calls.slice(before).map(([type]) => type);
+    expect(added).toEqual([LineSeries, BarSeries]);
+    const fill = series[before];
+    expect(fill.attachPrimitive.mock.calls[0][0]).toBeInstanceOf(FillBandPrimitive);
+    expect(fill.setSeriesOrder).toHaveBeenCalledWith(0);
+    // The hidden line runs through the band's middle and skips its gaps.
+    expect(fill.setData).toHaveBeenCalledWith([{ time: Date.parse(t0) / 1000, value: 2 }]);
+    expect(series[before + 1].setData).toHaveBeenCalledWith([{
+      time: Date.parse(t0) / 1000, open: 1, high: 5, low: 0, close: 4, color: '#F23645', wickColor: '#F23645', borderColor: '#F23645',
+    }]);
   });
 
   it('tells which pane a double-click landed on', () => {

@@ -21,8 +21,8 @@ import pytest
 
 from app.apps.trading.indicators.registry import BarSeries, IndicatorInputs, compute_indicator
 from app.apps.trading.indicators.server_indicators.core import exponential_moving_average, simple_moving_average
-from app.apps.trading.scripts import ScriptError, ScriptUnsupportedError, run_script
-from app.apps.trading.scripts.runtime import ScriptResult
+from app.apps.trading.scripts import ScriptError, compile_script, run_script
+from app.apps.trading.scripts.runtime import ScriptResult, SecurityBars
 
 ROOT = Path(__file__).resolve().parents[3]
 CORPUS = ROOT / "web" / "src" / "features" / "trading" / "indicators" / "fixtures" / "pineTemplateCorpus.json"
@@ -312,13 +312,23 @@ EXPECTATIONS: dict[str, list[Line]] = {
 
 # Templates that aren't (yet) runnable, and why.
 NOT_RUNNABLE = {
-    "bull-market-band": ScriptUnsupportedError,  # request.security (TVP-11.1)
     "volume-profile": ScriptError,  # not valid Pine: volume.profile_fixed doesn't exist
 }
+# Templates that read another timeframe (request.security, TVP-11.1): they run, given that timeframe's bars.
+OTHER_TIMEFRAME = {"bull-market-band": "|W"}
 
 
 def test_every_template_is_covered() -> None:
-    assert set(_corpus()) == set(EXPECTATIONS) | set(NOT_RUNNABLE) | {"fair-value-gap"}
+    assert set(_corpus()) == set(EXPECTATIONS) | set(NOT_RUNNABLE) | set(OTHER_TIMEFRAME) | {"fair-value-gap"}
+
+
+@pytest.mark.parametrize(("template", "key"), sorted(OTHER_TIMEFRAME.items()))
+def test_templates_on_another_timeframe_request_it(template: str, key: str) -> None:
+    source = _corpus()[template]["source"]
+    assert compile_script(source).securities == [key]
+    bars = _dataset("random-walk-300")
+    result = run_script(source, bars, timeframe="1d", securities={key: SecurityBars(bars, "", "1w")})
+    assert any(value is not None for plot in result.plots for value in plot.values)
 
 
 def _cases() -> list[tuple[str, str]]:

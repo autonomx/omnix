@@ -7,6 +7,7 @@ import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingOrderLinesOverlay } from './TradingOrderLinesOverlay';
 import { TradingPriceScalePlus } from './TradingPriceScalePlus';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
+import { ScriptTablesOverlay } from './scripts/ScriptTablesOverlay';
 import { TRADING_CHART_TYPE_OPTIONS, type TradingChartType } from './chart/chartAdapter';
 import { drawingInstrumentOf } from './drawings/drawingInstrument';
 import { TradingDrawingOverlay } from './drawings/TradingDrawingOverlay';
@@ -77,6 +78,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
       />
       <DrawingAlertSync adapter={adapter} instrumentId={instrumentId} instrument={drawingInstrumentOf(chartQuery.data?.instrument)} drawings={drawings.state.drawings} active={active} replayMode={replayMode} />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
+      <ScriptTablesOverlay outputs={indicatorOutputs} />
       <TradingOrderLinesOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} tickSize={tickSize} disabled={replayMode} />
       {active ? (
         <TradingPriceScalePlus
