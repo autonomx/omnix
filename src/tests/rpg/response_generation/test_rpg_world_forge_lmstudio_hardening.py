@@ -126,7 +126,9 @@ class _ParallelBatchProvider(_Provider):
             self.peak = max(self.peak, self.active)
             if self.active == 2:
                 self._paired_call.set()
-        assert self._paired_call.wait(timeout=2)
+        # Both batch calls must be in flight together; generous for a loaded parallel runner, and a serialised
+        # generator still fails here because the second call never arrives.
+        assert self._paired_call.wait(timeout=30)
         try:
             return ChatResponse(
                 content=_payload(
