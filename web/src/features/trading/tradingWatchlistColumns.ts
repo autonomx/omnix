@@ -1,12 +1,13 @@
+import { tradingViewBuiltInDefinition } from './indicators/tradingViewBuiltIns';
 import { formatWatchlistPrice } from './tradingWatchlistPresentation';
 
 /**
  * Watchlist columns (TVP-5.2). Every column reads one value from the symbol's
  * snapshot, so sorting works the same way for all of them.
  *
- * Extension point: indicator columns (TVP-5.2 after TVP-0.2) add definitions
- * whose `value` reads a server-side indicator result added to the snapshot;
- * the header, cells, sorting and the column chooser need no change.
+ * Indicator columns name a server registry indicator, its period and line
+ * (`indicator:<id>|<period>|<output>`); their values come from the server
+ * (`/api/trading/indicators/latest`) into the snapshot's `indicators`.
  */
 export type WatchlistSnapshot = {
   price: string | null;
@@ -17,7 +18,11 @@ export type WatchlistSnapshot = {
   high?: number | null;
   low?: number | null;
   extendedPrice?: string | null;
+  /** Indicator column values by column id. */
+  indicators?: Readonly<Record<string, number | null>>;
 };
+
+export type WatchlistIndicatorColumnId = `indicator:${string}`;
 
 export type WatchlistColumnId =
   | 'last'
@@ -27,7 +32,8 @@ export type WatchlistColumnId =
   | 'relativeVolume'
   | 'extendedPrice'
   | 'high'
-  | 'low';
+  | 'low'
+  | WatchlistIndicatorColumnId;
 
 export type WatchlistColumnTone = 'positive' | 'negative' | 'neutral' | null;
 
@@ -141,8 +147,59 @@ export const DEFAULT_WATCHLIST_COLUMNS: readonly WatchlistColumnId[] = ['last', 
 
 const COLUMN_BY_ID = new Map(WATCHLIST_COLUMNS.map((column) => [column.id, column]));
 
+/** An indicator column's line: a server registry indicator, its period and the output key it draws. */
+export type WatchlistIndicatorLine = { indicatorId: string; period: number; output: string };
+
+export const MAX_INDICATOR_COLUMNS = 8;
+const INDICATOR_PREFIX = 'indicator:';
+
+export function indicatorColumnId(line: WatchlistIndicatorLine): WatchlistIndicatorColumnId {
+  return `${INDICATOR_PREFIX}${line.indicatorId}|${line.period}|${line.output}`;
+}
+
+export function indicatorColumnLine(id: string): WatchlistIndicatorLine | null {
+  if (!id.startsWith(INDICATOR_PREFIX)) return null;
+  const [indicatorId, period, ...output] = id.slice(INDICATOR_PREFIX.length).split('|');
+  const length = Number(period);
+  const key = output.join('|');
+  return indicatorId && Number.isFinite(length) && length > 0 && key.startsWith(`${indicatorId}:`) ? { indicatorId, period: length, output: key } : null;
+}
+
+/** "RSI 14", or "MACD 9 · signal" for a line other than the indicator's first. */
+export function indicatorColumnLabel(line: WatchlistIndicatorLine): string {
+  const full = tradingViewBuiltInDefinition(line.indicatorId)?.name ?? line.indicatorId.toUpperCase();
+  // "Relative Strength Index (RSI)" is "RSI" in a narrow header.
+  const name = /\(([^()]+)\)/.exec(full)?.[1] ?? full;
+  const last = line.output.split(':').at(-1) ?? '';
+  const main = last === String(line.period) || last === '' || line.output === `${line.indicatorId}:${line.period}`;
+  return `${name} ${line.period}${main ? '' : ` · ${last}`}`;
+}
+
+function indicatorColumn(id: WatchlistIndicatorColumnId): WatchlistColumnDefinition | undefined {
+  const line = indicatorColumnLine(id);
+  if (!line) return undefined;
+  const label = indicatorColumnLabel(line);
+  const value = (snapshot: WatchlistSnapshot | undefined) => snapshot?.indicators?.[id] ?? null;
+  return {
+    id,
+    label,
+    description: `${label} (indicator)`,
+    hint: `${label} on the latest bar of the watchlist's interval`,
+    width: 'narrow',
+    value,
+    format: (snapshot) => {
+      const number = value(snapshot);
+      return number == null ? EMPTY : number.toLocaleString(undefined, { maximumFractionDigits: Math.abs(number) >= 100 ? 2 : 4 });
+    },
+  };
+}
+
 export function watchlistColumn(id: WatchlistColumnId): WatchlistColumnDefinition | undefined {
-  return COLUMN_BY_ID.get(id);
+  return COLUMN_BY_ID.get(id) ?? (id.startsWith(INDICATOR_PREFIX) ? indicatorColumn(id as WatchlistIndicatorColumnId) : undefined);
+}
+
+export function isIndicatorColumnId(id: WatchlistColumnId): id is WatchlistIndicatorColumnId {
+  return indicatorColumnLine(id) !== null;
 }
 
 export function columnTone(column: WatchlistColumnDefinition, snapshot: WatchlistSnapshot | undefined): WatchlistColumnTone {
@@ -152,12 +209,18 @@ export function columnTone(column: WatchlistColumnDefinition, snapshot: Watchlis
   return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
 }
 
-/** Chosen columns in the chooser's order; the symbol column is always shown. */
+/**
+ * Chosen columns in the chooser's order, then the indicator columns in the order they were added (at most
+ * MAX_INDICATOR_COLUMNS); the symbol column is always shown.
+ */
 export function toggleWatchlistColumn(columns: readonly WatchlistColumnId[], id: WatchlistColumnId): WatchlistColumnId[] {
   const chosen = new Set(columns);
   if (chosen.has(id)) chosen.delete(id);
   else chosen.add(id);
-  return WATCHLIST_COLUMNS.map((column) => column.id).filter((columnId) => chosen.has(columnId));
+  const indicators = [...columns.filter(isIndicatorColumnId), ...(isIndicatorColumnId(id) && !columns.includes(id) ? [id] : [])]
+    .filter((columnId) => chosen.has(columnId))
+    .slice(0, MAX_INDICATOR_COLUMNS);
+  return [...WATCHLIST_COLUMNS.map((column) => column.id).filter((columnId) => chosen.has(columnId)), ...indicators];
 }
 
 export type WatchlistSortKey = 'symbol' | WatchlistColumnId;
@@ -201,7 +264,7 @@ const VIEW_STORAGE_KEY = 'omnix.trading.watchlist-view';
 export type WatchlistView = { columns: WatchlistColumnId[]; sort: WatchlistSort };
 
 function isColumnId(value: unknown): value is WatchlistColumnId {
-  return typeof value === 'string' && COLUMN_BY_ID.has(value as WatchlistColumnId);
+  return typeof value === 'string' && (COLUMN_BY_ID.has(value as WatchlistColumnId) || indicatorColumnLine(value) !== null);
 }
 
 export function readWatchlistView(): WatchlistView {

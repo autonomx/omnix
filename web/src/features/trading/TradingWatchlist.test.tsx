@@ -4,9 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tradingApi } from './tradingApi';
 import type { BarsResponse, CanonicalInstrument, ProviderBinding, TradingDocument } from './tradingTypes';
 import { TradingWatchlist } from './TradingWatchlist';
+import { resetTradingWatchlistFlags } from './useTradingWatchlistFlags';
 import { useTradingCommandDispatcher } from './commands/useTradingCommands';
 import { onOmnixEvent } from '../../events/bus';
 import './advancedView';
+
+// The column chooser's indicator picker (TVP-5.2) reads the server's indicator list through react-query.
+vi.mock('./useTradingAlerts', async (original) => ({ ...(await original<typeof import('./useTradingAlerts')>()), useAlertIndicatorIds: () => new Set(['rsi']) }));
 
 const apple: CanonicalInstrument = {
   instrument_id: 'equity:NASDAQ:AAPL',
@@ -60,6 +64,8 @@ function watchlistCalls(documents: ReturnType<typeof mockDocuments>) {
 }
 
 afterEach(() => {
+  // The flags are one store for the page (TVP-5.1): each test starts without them.
+  resetTradingWatchlistFlags();
   vi.restoreAllMocks();
   window.localStorage.clear();
 });

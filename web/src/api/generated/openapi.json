@@ -21782,6 +21782,74 @@
         "title": "IndicatorSourceInputs",
         "type": "object"
       },
+      "IndicatorValuesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "instrument_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Instrument Ids",
+            "type": "array"
+          },
+          "interval": {
+            "default": "1d",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/IndicatorSource-Input"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instrument_ids",
+          "lines"
+        ],
+        "title": "IndicatorValuesRequest",
+        "type": "object"
+      },
+      "IndicatorValuesResponse": {
+        "properties": {
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "items": {
+                "anyOf": [
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "interval",
+          "values"
+        ],
+        "title": "IndicatorValuesResponse",
+        "type": "object"
+      },
       "InstrumentSearchResponse": {
         "properties": {
           "instruments": {
@@ -80083,6 +80151,48 @@
           }
         },
         "summary": "Update Trading Indicator Preset",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/indicators/latest": {
+      "post": {
+        "description": "The latest value of up to 8 indicator lines for up to 200 symbols (the watchlist's indicator columns).",
+        "operationId": "latest_api_trading_indicators_latest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndicatorValuesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndicatorValuesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest",
         "tags": [
           "trading"
         ]
