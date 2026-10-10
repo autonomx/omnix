@@ -31,6 +31,7 @@ from .alerts import (
 )
 from .indicators.registry import server_indicator_ids
 from .indicators.external import external_indicator_ids
+from .indicators.intrabar import INTRABAR_OUTPUTS
 from .alerts_delivery import NotificationDelivery, NotificationDeliveryRepository, default_delivery_repository
 from .alerts_channels import (
     AVAILABLE_ALERT_CHANNELS,
@@ -257,7 +258,9 @@ def create_trading_alert_router(
         """The indicators the server evaluates for alerts (TVP-1.3): the dialog offers these, greys out the rest.
 
         Includes the external-data indicators (TVP-0.2), read from their metric series."""
-        return TradingAlertIndicatorListResponse(indicator_ids=sorted([*server_indicator_ids(), *external_indicator_ids()]))
+        return TradingAlertIndicatorListResponse(
+            indicator_ids=sorted([*server_indicator_ids(), *external_indicator_ids(), *INTRABAR_OUTPUTS])
+        )
 
     @router.get("/triggers", response_model=TradingAlertTriggerListResponse)
     def list_triggers(

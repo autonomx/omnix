@@ -26,7 +26,8 @@ from .alerts_evaluation import evaluate_conditions, history_limit, required_bars
 from .alert_conditions import CompareBars
 from .alerts_scripts import ScriptAlertContext
 from .external_series import ExternalSeries
-from .indicator_context import compare_bars_loader, instrument_session
+from .indicator_context import compare_bars_loader, instrument_session, intrabar_loader
+from .indicators.intrabar import IntrabarLoader
 from .indicators.registry import TradingSession
 from .service import TradingMarketDataService, default_market_data_service
 
@@ -72,12 +73,13 @@ def _outcomes(
     session: TradingSession | None = None,
     compare: CompareBars | None = None,
     script_context: ScriptAlertContext | None = None,
+    intrabar: IntrabarLoader | None = None,
 ) -> list[AlertOutcomeRecord]:
     records: list[AlertOutcomeRecord] = []
     for alert in alerts:
         outcome = evaluate_conditions(
             alert.conditions, bars, final_only=_final_only(alert), external=external, session=session, compare=compare,
-            script_context=script_context,
+            script_context=script_context, intrabar=intrabar,
         )
         if outcome is not None:
             records.append(AlertOutcomeRecord(alert.alert_id, alert.revision, outcome))
@@ -158,9 +160,11 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                     lambda symbol, limit, interval=interval: service.bars(symbol, interval, limit, None).bars
                 )
                 scripts = ScriptAlertContext(instrument_id, interval, service)
+                # Volume Delta and CVD read lower-timeframe bars on the target's feed, each range once a pass (TVP-6.4).
+                intrabar = intrabar_loader(service, instrument_id, interval, requested_binding_id)
                 # Indicator maths (and metric and compare fetches) are blocking work; keep them off the event loop.
-                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars, external, session, compare, scripts)
-                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars, external, session, compare, scripts)
+                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars, external, session, compare, scripts, intrabar)
+                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars, external, session, compare, scripts, intrabar)
                 if not outcomes and not symbol_outcomes:
                     continue
                 context = AlertEvaluationContext(

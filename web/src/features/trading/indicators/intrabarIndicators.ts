@@ -25,6 +25,13 @@ export function isIntrabarIndicatorId(id: string): boolean {
   return (INTRABAR_INDICATOR_IDS as readonly string[]).includes(id);
 }
 
+/** The one line each draws (the server keys it the same, `indicators/intrabar.py`): its candles' close. */
+export function intrabarOutputLine(id: string): { key: string; title: string } | null {
+  if (id === 'tv-volume-delta') return { key: `${id}:delta`, title: 'Volume Delta' };
+  if (id === 'tv-cumulative-volume-delta') return { key: `${id}:cvd`, title: 'CVD' };
+  return null;
+}
+
 export type BarDelta = { delta: number; max: number; min: number };
 
 /** Each chart bar's volume delta from its lower bars, by the chart bar's start time (ms). */
@@ -168,7 +175,7 @@ export async function calculateIntrabarIndicatorOutputs(
   }
   const cumulative = id === 'tv-cumulative-volume-delta';
   const anchor = indicator.params?.anchor === 'W' || indicator.params?.anchor === 'M' ? indicator.params.anchor : 'D';
-  const key = cumulative ? `${id}:cvd` : `${id}:delta`;
+  const key = intrabarOutputLine(id)!.key;
   const points = cumulative ? cumulativeVolumeDeltaPoints(bars, deltas, anchor, context.session) : volumeDeltaPoints(bars, deltas);
   const output: IndicatorOutput = {
     key,

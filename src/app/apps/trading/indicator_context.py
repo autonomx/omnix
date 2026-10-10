@@ -1,5 +1,5 @@
-"""What an indicator needs besides its own bars, for alerts and the screener (TVP-1.3): the market's session hours and a
-compare symbol's bars.
+"""What an indicator needs besides its own bars, for alerts and the screener (TVP-1.3): the market's session hours, a
+compare symbol's bars, and lower-timeframe bars for Volume Delta and CVD (TVP-6.4).
 
 The chart gives each indicator its instrument's session calendar (``sessionForInstrument``) and loads a compare
 symbol's bars on the chart's interval. The server does the same: the session comes from the catalog instrument, never
@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from typing import Any
 
 from .catalog import instrument_by_id
+from .indicators.intrabar import IntrabarLoader
 from .indicators.registry import BarSeries, TradingSession, load_compare_bars, session_for_instrument
+from .intrabar import intrabar_bars
 
 logger = logging.getLogger(__name__)
 
@@ -50,4 +53,34 @@ def compare_bars_loader(fetch: FetchBars, *, max_bars: int = 1_000) -> CompareBa
     return load
 
 
-__all__ = ["CompareBars", "FetchBars", "compare_bars_loader", "instrument_session"]
+def intrabar_loader(service: Any, instrument_id: str, interval: str, binding_id: str | None = None) -> IntrabarLoader:
+    """Lower bars for Volume Delta and CVD through the intrabar loader (``intrabar.intrabar_bars``), each range once.
+
+    ``service`` has the market data service's ``bars(instrument_id, interval, limit, binding_id, alignment=...)``."""
+    cache: dict[tuple[str, datetime, datetime], list[Any]] = {}
+
+    def load(lower_interval: str, start: datetime, end: datetime) -> list[Any]:
+        key = (lower_interval, start, end)
+        if key not in cache:
+            response = intrabar_bars(
+                service, instrument_id=instrument_id, interval=interval, lower_interval=lower_interval, start=start, end=end,
+                now=datetime.now(timezone.utc), binding_id=binding_id,
+            )
+            cache[key] = list(response.bars)
+        return cache[key]
+
+    return load
+
+
+class FetchBarsService:
+    """A caller's bar fetch ``(instrument id, interval, limit, binding id) -> response`` as the market data service's
+    ``bars`` (the screener's fetch has no alignment: lower intervals of a day or less are the same either way)."""
+
+    def __init__(self, fetch: Callable[[str, str, int, str | None], Any]) -> None:
+        self._fetch = fetch
+
+    def bars(self, instrument_id: str, interval: str, limit: int = 500, binding_id: str | None = None, *args: Any, **kwargs: Any) -> Any:
+        return self._fetch(instrument_id, interval, limit, binding_id)
+
+
+__all__ = ["CompareBars", "FetchBars", "FetchBarsService", "compare_bars_loader", "instrument_session", "intrabar_loader"]

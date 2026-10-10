@@ -20,7 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .alert_conditions import IndicatorSource, validate_indicator_source
 from .alerts_evaluation import HISTORY_LIMIT_MAX, _BarValues, _source_lookback, history_limit
 from .external_series import ExternalSeries
-from .indicator_context import compare_bars_loader, instrument_session
+from .indicator_context import compare_bars_loader, instrument_session, intrabar_loader
+from .indicators.intrabar import IntrabarLoader
 from .indicators.external import external_indicator
 from .service import TradingMarketDataService, default_market_data_service
 
@@ -64,12 +65,13 @@ def latest_values(
     bars: Sequence[Any],
     instrument_id: str,
     compare: Callable[..., Any] | None = None,
+    intrabar: IntrabarLoader | None = None,
 ) -> list[Decimal | None]:
     """Each line's value on the latest bar of ``bars``."""
     if not bars:
         return [None] * len(request.lines)
     external = ExternalSeries(instrument_id, request.interval) if any(external_indicator(line.indicator_id) for line in request.lines) else None
-    values = _BarValues(bars, external, instrument_session(instrument_id), compare)
+    values = _BarValues(bars, external, instrument_session(instrument_id), compare, None, intrabar)
     return [values.value(line, len(bars) - 1) for line in request.lines]
 
 
@@ -87,7 +89,8 @@ async def indicator_values(
         async with semaphore:
             try:
                 bars = await asyncio.to_thread(fetch, instrument_id, limit)
-                return await asyncio.to_thread(latest_values, request, bars, instrument_id, compare_bars_loader(fetch))
+                intrabar = intrabar_loader(service, instrument_id, request.interval)
+                return await asyncio.to_thread(latest_values, request, bars, instrument_id, compare_bars_loader(fetch), intrabar)
             except Exception:  # a symbol without data shows empty cells; the others still fill
                 logger.info("indicator_values_symbol_failed", extra={"instrument_id": instrument_id}, exc_info=True)
                 return [None] * len(request.lines)
