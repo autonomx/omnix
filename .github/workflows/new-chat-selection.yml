@@ -36,7 +36,6 @@ jobs:
       - name: Verify new chat creation and selection
         run: >-
           npm --workspace @omnix/web run test --
-          src/features/assistant/chat/newChatCoordinator.test.ts
-          src/features/assistant/chat/chat-sidebar-manager.test.ts
+          src/features/assistant/chat/ChatSidebarSessions.test.tsx
           src/features/assistant/chat/sessionTools.test.ts
           src/features/assistant/chat/live-chat-fullscreen-controller.test.ts

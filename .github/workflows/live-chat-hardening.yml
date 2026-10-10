@@ -83,7 +83,7 @@ jobs:
             src/app/platform/chat/character_store.py \
             src/app/platform/chat/compaction.py \
             src/app/platform/chat/live_conversation_proactive.py \
-            src/app/platform/chat/memory_commands.py \
+            src/app/platform/assistant_memory/chat_commands.py \
             src/app/platform/chat/provider_metrics.py \
             src/app/platform/chat/retention_policy.py \
             src/app/apps/desktop_companion/context.py \

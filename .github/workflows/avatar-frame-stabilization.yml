@@ -6,7 +6,7 @@ on:
       - "src/app/platform/characters/avatar_frame_stabilization.py"
       - "src/app/platform/characters/avatar_viseme_generation.py"
       - "src/app/platform/characters/live2d_avatar.py"
-      - "src/app/assistant_context/__init__.py"
+      - "src/app/platform/chat/assistant_context/__init__.py"
       - "src/app/platform/image/jobs.py"
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
@@ -78,6 +78,7 @@ jobs:
               "types": ["vite/client"]
             },
             "include": [
+              "src/*.d.ts",
               "src/features/assistant/chat/CharacterAvatarPanel.tsx",
               "src/features/assistant/chat/characterAvatarClient.ts",
               "src/features/assistant/chat/characterClient.ts",
@@ -93,6 +94,6 @@ jobs:
       - name: Verify browser avatar playback
         run: >-
           npm --workspace @omnix/web run test --
-          src/features/assistant/chat/liveCharacterAvatarBridge.test.ts
+          src/features/assistant/chat/liveCharacterAvatarBridge.test.tsx
           src/features/assistant/chat/liveCharacterVisemeBridge.test.ts
           src/features/assistant/chat/live2dCharacterRenderer.test.ts
