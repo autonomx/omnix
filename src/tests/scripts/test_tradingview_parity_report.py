@@ -157,3 +157,8 @@ def test_done_percent_counts_partial_as_half_and_ignores_out_of_scope() -> None:
     assert done_percent(1, 1, 2) == "38%"
     assert done_percent(0, 0, 0) == "—"
     assert done_percent(3, 0, 0) == "100%"
+
+
+def test_done_percent_shows_100_only_when_everything_is_have() -> None:
+    assert done_percent(437, 2, 0) == "99%"
+    assert done_percent(999, 0, 1) == "99%"

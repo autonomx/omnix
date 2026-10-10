@@ -4,8 +4,8 @@ Rewrites two marked blocks in ``docs/trading/TRADINGVIEW_PARITY_ROADMAP_2026-10-
 
 - ``parity-completion``: the completion table. Feature percentages come from
   the parity ledger (have counts 1, partial 0.5, of the features in scope);
-  work packages from section 9's status table (rows whose status is exactly
-  ``**Done**``) against every ``#### TVP-`` heading; the gap closed against
+  work packages from section 9's status table (packages whose rows all have the
+  status exactly ``**Done**``) against every ``#### TVP-`` heading; the gap closed against
   the first ledger count.
 - ``parity-report``: the area and tier tables of ``tradingview_parity_report.py``.
 
@@ -64,14 +64,21 @@ def progress_section(roadmap: str) -> str:
 
 
 def done_work_packages(roadmap: str) -> list[str]:
+    """Work packages whose status rows are all ``**Done**`` (a package can have several rows, e.g. a later part)."""
     done: list[str] = []
+    not_done: set[str] = set()
     for line in progress_section(roadmap).splitlines():
         if not line.startswith("| TVP-"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) >= 2 and cells[1] == "**Done**":
-            done += expand_work_packages(cells[0])
-    return list(dict.fromkeys(done))
+        if len(cells) < 2:
+            continue
+        ids = expand_work_packages(cells[0])
+        if cells[1] == "**Done**":
+            done += ids
+        else:
+            not_done.update(ids)
+    return [wp for wp in dict.fromkeys(done) if wp not in not_done]
 
 
 def _percent(part: int, whole: int) -> str:
@@ -104,14 +111,16 @@ def completion_block(entries: Sequence[dict], roadmap: str) -> str:
             f"{_percent(closed, BASELINE_DAILY_WEEKLY_MISSING)} ({closed} of {BASELINE_DAILY_WEEKLY_MISSING})",
         ),
     ]
+    not_done = [f"TVP-{wp}" for wp in work_packages if wp not in done]
     lines = ["| Measure | Done |", "|---|---|"] + [f"| {name} | {value} |" for name, value in rows]
     lines += [
         "",
-        "Features: have counts 1, partial 0.5, missing 0; features excluded or waiting for a decision are left out, "
-        "and what Omnix had before this roadmap is included. Work packages: rows marked **Done** in the status table "
-        f"below, of every TVP work package in this roadmap (including the deferred TVP-4.6). Gap: missing daily + weekly "
-        f"features against {BASELINE_DAILY_WEEKLY_MISSING} at the first ledger count. Refreshed by "
-        "`python scripts/tradingview_parity_progress.py`.",
+        "Features: have counts 1, partial 0.5, missing 0, and 100% means every feature is have; features excluded or "
+        "waiting for a decision are left out, and what Omnix had before this roadmap is included. Work packages: those "
+        "whose rows in the status table below are all marked **Done**, of every TVP work package in this roadmap"
+        + (f"; not done: {', '.join(not_done)}" if not_done else "")
+        + f". Gap: missing daily + weekly features against {BASELINE_DAILY_WEEKLY_MISSING} at the first ledger count. "
+        "Refreshed by `python scripts/tradingview_parity_progress.py`.",
     ]
     return "\n".join(lines)
 

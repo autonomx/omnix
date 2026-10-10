@@ -2,7 +2,9 @@
 // and expiries noticed between account snapshots, shown as a toast over the
 // chart and kept in the terminal dock's Notifications tab. The first snapshot
 // of an account only sets the baseline, so opening Omnix replays nothing.
+// Orders placed by a margin call (TVP-7.2b) say so.
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { isMarginCallOrder } from './paperAccountMargin';
 import type { PaperAccountSnapshot, PaperOrder } from './paperTypes';
 
 export type PaperNotificationKind = 'fill' | 'partial' | 'reject' | 'cancel' | 'modify' | 'expire' | 'closed';
@@ -53,8 +55,14 @@ function movedPrice(order: PaperOrder, current: readonly PaperOrder[]): string |
   return String(replacement.order_type === 'limit' ? replacement.limit_price : replacement.stop_price ?? replacement.limit_price ?? '');
 }
 
-function describe(order: PaperOrder, current: readonly PaperOrder[] = []): Omit<PaperNotification, 'id' | 'at' | 'orderId'> | null {
+/** "Buy 2 BTC/USDT MARKET", with "Margin call:" in front of an order a margin call placed. */
+function orderLabel(order: PaperOrder): string {
   const what = `${order.side === 'buy' ? 'Buy' : 'Sell'} ${order.quantity} ${symbolOf(order.instrument_id)} ${order.order_type.replace('_', ' ').toUpperCase()}`;
+  return isMarginCallOrder(order.order_id) ? `Margin call: ${what}` : what;
+}
+
+function describe(order: PaperOrder, current: readonly PaperOrder[] = []): Omit<PaperNotification, 'id' | 'at' | 'orderId'> | null {
+  const what = orderLabel(order);
   switch (order.status) {
     case 'filled':
       return { kind: 'fill', message: `${what} filled${order.average_fill_price ? ` at ${order.average_fill_price}` : ''}` };
@@ -90,7 +98,7 @@ export function orderNotifications(before: PaperAccountSnapshot, after: PaperAcc
     if (order.status === 'open') {
       const filled = Number(order.filled_quantity ?? 0);
       if (filled > 0 && filled !== Number(prior?.filled_quantity ?? 0)) {
-        const what = `${order.side === 'buy' ? 'Buy' : 'Sell'} ${order.quantity} ${symbolOf(order.instrument_id)} ${order.order_type.replace('_', ' ').toUpperCase()}`;
+        const what = orderLabel(order);
         return [{ id: `${order.order_id}:partial:${filled}`, at: order.updated_at ?? now, orderId: order.order_id, kind: 'partial', message: `${what} partly filled: ${filled} of ${order.quantity}` }];
       }
       return [];
@@ -102,7 +110,7 @@ export function orderNotifications(before: PaperAccountSnapshot, after: PaperAcc
   const present = new Set(current.map((order) => order.order_id));
   for (const order of before.open_orders ?? []) {
     if (present.has(order.order_id)) continue;
-    const what = `${order.side === 'buy' ? 'Buy' : 'Sell'} ${order.quantity} ${symbolOf(order.instrument_id)} ${order.order_type.replace('_', ' ').toUpperCase()}`;
+    const what = orderLabel(order);
     notes.push({ id: `${order.order_id}:closed`, at: now, orderId: order.order_id, kind: 'closed', message: `${what} is no longer open` });
   }
   return notes;

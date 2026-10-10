@@ -31,6 +31,18 @@ def test_only_rows_marked_done_count() -> None:
     assert done_work_packages(roadmap) == ["1.1", "1.2"]
 
 
+def test_a_package_with_any_row_not_done_is_not_done() -> None:
+    roadmap = "\n".join([
+        "## 9. Progress",
+        "| WP | Status | Branch | Notes |",
+        "|---|---|---|---|",
+        "| TVP-9.1 | **Partly done** | x | y |",
+        "| TVP-9.1 (fundamental fields) | **Done** | x | y |",
+        "| TVP-9.2 | **Done** | x | y |",
+    ])
+    assert done_work_packages(roadmap) == ["9.2"]
+
+
 def test_blocks_are_replaced_between_their_markers() -> None:
     document = "a\n<!-- x:start -->\nold\n<!-- x:end -->\nb"
     assert replace_block(document, "x", "new") == "a\n<!-- x:start -->\nnew\n<!-- x:end -->\nb"

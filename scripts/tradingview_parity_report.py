@@ -167,12 +167,14 @@ def summarize(entries: Sequence[dict[str, Any]]) -> Summary:
 def done_percent(have: int, partial: int, missing: int) -> str:
     """Completion of the features in scope: have counts fully, partial half, missing not at all.
 
-    Features excluded or waiting for a decision are not in scope. Rounds half up; "—" with nothing in scope.
+    Features excluded or waiting for a decision are not in scope. Rounds half up, but shows 100% only when every
+    feature in scope is have; "—" with nothing in scope.
     """
     in_scope = have + partial + missing
     if in_scope == 0:
         return "—"
-    return f"{int(100 * (have + partial / 2) / in_scope + 0.5)}%"
+    percent = int(100 * (have + partial / 2) / in_scope + 0.5)
+    return f"{min(percent, 99) if have < in_scope else percent}%"
 
 
 def _area_row(name: str, counts: Counter[tuple[str, str]]) -> str:

@@ -52,6 +52,15 @@ describe('paper order notifications (TVP-7.4)', () => {
     ]);
   });
 
+  it('names orders placed by a margin call (TVP-7.2b)', () => {
+    const id = 'paper-margin-call-acct-1';
+    const before = snapshot('a', [order(id, 'open', { side: 'sell', filled_quantity: '0' })]);
+    const partly = snapshot('a', [order(id, 'open', { side: 'sell', filled_quantity: '1' })]);
+    const filled = snapshot('a', [order(id, 'filled', { side: 'sell', average_fill_price: '90' })]);
+    expect(orderNotifications(before, partly).map((item) => item.message)).toEqual(['Margin call: Sell 2 BTC/USDT MARKET partly filled: 1 of 2']);
+    expect(orderNotifications(partly, filled).map((item) => item.message)).toEqual(['Margin call: Sell 2 BTC/USDT MARKET filled at 90']);
+  });
+
   it('switching between live and replay starts a new baseline', () => {
     const live = snapshot('a', [order('h1', 'filled')]);
     const { rerender } = renderHook(({ value, mode }) => usePaperOrderNotifications(value, mode), { initialProps: { value: live, mode: 'live' } });
