@@ -21,12 +21,13 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
 from .alert_conditions import (
     MOVING_OPERATORS,
+    CompareBars,
     AlertConditionSpec,
     ChangePercentSource,
     ChannelTarget,
@@ -41,7 +42,8 @@ from .alert_conditions import (
     indicator_output_profile,
 )
 from .indicators.external import external_indicator
-from .indicators.registry import BarSeries, server_indicator
+from .indicators.registry import BarSeries, TradingSession, server_indicator
+from .providers.bar_semantics import interval_duration
 
 HISTORY_LIMIT_MAX = 1000
 _HUNDRED = Decimal("100")
@@ -221,9 +223,17 @@ def _decimal(value: Any) -> Decimal | None:
 class _BarValues:
     """Source values at bar indexes of one bar list, with per-source caches."""
 
-    def __init__(self, bars: Sequence[AlertBar], external: ExternalValues | None = None) -> None:
+    def __init__(
+        self,
+        bars: Sequence[AlertBar],
+        external: ExternalValues | None = None,
+        session: TradingSession | None = None,
+        compare: CompareBars | None = None,
+    ) -> None:
         self.bars = bars
         self.external = external
+        self.session = session
+        self.compare = compare
         self._series: BarSeries | None = None
         self._indicator_cache: dict[tuple[Any, ...], dict[int, float]] = {}
         self._script_cache: dict[str, Any] = {}
@@ -303,7 +313,9 @@ class _BarValues:
             # No loader (a pushed quote, a test): no data, so the condition is false.
             return self.external(source.indicator_id, source.output, self.bars) if self.external else {}
         try:
-            outputs = compute_source_indicator(source.indicator_id, self.series(), source.inputs, anchor_time)
+            outputs = compute_source_indicator(
+                source.indicator_id, self.series(), source.inputs, anchor_time, session=self.session, compare=self.compare
+            )
         except Exception:  # an indicator that cannot compute these bars has no value: the condition is false
             return {}
         chosen = next((output for output in outputs if output.key == source.output), None)
@@ -387,15 +399,19 @@ def evaluate_conditions(
     *,
     final_only: bool,
     external: ExternalValues | None = None,
+    session: TradingSession | None = None,
+    compare: CompareBars | None = None,
 ) -> AlertConditionOutcome | None:
     """Evaluate every condition at the evaluation bar; ``None`` when there is no bar to evaluate.
 
-    ``external`` supplies external-data indicator values (``external_series.ExternalSeries``)."""
+    ``external`` supplies external-data indicator values (``external_series.ExternalSeries``); ``session`` is the
+    instrument's session calendar and ``compare`` loads compare symbols' bars (``indicator_context``), as the chart has
+    them. Without them indicators run on UTC days with no second series."""
     index = evaluation_index(bars, final_only=final_only)
     if index is None:
         return None
     # Indicators see bars up to the evaluated bar only, so a forming bar after it cannot leak in.
-    values = _BarValues(bars[: index + 1], external)
+    values = _BarValues(bars[: index + 1], external, session, compare)
     observations = tuple(_evaluate_condition(values, position, condition, index) for position, condition in enumerate(conditions))
     bar = bars[index]
     return AlertConditionOutcome(
@@ -420,7 +436,23 @@ def evaluate_conditions(
 SCRIPT_ALERT_LOOKBACK = 300
 
 
-def _source_lookback(source: Any) -> int:
+# A time look-back in bars is capped so the conditions still fit one history fetch (previous bar and forming bar
+# included): an indicator over sessions then evaluates once the fetched bars cover what it needs.
+_TIME_LOOKBACK_CAP = HISTORY_LIMIT_MAX - 4
+
+
+def _bars_back(duration: timedelta, interval: str | None) -> int:
+    """Bars covering ``duration`` on ``interval``, capped; the cap when the interval has no fixed length (ticks)."""
+    try:
+        step = interval_duration(interval) if interval else None
+    except ValueError:
+        step = None
+    if step is None or step.total_seconds() <= 0:
+        return _TIME_LOOKBACK_CAP
+    return min(_TIME_LOOKBACK_CAP, math.ceil(duration / step) + 1)
+
+
+def _source_lookback(source: Any, interval: str | None = None) -> int:
     if isinstance(source, ChangePercentSource):
         return source.lookback_bars
     if isinstance(source, ScriptSource):
@@ -445,8 +477,14 @@ def _source_lookback(source: Any) -> int:
         # Indicator on indicator: the source's warm-up comes first, then the indicator's own.
         reference = inputs.source
         inner = IndicatorSource(kind="indicator", indicator_id=reference.indicator_id, inputs=reference.inputs, output=reference.output)
-        required += _source_lookback(inner)
+        required += _source_lookback(inner, interval)
     indicator = server_indicator(source.indicator_id)
+    if indicator is not None and indicator.lookback is not None:
+        # Anchored near the latest bar (TVP-6.2's swings and windows): its own look-back, not a measured first value.
+        return max(required, indicator.lookback(inputs.registry_inputs()))
+    if indicator is not None and indicator.lookback_time is not None:
+        # Over sessions or days: the time it reads back, in bars of the alert's interval.
+        return max(required, _bars_back(indicator.lookback_time(inputs.registry_inputs()), interval))
     if indicator is not None and indicator.signal_warmup is not None:
         # A signal output's first value on the synthetic series is when it happens to appear, not its warm-up.
         return max(required, indicator.signal_warmup)
@@ -461,11 +499,11 @@ def _source_lookback(source: Any) -> int:
     return required
 
 
-def required_bars(conditions: Sequence[AlertConditionSpec]) -> int:
-    """Bars the conditions need before the evaluated bar has a value and a previous value."""
+def required_bars(conditions: Sequence[AlertConditionSpec], interval: str | None = None) -> int:
+    """Bars the conditions need before the evaluated bar has a value and a previous value, on ``interval``."""
     required = 1
     for condition in conditions:
-        lookback = max(_source_lookback(source) for source in condition_sources(condition))
+        lookback = max(_source_lookback(source, interval) for source in condition_sources(condition))
         if condition.operator in MOVING_OPERATORS:
             lookback += condition.bars or 1
         else:
@@ -477,7 +515,7 @@ def required_bars(conditions: Sequence[AlertConditionSpec]) -> int:
 MAX_INDICATOR_PERIOD = 500
 
 
-def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec]) -> None:
+def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec], interval: str | None = None) -> None:
     """Reject conditions the monitor could never evaluate (write-time check).
 
     Periods are capped at 500 like the legacy parameters; every indicator
@@ -494,11 +532,15 @@ def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec]) -> No
                 if value is not None and value > MAX_INDICATOR_PERIOD:
                     raise ValueError(f"indicator {name} must be at most {MAX_INDICATOR_PERIOD}")
             indicator = server_indicator(source.indicator_id)
-            signal = indicator is not None and indicator.signal_warmup is not None
-            # A signal (a candlestick pattern) has a value only where it appears, which a series may never show.
-            if not signal and dict(indicator_output_profile(source)).get(source.output) is None:
+            declared = indicator is not None and (
+                indicator.signal_warmup is not None or indicator.lookback is not None or indicator.lookback_time is not None
+            )
+            # A signal (a candlestick pattern) has a value only where it appears, which a series may never show; an
+            # indicator with its own look-back (a day of bars, the latest swings) may start after the synthetic series
+            # ends; an anchor time decides where a line starts, and the synthetic series is years before any real anchor.
+            if not declared and inputs.anchor_time is None and dict(indicator_output_profile(source)).get(source.output) is None:
                 raise ValueError(f"indicator output {source.output!r} never has a value with these inputs")
-    required = required_bars(conditions)
+    required = required_bars(conditions, interval)
     if required + 2 > HISTORY_LIMIT_MAX:
         raise ValueError(
             f"these conditions need {required} bars of history; alerts can use at most {HISTORY_LIMIT_MAX - 2}"

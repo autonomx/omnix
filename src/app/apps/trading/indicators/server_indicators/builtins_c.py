@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from datetime import timedelta
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -30,9 +31,20 @@ from ._helpers import (
     rsi,
     stochastic,
 )
+from ..registry import IndicatorInputs
 from ._sessions import DAY_MS, SessionPeriod, epoch_ms, session_clock, session_periods
 
 PERIODS = ("D", "W", "M")
+# What an indicator over sessions reads back, for alerts (``lookback_time``): calendar time, with a weekend or holiday
+# of slack so the previous session is in reach.
+_WEEKEND = timedelta(days=4)
+_PERIOD_SPANS = {"D": timedelta(days=1), "W": timedelta(days=7), "M": timedelta(days=31), "240": timedelta(hours=4), "480": timedelta(hours=8)}
+
+
+def _periods_back(count: int, inputs: IndicatorInputs, key: str, default: str) -> timedelta:
+    value = inputs.param(key)
+    span = _PERIOD_SPANS.get(str(value), _PERIOD_SPANS[default]) if value is not None else _PERIOD_SPANS[default]
+    return span * count + _WEEKEND
 PRICE_SOURCES = ("close", "open", "high", "low", "hl2", "hlc3", "ohlc4")
 
 
@@ -280,7 +292,7 @@ def _complete_sma(values: Sequence[MaybeNumber], length: int) -> list[MaybeNumbe
     return result
 
 
-@builtin("tv-24-hour-volume", "24-hour Volume", "exact", 1)
+@builtin("tv-24-hour-volume", "24-hour Volume", "exact", 1, lookback_time=lambda period, inputs: timedelta(hours=24))
 def _volume_24_hours(chart: Chart) -> Outputs:
     source = chart.select_param("source", "close", PRICE_SOURCES)
     price = _price_source(source, chart.open, chart.high, chart.low, chart.close)
@@ -292,7 +304,10 @@ def _correlation_coefficient(chart: Chart) -> Outputs:
     return [chart.out("cc", _pearson(chart.close, chart.compare_close, chart.period))]
 
 
-@builtin("tv-relative-volume-at-time", "Relative Volume at Time", "exact", 5)
+@builtin(
+    "tv-relative-volume-at-time", "Relative Volume at Time", "exact", 5,
+    lookback_time=lambda period, inputs: _periods_back(period + 1, inputs, "anchor", "D"),
+)
 def _relative_volume_at_time_builtin(chart: Chart) -> Outputs:
     anchor = chart.select_param("anchor", "D", PERIODS)
     cumulative = chart.select_param("mode", "cumulative", ("cumulative", "regular")) == "cumulative"
@@ -300,7 +315,8 @@ def _relative_volume_at_time_builtin(chart: Chart) -> Outputs:
     return [chart.out("rvol-at-time", _relative_volume_at_time(keys, since, chart.volume, chart.period, cumulative))]
 
 
-@builtin("tv-rob-booker-adx-breakout", "Rob Booker - ADX Breakout", "recursive", 20)
+# Breakouts are signals (markers on the bars where they happen), after ADX(14) and the box warm up.
+@builtin("tv-rob-booker-adx-breakout", "Rob Booker - ADX Breakout", "recursive", 20, signal_warmup=60)
 def _adx_breakout(chart: Chart) -> Outputs:
     high, low, close, lookback = chart.high, chart.low, chart.close, chart.period
     _, _, adx = dmi(high, low, close, int(chart.number_param("adxLength", 14, 1, integer=True)))
@@ -347,13 +363,19 @@ def _pivot_outputs(chart: Chart, period: SessionPeriod, developing: bool, lines:
     return [chart.out(line, getattr(levels, line)) for line in lines]
 
 
-@builtin("tv-rob-booker-intraday-pivot-points", "Rob Booker Intraday Pivot Points", "exact", 1)
+@builtin(
+    "tv-rob-booker-intraday-pivot-points", "Rob Booker Intraday Pivot Points", "exact", 1,
+    lookback_time=lambda period, inputs: timedelta(hours=2 * period) + _WEEKEND,
+)
 def _intraday_pivots(chart: Chart) -> Outputs:
     # The period is the pivot period in hours (TradingView offers 1, 4 and 8).
     return _pivot_outputs(chart, chart.period, False, ("pp", "r1", "r2", "r3", "s1", "s2", "s3"))
 
 
-@builtin("tv-rob-booker-missed-pivot-points", "Rob Booker Missed Pivot Points", "exact", 10)
+@builtin(
+    "tv-rob-booker-missed-pivot-points", "Rob Booker Missed Pivot Points", "exact", 10,
+    lookback_time=lambda period, inputs: _periods_back(period + 1, inputs, "pivotPeriod", "D"),
+)
 def _missed_pivot_points(chart: Chart) -> Outputs:
     clock = session_clock(chart.bars, chart.inputs.session)
     keys, _ = session_periods(clock, chart.select_param("pivotPeriod", "D", PERIODS), chart.inputs.session)
@@ -361,7 +383,8 @@ def _missed_pivot_points(chart: Chart) -> Outputs:
     return [chart.out("missed-above", above), chart.out("missed-below", below)]
 
 
-@builtin("tv-rob-booker-reversal", "Rob Booker Reversal", "recursive", 14)
+# Reversals are signals, after MACD(12, 26) and the stochastic warm up.
+@builtin("tv-rob-booker-reversal", "Rob Booker Reversal", "recursive", 14, signal_warmup=45)
 def _reversal(chart: Chart) -> Outputs:
     close, high, low = chart.close, chart.high, chart.low
     fast = ema(close, int(chart.number_param("fastLength", 12, 1, integer=True)))
@@ -387,7 +410,10 @@ def _reversal(chart: Chart) -> Outputs:
 _GHOST_PERIODS: dict[str, SessionPeriod] = {"240": 4, "480": 8, "W": "W", "M": "M"}
 
 
-@builtin("tv-rob-booker-ziv-ghost-pivots", "Rob Booker Ziv Ghost Pivots", "exact", 1)
+@builtin(
+    "tv-rob-booker-ziv-ghost-pivots", "Rob Booker Ziv Ghost Pivots", "exact", 1,
+    lookback_time=lambda period, inputs: _periods_back(2, inputs, "pivotPeriod", "W"),
+)
 def _ziv_ghost_pivots(chart: Chart) -> Outputs:
     period = _GHOST_PERIODS[chart.select_param("pivotPeriod", "W", tuple(_GHOST_PERIODS))]
     return _pivot_outputs(chart, period, True, ("pp", "r1", "s1"))

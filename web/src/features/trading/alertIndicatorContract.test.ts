@@ -38,7 +38,12 @@ describe('alert indicator contract (TVP-1.3)', () => {
       { id: 'stochastic-rsi', period: 10, fastPeriod: 5, signalPeriod: 4, enabled: true },
       { id: 'rsi', period: 21, enabled: true },
       { id: 'vwap', period: 1, anchorTime: '2026-01-02T15:00:00.000Z', enabled: true },
-    ];
+      // Params and a compare symbol reach the server (TVP-1.3).
+      { id: 'tv-correlation-coefficient-cc', period: 20, compareSymbol: 'equity:NASDAQ:QQQ', enabled: true },
+      { id: 'tv-vwap-auto-anchored', period: 100, params: { anchor: 'lowest-low' }, enabled: true },
+      { id: 'tv-bollinger-bars', period: 10, params: { deviations: 1.5 }, enabled: true },
+      { id: 'tv-multi-time-period-charts-indicator', period: 1, params: { period: 'W' }, enabled: true },
+    ] as CoreIndicatorInstance[];
     const variants = variantInstances.flatMap((instance) => {
       const outputs = indicatorOutputsFor(instance, series);
       const [choice] = alertIndicatorChoices([instance], outputs, serverIds);

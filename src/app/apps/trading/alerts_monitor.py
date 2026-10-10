@@ -23,7 +23,10 @@ from .alerts import (
     default_alert_repository,
 )
 from .alerts_evaluation import evaluate_conditions, history_limit, required_bars
+from .alert_conditions import CompareBars
 from .external_series import ExternalSeries
+from .indicator_context import compare_bars_loader, instrument_session
+from .indicators.registry import TradingSession
 from .service import TradingMarketDataService, default_market_data_service
 
 
@@ -54,17 +57,25 @@ alert_monitor_interval_seconds = _interval_seconds
 
 def _history_limit(alerts: Sequence[TradingAlert]) -> int:
     """Bars to fetch for a group of alerts; see ``alerts_evaluation.history_limit``."""
-    return history_limit(max((required_bars(alert.conditions) for alert in alerts), default=1))
+    return history_limit(max((required_bars(alert.conditions, alert.evaluation_policy.interval) for alert in alerts), default=1))
 
 
 def _final_only(alert: TradingAlert) -> bool:
     return alert.frequency == "once_per_bar_close" or not alert.evaluation_policy.allow_partial_bars
 
 
-def _outcomes(alerts: Sequence[TradingAlert], bars: Sequence[Any], external: ExternalSeries | None = None) -> list[AlertOutcomeRecord]:
+def _outcomes(
+    alerts: Sequence[TradingAlert],
+    bars: Sequence[Any],
+    external: ExternalSeries | None = None,
+    session: TradingSession | None = None,
+    compare: CompareBars | None = None,
+) -> list[AlertOutcomeRecord]:
     records: list[AlertOutcomeRecord] = []
     for alert in alerts:
-        outcome = evaluate_conditions(alert.conditions, bars, final_only=_final_only(alert), external=external)
+        outcome = evaluate_conditions(
+            alert.conditions, bars, final_only=_final_only(alert), external=external, session=session, compare=compare
+        )
         if outcome is not None:
             records.append(AlertOutcomeRecord(alert.alert_id, alert.revision, outcome))
     return records
@@ -136,11 +147,16 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                 if not response.bars:
                     continue
                 bars = list(response.bars)
-                # External-data indicators (TVP-0.2) fetch each metric once for the target's alerts.
+                # External-data indicators (TVP-0.2) fetch each metric once for the target's alerts; indicators get the
+                # instrument's session hours and their compare symbols' bars on this interval, as on the chart.
                 external = self.external_series_factory(instrument_id, interval)
-                # Indicator maths (and metric fetches) are blocking work; keep them off the event loop.
-                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars, external)
-                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars, external)
+                session = instrument_session(instrument_id)
+                compare = compare_bars_loader(
+                    lambda symbol, limit, interval=interval: service.bars(symbol, interval, limit, None).bars
+                )
+                # Indicator maths (and metric and compare fetches) are blocking work; keep them off the event loop.
+                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars, external, session, compare)
+                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars, external, session, compare)
                 if not outcomes and not symbol_outcomes:
                     continue
                 context = AlertEvaluationContext(

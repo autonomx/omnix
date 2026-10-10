@@ -83,6 +83,8 @@ export interface paths {
         /**
          * List Alert Indicators
          * @description The indicators the server evaluates for alerts (TVP-1.3): the dialog offers these, greys out the rest.
+         *
+         *     Includes the external-data indicators (TVP-0.2), read from their metric series.
          */
         get: operations["list_alert_indicators_api_trading_alerts_indicators_get"];
         put?: never;
@@ -6461,8 +6463,14 @@ export interface components {
             anchor_bars_ago?: number | null;
             /** Anchor Time */
             anchor_time?: string | null;
+            /** Compare Symbol */
+            compare_symbol?: string | null;
             /** Fast Period */
             fast_period?: (number) | null;
+            /** Params */
+            params?: {
+                [key: string]: number | string;
+            };
             /**
              * Period
              * @default 14
@@ -6488,8 +6496,14 @@ export interface components {
             anchor_bars_ago: number | null;
             /** Anchor Time */
             anchor_time: string | null;
+            /** Compare Symbol */
+            compare_symbol: string | null;
             /** Fast Period */
             fast_period: (number) | null;
+            /** Params */
+            params: {
+                [key: string]: number | string;
+            };
             /**
              * Period
              * @default 14

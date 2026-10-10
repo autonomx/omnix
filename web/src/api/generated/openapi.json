@@ -21477,6 +21477,19 @@
             ],
             "title": "Anchor Time"
           },
+          "compare_symbol": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compare Symbol"
+          },
           "fast_period": {
             "anyOf": [
               {
@@ -21496,6 +21509,24 @@
               }
             ],
             "title": "Fast Period"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "maxProperties": 20,
+            "title": "Params",
+            "type": "object"
           },
           "period": {
             "anyOf": [
@@ -21607,6 +21638,19 @@
             ],
             "title": "Anchor Time"
           },
+          "compare_symbol": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compare Symbol"
+          },
           "fast_period": {
             "anyOf": [
               {
@@ -21626,6 +21670,24 @@
               }
             ],
             "title": "Fast Period"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "maxProperties": 20,
+            "title": "Params",
+            "type": "object"
           },
           "period": {
             "anyOf": [
@@ -21713,7 +21775,9 @@
           "standard_deviations",
           "anchor_time",
           "anchor_bars_ago",
-          "source"
+          "source",
+          "params",
+          "compare_symbol"
         ],
         "title": "IndicatorSourceInputs",
         "type": "object"
@@ -77877,7 +77941,7 @@
     },
     "/api/trading/alerts/indicators": {
       "get": {
-        "description": "The indicators the server evaluates for alerts (TVP-1.3): the dialog offers these, greys out the rest.",
+        "description": "The indicators the server evaluates for alerts (TVP-1.3): the dialog offers these, greys out the rest.\n\nIncludes the external-data indicators (TVP-0.2), read from their metric series.",
         "operationId": "list_alert_indicators_api_trading_alerts_indicators_get",
         "responses": {
           "200": {

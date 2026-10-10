@@ -23,9 +23,13 @@ describe('alerts on chart indicators (TVP-1.3)', () => {
     expect(choices.map((choice) => [choice.key, choice.outputs.map((output) => output.key), choice.unavailable ?? null])).toEqual([
       ['macd', ['macd:12:26:line', 'macd:12:26:signal'], null],
       ['vwap', ['vwap:dataset'], 'Server alerts are not available for this indicator yet'],
-      ['tv-correlation-coefficient-cc', ['tv-correlation-coefficient-cc:value'], 'Its extra inputs are not evaluated by server alerts yet'],
+      // Its compare symbol goes with the alert; the server loads its bars (TVP-1.3).
+      ['tv-correlation-coefficient-cc', ['tv-correlation-coefficient-cc:value'], null],
     ]);
     expect(choices[0].inputs).toMatchObject({ period: 9, fast_period: 12, slow_period: 26, signal_period: 9 });
+    expect(choices[2].inputs).toMatchObject({ period: 20, compare_symbol: 'equity:NASDAQ:QQQ', params: {} });
+    const withoutCompare = alertIndicatorChoices([{ id: 'tv-correlation-coefficient-cc', period: 20, enabled: true } as never], [line('tv-correlation-coefficient-cc:value', 'CC')], new Set(['tv-correlation-coefficient-cc']));
+    expect(withoutCompare[0].unavailable).toMatch(/compare symbol/);
     expect(defaultIndicatorSelection(choices)).toEqual({ key: 'macd', output: 'macd:12:26:line', operator: 'crossing' });
   });
 
@@ -114,10 +118,12 @@ describe('chart indicator alerts stay what the dialog showed (TVP-1.3 review)', 
       .toMatchObject({ condition: 'indicator_above', chartIndicatorId: 'tv-awesome-oscillator-ao' });
   });
 
-  it('offers nothing while the server list loads, and nothing session-based', () => {
+  it('offers nothing while the server list loads; session indicators and params go to the server', () => {
     expect(alertIndicatorChoices([{ id: 'sma', period: 20, enabled: true }], [line('sma:20', 'SMA')], null)[0].unavailable).toMatch(/Checking/);
-    const session = alertIndicatorChoices([{ id: 'tv-relative-volume-at-time', period: 20, enabled: true } as never], [line('tv-relative-volume-at-time:value', 'RVOL')], new Set(['tv-relative-volume-at-time']));
-    expect(session[0].unavailable).toMatch(/market sessions/);
+    // The server reads the instrument's session hours itself, and takes the indicator's params.
+    const session = alertIndicatorChoices([{ id: 'tv-relative-volume-at-time', period: 20, enabled: true, params: { anchor: 'W', flag: true } } as never], [line('tv-relative-volume-at-time:value', 'RVOL')], new Set(['tv-relative-volume-at-time']));
+    expect(session[0].unavailable).toBeUndefined();
+    expect(session[0].inputs.params).toEqual({ anchor: 'W' });
   });
 
   it('draws and drags a single indicator condition like a legacy indicator alert, without rounding its value', () => {

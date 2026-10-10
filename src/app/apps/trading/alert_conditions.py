@@ -15,6 +15,7 @@ so evaluation reads one model.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from functools import lru_cache
@@ -23,7 +24,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .indicators.external import external_available_for, external_indicator, external_scope_name
-from .indicators.registry import BarSeries, IndicatorInputs, IndicatorOutputSeries, compute_indicator, server_indicator
+from .indicators.registry import (
+    BarSeries,
+    IndicatorInputs,
+    IndicatorOutputSeries,
+    TradingSession,
+    compute_indicator,
+    server_indicator,
+)
 from .indicators.sources import accepts_source, compute_on_source, find_output
 
 MAX_ALERT_CONDITIONS = 5
@@ -93,6 +101,11 @@ class IndicatorSourceInputs(BaseModel):
     anchor_bars_ago: int | None = Field(default=None, ge=0, le=999)
     # Indicator on indicator (TVP-6.5): read this output of another indicator instead of the close.
     source: IndicatorOutputRef | None = None
+    # The indicator's own inputs, as the chart's ``params`` (a mode, a second length...); the registry falls back to the
+    # default for a missing or invalid one, as the chart does.
+    params: dict[str, float | int | str] = Field(default_factory=dict, max_length=20)
+    # The second symbol an indicator reads (Correlation Coefficient), loaded on the alert's interval.
+    compare_symbol: str | None = Field(default=None, min_length=3, max_length=200)
 
     @model_validator(mode="after")
     def validate_anchor(self) -> IndicatorSourceInputs:
@@ -100,9 +113,12 @@ class IndicatorSourceInputs(BaseModel):
             raise ValueError("indicator inputs take anchor_time or anchor_bars_ago, not both")
         if self.source is not None and self.source.inputs.source is not None:
             raise ValueError("an indicator's source cannot itself read another indicator")
+        for key, value in self.params.items():
+            if not key or len(key) > 40 or isinstance(value, bool) or (isinstance(value, str) and len(value) > 40):
+                raise ValueError(f"indicator param {key!r} must be a short name with a number or a short text")
         return self
 
-    def registry_inputs(self, anchor_time: str | None = None) -> IndicatorInputs:
+    def registry_inputs(self, anchor_time: str | None = None, session: TradingSession | None = None) -> IndicatorInputs:
         return IndicatorInputs(
             period=self.period,
             fast_period=self.fast_period,
@@ -110,6 +126,9 @@ class IndicatorSourceInputs(BaseModel):
             signal_period=self.signal_period,
             standard_deviations=self.standard_deviations,
             anchor_time=anchor_time if anchor_time is not None else self.anchor_time,
+            compare_symbol=self.compare_symbol,
+            params=dict(self.params),
+            session=session,
         )
 
 
@@ -279,28 +298,46 @@ def _inputs_key(inputs: IndicatorSourceInputs) -> tuple[Any, ...]:
         inputs.standard_deviations,
         inputs.anchor_time,
         inputs.source.model_dump_json() if inputs.source is not None else None,
+        tuple(sorted(inputs.params.items())),
+        inputs.compare_symbol,
     )
 
 
+# A compare symbol's bars covering the bars an indicator runs on (see ``indicator_context.compare_bars_loader``).
+CompareBars = Callable[[str, BarSeries], "BarSeries | None"]
+
+
 def compute_source_indicator(
-    indicator_id: str, bars: BarSeries, inputs: IndicatorSourceInputs, anchor_time: str | None = None
+    indicator_id: str,
+    bars: BarSeries,
+    inputs: IndicatorSourceInputs,
+    anchor_time: str | None = None,
+    *,
+    session: TradingSession | None = None,
+    compare: CompareBars | None = None,
 ) -> list[IndicatorOutputSeries]:
     """An indicator on ``bars`` with these inputs: on its source indicator's output when it has one (TVP-6.5).
 
+    ``session`` is the instrument's session calendar (None: UTC days); ``compare`` loads a compare symbol's bars.
     A source output the source indicator doesn't produce gives no outputs."""
-    registry_inputs = inputs.registry_inputs(anchor_time)
+
+    def run(indicator: str, indicator_inputs: IndicatorSourceInputs, anchor: str | None) -> list[IndicatorOutputSeries]:
+        symbol = indicator_inputs.compare_symbol
+        compare_bars = compare(symbol, bars) if compare is not None and symbol else None
+        return compute_indicator(indicator, bars, indicator_inputs.registry_inputs(anchor, session), compare_bars)
+
     if inputs.source is None:
-        return compute_indicator(indicator_id, bars, registry_inputs)
+        return run(indicator_id, inputs, anchor_time)
     reference = inputs.source
-    source = find_output(compute_indicator(reference.indicator_id, bars, reference.inputs.registry_inputs()), reference.output)
+    source = find_output(run(reference.indicator_id, reference.inputs, None), reference.output)
     if source is None:
         return []
-    return compute_on_source(indicator_id, bars, registry_inputs, source)
+    return compute_on_source(indicator_id, bars, inputs.registry_inputs(anchor_time, session), source)
 
 
 @lru_cache(maxsize=512)
 def _output_profile(indicator_id: str, inputs_key: tuple[Any, ...]) -> tuple[tuple[str, int | None], ...]:
-    period, fast, slow, signal, deviations, anchor_time, source = inputs_key
+    period, fast, slow, signal, deviations, anchor_time, source, params, compare_symbol = inputs_key
     outputs = compute_source_indicator(
         indicator_id,
         _synthetic_series(),
@@ -312,7 +349,11 @@ def _output_profile(indicator_id: str, inputs_key: tuple[Any, ...]) -> tuple[tup
             standard_deviations=deviations,
             anchor_time=anchor_time,
             source=IndicatorOutputRef.model_validate_json(source) if source is not None else None,
+            params=dict(params),
+            compare_symbol=compare_symbol,
         ),
+        # A compare symbol's profile reads the synthetic series as its second series too.
+        compare=lambda _symbol, bars: bars,
     )
     profile: list[tuple[str, int | None]] = []
     for output in outputs:
@@ -486,6 +527,7 @@ def legacy_conditions(condition_type: str, threshold: Decimal, parameters: Any) 
 
 
 __all__ = [
+    "CompareBars",
     "ALERT_FREQUENCIES",
     "CHANNEL_OPERATORS",
     "MAX_ALERT_CONDITIONS",

@@ -1,7 +1,8 @@
 /**
  * Indicators that draw (TVP-6.2), built from public descriptions of the TradingView indicators: they colour bars or
  * the background, mark events, or draw levels and lines found from the chart's own swings, rather than (only) a
- * numeric series. Browser-side: the server registry doesn't evaluate them, so they aren't offered for alerts.
+ * numeric series. The server registry has the same indicators (`server_indicators/drawing.py`, checked by the shared
+ * goldens), so their lines can be alerted on and screened, except Visible Average Price, which depends on the bars in view.
  */
 import type { MarketBar } from '../tradingTypes';
 import { candlestickPatternOutputs } from './candlestickPatterns';
