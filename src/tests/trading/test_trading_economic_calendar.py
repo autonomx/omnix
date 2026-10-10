@@ -77,9 +77,9 @@ def test_the_api_says_when_fred_is_not_set_up_and_bounds_the_window() -> None:
 
 
 def test_the_fred_key_status_never_returns_the_key(monkeypatch) -> None:
-    monkeypatch.setattr(market_data_api, "load_trading_provider_secrets", lambda: {"fred": {"api_key": "abcdef123456"}})
+    monkeypatch.setattr(market_data_api, "load_trading_provider_secrets", lambda: {"fred": {"api_key": "fake-fred-key-1234"}})
     monkeypatch.setattr(market_data_api, "trading_provider_credential_sources", lambda provider: {"api_key": "os_protected_store"})
     app = FastAPI()
     app.include_router(market_data_api.create_trading_market_data_router())
     body = TestClient(app).get("/api/trading/market-data/providers/fred/credentials").json()
-    assert body["configured"] is True and body["api_key_masked"] == "***3456" and "abcdef" not in str(body)
+    assert body["configured"] is True and body["api_key_masked"] == "***1234" and "fake-fred" not in str(body)

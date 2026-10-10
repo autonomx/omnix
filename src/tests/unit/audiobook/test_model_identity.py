@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from app.apps.audiobook import model_identity
@@ -27,7 +29,12 @@ def test_model_revision_tracks_weights_and_tokenizer(tmp_path, monkeypatch) -> N
     model_identity.assert_model_revision("faster-qwen3-tts", "Qwen3-TTS",
                                          str(original["model_revision"]))
 
-    (tokenizer / "model.safetensors").write_bytes(b"codec version two")
+    codec = tokenizer / "model.safetensors"
+    codec.write_bytes(b"codec version two")
+    # A same-size rewrite can keep its mtime on a coarse filesystem clock (Linux updates mtimes per tick), and the
+    # content hash is cached by size and mtime: date it a second later, as a replaced model file would be.
+    stat = codec.stat()
+    os.utime(codec, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
     updated = model_identity.current_model_identity()
     assert updated["model_revision"] != original["model_revision"]
     with pytest.raises(model_identity.ModelIdentityError, match="does not match"):

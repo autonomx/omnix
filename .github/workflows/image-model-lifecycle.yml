@@ -107,6 +107,7 @@ jobs:
               "types": ["vite/client"]
             },
             "include": [
+              "src/*.d.ts",
               "src/features/assistant/chat/characterAvatarClient.ts",
               "src/features/image-generation/**/*.ts",
               "src/features/image-generation/**/*.tsx"

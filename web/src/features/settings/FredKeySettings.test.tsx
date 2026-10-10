@@ -13,9 +13,9 @@ describe('FRED key settings (TVP-10.5)', () => {
   it('saves a key without ever showing it back', async () => {
     render(<FredKeySettings />);
     expect(await screen.findByText('Add a free FRED API key to show the economic calendar.')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('FRED API key'), { target: { value: 'abcdef123456' } });
+    fireEvent.change(screen.getByLabelText('FRED API key'), { target: { value: 'fake-fred-key-1234' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save FRED key' })));
-    expect(tradingMarketDataApi.saveFredCredentials).toHaveBeenCalledWith({ api_key: 'abcdef123456' });
+    expect(tradingMarketDataApi.saveFredCredentials).toHaveBeenCalledWith({ api_key: 'fake-fred-key-1234' });
     expect(screen.getByLabelText('FRED API key')).toHaveValue('');
     expect(screen.getByLabelText('FRED API key')).toHaveAttribute('placeholder', '***3456');
     expect(screen.getByRole('button', { name: 'Clear stored FRED key' })).toBeInTheDocument();
