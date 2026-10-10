@@ -18,7 +18,8 @@ from .indicators.engine import (
     simple_moving_average,
 )
 from .alert_conditions import CompareBars, IndicatorSource, validate_indicator_source
-from .indicator_context import compare_bars_loader, instrument_session
+from .indicator_context import FetchBarsService, compare_bars_loader, instrument_session, intrabar_loader
+from .indicators.intrabar import IntrabarLoader
 from .external_series import ExternalSeries
 from .indicators.external import external_indicator
 from .fundamental_snapshots import FUNDAMENTAL_METRICS, fundamental_metric, snapshot_for_instrument
@@ -301,6 +302,7 @@ def evaluate_scanner_dataset(
     response: BarsResponse,
     requested_binding_id: str | None,
     compare: CompareBars | None = None,
+    intrabar: IntrabarLoader | None = None,
 ) -> TradingScannerResult | None:
     bars = [bar for bar in response.bars if bar.is_final]
     metrics: dict[str, Decimal] = {}
@@ -320,6 +322,8 @@ def evaluate_scanner_dataset(
             ExternalSeries(response.instrument.instrument_id, definition.interval) if uses_external else None,
             instrument_session(response.instrument.instrument_id),
             compare,
+            None,
+            intrabar,
         )
     # A company's SEC fundamentals, once per instrument, when a rule reads them (TVP-9.1).
     fundamentals = (
@@ -390,6 +394,8 @@ async def execute_scanner(
             compare = compare_bars_loader(
                 lambda symbol, limit: fetch_bars(symbol, definition.interval, min(limit, 500), None).bars
             )
+            # Volume Delta and CVD read lower-timeframe bars through the same fetch (TVP-6.4).
+            intrabar = intrabar_loader(FetchBarsService(fetch_bars), instrument_id, definition.interval, requested_binding)
             result = await asyncio.to_thread(
                 evaluate_scanner_dataset,
                 definition,
@@ -397,6 +403,7 @@ async def execute_scanner(
                 response,
                 requested_binding,
                 compare,
+                intrabar,
             )
             completed += 1
             if progress:

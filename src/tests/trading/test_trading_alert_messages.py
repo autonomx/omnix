@@ -96,11 +96,12 @@ def test_the_alert_dialog_learns_which_indicators_the_server_evaluates() -> None
 
     from app.apps.trading.alerts_api import create_trading_alert_router
     from app.apps.trading.indicators.external import external_indicator_ids
+    from app.apps.trading.indicators.intrabar import INTRABAR_OUTPUTS
     from app.apps.trading.indicators.registry import server_indicator_ids
 
     app = FastAPI()
     app.include_router(create_trading_alert_router(repository_factory=lambda: None, webhook_store=object()))
     body = TestClient(app).get("/api/trading/alerts/indicators").json()
-    # Registry indicators and the external-data series (TVP-0.2).
-    assert body["indicator_ids"] == sorted([*server_indicator_ids(), *external_indicator_ids()])
+    # Registry indicators, the external-data series (TVP-0.2), and Volume Delta and CVD from lower-timeframe bars (TVP-6.4).
+    assert body["indicator_ids"] == sorted([*server_indicator_ids(), *external_indicator_ids(), *INTRABAR_OUTPUTS])
     assert {"rsi", "macd", "bollinger"} <= set(body["indicator_ids"])

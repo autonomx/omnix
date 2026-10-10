@@ -24,6 +24,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .indicators.external import external_available_for, external_indicator, external_scope_name
+from .indicators.intrabar import intrabar_output_keys, is_intrabar_indicator, validate_intrabar_params
 from .indicators.registry import (
     BarSeries,
     IndicatorInputs,
@@ -372,6 +373,16 @@ def indicator_output_profile(source: IndicatorSource) -> tuple[tuple[str, int | 
 
 
 def validate_indicator_source(source: IndicatorSource) -> None:
+    if is_intrabar_indicator(source.indicator_id):
+        # Volume Delta and CVD (TVP-6.4): computed from lower-timeframe bars, with a lower interval and an anchor.
+        if source.inputs.source is not None:
+            raise ValueError(f"indicator {source.indicator_id!r} reads lower-timeframe bars and does not take a source")
+        if source.output not in intrabar_output_keys(source.indicator_id):
+            raise ValueError(
+                f"indicator {source.indicator_id!r} has no output {source.output!r}; outputs: {', '.join(intrabar_output_keys(source.indicator_id))}"
+            )
+        validate_intrabar_params(source.inputs.params or {})
+        return
     external = external_indicator(source.indicator_id)
     if external is not None:
         # An external-data series (TVP-0.2): no formula, no inputs that matter, its outputs fixed by its metric.

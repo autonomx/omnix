@@ -42,6 +42,8 @@ from .alert_conditions import (
     indicator_output_profile,
 )
 from .indicators.external import external_indicator
+from .indicators.intrabar import IntrabarLoader, intrabar_values, is_intrabar_indicator
+from .indicators.intrabar import lookback_time as intrabar_lookback_time
 from .indicators.registry import BarSeries, TradingSession, server_indicator
 from .providers.bar_semantics import interval_duration
 
@@ -230,11 +232,14 @@ class _BarValues:
         session: TradingSession | None = None,
         compare: CompareBars | None = None,
         script_context: Any = None,
+        intrabar: IntrabarLoader | None = None,
     ) -> None:
         self.bars = bars
         self.external = external
         self.session = session
         self.compare = compare
+        # Lower-timeframe bars for Volume Delta and CVD (indicator_context.intrabar_loader); without it they have no value.
+        self.intrabar = intrabar
         # A script alert's instrument, interval and market data (alerts_scripts.ScriptAlertContext).
         self.script_context = script_context
         self._series: BarSeries | None = None
@@ -312,6 +317,9 @@ class _BarValues:
         return None if value is None else _decimal(value)
 
     def _compute_indicator(self, source: IndicatorSource, anchor_time: str | None) -> dict[int, Any]:
+        if is_intrabar_indicator(source.indicator_id):
+            interval = str(getattr(self.bars[0], "interval", "")) if self.bars else ""
+            return intrabar_values(source.indicator_id, self.bars, interval, source.inputs.params or {}, self.session, self.intrabar)
         if external_indicator(source.indicator_id) is not None:
             # No loader (a pushed quote, a test): no data, so the condition is false.
             return self.external(source.indicator_id, source.output, self.bars) if self.external else {}
@@ -405,6 +413,7 @@ def evaluate_conditions(
     session: TradingSession | None = None,
     compare: CompareBars | None = None,
     script_context: Any = None,
+    intrabar: IntrabarLoader | None = None,
 ) -> AlertConditionOutcome | None:
     """Evaluate every condition at the evaluation bar; ``None`` when there is no bar to evaluate.
 
@@ -415,7 +424,7 @@ def evaluate_conditions(
     if index is None:
         return None
     # Indicators see bars up to the evaluated bar only, so a forming bar after it cannot leak in.
-    values = _BarValues(bars[: index + 1], external, session, compare, script_context)
+    values = _BarValues(bars[: index + 1], external, session, compare, script_context, intrabar)
     observations = tuple(_evaluate_condition(values, position, condition, index) for position, condition in enumerate(conditions))
     bar = bars[index]
     return AlertConditionOutcome(
@@ -465,6 +474,9 @@ def _source_lookback(source: Any, interval: str | None = None) -> int:
         return 0
     if external_indicator(source.indicator_id) is not None:
         return 1  # a data series, with a value from its first point
+    if is_intrabar_indicator(source.indicator_id):
+        # A bar's own lower bars; CVD adds up from its anchor period's start.
+        return max(1, _bars_back(intrabar_lookback_time(source.indicator_id, source.inputs.params or {}), interval))
     inputs = source.inputs
     periods = [value for value in (inputs.period, inputs.fast_period, inputs.slow_period, inputs.signal_period) if value]
     required = math.ceil(max(periods, default=1))
@@ -530,6 +542,8 @@ def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec], inter
         for source in condition_sources(condition):
             if not isinstance(source, IndicatorSource) or external_indicator(source.indicator_id) is not None:
                 continue
+            if is_intrabar_indicator(source.indicator_id):
+                continue  # no periods; a value wherever the lower bars reach
             inputs = source.inputs
             for name in ("period", "fast_period", "slow_period", "signal_period"):
                 value = getattr(inputs, name)
