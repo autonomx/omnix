@@ -36,5 +36,5 @@ filelock>=3.16,<4
 einops>=0.8,<0.9
 typing_extensions>=4.8,<5
 
-torch==2.5.1+cu124
-torchaudio==2.5.1+cu124
+torch==2.6.0+cu124
+torchaudio==2.6.0+cu124
