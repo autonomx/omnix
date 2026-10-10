@@ -5,7 +5,6 @@ import logging
 
 from app.config.env import env_str
 
-import os
 import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -348,7 +347,7 @@ def _rss_bytes() -> int | None:
             return rss if sys.platform == "darwin" else rss * 1024
         except Exception:
             logger.debug("suppressed error in %s", "_rss_bytes", exc_info=True)
-    if os.name == "nt":
+    if sys.platform == "win32":
         try:
             import ctypes
             from ctypes import wintypes

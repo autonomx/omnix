@@ -6,6 +6,7 @@ from app.config.env import environment
 
 import math
 import os
+import sys
 import signal
 import socket
 import subprocess
@@ -286,7 +287,10 @@ class LauncherServiceManager:
             service.spec.cwd.mkdir(parents=True, exist_ok=True)
             self._clear_conflicting_ports(service)
             self._append(service, "[launcher] starting: " + " ".join(service.spec.command))
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+            # A process group of its own, so stop() can send it CTRL_BREAK.
+            creationflags = 0
+            if sys.platform == "win32":
+                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
             try:
                 process = subprocess.Popen(
                     service.spec.command,
@@ -348,7 +352,7 @@ class LauncherServiceManager:
                 return {"ok": True, "already_stopped": True, "service": service.snapshot()}
             self._append(service, "[launcher] stopping")
             try:
-                if os.name == "nt":
+                if sys.platform == "win32":
                     process.send_signal(signal.CTRL_BREAK_EVENT)
                 else:
                     process.terminate()
