@@ -19,6 +19,15 @@ export type AlertOperator = ConditionInput['operator'];
 type IndicatorInputs = components['schemas']['IndicatorSource-Input']['inputs'];
 
 export type ConditionSourceKind = 'close' | 'open' | 'high' | 'low' | 'hl2' | 'hlc3' | 'ohlc4' | 'volume' | 'change' | 'indicator';
+type PriceField = Exclude<ConditionSourceKind, 'change' | 'indicator'>;
+
+/**
+ * Another line as a condition's target or channel bound, instead of a number (TVP-1.3): a price field, or an indicator
+ * line (its id, inputs and output, as the chart computes it). The server evaluates both sides on the same bars.
+ */
+export type DraftLine =
+  | { kind: 'price'; field: PriceField }
+  | { kind: 'indicator'; indicatorId: string; indicatorInputs?: IndicatorInputs; output: string };
 
 export type ConditionDraft = {
   source: ConditionSourceKind;
@@ -32,6 +41,10 @@ export type ConditionDraft = {
   value: string;
   upper: string;
   lower: string;
+  /** A line instead of `value`, `upper` or `lower`. */
+  targetLine?: DraftLine;
+  upperLine?: DraftLine;
+  lowerLine?: DraftLine;
   amount: string;
   bars: string;
 };
@@ -75,6 +88,35 @@ export function newConditionDraft(value = ''): ConditionDraft {
 
 const isNumber = (text: string) => text.trim() !== '' && Number.isFinite(Number(text));
 const PRICE_FIELDS = new Set<ConditionSourceKind>(['close', 'open', 'high', 'low', 'hl2', 'hlc3', 'ohlc4', 'volume']);
+export const PRICE_LINE_OPTIONS = SOURCE_OPTIONS.filter((option) => PRICE_FIELDS.has(option.value)) as ReadonlyArray<{ value: PriceField; label: string }>;
+
+/** The condition source a line reads. */
+export function lineSource(line: DraftLine): ConditionInput['source'] {
+  return line.kind === 'price'
+    ? { kind: 'price', field: line.field }
+    : { kind: 'indicator', indicator_id: line.indicatorId, inputs: line.indicatorInputs ?? {}, output: line.output };
+}
+
+/** The line a stored source is, when the dialog can offer it as a target (a price field or an indicator line). */
+function sourceLine(source: ConditionOutput['source'] | ConditionInput['source']): DraftLine | null {
+  if (source.kind === 'price') return { kind: 'price', field: (source.field ?? 'close') as PriceField };
+  if (source.kind === 'indicator') return { kind: 'indicator', indicatorId: source.indicator_id, indicatorInputs: source.inputs as IndicatorInputs, output: source.output };
+  return null;
+}
+
+/** A chart indicator's line as a target. */
+export function choiceLine(choice: AlertIndicatorChoice, output: string): DraftLine {
+  return { kind: 'indicator', indicatorId: choice.key, indicatorInputs: choice.inputs as IndicatorInputs, output };
+}
+
+/** Whether a chart indicator's line is the stored line (same indicator, inputs and output). */
+export function choiceMatchesLine(choice: AlertIndicatorChoice, line: DraftLine | undefined, output: string): boolean {
+  if (!line || line.kind !== 'indicator' || line.output !== output) return false;
+  return choiceMatchesDraft(choice, { ...newConditionDraft(), indicatorId: line.indicatorId, indicatorInputs: line.indicatorInputs, output: line.output });
+}
+
+type Bound = components['schemas']['ChannelTarget-Input']['upper'];
+const bound = (value: string, line: DraftLine | undefined): Bound => (line ? { kind: 'source', source: lineSource(line) } : { kind: 'value', value: value.trim() });
 
 /** The condition a draft describes, or why it can't be sent. */
 export function draftCondition(draft: ConditionDraft): ConditionInput | string {
@@ -96,15 +138,24 @@ export function draftCondition(draft: ConditionDraft): ConditionInput | string {
     return { source, operator: draft.operator, amount: draft.amount.trim(), bars };
   }
   if (takes === 'channel') {
-    if (!isNumber(draft.upper) || !isNumber(draft.lower)) return 'A channel needs an upper and a lower value.';
-    if (Number(draft.upper) <= Number(draft.lower)) return 'The upper value must be above the lower value.';
-    return { source, operator: draft.operator, target: { kind: 'channel', upper: { kind: 'value', value: draft.upper.trim() }, lower: { kind: 'value', value: draft.lower.trim() } } };
+    if ((!draft.upperLine && !isNumber(draft.upper)) || (!draft.lowerLine && !isNumber(draft.lower))) return 'A channel needs an upper and a lower value or line.';
+    if (!draft.upperLine && !draft.lowerLine && Number(draft.upper) <= Number(draft.lower)) return 'The upper value must be above the lower value.';
+    return { source, operator: draft.operator, target: { kind: 'channel', upper: bound(draft.upper, draft.upperLine), lower: bound(draft.lower, draft.lowerLine) } };
   }
-  if (!isNumber(draft.value)) return 'Each condition needs a value.';
-  return { source, operator: draft.operator, target: { kind: 'value', value: draft.value.trim() } };
+  if (!draft.targetLine && !isNumber(draft.value)) return 'Each condition needs a value or a line.';
+  return { source, operator: draft.operator, target: bound(draft.value, draft.targetLine) };
 }
 
-/** The draft of a stored condition, or null when the dialog can't edit it (a trendline, or a source as target). */
+type StoredBound = { kind: 'value'; value: string | number } | { kind: 'source'; source: ConditionOutput['source'] | ConditionInput['source'] };
+
+/** A stored value or line bound as the draft's text and line; null for a line the dialog can't offer (a trendline). */
+function boundDraft(stored: StoredBound): { text: string; line?: DraftLine } | null {
+  if (stored.kind === 'value') return { text: String(stored.value) };
+  const line = sourceLine(stored.source);
+  return line ? { text: '', line } : null;
+}
+
+/** The draft of a stored condition, or null when the dialog can't edit it (a trendline or script among its parts). */
 export function conditionDraft(condition: ConditionOutput | ConditionInput): ConditionDraft | null {
   const draft = newConditionDraft();
   const source = condition.source;
@@ -116,10 +167,15 @@ export function conditionDraft(condition: ConditionOutput | ConditionInput): Con
   const takes = operatorTakes(condition.operator);
   if (takes === 'moving') return { ...draft, amount: String(condition.amount ?? ''), bars: String(condition.bars ?? 1) };
   const target = condition.target;
-  if (takes === 'channel' && target?.kind === 'channel' && target.upper.kind === 'value' && target.lower.kind === 'value') {
-    return { ...draft, upper: String(target.upper.value), lower: String(target.lower.value) };
+  if (takes === 'channel' && target?.kind === 'channel') {
+    const upper = boundDraft(target.upper as StoredBound);
+    const lower = boundDraft(target.lower as StoredBound);
+    return upper && lower ? { ...draft, upper: upper.text, upperLine: upper.line, lower: lower.text, lowerLine: lower.line } : null;
   }
-  if (takes === 'value' && target?.kind === 'value') return { ...draft, value: String(target.value) };
+  if (takes === 'value' && (target?.kind === 'value' || target?.kind === 'source')) {
+    const value = boundDraft(target as StoredBound);
+    return value ? { ...draft, value: value.text, targetLine: value.line } : null;
+  }
   return null;
 }
 
@@ -159,6 +215,27 @@ function legacyCondition(input: AlertInput): ConditionInput | null {
   if (type.startsWith('volume_')) return { source: { kind: 'price', field: 'volume' }, operator, target };
   if (type.startsWith('percent_change_')) return { source: { kind: 'change_percent', lookback_bars: Number(input.parameters?.lookback_bars) || 1 }, operator, target };
   return null;
+}
+
+/** Whether a price alert compares against a line rather than its value (so it has no value of its own). */
+export function isPriceLineAlert(condition: string, line: DraftLine | undefined): boolean {
+  return Boolean(line) && (condition === 'price_above' || condition === 'price_below');
+}
+
+/**
+ * A new price alert against a line (TVP-1.3) becomes a conditions alert: the close crossing up through the line for
+ * "Crossing above", down for "Crossing below", as a price alert crosses its value. Without a line nothing changes.
+ */
+export function withPriceLineCondition(input: AlertInput, condition: string, line: DraftLine | undefined): void {
+  if (!line || !isPriceLineAlert(condition, line)) return;
+  input.condition_type = 'conditions';
+  input.threshold = '0';
+  input.conditions = [{
+    source: { kind: 'price', field: 'close' },
+    operator: condition === 'price_above' ? 'crossing_up' : 'crossing_down',
+    target: { kind: 'source', source: lineSource(line) },
+  }];
+  input.parameters = { ...input.parameters, indicator_id: null };
 }
 
 /**

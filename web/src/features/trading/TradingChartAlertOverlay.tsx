@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
-import { applyConditionDrafts, conditionEditorFields } from './alertConditionDrafts';
+import { applyConditionDrafts, conditionEditorFields, isPriceLineAlert, withPriceLineCondition } from './alertConditionDrafts';
 import { chartAlertIndicatorId, chartAlertSourceIndicatorId, chartAlertThreshold, conditionsAtValue, resolveIndicatorSelection, withChartIndicatorCondition, type AlertIndicatorChoice } from './alertIndicatorSources';
 import { indicatorUsesSeparatePane, type CoreIndicatorId } from './indicators/coreIndicators';
 import { tradingViewBuiltInUsesSeparatePane } from './indicators/tradingViewBuiltIns';
@@ -263,7 +263,7 @@ export function TradingChartAlertOverlay({
   const createAlert = async () => {
     if (!editor || editor.mode !== 'create') return;
     const isTrendline = editor.condition.startsWith('trendline_');
-    const threshold = isTrendline ? 0 : Number(editor.threshold);
+    const threshold = isTrendline || isPriceLineAlert(editor.condition, editor.priceLine) ? 0 : Number(editor.threshold);
     if (!Number.isFinite(threshold) || (isTrendline && editor.trendlinePoints?.length !== 2)) {
       setStatus('error');
       return;
@@ -291,7 +291,7 @@ export function TradingChartAlertOverlay({
       trendline_points: isTrendline ? editor.trendlinePoints?.map((point) => ({ ...point, price: String(point.price) })) : null,
       trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null, ...(isTrendline && editor.drawingId ? { drawing_id: editor.drawingId, drawing_level: editor.drawingLevel ?? null } : {}),
     };
-    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at; if (editor.condition.startsWith('indicator_') && indicatorChoices?.length && !withChartIndicatorCondition(input, indicatorChoices, resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId), String(threshold))) return void setStatus('error'); if (applyConditionDrafts(input, editor, (problem) => setEditor((current) => current && { ...current, conditionError: problem }))) return void setStatus('error');
+    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at; if (editor.condition.startsWith('indicator_') && indicatorChoices?.length && !withChartIndicatorCondition(input, indicatorChoices, resolveIndicatorSelection(indicatorChoices, editor.indicatorSelection, editor.chartIndicatorId), String(threshold))) return void setStatus('error'); withPriceLineCondition(input, editor.condition, editor.priceLine); if (applyConditionDrafts(input, editor, (problem) => setEditor((current) => current && { ...current, conditionError: problem }))) return void setStatus('error');
     await runMutation(() => tradingApi.createAlert(input));
   };
 
