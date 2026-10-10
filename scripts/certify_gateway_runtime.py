@@ -124,6 +124,10 @@ def certify(url, duration):
     if not os.environ.get('OMNIX_SERVICE_TOKEN'):
         import secrets
         os.environ['OMNIX_SERVICE_TOKEN'] = secrets.token_urlsafe(32)
+    # The soak measures the runtime under load, not sign-in (on by default): its
+    # clients carry no session, so the cohort runs without authentication.
+    os.environ.setdefault('OMNIX_ENV', 'test')
+    os.environ.setdefault('OMNIX_AUTH_MODE', 'disabled')
     cohort = []
     def start(role, tts=''):
         parent, child = context.Pipe()
