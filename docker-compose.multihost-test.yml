@@ -10,6 +10,8 @@ x-omnix-env: &omnix-env
   PYTHONUNBUFFERED: "1"
   PYTHONPATH: /app/src
   OMNIX_ENV: test
+  # The driver measures traffic through nginx, not sign-in (on by default).
+  OMNIX_AUTH_MODE: disabled
   OMNIX_DATABASE_URL: postgresql://omnix:omnix@postgres:5432/omnix_multihost
   OMNIX_BLOB_BACKEND: s3
   OMNIX_S3_ENDPOINT: http://s3:8333
