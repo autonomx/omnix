@@ -66,6 +66,7 @@ def _account(row) -> PaperAccount:
         margin=_margin_settings(row[9]) if len(row) > 9 else {},
         commission_type=str(row[10]) if len(row) > 10 and row[10] else "percent",
         commission_fixed=Decimal(row[11]) if len(row) > 11 and row[11] is not None else Decimal("0"),
+        notify_margin_calls=bool(row[12]) if len(row) > 12 else False,
     )
 
 
@@ -142,11 +143,11 @@ class TradingPaperRepository:
                 INSERT INTO omnix_trading_paper_accounts (
                     workspace_id, account_id, owner_user_id, name,
                     base_currency, commission_bps, allow_short,
-                    margin_settings, commission_type, commission_fixed
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                    margin_settings, commission_type, commission_fixed, notify_margin_calls
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
                 RETURNING account_id, name, base_currency, commission_bps,
                           enabled, revision, created_at, updated_at, allow_short,
-                   margin_settings, commission_type, commission_fixed
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                 """,
                 (
                     self.context.workspace_id,
@@ -159,6 +160,7 @@ class TradingPaperRepository:
                     _margin_json(request.margin),
                     request.commission_type,
                     request.commission_fixed,
+                    request.notify_margin_calls,
                 ),
             ).fetchone()
             uow.connection.execute(
@@ -216,11 +218,12 @@ class TradingPaperRepository:
                        commission_type = COALESCE(%s, commission_type),
                        commission_bps = COALESCE(%s, commission_bps),
                        commission_fixed = COALESCE(%s, commission_fixed),
+                       notify_margin_calls = COALESCE(%s, notify_margin_calls),
                        revision = revision + 1, updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND account_id = %s AND revision = %s
                 RETURNING account_id, name, base_currency, commission_bps,
                           enabled, revision, created_at, updated_at, allow_short,
-                   margin_settings, commission_type, commission_fixed
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                 """,
                 (
                     settings.allow_short,
@@ -228,6 +231,7 @@ class TradingPaperRepository:
                     settings.commission_type,
                     settings.commission_bps,
                     settings.commission_fixed,
+                    settings.notify_margin_calls,
                     self.context.workspace_id,
                     account_id,
                     expected_revision,
@@ -268,7 +272,7 @@ class TradingPaperRepository:
                 """
                 SELECT account_id, name, base_currency, commission_bps,
                        enabled, revision, created_at, updated_at, allow_short,
-                   margin_settings, commission_type, commission_fixed
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s
                  ORDER BY created_at DESC LIMIT %s
@@ -366,7 +370,7 @@ class TradingPaperRepository:
             """
             SELECT account_id, name, base_currency, commission_bps,
                    enabled, revision, created_at, updated_at, allow_short,
-                   margin_settings, commission_type, commission_fixed
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
               FROM omnix_trading_paper_accounts
              WHERE workspace_id = %s AND account_id = %s
              FOR UPDATE
@@ -818,7 +822,7 @@ class TradingPaperRepository:
                 """
                 SELECT account_id, name, base_currency, commission_bps,
                        enabled, revision, created_at, updated_at, allow_short,
-                   margin_settings, commission_type, commission_fixed
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                   FROM omnix_trading_paper_accounts
                  WHERE workspace_id = %s AND account_id = %s
                  FOR UPDATE
@@ -1253,7 +1257,7 @@ class TradingPaperRepository:
                     """
                     SELECT account_id, name, base_currency, commission_bps,
                            enabled, revision, created_at, updated_at, allow_short,
-                   margin_settings, commission_type, commission_fixed
+                   margin_settings, commission_type, commission_fixed, notify_margin_calls
                       FROM omnix_trading_paper_accounts
                      WHERE workspace_id = %s AND account_id = %s
                     """,

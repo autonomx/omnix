@@ -7041,10 +7041,12 @@ export interface components {
         /**
          * NotificationDelivery
          * @description A delivery as the API shows it: status only, never a destination.
+         *
+         *     ``event_kind``: an alert trigger, or a paper margin call (TVP-7.2b), which has no trigger or alert.
          */
         NotificationDelivery: {
             /** Alert Id */
-            alert_id: string;
+            alert_id: string | null;
             /** Attempts */
             attempts: number;
             /**
@@ -7061,6 +7063,12 @@ export interface components {
             delivered_at: string | null;
             /** Delivery Id */
             delivery_id: string;
+            /**
+             * Event Kind
+             * @default alert
+             * @enum {string}
+             */
+            event_kind: "alert" | "margin_call";
             /** Last Attempt At */
             last_attempt_at: string | null;
             /** Last Error */
@@ -7077,7 +7085,7 @@ export interface components {
              */
             status: "pending" | "sending" | "delivered" | "failed";
             /** Trigger Id */
-            trigger_id: string;
+            trigger_id: string | null;
         };
         /** NoveltyShadowAnnotation */
         NoveltyShadowAnnotation: {
@@ -7366,6 +7374,11 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Notify Margin Calls
+             * @default false
+             */
+            notify_margin_calls?: boolean;
+            /**
              * Revision
              * @default 1
              */
@@ -7410,6 +7423,11 @@ export interface components {
             };
             /** Name */
             name: string;
+            /**
+             * Notify Margin Calls
+             * @default false
+             */
+            notify_margin_calls: boolean;
             /**
              * Revision
              * @default 1
@@ -7459,6 +7477,11 @@ export interface components {
             };
             /** Name */
             name: string;
+            /**
+             * Notify Margin Calls
+             * @default false
+             */
+            notify_margin_calls?: boolean;
         };
         /** PaperAccountListResponse */
         PaperAccountListResponse: {
@@ -7484,6 +7507,8 @@ export interface components {
             margin?: {
                 [key: string]: components["schemas"]["PaperMargin-Input"];
             } | null;
+            /** Notify Margin Calls */
+            notify_margin_calls?: boolean | null;
         };
         /** PaperAccountSnapshot */
         "PaperAccountSnapshot-Input": {

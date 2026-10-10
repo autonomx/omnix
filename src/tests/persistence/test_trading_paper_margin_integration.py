@@ -67,7 +67,10 @@ def paper():
             )
             return account_id
 
-        yield SimpleState(repository_factory=repository_factory, account=account, instrument_id=f"equity:NASDAQ:M{suffix[:4].upper()}")
+        yield SimpleState(
+            repository_factory=repository_factory, account=account, instrument_id=f"equity:NASDAQ:M{suffix[:4].upper()}",
+            context=context, uow=lambda: unit_of_work(database),
+        )
     finally:
         database.close()
 
@@ -102,10 +105,12 @@ def _market(state, account_id: str, instrument_id: str, side: str, quantity: str
     state.repository_factory().process_observation(account_id, _observation(instrument_id, price))
 
 
-def _margin_call(state, account_id: str, price: str) -> None:
+def _margin_call(state, account_id: str, price: str, notifier=None) -> TradingPaperMonitor:
     repository = state.repository_factory()
-    monitor = TradingPaperMonitor(repository_factory=lambda: repository, interval_seconds=5)
+    extra = {"margin_call_notifier_factory": notifier} if notifier is not None else {}
+    monitor = TradingPaperMonitor(repository_factory=lambda: repository, interval_seconds=5, **extra)
     asyncio.run(monitor._margin_call(account_id, {state.instrument_id: Decimal(price)}, repository))
+    return monitor
 
 
 def _margin_orders(state, account_id: str):
@@ -244,3 +249,49 @@ def test_a_cancelled_margin_call_is_followed_by_a_new_one(paper) -> None:
     _margin_call(paper, account_id, "60")
     orders = _margin_orders(paper, account_id)
     assert sorted(order.status for order in orders) == ["cancelled", "open"]
+
+
+def test_a_margin_call_is_sent_by_email_once_when_the_account_asks(paper) -> None:
+    """TVP-7.2b: margin calls go through the outbox on the workspace's email and push channels."""
+    from app.apps.trading.alerts_delivery import NotificationDeliveryRepository
+    from app.apps.trading.alerts_notify import EmailSettings, NotificationSettingsRepository
+    from app.apps.trading.paper_margin_notifications import PaperMarginCallNotifier
+
+    def settings() -> NotificationSettingsRepository:
+        return NotificationSettingsRepository(context=paper.context, uow_factory=paper.uow)
+
+    def notifier() -> PaperMarginCallNotifier:
+        return PaperMarginCallNotifier(context=paper.context, uow_factory=paper.uow, settings_factory=settings)
+
+    symbol = paper.instrument_id.split(":")[-1]
+    previous = settings().email()
+    settings().save_email(EmailSettings(host="smtp.example.com", from_address="omnix@example.com", to_addresses=["me@example.com"]))
+    try:
+        quiet = paper.account("quiet", margin={"equity": PaperMargin(long_pct=Decimal("50"))})
+        _market(paper, quiet, paper.instrument_id, "buy", "150", "100")
+        _margin_call(paper, quiet, "60", notifier)
+        account_id = paper.account("notified", margin={"equity": PaperMargin(long_pct=Decimal("50"))}, notify_margin_calls=True)
+        assert paper.repository_factory().snapshot(account_id).account.notify_margin_calls is True
+        _market(paper, account_id, paper.instrument_id, "buy", "150", "100")
+        monitor = _margin_call(paper, account_id, "60", notifier)
+        assert monitor.last_error is None
+        _margin_call(paper, account_id, "60", notifier)  # the next pass queues nothing new
+
+        deliveries = NotificationDeliveryRepository(context=paper.context, uow_factory=paper.uow).list_deliveries(limit=500)
+        ours = [item for item in deliveries if item.event_kind == "margin_call" and item.created_at >= datetime.now(timezone.utc) - timedelta(minutes=5)]
+        mine = [item for item in ours if item.alert_id is None and item.trigger_id is None]
+        assert [(item.channel, item.status) for item in mine] == [("email", "pending")]
+        claimed = NotificationDeliveryRepository(all_workspaces=True, uow_factory=paper.uow).claim_due(datetime.now(timezone.utc) + timedelta(seconds=1), limit=500)
+        delivery = next(item for item in claimed if item.delivery_id == mine[0].delivery_id)
+        assert (delivery.event_kind, delivery.alert_id, delivery.trigger_id) == ("margin_call", "", "")
+        assert "Sold" in delivery.message and symbol in delivery.message and "notified" in delivery.message
+    finally:
+        settings().save_email(previous)
+
+
+def test_margin_call_notifications_are_a_setting_that_keeps_the_rest(paper) -> None:
+    account_id = paper.account("setting", allow_short=True)
+    repository = paper.repository_factory()
+    current = repository.snapshot(account_id).account
+    updated = repository.update_account_settings(account_id, PaperAccountSettings(notify_margin_calls=True), expected_revision=current.revision)
+    assert updated.account.notify_margin_calls is True and updated.account.allow_short is True

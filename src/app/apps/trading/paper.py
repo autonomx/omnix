@@ -77,6 +77,8 @@ class PaperAccountCreate(BaseModel):
     margin: dict[str, PaperMargin] = Field(default_factory=dict)
     commission_type: CommissionType = "percent"
     commission_fixed: Decimal = Field(default=Decimal("0"), ge=0, le=10_000)
+    # TVP-7.2b: a margin call also notifies by the workspace's email and push channels; off unless asked for.
+    notify_margin_calls: bool = False
 
     @model_validator(mode="after")
     def validate_margin(self) -> PaperAccountCreate:
@@ -97,6 +99,7 @@ class PaperAccountSettings(BaseModel):
     commission_type: CommissionType | None = None
     commission_bps: Decimal | None = Field(default=None, ge=0, le=1000)
     commission_fixed: Decimal | None = Field(default=None, ge=0, le=10_000)
+    notify_margin_calls: bool | None = None
 
     @model_validator(mode="after")
     def validate_margin(self) -> PaperAccountSettings:
@@ -120,6 +123,7 @@ class PaperAccount(BaseModel):
     margin: dict[str, PaperMargin] = Field(default_factory=dict)
     commission_type: CommissionType = "percent"
     commission_fixed: Decimal = Decimal("0")
+    notify_margin_calls: bool = False
 
 
 class PaperBalance(BaseModel):
@@ -441,6 +445,10 @@ def paper_margin_status(
         buying_power=paper_buying_power(account, available_cash, positions),
         margin_call=equity < maintenance,
     )
+
+
+# A margin call's orders carry this id prefix (the paper monitor places them; the web marks them as margin calls).
+MARGIN_CALL_ORDER_PREFIX = "paper-margin-call-"
 
 
 def paper_margin_call_closes(account: PaperAccount, status: PaperMarginStatus, positions: list[PaperMarginPosition]) -> list[tuple[str, Decimal]]:

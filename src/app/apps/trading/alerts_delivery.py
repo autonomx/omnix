@@ -81,6 +81,7 @@ logger = logging.getLogger(__name__)
 
 DeliveryChannel = Literal["webhook", "email", "push"]
 DeliveryStatus = Literal["pending", "sending", "delivered", "failed"]
+DeliveryEventKind = Literal["alert", "margin_call"]
 
 # Channels the outbox delivers; TVP-0.5b (email) and TVP-0.5c (push) add theirs.
 OUTBOX_CHANNELS: tuple[DeliveryChannel, ...] = ("webhook", "email", "push")
@@ -151,11 +152,14 @@ def enqueue_alert_deliveries(connection: Any, workspace_id: str, alert: TradingA
 
 
 class NotificationDelivery(BaseModel):
-    """A delivery as the API shows it: status only, never a destination."""
+    """A delivery as the API shows it: status only, never a destination.
+
+    ``event_kind``: an alert trigger, or a paper margin call (TVP-7.2b), which has no trigger or alert."""
 
     delivery_id: str
-    trigger_id: str
-    alert_id: str
+    trigger_id: str | None
+    alert_id: str | None
+    event_kind: DeliveryEventKind = "alert"
     channel: DeliveryChannel
     status: DeliveryStatus
     attempts: int
@@ -181,6 +185,8 @@ class ClaimedDelivery:
     max_attempts: int
     webhook_ref: str | None
     workspace_id: str = ""
+    # 'alert', or 'margin_call' (no trigger or alert: their ids are empty, and the channel is email or push).
+    event_kind: str = "alert"
 
 
 @dataclass(frozen=True)
@@ -200,7 +206,7 @@ class NotificationSender(Protocol):
 
 _DELIVERY_COLUMNS = """
     delivery_id, trigger_id, alert_id, channel, status, attempts, max_attempts,
-    next_attempt_at, last_attempt_at, last_error, last_status_code, delivered_at, created_at
+    next_attempt_at, last_attempt_at, last_error, last_status_code, delivered_at, created_at, event_kind
 """
 
 
@@ -208,8 +214,9 @@ def _delivery(row: Any) -> NotificationDelivery:
     status = str(row[4])
     return NotificationDelivery(
         delivery_id=str(row[0]),
-        trigger_id=str(row[1]),
-        alert_id=str(row[2]),
+        trigger_id=str(row[1]) if row[1] is not None else None,
+        alert_id=str(row[2]) if row[2] is not None else None,
+        event_kind=str(row[13]) if len(row) > 13 and row[13] else "alert",
         channel=row[3],
         status=row[4],
         attempts=int(row[5]),
@@ -292,7 +299,7 @@ class NotificationDeliveryRepository:
                           (SELECT alert.notification_settings->>'webhook_ref'
                              FROM omnix_trading_alerts AS alert
                             WHERE alert.workspace_id = delivery.workspace_id AND alert.alert_id = delivery.alert_id),
-                          delivery.workspace_id
+                          delivery.workspace_id, delivery.event_kind
                 """,
                 (workspace, workspace, now, now, limit, lease_end, lease_end, now, now),
             ).fetchall()
@@ -300,14 +307,15 @@ class NotificationDeliveryRepository:
         claimed = [
             ClaimedDelivery(
                 delivery_id=str(row[0]),
-                trigger_id=str(row[1]),
-                alert_id=str(row[2]),
+                trigger_id=str(row[1] or ""),
+                alert_id=str(row[2] or ""),
                 channel=str(row[3]),
                 message=str(row[4]),
                 attempt=int(row[5]),
                 max_attempts=int(row[6]),
                 webhook_ref=str(row[7]) if row[7] else None,
                 workspace_id=str(row[8]),
+                event_kind=str(row[9] or "alert"),
             )
             for row in rows
         ]
