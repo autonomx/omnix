@@ -526,7 +526,8 @@ function indicatorColor(output: IndicatorOutput): string {
   return '#5c7cfa';
 }
 
-function indicatorPaneId(output: IndicatorOutput): string | null {
+/** The pane an output is drawn in: null for the price pane, else its indicator's (or its source's) pane id. */
+export function indicatorPaneId(output: Pick<IndicatorOutput, 'pane' | 'paneOf' | 'key'>): string | null {
   if (output.pane === 0) return null;
   // An indicator on another indicator shares its source's pane (TVP-6.5).
   return output.paneOf ?? output.key.split(':', 1)[0] ?? null;

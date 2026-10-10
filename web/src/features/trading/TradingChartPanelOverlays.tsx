@@ -19,7 +19,7 @@ import { ChartWorkflowSettings } from './TradingChartWorkflowControls';
 export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartType, clearAlertPlacement,
-    drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicatorOutputs, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
+    drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicatorOutputs, indicatorPaneGeometry, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
     onActivate, onChangeChartType, onToggleIndicator, openContextMenu, paperAccountId, priceScaleMultiplier,
     provenance, replayMode, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
     setSettingsVisible, setTableVisible, settingsVisible, tableVisible,
@@ -78,7 +78,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
       />
       <DrawingAlertSync adapter={adapter} instrumentId={instrumentId} instrument={drawingInstrumentOf(chartQuery.data?.instrument)} drawings={drawings.state.drawings} active={active} replayMode={replayMode} />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
-      <ScriptTablesOverlay outputs={indicatorOutputs} />
+      <ScriptTablesOverlay outputs={indicatorOutputs} adapter={adapter} panes={indicatorPaneGeometry} />
       <TradingOrderLinesOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} tickSize={tickSize} disabled={replayMode} />
       {active ? (
         <TradingPriceScalePlus

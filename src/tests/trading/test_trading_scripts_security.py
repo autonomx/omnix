@@ -102,6 +102,17 @@ def test_a_script_with_contexts_runs_again_in_full() -> None:
     assert not run.can_extend
 
 
+def test_fill_and_hline_keep_colours_written_as_expressions() -> None:
+    result = run_script(script(
+        'a = plot(close, "a")\nb = plot(open, "b")\nfill(a, b, color=color.new(color.teal, 85), title="Band")\n'
+        'h = hline(5, "Mid", color=color.new(color.red, 50))\nfill(h, b, color=#FF000033)'
+    ), SIX_HOURS, timeframe="6h")
+    band, level = result.fills
+    assert band["title"] == "Band" and band["color"] is not None and band["color"] != level["color"]
+    assert result.hlines[0]["color"] is not None and result.hlines[0]["title"] == "Mid"
+    assert band["from"] == 0 and band["to"] == 1 and level["from"] == ("hline", 0)
+
+
 def test_the_server_names_symbols_and_timeframes_as_omnix_does() -> None:
     assert [resolve_script_timeframe(text, "1h") for text in ("", "60", "240", "15", "D", "1W", "M", "30S", "4h", "bad")] == [
         "1h", "1h", "4h", "15m", "1d", "1w", "1mo", "30s", "4h", None,

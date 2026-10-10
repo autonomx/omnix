@@ -97,7 +97,7 @@ describe('script indicators (TVP-11.1)', () => {
     // An empty plotcandle has nothing to draw; the fill and the table are drawn.
     expect(byKey.p6).toBeUndefined();
     expect(byKey.f0).toMatchObject({ kind: 'fill', pane: 1, title: 'Fill 1' });
-    expect(byKey.t4).toMatchObject({ kind: 'table', pane: 0, points: [] });
+    expect(byKey.t4).toMatchObject({ kind: 'table', pane: 1, points: [] }); // in the script's own pane
     expect(mapped.notDrawn).toEqual([]);
   });
 
@@ -115,6 +115,8 @@ describe('script indicators (TVP-11.1)', () => {
     // One point per chart bar: the na bar is a gap; the higher value is always the top, whichever plot it comes from.
     expect(byKey.f0.points.map((point) => [point.high, point.low])).toEqual([[6, 2], [Number.NaN, Number.NaN], [8, 4], [10, 9]]);
     expect(byKey.f1.points.map((point) => [point.high, point.low])).toEqual([[7, 2], [7, 3], [7, 4], [10, 7]]);
+    // Only fill() shades: the chart's automatic band between an indicator's lines is off for scripts.
+    expect(mapped.outputs.every((output) => output.backgroundVisible === false)).toBe(true);
   });
 
   it('draws plotcandle as candles and plotbar as OHLC bars, coloured per bar', () => {
