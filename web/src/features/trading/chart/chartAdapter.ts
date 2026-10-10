@@ -688,6 +688,8 @@ export class TradingChartAdapter {
   private readonly priceSeriesPrimitives = new Set<ISeriesPrimitive<Time>>();
   /** Script fills (TVP-11.1), by output key: the primitive on each fill's hidden series. */
   private readonly fillPrimitives = new Map<string, FillBandPrimitive>();
+  /** Bar-click listeners (time sync), also told of clicks the pan handling takes (`clickAt`). */
+  private readonly barClickListeners = new Set<(timeMs: number) => void>();
   private readonly comparisonViewportHandler = () => {
     this.renderComparisonSeries();
     this.renderViewportAverage();
@@ -1938,14 +1940,38 @@ export class TradingChartAdapter {
     return () => this.chart.unsubscribeClick(handler);
   }
 
-  /** A click on a bar of the chart: its time in milliseconds (time sync, TVP-4.2). */
+  /**
+   * A click on a bar of the chart: its time in milliseconds (time sync, TVP-4.2). Mouse presses on the chart are taken
+   * by its pan handling, which reports a press without a drag through `clickAt`; the chart's own click event covers the
+   * presses it lets through (touch, replay).
+   */
   onBarClick(listener: (timeMs: number) => void): () => void {
     this.assertActive();
     const handler = (parameter: { time?: Time }) => {
       if (typeof parameter.time === 'number') listener(parameter.time * 1000);
     };
     this.chart.subscribeClick(handler);
-    return () => this.chart.unsubscribeClick(handler);
+    this.barClickListeners.add(listener);
+    return () => {
+      this.chart.unsubscribeClick(handler);
+      this.barClickListeners.delete(listener);
+    };
+  }
+
+  /** A click at a pane x that the chart's pan handling took: the bar under it, if any, to the bar-click listeners. */
+  clickAt(x: number): void {
+    this.assertActive();
+    const logical = this.chart.timeScale().coordinateToLogical(x);
+    if (logical === null) return;
+    // Only a bar the chart has (as the chart's own click event gives), not the empty space before or after them.
+    const index = Math.round(logical);
+    const timeIndex = this.timeIndex();
+    if (index < 0 || index >= timeIndex.length) return;
+    const time = timeIndex.timeForLogicalIndex(index);
+    if (time === null) return;
+    const timeMs = Date.parse(time);
+    if (!Number.isFinite(timeMs)) return;
+    for (const listener of [...this.barClickListeners]) listener(timeMs);
   }
 
   onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {
@@ -2041,7 +2067,7 @@ export class TradingChartAdapter {
     };
   }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.priceTimes = []; this.seriesTimes.clear(); this.invalidateDrawingTimes(); this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.indicatorMarkerPlugins.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.priceTimes = []; this.seriesTimes.clear(); this.invalidateDrawingTimes(); this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.indicatorMarkerPlugins.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.barClickListeners.clear(); this.chart.remove(); }
   /**
    * The x coordinate of a logical index. Lightweight Charts returns 0 for a
    * fractional logical index, so a time between bars (another interval's
