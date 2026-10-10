@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "composite": false,
-    "noEmit": true
+    "noEmit": true,
+    // Browser code: no Node globals, so timers are the DOM's (as in the image and avatar typechecks).
+    "types": ["vite/client"]
   },
   "include": [
     "src/*.d.ts",
