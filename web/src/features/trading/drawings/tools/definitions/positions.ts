@@ -131,7 +131,7 @@ function positionGeometry(side: PositionSide, context: DrawingGeometryContext): 
     const top = above ? y - 24 : y + 4;
     return [
       { kind: 'rect', x: center - labelWidth / 2, y: top, width: labelWidth, height: 20, radius: 3, fill: color, hit: 'none' },
-      { kind: 'text', x: center, y: top + 14, text, align: 'middle', fontSize: 11, fill: '#ffffff', hit: 'none' },
+      { kind: 'text', x: center, y: top + 14, text, align: 'middle', fontSize: 11, fill: '#ffffff', halo: false, hit: 'none' },
     ];
   };
   const targetAbove = targetPoint.y < entryPoint.y;
@@ -158,7 +158,7 @@ function positionGeometry(side: PositionSide, context: DrawingGeometryContext): 
   const summaryTop = entryPoint.y + (targetAbove ? 4 : -24);
   shapes.push(
     { kind: 'rect', x: center - summaryWidth / 2, y: summaryTop, width: summaryWidth, height: 20, radius: 3, fill: outcome.state === 'closed' ? (outcome.at === 'target' ? PROFIT : LOSS) : '#2a2e39', fillOpacity: 0.9, hit: 'none' },
-    { kind: 'text', x: center, y: summaryTop + 14, text: summary, align: 'middle', fontSize: 11, fill: '#ffffff', hit: 'none' },
+    { kind: 'text', x: center, y: summaryTop + 14, text: summary, align: 'middle', fontSize: 11, fill: '#ffffff', halo: false, hit: 'none' },
   );
   return shapes;
 }

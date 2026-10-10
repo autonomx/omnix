@@ -66,7 +66,7 @@ export const positionForecastTool = defineDrawingTool({
       { kind: 'marker', x: source.x, y: source.y, radius: 4, stroke: color, fill: '#ffffff', strokeWidth: 2 },
       { kind: 'marker', x: target.x, y: target.y, radius: 4, stroke: color, fill: color },
       { kind: 'rect', x: target.x - width / 2, y: top, width, height: 20, radius: 3, fill: color, hit: 'none' },
-      { kind: 'text', x: target.x, y: top + 14, text, align: 'middle', fontSize: 11, fill: '#ffffff', hit: 'none' },
+      { kind: 'text', x: target.x, y: top + 14, text, align: 'middle', fontSize: 11, fill: '#ffffff', halo: false, hit: 'none' },
     ];
   },
 });

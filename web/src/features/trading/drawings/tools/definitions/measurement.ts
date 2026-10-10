@@ -58,6 +58,7 @@ export const measurementTool = defineDrawingTool({
         fontSize: 13,
         fontWeight: 500,
         fill: '#202124',
+        halo: false,
         className: 'trading-measurement-label-text',
       },
     ];

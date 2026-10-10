@@ -1,5 +1,7 @@
+import { render } from '@testing-library/react';
+import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { paintShapes } from './canvasShapes';
+import { dropShadowGlow, paintShapes, readCanvasPaintTheme } from './canvasShapes';
 import { DrawingCanvasPrimitive, type CanvasDrawingEntry } from './DrawingCanvasPrimitive';
 import { runTool } from './tools/testing';
 import { drawingToolDefinition } from './tools/registry';
@@ -41,6 +43,45 @@ describe('canvas drawing renderer', () => {
     ]));
     expect(calls[0]).toBe('save()');
     expect(calls.at(-1)).toBe('restore()');
+  });
+
+  it("paints text like the stylesheet does: the theme's colour and font, a halo under it, none on a boxed label (TVP-3.4)", () => {
+    const theme = { text: 'rgb(1, 2, 3)', halo: 'rgb(255, 255, 255)', selectedText: 'rgb(9, 9, 9)', fontFamily: 'Inter', glow: 'rgb(255, 212, 59)', glowBlur: 3 };
+    const { context, calls } = recordingContext();
+    paintShapes(context, [
+      { kind: 'text', x: 1, y: 2, text: 'plain' },
+      { kind: 'text', x: 1, y: 2, text: 'boxed', fill: '#ffffff', halo: false },
+      { kind: 'text', x: 1, y: 2, text: 'emoji', stroke: 'none' },
+      { kind: 'text', x: 1, y: 2, text: 'picked', className: 'selected' },
+      { kind: 'segment', x1: 0, y1: 0, x2: 1, y2: 1, stroke: '#fff', className: 'selected' },
+    ], theme);
+    const plain = calls.indexOf('fillText(plain,1,2)');
+    // The halo is stroked first, then the text is filled over it.
+    expect(calls.slice(0, plain)).toEqual(expect.arrayContaining(['font=400 11px Inter', 'strokeStyle=rgb(255, 255, 255)', 'lineWidth=3', 'strokeText(plain,1,2)', 'fillStyle=rgb(1, 2, 3)']));
+    expect(calls.indexOf('strokeText(plain,1,2)')).toBeLessThan(plain);
+    expect(calls).not.toContain('strokeText(boxed,1,2)');
+    expect(calls).not.toContain('strokeText(emoji,1,2)');
+    // Selected text without a colour of its own takes the selection colour; selected shapes glow.
+    const picked = calls.indexOf('fillText(picked,1,2)');
+    expect(calls.slice(plain, picked)).toEqual(expect.arrayContaining(['shadowColor=rgb(255, 212, 59)', 'shadowBlur=6', 'fillStyle=rgb(9, 9, 9)']));
+  });
+
+  it("reads the theme from the overlay's stylesheet through probe elements", () => {
+    const view = render(createElement('svg'));
+    const svg = view.container.querySelector('svg')!;
+    const style = document.createElement('style');
+    style.textContent = 'text { fill: rgb(1, 2, 3); stroke: rgb(4, 5, 6); font-family: Inter } text.selected { fill: rgb(7, 8, 9) } line.selected { filter: drop-shadow(rgb(255, 212, 59) 0px 0px 3px) }';
+    document.head.appendChild(style);
+    try {
+      expect(readCanvasPaintTheme(svg)).toEqual({
+        text: 'rgb(1, 2, 3)', halo: 'rgb(4, 5, 6)', selectedText: 'rgb(7, 8, 9)', fontFamily: 'Inter', glow: 'rgb(255, 212, 59)', glowBlur: 3,
+      });
+      expect(svg.childNodes).toHaveLength(0);
+    } finally {
+      style.remove();
+      view.unmount();
+    }
+    expect(dropShadowGlow('none')).toBeNull();
   });
 
   it('paints the scene at draw time and hit-tests what it painted, topmost first', () => {

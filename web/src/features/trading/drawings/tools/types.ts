@@ -130,6 +130,11 @@ export type DrawingShape =
     align?: 'start' | 'middle' | 'end';
     fontSize?: number;
     fontWeight?: number;
+    /**
+     * Text over the chart gets a halo in the chart's background colour so it stays readable over lines (the default);
+     * `false` for text on its own filled box (a price label, a measurement), which needs none.
+     */
+    halo?: boolean;
   } & ShapePaint);
 
 export type DrawingShapeKind = DrawingShape['kind'];

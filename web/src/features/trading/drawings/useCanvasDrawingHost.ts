@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+import { APPEARANCE_CHANGE_EVENT, onOmnixEvent } from '../../../events/bus';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
+import { readCanvasPaintTheme } from './canvasShapes';
 import type { TradingDrawing } from './drawingCommands';
 import { DrawingCanvasPrimitive, type CanvasDrawingScene } from './DrawingCanvasPrimitive';
 
@@ -34,11 +36,23 @@ export function useCanvasDrawingHost({
     primitive.setScene((viewport) => sceneRef.current(viewport));
     primitiveRef.current = primitive;
     const detach = adapter.attachPriceSeriesPrimitive(primitive);
+    // Text colours and halo from the overlay's stylesheet, again whenever the appearance changes (once it applies).
+    const readTheme = () => {
+      if (svgRef.current) primitive.setTheme(readCanvasPaintTheme(svgRef.current));
+    };
+    readTheme();
+    let frame = 0;
+    const stopListening = onOmnixEvent(APPEARANCE_CHANGE_EVENT, () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(readTheme);
+    });
     return () => {
+      stopListening();
+      cancelAnimationFrame(frame);
       detach();
       primitiveRef.current = null;
     };
-  }, [adapter, enabled]);
+  }, [adapter, enabled, svgRef]);
 
   // Any React render may have changed drawings, selection or previews.
   useEffect(() => {

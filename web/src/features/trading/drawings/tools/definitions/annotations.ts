@@ -183,7 +183,7 @@ export const priceLabelTool = defineDrawingTool({
         fill: context.style.color,
         fillOpacity: 0.85,
       },
-      { kind: 'text', x: anchor.x + tip + PADDING, y: anchor.y + FONT_SIZE / 2 - 2, text, fontSize: FONT_SIZE, fill: '#ffffff', hit: 'none' },
+      { kind: 'text', x: anchor.x + tip + PADDING, y: anchor.y + FONT_SIZE / 2 - 2, text, fontSize: FONT_SIZE, fill: '#ffffff', halo: false, hit: 'none' },
     ];
   },
 });

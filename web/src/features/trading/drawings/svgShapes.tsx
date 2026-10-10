@@ -61,6 +61,7 @@ function textStyle(shape: Extract<DrawingShape, { kind: 'text' }>): CSSPropertie
   if (shape.fontSize !== undefined) style.fontSize = shape.fontSize;
   if (shape.fill !== undefined) style.fill = shape.fill;
   if (shape.stroke !== undefined) style.stroke = shape.stroke;
+  else if (shape.halo === false) style.stroke = 'none';
   return Object.keys(style).length > 0 ? style : undefined;
 }
 

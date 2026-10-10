@@ -142,6 +142,8 @@ function renderOverlay(props: Partial<TradingDrawingOverlayProps> & { tool?: Dra
         snapMode="none"
         drawings={[]}
         selectedId={null}
+        // These tests read the SVG host's elements; the canvas host (the default) has its own test below.
+        renderer="svg"
         {...handlers}
         {...props}
       />
