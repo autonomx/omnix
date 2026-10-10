@@ -66,7 +66,7 @@ jobs:
 
       - name: Upload V11 unseen evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trading-strategy-failed-selloff-v11-unseen
           path: artifacts/failed-selloff-v11-unseen
