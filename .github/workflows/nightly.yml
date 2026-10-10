@@ -167,8 +167,10 @@ jobs:
     env:
       OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_bench_source
       OMNIX_MIGRATION_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_bench_source
-      OMNIX_BLOB_ROOT: ${{ runner.temp }}/blobs-source
     steps:
+      # The runner context is not available in job-level env.
+      - name: Choose the blob root
+        run: echo "OMNIX_BLOB_ROOT=$RUNNER_TEMP/blobs-source" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.11", cache: pip}
