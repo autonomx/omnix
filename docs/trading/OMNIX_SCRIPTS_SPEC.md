@@ -140,9 +140,12 @@ Scripts run only on the server, in a Python interpreter.
 
 **On the chart (TVP-11.1).**
 - `fill` shades between two plots, or two `hline` levels, in its colour; a bar where either value is `na` is a gap (Pine's `fillgaps=false`).
+  Options of `fill` and `hline` may be expressions (`color.new(color.teal, 85)`, an input); they are evaluated on the first bar, so a
+  colour that changes bar by bar is drawn in its first bar's colour.
+- Only `fill` (and `bgcolor`) shade: the chart's automatic band between an indicator's lines is off for scripts.
 - `plotcandle` draws candles and `plotbar` OHLC bars in the script's pane, coloured per bar when the script sets a colour.
-- `table.new` tables are drawn over the price pane at their `position`, with their cells' text, text colour and background;
-  tables at the same position stack. They are drawn from the run's last state, as in Pine.
+- `table.new` tables are drawn in the script's pane (the price pane for an overlay script) at their `position`, with their
+  cells' text, text colour and background; tables at the same position stack. They are drawn from the run's last state, as in Pine.
 
 **Drawings.**
 - `label.*`, `line.*`, `box.*`, `table.*` and `linefill.new`: `new`, `set_*`, `get_*`, `delete`.

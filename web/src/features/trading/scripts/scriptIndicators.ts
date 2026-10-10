@@ -8,7 +8,7 @@
  * - `bgcolor` shades the price pane and `barcolor` recolours the bars;
  * - `hline` is a level; `line.new` and `box.new` drawings are lines, `label.new` a marker with its text;
  * - `fill` shades between two plots or levels; `plotcandle` and `plotbar` are candles and OHLC bars in the script's
- *   pane; `table.new` tables are drawn over the chart at their position.
+ *   pane; `table.new` tables are drawn over the script's pane at their position.
  *
  * An instance keeps the script's name, whether it overlays the price, the revision it last ran and its input values
  * (`params`, inputs as `in:<title>`), so a layout can show it before the script loads.
@@ -133,6 +133,8 @@ export function scriptOutputs(indicator: CoreIndicatorInstance, result: ScriptRu
       // A fill's value is the middle of its band: never a status-line value.
       valuesInStatusLine: output.kind === 'fill' ? false : style?.valuesInStatusLine ?? true,
       inputsInStatusLine: false,
+      // A script shades only what it fills (fill(), bgcolor): no automatic band between its plots, as in Pine.
+      backgroundVisible: false,
     });
   };
   for (const plot of result.plots) mapPlot(id, plot, aligned, ownPane, add, notDrawn);
@@ -346,7 +348,8 @@ function mapDrawings(
       continue;
     }
     if (drawing.kind === 'table') {
-      add({ key: `${id}:t${drawing.id}`, title: `table ${drawing.id}`, pane: 0, kind: 'table', points: [], table: scriptTable(fields) });
+      // In the script's pane, as in Pine: the price pane for an overlay script.
+      add({ key: `${id}:t${drawing.id}`, title: `table ${drawing.id}`, pane: ownPane, kind: 'table', points: [], table: scriptTable(fields) });
       continue;
     }
     if (drawing.kind !== 'line' && drawing.kind !== 'box') continue;

@@ -984,6 +984,22 @@ def _security(c: Any, node: Call) -> Closure:
     return security
 
 
+def _static_options(c: Any, arguments: dict[str, Node], skip: tuple[str, ...]) -> tuple[dict[str, Any], dict[str, Closure]]:
+    """The options of an output drawn once (hline, fill): constants as written, and the other expressions
+    (``color.new(color.teal, 85)``, an input) compiled, to evaluate on the first bar, when the output is recorded."""
+    constants: dict[str, Any] = {}
+    computed: dict[str, Closure] = {}
+    for key, value in arguments.items():
+        if key in skip:
+            continue
+        literal = _literal(value)
+        if literal is _MISSING:
+            computed[key] = c.expression(value)
+        else:
+            constants[key] = literal
+    return constants, computed
+
+
 def _hline(c: Any, node: Call) -> Closure:
     params = ["price", "title", "color", "linestyle", "linewidth", "editable", "display"]
     arguments: dict[str, Node] = dict(zip(params, node.args, strict=False))
@@ -991,15 +1007,14 @@ def _hline(c: Any, node: Call) -> Closure:
     price = c.expression(arguments["price"]) if "price" in arguments else None
     if price is None:
         raise ScriptSyntaxError("hline() needs a price", node.line)
-    options = {key: _literal(value) for key, value in arguments.items() if key != "price"}
-    options = {key: value for key, value in options.items() if value is not _MISSING}
+    options, computed = _static_options(c, arguments, ("price",))
 
     def emit(ctx: Context) -> Any:
         # Drawn once: recorded on the first bar (fill() reads the handle there too).
         run = ctx.run
         if run.statics_done:
             return ("hline", None)
-        run.hlines.append({"price": price(ctx), **options})
+        run.hlines.append({"price": price(ctx), **options, **{key: value(ctx) for key, value in computed.items()}})
         return ("hline", len(run.hlines) - 1)
 
     return emit
@@ -1010,13 +1025,13 @@ def _fill(c: Any, node: Call) -> Closure:
     arguments: dict[str, Node] = dict(zip(params, node.args, strict=False))
     arguments.update(node.kwargs)
     first, second = c.expression(arguments["plot1"]), c.expression(arguments["plot2"])
-    options = {key: _literal(value) for key, value in arguments.items() if key not in ("plot1", "plot2")}
-    options = {key: value for key, value in options.items() if value is not _MISSING}
+    options, computed = _static_options(c, arguments, ("plot1", "plot2"))
 
     def emit(ctx: Context) -> Any:
         run = ctx.run
         if not run.statics_done:
-            run.fills.append({"from": first(ctx), "to": second(ctx), **options})
+            # A colour that changes bar by bar is drawn in its first bar's colour.
+            run.fills.append({"from": first(ctx), "to": second(ctx), **options, **{key: value(ctx) for key, value in computed.items()}})
         return None
 
     return emit
