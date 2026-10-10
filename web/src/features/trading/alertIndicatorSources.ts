@@ -7,6 +7,7 @@
 import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIndicators';
 import { orderBySources, resolveSourceOutput } from './indicators/indicatorSources';
 import { tradingViewBuiltInUsesSessions } from './indicators/tradingViewBuiltIns';
+import { isExternalIndicatorId } from './indicators/externalIndicatorData';
 import { indicatorContextLabel } from './tradingChartPanelModel';
 import { isScriptIndicatorId, scriptAlertOutput, scriptIdOf, scriptIndicatorName, scriptInputValues, scriptRunStatus } from './scripts/scriptIndicators';
 import type { components } from './api/generated';
@@ -110,7 +111,8 @@ export function alertIndicatorChoices(
           : instance.compareSymbol || (instance.params && Object.keys(instance.params).length > 0)
         ? 'Its extra inputs are not evaluated by server alerts yet'
         // An indicator on another indicator needs the server to compute its source the same way.
-        : instance.source && (!source || !serverIds.has(String(source.id)) || tradingViewBuiltInUsesSessions(String(source.id))
+        // A data series (TVP-0.2) as the source is computed in the browser only.
+        : instance.source && (!source || !serverIds.has(String(source.id)) || isExternalIndicatorId(String(source.id)) || tradingViewBuiltInUsesSessions(String(source.id))
           || source.compareSymbol || (source.params && Object.keys(source.params).length > 0))
           ? 'Its source indicator is not evaluated by server alerts yet'
         : lines.length === 0

@@ -18,6 +18,8 @@ from .indicators.engine import (
     simple_moving_average,
 )
 from .alert_conditions import IndicatorSource, validate_indicator_source
+from .external_series import ExternalSeries
+from .indicators.external import external_indicator
 from .fundamental_snapshots import FUNDAMENTAL_METRICS, fundamental_metric, snapshot_for_instrument
 from .models import BarsResponse, MarketBar
 
@@ -308,7 +310,9 @@ def evaluate_scanner_dataset(
     if any(rule.metric == "indicator" for rule in definition.rules):
         from .alerts_evaluation import _BarValues
 
-        shared = _BarValues(bars)
+        # External-data indicators (TVP-0.2) read their metric series, once per instrument and metric.
+        uses_external = any(rule.source is not None and external_indicator(rule.source.indicator_id) for rule in definition.rules)
+        shared = _BarValues(bars, ExternalSeries(response.instrument.instrument_id, definition.interval) if uses_external else None)
     # A company's SEC fundamentals, once per instrument, when a rule reads them (TVP-9.1).
     fundamentals = (
         snapshot_for_instrument(response.instrument.instrument_id)

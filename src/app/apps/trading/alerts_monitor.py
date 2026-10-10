@@ -23,6 +23,7 @@ from .alerts import (
     default_alert_repository,
 )
 from .alerts_evaluation import evaluate_conditions, history_limit, required_bars
+from .external_series import ExternalSeries
 from .service import TradingMarketDataService, default_market_data_service
 
 
@@ -60,10 +61,10 @@ def _final_only(alert: TradingAlert) -> bool:
     return alert.frequency == "once_per_bar_close" or not alert.evaluation_policy.allow_partial_bars
 
 
-def _outcomes(alerts: Sequence[TradingAlert], bars: Sequence[Any]) -> list[AlertOutcomeRecord]:
+def _outcomes(alerts: Sequence[TradingAlert], bars: Sequence[Any], external: ExternalSeries | None = None) -> list[AlertOutcomeRecord]:
     records: list[AlertOutcomeRecord] = []
     for alert in alerts:
-        outcome = evaluate_conditions(alert.conditions, bars, final_only=_final_only(alert))
+        outcome = evaluate_conditions(alert.conditions, bars, final_only=_final_only(alert), external=external)
         if outcome is not None:
             records.append(AlertOutcomeRecord(alert.alert_id, alert.revision, outcome))
     return records
@@ -77,8 +78,10 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         document_repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
         interval_seconds: float | None = None,
+        external_series_factory: Callable[[str, str], ExternalSeries] = ExternalSeries,
     ) -> None:
         self.repository_factory = repository_factory
+        self.external_series_factory = external_series_factory
         self.market_service_factory = market_service_factory
         self.document_repository_factory = document_repository_factory
         # Watchlist alerts (TVP-1.7), by alert: its list's members, those evaluated and skipped in the last pass.
@@ -133,9 +136,11 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                 if not response.bars:
                     continue
                 bars = list(response.bars)
-                # Indicator maths is CPU work; keep it off the event loop.
-                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars)
-                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars)
+                # External-data indicators (TVP-0.2) fetch each metric once for the target's alerts.
+                external = self.external_series_factory(instrument_id, interval)
+                # Indicator maths (and metric fetches) are blocking work; keep them off the event loop.
+                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars, external)
+                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars, external)
                 if not outcomes and not symbol_outcomes:
                     continue
                 context = AlertEvaluationContext(

@@ -11,12 +11,15 @@ conditions must hold (AND).
 Values are compared as ``Decimal``: price fields come from the bars exactly,
 indicator values from the server registry (``indicators/registry.py``, the
 same numbers the chart plots) through their shortest decimal representation.
+External-data indicators (open interest, analyst targets, breadth...) come
+from their metric series through an injected loader (``external_series.py``),
+so this module stays free of I/O.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -37,10 +40,14 @@ from .alert_conditions import (
     condition_sources,
     indicator_output_profile,
 )
+from .indicators.external import external_indicator
 from .indicators.registry import BarSeries, server_indicator
 
 HISTORY_LIMIT_MAX = 1000
 _HUNDRED = Decimal("100")
+
+# An external-data indicator's values at bar indexes: (indicator id, output, bars) -> {index: value}.
+ExternalValues = Callable[[str, str, Sequence[Any]], dict[int, Any]]
 
 
 class AlertBar(Protocol):
@@ -214,8 +221,9 @@ def _decimal(value: Any) -> Decimal | None:
 class _BarValues:
     """Source values at bar indexes of one bar list, with per-source caches."""
 
-    def __init__(self, bars: Sequence[AlertBar]) -> None:
+    def __init__(self, bars: Sequence[AlertBar], external: ExternalValues | None = None) -> None:
         self.bars = bars
+        self.external = external
         self._series: BarSeries | None = None
         self._indicator_cache: dict[tuple[Any, ...], dict[int, float]] = {}
         self._script_cache: dict[str, Any] = {}
@@ -290,7 +298,10 @@ class _BarValues:
         value = points.get(index)
         return None if value is None else _decimal(value)
 
-    def _compute_indicator(self, source: IndicatorSource, anchor_time: str | None) -> dict[int, float]:
+    def _compute_indicator(self, source: IndicatorSource, anchor_time: str | None) -> dict[int, Any]:
+        if external_indicator(source.indicator_id) is not None:
+            # No loader (a pushed quote, a test): no data, so the condition is false.
+            return self.external(source.indicator_id, source.output, self.bars) if self.external else {}
         try:
             outputs = compute_source_indicator(source.indicator_id, self.series(), source.inputs, anchor_time)
         except Exception:  # an indicator that cannot compute these bars has no value: the condition is false
@@ -375,13 +386,16 @@ def evaluate_conditions(
     bars: Sequence[AlertBar],
     *,
     final_only: bool,
+    external: ExternalValues | None = None,
 ) -> AlertConditionOutcome | None:
-    """Evaluate every condition at the evaluation bar; ``None`` when there is no bar to evaluate."""
+    """Evaluate every condition at the evaluation bar; ``None`` when there is no bar to evaluate.
+
+    ``external`` supplies external-data indicator values (``external_series.ExternalSeries``)."""
     index = evaluation_index(bars, final_only=final_only)
     if index is None:
         return None
     # Indicators see bars up to the evaluated bar only, so a forming bar after it cannot leak in.
-    values = _BarValues(bars[: index + 1])
+    values = _BarValues(bars[: index + 1], external)
     observations = tuple(_evaluate_condition(values, position, condition, index) for position, condition in enumerate(conditions))
     bar = bars[index]
     return AlertConditionOutcome(
@@ -413,6 +427,8 @@ def _source_lookback(source: Any) -> int:
         return SCRIPT_ALERT_LOOKBACK
     if not isinstance(source, IndicatorSource):
         return 0
+    if external_indicator(source.indicator_id) is not None:
+        return 1  # a data series, with a value from its first point
     inputs = source.inputs
     periods = [value for value in (inputs.period, inputs.fast_period, inputs.slow_period, inputs.signal_period) if value]
     required = math.ceil(max(periods, default=1))
@@ -470,7 +486,7 @@ def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec]) -> No
     """
     for condition in conditions:
         for source in condition_sources(condition):
-            if not isinstance(source, IndicatorSource):
+            if not isinstance(source, IndicatorSource) or external_indicator(source.indicator_id) is not None:
                 continue
             inputs = source.inputs
             for name in ("period", "fast_period", "slow_period", "signal_period"):

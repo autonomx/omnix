@@ -31,6 +31,7 @@ from .alert_conditions import (
     condition_sources,
     legacy_conditions,
     validate_conditions_against_registry,
+    validate_external_scope,
 )
 from .alerts_delivery import enqueue_alert_deliveries
 from .alerts_message import message_values, render_alert_message
@@ -312,6 +313,9 @@ class _AlertWrite(_AlertContract):
         elif self.evaluation_policy.symbol_limit is not None:
             raise ValueError("symbol_limit is for watchlist alerts")
         validate_conditions_against_registry(self.conditions)
+        if watchlist_id_of(self.instrument_id) is None:
+            # A list's members are checked as each is evaluated: a member without the data has no value.
+            validate_external_scope(self.instrument_id, self.conditions)
         validate_conditions_can_fire(self.conditions)
         # Only "once per bar close" waits for closed bars; every other frequency
         # is intrabar, whatever an older client sends.
