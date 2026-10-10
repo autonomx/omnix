@@ -22,7 +22,13 @@ function seriesMock() {
 
 const chartMock = {
   applyOptions: vi.fn(),
-  timeScale: () => ({ subscribeVisibleLogicalRangeChange: vi.fn(), unsubscribeVisibleLogicalRangeChange: vi.fn(), getVisibleLogicalRange: () => null }),
+  timeScale: () => ({
+    subscribeVisibleLogicalRangeChange: vi.fn(), unsubscribeVisibleLogicalRangeChange: vi.fn(), getVisibleLogicalRange: () => null,
+    // 10 px per bar from x = 0.
+    coordinateToLogical: (x: number) => x / 10, fitContent: vi.fn(), setVisibleLogicalRange: vi.fn(), scrollToPosition: vi.fn(),
+  }),
+  subscribeClick: vi.fn(),
+  unsubscribeClick: vi.fn(),
   addSeries: vi.fn<(type: unknown) => SeriesMock>(() => {
     const created = seriesMock();
     series.push(created);
@@ -143,6 +149,21 @@ describe('chart adapter workflow hooks (TVP-2.5)', () => {
     expect(series[before + 1].setData).toHaveBeenCalledWith([{
       time: Date.parse(t0) / 1000, open: 1, high: 5, low: 0, close: 4, color: '#F23645', wickColor: '#F23645', borderColor: '#F23645',
     }]);
+  });
+
+  it('reports a press the pan handling took as a click on the bar under it, for the time link (TVP-4.2)', () => {
+    const adapter = new TradingChartAdapter(document.createElement('div'));
+    // The chart's time index is built from its series' times.
+    (adapter as unknown as { seriesTimes: Map<string, number[]> }).seriesTimes.set('price', [0, 1, 2].map((index) => Date.UTC(2026, 0, 1, index) / 1000));
+    const clicks: number[] = [];
+    const stop = adapter.onBarClick((timeMs) => clicks.push(timeMs));
+    adapter.clickAt(19); // bar 2 (logical 1.9)
+    adapter.clickAt(80); // past the last bar: nothing
+    expect(clicks).toEqual([Date.UTC(2026, 0, 1, 2)]);
+    stop();
+    adapter.clickAt(0);
+    expect(clicks).toHaveLength(1);
+    expect(chartMock.unsubscribeClick).toHaveBeenCalled();
   });
 
   it('tells which pane a double-click landed on', () => {
