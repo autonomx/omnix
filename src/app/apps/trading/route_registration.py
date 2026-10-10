@@ -16,6 +16,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
     from app.apps.trading.catalyst_api import create_trading_catalyst_router
     from app.apps.trading.execution_api import create_trading_execution_router
     from app.apps.trading.hermes_research_api import create_trading_hermes_research_router
+    from app.apps.trading.indicator_values import create_trading_indicator_values_router
     from app.apps.trading.kill_switches import create_trading_kill_switch_router
     from app.apps.trading.market_data_api import create_trading_market_data_router
     from app.apps.trading.metric_api import create_trading_metric_router
@@ -51,6 +52,7 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
         create_trading_alert_router,
         create_trading_notification_router,
         create_trading_scanner_router,
+        create_trading_indicator_values_router,
         create_trading_snapshots_router,
         create_trading_heatmaps_router,
         create_trading_fundamentals_router,

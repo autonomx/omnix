@@ -486,6 +486,7 @@
     "DELETE /api/trading/indicator-presets/{record_id}": "trading",
     "GET /api/trading/indicator-presets/{record_id}": "trading",
     "PUT /api/trading/indicator-presets/{record_id}": "trading",
+    "POST /api/trading/indicators/latest": "trading",
     "GET /api/trading/instruments/search": "trading",
     "GET /api/trading/kill-switches": "trading",
     "PUT /api/trading/kill-switches": "trading",

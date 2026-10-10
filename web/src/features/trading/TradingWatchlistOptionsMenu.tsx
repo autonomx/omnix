@@ -1,4 +1,5 @@
 import { WATCHLIST_COLUMNS, type WatchlistColumnId } from './tradingWatchlistColumns';
+import { WatchlistIndicatorColumnPicker } from './WatchlistIndicatorColumnPicker';
 
 /** The watchlist's "⋯" menu: list actions, import/export and the column chooser. */
 export function TradingWatchlistOptionsMenu({
@@ -51,6 +52,7 @@ export function TradingWatchlistOptionsMenu({
           </button>
         ))}
       </div>
+      <WatchlistIndicatorColumnPicker columns={columns} onToggleColumn={onToggleColumn} />
     </div>
   );
 }

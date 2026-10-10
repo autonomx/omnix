@@ -27,6 +27,7 @@ import {
 } from './tradingWatchlistModel';
 import { useTradingWatchlistDocuments } from './useTradingWatchlistDocuments';
 import { useTradingWatchlistFlags } from './useTradingWatchlistFlags';
+import { useWatchlistSnapshotsWithIndicators } from './useWatchlistIndicatorValues';
 import { useTradingWatchlistQuotes } from './useTradingWatchlistQuotes';
 import {
   useTradingWatchlistSelection,
@@ -90,7 +91,8 @@ export function TradingWatchlist({
   );
   const instrumentIds = useMemo(() => listItems.filter(isSymbolItem).map((item) => item.instrumentId), [listItems]);
   const { columns } = view;
-  const quotes = useTradingWatchlistQuotes(instrumentIds, interval, providerBindings, view.columnIds.includes('relativeVolume'));
+  const prices = useTradingWatchlistQuotes(instrumentIds, interval, providerBindings, view.columnIds.includes('relativeVolume'));
+  const quotes = useWatchlistSnapshotsWithIndicators(prices, instrumentIds, interval, view.columnIds);
   const flagListColors = WATCHLIST_FLAG_COLORS.filter((color) => (
     color === flagColor || flagsPayload.flags.some((flag) => flag.color === color)
   ));

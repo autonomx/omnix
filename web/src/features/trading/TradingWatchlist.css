@@ -134,6 +134,26 @@
     font-size: 8px;
   }
 
+  /* Adding an indicator column (TVP-5.2): indicator, period and line on one row, then Add. */
+  .trading-watchlist-indicator-column-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr);
+    gap: 3px;
+    padding: 2px 7px 4px;
+  }
+
+  .trading-watchlist-indicator-column-form select,
+  .trading-watchlist-indicator-column-form input {
+    min-width: 0;
+    padding: 3px 4px;
+    font-size: 9px;
+  }
+
+  .trading-watchlist-indicator-column-form button {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
   .trading-watchlist-columns,
   .trading-watchlist li {
     display: grid;

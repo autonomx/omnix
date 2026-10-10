@@ -143,6 +143,7 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
           <TradingChartContextMenu
             point={contextMenu}
             chartId={chartId}
+            instrumentId={contextIndicator || contextMenu?.trendlinePoints?.length === 2 ? null : instrumentId}
             symbol={contextIndicator
               ? indicatorContextLabel(contextIndicator)
               : contextMenu?.trendlinePoints?.length === 2

@@ -77,7 +77,7 @@ export function TradingWatchlistHeader({
   );
 }
 
-function TradingWatchlistFlagMenu({
+export function TradingWatchlistFlagMenu({
   symbol,
   current,
   onPick,

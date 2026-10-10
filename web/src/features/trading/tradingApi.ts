@@ -269,6 +269,19 @@ export const tradingApi = {
   /** The indicators the server evaluates for alerts (TVP-1.3). */
   alertIndicators: async (): Promise<string[]> =>
     (await trading(api.GET('/api/trading/alerts/indicators'))).indicator_ids,
+  /** The latest value of indicator lines for a list of symbols: the watchlist's indicator columns (TVP-5.2). */
+  indicatorValues: async (
+    instrumentIds: readonly string[],
+    interval: string,
+    lines: ReadonlyArray<{ indicator_id: string; period: number; output: string }>,
+  ): Promise<Record<string, Array<string | number | null>>> =>
+    (await trading(api.POST('/api/trading/indicators/latest', {
+      body: {
+        instrument_ids: [...instrumentIds],
+        interval,
+        lines: lines.map((line) => ({ kind: 'indicator' as const, indicator_id: line.indicator_id, inputs: { period: line.period }, output: line.output })),
+      },
+    }))).values,
   alertTriggers: async (): Promise<TradingAlertTrigger[]> =>
     (await trading(api.GET('/api/trading/alerts/triggers', { cache: 'no-store' }))).triggers,
   /** How many of a watchlist's symbols an alert on it evaluates (TVP-1.7). */

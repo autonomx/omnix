@@ -619,6 +619,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/indicators/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Latest
+         * @description The latest value of up to 8 indicator lines for up to 200 symbols (the watchlist's indicator columns).
+         */
+        post: operations["latest_api_trading_indicators_latest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/instruments/search": {
         parameters: {
             query?: never;
@@ -6516,6 +6536,27 @@ export interface components {
             source: components["schemas"]["IndicatorOutputRef-Output"] | null;
             /** Standard Deviations */
             standard_deviations: number | null;
+        };
+        /** IndicatorValuesRequest */
+        IndicatorValuesRequest: {
+            /** Instrument Ids */
+            instrument_ids: string[];
+            /**
+             * Interval
+             * @default 1d
+             */
+            interval?: string;
+            /** Lines */
+            lines: components["schemas"]["IndicatorSource-Input"][];
+        };
+        /** IndicatorValuesResponse */
+        IndicatorValuesResponse: {
+            /** Interval */
+            interval: string;
+            /** Values */
+            values: {
+                [key: string]: (string | null)[];
+            };
         };
         /** InstrumentSearchResponse */
         InstrumentSearchResponse: {
@@ -15397,6 +15438,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_api_trading_indicators_latest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndicatorValuesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndicatorValuesResponse"];
                 };
             };
             /** @description Validation Error */
