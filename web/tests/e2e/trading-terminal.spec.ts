@@ -596,7 +596,9 @@ test('chart session tabs isolate symbols and can be closed', async ({ page }) =>
   const tabs = page.getByRole('group', { name: 'Independent chart sessions' });
   const sessionTab = { name: /^Open .* chart session$/ };
   await expect(tabs.getByRole('button', sessionTab)).toHaveCount(1);
+  // The + button opens the new-tab launcher (TVP-4.x); a new chart tab is its first item.
   await page.getByRole('button', { name: 'Create chart session tab' }).click();
+  await page.getByRole('menu', { name: 'New tab' }).getByRole('menuitem', { name: 'New chart tab' }).click();
   await expect(tabs.getByRole('button', sessionTab)).toHaveCount(2);
 
   await page.getByRole('button', { name: 'Open symbol search' }).click();
