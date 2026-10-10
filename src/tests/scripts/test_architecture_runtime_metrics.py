@@ -93,6 +93,10 @@ sys.path.insert(0, {str(SCRIPTS)!r})
 from architecture_runtime_metrics import install_probe_guard
 install_probe_guard(Path({str(tmp_path)!r}), Path({str(owned)!r}), {URL!r})
 Path({str(owned / 'allowed.txt')!r}).write_text('allowed')
+import os, tempfile
+descriptor, _ = tempfile.mkstemp(dir={str(owned)!r})
+with os.fdopen(descriptor, 'wb') as stream:  # a descriptor the guard saw created
+    stream.write(b'allowed')
 assert Path({str(source)!r}).read_text() == 'operator input'
 for operation in [
     lambda: Path({str(source)!r}).write_text('changed'),
