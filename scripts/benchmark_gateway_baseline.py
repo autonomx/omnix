@@ -14,6 +14,10 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+# The benchmark measures the event loop, not sign-in: like the test suite, it runs the gateway without
+# authentication (allowed only in the test environment).
+os.environ.setdefault("OMNIX_ENV", "test")
+os.environ.setdefault("OMNIX_AUTH_MODE", "disabled")
 
 
 async def measure(samples: int, delay_ms: float) -> dict:
