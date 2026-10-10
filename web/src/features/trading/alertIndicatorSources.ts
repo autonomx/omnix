@@ -1,13 +1,13 @@
 // Alerts on any chart indicator and output (TVP-1.3). The alert dialog
 // offers the chart's indicators, each with the output lines the chart draws;
-// an indicator the server can't evaluate (or whose extra inputs it doesn't
-// take yet) is offered greyed out with the reason. The alert is created as a
-// conditions alert, so the server evaluates the same indicator, inputs and
-// output on its own bars.
+// an indicator the server can't evaluate is offered greyed out with the
+// reason. The alert is created as a conditions alert with the indicator's
+// inputs, params and compare symbol, so the server evaluates the same
+// indicator and output on its own bars, in the instrument's session hours.
 import type { CoreIndicatorInstance, IndicatorOutput } from './indicators/coreIndicators';
 import { orderBySources, resolveSourceOutput } from './indicators/indicatorSources';
-import { tradingViewBuiltInUsesSessions } from './indicators/tradingViewBuiltIns';
 import { isExternalIndicatorId } from './indicators/externalIndicatorData';
+import { tradingViewBuiltInUsesCompareSeries } from './indicators/tradingViewBuiltIns';
 import { indicatorContextLabel } from './tradingChartPanelModel';
 import { isScriptIndicatorId, scriptAlertOutput, scriptIdOf, scriptIndicatorName, scriptInputValues, scriptRunStatus } from './scripts/scriptIndicators';
 import type { components } from './api/generated';
@@ -87,7 +87,15 @@ function inputsOf(instance: CoreIndicatorInstance, instances: readonly CoreIndic
     standard_deviations: instance.standardDeviations ?? null,
     anchor_time: instance.anchorTime || null,
     anchor_bars_ago: null,
+    // The indicator's own inputs and compare symbol; the server takes the session hours from the instrument (TVP-1.3).
+    params: Object.fromEntries(Object.entries(instance.params ?? {}).filter((entry): entry is [string, number | string] => (
+      typeof entry[1] === 'string' || (typeof entry[1] === 'number' && Number.isFinite(entry[1]))))),
+    compare_symbol: instance.compareSymbol || null,
   };
+}
+
+function isSignalOutput(output: IndicatorOutput): boolean {
+  return output.render === 'markers' || output.kind === 'bar-colors' || output.kind === 'background';
 }
 
 /** The chart's enabled indicators as alert sources; `serverIds` null while the server's list loads. */
@@ -99,22 +107,19 @@ export function alertIndicatorChoices(
   return instances.filter((instance) => instance.enabled).map((instance) => {
     if (isScriptIndicatorId(String(instance.id))) return scriptChoice(instance, outputs);
     const source = instance.source ? instances.find((item) => item.id === instance.source!.indicatorId) : undefined;
+    // Markers, and what the chart paints (bar colours, background), are signals: they hold only on the bars they mark.
     const lines = outputs.filter((output) => output.key.split(':', 1)[0] === instance.id)
-      .map((output) => ({ key: output.key, title: output.title, ...(output.render === 'markers' ? { signal: true as const } : {}) }));
+      .map((output) => ({ key: output.key, title: output.title, ...(isSignalOutput(output) ? { signal: true as const } : {}) }));
     const unavailable = serverIds === null
       ? 'Checking which indicators server alerts support…'
       : !serverIds.has(instance.id)
         ? 'Server alerts are not available for this indicator yet'
-        // The server evaluates session-based indicators on UTC days; the chart draws them on the market's sessions.
-        : tradingViewBuiltInUsesSessions(instance.id)
-          ? 'It uses the market sessions, which server alerts do not follow yet'
-          : instance.compareSymbol || (instance.params && Object.keys(instance.params).length > 0)
-        ? 'Its extra inputs are not evaluated by server alerts yet'
-        // An indicator on another indicator needs the server to compute its source the same way.
-        // A data series (TVP-0.2) as the source is computed in the browser only.
-        : instance.source && (!source || !serverIds.has(String(source.id)) || isExternalIndicatorId(String(source.id)) || tradingViewBuiltInUsesSessions(String(source.id))
-          || source.compareSymbol || (source.params && Object.keys(source.params).length > 0))
+        // An indicator on another indicator needs the server to compute its source the same way; a data series
+        // (TVP-0.2) as the source is computed in the browser only.
+        : instance.source && (!source || !serverIds.has(String(source.id)) || isExternalIndicatorId(String(source.id)))
           ? 'Its source indicator is not evaluated by server alerts yet'
+        : tradingViewBuiltInUsesCompareSeries(instance.id) && !instance.compareSymbol
+          ? 'Choose its compare symbol on the chart first'
         : lines.length === 0
           ? 'It draws no line to alert on'
           : LAGGED_SIGNAL_INDICATORS.has(instance.id)

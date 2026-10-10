@@ -316,7 +316,7 @@ class _AlertWrite(_AlertContract):
         if watchlist_id_of(self.instrument_id) is None:
             # A list's members are checked as each is evaluated: a member without the data has no value.
             validate_external_scope(self.instrument_id, self.conditions)
-        validate_conditions_can_fire(self.conditions)
+        validate_conditions_can_fire(self.conditions, self.evaluation_policy.interval)
         # Only "once per bar close" waits for closed bars; every other frequency
         # is intrabar, whatever an older client sends.
         self.evaluation_policy.allow_partial_bars = self.frequency != "once_per_bar_close"

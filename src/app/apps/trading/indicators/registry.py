@@ -16,7 +16,7 @@ import math
 import pkgutil
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, Protocol, cast
 
 NumericClass = Literal["exact", "recursive", "transcendental"]
@@ -181,6 +181,12 @@ class ServerIndicator:
     # Signal indicators (candlestick patterns): outputs with a value only on the bars where the signal appears,
     # so a series may never show one. Alerts take this warm-up (bars) instead of measuring the first value.
     signal_warmup: int | None = None
+    # Indicators anchored near the latest bar (swings, a lookback window): the bars they read back from it. Their first
+    # value on a long series is late by design, so alerts take this instead of measuring it.
+    lookback: Callable[[IndicatorInputs], int] | None = None
+    # Indicators over sessions or days (pivots of the previous period, a day of volume): the time they read back. Alerts
+    # turn it into bars with their interval.
+    lookback_time: Callable[[IndicatorInputs], timedelta] | None = None
 
     @property
     def uses_compare_series(self) -> bool:
@@ -198,10 +204,19 @@ def _add(indicator: ServerIndicator) -> None:
 
 
 def register(
-    indicator_id: str, name: str, numeric_class: NumericClass, signal_warmup: int | None = None
+    indicator_id: str,
+    name: str,
+    numeric_class: NumericClass,
+    signal_warmup: int | None = None,
+    lookback: Callable[[IndicatorInputs], int] | None = None,
+    lookback_time: Callable[[IndicatorInputs], timedelta] | None = None,
 ) -> Callable[[ComputeFunction], ComputeFunction]:
     def decorate(compute: ComputeFunction) -> ComputeFunction:
-        _add(ServerIndicator(indicator_id, name, numeric_class, compute, signal_warmup=signal_warmup))
+        _add(
+            ServerIndicator(
+                indicator_id, name, numeric_class, compute, signal_warmup=signal_warmup, lookback=lookback, lookback_time=lookback_time
+            )
+        )
         return compute
 
     return decorate

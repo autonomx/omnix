@@ -17,7 +17,8 @@ from .indicators.engine import (
     relative_strength_index,
     simple_moving_average,
 )
-from .alert_conditions import IndicatorSource, validate_indicator_source
+from .alert_conditions import CompareBars, IndicatorSource, validate_indicator_source
+from .indicator_context import compare_bars_loader, instrument_session
 from .external_series import ExternalSeries
 from .indicators.external import external_indicator
 from .fundamental_snapshots import FUNDAMENTAL_METRICS, fundamental_metric, snapshot_for_instrument
@@ -92,7 +93,7 @@ class TradingScannerDefinition(BaseModel):
             raise ValueError("a scanner needs at least one filter rule")
         if len({rule.rule_id for rule in self.rules}) != len(self.rules):
             raise ValueError("scanner rule_ids must be unique")
-        required = max(scanner_rule_history(rule) for rule in self.rules)
+        required = max(scanner_rule_history(rule, self.interval) for rule in self.rules)
         if self.history_limit < required:
             raise ValueError(
                 f"history_limit {self.history_limit} is smaller than required metric history {required}"
@@ -163,11 +164,11 @@ BarsFetcher = Callable[[str, str, int, str | None], BarsResponse]
 ProgressCallback = Callable[[int], None]
 
 
-def scanner_rule_history(rule: TradingScannerRule) -> int:
+def scanner_rule_history(rule: TradingScannerRule, interval: str | None = None) -> int:
     if rule.metric == "indicator" and rule.source is not None:
         from .alerts_evaluation import _source_lookback
 
-        return _source_lookback(rule.source)
+        return _source_lookback(rule.source, interval)
     if rule.metric == "relative_volume":
         return rule.period + 1
     if rule.metric in {"high_distance_percent", "low_distance_percent"}:
@@ -299,6 +300,7 @@ def evaluate_scanner_dataset(
     run_id: str,
     response: BarsResponse,
     requested_binding_id: str | None,
+    compare: CompareBars | None = None,
 ) -> TradingScannerResult | None:
     bars = [bar for bar in response.bars if bar.is_final]
     metrics: dict[str, Decimal] = {}
@@ -312,7 +314,13 @@ def evaluate_scanner_dataset(
 
         # External-data indicators (TVP-0.2) read their metric series, once per instrument and metric.
         uses_external = any(rule.source is not None and external_indicator(rule.source.indicator_id) for rule in definition.rules)
-        shared = _BarValues(bars, ExternalSeries(response.instrument.instrument_id, definition.interval) if uses_external else None)
+        # Indicators get the instrument's session hours and compare symbols' bars, as on the chart (TVP-1.3).
+        shared = _BarValues(
+            bars,
+            ExternalSeries(response.instrument.instrument_id, definition.interval) if uses_external else None,
+            instrument_session(response.instrument.instrument_id),
+            compare,
+        )
     # A company's SEC fundamentals, once per instrument, when a rule reads them (TVP-9.1).
     fundamentals = (
         snapshot_for_instrument(response.instrument.instrument_id)
@@ -378,13 +386,17 @@ async def execute_scanner(
                 ),
                 timeout=definition.request_timeout_seconds,
             )
-            # Indicator rules are CPU work: off the event loop (TVP-9.1).
+            # Indicator rules are CPU work (and may fetch a compare symbol): off the event loop (TVP-9.1).
+            compare = compare_bars_loader(
+                lambda symbol, limit: fetch_bars(symbol, definition.interval, min(limit, 500), None).bars
+            )
             result = await asyncio.to_thread(
                 evaluate_scanner_dataset,
                 definition,
                 run_id,
                 response,
                 requested_binding,
+                compare,
             )
             completed += 1
             if progress:

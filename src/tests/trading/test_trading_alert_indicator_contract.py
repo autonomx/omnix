@@ -34,3 +34,21 @@ def test_every_line_a_chart_offers_is_a_server_output() -> None:
             except ValueError as exc:
                 problems.append(f"{entry['id']} {output}: {exc}")
     assert not problems, "\n".join(problems)
+
+
+def test_every_line_a_chart_offers_can_be_saved_as_an_alert() -> None:
+    """The write-time checks accept every offered line: its warm-up fits one history fetch, and it has values."""
+    from app.apps.trading.alert_conditions import AlertConditionSpec
+    from app.apps.trading.alerts_evaluation import validate_conditions_can_fire
+
+    contract = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    problems = []
+    for entry in [*contract["entries"], *contract.get("variants", [])]:
+        for output in entry["outputs"]:
+            source = {"kind": "indicator", "indicator_id": entry["id"], "inputs": entry["inputs"], "output": output}
+            condition = AlertConditionSpec.model_validate({"source": source, "operator": "greater_than", "target": {"kind": "value", "value": "-1e18"}})
+            try:
+                validate_conditions_can_fire([condition])
+            except ValueError as exc:
+                problems.append(f"{entry['id']} {output}: {exc}")
+    assert not problems, "\n".join(problems)
