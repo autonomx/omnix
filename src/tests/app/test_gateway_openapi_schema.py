@@ -17,6 +17,10 @@ from scripts.export_gateway_openapi import KERNEL_OWNER, ROUTE_OWNERS_FILE, norm
 _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
 _INTERNAL_JOB_LIST_PARAMETERS = {"limit", "full"}
 _DOCUMENTED_NON_JSON_RESPONSES = {
+    ("DELETE", "/api/trading/notifications/email"),
+    ("DELETE", "/api/trading/notifications/push/subscriptions/{subscription_id}"),
+    ("GET", "/api/trading/snapshots/{snapshot_id}.png"),
+    ("DELETE", "/api/trading/snapshots/{snapshot_id}"),
     ("DELETE", "/api/audiobook/projects/{project_id}"),
     ("GET", "/api/audiobook/projects/{project_id}/source/download"),
     ("GET", "/api/audiobook/projects/{project_id}/cover"),

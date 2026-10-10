@@ -29,6 +29,13 @@
   },
   {
     "default": null,
+    "description": "Controls fred api key for trading.",
+    "feature": "trading",
+    "name": "FRED_API_KEY",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls hermes api key for chat, providers, research, rpg, trading.",
     "feature": "chat, providers, research, rpg, trading",
     "name": "HERMES_API_KEY",
@@ -554,6 +561,13 @@
   },
   {
     "default": null,
+    "description": "Controls alpaca trading url for trading.",
+    "feature": "trading",
+    "name": "OMNIX_ALPACA_TRADING_URL",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls alpaca ws proxy for trading.",
     "feature": "trading",
     "name": "OMNIX_ALPACA_WS_PROXY",
@@ -928,6 +942,13 @@
     "description": "Controls ffmpeg for audiobook, tooling.",
     "feature": "audiobook, tooling",
     "name": "OMNIX_FFMPEG",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls fred api key for trading.",
+    "feature": "trading",
+    "name": "OMNIX_FRED_API_KEY",
     "type": "string"
   },
   {
@@ -1666,6 +1687,13 @@
     "type": "string"
   },
   {
+    "default": "OmnixTradingResearch/1.0 local-research contact=local@localhost",
+    "description": "Controls sec user agent for trading.",
+    "feature": "trading",
+    "name": "OMNIX_SEC_USER_AGENT",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls service token for security.",
     "feature": "security",
@@ -1820,6 +1848,13 @@
     "type": "boolean"
   },
   {
+    "default": "sip",
+    "description": "Controls trading breadth feed for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_BREADTH_FEED",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading deep recovery shadow monitor for trading.",
     "feature": "trading",
@@ -1936,6 +1971,20 @@
     "description": "Controls trading liquidation collector in tests for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "1",
+    "description": "Controls trading notification monitor for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_NOTIFICATION_MONITOR",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading notification monitor in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_NOTIFICATION_MONITOR_IN_TESTS",
     "type": "boolean"
   },
   {
@@ -2202,6 +2251,13 @@
     "description": "Controls tts warmup speaker for voice.",
     "feature": "voice",
     "name": "OMNIX_TTS_WARMUP_SPEAKER",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls vapid subject for trading.",
+    "feature": "trading",
+    "name": "OMNIX_VAPID_SUBJECT",
     "type": "string"
   },
   {
