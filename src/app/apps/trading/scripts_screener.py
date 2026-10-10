@@ -18,7 +18,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .scripts_service import ScriptRunService, ScriptServiceError, bars_for_script
-from .scripts_security import load_script_securities
 from .service import TradingMarketDataService
 
 logger = logging.getLogger(__name__)
@@ -106,6 +105,8 @@ def screen_script(
     slot = f"screen:{user_id}"
 
     def one(instrument_id: str) -> tuple[ScriptScreenRow, list[ScriptScreenOutput]]:
+        from .scripts_security import load_script_securities
+
         if clock() >= stop_at:
             return ScriptScreenRow(instrument_id=instrument_id, error="not screened: the screen's time ran out"), []
         try:

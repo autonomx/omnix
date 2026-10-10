@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asMarketBars, generateCandlestickDatasets } from './goldens/goldenDatasets';
+import { asMarketBars, generateCandlestickDatasets } from '../../../test/indicatorGoldenDatasets';
 import { CANDLESTICK_PATTERNS, candlestickPatternOutputs, detectCandlestickPatterns, selectedCandlestickPatterns } from './candlestickPatterns';
 import { calculateTradingViewBuiltInOutputs, tradingViewBuiltInDefinition, tradingViewBuiltInInputs, tradingViewBuiltInPlotDefinitions } from './tradingViewBuiltIns';
 

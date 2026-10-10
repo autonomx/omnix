@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -36,25 +37,36 @@ class ScriptAlertSeries:
     error: str | None = None
 
 
-_sources: OrderedDict[tuple[str, str, int], str] = OrderedDict()
+# Script versions never change, so an entry expires only to bound how long it is held.
+_SOURCES_TTL_SECONDS = 3_600.0
+_sources: OrderedDict[tuple[str, str, int], tuple[float, str]] = OrderedDict()
 _sources_guard = threading.Lock()
 
 
 def script_source_at(repository: TradingDocumentRepository, script_id: str, revision: int) -> str | None:
     """A script's source at a revision; versions never change, so they are kept in memory."""
     key = (str(repository.context.workspace_id), script_id, revision)
+    now = time.monotonic()
     with _sources_guard:
-        if key in _sources:
+        cached = _sources.get(key)
+        if cached is not None and now - cached[0] < _SOURCES_TTL_SECONDS:
             _sources.move_to_end(key)
-            return _sources[key]
+            return cached[1]
     version = repository.script_version_at(script_id, revision)
     if version is None:
         return None
     with _sources_guard:
-        _sources[key] = version["source"]
+        _sources[key] = (now, version["source"])
+        _sources.move_to_end(key)
         while len(_sources) > _SOURCES_KEPT:
             _sources.popitem(last=False)
     return version["source"]
+
+
+def clear_script_sources() -> None:
+    """Forget every cached script source (tests, or after a restore)."""
+    with _sources_guard:
+        _sources.clear()
 
 
 def series_from_result(result: dict[str, Any], output: str) -> ScriptAlertSeries:

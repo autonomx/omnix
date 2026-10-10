@@ -6,7 +6,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.runtime.features import FeatureContext
 
@@ -15,21 +15,17 @@ from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .alerts_watchlist import Target, plan_watchlist_pass, watchlist_members
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .providers.request_budget import upstream_of
-from .alerts import (
-    AlertEvaluationContext,
-    AlertOutcomeRecord,
-    TradingAlert,
-    TradingAlertRepository,
-    default_alert_repository,
-)
+from .alerts import AlertEvaluationContext, AlertOutcomeRecord, TradingAlert
+from .alerts_repository import TradingAlertRepository, default_alert_repository
 from .alerts_evaluation import evaluate_conditions, history_limit, required_bars
 from .alert_conditions import CompareBars
-from .alerts_scripts import ScriptAlertContext
-from .external_series import ExternalSeries
-from .indicator_context import compare_bars_loader, instrument_session, intrabar_loader
-from .indicators.intrabar import IntrabarLoader
-from .indicators.registry import TradingSession
 from .service import TradingMarketDataService, default_market_data_service
+
+if TYPE_CHECKING:
+    from .indicators.intrabar import IntrabarLoader
+    from .indicators.registry import TradingSession
+    from .alerts_scripts import ScriptAlertContext
+    from .external_series import ExternalSeries
 
 
 _MONITOR_STATE_KEY = "_omnix_trading_alert_monitor"
@@ -86,6 +82,12 @@ def _outcomes(
     return records
 
 
+def _external_series(instrument_id: str, interval: str) -> ExternalSeries:
+    from .external_series import ExternalSeries
+
+    return ExternalSeries(instrument_id, interval)
+
+
 class TradingAlertMonitor(ScheduledTradingMonitor):
     def __init__(
         self,
@@ -94,7 +96,7 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         document_repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
         interval_seconds: float | None = None,
-        external_series_factory: Callable[[str, str], ExternalSeries] = ExternalSeries,
+        external_series_factory: Callable[[str, str], ExternalSeries] = _external_series,
     ) -> None:
         self.repository_factory = repository_factory
         self.external_series_factory = external_series_factory
@@ -111,6 +113,9 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
         self.unreadable_alert_ids: list[str] = []
 
     async def run_once(self) -> int:
+        from .alerts_scripts import ScriptAlertContext
+        from .indicator_context import compare_bars_loader, instrument_session, intrabar_loader
+
         repository = self.repository_factory()
         listing = await asyncio.to_thread(repository.list_alerts_report, 500)
         alerts = listing.alerts

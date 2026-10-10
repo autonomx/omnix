@@ -23,7 +23,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .alert_conditions import (
     MOVING_OPERATORS,
@@ -41,11 +41,11 @@ from .alert_conditions import (
     condition_sources,
     indicator_output_profile,
 )
-from .indicators.external import external_indicator
-from .indicators.intrabar import IntrabarLoader, intrabar_values, is_intrabar_indicator
-from .indicators.intrabar import lookback_time as intrabar_lookback_time
-from .indicators.registry import BarSeries, TradingSession, server_indicator
 from .providers.bar_semantics import interval_duration
+
+if TYPE_CHECKING:
+    from .indicators.intrabar import IntrabarLoader
+    from .indicators.registry import BarSeries, TradingSession
 
 HISTORY_LIMIT_MAX = 1000
 _HUNDRED = Decimal("100")
@@ -247,6 +247,8 @@ class _BarValues:
         self._script_cache: dict[str, Any] = {}
 
     def series(self) -> BarSeries:
+        from .indicators.registry import BarSeries
+
         if self._series is None:
             self._series = BarSeries.from_bars(self.bars)
         return self._series
@@ -317,6 +319,9 @@ class _BarValues:
         return None if value is None else _decimal(value)
 
     def _compute_indicator(self, source: IndicatorSource, anchor_time: str | None) -> dict[int, Any]:
+        from .indicators.external import external_indicator
+        from .indicators.intrabar import intrabar_values, is_intrabar_indicator
+
         if is_intrabar_indicator(source.indicator_id):
             interval = str(getattr(self.bars[0], "interval", "")) if self.bars else ""
             return intrabar_values(source.indicator_id, self.bars, interval, source.inputs.params or {}, self.session, self.intrabar)
@@ -466,6 +471,10 @@ def _bars_back(duration: timedelta, interval: str | None) -> int:
 
 
 def _source_lookback(source: Any, interval: str | None = None) -> int:
+    from .indicators.external import external_indicator
+    from .indicators.intrabar import is_intrabar_indicator, lookback_time as intrabar_lookback_time
+    from .indicators.registry import server_indicator
+
     if isinstance(source, ChangePercentSource):
         return source.lookback_bars
     if isinstance(source, ScriptSource):
@@ -538,6 +547,10 @@ def validate_conditions_can_fire(conditions: Sequence[AlertConditionSpec], inter
     output must produce a value; and the bars the conditions need, plus the
     previous bar and room for a forming bar, must fit in one history fetch.
     """
+    from .indicators.external import external_indicator
+    from .indicators.intrabar import is_intrabar_indicator
+    from .indicators.registry import server_indicator
+
     for condition in conditions:
         for source in condition_sources(condition):
             if not isinstance(source, IndicatorSource) or external_indicator(source.indicator_id) is not None:

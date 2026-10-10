@@ -1222,6 +1222,11 @@ export class TradingChartAdapter {
       else if (markers) this.indicatorMarkerPlugins.set(output.key, createSeriesMarkers(series as ISeriesApi<'Line'>, markers) as ISeriesMarkersPluginApi<Time>);
       else if (plugin) { plugin.detach(); this.indicatorMarkerPlugins.delete(output.key); }
     }
+    this.applyIndicatorPanes(paneIds);
+  }
+
+  /** Indicator panes after their outputs change: scales, kept heights and ranges, and panes left empty. */
+  private applyIndicatorPanes(paneIds: string[]): void {
     this.indicatorPaneIds = paneIds;
     for (const [index, paneId] of paneIds.entries()) {
       const pane = this.chart.panes()[index + 1];

@@ -1,7 +1,7 @@
 import type { PaperAccountSnapshot, PaperOrder, PaperOrderInput } from './paperTypes';
 import { tradingReplayApi, type ReplayExecutionMarketBar } from './tradingReplayApi';
 
-type ReplayResult = {
+export type ReplayResult = {
   snapshot: PaperAccountSnapshot;
   order: PaperOrder;
 };

@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { dropShadowGlow, paintShapes, readCanvasPaintTheme } from './canvasShapes';
 import { DrawingCanvasPrimitive, type CanvasDrawingEntry } from './DrawingCanvasPrimitive';
-import { runTool } from './tools/testing';
+import { runTool } from '../../../test/drawingTools';
 import { drawingToolDefinition } from './tools/registry';
 
 function recordingContext() {

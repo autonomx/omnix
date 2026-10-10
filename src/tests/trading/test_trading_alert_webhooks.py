@@ -228,13 +228,19 @@ def test_internationalised_hostnames_are_sent_in_idna_form() -> None:
 
 
 def test_a_slow_lookup_is_retried_later() -> None:
+    answered = threading.Event()
+
     def slow(host: str, port: int) -> list[str]:
-        time.sleep(0.5)
+        # Answers only after the sender has given up on it.
+        answered.wait(5)
         return ["93.184.216.34"]
 
     webhook, _ = sender(lambda request: httpx.Response(200), resolver=slow)
     webhook.deadline = 0.2
-    assert webhook.send(delivery()) == DeliveryResult("retry", "dns_timeout")
+    try:
+        assert webhook.send(delivery()) == DeliveryResult("retry", "dns_timeout")
+    finally:
+        answered.set()
 
 
 def test_one_deadline_bounds_a_peer_that_drips_its_headers() -> None:
@@ -255,7 +261,9 @@ def test_one_deadline_bounds_a_peer_that_drips_its_headers() -> None:
                     connection.sendall(bytes([byte]))
                 except OSError:
                     return
-                time.sleep(0.05)
+                # A byte at a time, until the test ends.
+                if stop.wait(0.05):
+                    return
 
     threading.Thread(target=drip, daemon=True).start()
     request = httpx.Request("POST", f"http://127.0.0.1:{port}/", content=b"x", extensions={"timeout": httpx.Timeout(0.2).as_dict()})
@@ -302,13 +310,16 @@ def test_a_response_is_returned_without_reading_its_body() -> None:
             connection.recv(65536)
             # Headers, then a body far bigger than anything the sender should read.
             connection.sendall(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
-            time.sleep(0.2)
+            # The connection stays open until the client has its answer.
+            answered.wait(5)
 
+    answered = threading.Event()
     threading.Thread(target=answer, daemon=True).start()
     request = httpx.Request("POST", f"http://127.0.0.1:{port}/hook", content=b"{}", extensions={"timeout": httpx.Timeout(2).as_dict()})
     try:
         response = post_within(request, 2.0)
     finally:
+        answered.set()
         server.close()
     assert response.status_code == 204
 

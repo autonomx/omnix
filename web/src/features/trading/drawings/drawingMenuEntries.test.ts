@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TradingDrawing } from './drawingCommands';
 import { drawingMenuEntries, offeredAlertLevels } from './TradingDrawingOverlay';
 import { staticChartAccess } from './tools/scene';
-import { pointAt, testBarSeries, testProjector, testServices } from './tools/testing';
+import { pointAt, testBarSeries, testProjector, testServices } from '../../../test/drawingTools';
 import type { DrawingToolServices } from './tools/types';
 
 function drawing(toolType: TradingDrawing['toolType'], pixels: [number, number][]): TradingDrawing {

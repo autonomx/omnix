@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -18,12 +18,11 @@ from .indicators.engine import (
     simple_moving_average,
 )
 from .alert_conditions import CompareBars, IndicatorSource, validate_indicator_source
-from .indicator_context import FetchBarsService, compare_bars_loader, instrument_session, intrabar_loader
-from .indicators.intrabar import IntrabarLoader
-from .external_series import ExternalSeries
-from .indicators.external import external_indicator
 from .fundamental_snapshots import FUNDAMENTAL_METRICS, fundamental_metric, snapshot_for_instrument
 from .models import BarsResponse, MarketBar
+
+if TYPE_CHECKING:
+    from .indicators.intrabar import IntrabarLoader
 
 
 # TVP-9.1: any registry indicator line ("indicator", with a source), relative volume, gap % and the distance
@@ -304,6 +303,10 @@ def evaluate_scanner_dataset(
     compare: CompareBars | None = None,
     intrabar: IntrabarLoader | None = None,
 ) -> TradingScannerResult | None:
+    from .external_series import ExternalSeries
+    from .indicator_context import instrument_session
+    from .indicators.external import external_indicator
+
     bars = [bar for bar in response.bars if bar.is_final]
     metrics: dict[str, Decimal] = {}
     formulas: dict[str, str] = {}
@@ -373,6 +376,8 @@ async def execute_scanner(
     completed = 0
 
     async def scan(instrument_id: str) -> TradingScannerResult | None:
+        from .indicator_context import FetchBarsService, compare_bars_loader, intrabar_loader
+
         nonlocal completed
         if cancellation.is_set():
             return None

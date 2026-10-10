@@ -1,13 +1,14 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperRiskOrderInput, PaperRiskPreview, PaperSide, PaperTimeInForce } from './paperTypes';
-import { localDateTimeToIso, paperOrderTerms, paperOrderTypeLabel, ticketOrderTypes, timeInForceLabels } from './paperOrderTypes';
+import { localDateTimeToIso, paperOrderTypeLabel, ticketOrderTypes } from './paperOrderTypes';
 import { tradingApi, type TradingQuote } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
 import { createReplaySnapshot } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { applyPaperTicketPrefill, isRiskEntry, usePaperTicketPrefill } from './paperTicketRequests';
 import { useTradingStore } from './tradingStore';
+import { PaperAccountActivity, PaperAdvancedOrderFields, PaperOrderMetrics, displaySymbol, number } from './TradingPaperTicketParts';
 import './TradingPaper.css';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
@@ -21,23 +22,11 @@ type PaperConfirmation = {
   price: string;
 };
 
-function displaySymbol(instrumentId: string): string {
-  const raw = instrumentId.split(':').at(-1) ?? instrumentId;
-  return raw.replace('-', '/');
-}
-
 function displayMarket(instrumentId: string): string {
   const parts = instrumentId.split(':');
   const venue = parts[1] ?? 'Market';
   const rawSymbol = parts.at(-1) ?? instrumentId;
   return `${venue}:${rawSymbol.replaceAll('-', '')}`;
-}
-
-function number(value?: string | null, digits = 2): string {
-  const parsed = Number(value);
-  return Number.isFinite(parsed)
-    ? parsed.toLocaleString(undefined, { maximumFractionDigits: digits })
-    : '—';
 }
 
 function parsePositive(value: string): number | null {
@@ -524,57 +513,13 @@ export function TradingPaperPanel({
             </label>
           ) : null}
 
-          {orderType === 'stop_limit' ? (
-            <label className="trading-paper-price-field">
-              Limit price
-              <input aria-label="Limit price" inputMode="decimal" value={limitPrice} onChange={(event) => setLimitPrice(event.target.value)} placeholder={quotePrice} />
-            </label>
-          ) : null}
+          <PaperAdvancedOrderFields
+            orderType={orderType} quotePrice={quotePrice} limitPrice={limitPrice} setLimitPrice={setLimitPrice}
+            trailValue={trailValue} setTrailValue={setTrailValue} trailUnit={trailUnit} setTrailUnit={setTrailUnit}
+            timeInForceEnabled={timeInForceEnabled} timeInForce={timeInForce} setTimeInForce={setTimeInForce} expiresAt={expiresAt} setExpiresAt={setExpiresAt}
+          />
 
-          {orderType === 'trailing_stop' ? (
-            <div className="trading-paper-field-pair">
-              <label className="trading-paper-price-field">
-                {trailUnit === 'percent' ? 'Trail, %' : 'Trail, price'}
-                <input aria-label="Trail distance" inputMode="decimal" value={trailValue} onChange={(event) => setTrailValue(event.target.value)} />
-              </label>
-              <label className="trading-paper-price-field">
-                Trail by
-                <select aria-label="Trail unit" value={trailUnit} onChange={(event) => setTrailUnit(event.target.value as 'amount' | 'percent')}>
-                  <option value="amount">Price</option>
-                  <option value="percent">Percent</option>
-                </select>
-              </label>
-            </div>
-          ) : null}
-
-          {timeInForceEnabled ? (
-            <div className="trading-paper-field-pair">
-              <label className="trading-paper-price-field">
-                Time in force
-                <select aria-label="Time in force" value={timeInForce} onChange={(event) => setTimeInForce(event.target.value as PaperTimeInForce)}>
-                  <option value="gtc">{timeInForceLabels.gtc} · until cancelled</option>
-                  <option value="day">{timeInForceLabels.day} · session close</option>
-                  <option value="gtd">{timeInForceLabels.gtd} · until a date</option>
-                </select>
-              </label>
-              {timeInForce === 'gtd' ? (
-                <label className="trading-paper-price-field">
-                  Expires
-                  <input aria-label="Order expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
-                </label>
-              ) : null}
-            </div>
-          ) : null}
-
-          <dl className="trading-paper-metrics">
-            <div><dt>Trade value</dt><dd>{tradeValue === null ? '—' : `${number(String(tradeValue))} ${activeAccount.base_currency}`}</dd></div>
-            <div><dt>Available funds</dt><dd>{availableFunds == null ? '—' : `${number(availableFunds)} ${activeAccount.base_currency}`}</dd></div>
-            <div><dt>Reserved funds</dt><dd>{reservedFunds == null ? '—' : `${number(reservedFunds)} ${activeAccount.base_currency}`}</dd></div>
-            {riskManagedEntry ? <div><dt>Risk at stop</dt><dd>{riskPreview ? `${number(riskPreview.actual_risk_dollars)} ${activeAccount.base_currency} · ${number(riskPreview.actual_risk_pct, 3)}%` : '—'}</dd></div> : null}
-            {riskManagedEntry ? <div><dt>Open risk</dt><dd>{riskPreview ? `${number(riskPreview.aggregate_open_risk_dollars)} ${activeAccount.base_currency} · ${number(riskPreview.aggregate_open_risk_pct, 3)}%` : '—'}</dd></div> : null}
-            {riskManagedEntry ? <div><dt>Buying power after</dt><dd>{riskPreview ? `${number(riskPreview.buying_power_after)} ${activeAccount.base_currency}` : '—'}</dd></div> : null}
-            {riskManagedEntry ? <div><dt>Execution check</dt><dd>{riskPreview ? `${riskPreview.execution_eligible ? 'Eligible' : 'Blocked'} · ${riskPreview.spread_bps == null ? 'spread —' : `${number(riskPreview.spread_bps)} bps`} · ${riskPreview.freshness_mode}` : 'Awaiting server preview'}</dd></div> : null}
-          </dl>
+          <PaperOrderMetrics tradeValue={tradeValue} availableFunds={availableFunds} reservedFunds={reservedFunds} currency={activeAccount.base_currency} riskManagedEntry={riskManagedEntry} riskPreview={riskPreview} />
 
           <details className="trading-paper-exits" open>
             <summary><strong>Exits</strong><span aria-hidden="true">⌃</span></summary>
@@ -621,37 +566,12 @@ export function TradingPaperPanel({
       )}
 
       {displayedSnapshot ? (
-        <div className="trading-paper-activity">
-          <details>
-            <summary>Positions <span>{displayedSnapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).length}</span></summary>
-            <ul className="trading-paper-list">
-              {displayedSnapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).map((positionItem) => (
-                <li key={positionItem.instrument_id}><strong>{displaySymbol(positionItem.instrument_id)}</strong><span>{positionItem.quantity} @ {positionItem.average_cost}</span></li>
-              ))}
-              {displayedSnapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).length === 0 ? <li className="empty">No open positions.</li> : null}
-            </ul>
-          </details>
-          <details>
-            <summary>Open orders <span>{displayedSnapshot.open_orders.length}</span></summary>
-            <ul className="trading-paper-list">
-              {displayedSnapshot.open_orders.map((order) => (
-                <li key={order.order_id}>
-                  <strong>{order.side} {order.quantity} · {paperOrderTypeLabel(order.order_type)}</strong>
-                  <span>{displaySymbol(order.instrument_id)} · {paperOrderTerms(order)}</span>
-                  <span>{order.order_type === 'trailing_stop' && order.stop_price ? `Stop ${number(order.stop_price)}` : 'Awaiting fill'}</span>
-                </li>
-              ))}
-              {displayedSnapshot.open_orders.length === 0 ? <li className="empty">No open orders.</li> : null}
-            </ul>
-          </details>
-          <details>
-            <summary>Account actions</summary>
-            <div className="trading-paper-danger-actions">
-              <button type="button" disabled={replayMode} onClick={() => void mutate(() => tradingPaperApi.resetAccount(displayedSnapshot.account, initialCash), displayedSnapshot.account.account_id)}>Reset</button>
-              <button type="button" disabled={replayMode || !displayedSnapshot.account.enabled} onClick={() => void mutate(() => tradingPaperApi.archiveAccount(displayedSnapshot.account), displayedSnapshot.account.account_id)}>Archive</button>
-            </div>
-          </details>
-        </div>
+        <PaperAccountActivity
+          snapshot={displayedSnapshot}
+          replayMode={replayMode}
+          onReset={() => void mutate(() => tradingPaperApi.resetAccount(displayedSnapshot.account, initialCash), displayedSnapshot.account.account_id)}
+          onArchive={() => void mutate(() => tradingPaperApi.archiveAccount(displayedSnapshot.account), displayedSnapshot.account.account_id)}
+        />
       ) : null}
 
       {confirmation ? (

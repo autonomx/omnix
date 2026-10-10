@@ -15,16 +15,16 @@
   .trading-strategy-chart{display:block;width:100%;height:140px;margin-bottom:6px}
   .trading-strategy-chart.is-drawdown{height:60px}
   .trading-strategy-chart path{fill:none;stroke-width:1.5;vector-effect:non-scaling-stroke}
-  .trading-strategy-chart .is-equity{stroke:#2962ff}
-  .trading-strategy-chart .is-buy-hold{stroke:#9598a1;stroke-dasharray:4 3}
-  .trading-strategy-chart.is-drawdown path{fill:color-mix(in srgb, #f23645 30%, transparent);stroke:#f23645}
+  .trading-strategy-chart .is-equity{stroke:var(--c-blue-540)}
+  .trading-strategy-chart .is-buy-hold{stroke:var(--c-slate-680);stroke-dasharray:4 3}
+  .trading-strategy-chart.is-drawdown path{fill:color-mix(in srgb, var(--c-red-640) 30%, transparent);stroke:var(--c-red-640)}
   .trading-strategy-table-scroll{overflow:auto}
   .trading-strategy-table-scroll table{width:100%;border-collapse:collapse}
   .trading-strategy-table-scroll :is(th,td){padding:4px 8px;border-bottom:1px solid var(--c-neutral-910);text-align:right;white-space:nowrap}
   .trading-strategy-table-scroll :is(th[scope='row'],td:first-child){text-align:left}
   .trading-strategy-table-scroll small{color:var(--c-slate-630)}
-  .trading-strategy-tester .is-up{color:#089981}
-  .trading-strategy-tester .is-down{color:#f23645}
+  .trading-strategy-tester .is-up{color:var(--c-teal-600)}
+  .trading-strategy-tester .is-down{color:var(--c-red-640)}
   .trading-strategy-note{margin:4px 0;color:var(--c-slate-630);font-size:11px}
   :root[data-omnix-appearance='dark'] :is(.trading-strategy-tabs,.trading-strategy-table-scroll th,.trading-strategy-table-scroll td),:root:not([data-omnix-appearance]) :is(.trading-strategy-tabs,.trading-strategy-table-scroll th,.trading-strategy-table-scroll td){border-color:color-mix(in srgb, var(--c-blue-660) 14%, transparent)}
 }

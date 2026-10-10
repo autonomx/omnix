@@ -1,3 +1,4 @@
+-- omnix-migration: phase=expand transactional=true
 -- Market reference data is shared by every workspace: public company facts,
 -- filings and market-wide statistics fetched from providers, with no workspace,
 -- user or account data. Record why these tables are not tenant-isolated.

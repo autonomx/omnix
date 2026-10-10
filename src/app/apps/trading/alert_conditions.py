@@ -18,22 +18,14 @@ import math
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from functools import lru_cache
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .indicators.external import external_available_for, external_indicator, external_scope_name
-from .indicators.intrabar import intrabar_output_keys, is_intrabar_indicator, validate_intrabar_params
-from .indicators.registry import (
-    BarSeries,
-    IndicatorInputs,
-    IndicatorOutputSeries,
-    TradingSession,
-    compute_indicator,
-    server_indicator,
-)
-from .indicators.sources import accepts_source, compute_on_source, find_output
+from app.caching.bounded_cache import bounded_lru_cache
+
+if TYPE_CHECKING:
+    from .indicators.registry import BarSeries, IndicatorInputs, IndicatorOutputSeries, TradingSession
 
 MAX_ALERT_CONDITIONS = 5
 
@@ -120,6 +112,8 @@ class IndicatorSourceInputs(BaseModel):
         return self
 
     def registry_inputs(self, anchor_time: str | None = None, session: TradingSession | None = None) -> IndicatorInputs:
+        from .indicators.registry import IndicatorInputs
+
         return IndicatorInputs(
             period=self.period,
             fast_period=self.fast_period,
@@ -279,8 +273,10 @@ class _SyntheticBar:
         self.volume = 1000 + (index % 11) * 37
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=86_400.0)
 def _synthetic_series() -> BarSeries:
+    from .indicators.registry import BarSeries
+
     bars: list[_SyntheticBar] = []
     previous = 100.0
     for index in range(_SYNTHETIC_BARS):
@@ -305,7 +301,7 @@ def _inputs_key(inputs: IndicatorSourceInputs) -> tuple[Any, ...]:
 
 
 # A compare symbol's bars covering the bars an indicator runs on (see ``indicator_context.compare_bars_loader``).
-CompareBars = Callable[[str, BarSeries], "BarSeries | None"]
+CompareBars = Callable[[str, "BarSeries"], "BarSeries | None"]
 
 
 def compute_source_indicator(
@@ -322,6 +318,9 @@ def compute_source_indicator(
     ``session`` is the instrument's session calendar (None: UTC days); ``compare`` loads a compare symbol's bars.
     A source output the source indicator doesn't produce gives no outputs."""
 
+    from .indicators.registry import compute_indicator
+    from .indicators.sources import compute_on_source, find_output
+
     def run(indicator: str, indicator_inputs: IndicatorSourceInputs, anchor: str | None) -> list[IndicatorOutputSeries]:
         symbol = indicator_inputs.compare_symbol
         compare_bars = compare(symbol, bars) if compare is not None and symbol else None
@@ -336,7 +335,7 @@ def compute_source_indicator(
     return compute_on_source(indicator_id, bars, inputs.registry_inputs(anchor_time, session), source)
 
 
-@lru_cache(maxsize=512)
+@bounded_lru_cache(max_entries=512, ttl_seconds=86_400.0)
 def _output_profile(indicator_id: str, inputs_key: tuple[Any, ...]) -> tuple[tuple[str, int | None], ...]:
     period, fast, slow, signal, deviations, anchor_time, source, params, compare_symbol = inputs_key
     outputs = compute_source_indicator(
@@ -373,6 +372,11 @@ def indicator_output_profile(source: IndicatorSource) -> tuple[tuple[str, int | 
 
 
 def validate_indicator_source(source: IndicatorSource) -> None:
+    from .indicators.external import external_indicator
+    from .indicators.intrabar import intrabar_output_keys, is_intrabar_indicator, validate_intrabar_params
+    from .indicators.registry import server_indicator
+    from .indicators.sources import accepts_source
+
     if is_intrabar_indicator(source.indicator_id):
         # Volume Delta and CVD (TVP-6.4): computed from lower-timeframe bars, with a lower interval and an anchor.
         if source.inputs.source is not None:
@@ -425,6 +429,8 @@ def validate_conditions_against_registry(conditions: list[AlertConditionSpec]) -
 
 def validate_external_scope(instrument_id: str, conditions: list[AlertConditionSpec]) -> None:
     """External-data indicators only on the instruments their data exists for (open interest on Binance crypto...)."""
+    from .indicators.external import external_available_for, external_indicator, external_scope_name
+
     for condition in conditions:
         for source in condition_sources(condition):
             if isinstance(source, IndicatorSource) and external_indicator(source.indicator_id) is not None:

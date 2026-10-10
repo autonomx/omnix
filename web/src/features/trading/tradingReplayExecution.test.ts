@@ -96,7 +96,8 @@ function startReplay(bars: MarketBar[], startIndex: number, seed: TestSnapshot, 
   return hook;
 }
 
-describe('replay account execution queue', () => {
+/** A slow replay kernel on fake timers, cleared around every test. */
+function mockReplayQueue(): void {
   beforeEach(() => {
     vi.useFakeTimers();
     replay().clear();
@@ -110,6 +111,10 @@ describe('replay account execution queue', () => {
     vi.useRealTimers();
     vi.clearAllMocks();
   });
+}
+
+describe('replay account execution queue', () => {
+  mockReplayQueue();
 
   it('advances a working account through every bar, in order, each on the previous result', async () => {
     const bars = series(12);
@@ -250,6 +255,10 @@ describe('replay account execution queue', () => {
     expect(await outcome).toMatch(/not placed/);
     expect(replayApi.placeExecutionOrder).not.toHaveBeenCalled();
   });
+});
+
+describe('replay account execution queue', () => {
+  mockReplayQueue();
 
   it('ignores a failure from a request of an earlier session', async () => {
     const bars = series(10);

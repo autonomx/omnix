@@ -20,6 +20,7 @@ const crypto: CanonicalInstrument = {
   price_scale: 100,
   minimum_tick: '0.01',
   status: 'active',
+  name: null,
 };
 
 const stock: CanonicalInstrument = {
@@ -36,6 +37,7 @@ const stock: CanonicalInstrument = {
   price_scale: 100,
   minimum_tick: '0.01',
   status: 'active',
+  name: null,
 };
 
 const commodity: CanonicalInstrument = {
@@ -52,6 +54,7 @@ const commodity: CanonicalInstrument = {
   price_scale: 100,
   minimum_tick: '0.01',
   status: 'active',
+  name: null,
 };
 
 const unemployment: CanonicalInstrument = {

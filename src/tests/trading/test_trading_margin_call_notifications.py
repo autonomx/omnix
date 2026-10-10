@@ -7,7 +7,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from app.apps.trading.alerts_delivery import ClaimedDelivery
-from app.apps.trading.alerts_notify import EmailSettings, PushSender, alert_email
+from app.apps.trading.alerts_notify import EmailSettings
+from app.apps.trading.alerts_notify_senders import PushSender, alert_email
 from app.apps.trading.paper import MARGIN_CALL_ORDER_PREFIX, PaperAccount, PaperAccountCreate, PaperAccountSettings, PaperOrder
 from app.apps.trading.paper_margin_notifications import PaperMarginCallNotifier, margin_call_message, margin_call_orders
 

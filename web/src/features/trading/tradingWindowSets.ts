@@ -7,6 +7,7 @@
  * opens one window per click) or to bring its tabs back.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTicker } from '../../shared/timers';
 import type { TradingTabState } from './tradingStore';
 import { HEARTBEAT_MS, PRESENCE_TTL_MS } from './windowPresence';
 
@@ -103,6 +104,11 @@ export function goneWindows(workspaceId: string, now = Date.now()): Array<{ wind
     .map(([windowKey, tabIds]) => ({ windowKey, tabIds }));
 }
 
+/** The workspace's window set as stored now: its assignments and its gone windows. */
+function storedWindowSet(workspaceId: string): { assignments: Record<string, string[]>; gone: ReturnType<typeof goneWindows> } {
+  return { assignments: windowAssignments(workspaceId), gone: goneWindows(workspaceId) };
+}
+
 export function windowUrl(workspaceId: string, tabId: string, windowKey: string, base: Pick<Location, 'origin' | 'pathname'> = window.location): string {
   const url = new URL(base.pathname, base.origin);
   url.searchParams.set('workspace', workspaceId);
@@ -145,36 +151,38 @@ type WindowTabsInput = {
  */
 export function useWindowTabs({ workspaceId, tabs, activeTabId, setActiveTab, ready }: WindowTabsInput) {
   const windowKey = useMemo(() => currentWindowKey(), []);
-  const [version, setVersion] = useState(0);
+  // The workspace's window set as stored on this computer, read again on every change and now and then (a popped
+  // window that stops heartbeating is gone).
+  const [stored, setStored] = useState(() => storedWindowSet(workspaceId));
   useEffect(() => {
+    const refresh = () => setStored(storedWindowSet(workspaceId));
     const changed = (event: Event) => {
       if (event instanceof StorageEvent && event.key !== SETS_KEY && event.key !== ALIVE_KEY) return;
-      setVersion((value) => value + 1);
+      refresh();
     };
+    refresh();
     window.addEventListener('storage', changed);
     window.addEventListener(CHANGED_EVENT, changed);
-    // The main window looks again now and then: a popped window that stops heartbeating is gone.
-    const timer = window.setInterval(() => setVersion((value) => value + 1), HEARTBEAT_MS);
+    const stopTicker = startTicker(refresh, HEARTBEAT_MS);
     return () => {
       window.removeEventListener('storage', changed);
       window.removeEventListener(CHANGED_EVENT, changed);
-      window.clearInterval(timer);
+      stopTicker();
     };
-  }, []);
+  }, [workspaceId]);
   useEffect(() => {
     if (windowKey === MAIN_WINDOW) return undefined;
     heartbeatWindow(windowKey);
-    const timer = window.setInterval(() => heartbeatWindow(windowKey), HEARTBEAT_MS);
+    const stopTicker = startTicker(() => heartbeatWindow(windowKey), HEARTBEAT_MS);
     const closing = (event: PageTransitionEvent) => { if (!event.persisted) heartbeatWindow(windowKey, 0); };
     window.addEventListener('pagehide', closing);
     return () => {
-      window.clearInterval(timer);
+      stopTicker();
       window.removeEventListener('pagehide', closing);
     };
   }, [windowKey]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` re-reads the shared assignments
-  const assignments = useMemo(() => windowAssignments(workspaceId), [workspaceId, version]);
+  const assignments = stored.assignments;
   const visibleTabs = useMemo(() => tabsForWindow(tabs, assignments, windowKey), [tabs, assignments, windowKey]);
 
   useEffect(() => {
@@ -205,11 +213,7 @@ export function useWindowTabs({ workspaceId, tabs, activeTabId, setActiveTab, re
     // A popped window left without tabs closes (a window the page opened itself may).
     if (windowKey !== MAIN_WINDOW && (windowAssignments(workspaceId)[windowKey] ?? []).length === 0) window.close();
   }, [windowKey, workspaceId]);
-  const gone = useMemo(
-    () => (windowKey === MAIN_WINDOW && ready ? goneWindows(workspaceId) : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` re-checks the heartbeats
-    [ready, windowKey, workspaceId, version],
-  );
+  const gone = useMemo(() => (windowKey === MAIN_WINDOW && ready ? stored.gone : []), [ready, windowKey, stored]);
   return {
     windowKey,
     visibleTabs,

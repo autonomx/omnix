@@ -183,7 +183,9 @@ describe('chart-native Trading alerts', () => {
     expect(formatAlertThreshold('73')).toBe('73.00');
     expect(formatAlertThreshold('')).toBe('');
   });
+});
 
+describe('chart-native Trading alerts', () => {
   it('persists the indicator identity when an alert is changed to RSI', () => {
     const input = chartAlertUpdateInput(baseAlert, {
       condition_type: 'indicator_cross_below',

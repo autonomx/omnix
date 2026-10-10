@@ -13,9 +13,9 @@
   .trading-option-chain tr.is-call-itm td:nth-child(-n+6),.trading-option-chain tr.is-put-itm td:nth-last-child(-n+6){background:color-mix(in srgb, var(--c-yellow-840) 6%, transparent)}
   .trading-option-smile svg,.trading-option-pnl{width:100%;height:auto}
   .trading-option-smile text,.trading-option-pnl text{fill:var(--c-slate-630);font-size:10px}
-  .trading-option-smile .calls,.trading-option-pnl .expiry{stroke:#2962ff;stroke-width:2;color:#2962ff}
-  .trading-option-smile .puts{stroke:#ff9800;stroke-width:2;color:#ff9800}
-  .trading-option-pnl .dated{stroke:#9c27b0;stroke-width:1.5;stroke-dasharray:4 3}
+  .trading-option-smile .calls,.trading-option-pnl .expiry{stroke:var(--c-blue-540);stroke-width:2;color:var(--c-blue-540)}
+  .trading-option-smile .puts{stroke:var(--c-amber-770);stroke-width:2;color:var(--c-amber-770)}
+  .trading-option-pnl .dated{stroke:var(--c-purple-500);stroke-width:1.5;stroke-dasharray:4 3}
   .trading-option-smile .spot,.trading-option-pnl .spot{stroke:var(--c-slate-630);stroke-dasharray:3 3}
   .trading-option-pnl .zero{stroke:var(--c-neutral-910)}
   .trading-option-builder{display:flex;flex-direction:column;gap:8px}

@@ -714,12 +714,8 @@ npm run web:build</code></pre></div>
 <th>Behaviour</th>
 </tr></thead><tbody>
 <tr>
-<td>unset</td>
-<td>No sign-in, as before. The gateway logs <code>authentication_not_enforced</code> at startup.</td>
-</tr>
-<tr>
-<td><code>local</code></td>
-<td>Sign-in required. One local owner account (<code>user:local</code>) signs in with the install credential or a launcher link.</td>
+<td>unset or <code>local</code></td>
+<td>Sign-in required (the default since 2026-10-06). Accounts with email and password, guests, invite links and Google sign-in, as the account settings below allow. The owner (<code>user:local</code>) is signed in automatically from the launcher and can always use the install credential.</td>
 </tr>
 <tr>
 <td><code>oidc</code></td>
@@ -730,13 +726,55 @@ npm run web:build</code></pre></div>
 <td>No sign-in. Startup fails unless <code>OMNIX_ENV=test</code>, or <code>OMNIX_ENV=development</code> with a loopback <code>OMNIX_BIND_HOST</code>.</td>
 </tr>
 </tbody></table></div>
-<p>Leaving the variable unset keeps existing installations working unchanged. Making <code>local</code> the default is a separate, approved change (roadmap WP-4.1).</p>
+<p>With sign-in on, outbound provider URLs (LM Studio, OpenAI-compatible servers) may use loopback, but a private-network address such as <code>192.168.1.20</code> needs <code>OMNIX_ALLOWED_PRIVATE_NETWORKS</code> (for example <code>192.168.1.0/24</code>). Every account can configure providers in its own workspace, so the LAN stays closed unless you open it.</p>
 <p>When sign-in is required, every route needs a session except <code>/health</code>, <code>/ready</code>, <code>/api/health</code> and <code>/api/auth/*</code>. Unauthenticated requests get 401; WebSockets close with code 1008. Internal <code>/internal/*</code> routes accept the service token instead. Until run-scoped tokens land (WP-4.6), the Pi agent extensions reach their broker and model-gateway routes from loopback without a session.</p>
 <p>Sessions use the <code>omnix_session</code> cookie (HttpOnly, <code>SameSite=Strict</code>). They end after 12 idle hours (<code>OMNIX_AUTH_SESSION_IDLE_HOURS</code>) or 7 days (<code>OMNIX_AUTH_SESSION_MAX_DAYS</code>), whichever comes first. When the browser reaches Omnix over HTTPS (directly or through an ingress that sends <code>X-Forwarded-Proto: https</code>) the cookies are <code>Secure</code> and the session cookie is named <code>__Host-omnix_session</code>, which no other host or path can set or read; <code>OMNIX_AUTH_COOKIE_SECURE=true</code> forces this for every request. Browser requests that change state must echo the <code>omnix_csrf</code> cookie in <code>X-Omnix-CSRF</code>; the web app does this automatically. Missing or wrong values get 403 <code>csrf_failed</code>.</p>
-<p>Settings → Overview lists the signed-in user&#x27;s sessions (<code>GET /api/auth/sessions</code>). Signing out one other session or all others (<code>POST /api/auth/sessions/revoke</code>) needs proof of identity again: the install credential in local mode, a sign-in within the last 10 minutes in OIDC mode. It shares the sign-in rate limit and is audited (<code>auth.sessions.revoked</code>). Sign-out answers <code>Clear-Site-Data: &quot;cache&quot;, &quot;storage&quot;</code>, so the browser drops what the app stored locally.</p>
+<p>Settings → Overview lists the signed-in user&#x27;s sessions (<code>GET /api/auth/sessions</code>). Signing out one other session or all others (<code>POST /api/auth/sessions/revoke</code>) needs proof of identity again: the install account&#x27;s password (or, for the owner, the install credential) in local mode; a sign-in within the last 10 minutes in OIDC mode or for a Google-only account. It shares the sign-in rate limit and is audited (<code>auth.sessions.revoked</code>). Sign-out answers <code>Clear-Site-Data: &quot;cache&quot;, &quot;storage&quot;</code>, so the browser drops what the app stored locally.</p>
 <p>Disconnecting a tool account (Settings → Tools, or <code>POST /api/assistant/tools/connect/{tool_id}/disconnect</code>) deletes its stored OAuth token and revokes the grant at the provider: Google once no other Google tool uses the grant, GitHub with the OAuth app&#x27;s client credentials. When the provider cannot be reached, the token is still deleted and the reply says to revoke Omnix&#x27;s access in the provider&#x27;s account settings.</p>
 <h3 id="local-mode">Local mode</h3>
-<p>On first start the gateway creates a random install credential. The plaintext is kept in the protected secret store (DPAPI on Windows, a 0600 file on POSIX); the database keeps only a scrypt hash.</p>
+<p><strong>Accounts.</strong> The sign-in page offers what the account settings allow:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td><code>OMNIX_AUTH_REGISTRATION</code></td>
+<td><code>open</code> in development, <code>invite</code> otherwise</td>
+<td><code>open</code>: anyone who reaches Omnix may create an account. <code>invite</code>: only with an invite link. <code>closed</code>: nobody.</td>
+</tr>
+<tr>
+<td><code>OMNIX_AUTH_GUESTS</code></td>
+<td>on when registration is <code>open</code></td>
+<td>One-click guest accounts.</td>
+</tr>
+<tr>
+<td><code>OMNIX_AUTH_REMEMBER_DAYS</code></td>
+<td>30</td>
+<td>Lifetime of a &quot;stay signed in&quot; session.</td>
+</tr>
+<tr>
+<td><code>OMNIX_AUTH_GUEST_DAYS</code></td>
+<td>7</td>
+<td>Lifetime of a guest account&#x27;s session.</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li><strong>Email and password:</strong> passwords have at least 12 characters and are stored</li>
+<p>as scrypt hashes. A wrong password and an unknown email get the same answer. Changing a password signs out the account&#x27;s other sessions.</p>
+<li><strong>Own workspace:</strong> every new account gets a workspace of its own, which</li>
+<p>starts with a copy of the installation workspace&#x27;s settings (providers, models, appearance). API keys stay in the secret store and are shared.</p>
+<li><strong>Guests:</strong> a guest account has its own workspace and the <code>guest</code> role: what</li>
+<p>a member does, minus tools, agents, research runs, trading orders and voice cloning. <strong>Save your account</strong> (top bar, or Settings → Your account) turns it into a full account and keeps everything. A guest who signs out cannot come back. Their workspace stays until an operator removes it.</p>
+<li><strong>Invites:</strong> an admin creates a single-use link that is valid for 7 days</li>
+<p>(Settings → Your account, or <code>POST /api/auth/invites</code>). The link lets one person create an account while registration is <code>invite</code>.</p>
+<li><strong>Stay signed in:</strong> checked by default on the sign-in page. Launcher sign-ins</li>
+<p>always stay signed in on the owner&#x27;s machine.</p>
+<li><strong>The owner</strong> (<code>user:local</code>) can add an email and a password in Settings →</li>
+<p>Your account, to sign in from other devices. Setting the first password needs the install credential.</p>
+</ul>
+<p><strong>Google.</strong> Set <code>OMNIX_GOOGLE_CLIENT_ID</code>, <code>OMNIX_GOOGLE_CLIENT_SECRET</code> and <code>OMNIX_GOOGLE_REDIRECT_URI</code> (<code>&lt;public origin&gt;/api/auth/google/callback</code>, registered as an authorized redirect URI of a Google OAuth web client). <code>OMNIX_GOOGLE_ALLOWED_DOMAINS</code> limits sign-in to verified emails in the listed domains. A new Google account follows the registration setting, including invites. Accounts are never merged by email, because registration does not verify email. If a Google account&#x27;s email already belongs to an Omnix account, its owner signs in with their password and chooses <strong>Connect Google</strong> in Settings.</p>
+<p><strong>Install credential.</strong> On first start the gateway creates a random install credential. The plaintext is kept in the protected secret store (DPAPI on Windows, a 0600 file on POSIX); the database keeps only a scrypt hash.</p>
 <ul>
 <li><strong>Launcher:</strong> <strong>Open app</strong> signs the browser in through a single-use link</li>
 <p>that expires after 60 seconds.</p>
@@ -805,7 +843,7 @@ npm run web:build</code></pre></div>
 <p>Details never contain prompts, messages or secrets. The table is append-only: rows cannot be updated or deleted, even by the database owner. Deleting a workspace keeps its audit rows (the workspace reference becomes empty). Retention runs through the maintenance path (planned).</p>
 <h2 id="agent-run-tokens">Agent run tokens</h2>
 <p>An agent&#x27;s Pi process talks to the broker and the model gateway with a token that belongs to its run (<code>Authorization: OmnixRun &lt;token&gt;</code>). The token names the run, its workspace and the process that owns it, lasts 15 minutes and is renewed while the run is active. It stops working when the run finishes, its capabilities change or another process takes the run over. A run id alone, or a signed-in browser session, is refused on these routes. Pi&#x27;s extensions remove the token from their environment before any tool runs, so shell commands never see it.</p>
-<p>Every Omnix process of an installation must share the signing key. The launcher&#x27;s service token provides it; otherwise set <code>OMNIX_RUN_TOKEN_KEY</code> (at least 32 characters) on every gateway and worker. <code>scripts/gateway_cluster.py</code> generates one shared key for its replicas when neither is set.</p>
+<p>Every gateway process of an installation must share the signing key, and no model service may hold it. The gateway entrypoint (<code>scripts/run_omnix_gateway.py</code>) uses <code>OMNIX_RUN_TOKEN_KEY</code> when set and otherwise a protected key of its own next to the service token; its replicas and job worker inherit it. The key is never derived from the service token, which the model services share. Compose requires <code>OMNIX_RUN_TOKEN_KEY</code> for the gateway processes only. <code>scripts/gateway_cluster.py</code> generates one shared key for its replicas when none is set.</p>
 <h2 id="agent-request-ceilings">Agent request ceilings</h2>
 <p>Public agent-run requests may tighten the selected profile&#x27;s approval policy; <code>allow_automatic</code> is rejected when the profile default is <code>ask_sensitive</code>. Allowed file patterns must remain within the profile ceiling, and isolation cannot be lowered. Reviewer requests use immutable review snapshots.</p>
 <p>Both <code>repository</code> and <code>workspace_root</code> must resolve under operator-approved roots. <code>OMNIX_AGENT_WORKSPACE_ROOTS</code> is a path list separated by <code>;</code> on Windows or <code>:</code> on POSIX. The default roots are the repository and <code>resources/agent_workspaces</code>. Empty configuration denies every root. Relative configured roots are anchored to the repository; request roots must be absolute. Resolved symlinks and parent traversal are checked before a run starts. The same roots bound the local folders attached to Chat agent runs and any workspace an agent changes in place.</p>

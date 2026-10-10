@@ -7,7 +7,6 @@ nothing runs until the user runs the screen. The model never sees market data or
 
 from __future__ import annotations
 
-import functools
 import json
 import logging
 from collections.abc import Callable
@@ -17,6 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.prompts import prompt_template
 from app.providers.base import ChatMessage
+from app.caching.bounded_cache import bounded_lru_cache
 
 from .alert_conditions import IndicatorSource, indicator_output_profile
 from .indicators.registry import server_indicator, server_indicator_ids
@@ -68,7 +68,7 @@ def _output_keys(indicator_id: str, inputs: dict[str, Any] | None = None) -> lis
     return [key for key, _first in indicator_output_profile(source)]
 
 
-@functools.lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=86_400.0)
 def _indicator_catalog() -> tuple[dict[str, Any], ...]:
     """Indicator ids, names and output keys at default inputs, for the model to choose from (computed once)."""
     catalog: list[dict[str, Any]] = []

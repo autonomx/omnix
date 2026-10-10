@@ -7,7 +7,7 @@ import type { MarketBar } from '../../tradingTypes';
 import { indicatorOutputs, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from '../coreIndicators';
 import { calculateWithSources, SOURCE_TARGET_IDS } from '../indicatorSources';
 import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from '../tradingViewBuiltIns';
-import { ALTERNATIVE_PERIOD_DATASET, asMarketBars, generateGoldenDatasets } from './goldenDatasets';
+import { ALTERNATIVE_PERIOD_DATASET, asMarketBars, generateGoldenDatasets } from '../../../../test/indicatorGoldenDatasets';
 
 // Indicator on indicator (TVP-6.5), shared with the server (src/tests/trading/test_indicator_sources.py).
 // Regenerate after an intended change: UPDATE_INDICATOR_GOLDENS=1 npm --prefix web run test -- indicatorSourceGoldens

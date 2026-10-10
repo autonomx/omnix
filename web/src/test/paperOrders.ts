@@ -1,5 +1,5 @@
 // Test fixtures: working paper orders and a pending stop (TVP-7.3 tests).
-import type { PaperOrder, PaperPositionProtection } from './paperTypes';
+import type { PaperOrder, PaperPositionProtection } from '../features/trading/paperTypes';
 
 export const INSTRUMENT = 'equity:NYSE:TEST';
 

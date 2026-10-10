@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from app.apps.trading import external_series as external_series_module
 from app.apps.trading import scanner as scanner_module
 from app.apps.trading.alert_conditions import AlertConditionSpec, IndicatorSource, validate_indicator_source
 from app.apps.trading.alerts import TradingAlertCreate
@@ -196,7 +197,7 @@ def test_a_screen_filters_on_a_breadth_line(monkeypatch) -> None:
     symbol = "crypto:FIXTURE:spot:AAA-USD"
     bars = response(symbol).bars
     loader = FakeLoader(metric("breadth.ad_line", {"nyse": [(bars[0].start_time, "250")], "nasdaq": [(bars[0].start_time, "-40")]}))
-    monkeypatch.setattr(scanner_module, "ExternalSeries", lambda instrument_id, interval: ExternalSeries(instrument_id, interval, loader))
+    monkeypatch.setattr(external_series_module, "ExternalSeries", lambda instrument_id, interval: ExternalSeries(instrument_id, interval, loader))
     rule = {
         "rule_id": "breadth", "metric": "indicator", "operator": "gt", "threshold": "100",
         "source": {"kind": "indicator", "indicator_id": "tv-advance-decline-line", "inputs": {}, "output": "tv-advance-decline-line:nyse"},

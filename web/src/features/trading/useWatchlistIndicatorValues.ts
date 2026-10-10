@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 import { tradingApi } from './tradingApi';
 import { indicatorColumnLine, isIndicatorColumnId, type WatchlistColumnId, type WatchlistSnapshot } from './tradingWatchlistColumns';
 
-/** How often indicator columns refresh while the watchlist is shown. */
-export const INDICATOR_COLUMNS_REFRESH_MS = 60_000;
 /** Symbols one request carries (the server's limit). */
 const MAX_SYMBOLS = 200;
 
@@ -16,21 +15,23 @@ export type WatchlistIndicatorValues = Readonly<Record<string, Readonly<Record<s
 export function useWatchlistIndicatorValues(instrumentIds: readonly string[], interval: string, columnIds: readonly WatchlistColumnId[]): WatchlistIndicatorValues {
   const columns = useMemo(() => columnIds.filter(isIndicatorColumnId), [columnIds]);
   const symbols = useMemo(() => instrumentIds.slice(0, MAX_SYMBOLS), [instrumentIds]);
+  // The request by value: the effect runs again only when symbols, interval or columns change, not their arrays.
   const key = JSON.stringify([symbols, interval, columns]);
   const [values, setValues] = useState<WatchlistIndicatorValues>({});
 
   useEffect(() => {
-    if (columns.length === 0 || symbols.length === 0) {
+    const [requested, requestedInterval, requestedColumns] = JSON.parse(key) as [string[], string, WatchlistColumnId[]];
+    if (requestedColumns.length === 0 || requested.length === 0) {
       setValues({});
       return undefined;
     }
     let cancelled = false;
-    const lines = columns.flatMap((id) => {
+    const lines = requestedColumns.flatMap((id) => {
       const line = indicatorColumnLine(id);
       return line ? [{ id, indicator_id: line.indicatorId, period: line.period, output: line.output }] : [];
     });
-    const load = () => {
-      void tradingApi.indicatorValues(symbols, interval, lines).then((rows) => {
+    const load = () =>
+      tradingApi.indicatorValues(requested, requestedInterval, lines).then((rows) => {
         if (cancelled) return;
         setValues(Object.fromEntries(Object.entries(rows).map(([instrumentId, row]) => [
           instrumentId,
@@ -40,15 +41,12 @@ export function useWatchlistIndicatorValues(instrumentIds: readonly string[], in
           })),
         ])));
       }).catch(() => undefined); // keep the last values; the next refresh tries again
-    };
-    load();
-    const timer = window.setInterval(load, INDICATOR_COLUMNS_REFRESH_MS);
+    void load();
+    const stopPolling = startPolling(load, POLL_INTERVALS_MS.watchlistIndicators);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
-    // `key` stands for symbols, interval and columns.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   return values;

@@ -23,7 +23,7 @@ type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 're
 type AccountModal = 'create' | 'settings' | null;
 type CommissionType = 'Percent' | 'Fixed';
 type Leverage = { stocks: string; futures: string; forex: string; crypto: string; others: string };
-type PaperAccountSettings = {
+type PaperAccountSettingsForm = {
   marginControl: boolean;
   leverage: Leverage;
   futuresOptions: boolean;
@@ -32,7 +32,7 @@ type PaperAccountSettings = {
   commission: string;
   commissionType: CommissionType;
 };
-type CreateAccountDraft = PaperAccountSettings & { name: string; balance: string; currency: string; allowShort: boolean; notifyMarginCalls: boolean };
+type CreateAccountDraft = PaperAccountSettingsForm & { name: string; balance: string; currency: string; allowShort: boolean; notifyMarginCalls: boolean };
 type DockPosition = PaperAccountSnapshot['positions'][number] & { pending?: boolean; pendingSide?: 'buy' | 'sell'; pendingOrderId?: string };
 
 const tabs: Array<{ id: DockTab; label: string }> = [
@@ -134,8 +134,8 @@ function OrderStatus({ order }: { order: PaperOrder }) {
   </span>;
 }
 
-function defaultSettings(account?: PaperAccount | null, stored?: PaperAccountSettings): PaperAccountSettings {
-  const base: PaperAccountSettings = stored ?? {
+function defaultSettings(account?: PaperAccount | null, stored?: PaperAccountSettingsForm): PaperAccountSettingsForm {
+  const base: PaperAccountSettingsForm = stored ?? {
     marginControl: false,
     leverage: { stocks: '500:1', futures: '500:1', forex: '500:1', crypto: '500:1', others: '500:1' },
     futuresOptions: false, commissionPerContract: '0.01', othersCommission: true, commission: '0.005', commissionType: 'Percent',
@@ -159,17 +159,17 @@ function defaultCreateDraft(): CreateAccountDraft {
 }
 
 /** Saves the dialog's leverage and commission to the account (TVP-7.2b): the server applies them to orders and margin calls. */
-function saveServerSettings(account: PaperAccount, settings: PaperAccountSettings) {
+function saveServerSettings(account: PaperAccount, settings: PaperAccountSettingsForm) {
   return tradingPaperApi.updateAccountSettings(account, {
     allow_short: account.allow_short ?? false, margin: marginFromLeverage(settings.marginControl, settings.leverage), ...commissionInput(settings),
   });
 }
 
-function readStoredSettings(): Record<string, PaperAccountSettings> {
+function readStoredSettings(): Record<string, PaperAccountSettingsForm> {
   if (typeof window === 'undefined') return {};
   try {
     const parsed = JSON.parse(window.localStorage.getItem(settingsStorageKey) ?? '{}');
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, PaperAccountSettings> : {};
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, PaperAccountSettingsForm> : {};
   } catch { return {}; }
 }
 
@@ -201,8 +201,8 @@ export function TradingTerminalDock({
   const [snapshot, setSnapshot] = useState<PaperAccountSnapshot | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
   const [notice, setNotice] = useState<string | null>(null);
-  const [settingsByAccount, setSettingsByAccount] = useState<Record<string, PaperAccountSettings>>(readStoredSettings);
-  const [settingsDraft, setSettingsDraft] = useState<PaperAccountSettings>(defaultSettings());
+  const [settingsByAccount, setSettingsByAccount] = useState<Record<string, PaperAccountSettingsForm>>(readStoredSettings);
+  const [settingsDraft, setSettingsDraft] = useState<PaperAccountSettingsForm>(defaultSettings());
   const [createDraft, setCreateDraft] = useState<CreateAccountDraft>(defaultCreateDraft);
   const replayMode = useTradingStore((state) => state.replayMode);
   const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
@@ -395,7 +395,7 @@ export function TradingTerminalDock({
   const currentForm = modal === 'create' ? createDraft : settingsDraft;
   const setFormValue = <K extends keyof CreateAccountDraft>(key: K, value: CreateAccountDraft[K]) => {
     if (modal === 'create') setCreateDraft((current) => ({ ...current, [key]: value }));
-    else if (key in settingsDraft) setSettingsDraft((current) => ({ ...current, [key as keyof PaperAccountSettings]: value } as PaperAccountSettings));
+    else if (key in settingsDraft) setSettingsDraft((current) => ({ ...current, [key as keyof PaperAccountSettingsForm]: value } as PaperAccountSettingsForm));
   };
   const toggleFullscreen = () => {
     setFullscreen((current) => {

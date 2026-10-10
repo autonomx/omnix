@@ -10,7 +10,8 @@ import './TradingSeasonals.css';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_STARTS = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
-const COLORS = ['#2962ff', '#f7a600', '#089981', '#9c27b0', '#e91e63', '#00bcd4', '#795548', '#607d8b', '#8bc34a', '#ff5722'];
+// Palette tokens (WP-9.8), one per series in order.
+const COLORS = ['var(--c-blue-540)', 'var(--c-amber-770)', 'var(--c-teal-600)', 'var(--c-purple-500)', 'var(--c-pink-660)', 'var(--c-cyan-720)', 'var(--c-amber-480)', 'var(--c-blue-560)', 'var(--c-green-790)', 'var(--c-amber-700)'];
 const percent = (value: number | null) => (value === null ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(1)}%`);
 
 export function TradingSeasonals({ instrumentId, bindingId }: { instrumentId: string; bindingId: string | null }) {
@@ -48,7 +49,7 @@ export function TradingSeasonals({ instrumentId, bindingId }: { instrumentId: st
         <line x1={0} x2={1000} y1={y(0)} y2={y(0)} className="is-zero" />
         {showAverage && average.length ? <path d={path(average)} className="is-average" /> : null}
         {[...curves].reverse().map((curve) => (
-          <path key={curve.year} d={path(curve.points)} stroke={COLORS[curves.indexOf(curve) % COLORS.length]} className={curve === curves[0] ? 'is-current' : undefined} />
+          <path key={curve.year} d={path(curve.points)} style={{ stroke: COLORS[curves.indexOf(curve) % COLORS.length] }} className={curve === curves[0] ? 'is-current' : undefined} />
         ))}
       </svg>
       <div className="trading-seasonals-axis" aria-hidden="true">{MONTHS.map((month) => <span key={month}>{month}</span>)}</div>

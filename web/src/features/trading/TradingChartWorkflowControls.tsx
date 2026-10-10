@@ -1,5 +1,5 @@
 /** Chart workflow UI of TVP-2.5: bar-close countdown, go-to-date box, chart settings additions and legend badges. */
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import { barCountdownRemainingMs, formatBarCountdown, type ChartTemplate } from './tradingChartWorkflow';
 import type { MarketBar } from './tradingTypes';
@@ -53,16 +53,17 @@ export function ChartGoToDate({ ws }: { ws: TradingChartPanelModel }) {
   const { goToDate, goToDateDefault, goToDateError, goToDateLoading, goToDateOpen, openGoToDate, replayMode, setGoToDateOpen } = ws;
   const [value, setValue] = useState('');
   const rootRef = useRef<HTMLDivElement | null>(null);
+  // Seeds the box when it opens; later edits are the user's.
+  const seed = useEffectEvent(() => setValue((current) => current || goToDateDefault()));
+  const closeOutside = useEffectEvent((event: PointerEvent) => {
+    if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setGoToDateOpen(false);
+  });
   useEffect(() => {
     if (!goToDateOpen) return;
-    setValue((current) => current || goToDateDefault());
-    const close = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setGoToDateOpen(false);
-    };
+    seed();
+    const close = (event: PointerEvent) => closeOutside(event);
     document.addEventListener('pointerdown', close, true);
     return () => document.removeEventListener('pointerdown', close, true);
-    // Seeds the box when it opens; later edits are the user's.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goToDateOpen]);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

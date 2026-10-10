@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
@@ -17,22 +17,19 @@ from pydantic import BaseModel
 from app.security.tenant_context import current_tenant
 
 from .alerts_notify import (
-    EmailSender,
     EmailSettings,
     EmailSettingsWrite,
     NotificationSecretStore,
     NotificationSettingsRepository,
     ProtectedNotificationSecretStore,
-    PushSender,
     PushSubscription,
     PushSubscriptionWrite,
-    alert_email,
     default_notification_settings_repository,
-    push_payload,
     smtp_password_secret,
-    vapid_key,
 )
-from .webpush import vapid_public_key
+
+if TYPE_CHECKING:
+    from .alerts_notify_senders import EmailSender, PushSender
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +61,17 @@ def create_trading_notification_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/notifications", tags=["trading-notifications"])
     secrets = store or ProtectedNotificationSecretStore()
-    email = email_sender or EmailSender(store=secrets)
-    push = push_sender or PushSender(store=secrets)
+
+    # The senders load smtplib and the Web Push cryptography: built on first use, not with the router.
+    def email() -> EmailSender:
+        from .alerts_notify_senders import EmailSender
+
+        return email_sender or EmailSender(store=secrets)
+
+    def push() -> PushSender:
+        from .alerts_notify_senders import PushSender
+
+        return push_sender or PushSender(store=secrets)
 
     def workspace() -> str:
         return str(current_tenant().workspace_id)
@@ -112,12 +118,17 @@ def create_trading_notification_router(
         settings = repository_factory().email()
         if settings is None:
             raise HTTPException(status_code=422, detail="set up email delivery first")
+        from .alerts_notify_senders import alert_email
+
         message = alert_email(settings, "This is a test of Omnix alert emails. Alerts with the Email channel arrive like this.", test=True)
-        result = await asyncio.to_thread(email.deliver, settings, workspace(), message)
+        result = await asyncio.to_thread(email().deliver, settings, workspace(), message)
         return DeliveryTestResponse(outcome=result.outcome, error=result.error)
 
     @router.get("/push", response_model=PushSettingsResponse)
     def get_push() -> PushSettingsResponse:
+        from .alerts_notify_senders import vapid_key
+        from .webpush import vapid_public_key
+
         try:
             key = vapid_key(secrets, create=True)
         except Exception as exc:
@@ -149,8 +160,10 @@ def create_trading_notification_router(
         mine = repository.subscriptions(user_id=str(current_tenant().user_id))
         if not mine:
             raise HTTPException(status_code=422, detail="turn on notifications in this browser first")
+        from .alerts_notify_senders import push_payload
+
         payload = push_payload("This is a test of Omnix alert notifications.", title="Omnix test notification")
-        result = await asyncio.to_thread(push.deliver, repository, workspace(), mine, payload)
+        result = await asyncio.to_thread(push().deliver, repository, workspace(), mine, payload)
         return DeliveryTestResponse(outcome=result.outcome, error=result.error)
 
     return router

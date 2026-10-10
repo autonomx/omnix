@@ -25,7 +25,6 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from app.apps.trading.cache import TradingMarketDataCache
@@ -37,6 +36,7 @@ from app.apps.trading.us_equity_calendar import (
     regular_holidays,
     us_equity_session,
 )
+from app.caching.bounded_cache import bounded_lru_cache
 
 from .bar_semantics import interval_duration
 
@@ -125,7 +125,7 @@ def _bucket_24x7(bar: MarketBar, shape: _Shape) -> _Bucket:
     return _Bucket(key, _utc_midnight(first), _utc_midnight(after), bar.session)
 
 
-@lru_cache(maxsize=256)
+@bounded_lru_cache(max_entries=256, ttl_seconds=86_400.0)
 def _weekday_holidays(year: int) -> frozenset[date]:
     return frozenset(day for day in regular_holidays(year) if day.weekday() < 5)
 

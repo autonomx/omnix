@@ -16,7 +16,7 @@
 import type { CoreIndicatorId, CoreIndicatorInstance, IndicatorOutput, IndicatorPoint, IndicatorTable } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 import { tradingApi } from '../tradingApi';
-import { scriptsApi, type ScriptPayload, type ScriptPlot, type ScriptRunResponse, type ScriptRunResult, type StrategyReport } from './scriptsApi';
+import { scriptsApi, type ScriptPayload, type ScriptPlot, type ScriptRunOutput, type ScriptRunResult, type StrategyReport } from './scriptsApi';
 
 export const SCRIPT_INDICATOR_PREFIX = 'script-';
 const INPUT_PREFIX = 'in:';
@@ -458,7 +458,7 @@ export function forgetScriptSource(scriptId: string): void {
   sources.delete(scriptId);
 }
 
-const runs = new Map<string, { at: number; run: Promise<ScriptRunResponse> }>();
+const runs = new Map<string, { at: number; run: Promise<ScriptRunOutput> }>();
 const MAX_CACHED_RUNS = 32;
 /** A forming bar's ticks re-run a script at most this often (each run is a server request and a worker run). */
 export const SCRIPT_LIVE_RERUN_MS = 5_000;
@@ -467,7 +467,7 @@ export const SCRIPT_LIVE_RERUN_MS = 5_000;
  * One run per script, inputs and bars, shared by every chart showing them. Ticks of the same forming bar reuse the
  * last run for SCRIPT_LIVE_RERUN_MS; a new bar runs at once.
  */
-function runOnce(key: string, tick: string, run: () => Promise<ScriptRunResponse>, now = Date.now()): Promise<ScriptRunResponse> {
+function runOnce(key: string, tick: string, run: () => Promise<ScriptRunOutput>, now = Date.now()): Promise<ScriptRunOutput> {
   const exact = runs.get(`${key}|${tick}`);
   if (exact) return exact.run;
   const recent = runs.get(key);

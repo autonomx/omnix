@@ -16,13 +16,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.apps.trading.alert_conditions import legacy_conditions
-from app.apps.trading.alerts import (
-    TradingAlertCreate,
-    TradingAlertEvaluation,
-    TradingAlertParameters,
-    TradingAlertRepository,
-    TradingAlertUpdate,
-)
+from app.apps.trading.alerts import TradingAlertCreate, TradingAlertEvaluation, TradingAlertParameters, TradingAlertUpdate
+from app.apps.trading.alerts_repository import TradingAlertRepository
 from app.apps.trading.alerts_api import create_trading_alert_router
 from app.apps.trading.alerts_channels import ProtectedAlertWebhookStore, alert_webhook_prefix
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
@@ -757,13 +752,27 @@ def test_alert_transactions_are_serialised_per_alert(alerts) -> None:
     _create(alerts, "locked")
     alert_id = f"locked-{alerts.suffix}"
     entered = threading.Event()
+    other_done = threading.Event()
     timeline: list[str] = []
+
+    def second_is_waiting() -> bool:
+        # The second transaction is queued on this alert's advisory lock.
+        with alerts.uow() as uow:
+            row = uow.connection.execute(
+                "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"
+            ).fetchone()
+        return bool(row and row[0])
 
     def first() -> None:
         with alerts.repository.alert_transaction(alert_id) as state:
             assert state.exists
             entered.set()
-            time.sleep(0.6)
+            # Hold the lock until another alert has gone through and this
+            # alert's second transaction is waiting for it.
+            other_done.wait(5)
+            deadline = time.monotonic() + 5
+            while not second_is_waiting() and time.monotonic() < deadline:
+                other_done.wait(0.02)
             timeline.append("first-done")
 
     def second() -> None:
@@ -776,6 +785,7 @@ def test_alert_transactions_are_serialised_per_alert(alerts) -> None:
         with alerts.repository.alert_transaction(f"other-{alerts.suffix}") as state:
             assert not state.exists
             timeline.append("other-in")
+        other_done.set()
 
     threads = [threading.Thread(target=target) for target in (first, second, other_alert)]
     for thread in threads:

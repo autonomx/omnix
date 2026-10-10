@@ -5,7 +5,7 @@ type RequiredField<T, K extends keyof T> = T & Required<Pick<T, K>>;
 export type AssetClass = components['schemas']['AssetClass'];
 export type InstrumentType = components['schemas']['InstrumentType'];
 /** `name` is set only where the symbol alone says little (an economic series' title, TVP-10.5). */
-export type CanonicalInstrument = Omit<components['schemas']['CanonicalInstrument'], 'name'> & { name?: string | null };
+export type CanonicalInstrument = components['schemas']['CanonicalInstrument'];
 export type ProviderPolicy = components['schemas']['ProviderPolicy'];
 export type ProviderBinding = components['schemas']['ProviderBinding'];
 export type ProviderDescriptor = components['schemas']['ProviderDescriptor'];

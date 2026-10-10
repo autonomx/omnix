@@ -3,7 +3,7 @@
  * chart, read their logs and profile, and browse, diff and restore their saved versions. A built-in indicator's
  * source (the legend's source button) opens as an unsaved copy.
  */
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react';
 import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
 import { indicatorPineSource, indicatorPineTitle } from './indicators/indicatorPine';
 import { ScriptCodeEditor } from './scripts/ScriptCodeEditor';
@@ -112,17 +112,19 @@ export function TradingPinePanel({
 
   // The legend's source button: a script opens itself, a built-in an unsaved copy of its source.
   const handled = useRef<string | null>(storedHandled());
+  // Only a new request opens something; the editor's own state changes don't.
+  const openRequested = useEffectEvent((id: string) => {
+    const scriptId = scriptIdOf(id);
+    const builtIn = indicators.find((indicator) => indicator.id === id);
+    if (scriptId) guarded('the script', (force) => editor.openScript(scriptId, force));
+    else if (builtIn) guarded(`${indicatorPineTitle(builtIn.id)}'s source`, (force) => editor.openDraft(`${indicatorPineTitle(builtIn.id)} (copy)`, indicatorPineSource(builtIn), force));
+  });
   useEffect(() => {
     const id = activeIndicatorId ? String(activeIndicatorId) : null;
     if (!id || handled.current === id) return;
     handled.current = id;
     storeHandled(id);
-    const scriptId = scriptIdOf(id);
-    const builtIn = indicators.find((indicator) => indicator.id === id);
-    if (scriptId) guarded('the script', (force) => editor.openScript(scriptId, force));
-    else if (builtIn) guarded(`${indicatorPineTitle(builtIn.id)}'s source`, (force) => editor.openDraft(`${indicatorPineTitle(builtIn.id)} (copy)`, indicatorPineSource(builtIn), force));
-    // Only a new request opens something; the editor's own state changes don't.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    openRequested(id);
   }, [activeIndicatorId]);
 
   const importFile = (event: ChangeEvent<HTMLInputElement>) => {

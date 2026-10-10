@@ -11,12 +11,10 @@ import {
   replayVisibleCount,
   type ReplaySpeed,
 } from './replayClock';
-import { advanceReplaySnapshot, placeReplayOrder } from './replayTrading';
+import { advanceReplaySnapshot, placeReplayOrder, type ReplayResult } from './replayTrading';
 import type { ReplayExecutionMarketBar } from './tradingReplayApi';
 import { useTradingStore } from './tradingStore';
 import type { MarketBar } from './tradingTypes';
-
-export type ReplayOrderResult = Awaited<ReturnType<typeof placeReplayOrder>>;
 
 /**
  * Bar replay state shared by every chart in the layout (TVP-8.1).
@@ -71,7 +69,7 @@ type TradingReplayState = {
    */
   seedSnapshot: (snapshot: PaperAccountSnapshot, key: string) => void;
   /** Place a replay order after every queued bar advance, at the current bar. */
-  placeOrder: (input: PaperOrderInput) => Promise<ReplayOrderResult>;
+  placeOrder: (input: PaperOrderInput) => Promise<ReplayResult>;
   setSpeed: (speed: ReplaySpeed) => void;
   setUpdateInterval: (updateInterval: string | null) => void;
   setIntrabarNote: (note: string | null) => void;
@@ -258,7 +256,7 @@ function clockMidBar(): boolean {
   return count === 0 || barCloseTime(activeBars[count - 1]) !== clock;
 }
 
-function placeOrder(input: PaperOrderInput): Promise<ReplayOrderResult> {
+function placeOrder(input: PaperOrderInput): Promise<ReplayResult> {
   if (clockMidBar()) return Promise.reject(new Error('Replay orders fill on whole bars: step to the bar close to trade during sub-bar playback.'));
   const bar = orderBar();
   if (!bar) return Promise.reject(new Error('Select a replay bar before trading.'));

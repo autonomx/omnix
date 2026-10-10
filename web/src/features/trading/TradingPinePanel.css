@@ -5,7 +5,7 @@
   .trading-pine-glyph{display:grid;place-items:center;width:25px;height:25px;border:1px solid currentColor;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}
   .trading-script-status{border-radius:999px;background:color-mix(in srgb, var(--c-blue-660) 14%, transparent);padding:4px 8px;font-size:10px}
   .trading-script-status.is-dirty{background:var(--c-yellow-980);color:var(--c-amber-620)}
-  .trading-script-status.has-problems{background:color-mix(in srgb, #f23645 18%, transparent);color:#f23645}
+  .trading-script-status.has-problems{background:color-mix(in srgb, var(--c-red-640) 18%, transparent);color:var(--c-red-640)}
   .trading-script-toolbar,.trading-script-saveas{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--c-neutral-910)}
   .trading-script-toolbar input[aria-label='Script name']{flex:1 1 140px;min-width:0}
   .trading-script-toolbar select{max-width:160px}
@@ -23,8 +23,8 @@
   .trading-script-console{padding:6px 10px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px}
   .trading-script-console p{display:flex;gap:8px;margin:0 0 3px;white-space:pre-wrap}
   .trading-script-console time,.trading-script-console span{flex:none;color:var(--c-slate-630)}
-  .trading-script-console .is-warning{color:#f7a600}
-  .trading-script-console .is-error{color:#f23645}
+  .trading-script-console .is-warning{color:var(--c-amber-770)}
+  .trading-script-console .is-error{color:var(--c-red-640)}
   .trading-script-empty{margin:8px 10px;color:var(--c-slate-630);font-size:11px}
   .trading-script-profiler{display:grid;gap:6px;padding:8px 10px;font-size:11px}
   .trading-script-profiler button{justify-self:start}
@@ -41,8 +41,8 @@
   .trading-script-diff{flex:1;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;line-height:1.5}
   .trading-script-diff-line{display:grid;grid-template-columns:16px minmax(0,1fr)}
   .trading-script-diff-line code{white-space:pre-wrap;overflow-wrap:anywhere}
-  .trading-script-diff-line.is-added{background:color-mix(in srgb, #089981 18%, transparent)}
-  .trading-script-diff-line.is-removed{background:color-mix(in srgb, #f23645 18%, transparent)}
+  .trading-script-diff-line.is-added{background:color-mix(in srgb, var(--c-teal-600) 18%, transparent)}
+  .trading-script-diff-line.is-removed{background:color-mix(in srgb, var(--c-red-640) 18%, transparent)}
   :root[data-omnix-appearance='dark'] .trading-pine-panel,:root:not([data-omnix-appearance]) .trading-pine-panel{background:var(--c-slate-170-2);color:var(--c-slate-910)}
   :root[data-omnix-appearance='dark'] :is(.trading-pine-header,.trading-script-toolbar,.trading-script-saveas,.trading-script-bottom,.trading-script-bottom>nav,.trading-script-versions),:root:not([data-omnix-appearance]) :is(.trading-pine-header,.trading-script-toolbar,.trading-script-saveas,.trading-script-bottom,.trading-script-bottom>nav,.trading-script-versions){border-color:color-mix(in srgb, var(--c-blue-660) 14%, transparent)}
   :root[data-omnix-appearance='dark'] .trading-script-code,:root:not([data-omnix-appearance]) .trading-script-code{background:var(--c-indigo-190)}
@@ -52,7 +52,7 @@
 @layer overrides {
   .trading-script-toolbar :is(input,select,button),.trading-script-saveas :is(input,button){border:1px solid var(--c-slate-890);border-radius:5px;background:var(--c-neutral-1000);padding:5px 8px;color:var(--c-slate-280)}
 
-  .trading-script-toolbar .trading-script-primary{border-color:var(--c-blue-660);background:var(--c-blue-660);color:#fff}
+  .trading-script-toolbar .trading-script-primary{border-color:var(--c-blue-660);background:var(--c-blue-660);color:var(--c-neutral-1000)}
 
   :root[data-omnix-appearance='dark'] :is(.trading-script-toolbar,.trading-script-saveas) :is(input,select,button:not(.trading-script-primary)),:root:not([data-omnix-appearance]) :is(.trading-script-toolbar,.trading-script-saveas) :is(input,select,button:not(.trading-script-primary)){border-color:color-mix(in srgb, var(--c-blue-660) 25%, transparent);background:var(--c-blue-230);color:var(--c-slate-910)}
 }

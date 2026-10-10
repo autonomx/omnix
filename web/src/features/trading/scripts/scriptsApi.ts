@@ -70,8 +70,8 @@ export type ScriptRunResult = {
   /** A strategy() script's backtest on the run's bars (TVP-11.5). */
   strategy?: StrategyReport | null;
 };
-export type ScriptRunResponse = { times: string[]; result: ScriptRunResult | null; error: ScriptDiagnostic | null };
-export type ScriptRunRequest = {
+export type ScriptRunOutput = { times: string[]; result: ScriptRunResult | null; error: ScriptDiagnostic | null };
+export type ScriptRunOptions = {
   source: string;
   instrumentId: string;
   bindingId?: string | null;
@@ -83,7 +83,7 @@ export type ScriptRunRequest = {
 
 export const scriptsApi = {
   check: (source: string): Promise<ScriptCheckResult> => scripts(api.POST('/api/trading/scripts/check', { body: { source } })),
-  run: async (request: ScriptRunRequest): Promise<ScriptRunResponse> => {
+  run: async (request: ScriptRunOptions): Promise<ScriptRunOutput> => {
     const response = await scripts(api.POST('/api/trading/scripts/run', {
       body: {
         source: request.source,
@@ -98,7 +98,7 @@ export const scriptsApi = {
     return { times: response.times, result: (response.result ?? null) as ScriptRunResult | null, error: response.error ?? null };
   },
   /** A strategy over all the history the provider serves, up to `bars` (TVP-11.5); the result has no plots. */
-  backtest: async (request: Omit<ScriptRunRequest, 'limit' | 'profile'> & { bars?: number }): Promise<ScriptRunResponse> => {
+  backtest: async (request: Omit<ScriptRunOptions, 'limit' | 'profile'> & { bars?: number }): Promise<ScriptRunOutput> => {
     const response = await scripts(api.POST('/api/trading/scripts/backtest', {
       body: {
         source: request.source, instrument_id: request.instrumentId, binding_id: request.bindingId ?? null, interval: request.interval,

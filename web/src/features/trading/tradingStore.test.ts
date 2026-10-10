@@ -186,7 +186,9 @@ describe('Trading multi-chart store', () => {
     ]);
     expect(useTradingStore.getState().charts[0].indicators.find((item) => item.id === 'sma')?.enabled).toBe(true);
   });
+});
 
+describe('Trading multi-chart store', () => {
   it('keeps secondary indicator order bounded at the first and last pane', () => {
     const indicators = defaultTradingIndicators().map((indicator) => (
       indicator.id === 'macd' ? { ...indicator, enabled: true } : indicator

@@ -1,6 +1,6 @@
-import type { MarketBar } from '../../tradingTypes';
-import { fixture } from '../../../../test/fixture';
-import { wallClockMs, type TradingSessionSpec } from '../tradingSessions';
+import type { MarketBar } from '../features/trading/tradingTypes';
+import { fixture } from './fixture';
+import { wallClockMs, type TradingSessionSpec } from '../features/trading/indicators/tradingSessions';
 
 export type GoldenBar = {
   start_time: string;

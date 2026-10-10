@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TradingChartAdapter } from './chart/chartAdapter';
-import { order, pendingStop } from './paperOrderFixtures';
+import { order, pendingStop } from '../../test/paperOrders';
 
 const paperApi = vi.hoisted(() => ({
   snapshot: vi.fn(), protections: vi.fn(), moveRiskEntry: vi.fn(), replaceOrder: vi.fn(), cancelOrder: vi.fn(),

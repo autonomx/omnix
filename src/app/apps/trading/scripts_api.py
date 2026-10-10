@@ -17,12 +17,9 @@ from pydantic import BaseModel, Field
 
 from app.security.tenant_context import current_tenant
 
-from .scripts.builtins import _NAMED_CONSTANTS, COLORS, FUNCTIONS
-from .scripts.runtime import SERIES_NAMES
 from .repositories import RepositoryFactory, default_trading_repository
 from .scripts_screener import SCREEN_MAX_INSTRUMENTS, ScriptScreenOutput, ScriptScreenRow, screen_script
 from .scripts_service import BACKTEST_LIMITS, ScriptRunService, ScriptServiceError, bars_for_script, check_script, default_script_service
-from .scripts_security import load_script_securities
 from .service import TradingMarketDataService, default_market_data_service
 
 logger = logging.getLogger(__name__)
@@ -183,6 +180,8 @@ def create_trading_scripts_router(
     @router.post("/run", response_model=ScriptRunResponse)
     async def run(request: ScriptRunRequest) -> ScriptRunResponse:
         """Run a script on the latest ``limit`` bars of a chart (as the chart reads them, clock-aligned)."""
+        from .scripts_security import load_script_securities
+
         try:
             response = await asyncio.to_thread(
                 market_service_factory().bars, request.instrument_id, request.interval, request.limit, request.binding_id, alignment="clock",
@@ -227,6 +226,8 @@ def create_trading_scripts_router(
 
         A research backtest: the script trades a simulated account on these bars and never reaches an order gateway.
         """
+        from .scripts_security import load_script_securities
+
         try:
             response = await asyncio.to_thread(
                 market_service_factory().bars, request.instrument_id, request.interval, request.bars, request.binding_id, alignment="clock",
@@ -258,6 +259,9 @@ def create_trading_scripts_router(
     @router.get("/reference", response_model=ScriptReferenceResponse)
     def reference() -> ScriptReferenceResponse:
         """The names the editor completes: functions, named constants, built-in series and variables, keywords."""
+        from .scripts.builtins import COLORS, FUNCTIONS, _NAMED_CONSTANTS
+        from .scripts.runtime import SERIES_NAMES
+
         return ScriptReferenceResponse(
             functions=sorted(FUNCTIONS),
             constants=sorted({*_NAMED_CONSTANTS, *(f"color.{name}" for name in COLORS)}),

@@ -16,7 +16,8 @@ export const TENOR_SERIES: Record<string, string> = {
   '1 Mo': 'DGS1MO', '3 Mo': 'DGS3MO', '6 Mo': 'DGS6MO', '1 Yr': 'DGS1', '2 Yr': 'DGS2', '3 Yr': 'DGS3',
   '5 Yr': 'DGS5', '7 Yr': 'DGS7', '10 Yr': 'DGS10', '20 Yr': 'DGS20', '30 Yr': 'DGS30',
 };
-const COLORS = ['#2962ff', '#ff9800', '#9c27b0', '#787b86'];
+// Palette tokens (WP-9.8), one per series in order.
+const COLORS = ['var(--c-blue-540)', 'var(--c-amber-770)', 'var(--c-purple-500)', 'var(--c-slate-580)'];
 const WIDTH = 640;
 const HEIGHT = 220;
 const PAD = { left: 40, right: 12, top: 12, bottom: 28 };
@@ -45,8 +46,8 @@ function CurveChart({ curve }: { curve: YieldCurve }) {
         const points = line.yields.flatMap((value, index) => (value === null ? [] : [`${x(index)},${y(value)}`]));
         return (
           <g key={line.label}>
-            <polyline points={points.join(' ')} fill="none" stroke={color} strokeWidth={line === curve.curves[0] ? 2.5 : 1.5} strokeDasharray={line === curve.curves[0] ? undefined : '4 3'} />
-            {line === curve.curves[0] ? line.yields.map((value, index) => (value === null ? null : <circle key={index} cx={x(index)} cy={y(value)} r={3} fill={color} />)) : null}
+            <polyline points={points.join(' ')} fill="none" style={{ stroke: color }} strokeWidth={line === curve.curves[0] ? 2.5 : 1.5} strokeDasharray={line === curve.curves[0] ? undefined : '4 3'} />
+            {line === curve.curves[0] ? line.yields.map((value, index) => (value === null ? null : <circle key={index} cx={x(index)} cy={y(value)} r={3} style={{ fill: color }} />)) : null}
           </g>
         );
       })}

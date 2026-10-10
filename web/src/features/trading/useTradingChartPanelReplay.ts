@@ -12,47 +12,17 @@ import type { useChartView } from './useTradingChartPanelView';
 import type { useChartIndicatorActions } from './useTradingChartPanelActions';
 import type { useChartRangeActions } from './useTradingChartPanelActions';
 
+type ChartReplayWorkspace = TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync> & ReturnType<typeof useChartView> & ReturnType<typeof useChartIndicatorActions> & ReturnType<typeof useChartRangeActions>;
+
 /** Bar replay on one chart: choosing the start, stepping the shared clock, and leaving replay. */
-export function useChartReplayActions(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync> & ReturnType<typeof useChartView> & ReturnType<typeof useChartIndicatorActions> & ReturnType<typeof useChartRangeActions>) {
+export function useChartReplayActions(ws: ChartReplayWorkspace) {
   const {
-    active, adapter, adapterRef, allBarsRef, chartQuery, hostRef, replayChoosingStart, replayMode,
+    active, adapter, allBarsRef, chartQuery, hostRef, replayChoosingStart, replayMode,
     replaySelectionIndex, replayStartTime, setReplayMarkerX, setReplayMode, setReplaySelectionIndex,
     setReplaySelectionX,
   } = ws;
 
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-
-    // React delegates wheel events through a passive listener in this setup.
-    // Use a native non-passive listener because chart zoom intentionally
-    // consumes the wheel event so the page does not scroll underneath it.
-    const handleChartWheel = (event: WheelEvent) => {
-      const targetAdapter = adapterRef.current;
-      if (!targetAdapter) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const bounds = host.getBoundingClientRect();
-      const x = event.clientX - bounds.left;
-      const y = event.clientY - bounds.top;
-      if (targetAdapter.isPriceScaleCoordinate(x)) {
-        targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
-        return;
-      }
-      if (event.deltaX !== 0) {
-        targetAdapter.panTimeByPixels(-event.deltaX);
-        return;
-      }
-      if (event.shiftKey) {
-        targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
-        return;
-      }
-      targetAdapter.zoomAtCoordinate(x, event.deltaY);
-    };
-
-    host.addEventListener('wheel', handleChartWheel, { capture: true, passive: false });
-    return () => host.removeEventListener('wheel', handleChartWheel, true);
-  }, [adapter, adapterRef, hostRef]);
+  useChartWheelZoom(ws);
 
   const handleReplayStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!replayMode || !active || !adapter || allBarsRef.current.length === 0) return;
@@ -166,4 +136,41 @@ export function useChartReplayActions(ws: TradingChartPanelProps & ReturnType<ty
     handleReplayStageClick, selectReplayStart, resetReplay, previousReplayBar, nextReplayBar, toggleReplayPlaying,
     exitReplay,
   };
+}
+
+/** Wheel zoom and pan on the chart: over the price scale (or with Shift) it zooms prices, sideways it pans time. */
+function useChartWheelZoom({ adapter, adapterRef, hostRef }: Pick<ChartReplayWorkspace, 'adapter' | 'adapterRef' | 'hostRef'>) {
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    // React delegates wheel events through a passive listener in this setup.
+    // Use a native non-passive listener because chart zoom intentionally
+    // consumes the wheel event so the page does not scroll underneath it.
+    const handleChartWheel = (event: WheelEvent) => {
+      const targetAdapter = adapterRef.current;
+      if (!targetAdapter) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const bounds = host.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top;
+      if (targetAdapter.isPriceScaleCoordinate(x)) {
+        targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
+        return;
+      }
+      if (event.deltaX !== 0) {
+        targetAdapter.panTimeByPixels(-event.deltaX);
+        return;
+      }
+      if (event.shiftKey) {
+        targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
+        return;
+      }
+      targetAdapter.zoomAtCoordinate(x, event.deltaY);
+    };
+
+    host.addEventListener('wheel', handleChartWheel, { capture: true, passive: false });
+    return () => host.removeEventListener('wheel', handleChartWheel, true);
+  }, [adapter, adapterRef, hostRef]);
 }

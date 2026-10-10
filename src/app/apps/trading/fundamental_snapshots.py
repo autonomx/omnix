@@ -13,13 +13,15 @@ import logging
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.persistence.unit_of_work import unit_of_work
 from app.runtime.features import FeatureContext
 
-from .company_profiles import SecCompanySource
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+
+if TYPE_CHECKING:
+    from .company_profiles import SecCompanySource
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +188,12 @@ def snapshot_for_instrument(instrument_id: str) -> dict[str, Decimal | None] | N
         return None
 
 
+def _sec_source() -> SecCompanySource:
+    from .company_profiles import SecCompanySource
+
+    return SecCompanySource()
+
+
 class FundamentalSnapshotMonitor(ScheduledTradingMonitor):
     """Refreshes every filer's snapshot weekly from the SEC frames (about forty requests)."""
 
@@ -193,7 +201,7 @@ class FundamentalSnapshotMonitor(ScheduledTradingMonitor):
         self,
         *,
         repository_factory: Callable[[], FundamentalSnapshotRepository] = default_fundamental_snapshot_repository,
-        source_factory: Callable[[], SecCompanySource] = SecCompanySource,
+        source_factory: Callable[[], SecCompanySource] = _sec_source,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         interval_seconds: float = 6 * 3600.0,
     ) -> None:

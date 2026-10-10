@@ -16,14 +16,12 @@ from fastapi.testclient import TestClient
 
 from app.apps.trading.alerts_delivery import ClaimedDelivery
 from app.apps.trading.alerts_notify import (
-    EmailSender,
     EmailSettings,
-    PushSender,
     PushSubscriptionWrite,
     StoredSubscription,
-    push_payload,
     smtp_password_secret,
 )
+from app.apps.trading.alerts_notify_senders import EmailSender, PushSender, push_payload
 from app.apps.trading.alerts_notify_api import create_trading_notification_router
 from app.apps.trading.webpush import b64url, b64url_decode, decrypt_push, encrypt_push, new_vapid_key, load_vapid_key, vapid_authorization
 from app.runtime.tenant_context import TenantContext, pop_tenant, push_tenant

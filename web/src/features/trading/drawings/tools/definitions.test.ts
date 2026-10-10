@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { chartPalette } from '../../chartPalette';
 import { alertLevelPriceAt, lineThroughPoint } from './alertLevels';
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from './registry';
-import { pointAt, runTool, testServices } from './testing';
+import { pointAt, runTool, testServices } from '../../../../test/drawingTools';
 import type { DrawingAlertLevel, DrawingPoint, DrawingShape } from './types';
 
 function only<K extends DrawingShape['kind']>(shapes: DrawingShape[], kind: K): Extract<DrawingShape, { kind: K }>[] {

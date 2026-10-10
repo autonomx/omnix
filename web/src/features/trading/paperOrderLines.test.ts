@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chartOrderLines, entryMoveInput, exitReplacement, moveErrorMessage, roundPrice } from './paperOrderLines';
-import { INSTRUMENT, order, pendingStop } from './paperOrderFixtures';
+import { INSTRUMENT, order, pendingStop } from '../../test/paperOrders';
 import type { PaperOrder } from './paperTypes';
 
 describe('chart order lines', () => {

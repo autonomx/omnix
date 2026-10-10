@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parsePaperTicketRequest } from '../../../paperTicketRequests';
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from '../registry';
-import { pointAt, runTool, testServices } from '../testing';
+import { pointAt, runTool, testServices } from '../../../../../test/drawingTools';
 import type { DrawingBarSeries, DrawingProperties, DrawingShape, DrawingToolServices } from '../types';
 import { keepSide, positionLevels, positionOutcome, positionQuantity, riskReward } from './positions';
 import { MAX_GHOST_CANDLES, forecastState, ghostCandles, patternBars, sectorPoints } from './projections';

@@ -7,6 +7,7 @@
 // never overwritten from here.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { DrawingStyle, TradingDrawing } from './drawingCommands';
+import { chartPalette } from '../chartPalette';
 import { DrawingTemplateSection, DrawingVisibilitySection } from './DrawingSettingsSections';
 import type { DrawingVisibility } from './drawingVisibility';
 import { clampToField, numberListProperty, propertyValueReadable, recordsProperty } from './tools/properties';
@@ -82,7 +83,7 @@ function RecordFieldInput({ field, label, record, onChange }: {
         />
       );
     case 'color':
-      return <input aria-label={label} type="color" value={typeof value === 'string' && value ? value : '#66d9e8'} onChange={(event) => onChange(event.target.value)} />;
+      return <input aria-label={label} type="color" value={typeof value === 'string' && value ? value : chartPalette.cyan} onChange={(event) => onChange(event.target.value)} />;
     case 'text':
       return <DeferredInput label={label} type="text" value={typeof value === 'string' ? value : ''} onCommit={onChange} />;
   }
@@ -111,7 +112,7 @@ function PropertyInput({ field, value, onCommit }: { field: DrawingPropertyField
         </select>
       );
     case 'color':
-      return <input aria-label={label} type="color" value={typeof value === 'string' && value ? value : '#66d9e8'} onChange={(event) => onCommit(event.target.value)} />;
+      return <input aria-label={label} type="color" value={typeof value === 'string' && value ? value : chartPalette.cyan} onChange={(event) => onCommit(event.target.value)} />;
     case 'text':
       return <DeferredInput label={label} type="text" value={String(value)} onCommit={onCommit} />;
     case 'records': {

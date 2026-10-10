@@ -28,7 +28,7 @@ import {
   generateGoldenDatasets,
   generateSessionDatasets,
   type GoldenDataset,
-} from './goldenDatasets';
+} from '../../../../test/indicatorGoldenDatasets';
 
 // Shared with the server registry tests (src/tests/trading/test_indicator_registry_goldens.py).
 // Regenerate after an intended formula change: UPDATE_INDICATOR_GOLDENS=1 npm --prefix web run test -- indicatorGoldens

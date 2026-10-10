@@ -14,13 +14,18 @@ vi.mock('./TradingPaperDashboard', () => ({ TradingPaperDashboard: () => <div>Pa
 
 import { TradingTerminalDock } from './TradingTerminalDock';
 
-describe('TradingTerminalDock', () => {
+/** The services every TradingTerminalDock test starts from. */
+function mockDockServices(): void {
   beforeEach(() => {
     paperApi.accounts.mockResolvedValue([]);
     paperApi.snapshot.mockResolvedValue(null);
   });
 
   afterEach(() => vi.clearAllMocks());
+}
+
+describe('TradingTerminalDock', () => {
+  mockDockServices();
 
   it('minimizes the dock while keeping the restore control visible', async () => {
     render(<TradingTerminalDock instrumentId="crypto:BINANCE:spot:BTC-USDT" bindingId={null} />);
@@ -146,6 +151,10 @@ describe('TradingTerminalDock', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('Insufficient available paper cash at the fill price.');
     expect(screen.getByTitle('Insufficient available paper cash at the fill price.')).toBeInTheDocument();
   });
+});
+
+describe('TradingTerminalDock', () => {
+  mockDockServices();
 
   it('labels the new order types and filters expired orders', async () => {
     const account = {

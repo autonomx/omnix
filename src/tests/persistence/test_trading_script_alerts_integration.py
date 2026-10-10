@@ -12,7 +12,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.trading.alerts import TradingAlertCreate, TradingAlertRepository
+from app.apps.trading.alerts import TradingAlertCreate
+from app.apps.trading.alerts_repository import TradingAlertRepository
 from app.apps.trading.alerts_api import create_trading_alert_router
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
 from app.apps.trading.repositories import TradingDocumentRepository

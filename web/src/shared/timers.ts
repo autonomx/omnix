@@ -27,6 +27,8 @@ export const POLL_INTERVALS_MS = {
   strategyOperations: 30_000,
   /** Trading alerts and their triggers: alert evaluation publishes no events. */
   tradingAlerts: 10_000,
+  /** Watchlist indicator columns: computed from bars on request; nothing publishes them. */
+  watchlistIndicators: 60_000,
   /** Chart bars when the market stream is not delivering (closed or failed stream). */
   chartFallback: 30_000,
   /** A research job's progress (pages read, sources): job progress writes publish no events. */

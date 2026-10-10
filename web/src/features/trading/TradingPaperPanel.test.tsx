@@ -86,7 +86,8 @@ async function prepareRiskManagedBuy() {
   await screen.findByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ });
 }
 
-describe('TradingPaperPanel', () => {
+/** The services every TradingPaperPanel test starts from. */
+function mockPaperPanelServices(): void {
   beforeEach(() => {
     useTradingStore.setState({ replayMode: false, replaySessionId: 0 });
     useTradingReplayStore.getState().clear();
@@ -122,6 +123,10 @@ describe('TradingPaperPanel', () => {
     useTradingReplayStore.getState().clear();
     vi.clearAllMocks();
   });
+}
+
+describe('TradingPaperPanel', () => {
+  mockPaperPanelServices();
 
   it('fills the real ticket from a long position drawing: limit price, stop, target (TVP-3.6)', async () => {
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
@@ -249,6 +254,10 @@ describe('TradingPaperPanel', () => {
     }));
     expect(paperApi.placeRiskOrder.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
+});
+
+describe('TradingPaperPanel', () => {
+  mockPaperPanelServices();
 
   it('sends a stop-limit entry with time in force and a trailing stop-loss leg', async () => {
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { alertLevelPriceAt } from '../alertLevels';
 import { drawingToolDefinition, drawingPropertiesWithDefaults } from '../registry';
-import { pointAt, runTool, testServices } from '../testing';
+import { pointAt, runTool, testServices } from '../../../../../test/drawingTools';
 import type { DrawingShape } from '../types';
 
 const segments = (shapes: readonly DrawingShape[]) => shapes.filter((shape): shape is Extract<DrawingShape, { kind: 'segment' }> => shape.kind === 'segment');

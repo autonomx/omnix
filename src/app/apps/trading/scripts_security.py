@@ -19,8 +19,6 @@ from typing import Any
 
 from .catalog import all_instruments, instrument_by_id
 from .providers.bar_semantics import interval_duration
-from .scripts.errors import ScriptError
-from .scripts.runtime import compile_script, resolve_security_key, validate_inputs
 from .scripts_service import ScriptSecurity, bars_for_script
 
 logger = logging.getLogger(__name__)
@@ -82,6 +80,9 @@ def resolve_script_symbol(text: str, chart_instrument_id: str) -> str | None:
 def script_securities_requested(source: str, inputs: dict[str, Any] | None = None) -> list[str]:
     """The contexts a script requests with these inputs; none when it doesn't compile or its inputs are wrong (the run
     reports that)."""
+    from .scripts.errors import ScriptError
+    from .scripts.runtime import compile_script, resolve_security_key, validate_inputs
+
     try:
         program = compile_script(source)
         values = validate_inputs(program, dict(inputs or {}))

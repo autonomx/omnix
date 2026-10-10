@@ -94,7 +94,8 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-describe('chart workflow hook (TVP-2.5)', () => {
+/** An always-open market status for every workflow test. */
+function mockMarketStatus(): void {
   beforeEach(() => {
     vi.spyOn(tradingApi, 'marketStatus').mockResolvedValue({
       instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
@@ -110,6 +111,10 @@ describe('chart workflow hook (TVP-2.5)', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+}
+
+describe('chart workflow hook (TVP-2.5)', () => {
+  mockMarketStatus();
 
   it('scrolls straight to a loaded date and centres it', () => {
     const { input, timeScale, raw } = workflowInput();
@@ -249,6 +254,10 @@ describe('chart workflow hook (TVP-2.5)', () => {
     await vi.waitFor(() => expect(result.current.marketStatus).toBe('Post-market'));
     expect(adapter.setSessionPriceLine).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Post-market' }));
   });
+});
+
+describe('chart workflow hook (TVP-2.5)', () => {
+  mockMarketStatus();
 
   it('never shows a pre/post-market line while the regular session is open', async () => {
     vi.mocked(tradingApi.marketStatus).mockResolvedValue({

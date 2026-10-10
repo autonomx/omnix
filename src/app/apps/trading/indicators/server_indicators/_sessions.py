@@ -6,10 +6,10 @@ milliseconds, like the browser's ``Date.parse``.
 """
 
 from __future__ import annotations
+from app.caching.bounded_cache import bounded_lru_cache
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from functools import cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..registry import UTC_SESSION, BarSeries, TradingSession
@@ -35,7 +35,7 @@ def epoch_ms(moment: datetime) -> int:
     return (_aware(moment) - _EPOCH) // _MILLISECOND
 
 
-@cache
+@bounded_lru_cache(max_entries=256, ttl_seconds=86_400.0)
 def _zone(timezone: str) -> ZoneInfo | None:
     if timezone == "UTC":
         return None

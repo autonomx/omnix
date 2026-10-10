@@ -11,19 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.persistence.errors import RevisionConflict
-from app.apps.trading.alerts import (
-    AlertEvaluationContext,
-    AlertListing,
-    AlertLockState,
-    AlertOutcomeRecord,
-    TradingAlert,
-    TradingAlertCreate,
-    TradingAlertEvaluation,
-    TradingAlertEvaluationPolicy,
-    TradingAlertTrigger,
-    TradingAlertUpdate,
-    cooldown_elapsed,
-)
+from app.apps.trading.alerts import AlertEvaluationContext, AlertOutcomeRecord, TradingAlert, TradingAlertCreate, TradingAlertEvaluation, TradingAlertEvaluationPolicy, TradingAlertTrigger, TradingAlertUpdate, cooldown_elapsed
+from app.apps.trading.alerts_repository import AlertListing, AlertLockState
 from app.apps.trading.alerts_api import create_trading_alert_router
 from app.apps.trading.alerts_evaluation import evaluate_conditions
 from app.apps.trading.alerts_monitor import (

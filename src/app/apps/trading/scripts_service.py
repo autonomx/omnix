@@ -11,17 +11,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import queue
 import subprocess
 import sys
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from app.config.env import environment_copy
-from .scripts import ScriptError, ScriptLimits, compile_script
+from .scripts.errors import ScriptError
+from .scripts.limits import ScriptLimits
 
 # A run's budget: wall time inside the worker, and how long the server waits for the worker before killing it.
 RUN_LIMITS = ScriptLimits(max_seconds=5.0)
@@ -75,6 +78,8 @@ class ScriptSecurity:
 
 def check_script(source: str) -> dict[str, Any]:
     """Compile a script: its problems with their line (none when it compiles), its declaration and inputs."""
+    from .scripts.runtime import compile_script
+
     try:
         program = compile_script(source)
     except ScriptError as error:
@@ -88,13 +93,26 @@ def check_script(source: str) -> dict[str, Any]:
     }
 
 
+def _worker_environment() -> dict[str, str]:
+    """The server's environment, with the source root that holds ``app`` first on PYTHONPATH.
+
+    The worker runs ``python -m app.apps.trading.scripts.worker``; without this it finds
+    ``app`` only when the server's working directory or PYTHONPATH happens to hold it.
+    """
+    environment = environment_copy()
+    source_root = str(Path(__file__).resolve().parents[3])
+    existing = environment.get("PYTHONPATH", "")
+    environment["PYTHONPATH"] = os.pathsep.join(path for path in (source_root, existing) if path)
+    return environment
+
+
 class _Worker:
     """One worker process and a thread reading its answers."""
 
     def __init__(self, command: Sequence[str]) -> None:
         self.process = subprocess.Popen(
             list(command), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            text=True, encoding="utf-8", bufsize=1, env=environment_copy(),
+            text=True, encoding="utf-8", bufsize=1, env=_worker_environment(),
         )
         self.answers: queue.Queue[str | None] = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()

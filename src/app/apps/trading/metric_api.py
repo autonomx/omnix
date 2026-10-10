@@ -16,7 +16,6 @@ from .metric_data import (
     TradingMetricDataService,
     default_metric_data_service,
 )
-from .metric_sources import load_metric
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +39,8 @@ def create_trading_metric_router(
         limit: int = Query(default=500, ge=1, le=1_500),
         end_time: datetime | None = Query(default=None),
     ) -> MarketMetricResponse:
+        from .metric_sources import load_metric
+
         try:
             return load_metric(
                 metric,

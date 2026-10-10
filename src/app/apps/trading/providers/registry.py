@@ -26,13 +26,11 @@ from .aggregation import (
 )
 from app.apps.trading.market_session_status import us_equity_rules_apply
 
-from .clock_aggregation import aggregate_market_bars_clock, clock_aggregated_dataset_fingerprint
 from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .base import MarketDataProvider
 from .binance import BinanceMarketDataProvider
 from .ibkr import IbkrEquityProvider
 from .coinmarketcap import CoinMarketCapProvider
-from .fred import FredSeriesProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
 from .errors import ProviderFallbackEligibleError
@@ -45,6 +43,8 @@ class ProviderRegistry:
         cache: TradingMarketDataCache | None = None,
         factories: dict[str, Callable[[], Any]] | None = None,
     ) -> None:
+        from .fred import FredSeriesProvider
+
         self.cache = cache or TradingMarketDataCache()
         self._factories = factories or {
             "binance": lambda: BinanceMarketDataProvider(cache=self.cache),
@@ -372,6 +372,8 @@ class ProviderRegistry:
         include_extended_hours: bool,
     ) -> BarsResponse:
         """Chart-only clock-aligned aggregation (TVP-2.5); count mode is what strategies read."""
+        from .clock_aggregation import aggregate_market_bars_clock, clock_aggregated_dataset_fingerprint
+
         instrument = base_response.instrument
         calendar = (
             instrument.session_calendar

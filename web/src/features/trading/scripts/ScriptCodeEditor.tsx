@@ -7,7 +7,7 @@ import { indentWithTab } from '@codemirror/commands';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import { Compartment, EditorState, Prec } from '@codemirror/state';
 import { EditorView, gutter, GutterMarker, hoverTooltip, keymap } from '@codemirror/view';
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import type { Completion } from '@codemirror/autocomplete';
 import { nameAt, omnixScriptLanguage, scriptCompletionOptions, scriptCompletionSource, scriptDiagnostics, scriptHoverText } from './scriptLanguage';
 import type { ScriptDiagnostic, ScriptReference } from './scriptsApi';
@@ -52,7 +52,7 @@ const theme = EditorView.theme({
   '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace', lineHeight: '1.6' },
   '.cm-gutters': { backgroundColor: 'transparent', borderRight: '1px solid color-mix(in srgb, currentColor 12%, transparent)' },
   '.omnix-script-profile-time': { color: 'color-mix(in srgb, currentColor 55%, transparent)', fontSize: '10px', paddingRight: '4px' },
-  '.omnix-script-profile-hot': { color: '#f7a600', fontSize: '10px', fontWeight: '700', paddingRight: '4px' },
+  '.omnix-script-profile-hot': { color: 'var(--c-amber-770)', fontSize: '10px', fontWeight: '700', paddingRight: '4px' },
 });
 
 export function ScriptCodeEditor({
@@ -84,52 +84,53 @@ export function ScriptCodeEditor({
     latest.current.completions = reference ? scriptCompletionOptions(reference) : [];
   }
 
+  // The editor is created once, on the first value and label; value, diagnostics and profile reach it through the
+  // effects below.
+  const createEditor = useEffectEvent((parent: HTMLElement) => new EditorView({
+    parent,
+    state: EditorState.create({
+      doc: value,
+      extensions: [
+        basicSetup,
+        keymap.of([indentWithTab]),
+        Prec.high(keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { latest.current.onSave(); return true; } }])),
+        omnixScriptLanguage,
+        omnixScriptLanguage.data.of({ autocomplete: scriptCompletionSource(() => latest.current.completions) }),
+        hoverTooltip((hovered, pos) => {
+          const reference = latest.current.reference;
+          const found = reference ? nameAt(hovered.state.doc, pos) : null;
+          const text = found && reference ? scriptHoverText(reference, found.name) : null;
+          if (!found || !text) return null;
+          return {
+            pos: found.from,
+            end: found.to,
+            above: true,
+            create: () => {
+              const dom = document.createElement('div');
+              dom.className = 'omnix-script-hover';
+              dom.textContent = text;
+              return { dom };
+            },
+          };
+        }),
+        lintGutter(),
+        profileCompartment.current.of([]),
+        theme,
+        EditorView.contentAttributes.of({ 'aria-label': label }),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) latest.current.onChange(update.state.doc.toString());
+        }),
+      ],
+    }),
+  }));
   useEffect(() => {
     if (!host.current) return undefined;
-    const editor = new EditorView({
-      parent: host.current,
-      state: EditorState.create({
-        doc: value,
-        extensions: [
-          basicSetup,
-          keymap.of([indentWithTab]),
-          Prec.high(keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { latest.current.onSave(); return true; } }])),
-          omnixScriptLanguage,
-          omnixScriptLanguage.data.of({ autocomplete: scriptCompletionSource(() => latest.current.completions) }),
-          hoverTooltip((hovered, pos) => {
-            const reference = latest.current.reference;
-            const found = reference ? nameAt(hovered.state.doc, pos) : null;
-            const text = found && reference ? scriptHoverText(reference, found.name) : null;
-            if (!found || !text) return null;
-            return {
-              pos: found.from,
-              end: found.to,
-              above: true,
-              create: () => {
-                const dom = document.createElement('div');
-                dom.className = 'omnix-script-hover';
-                dom.textContent = text;
-                return { dom };
-              },
-            };
-          }),
-          lintGutter(),
-          profileCompartment.current.of([]),
-          theme,
-          EditorView.contentAttributes.of({ 'aria-label': label }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) latest.current.onChange(update.state.doc.toString());
-          }),
-        ],
-      }),
-    });
+    const editor = createEditor(host.current);
     view.current = editor;
     return () => {
       editor.destroy();
       view.current = null;
     };
-    // The editor is created once; value, diagnostics and profile reach it through the effects below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A new document from outside (another script opened, a version restored).

@@ -15,12 +15,14 @@ import threading
 import time
 from collections.abc import Callable
 from decimal import Decimal
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from .company_profiles import CompanyProfiles, default_company_profiles
+
+if TYPE_CHECKING:
+    from .company_profiles import CompanyProfiles
 
 CACHE_SECONDS = 300.0
 SNAPSHOT_CHUNK = 200
@@ -141,13 +143,19 @@ def crypto_tiles(tickers: list[dict[str, Any]], limit: int) -> list[HeatmapTile]
     return tiles[:limit]
 
 
+def _company_profiles() -> CompanyProfiles:
+    from .company_profiles import default_company_profiles
+
+    return default_company_profiles()
+
+
 class HeatmapService:
     def __init__(
         self,
         *,
         stocks_source: Callable[[], Any] = AlpacaSnapshotSource,
         crypto_source: Callable[[], Any] = BinanceTickerSource,
-        profiles: Callable[[], CompanyProfiles] = default_company_profiles,
+        profiles: Callable[[], CompanyProfiles] = _company_profiles,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.stocks_source = stocks_source

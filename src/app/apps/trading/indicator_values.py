@@ -12,18 +12,17 @@ import asyncio
 import logging
 from collections.abc import Callable, Sequence
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .alert_conditions import IndicatorSource, validate_indicator_source
 from .alerts_evaluation import HISTORY_LIMIT_MAX, _BarValues, _source_lookback, history_limit
-from .external_series import ExternalSeries
-from .indicator_context import compare_bars_loader, instrument_session, intrabar_loader
-from .indicators.intrabar import IntrabarLoader
-from .indicators.external import external_indicator
 from .service import TradingMarketDataService, default_market_data_service
+
+if TYPE_CHECKING:
+    from .indicators.intrabar import IntrabarLoader
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +67,11 @@ def latest_values(
     intrabar: IntrabarLoader | None = None,
 ) -> list[Decimal | None]:
     """Each line's value on the latest bar of ``bars``."""
+    from .indicators.external import external_indicator
+
+    from .external_series import ExternalSeries
+    from .indicator_context import instrument_session
+
     if not bars:
         return [None] * len(request.lines)
     external = ExternalSeries(instrument_id, request.interval) if any(external_indicator(line.indicator_id) for line in request.lines) else None
@@ -86,6 +90,8 @@ async def indicator_values(
         return service.bars(symbol, request.interval, min(count, HISTORY_LIMIT_MAX), None, alignment="clock").bars
 
     async def one(instrument_id: str) -> list[Decimal | None]:
+        from .indicator_context import compare_bars_loader, intrabar_loader
+
         async with semaphore:
             try:
                 bars = await asyncio.to_thread(fetch, instrument_id, limit)

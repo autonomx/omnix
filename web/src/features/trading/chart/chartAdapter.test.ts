@@ -146,7 +146,9 @@ describe('Trading chart adapter normalization', () => {
     expect(index.timeAfterBars('2026-08-05T12:01:00.000Z', 3)).toBe('2026-08-05T12:04:00.000Z');
     expect(new DrawingTimeIndex([]).logicalIndexForTime('2026-08-05T12:00:00.000Z')).toBeNull();
   });
+});
 
+describe('Trading chart adapter normalization', () => {
   describe('drawing times on gapped data', () => {
     // Two 5m sessions, 13:30-19:55 UTC, with an overnight gap between them.
     const sessions = ['2026-10-05', '2026-10-06'].flatMap((day) => Array.from({ length: 78 }, (_, minute) => ({
@@ -189,7 +191,9 @@ describe('Trading chart adapter normalization', () => {
       expect(new DrawingTimeIndex([daily[0]]).timeForLogicalIndex(1)).toBe('2026-10-03T00:00:00.000Z');
     });
   });
+});
 
+describe('Trading chart adapter normalization', () => {
   describe("drawing anchors on the chart's own time scale", () => {
     // Lightweight Charts indexes the union of every series' times. This fake time
     // scale does the same; like the real one, it puts fractional logical indices at 0.

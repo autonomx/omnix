@@ -16,7 +16,7 @@
   .trading-seasonals-table table{width:100%;border-collapse:collapse;font-size:11px}
   .trading-seasonals-table :is(th,td){padding:3px 5px;text-align:right;white-space:nowrap}
   .trading-seasonals-table th[scope='row']{text-align:left}
-  .trading-seasonals-table .is-up{color:#089981}
-  .trading-seasonals-table .is-down{color:#f23645}
+  .trading-seasonals-table .is-up{color:var(--c-teal-600)}
+  .trading-seasonals-table .is-down{color:var(--c-red-640)}
   .trading-seasonals-table .is-summary{font-weight:600;border-top:1px solid var(--c-neutral-910)}
 }

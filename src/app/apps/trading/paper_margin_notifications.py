@@ -14,14 +14,16 @@ import uuid
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.persistence.unit_of_work import unit_of_work
 from app.security.tenant_context import RequestTenant, TenantContext
 
 from .alerts_delivery import MAX_WEBHOOK_ATTEMPTS
-from .alerts_notify import NotificationSettingsRepository, default_notification_settings_repository
 from .paper import MARGIN_CALL_ORDER_PREFIX, PaperAccount, PaperOrder
+
+if TYPE_CHECKING:
+    from .alerts_notify import NotificationSettingsRepository
 
 # Margin-call orders this recent are (re)queued; older ones were queued on an earlier pass or predate the setting.
 RECENT = timedelta(hours=24)
@@ -48,6 +50,12 @@ def _idempotency_key(account_id: str, order_id: str, channel: str) -> str:
     return hashlib.sha256(f"margin-call|{account_id}|{order_id}|{channel}".encode()).hexdigest()
 
 
+def _notification_settings() -> NotificationSettingsRepository:
+    from .alerts_notify import default_notification_settings_repository
+
+    return default_notification_settings_repository()
+
+
 class PaperMarginCallNotifier:
     """Queues margin-call deliveries in the current workspace's outbox."""
 
@@ -58,7 +66,7 @@ class PaperMarginCallNotifier:
         *,
         context: TenantContext | None = None,
         uow_factory: Callable[[], AbstractContextManager[Any]] = unit_of_work,
-        settings_factory: Callable[[], NotificationSettingsRepository] = default_notification_settings_repository,
+        settings_factory: Callable[[], NotificationSettingsRepository] = _notification_settings,
     ) -> None:
         self.context = context
         self.uow_factory = uow_factory

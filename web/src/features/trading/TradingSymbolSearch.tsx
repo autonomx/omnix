@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import type { CanonicalInstrument } from './tradingTypes';
 import type { TradingFormula } from './tradingFormula';
 import { returnKeyboardToChart } from './commands/chartKeyContext';
@@ -167,25 +167,26 @@ export function TradingSymbolSearch({
   const [category, setCategory] = useState<SymbolSearchCategory>('all');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Focuses the query when the search opens (not when the selection mode changes); returns whether it took focus at
+  // once: typed text keeps arriving, so it does unless the query is to be selected.
+  const focusInput = useEffectEvent((atOnce: boolean) => {
+    if (atOnce && selectQueryOnOpen) return false;
+    const input = inputRef.current;
+    input?.focus();
+    if (selectQueryOnOpen) input?.select();
+    else input?.setSelectionRange(input.value.length, input.value.length);
+    return true;
+  });
   useEffect(() => {
     if (!open) return;
     setCategory('all');
-    const focusInput = () => {
-      const input = inputRef.current;
-      input?.focus();
-      if (selectQueryOnOpen) input?.select();
-      else input?.setSelectionRange(input.value.length, input.value.length);
-    };
-    // Typed text keeps arriving, so take focus at once as well as after layout.
-    if (!selectQueryOnOpen) focusInput();
-    const frame = window.requestAnimationFrame(focusInput);
+    focusInput(true);
+    const frame = window.requestAnimationFrame(() => focusInput(false));
     return () => {
       window.cancelAnimationFrame(frame);
       // Choosing a symbol (or closing the search) is a chart action: chart keys work again without a click.
       returnKeyboardToChart();
     };
-    // Runs when the search opens, not when the selection mode changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const results = useMemo(() => {

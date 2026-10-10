@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runTool } from '../testing';
+import { runTool } from '../../../../../test/drawingTools';
 import type { DrawingShape } from '../types';
 import { arcThrough, circleThrough, rotatedRectangleCorners, smoothPath } from './shapesExtra';
 import { intersection, moveRatio } from './patterns';

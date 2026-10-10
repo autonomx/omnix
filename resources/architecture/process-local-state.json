@@ -1493,6 +1493,96 @@
       "max_entries": 4,
       "ttl_seconds": 3600.0,
       "invalidation": "foreground_owner_guard.cache_clear"
+    },
+    {
+      "path": "src/app/apps/trading/alert_conditions.py",
+      "symbol": "_output_profile.__cache__",
+      "category": "cache",
+      "reason": "Output keys of an indicator at given inputs, computed on a fixed synthetic series: pure and deterministic; a source-declared capacity, expiry and cache_clear bound it.",
+      "max_entries": 512,
+      "ttl_seconds": 86400.0,
+      "invalidation": "_output_profile.cache_clear"
+    },
+    {
+      "path": "src/app/apps/trading/alert_conditions.py",
+      "symbol": "_synthetic_series.__cache__",
+      "category": "cache",
+      "reason": "The one fixed synthetic bar series indicator output profiles are computed on: pure and deterministic; a source-declared capacity of one, expiry and cache_clear bound it.",
+      "max_entries": 1,
+      "ttl_seconds": 86400.0,
+      "invalidation": "_synthetic_series.cache_clear"
+    },
+    {
+      "path": "src/app/apps/trading/indicators/server_indicators/_sessions.py",
+      "symbol": "_zone.__cache__",
+      "category": "cache",
+      "reason": "ZoneInfo objects by IANA name, as zoneinfo itself caches them; a source-declared capacity, expiry and cache_clear bound it.",
+      "max_entries": 256,
+      "ttl_seconds": 86400.0,
+      "invalidation": "_zone.cache_clear"
+    },
+    {
+      "path": "src/app/apps/trading/providers/clock_aggregation.py",
+      "symbol": "_weekday_holidays.__cache__",
+      "category": "cache",
+      "reason": "The weekday market holidays of a year, derived from the exchange calendar: pure and deterministic; a source-declared capacity, expiry and cache_clear bound it.",
+      "max_entries": 256,
+      "ttl_seconds": 86400.0,
+      "invalidation": "_weekday_holidays.cache_clear"
+    },
+    {
+      "path": "src/app/apps/trading/screener_words.py",
+      "symbol": "_indicator_catalog.__cache__",
+      "category": "cache",
+      "reason": "The indicator catalog shown to the screener's language model, derived from the code-declared indicators: pure; a source-declared capacity of one, expiry and cache_clear bound it.",
+      "max_entries": 1,
+      "ttl_seconds": 86400.0,
+      "invalidation": "_indicator_catalog.cache_clear"
+    },
+    {
+      "path": "src/app/apps/trading/alerts_scripts.py",
+      "symbol": "_sources",
+      "category": "cache",
+      "reason": "Immutable script versions by (workspace, script, revision) for script alerts; PostgreSQL is the authority. Source enforces a size cap and expiry and exposes the named invalidation.",
+      "max_entries_symbol": "_SOURCES_KEPT",
+      "ttl_symbol": "_SOURCES_TTL_SECONDS",
+      "invalidation": "clear_script_sources"
+    },
+    {
+      "path": "src/app/apps/trading/alerts_scripts.py",
+      "symbol": "_sources_guard",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/apps/trading/alerts_delivery.py",
+      "symbol": "_RESOLVERS",
+      "category": "cache",
+      "reason": "Fixed process-local worker pool (four threads) that bounds webhook host lookups; delivery state and retries live in PostgreSQL."
+    },
+    {
+      "path": "src/app/apps/trading/alerts_delivery.py",
+      "symbol": "_RESOLVER_SLOTS",
+      "category": "coordination",
+      "reason": "Process-local semaphore that keeps webhook host lookups from queueing behind a stuck resolver thread; it holds no durable state."
+    },
+    {
+      "path": "src/app/apps/trading/indicators/registry.py",
+      "symbol": "_REGISTRY",
+      "category": "coordination",
+      "reason": "Registry of the indicators declared in code: every process registers the same indicators when it imports their modules; bounded by the code and never written at run time."
+    },
+    {
+      "path": "src/app/apps/trading/scripts_service.py",
+      "symbol": "_service_guard",
+      "category": "coordination",
+      "reason": "Process-local mutex serializing the one-time construction of this process's script worker pool; script runs carry no durable state."
+    },
+    {
+      "path": "src/app/security/provider_secret_store.py",
+      "symbol": "_PAYLOAD_LOCK",
+      "category": "coordination",
+      "reason": "Process-local re-entrant mutex serializing read-modify-write of the operating-system secret payload within this process; the secret store is the authority."
     }
   ]
 }

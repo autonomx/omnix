@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
 import type { DrawingTool, TradingDrawing } from './drawingCommands';
 import { TradingDrawingOverlay, type TradingDrawingOverlayProps } from './TradingDrawingOverlay';
-import { pointAt, testBarSeries, testProjector } from './tools/testing';
+import { pointAt, testBarSeries, testProjector } from '../../../test/drawingTools';
 import { type DrawingGeometryContext, type DrawingToolDefinition } from './tools/types';
 import type { DrawingCanvasPrimitive } from './DrawingCanvasPrimitive';
 
@@ -296,7 +296,9 @@ describe('TradingDrawingOverlay', () => {
     expect(line).toHaveAttribute('x1', '150');
     expect(line).toHaveAttribute('x2', '250');
   });
+});
 
+describe('TradingDrawingOverlay', () => {
   it('completes an open-ended path on double click and constrains with Shift', () => {
     const { svg, handlers } = renderOverlay({ tool: 'path' as DrawingTool });
     click(svg, 100, 100);

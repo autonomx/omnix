@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.apps.trading.alerts import TradingAlertCreate, TradingAlertEvaluation, TradingAlertRepository
+from app.apps.trading.alerts import TradingAlertCreate, TradingAlertEvaluation
+from app.apps.trading.alerts_repository import TradingAlertRepository
 from app.apps.trading.alerts_delivery import (
     DeliveryResult,
     MAX_WEBHOOK_ATTEMPTS,
@@ -270,7 +271,7 @@ def test_the_monitor_repository_claims_every_workspace(outbox) -> None:
 
 
 def test_a_failing_enqueue_rolls_the_trigger_back(outbox, monkeypatch) -> None:
-    from app.apps.trading import alerts as alerts_module
+    from app.apps.trading import alerts_repository as alerts_module
 
     hooked = _alert(outbox, "atomic", channels=["webhook"], webhook_ref="ref-10")
 

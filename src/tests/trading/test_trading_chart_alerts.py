@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from app.apps.trading.alerts import AlertListing, TradingAlert
+from app.apps.trading.alerts import TradingAlert
+from app.apps.trading.alerts_repository import AlertListing
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
 
 
@@ -79,7 +80,9 @@ def test_expiration_is_postgres_authority_and_evaluation_filter() -> None:
     migration = Path(
         "src/app/apps/trading/migrations/0026_trading_alert_expiration.sql"
     ).read_text()
-    implementation = Path("src/app/apps/trading/alerts.py").read_text()
+    implementation = chr(10).join(
+        Path(f"src/app/apps/trading/{name}.py").read_text() for name in ("alerts", "alerts_repository")
+    )
     assert "ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ" in migration
     assert "expires_at > %s" in implementation
     assert '"expires_at": alert.expires_at.isoformat()' in implementation

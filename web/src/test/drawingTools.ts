@@ -1,8 +1,8 @@
 // Test helpers for drawing tool definitions: a linear projector and a
 // geometry runner, so tool tests read in pixels.
-import { drawingPropertiesWithDefaults, drawingToolDefinition } from './registry';
-import { drawingGeometry, hitTestDrawing, staticChartAccess } from './scene';
-import { DEFAULT_DRAWING_STYLE, type DrawingBarSeries, type DrawingChartAccess, type DrawingToolServices, type DrawingPoint, type DrawingProperties, type DrawingStyle, type ScreenPoint } from './types';
+import { drawingPropertiesWithDefaults, drawingToolDefinition } from '../features/trading/drawings/tools/registry';
+import { drawingGeometry, hitTestDrawing, staticChartAccess } from '../features/trading/drawings/tools/scene';
+import { DEFAULT_DRAWING_STYLE, type DrawingBarSeries, type DrawingChartAccess, type DrawingToolServices, type DrawingPoint, type DrawingProperties, type DrawingStyle, type ScreenPoint } from '../features/trading/drawings/tools/types';
 
 const BASE_TIME = Date.parse('2026-08-05T00:00:00.000Z');
 

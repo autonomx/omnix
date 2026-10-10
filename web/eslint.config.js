@@ -342,7 +342,7 @@ const functionLengthBaseline = {
   'src/features/rpg/RpgWorldVisualMapPanel.tsx': 299,
   'src/features/trading/TradingAlertsPanel.tsx': 313,
   'src/features/trading/TradingChartAlertOverlay.tsx': 332,
-  'src/features/trading/TradingPaperPanel.tsx': 499,
+  'src/features/trading/TradingPaperPanel.tsx': 498,
   'src/features/trading/TradingPositionOverlay.tsx': 333,
   'src/features/trading/TradingStrategiesPanel.tsx': 925,
   'src/features/trading/TradingTerminalDock.tsx': 296,

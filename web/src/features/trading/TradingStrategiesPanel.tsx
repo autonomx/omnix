@@ -208,6 +208,11 @@ const defaultStochRsi5mStrategy = (accountId: string): StochRsi5mTradingStrategy
   },
 });
 
+/** A preset changes the strategy, not which task runs it: the preset with the current execution owner. */
+function keepingOwner<T extends GapPullbackConfig>(preset: T, current: GapPullbackConfig): T {
+  return { ...preset, execution_owner: current.execution_owner };
+}
+
 function eventTone(event: StrategyEvent): string {
   if (event.event_type === 'rejection' || event.state === 'rejected' || event.state === 'vetoed' || event.state === 'research_error') return 'rejected';
   if (event.event_type === 'stoch_trend_capture_entry' && eventStochEntryAllowed(event) === false) return 'rejected';
@@ -695,27 +700,25 @@ export function TradingStrategiesPanel() {
 
   const upgradeToStrictV11 = () => {
     if (!draft) return;
-    setDraft({ ...draft, strategy_version: '1.1.0', config: { ...strictV11Config(), execution_owner: draft.config.execution_owner } });
+    setDraft({ ...draft, strategy_version: '1.1.0', config: keepingOwner(strictV11Config(), draft.config) });
     setNotice('Loaded the strict v1.1 failed-selloff baseline with 5-minute structure and 1-minute execution. Review every value, then save to persist it.');
   };
 
   const loadReviewedV12 = () => {
     if (!draft || !htrPromotionAllowed) return;
-    const config = { ...strictV11Config(), strategy_version: '1.2.0' as const, execution_owner: draft.config.execution_owner };
+    const config = keepingOwner({ ...strictV11Config(), strategy_version: '1.2.0' as const }, draft.config);
     setDraft({ ...draft, strategy_version: '1.2.0', config });
     setNotice('Loaded gap_pullback_v1 1.2.0. Market-structure defaults remain the strict v1.1 baseline; only the reviewed trading-research-1 policy becomes authoritative. Review and save explicitly.');
   };
 
   const loadFrozenV2 = () => {
     if (!draft) return;
-    // A preset changes the strategy, not which task runs it.
-    const config = { ...frozenV2Config(), execution_owner: draft.config.execution_owner };
     setDraft({
       ...draft,
       strategy_version: '2.0.0',
       mode: 'shadow',
       active_universe_id: null,
-      config,
+      config: keepingOwner(frozenV2Config(), draft.config),
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
     setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode and cleared any selected universe so qualification uses the strategy-owned raw morning archive. Structure: 1m L1→B1→higher-L2, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');
@@ -723,7 +726,7 @@ export function TradingStrategiesPanel() {
 
   const loadFinvizLearningV2 = () => {
     if (!draft) return;
-    const config = { ...finvizLearningV2Config(), execution_owner: draft.config.execution_owner };
+    const config = keepingOwner(finvizLearningV2Config(), draft.config);
     setDraft({
       ...draft,
       strategy_version: '2.0.0',

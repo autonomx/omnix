@@ -87,6 +87,32 @@ function codexAuthLabel(status: CodexAuthStatus): string {
   return 'Signed in';
 }
 
+/** The Claude Code CLI provider's settings; it signs in on its own, so Omnix keeps no credentials for it. */
+function ClaudeCliSettings() {
+  const { state, dispatch } = useSettingsProfileContext();
+  const config = state.draft.providerConfigs.claudeCli;
+  return (
+    <div className="provider-config-group">
+      <h4>Claude (Claude Code CLI)</h4>
+      <div className="settings-form-grid">
+        <SettingsField label="Model">
+          <input value={config.model} onChange={updateString(dispatch, 'providerConfigs.claudeCli.model')} placeholder="sonnet" />
+          <small>An alias (sonnet, opus, haiku, fable) or a full model name.</small>
+        </SettingsField>
+        <SettingsField label="Effort">
+          <select value={config.effort} onChange={updateString(dispatch, 'providerConfigs.claudeCli.effort')}>
+            {CLAUDE_EFFORT_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </SettingsField>
+        <SettingsField label="Claude executable">
+          <input value={config.claudePath} onChange={updateString(dispatch, 'providerConfigs.claudeCli.claudePath')} placeholder="claude" />
+          <small>Found on PATH or in the Claude Code install when left as claude. Sign in with the CLI itself; Omnix stores no Anthropic credentials.</small>
+        </SettingsField>
+      </div>
+    </div>
+  );
+}
+
 export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadePayload }) {
   const { state, dispatch } = useSettingsProfileContext();
   const [codexAuthStatus, setCodexAuthStatus] = useState<CodexAuthStatus>();
@@ -231,26 +257,7 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
             </div>
           </div>
         ) : null}
-        {providers.llm === 'claude_cli' ? (
-          <div className="provider-config-group">
-            <h4>Claude (Claude Code CLI)</h4>
-            <div className="settings-form-grid">
-              <SettingsField label="Model">
-                <input value={configs.claudeCli.model} onChange={updateString(dispatch, 'providerConfigs.claudeCli.model')} placeholder="sonnet" />
-                <small>An alias (sonnet, opus, haiku, fable) or a full model name.</small>
-              </SettingsField>
-              <SettingsField label="Effort">
-                <select value={configs.claudeCli.effort} onChange={updateString(dispatch, 'providerConfigs.claudeCli.effort')}>
-                  {CLAUDE_EFFORT_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-              </SettingsField>
-              <SettingsField label="Claude executable">
-                <input value={configs.claudeCli.claudePath} onChange={updateString(dispatch, 'providerConfigs.claudeCli.claudePath')} placeholder="claude" />
-                <small>Found on PATH or in the Claude Code install when left as claude. Sign in with the CLI itself; Omnix stores no Anthropic credentials.</small>
-              </SettingsField>
-            </div>
-          </div>
-        ) : null}
+        {providers.llm === 'claude_cli' ? <ClaudeCliSettings /> : null}
         {providers.llm === 'chatgpt_codex' ? (
           <div className="provider-config-group">
             <h4>ChatGPT Plus (Codex)</h4>

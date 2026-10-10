@@ -8,6 +8,7 @@
  * Without BroadcastChannel (old browsers, tests) the page behaves as the only window.
  */
 import { useEffect } from 'react';
+import { startTicker } from '../../shared/timers';
 
 export type SavedDocumentKind = 'workspace' | 'watchlist';
 
@@ -165,12 +166,12 @@ export function useTradingWindowPresence(): void {
     };
     const onVisibility = () => presence.setVisible(document.visibilityState !== 'hidden');
     document.addEventListener('visibilitychange', onVisibility);
-    const timer = window.setInterval(() => presence.heartbeat(), HEARTBEAT_MS);
+    const stopTicker = startTicker(() => presence.heartbeat(), HEARTBEAT_MS);
     window.addEventListener('focus', onFocus);
     window.addEventListener('pagehide', onHide);
     window.addEventListener('pageshow', onShow);
     return () => {
-      window.clearInterval(timer);
+      stopTicker();
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('pagehide', onHide);
       window.removeEventListener('pageshow', onShow);

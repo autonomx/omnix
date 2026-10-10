@@ -3,7 +3,7 @@ import { anchoredVolumeWeightedAveragePrice } from '../../../indicators/coreIndi
 import type { MarketBar } from '../../../tradingTypes';
 import { drawingPropertiesWithDefaults, drawingToolDefinition } from '../registry';
 import { drawingGeometry, staticChartAccess } from '../scene';
-import { pointAt, runTool, testProjector, testServices } from '../testing';
+import { pointAt, runTool, testProjector, testServices } from '../../../../../test/drawingTools';
 import {
   DEFAULT_DRAWING_STYLE,
   type DrawingAlertLevel,

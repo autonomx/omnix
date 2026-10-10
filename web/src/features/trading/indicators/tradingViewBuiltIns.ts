@@ -1140,9 +1140,9 @@ function relativeVolumeAtTime(keys: readonly number[], since: readonly number[],
 }
 
 const PRICE_SOURCES = ['close', 'open', 'high', 'low', 'hl2', 'hlc3', 'ohlc4'] as const;
-type PriceSource = typeof PRICE_SOURCES[number];
+type PriceSourceName = typeof PRICE_SOURCES[number];
 
-function priceSource(source: PriceSource, open: readonly number[], high: readonly number[], low: readonly number[], close: readonly number[]): number[] {
+function priceSource(source: PriceSourceName, open: readonly number[], high: readonly number[], low: readonly number[], close: readonly number[]): number[] {
   return close.map((value, i) => {
     if (source === 'open') return open[i];
     if (source === 'high') return high[i];
@@ -1327,7 +1327,7 @@ function quickWinOutputs(
   const session = instance.session ?? UTC_SESSION;
   const clock = () => sessionClock(bars, startTimes(bars), session);
   if (name === '24-hour Volume') {
-    const price = priceSource(p.source as PriceSource, open, high, low, close);
+    const price = priceSource(p.source as PriceSourceName, open, high, low, close);
     return [output(id, 'volume-24h', '24h Volume', 1, 'histogram', rollingDayVolume(startTimes(bars), volume, price), bars)];
   }
   if (name === 'Correlation Coefficient (CC)') {

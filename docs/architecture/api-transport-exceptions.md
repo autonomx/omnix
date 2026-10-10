@@ -90,6 +90,11 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/trading/persistence/workspaceDocument.ts` | `*` | Trading workspace document content, stored in `TradingDocument.payload` and owned by the web client |
 | `web/src/features/trading/tradingWatchlistModel.ts` | `WatchlistPayload` | Watchlist document content in `TradingDocument.payload` |
 | `web/src/features/trading/tradingFormula.ts` | `TradingFormulaPayload` | Formula document content in `TradingDocument.payload` |
+| `web/src/features/trading/tradingWatchlistModel.ts` | `WatchlistFlagsPayload` | Watchlist flag document content in `TradingDocument.payload` |
+| `web/src/features/trading/drawings/drawingDocument.ts` | `DrawingDocumentPayload` | Drawing document content in `TradingDocument.payload` |
+| `web/src/features/trading/scripts/scriptsApi.ts` | `ScriptPayload` | Script document content in `TradingDocument.payload` |
+| `web/src/features/trading/drawings/tools/types.ts` | `DrawingActionRequest` | What a drawing's context action asks of the chart (open the order ticket, say) |
+| `web/src/features/trading/intrabarData.ts` | `IntrabarRequest` | A request to the browser's intrabar loader and cache; the wire request is the query of `GET /api/trading/bars/intrabar` |
 | `web/src/features/rpg/*` | `*` | The RPG web surface, which is being retired and keeps its handwritten clients until then (DECISIONS 2026-10-03) |
 
 Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `web/src/features/assistant/workspace/live-voice-messages.ts`; story audio control messages in `web/src/features/storyteller/storyAudioMessages.ts`.

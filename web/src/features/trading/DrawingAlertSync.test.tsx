@@ -197,7 +197,9 @@ describe('drawing alerts follow their drawing (TVP-1.4)', () => {
     expect(mutations.replace).toHaveBeenCalledWith(expect.objectContaining({ alert_id: 'a-upper', enabled: false }));
     expect(screen.getByRole('alertdialog')).toHaveTextContent('An alert follows');
   });
+});
 
+describe('drawing alerts follow their drawing (TVP-1.4)', () => {
   it('tries a failing move again once the drawing moves again', async () => {
     vi.useFakeTimers();
     api.updateAlert.mockRejectedValue(new Error('Trading request failed (500)'));

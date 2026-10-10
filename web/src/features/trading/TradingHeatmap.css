@@ -8,6 +8,6 @@
   .trading-heatmap-group{fill:none;stroke:var(--c-neutral-1000);stroke-width:2}
   .trading-heatmap-group-label{fill:currentColor;font-size:10px;font-weight:700}
   .trading-heatmap-tile{cursor:pointer}
-  .trading-heatmap-tile text{fill:#fff;font-weight:600;pointer-events:none}
-  .trading-heatmap-tile:is(:hover,:focus) rect{stroke:#fff;stroke-width:1.5}
+  .trading-heatmap-tile text{fill:var(--c-neutral-1000);font-weight:600;pointer-events:none}
+  .trading-heatmap-tile:is(:hover,:focus) rect{stroke:var(--c-neutral-1000);stroke-width:1.5}
 }

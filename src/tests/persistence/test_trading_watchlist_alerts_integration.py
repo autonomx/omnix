@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.apps.trading.alerts import TradingAlertCreate, TradingAlertEvaluation, TradingAlertRepository, TradingAlertUpdate
+from app.apps.trading.alerts import TradingAlertCreate, TradingAlertEvaluation, TradingAlertUpdate
+from app.apps.trading.alerts_repository import TradingAlertRepository
 from app.apps.trading.alerts_monitor import TradingAlertMonitor
 from app.apps.trading.repositories import TradingDocumentRepository
 from app.persistence.config import DatabaseSettings
