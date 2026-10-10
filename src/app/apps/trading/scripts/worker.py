@@ -19,7 +19,7 @@ from typing import Any
 
 from ..indicators.registry import BarSeries
 from .errors import ScriptError
-from .runtime import ScriptLimits, ScriptResult, compile_script, run_script
+from .runtime import ScriptLimits, ScriptResult, SecurityBars, compile_script, run_script
 
 
 def jsonable(value: Any) -> Any:
@@ -77,9 +77,15 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
     try:
         program = compile_script(str(job["source"]))
         limits = ScriptLimits(**dict(job.get("limits") or {}))
+        # request.security() contexts' bars, loaded by the service: {"<symbol>|<timeframe>": {"symbol", "timeframe", "bars"}}.
+        securities = {
+            str(key): SecurityBars(bar_series(item["bars"]), str(item.get("symbol") or ""), str(item.get("timeframe") or ""))
+            for key, item in dict(job.get("securities") or {}).items()
+        }
         result = run_script(
             program, bar_series(job["bars"]), dict(job.get("inputs") or {}), limits,
             symbol=str(job.get("symbol") or ""), timeframe=str(job.get("timeframe") or ""), profile=bool(job.get("profile")),
+            securities=securities,
         )
         return {"id": job.get("id"), "result": result_payload(result)}
     except ScriptError as error:

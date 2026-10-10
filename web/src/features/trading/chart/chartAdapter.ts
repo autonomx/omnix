@@ -26,6 +26,7 @@ import {
   type UTCTimestamp,
   type WhitespaceData,
 } from 'lightweight-charts';
+import { FillBandPrimitive } from './fillBandPrimitive';
 import type { DrawingPoint } from '../drawings/drawingCommands';
 import { barIndexAtOrBefore, barIndexForTime, createBarTimeline, intervalStepMs, timeForBarIndex, type BarTimeline } from '../drawings/tools/barTimeline';
 import type { DrawingBar, DrawingBarSeries } from '../drawings/tools/types';
@@ -111,7 +112,7 @@ type PriceSeries =
   | ISeriesApi<'Area'>
   | ISeriesApi<'Baseline'>
   | ISeriesApi<'Histogram'>;
-type IndicatorSeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Candlestick'>;
+type IndicatorSeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'>;
 type LogicalRange = { from: number; to: number };
 
 export function constrainZoomOutRange(
@@ -647,6 +648,13 @@ function indicatorPriceFormat(precision: number | null | undefined): { priceForm
   return { priceFormat: { type: 'price', precision, minMove: 10 ** -precision } };
 }
 
+/** The kind of series an indicator output is drawn on; a change of kind replaces the series. */
+function seriesKind(output: IndicatorOutput): 'candles' | 'bars' | 'fill' | 'columns' | 'line' {
+  if (output.kind === 'candles') return output.barStyle === 'bars' ? 'bars' : 'candles';
+  if (output.kind === 'fill') return 'fill';
+  return output.kind === 'histogram' || output.kind === 'background' ? 'columns' : 'line';
+}
+
 export class TradingChartAdapter {
   private readonly chart: IChartApi;
   private priceSeries: PriceSeries;
@@ -654,7 +662,7 @@ export class TradingChartAdapter {
   private readonly indicatorSeries = new Map<string, IndicatorSeries>();
   private readonly indicatorSeriesPanes = new Map<string, number>();
   /** Each indicator series' kind: an output that changes kind gets a new series of the right type. */
-  private readonly indicatorSeriesKinds = new Map<string, 'line' | 'columns' | 'candles'>();
+  private readonly indicatorSeriesKinds = new Map<string, 'line' | 'columns' | 'candles' | 'bars' | 'fill'>();
   private readonly indicatorMarkerPlugins = new Map<string, ISeriesMarkersPluginApi<Time>>();
   private readonly comparisonSeries = new Map<string, ISeriesApi<'Line'>>();
   private readonly comparisonSeriesPanes = new Map<string, number>();
@@ -677,6 +685,8 @@ export class TradingChartAdapter {
   private readonly revisions = new Map<number, number>();
   private readonly viewportListeners = new Set<() => void>();
   private readonly priceSeriesPrimitives = new Set<ISeriesPrimitive<Time>>();
+  /** Script fills (TVP-11.1), by output key: the primitive on each fill's hidden series. */
+  private readonly fillPrimitives = new Map<string, FillBandPrimitive>();
   private readonly comparisonViewportHandler = () => {
     this.renderComparisonSeries();
     this.renderViewportAverage();
@@ -1045,6 +1055,46 @@ export class TradingChartAdapter {
     }
   }
 
+  /** A fill's series (TVP-11.1): a hidden line in the pane, carrying the band primitive that paints the fill under it. */
+  private addFillSeries(key: string, priceScaleId: string, paneIndex: number): ISeriesApi<'Line'> {
+    const series = this.chart.addSeries(LineSeries, {
+      color: 'rgba(0, 0, 0, 0)', lineVisible: false, title: '', lastValueVisible: false, priceLineVisible: false,
+      crosshairMarkerVisible: false, priceScaleId,
+    }, paneIndex);
+    const primitive = new FillBandPrimitive();
+    series.attachPrimitive(primitive);
+    this.fillPrimitives.set(key, primitive);
+    series.setSeriesOrder(0);
+    return series;
+  }
+
+  private setFillData(output: IndicatorOutput, series: ISeriesApi<'Line'>): void {
+    const scale = this.priceScaleMultiplier;
+    const band = output.points.map((point) => ({
+      time: timestamp(point.time) as Time,
+      upper: (point.high ?? Number.NaN) * scale,
+      lower: (point.low ?? Number.NaN) * scale,
+      color: point.color ?? output.color ?? 'rgba(41, 98, 255, 0.2)',
+    }));
+    // The hidden line runs through the middle of the band, so the bars and crosshair know its times.
+    const data = band.filter((point) => Number.isFinite(point.upper) && Number.isFinite(point.lower))
+      .map((point) => ({ time: point.time, value: (point.upper + point.lower) / 2 }));
+    this.noteSeriesTimes(`indicator:${output.key}`, data);
+    series.setData(data);
+    this.fillPrimitives.get(output.key)?.setPoints(band);
+  }
+
+  /** Candles (Volume Delta, CVD; a script's plotcandle and plotbar): on the chart's bars already, each with its own open, high and low, and a script's colour per bar. */
+  private setCandleData(output: IndicatorOutput, series: ISeriesApi<'Candlestick'>, priceScaleId: string): void {
+    const data = output.points.map((point) => ({
+      time: timestamp(point.time), open: point.open ?? point.value, high: point.high ?? point.value, low: point.low ?? point.value, close: point.value,
+      ...(point.color ? { color: point.color, wickColor: point.color, borderColor: point.color } : {}),
+    }));
+    series.applyOptions({ title: output.valuesInStatusLine === false ? '' : output.title, lastValueVisible: output.labelsOnPriceScale === true, priceScaleId, ...indicatorPriceFormat(output.precision) });
+    this.noteSeriesTimes(`indicator:${output.key}`, data);
+    series.setData(data);
+  }
+
   setIndicatorOutputs(outputs: readonly IndicatorOutput[]): void {
     this.assertActive();
     this.indicatorOutputs = [...outputs];
@@ -1054,7 +1104,6 @@ export class TradingChartAdapter {
       return ids;
     }, []);
 
-    const seriesKind = (output: IndicatorOutput) => (output.kind === 'candles' ? 'candles' : output.kind === 'histogram' || output.kind === 'background' ? 'columns' : 'line');
     const enabled = new Set(outputs.filter((output) => {
       const known = this.indicatorSeriesKinds.get(output.key);
       return known === undefined || known === seriesKind(output);
@@ -1068,6 +1117,7 @@ export class TradingChartAdapter {
         this.indicatorSeries.delete(key);
         this.indicatorSeriesPanes.delete(key);
         this.indicatorSeriesKinds.delete(key);
+        this.fillPrimitives.delete(key);
       }
     }
     const barTimes = this.bars.map((bar) => timestamp(bar.start_time));
@@ -1075,8 +1125,8 @@ export class TradingChartAdapter {
     this.viewportAverageOutput = outputs.find((output) => output.kind === 'viewport-average' && output.visible !== false) ?? null;
     this.renderViewportAverage();
     for (const output of outputs) {
-      // Bar colours and the visible average have no series of their own.
-      if (output.visible === false || output.kind === 'bar-colors' || output.kind === 'viewport-average') continue;
+      // Bar colours, the visible average and tables (drawn over the chart) have no series of their own.
+      if (output.visible === false || output.kind === 'bar-colors' || output.kind === 'viewport-average' || output.kind === 'table') continue;
       const columns = output.kind === 'histogram' || output.kind === 'background';
       const candles = output.kind === 'candles';
       const paneId = indicatorPaneId(output);
@@ -1097,7 +1147,11 @@ export class TradingChartAdapter {
           priceLineVisible: false,
           ...indicatorPriceFormat(output.precision),
         };
-        series = candles
+        series = output.kind === 'fill'
+          ? this.addFillSeries(output.key, priceScaleId, paneIndex)
+          : candles && output.barStyle === 'bars'
+          ? this.chart.addSeries(BarSeries, { ...commonOptions, priceScaleId, upColor: INDICATOR_CANDLE_UP, downColor: INDICATOR_CANDLE_DOWN }, paneIndex)
+          : candles
           ? this.chart.addSeries(CandlestickSeries, {
             ...commonOptions, priceScaleId, upColor: INDICATOR_CANDLE_UP, downColor: INDICATOR_CANDLE_DOWN, wickUpColor: INDICATOR_CANDLE_UP,
             wickDownColor: INDICATOR_CANDLE_DOWN, borderVisible: false,
@@ -1116,14 +1170,12 @@ export class TradingChartAdapter {
         series.moveToPane(paneIndex);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       }
+      if (output.kind === 'fill') {
+        this.setFillData(output, series as ISeriesApi<'Line'>);
+        continue;
+      }
       if (candles) {
-        // Candles (Volume Delta, CVD): on the chart's bars already, each with its own open, high and low.
-        const data = output.points.map((point) => ({
-          time: timestamp(point.time), open: point.open ?? point.value, high: point.high ?? point.value, low: point.low ?? point.value, close: point.value,
-        }));
-        (series as ISeriesApi<'Candlestick'>).applyOptions({ title: output.valuesInStatusLine === false ? '' : output.title, lastValueVisible: output.labelsOnPriceScale === true, priceScaleId, ...indicatorPriceFormat(output.precision) });
-        this.noteSeriesTimes(`indicator:${output.key}`, data);
-        (series as ISeriesApi<'Candlestick'>).setData(data);
+        this.setCandleData(output, series as ISeriesApi<'Candlestick'>, priceScaleId);
         continue;
       }
       if (columns) {

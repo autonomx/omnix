@@ -22,6 +22,7 @@ from .scripts.runtime import SERIES_NAMES
 from .repositories import RepositoryFactory, default_trading_repository
 from .scripts_screener import SCREEN_MAX_INSTRUMENTS, ScriptScreenOutput, ScriptScreenRow, screen_script
 from .scripts_service import BACKTEST_LIMITS, ScriptRunService, ScriptServiceError, bars_for_script, check_script, default_script_service
+from .scripts_security import load_script_securities
 from .service import TradingMarketDataService, default_market_data_service
 
 logger = logging.getLogger(__name__)
@@ -194,10 +195,14 @@ def create_trading_scripts_router(
         bars = list(response.bars)
         times = [bar.start_time.isoformat() for bar in bars]
         user_id = str(getattr(current_tenant(), "user_id", "") or "")
+        # request.security(): the other symbols' and timeframes' bars (TVP-11.1).
+        securities = await asyncio.to_thread(
+            load_script_securities, request.source, request.instrument_id, request.interval, bars, market_service_factory(), request.inputs,
+        )
         try:
             result = await asyncio.to_thread(
                 service_factory().run, request.source, bars_for_script(bars), inputs=request.inputs,
-                symbol=request.instrument_id, timeframe=request.interval, user_id=user_id, profile=request.profile,
+                symbol=request.instrument_id, timeframe=request.interval, user_id=user_id, profile=request.profile, securities=securities,
             )
         except ScriptServiceError as error:
             return ScriptRunResponse(times=times, error=ScriptDiagnostic(**error.payload()))
@@ -234,10 +239,13 @@ def create_trading_scripts_router(
         bars = list(response.bars)
         times = [bar.start_time.isoformat() for bar in bars]
         user_id = str(getattr(current_tenant(), "user_id", "") or "")
+        securities = await asyncio.to_thread(
+            load_script_securities, request.source, request.instrument_id, request.interval, bars, market_service_factory(), request.inputs,
+        )
         try:
             result = await asyncio.to_thread(
                 service_factory().run, request.source, bars_for_script(bars), inputs=request.inputs,
-                symbol=request.instrument_id, timeframe=request.interval, user_id=user_id, limits=BACKTEST_LIMITS,
+                symbol=request.instrument_id, timeframe=request.interval, user_id=user_id, limits=BACKTEST_LIMITS, securities=securities,
             )
         except ScriptServiceError as error:
             return ScriptRunResponse(times=times, error=ScriptDiagnostic(**error.payload()))

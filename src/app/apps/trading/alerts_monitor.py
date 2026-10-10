@@ -24,6 +24,7 @@ from .alerts import (
 )
 from .alerts_evaluation import evaluate_conditions, history_limit, required_bars
 from .alert_conditions import CompareBars
+from .alerts_scripts import ScriptAlertContext
 from .external_series import ExternalSeries
 from .indicator_context import compare_bars_loader, instrument_session
 from .indicators.registry import TradingSession
@@ -70,11 +71,13 @@ def _outcomes(
     external: ExternalSeries | None = None,
     session: TradingSession | None = None,
     compare: CompareBars | None = None,
+    script_context: ScriptAlertContext | None = None,
 ) -> list[AlertOutcomeRecord]:
     records: list[AlertOutcomeRecord] = []
     for alert in alerts:
         outcome = evaluate_conditions(
-            alert.conditions, bars, final_only=_final_only(alert), external=external, session=session, compare=compare
+            alert.conditions, bars, final_only=_final_only(alert), external=external, session=session, compare=compare,
+            script_context=script_context,
         )
         if outcome is not None:
             records.append(AlertOutcomeRecord(alert.alert_id, alert.revision, outcome))
@@ -154,9 +157,10 @@ class TradingAlertMonitor(ScheduledTradingMonitor):
                 compare = compare_bars_loader(
                     lambda symbol, limit, interval=interval: service.bars(symbol, interval, limit, None).bars
                 )
+                scripts = ScriptAlertContext(instrument_id, interval, service)
                 # Indicator maths (and metric and compare fetches) are blocking work; keep them off the event loop.
-                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars, external, session, compare)
-                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars, external, session, compare)
+                outcomes = await asyncio.to_thread(_outcomes, target_alerts, bars, external, session, compare, scripts)
+                symbol_outcomes = await asyncio.to_thread(_outcomes, symbol_alerts, bars, external, session, compare, scripts)
                 if not outcomes and not symbol_outcomes:
                     continue
                 context = AlertEvaluationContext(

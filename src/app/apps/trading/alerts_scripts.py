@@ -18,6 +18,7 @@ from typing import Any
 from .alert_conditions import AlertConditionSpec, ScriptSource, condition_sources
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .scripts_service import ScriptRunService, ScriptServiceError, bars_for_script, check_script, default_script_service
+from .scripts_security import load_script_securities
 
 logger = logging.getLogger(__name__)
 
@@ -80,21 +81,40 @@ def series_from_result(result: dict[str, Any], output: str) -> ScriptAlertSeries
     return ScriptAlertSeries(values=values, messages={bar: str(message) for bar in values} if message else {})
 
 
+@dataclass(frozen=True)
+class ScriptAlertContext:
+    """What a script alert runs on besides its bars: the alert's instrument and interval, and the market data service."""
+
+    instrument_id: str
+    interval: str
+    market_service: Any
+
+
 def script_alert_series(
     source: ScriptSource,
     bars: Sequence[Any],
     *,
     repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
     service_factory: Callable[[], ScriptRunService] = default_script_service,
+    context: ScriptAlertContext | None = None,
 ) -> ScriptAlertSeries:
-    """Run the alert's script version on ``bars``; its ``output`` by bar index."""
+    """Run the alert's script version on ``bars``; its ``output`` by bar index.
+
+    ``context``: the alert's instrument, interval and market data, for syminfo and request.security() (TVP-11.1)."""
     if not bars:
         return ScriptAlertSeries()
     try:
         text = script_source_at(repository_factory(), source.script_id, source.revision)
         if text is None:
             return ScriptAlertSeries(error=f"script {source.script_id} has no version at revision {source.revision}")
-        result = service_factory().run(text, bars_for_script(bars), inputs=dict(source.inputs), user_id=ALERT_RUNS_USER)
+        extra: dict[str, Any] = {}
+        if context is not None:
+            extra = {
+                "symbol": context.instrument_id,
+                "timeframe": context.interval,
+                "securities": load_script_securities(text, context.instrument_id, context.interval, bars, context.market_service, dict(source.inputs)),
+            }
+        result = service_factory().run(text, bars_for_script(bars), inputs=dict(source.inputs), user_id=ALERT_RUNS_USER, **extra)
     except ScriptServiceError as error:
         logger.info("script_alert_run_failed", extra={"script_id": source.script_id, "error": error.message})
         return ScriptAlertSeries(error=error.message)

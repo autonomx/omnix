@@ -14,9 +14,10 @@ from __future__ import annotations
 import contextvars
 import copy
 import math
+import re
 import time as clock
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
@@ -268,6 +269,9 @@ class Program:
     # Reads the last bar (barstate.islast, last_bar_index, ...): a run can't be extended bar by bar, since bars that
     # were last when they ran no longer are; such a script runs again in full on new bars.
     uses_last_bar: bool = False
+    # request.security() contexts, as "<symbol>|<timeframe>" written in the script ("" is the chart's own, and
+    # "{input:<title>}" an input's value: see resolve_security_key).
+    securities: list[str] = field(default_factory=list)
 
 
 def compile_script(source: str | Script) -> Program:
@@ -295,13 +299,40 @@ def run_script(
     symbol: str = "",
     timeframe: str = "",
     profile: bool = False,
+    securities: dict[str, SecurityBars] | None = None,
 ) -> ScriptResult:
+    """Runs a program on bars. ``securities``: the bars of each request.security() context (Program.securities)."""
     if isinstance(program, str):
         program = compile_script(program)
-    run = ScriptRun(program, bars, inputs or {}, limits or ScriptLimits(), symbol, timeframe)
+    run = ScriptRun(program, bars, inputs or {}, limits or ScriptLimits(), symbol, timeframe, securities=securities)
     run.profiling = profile
     run.run_all()
     return run.result()
+
+
+def resolve_security_key(template: str, program: Program, inputs: dict[str, Any]) -> str:
+    """A request.security() context with its inputs' values: "{input:<title>}" becomes the input's value (its
+    default when the run doesn't set it)."""
+    defaults = {item.title: item.default for item in program.inputs}
+
+    def value(match: re.Match[str]) -> str:
+        title = match.group(1)
+        chosen = inputs.get(title, defaults.get(title, ""))
+        return "" if chosen is None else str(chosen)
+
+    return _INPUT_REFERENCE.sub(value, template)
+
+
+_INPUT_REFERENCE = re.compile(r"\{input:([^{}|]*)\}")
+
+
+@dataclass(frozen=True)
+class SecurityBars:
+    """Another context's bars for request.security(): its symbol and timeframe as Omnix names them."""
+
+    bars: BarSeries
+    symbol: str
+    timeframe: str
 
 
 class ScriptRun:
@@ -316,10 +347,21 @@ class ScriptRun:
         limits: ScriptLimits,
         symbol: str = "",
         timeframe: str = "",
+        *,
+        securities: dict[str, SecurityBars] | None = None,
+        context_key: str | None = None,
     ) -> None:
         if len(bars) > limits.max_bars:
             raise ScriptLimitError(f"a script runs on at most {limits.max_bars} bars")
         self.program = program
+        # request.security(): the context this run computes ("<symbol>|<timeframe>"; None for the chart's own run),
+        # the bars of the others, and, for each call site, the values a context's run recorded bar by bar.
+        self.context_key = context_key
+        self.securities = securities or {}
+        self.security_values: dict[int, list[Any]] = {}
+        self.security_runs: dict[str, ScriptRun | None] = {}
+        self.security_alignment: dict[tuple[str, bool], list[int]] = {}
+        self.resolved_securities: dict[str, str] = {}
         self.limits = limits
         self.inputs = validate_inputs(program, inputs)
         self.symbol = symbol
@@ -354,21 +396,112 @@ class ScriptRun:
         self.interval_ms = interval_ms(timeframe)
         # A strategy() script trades a simulated account, filled on these bars only (scripts/strategy.py).
         self.broker: Any = None
-        if program.declaration.get("kind") == "strategy":
+        if program.declaration.get("kind") == "strategy" and context_key is None:
             from .strategy import Broker, StrategySettings
 
             self.broker = Broker(self, StrategySettings.from_declaration(program.declaration))
 
     @property
     def can_extend(self) -> bool:
-        """Whether new bars can be run one at a time (see Program.uses_last_bar)."""
-        return not self.program.uses_last_bar
+        """Whether new bars can be run one at a time (see Program.uses_last_bar); request.security() runs in full."""
+        return not self.program.uses_last_bar and not self.program.securities
 
     def __len__(self) -> int:
         return len(self.close)
 
     def run_all(self) -> None:
+        if self.context_key is None and self.program.securities and not self.security_runs:
+            self._run_securities()
         self._run_bars(self.committed, len(self.close))
+
+    # request.security()
+
+    def security_key(self, template: str) -> str:
+        """A context as this run resolves it (its input values)."""
+        key = self.resolved_securities.get(template)
+        if key is None:
+            key = resolve_security_key(template, self.program, self.inputs)
+            self.resolved_securities[template] = key
+        return key
+
+    def _run_securities(self) -> None:
+        """Runs the script once in each requested context, on that context's bars, before the chart's own run. The
+        time they take counts against this run's limit."""
+        for key in dict.fromkeys(self.security_key(template) for template in self.program.securities):
+            if key == "|":
+                continue  # an input set to the chart's own symbol and timeframe
+            context = self.securities.get(key)
+            if context is None or len(context.bars) == 0:
+                self.security_runs[key] = None  # no bars for it: its values are na
+                continue
+            remaining = self.limits.max_seconds - self.seconds
+            if remaining <= 0:
+                raise ScriptLimitError(f"the script ran for more than {self.limits.max_seconds:g} s")
+            run = ScriptRun(
+                self.program, context.bars, self.inputs, replace(self.limits, max_seconds=remaining),
+                context.symbol, context.timeframe, context_key=key,
+            )
+            try:
+                run.run_all()
+            finally:
+                self.seconds += run.seconds
+            self.security_runs[key] = run
+
+    def record_security(self, site: int, value: Any) -> None:
+        """In a context's run: the value of a request.security() expression on this bar."""
+        values = self.security_values.setdefault(site, [])
+        if len(values) <= self.t:
+            values.extend([None] * (self.t - len(values) + 1))
+        values[self.t] = value
+
+    def _close_times(self, times: list[int], timeframe: str) -> list[int]:
+        step = interval_ms(timeframe)
+        return [
+            times[index + 1] if step is None and index + 1 < len(times) else (time + step if step is not None else time + 1)
+            for index, time in enumerate(times)
+        ]
+
+    def _alignment(self, key: str, lookahead: bool) -> list[int]:
+        """For each of this run's bars, the context bar whose value it reads (-1 for none): the last one closed by the
+        bar's close (lookahead off), or the last one started by the bar's start (lookahead on). On the last bar, as on a
+        realtime bar, lookahead off reads the latest context bar started before the bar closes, closed or not."""
+        cached = self.security_alignment.get((key, lookahead))
+        if cached is not None:
+            return cached
+        run = self.security_runs.get(key)
+        indexes: list[int] = []
+        if run is not None:
+            starts = run.time
+            closes = self._close_times(run.time, run.timeframe)
+            own_closes = self._close_times(self.time, self.timeframe)
+            j = -1
+            last = len(self.time) - 1
+            for t, start in enumerate(self.time):
+                if lookahead:
+                    marks, bound = starts, start
+                elif t == last:
+                    marks, bound = starts, own_closes[t] - 1  # started before the close
+                else:
+                    marks, bound = closes, own_closes[t]
+                while j + 1 < len(marks) and marks[j + 1] <= bound:
+                    j += 1
+                indexes.append(j)
+        else:
+            indexes = [-1] * len(self.time)
+        self.security_alignment[(key, lookahead)] = indexes
+        return indexes
+
+    def security_value(self, site: int, key: str, gaps: bool, lookahead: bool) -> Any:
+        """In the chart's run: the context's value for this bar; with gaps on, only on the bar its context bar changes."""
+        run = self.security_runs.get(key)
+        if run is None:
+            return None
+        indexes = self._alignment(key, lookahead)
+        j = indexes[self.t] if self.t < len(indexes) else -1
+        if j < 0 or (gaps and self.t > 0 and indexes[self.t - 1] == j):
+            return None
+        values = run.security_values.get(site, [])
+        return values[j] if j < len(values) else None
 
     def append_bar(self, bar: Any) -> None:
         """Adds one closed bar and runs only it (incremental execution). A script that reads the last bar can't be
@@ -694,6 +827,12 @@ class _Compiler:
         self.plot_specs: list[tuple[str, str, dict[str, Any]]] = []
         self.uses_drawings = False
         self.uses_last_bar = False
+        self.securities: list[str] = []
+        # Top-level variables holding an input's value (`tf = input.timeframe("D")`), by name: the input's title and the
+        # variable's binding (a local of the same name is another variable). One that is reassigned is dropped; one a
+        # request.security() context uses can't be reassigned (security_bindings).
+        self.input_variables: dict[str, tuple[str, _Binding]] = {}
+        self.security_bindings: set[int] = set()
         self.function_depth = 0
         self.loop_depth = 0
         self.version = script.version or 6
@@ -708,7 +847,10 @@ class _Compiler:
                 lines.append(statement.line)
         if not self.declaration:
             raise ScriptSyntaxError("a script declares itself with indicator(...)", 1)
-        return Program(self.script, body, self.declaration, self.inputs, self.plot_specs, self.uses_drawings, lines, self.uses_last_bar)
+        return Program(
+            self.script, body, self.declaration, self.inputs, self.plot_specs, self.uses_drawings, lines, self.uses_last_bar,
+            list(self.securities),
+        )
 
     def fail(self, node: Node, message: str, unsupported: bool = False) -> None:
         error = ScriptUnsupportedError if unsupported else ScriptSyntaxError
@@ -782,10 +924,16 @@ class _Compiler:
         return lambda ctx: ctx.slot(key, persistent)
 
     def declare(self, node: Declare) -> Closure:
+        inputs_before = len(self.inputs)
         value = self.expression(node.value)
         if node.name in ("indicator", "strategy"):
             self.fail(node, f"{node.name!r} can't be used as a variable name")
         binding = self.bind(node, node.name, persistent=node.mode in ("var", "varip"))
+        if (
+            not node.mode and self.scope.parent is None and not self.function_depth and isinstance(node.value, Call)
+            and node.value.callee.startswith("input.") and len(self.inputs) == inputs_before + 1
+        ):
+            self.input_variables[node.name] = (self.inputs[-1].title, binding)
         get_slot = self.slot_writer(binding)
         if node.mode:
             def declare_var(ctx: Context) -> Any:
@@ -824,6 +972,11 @@ class _Compiler:
         if binding is None or binding.kind != "slot":
             self.fail(node, f"{node.name!r} is assigned with {node.op} before it is declared")
         assert binding is not None
+        if id(binding) in self.security_bindings:
+            self.fail(node, f"{node.name!r} sets a request.security() context and can't be reassigned", unsupported=True)
+        recorded = self.input_variables.get(node.name)
+        if recorded is not None and recorded[1] is binding:
+            del self.input_variables[node.name]  # no longer the input's value on every bar
         value = self.expression(node.value)
         get_slot = self.slot_writer(binding)
         if node.op == ":=":

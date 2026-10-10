@@ -138,6 +138,12 @@ Scripts run only on the server, in a Python interpreter.
 - `hline` and `fill`: drawn once.
 - `alert()`.
 
+**On the chart (TVP-11.1).**
+- `fill` shades between two plots, or two `hline` levels, in its colour; a bar where either value is `na` is a gap (Pine's `fillgaps=false`).
+- `plotcandle` draws candles and `plotbar` OHLC bars in the script's pane, coloured per bar when the script sets a colour.
+- `table.new` tables are drawn over the price pane at their `position`, with their cells' text, text colour and background;
+  tables at the same position stack. They are drawn from the run's last state, as in Pine.
+
 **Drawings.**
 - `label.*`, `line.*`, `box.*`, `table.*` and `linefill.new`: `new`, `set_*`, `get_*`, `delete`.
 - When a script exceeds its `max_*_count` (Pine's default is 50), the oldest drawings are removed, as in Pine.
@@ -156,11 +162,30 @@ Scripts run only on the server, in a Python interpreter.
 - **`time_close`** is the bar's start plus the interval (the run's timeframe); `na` without a fixed interval (months, or no timeframe given).
 - **Known deviation:** inputs to `ta.*` that are `na` in the middle of a series are not yet tested against TradingView; no golden dataset has gaps of `na`.
 
+### `request.security` (TVP-11.1)
+
+`request.security(symbol, timeframe, expression, gaps=, lookahead=)` reads `expression` in another symbol's or timeframe's
+context.
+- **Contexts are known before the run.** The symbol and timeframe must each be a literal, `syminfo.tickerid` /
+  `timeframe.period` (the chart's own), or a variable declared from an `input.*` (`input.symbol`, `input.timeframe`).
+  Anything else, such as a timeframe chosen from a bar's values, is refused at compile time. A script has at most 5
+  contexts.
+- **The server loads each context's bars** (`scripts_security.py`) before the run: symbols as Omnix names them
+  (`NASDAQ:AAPL` → `equity:NASDAQ:AAPL`, `BINANCE:BTCUSDT` → `crypto:BINANCE:spot:BTC-USDT`), timeframes in Pine's
+  notation (`"60"`, `"D"`, `"1W"`, `"M"`), over the chart's span. A context the server can't resolve or load reads `na`.
+  The chart's own context is the expression itself.
+- **The expression runs once per context**, on that context's bars, with its own `ta.*` state; a tuple expression returns a tuple.
+- **Alignment to the chart's bars:** with `lookahead_off` (the default), a chart bar sees the last context bar closed
+  by its own close (a lower timeframe: its bar that closes with the chart's). The chart's last bar, as a realtime bar,
+  sees the latest context bar started before it closes, closed or not. `lookahead_on`
+  gives a chart bar the context bar it falls in. `gaps_on` gives the value only on the chart bar where a context bar closes, and `na` elsewhere.
+- Runs, alerts and the screener all load contexts. A script with contexts runs again in full on each new bar, instead of being extended.
+
 ### Not supported yet
 
 | Feature | Arrives with |
 |---|---|
-| `request.*` (`request.security` and other symbols/timeframes) | TVP-11.1, within the request budget |
+| `request.*` other than `request.security` (`request.security_lower_tf`, `request.financial`, `request.economic`, ...) | Later |
 | `strategy.risk.*`, `strategy.margin_liquidation_price`, margin calls, intrabar (bar magnifier) fills | Later |
 | `import`/`export` libraries, user-defined types, methods, enums | Later; refused with a reason |
 | `matrix.*`, `polyline.*`, `chart.point` | Later |
@@ -239,14 +264,15 @@ Scripts have no file, network or OS access: the interpreter only exposes the fun
 - Fair Value Gap boxes.
 
 **Not runnable, and refused with a reason:**
-- Bull Market Support Band uses `request.security`.
 - Volume Profile's template is not valid Pine (`volume.profile_fixed` doesn't exist).
+
+Bull Market Support Band (`request.security` on the weekly timeframe) runs since TVP-11.1, given the weekly bars.
 
 **Two bugs found and fixed:**
 - The Stochastic RSI template hard-coded its stochastic length and smoothing (14, 3, 3). The chart uses the instance's period and smoothing, so the template now uses those inputs.
 - A drawing cap read the wrong declaration key.
 
-### Community-idiom corpus: 18 of 20 run unchanged
+### Community-idiom corpus: 19 of 20 run unchanged
 
 `resources/trading/script_corpus/idioms` holds 20 scripts written for Omnix in the idioms of popular community indicators, among them:
 - Supertrend (built-in and manual), Squeeze Momentum, RSI with MA type and a dashboard table;
@@ -254,7 +280,7 @@ Scripts have no file, network or OS access: the interpreter only exposes the fun
 - Hull (with v5 integer lengths), DMI, Chandelier Exit, Williams %R, ATR trailing stop;
 - Keltner, OBV oscillator with CCI, Heikin Ashi with SAR, ZigZag with arrays and lines.
 
-Eighteen run (the EMA-cross strategy since TVP-11.5); the two that fail use features outside the subset on purpose: `request.security` and a user-defined type. Cross-checks in the tests:
+Nineteen run (the EMA-cross strategy since TVP-11.5, the multi-timeframe EMA with `request.security` since TVP-11.1); the one that fails uses a feature outside the subset on purpose: a user-defined type. Cross-checks in the tests:
 - The session VWAP computed by hand equals `ta.vwap`.
 - A hand-written Hull MA equals `ta.hma`.
 

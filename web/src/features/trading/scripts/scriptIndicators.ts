@@ -7,12 +7,13 @@
  * - `plotshape`, `plotchar` and `plotarrow` are markers above or below the bar (at the value with `location.absolute`);
  * - `bgcolor` shades the price pane and `barcolor` recolours the bars;
  * - `hline` is a level; `line.new` and `box.new` drawings are lines, `label.new` a marker with its text;
- * - `fill`, `plotcandle`, `plotbar` and `table` are not drawn yet (the console says so).
+ * - `fill` shades between two plots or levels; `plotcandle` and `plotbar` are candles and OHLC bars in the script's
+ *   pane; `table.new` tables are drawn over the chart at their position.
  *
  * An instance keeps the script's name, whether it overlays the price, the revision it last ran and its input values
  * (`params`, inputs as `in:<title>`), so a layout can show it before the script loads.
  */
-import type { CoreIndicatorId, CoreIndicatorInstance, IndicatorOutput, IndicatorPoint } from '../indicators/coreIndicators';
+import type { CoreIndicatorId, CoreIndicatorInstance, IndicatorOutput, IndicatorPoint, IndicatorTable } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 import { tradingApi } from '../tradingApi';
 import { scriptsApi, type ScriptPayload, type ScriptPlot, type ScriptRunResponse, type ScriptRunResult, type StrategyReport } from './scriptsApi';
@@ -120,7 +121,7 @@ export function scriptOutputs(indicator: CoreIndicatorInstance, result: ScriptRu
   const outputs: IndicatorOutput[] = [];
   const style = indicator.style;
   const add = (output: Omit<IndicatorOutput, 'visible' | 'precision'>) => {
-    if (output.points.length === 0 && output.kind !== 'viewport-average') return;
+    if (output.points.length === 0 && output.kind !== 'viewport-average' && output.kind !== 'table') return;
     outputs.push({
       ...output,
       visible: style?.plots?.[output.key] !== false,
@@ -129,7 +130,8 @@ export function scriptOutputs(indicator: CoreIndicatorInstance, result: ScriptRu
       lineWidth: style?.lineWidth ?? output.lineWidth,
       precision: style?.precision ?? precision,
       labelsOnPriceScale: style?.labelsOnPriceScale ?? output.labelsOnPriceScale ?? true,
-      valuesInStatusLine: style?.valuesInStatusLine ?? true,
+      // A fill's value is the middle of its band: never a status-line value.
+      valuesInStatusLine: output.kind === 'fill' ? false : style?.valuesInStatusLine ?? true,
       inputsInStatusLine: false,
     });
   };
@@ -143,7 +145,7 @@ export function scriptOutputs(indicator: CoreIndicatorInstance, result: ScriptRu
       color: scriptColor(hline.color) ?? '#787b86', lineStyle: LINE_STYLES[String(hline.linestyle ?? 'hline.style_dashed')] ?? 'dashed', lineWidth: 1,
     });
   });
-  if (result.fills.length > 0) notDrawn.push(`fill() ×${result.fills.length}`);
+  mapFillAreas(id, result, aligned, ownPane, add);
   mapDrawings(id, result, aligned, ownPane, add, notDrawn);
   if (result.strategy) mapFills(id, result.strategy, aligned, add);
   return { outputs: outputs.filter((output) => output.visible !== false), notDrawn };
@@ -177,6 +179,19 @@ function mapPlot(
   }
   if (plot.kind === 'plotshape' || plot.kind === 'plotchar' || plot.kind === 'plotarrow') {
     mapMarkers(key, plot, bars, pane, colorAt, add);
+    return;
+  }
+  if (plot.kind === 'plotcandle' || plot.kind === 'plotbar') {
+    // [open, high, low, close] per bar, coloured per bar where the script sets a colour.
+    const points: IndicatorPoint[] = [];
+    plot.values.forEach((value, index) => {
+      const time = bars.times[index];
+      if (!time || !Array.isArray(value) || value.length < 4 || !value.every(finite)) return;
+      const [open, high, low, close] = value as number[];
+      const color = plot.colors ? colorAt(index) : scriptColor(options.color);
+      points.push({ time, value: close, open, high, low, ...(color ? { color } : {}) });
+    });
+    add({ key, title: plot.title, pane, kind: 'candles', points, ...(plot.kind === 'plotbar' ? { barStyle: 'bars' as const } : {}) });
     return;
   }
   if (plot.kind === 'bgcolor' || plot.kind === 'barcolor') {
@@ -228,6 +243,69 @@ function mapMarkers(
   });
 }
 
+type ScriptFill = { from?: unknown; to?: unknown; color?: unknown; title?: unknown };
+
+/**
+ * fill() between two plots or two levels (hline): a band per bar from the higher to the lower value, in the fill's
+ * colour (Pine's default is the plot colour at 90% transparency; Omnix uses a light blue). A bar without both values is a
+ * gap, as with Pine's fillgaps=false.
+ */
+function mapFillAreas(id: string, result: ScriptRunResult, bars: ChartBars, ownPane: 0 | 1, add: (output: Omit<IndicatorOutput, 'visible' | 'precision'>) => void): void {
+  const valuesOf = (reference: unknown): Array<number | null> | null => {
+    if (Array.isArray(reference) && reference[0] === 'hline') {
+      const price = Number(result.hlines[Number(reference[1])]?.price);
+      return Number.isFinite(price) ? bars.times.map(() => price) : null;
+    }
+    const plot = typeof reference === 'number' ? result.plots.find((item) => item.index === reference) : undefined;
+    return plot ? plot.values.map((value) => (finite(value) ? value : null)) : null;
+  };
+  (result.fills as ScriptFill[]).forEach((fill, index) => {
+    const first = valuesOf(fill.from);
+    const second = valuesOf(fill.to);
+    if (!first || !second) return;
+    const color = scriptColor(fill.color) ?? 'rgba(41, 98, 255, 0.1)';
+    const points: IndicatorPoint[] = [];
+    bars.times.forEach((time, bar) => {
+      if (!time) return;
+      const a = first[bar];
+      const b = second[bar];
+      const both = a !== null && a !== undefined && b !== null && b !== undefined;
+      points.push({ time, value: both ? (a + b) / 2 : Number.NaN, high: both ? Math.max(a, b) : Number.NaN, low: both ? Math.min(a, b) : Number.NaN, color });
+    });
+    const title = typeof fill.title === 'string' && fill.title ? fill.title : `Fill ${index + 1}`;
+    add({ key: `${id}:f${index}`, title, pane: ownPane, kind: 'fill', points, color, labelsOnPriceScale: false, valuesInStatusLine: false });
+  });
+}
+
+const TABLE_POSITIONS = new Set(['top_left', 'top_center', 'top_right', 'middle_left', 'middle_center', 'middle_right', 'bottom_left', 'bottom_center', 'bottom_right']);
+
+/** A table.new() table with its cells (`"(column, row)"` keys) as rows of cells. */
+export function scriptTable(fields: Record<string, unknown>): IndicatorTable {
+  const columns = Math.max(0, Math.min(50, Math.floor(Number(fields.columns) || 0)));
+  const rows = Math.max(0, Math.min(100, Math.floor(Number(fields.rows) || 0)));
+  const grid: IndicatorTable['rows'] = Array.from({ length: rows }, () => Array.from({ length: columns }, () => null));
+  const cells = fields.cells && typeof fields.cells === 'object' ? fields.cells as Record<string, Record<string, unknown>> : {};
+  for (const [key, cell] of Object.entries(cells)) {
+    const match = /^\((\d+),\s*(\d+)\)$/.exec(key);
+    if (!match) continue;
+    const column = Number(match[1]);
+    const row = Number(match[2]);
+    if (row >= rows || column >= columns) continue;
+    grid[row][column] = {
+      text: String(cell.text ?? ''),
+      ...(scriptColor(cell.text_color) ? { color: scriptColor(cell.text_color)! } : {}),
+      ...(scriptColor(cell.bgcolor) ? { background: scriptColor(cell.bgcolor)! } : {}),
+    };
+  }
+  const position = String(fields.position ?? 'position.top_right').replace(/^position\./, '');
+  return {
+    position: TABLE_POSITIONS.has(position) ? position : 'top_right',
+    rows: grid,
+    ...(scriptColor(fields.bgcolor) ? { background: scriptColor(fields.bgcolor)! } : {}),
+    ...(scriptColor(fields.border_color ?? fields.frame_color) ? { border: scriptColor(fields.border_color ?? fields.frame_color)! } : {}),
+  };
+}
+
 /** A strategy's fills as arrows on the price chart: buys below the bar, sells above, each with its order id and size. */
 function mapFills(id: string, strategy: StrategyReport, bars: ChartBars, add: (output: Omit<IndicatorOutput, 'visible' | 'precision'>) => void): void {
   const size = (qty: number) => Number(qty.toFixed(4)).toString();
@@ -259,7 +337,6 @@ function mapDrawings(
   const labels: IndicatorPoint[] = [];
   let drawn = 0;
   let skipped = 0;
-  let tables = 0;
   for (const drawing of result.drawings) {
     const fields = drawing.fields;
     const pane: 0 | 1 = fields.force_overlay === true ? 0 : ownPane;
@@ -268,7 +345,10 @@ function mapDrawings(
       if (time && finite(fields.y)) labels.push({ time, value: fields.y, label: String(fields.text ?? ''), color: scriptColor(fields.color) ?? '#2962ff' });
       continue;
     }
-    if (drawing.kind === 'table') { tables += 1; continue; }
+    if (drawing.kind === 'table') {
+      add({ key: `${id}:t${drawing.id}`, title: `table ${drawing.id}`, pane: 0, kind: 'table', points: [], table: scriptTable(fields) });
+      continue;
+    }
     if (drawing.kind !== 'line' && drawing.kind !== 'box') continue;
     if (drawn >= MAX_SCRIPT_DRAWINGS) { skipped += 1; continue; }
     const line = drawing.kind === 'line';
@@ -291,7 +371,6 @@ function mapDrawings(
   }
   if (labels.length > 0) add({ key: `${id}:labels`, title: 'Labels', pane: ownPane, kind: 'line', render: 'markers', marker: 'circle', points: labels, labelsOnPriceScale: false });
   if (skipped > 0) notDrawn.push(`${skipped} lines and boxes beyond ${MAX_SCRIPT_DRAWINGS}`);
-  if (tables > 0) notDrawn.push(`table ×${tables}`);
 }
 
 /** A script's alertcondition() calls and its alert() calls, as the alert dialog's signal outputs (TVP-11.4). */

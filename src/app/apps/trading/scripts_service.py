@@ -64,6 +64,15 @@ class ScriptBars:
         return hashlib.sha256(json.dumps(asdict(self), separators=(",", ":")).encode()).hexdigest()
 
 
+@dataclass(frozen=True)
+class ScriptSecurity:
+    """A request.security() context's bars (TVP-11.1): its instrument and interval as Omnix names them."""
+
+    symbol: str
+    timeframe: str
+    bars: ScriptBars
+
+
 def check_script(source: str) -> dict[str, Any]:
     """Compile a script: its problems with their line (none when it compiles), its declaration and inputs."""
     try:
@@ -156,11 +165,20 @@ class ScriptRunService:
         user_id: str = "",
         profile: bool = False,
         limits: ScriptLimits | None = None,
+        securities: dict[str, ScriptSecurity] | None = None,
     ) -> dict[str, Any]:
-        """A run's result (``worker.result_payload``); ScriptServiceError for the script's error or a busy service."""
+        """A run's result (``worker.result_payload``); ScriptServiceError for the script's error or a busy service.
+
+        ``securities``: the bars of the request.security() contexts (``scripts_security.load_script_securities``)."""
         limits = limits or self.limits
+        contexts = {
+            name: {"symbol": item.symbol, "timeframe": item.timeframe, "bars": asdict(item.bars)} for name, item in (securities or {}).items()
+        }
+        fingerprints = {name: [item.symbol, item.timeframe, item.bars.fingerprint()] for name, item in (securities or {}).items()}
         key = hashlib.sha256(
-            json.dumps([source, inputs or {}, symbol, timeframe, profile, bars.fingerprint(), asdict(limits)], sort_keys=True, default=str).encode()
+            json.dumps(
+                [source, inputs or {}, symbol, timeframe, profile, bars.fingerprint(), asdict(limits), fingerprints], sort_keys=True, default=str,
+            ).encode()
         ).hexdigest()
         with self._cache_guard:
             cached = self._cache.get(key)
@@ -173,7 +191,7 @@ class ScriptRunService:
         try:
             answer = self._dispatch({
                 "id": key, "source": source, "bars": asdict(bars), "inputs": inputs or {}, "symbol": symbol,
-                "timeframe": timeframe, "limits": asdict(limits), "profile": profile,
+                "timeframe": timeframe, "limits": asdict(limits), "profile": profile, "securities": contexts,
             }, limits)
         finally:
             slot.release()

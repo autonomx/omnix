@@ -18,6 +18,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .scripts_service import ScriptRunService, ScriptServiceError, bars_for_script
+from .scripts_security import load_script_securities
 from .service import TradingMarketDataService
 
 logger = logging.getLogger(__name__)
@@ -115,9 +116,13 @@ def screen_script(
         if not bars:
             return ScriptScreenRow(instrument_id=instrument_id, error="no bars"), []
         times = [bar.start_time.isoformat() for bar in bars]
+        # request.security() contexts, from this symbol (TVP-11.1).
+        securities = load_script_securities(source, instrument_id, interval, bars, market_service, inputs)
         for attempt in range(2):
             try:
-                result = script_service.run(source, bars_for_script(bars), inputs=inputs, symbol=instrument_id, timeframe=interval, user_id=slot)
+                result = script_service.run(
+                    source, bars_for_script(bars), inputs=inputs, symbol=instrument_id, timeframe=interval, user_id=slot, securities=securities,
+                )
                 return screen_row(instrument_id, result, times), screen_outputs(result)
             except ScriptServiceError as error:
                 if error.kind == "busy" and attempt == 0:

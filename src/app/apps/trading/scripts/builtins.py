@@ -27,6 +27,10 @@ RESERVED_NAMES = {"open", "high", "low", "close", "volume", "time", "bar_index",
 UNSUPPORTED_PREFIXES = ("request.", "strategy.risk.", "matrix.", "ticker.", "polyline.", "chart.", "library")
 
 
+# request.security() contexts a script may use besides the chart's own.
+MAX_SECURITIES = 5
+
+
 def is_unsupported(name: str) -> bool:
     return name.startswith(UNSUPPORTED_PREFIXES)
 
@@ -905,6 +909,81 @@ def _output(kind: str, spec: str) -> Factory:
     return factory
 
 
+_SAME_SYMBOL = ("syminfo.tickerid", "syminfo.ticker")
+_SAME_TIMEFRAME = ("timeframe.period",)
+
+
+def _security_spec(c: Any, node: Node | None, same: tuple[str, ...]) -> str | None:
+    """A request.security() symbol or timeframe as written: a string, "" for the chart's own, or "{input:<title>}" for
+    an input (a top-level variable set by input.*(), or an input.*() call in place); None otherwise."""
+    if isinstance(node, Literal) and isinstance(node.value, str):
+        return node.value.strip().replace("|", "")
+    if isinstance(node, Name) and node.name in same:
+        return ""
+    if isinstance(node, Name) and node.name in c.input_variables:
+        title, binding = c.input_variables[node.name]
+        if c.scope.lookup(node.name) is binding:  # not a local of the same name
+            c.security_bindings.add(id(binding))
+            return f"{{input:{title}}}"
+    if isinstance(node, Call) and node.callee.startswith("input."):
+        before = len(c.inputs)
+        c.expression(node)  # declares the input
+        if len(c.inputs) == before + 1:
+            return f"{{input:{c.inputs[-1].title}}}"
+    return None
+
+
+def _security(c: Any, node: Call) -> Closure:
+    """request.security(symbol, timeframe, expression, gaps, lookahead): the expression in another symbol's or
+    timeframe's context. The script runs once in each requested context (ScriptRun._run_securities); here the chart's
+    run reads that run's value for the bar."""
+    params = ["symbol", "timeframe", "expression", "gaps", "lookahead", "ignore_invalid_symbol", "currency", "calc_bars_count"]
+    if len(node.args) > len(params):
+        raise ScriptSyntaxError(f"request.security() takes at most {len(params)} arguments", node.line)
+    arguments: dict[str, Node] = dict(zip(params, node.args, strict=False))
+    for key, value in node.kwargs.items():
+        if key not in params:
+            raise ScriptSyntaxError(f"request.security() has no argument {key!r}", node.line)
+        arguments[key] = value
+    if "expression" not in arguments:
+        raise ScriptSyntaxError("request.security() needs an expression", node.line)
+    symbol = _security_spec(c, arguments.get("symbol"), _SAME_SYMBOL)
+    timeframe = _security_spec(c, arguments.get("timeframe"), _SAME_TIMEFRAME)
+    if symbol is None or timeframe is None:
+        raise ScriptUnsupportedError(
+            "request.security() needs its symbol and timeframe written in the script, from an input, or as syminfo.tickerid"
+            " and timeframe.period",
+            node.line,
+        )
+    gaps = _literal(arguments.get("gaps")) == "barmerge.gaps_on"
+    lookahead = _literal(arguments.get("lookahead")) == "barmerge.lookahead_on"
+    template = f"{symbol}|{timeframe}"
+    if template != "|" and template not in c.securities:
+        if len(c.securities) >= MAX_SECURITIES:
+            raise ScriptLimitError(f"a script requests at most {MAX_SECURITIES} other symbols or timeframes", node.line)
+        c.securities.append(template)
+    expression = c.expression(arguments["expression"])
+    site = node.id
+    # A tuple expression reads a tuple of na where its context has no value yet, so `[a, b] = request.security(...)` works.
+    missing = tuple(None for _ in arguments["expression"].items) if isinstance(arguments["expression"], TupleExpr) else None
+
+    def security(ctx: Context) -> Any:
+        run = ctx.run
+        key = run.security_key(template)
+        if key == "|" or run.context_key == key:
+            # This run is the requested context: the expression is its own.
+            value = expression(ctx)
+            if run.context_key is not None:
+                run.record_security(site, value)
+            return value
+        if run.context_key is not None:
+            return missing  # a request from inside another request's context: not nested
+        value = run.security_value(site, key, gaps, lookahead)
+        return missing if value is None else value
+
+    return security
+
+
 def _hline(c: Any, node: Call) -> Closure:
     params = ["price", "title", "color", "linestyle", "linewidth", "editable", "display"]
     arguments: dict[str, Node] = dict(zip(params, node.args, strict=False))
@@ -1511,6 +1590,7 @@ FUNCTIONS: dict[str, Factory] = {
     "alertcondition": _output("alertcondition", "condition, title, message"),
     "hline": _hline,
     "fill": _fill,
+    "request.security": _security,
     "alert": _alert,
     "indicator": _declaration("indicator"),
     "strategy": _declaration("strategy"),

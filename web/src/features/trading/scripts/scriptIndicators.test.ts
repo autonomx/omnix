@@ -9,7 +9,7 @@ vi.mock('./scriptsApi', () => ({ scriptsApi }));
 
 const {
   calculateScriptIndicatorOutputs, forgetScriptSource, isScriptIndicatorId, scriptColor, scriptIdOf, scriptIndicatorInstance,
-  scriptIndicatorName, scriptInputValues, scriptOutputs, scriptRunStatus, withScriptInput,
+  scriptIndicatorName, scriptInputValues, scriptOutputs, scriptRunStatus, scriptTable, withScriptInput,
 } = await import('./scriptIndicators');
 const { parseIndicatorInstances } = await import('../persistence/workspaceDocument');
 
@@ -94,7 +94,57 @@ describe('script indicators (TVP-11.1)', () => {
     expect(byKey.d1.points).toEqual([{ time: bars(4)[0].start_time, value: 100 }, { time: bars(4)[3].start_time, value: 110 }]);
     expect(byKey['d2:top'].points.map((point) => point.value)).toEqual([105, 105]);
     expect(byKey.labels.points).toEqual([{ time: bars(4)[3].start_time, value: 104, label: 'last', color: '#F23645' }]);
-    expect(mapped.notDrawn).toEqual(['plotcandle() "Candles"', 'fill() ×1', 'table ×1']);
+    // An empty plotcandle has nothing to draw; the fill and the table are drawn.
+    expect(byKey.p6).toBeUndefined();
+    expect(byKey.f0).toMatchObject({ kind: 'fill', pane: 1, title: 'Fill 1' });
+    expect(byKey.t4).toMatchObject({ kind: 'table', pane: 0, points: [] });
+    expect(mapped.notDrawn).toEqual([]);
+  });
+
+  it('shades a fill between two plots or levels, with a gap where a value is na', () => {
+    const mapped = scriptOutputs(instance, result({
+      plots: [
+        { index: 0, kind: 'plot', title: 'Up', options: {}, values: [5, 6, null, 8, 9], colors: null },
+        { index: 1, kind: 'plot', title: 'Down', options: {}, values: [1, 2, 3, 4, 10], colors: null },
+      ],
+      hlines: [{ price: 7, title: 'Seven' }],
+      fills: [{ from: 0, to: 1, color: { color: '#089981' }, title: 'Band' }, { from: ['hline', 0], to: 1 }],
+    }), runTimes, bars(4));
+    const byKey = Object.fromEntries(mapped.outputs.map((output) => [output.key.replace('script-sabc:', ''), output]));
+    expect(byKey.f0).toMatchObject({ kind: 'fill', title: 'Band', color: '#089981', labelsOnPriceScale: false, valuesInStatusLine: false });
+    // One point per chart bar: the na bar is a gap; the higher value is always the top, whichever plot it comes from.
+    expect(byKey.f0.points.map((point) => [point.high, point.low])).toEqual([[6, 2], [Number.NaN, Number.NaN], [8, 4], [10, 9]]);
+    expect(byKey.f1.points.map((point) => [point.high, point.low])).toEqual([[7, 2], [7, 3], [7, 4], [10, 7]]);
+  });
+
+  it('draws plotcandle as candles and plotbar as OHLC bars, coloured per bar', () => {
+    const ohlc = [[1, 3, 0, 2], [2, 4, 1, 3], null, [3, 5, 2, 4], [4, 6, 3, 5]];
+    const mapped = scriptOutputs(instance, result({
+      plots: [
+        { index: 0, kind: 'plotcandle', title: 'C', options: {}, values: ohlc, colors: [null, { color: '#F23645' }, null, null, { color: '#089981' }] },
+        { index: 1, kind: 'plotbar', title: 'B', options: { color: '#2962FF' }, values: ohlc, colors: null },
+      ],
+    }), runTimes, bars(4));
+    const byKey = Object.fromEntries(mapped.outputs.map((output) => [output.key.replace('script-sabc:', ''), output]));
+    expect(byKey.p0).toMatchObject({ kind: 'candles', pane: 1 });
+    expect(byKey.p0.barStyle).toBeUndefined();
+    expect(byKey.p0.points.map((point) => [point.open, point.high, point.low, point.value, point.color])).toEqual([
+      [2, 4, 1, 3, '#F23645'], [3, 5, 2, 4, undefined], [4, 6, 3, 5, '#089981'],
+    ]);
+    expect(byKey.p1).toMatchObject({ kind: 'candles', barStyle: 'bars' });
+    expect(byKey.p1.points.every((point) => point.color === '#2962FF')).toBe(true);
+  });
+
+  it('reads a table, its cells by column and row, and its position', () => {
+    const table = scriptTable({
+      position: 'position.bottom_left', columns: 2, rows: 2, bgcolor: { color: '#131722' }, border_color: { color: '#FFFFFF' },
+      cells: { '(0, 0)': { text: 'RSI', text_color: { color: '#D1D4DC' } }, '(1,1)': { text: 42, bgcolor: { color: '#089981' } }, '(5, 0)': { text: 'off' }, junk: { text: 'x' } },
+    });
+    expect(table).toEqual({
+      position: 'bottom_left', background: '#131722', border: '#FFFFFF',
+      rows: [[{ text: 'RSI', color: '#D1D4DC' }, null], [null, { text: '42', background: '#089981' }]],
+    });
+    expect(scriptTable({ position: 'nowhere', columns: 1, rows: 1 })).toEqual({ position: 'top_right', rows: [[null]] });
   });
 
   it('runs the saved script on the server once per bars and reports errors to the console', async () => {
