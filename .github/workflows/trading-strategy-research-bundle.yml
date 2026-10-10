@@ -17,7 +17,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Restore immutable trading datasets
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .cache/trading-liquidity-datasets
           key: trading-liquidity-datasets-v1-${{ runner.os }}-research-bundle-${{ github.run_id }}
