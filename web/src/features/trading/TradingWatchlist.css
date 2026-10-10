@@ -229,6 +229,8 @@
 
   .trading-watchlist ul {
     display: grid;
+    /* Rows keep their own height when the list is taller than them (a short list). */
+    align-content: start;
     max-height: calc(100vh - 205px);
     overflow: auto;
     margin: 0;
@@ -265,8 +267,8 @@
     min-width: 0;
   }
 
-  .trading-watchlist-symbol-cell > button,
-  .trading-watchlist-section-cell > button {
+  .trading-watchlist .trading-watchlist-symbol-cell > button,
+  .trading-watchlist .trading-watchlist-section-cell > button {
     display: flex;
     align-items: center;
     min-width: 0;
@@ -279,8 +281,8 @@
     text-align: left;
   }
 
-  .trading-watchlist-symbol-cell > button:hover,
-  .trading-watchlist-section-cell > button:hover {
+  .trading-watchlist .trading-watchlist-symbol-cell > button:hover,
+  .trading-watchlist .trading-watchlist-section-cell > button:hover {
     background: color-mix(in srgb, var(--c-blue-630) 10%, transparent);
   }
 
@@ -411,7 +413,7 @@
     pointer-events: auto;
   }
 
-  .trading-watchlist-row-actions button {
+  .trading-watchlist .trading-watchlist-row-actions button {
     display: grid;
     place-items: center;
     width: 28px;
@@ -419,12 +421,12 @@
     height: 22px;
   }
 
-  .trading-watchlist-row-actions button:disabled {
+  .trading-watchlist .trading-watchlist-row-actions button:disabled {
     cursor: not-allowed;
     opacity: 0.35;
   }
 
-  .trading-watchlist-row-actions.is-sorted button[aria-label^='Move '] {
+  .trading-watchlist .trading-watchlist-row-actions.is-sorted button[aria-label^='Move '] {
     display: none;
   }
 
@@ -595,7 +597,7 @@
     color: var(--c-red-720);
   }
 
-  .trading-watchlist-row-actions button {
+  .trading-watchlist .trading-watchlist-row-actions button {
     padding: 0;
     font-size: 12px;
     line-height: 1;
