@@ -16,6 +16,7 @@ from app.persistence.identity_service import (
     list_workspace_contexts_with_ready_jobs,
 )
 from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
+from app.runtime.tenant_context import pop_tenant, push_tenant
 from tests.conftest_databases import is_disposable_test_database
 
 pytestmark = [
@@ -52,6 +53,17 @@ def _workspace(database, owner: str, label: str):
         return PostgresIdentityRepository(connection).load_context(user_id=owner, workspace_id=workspace)
 
 
+def _ready_job(database, context) -> None:
+    """A claimable CPU job in the workspace, created as that workspace's tenant (jobs are row-level secured)."""
+    store = PostgresJobStoreAdapter(database)
+    store.context = context
+    token = push_tenant(context)
+    try:
+        store.create_job(CreateJobRequest(module="diagnostics", type="diagnostics.ready", resource_class=ResourceClass.CPU))
+    finally:
+        pop_tenant(token)
+
+
 def _delete(database, *workspaces: str) -> None:
     with database.transaction() as connection:
         connection.execute("SELECT set_config('omnix.system', 'on', true)")
@@ -64,9 +76,7 @@ def test_only_workspaces_with_a_claimable_job_are_polled(database):
     owner = ensure_local_identity(database).user_id
     busy, idle = _workspace(database, owner, "busy"), _workspace(database, owner, "idle")
     try:
-        store = PostgresJobStoreAdapter(database)
-        store.context = busy
-        store.create_job(CreateJobRequest(module="diagnostics", type="diagnostics.ready", resource_class=ResourceClass.CPU))
+        _ready_job(database, busy)
 
         ready = {context.workspace_id for context in list_workspace_contexts_with_ready_jobs(database, ["cpu"])}
         assert busy.workspace_id in ready
@@ -89,10 +99,8 @@ def test_the_longest_waiting_workspace_comes_first_under_the_limit(database):
     owner = ensure_local_identity(database).user_id
     older, newer = _workspace(database, owner, "older"), _workspace(database, owner, "newer")
     try:
-        store = PostgresJobStoreAdapter(database)
         for context in (older, newer):
-            store.context = context
-            store.create_job(CreateJobRequest(module="diagnostics", type="diagnostics.ready", resource_class=ResourceClass.CPU))
+            _ready_job(database, context)
         with database.transaction() as connection:
             connection.execute("SELECT set_config('omnix.system', 'on', true)")
             connection.execute(
