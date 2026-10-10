@@ -16,6 +16,7 @@ import app.platform.chat.character_store as character_store
 from app.platform.chat.assistant_turns import AssistantTurnCoordinator
 from app.platform.characters.repository import InMemoryCharacterRepository
 from app.platform.characters.service import CharacterService
+from app.platform.chat.segments import InMemoryConversationSegments
 
 
 def _use_memory_character_service(tmp_path, monkeypatch) -> None:
@@ -26,6 +27,9 @@ def _use_memory_character_service(tmp_path, monkeypatch) -> None:
         "default_assistant_turn_coordinator",
         lambda _database=None: AssistantTurnCoordinator(tmp_path / "assistant-turns.json"),
     )
+    # Conversation segments too: without this a session would open PostgreSQL's segment repository.
+    segments = InMemoryConversationSegments()
+    monkeypatch.setattr(character_store, "conversation_segments", lambda: segments)
 
 
 @pytest.mark.parametrize(

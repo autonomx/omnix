@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
@@ -122,6 +123,10 @@ def test_profile_cache_uses_file_signature_and_observes_updates(
         ),
         encoding="utf-8",
     )
+    # The rewrite has the same size, and a coarse filesystem clock (Linux updates mtimes per tick) can give it the
+    # same mtime: date it a second later, as an edit made later would be.
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
     updated = prompt_cache.get_live_conversation_profile_cached(store, "chat:test")
 
     assert updated.effective.talkativeness == 20
