@@ -41,7 +41,7 @@ jobs:
       matrix:
         image: [gateway, web, tts, stt, image]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Free disk space for the CUDA images
         if: contains(fromJSON('["tts", "stt", "image"]'), matrix.image)
         run: |
