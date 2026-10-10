@@ -16,4 +16,13 @@ describe('SVG drawing shapes', () => {
     expect(emoji.style.stroke).toBe('none');
     expect(plain.getAttribute('style')).toBeNull();
   });
+
+  it('drops the halo of text on its own box, over any theme (TVP-3.4)', () => {
+    const { container } = render(
+      <svg>
+        <ShapeElement shape={{ kind: 'text', x: 1, y: 2, text: '69300.00', fill: '#ffffff', halo: false }} index={0} />
+      </svg>,
+    );
+    expect(container.querySelector('text')!.style.stroke).toBe('none');
+  });
 });

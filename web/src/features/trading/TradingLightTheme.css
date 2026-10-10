@@ -451,7 +451,8 @@
     background: radial-gradient(circle at center, var(--c-slate-970-2) 0 2px, var(--c-blue-510) 2px 3px, var(--c-slate-970-2) 3px 5px, transparent 5px), var(--c-slate-970-2);
   }
 
-  :root[data-omnix-appearance='light'] .trading-drawing-overlay circle {
+  /* Edit handles only: a drawing's own markers (the dot tool) keep their colour, as in the dark theme. */
+  :root[data-omnix-appearance='light'] .trading-drawing-overlay circle[data-handle-id] {
     fill: var(--c-neutral-1000);
   }
 

@@ -10,7 +10,7 @@ import type {
   SeriesAttachedParameter,
   Time,
 } from 'lightweight-charts';
-import { paintShapes } from './canvasShapes';
+import { DEFAULT_CANVAS_PAINT_THEME, paintShapes, type CanvasPaintTheme } from './canvasShapes';
 import { hitTestDrawing } from './tools/scene';
 import type { DrawingGeometryContext, DrawingShape, DrawingToolDefinition, ScreenPoint } from './tools/types';
 
@@ -29,6 +29,7 @@ type RenderTarget = Parameters<IPrimitivePaneRenderer['draw']>[0];
 export class DrawingCanvasPrimitive implements ISeriesPrimitive<Time> {
   private scene: CanvasDrawingScene = () => [];
   private painted: readonly CanvasDrawingEntry[] = [];
+  private theme: CanvasPaintTheme = DEFAULT_CANVAS_PAINT_THEME;
   private requestUpdate: (() => void) | null = null;
   private readonly views: readonly IPrimitivePaneView[];
 
@@ -36,7 +37,7 @@ export class DrawingCanvasPrimitive implements ISeriesPrimitive<Time> {
     const renderer: IPrimitivePaneRenderer = {
       draw: (target: RenderTarget) => target.useMediaCoordinateSpace(({ context, mediaSize }) => {
         this.painted = this.scene(mediaSize);
-        for (const entry of this.painted) paintShapes(context, entry.shapes);
+        for (const entry of this.painted) paintShapes(context, entry.shapes, this.theme);
       }),
     };
     this.views = [{ zOrder: () => 'top', renderer: () => renderer }];
@@ -52,6 +53,12 @@ export class DrawingCanvasPrimitive implements ISeriesPrimitive<Time> {
 
   paneViews(): readonly IPrimitivePaneView[] {
     return this.views;
+  }
+
+  /** The overlay stylesheet's text paint (canvasShapes.readCanvasPaintTheme); repaints. */
+  setTheme(theme: CanvasPaintTheme): void {
+    this.theme = theme;
+    this.invalidate();
   }
 
   setScene(scene: CanvasDrawingScene): void {

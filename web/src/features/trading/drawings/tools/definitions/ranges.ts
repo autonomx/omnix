@@ -103,7 +103,7 @@ function labelBox(center: number, top: number, lines: readonly string[]): Drawin
   return [
     { kind: 'rect', x: center - width / 2, y: top, width, height, radius: 5, fill: '#ffffff', stroke: 'rgba(92, 99, 106, 0.28)', strokeWidth: 1, hit: 'none', className: 'trading-measurement-label-box' },
     ...lines.map((text, index): DrawingShape => ({
-      kind: 'text', x: center, y: top + 18 + index * 17, text, align: 'middle', fontSize: 12, fontWeight: 500, fill: '#202124', hit: 'none', className: 'trading-measurement-label-text',
+      kind: 'text', x: center, y: top + 18 + index * 17, text, align: 'middle', fontSize: 12, fontWeight: 500, fill: '#202124', halo: false, hit: 'none', className: 'trading-measurement-label-text',
     })),
   ];
 }
