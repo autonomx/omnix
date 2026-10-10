@@ -115,6 +115,44 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-11.6 | in progress | #1547 | 2026-10-04 | Untracked runtime files under `resources/`: none show in `git status` (were caches, evidence captures, benchmark runs and user voice clones); port collisions: 0 (llama-server 8080 → 8180) | `.gitignore` covers the runtime output (`resources/cache`, IBKR/Yahoo evidence, gateway hardening benchmark runs, user-created voice clones; the 13 approved samples stay tracked, owner decision in DECISIONS). llama.cpp's default base URL and `start_llama_server.sh` use 8180 (saved settings keep their own port; the server starts on the base URL's port); one port map in `docs/SETUP.md`. HTML docs stay with the docs freshness check. 2026-10-04 (owner decision, WP-8.3): the trading research journal (`resources/trading/activity_log/`) is untracked and ignored, and the climatology state moved to PostgreSQL (seeded by migration 0124; new states are imported with `import-climatology`). The history purge stays a human gate History purge (2026-10-04, owner asked to proceed): the tree acceptance holds (`git ls-files resources/` is examples, config, the approved voice clones and architecture baselines). A history scan (gitleaks over all refs) finds two real provider keys committed in March in `data/settings.json` and `src/app/data/settings.json` (Cerebras, OpenRouter/OpenAI rules); the other findings are false positives (storage-key names, a tokenizer import, a test's fake key). Published history (origin refs) carries about 1 GB of large blobs: `resources/data/test-results/` (about 920 MB of RPG autoplay reports and zips), `src/app/rpg.zip`, `src/tests/rpg.zip`, `src/tests.zip` and old `frontend/node_modules` binaries. The multi-gigabyte model DLLs, Yahoo evidence and caches are only in the local `refs/original/*` left by an earlier filter-branch and were never published. Prepared: a verified backup bundle of every ref (`%LOCALAPPDATA%\Omnix\backups\omnix-git-pre-purge-2026-10-04.bundle`, 2.46 GB) and a mirror clone (`F:\LLM\omnix-purged.git`). Not done: the rewrite itself (git-filter-repo on the mirror) was blocked by this session's permission policy as a destructive git action, and the force-push is the owner's; both stay human steps, and the two keys must be rotated regardless. |
 | WP-12.1 | not started | — | 2026-09-27 | — | Re-measure, re-audit, re-rate |
 
+## Rescore and remaining work (2026-10-08)
+
+An interim rating after the mypy expansion, the strategy runner work package and RPG Track R-3, with the independent reviews of the last two (all on `architecture-hardening`, not yet merged). It is not the WP-12.1 certification.
+
+| Area | Before | Now | Evidence |
+|---|---:|---:|---|
+| Security as shipped | 7.5 | 7.5 | Unchanged. Sign-in has been on by default since 2026-10-06 |
+| Security with sign-in on | 8 | 8 | Unchanged. The strategy runner uses the same order gateway checks, and its parity pass cannot write |
+| Persistence and jobs | 8 | 8 | Unchanged. A configuration pass now holds a per-strategy PostgreSQL advisory lock |
+| Type safety | 6.5 | 7.5 | mypy-ignored patterns 30 → 16; share of `src/app` lines mypy skips: 88% → 13% (trading, RPG, chat, assistant memory and the agent runtime are checked) |
+| Internal decomposition | 6 | 7 | RPG in 7 contexts with AL017 60 → 0 and top-level entries 129 → 9; 117 unreachable RPG modules (about 25,000 lines with their tests) deleted; boot imports 2,083 → 1,965; one entry path for the trading monitor and the strategy runner |
+| Observability and operations | 7 | 7 | Unchanged apart from the strategy runner in the operations status |
+
+### What remains
+
+**Type safety (7.5 → 8)**
+- Bring `app.providers` (28,064 lines, the external model and API boundary) and `app.settings` (1,378) under mypy.
+- Then `app.platform.live_voice` (8,544), `characters` (6,627), `research` (6,373), `assistant_tools` (6,160), `app.apps.audiobook` (13,876) and `desktop_companion` (4,327).
+- mypy runs with `check_untyped_defs` but not strict; untyped definitions and `Any` at JSON boundaries remain.
+
+**Internal decomposition (7 → 8)**
+- `largest_class_lines` 2,196 (target 800): `TradingAIShadowMonitor` (2,196) and `ProspectiveGapRuntime` (2,187) need splitting as the strategy monitor was.
+- `files_over_1200_lines` 36 (target 5) and `functions_over_150_lines` 346 (target 20).
+- `any_scope_package_cycles` 2: the kernel pairs `assets<->persistence` and `persistence<->security` (PA-1.4).
+- RPG contract-only imports are not enforced: only `world` and `genesis` have a `contracts` module, for their ports (see `docs/architecture/RPG_CONTEXTS.md`).
+
+**Observability and operations (7 → 8)**
+- WP-10.7: the nightly restore rehearsal has not had its first run, and the human restore of real data (step 4) is open.
+- No dedicated assessment yet of what else 8 needs here; WP-12.1 re-audits it.
+
+**Security**
+- The human actions below: credential rotation and history purge (WP-0.1), main-branch protection, CODEOWNERS owners.
+
+**Strategy runner (operator steps)**
+- Gap pullback still runs in the monitor everywhere: `execution_owner` defaults to `monitor`. Moving a configuration is a strategy update: set `runner_shadow`, compare proposals with `GET /api/trading/strategies/{id}/runner-parity` over a parity period, then set `runner`. Upgrade every process before saving configurations with the field (see DECISIONS.md).
+
+**Open work packages** (from the table above): in progress WP-4.1, WP-5.2, WP-5.3, WP-7.3, WP-7.5, WP-7.6, WP-8.1, WP-8.5, WP-8.6, WP-9.3, WP-9.4, WP-9.9, WP-9.10, WP-10.7, WP-11.4 and WP-11.6; not started WP-5.6 and WP-12.1 (re-measure, re-audit, re-rate).
+
 ## Blocked
 
 - WP-0.1: credential rotation and git-history purge require the human gate in roadmap section 1.5. Repository containment can proceed independently.
@@ -125,7 +163,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 
 - WP-9.8 visual review: the colour palette changes a few accent colours slightly (largest: 2.1% of the Audiobook screen). To see every difference, run `npx playwright test tests/e2e/visual-baselines.spec.ts --update-snapshots=all` in `src/apps/web` and review the changed PNGs with git; keep them (commit) to approve, or discard them. Numbers per screen are in `docs/measurements/web-colour-palette-2026-10-03.json`.
 
-- WP-4.1 default flip: deferred by the owner on 2026-10-01; sign-in stays off by default and will be enabled later. When ready, set `AUTH_ENFORCED_WHEN_UNSET = True` in `src/app/security/auth/settings.py`. Until then, sign-in is enforced only where an operator sets `OMNIX_AUTH_MODE` explicitly. See [OPERATIONS.md](../OPERATIONS.md#sign-in-and-sessions).
+- WP-4.1 default flip: done 2026-10-06 at the owner's request (`AUTH_ENFORCED_WHEN_UNSET = True`; accounts, guests, invites and Google sign-in; see DECISIONS.md). Nothing left to do here.
 
 - Rotate/revoke the Cerebras credential formerly in src/app/data/settings.json (cerebras.api_key). Earliest known commit: 637220e19; review baseline: 7bd17af08. Do not paste the credential into logs or messages.
 - After rotation, prepare and approve a coordinated history purge of that file using git filter-repo, including clone replacement and protected-branch handling. Rewriting history and force-pushing require explicit authorization under roadmap section 1.5.
@@ -134,6 +172,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 
 ## Validation evidence
 
+- 2026-10-08 (local, disposable PostgreSQL 17 container, `architecture-hardening`): mypy over `src/app` with 16 ignored patterns; the strategy runner work package (shared entry path, `execution_owner`, auto-paper replay with the runner as owner places the identical order, protection and events) and its review fixes (per-strategy pass lock, owner kept on restore, runner status and parity route); RPG R-3 (AL017 0) and its review fixes. Trading tests and the PostgreSQL auto-paper and order gateway tests pass; the RPG selection (2,573 tests with the app and Hermes suites) passes after fixing tests that used a host the request guard rejects; the `rpg-production-turn` golden and the determinism replay pass; architecture lint, the Ruff ratchet on a clean checkout and the metrics check pass at the branch tip.
 - 2026-10-04 review of the roadmap and its commits (local, clean worktree of `86c2680b4`, disposable PostgreSQL 17 containers): Ruff ratchet, architecture lint, ingress and JSONB checks, mypy (2,285 files), the non-service Python selection, the PostgreSQL and multiprocess selection as `omnix_app` (209 passed, 6 torch skips), the unit, PostgreSQL and multiprocess architecture gates, web lint (0 errors, 94 warnings), typecheck and `api:check` pass, and `docker compose config` validates every profile. The source-bound metrics check passed only because baselines were stale: `collection_errors` 2 (probe snapshot bug, fixed), `unreachable_rpg_modules` 8 and `web_unreachable_modules` 10 against rows that claimed 0 (fixed; see WP-1.1, WP-8.6, WP-9.10), and the web metrics, `capped_500_queries`, `inline_prompt_strings` and others never lowered after their work (e.g. `web_fetch_assignment_files` baseline 17 at value 0), so the ratchet would have accepted a regression; the baseline is now the measured values. Status corrections: WP-8.6 and the nine packages whose RPG work DECISIONS 2026-10-04 reopened are in progress; the WP-11.2 row, overwritten in f0e6d48f1, is restored. Fixed on the way: the RPG turn route blocked the event loop outside `apply_turn` (WP-7.1). Not fixed (owner decision): about 100 routes and stream events still return `str(exc)` to clients; WP-10.5 kept the 4xx ones by decision, but chat, assistant-context, trading and TTS stream errors carry unexpected exception text too. Left as is: `layers.toml` still lists the removed `app.hermes` (changing the policy needs a deliberate lint-baseline contract update).
 - Phase 6 final acceptance (2026-10-01): WP-6.1 through WP-6.8 are done. Nightly run [36863947119](https://github.com/autonomx/omnix/actions/runs/36863947119) on `d95cd0fa8` passed the multihost-topology job (results in `docs/measurements/multihost-topology-2026-10-01.json`), the rolling-upgrade job and the complete non-hardware Python suite plus the ten-minute mock-compute soak. Its gateway responsiveness step failed because the WP-4.3 permission guard required an installed tenant in a gateway composed without persistence; `f09d8657c` falls back to the local owner when sign-in is off and no tenant is installed. WP-5.8 is done with the same run (assets read across hosts through S3).
 - WP-4.1 (2026-10-01, local, disposable PostgreSQL): `src/tests/security/test_auth_{settings,middleware,oidc}.py` pass (53 tests). They include an auto-enumerated check that every non-public HTTP route returns 401 and every WebSocket closes with code 1008, plus CSRF, bearer, query-token, duplicate-cookie, service-token, loopback agent-route, fail-closed backend and OIDC token-validation cases (alg none/HS256, audience, issuer, nonce, azp, expiry, JWKS rotation throttling, PKCE). `src/tests/persistence/test_auth_sessions_integration.py` passes 14 tests against migration 0105: install-credential login and audit, single-use and expiring login codes, logout, idle/absolute/sliding expiry, rotation revoking sessions, OIDC provisioning, browser binding and admission, no email-based account linking, bearer mapping, disabled membership, the launcher callback flow and session rotation through the gateway. Web: firewall CSRF, 401 redirect, sign-in page and sign-out tests pass, as does the full web suite (429 files, 1,578 tests); typecheck and lint pass. mypy, the Ruff ratchet, architecture lint and source-bound metrics hold; route-permission and API-coverage metrics did not regress.
