@@ -72,15 +72,27 @@ _PAYLOAD_LOCK = threading.RLock()
 _LOCK_STATE = threading.local()
 
 
-def _lock_file(handle: Any) -> None:
-    handle.seek(0)
-    if sys.platform == "win32":
-        import msvcrt
+# Windows' msvcrt.locking(LK_LOCK) gives up after about ten seconds; match it elsewhere.
+_LOCK_TIMEOUT_SECONDS = 10.0
 
+# The file lock follows the operating system this process runs on, chosen once at import: the store's own platform
+# checks read sys.platform when called (tests set it to exercise the Windows store), the lock primitive must not.
+if sys.platform == "win32":
+    import msvcrt
+
+    def _lock_file(handle: Any) -> None:
+        handle.seek(0)
         msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-    else:
-        import fcntl
 
+    def _unlock_file(handle: Any) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    def _lock_file(handle: Any) -> None:
+        handle.seek(0)
         deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
         while True:
             try:
@@ -91,20 +103,8 @@ def _lock_file(handle: Any) -> None:
                     raise TimeoutError("the protected credential store is locked by another process") from None
                 time.sleep(0.05)
 
-
-# Windows' msvcrt.locking(LK_LOCK) gives up after about ten seconds; match it elsewhere.
-_LOCK_TIMEOUT_SECONDS = 10.0
-
-
-def _unlock_file(handle: Any) -> None:
-    handle.seek(0)
-    if sys.platform == "win32":
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-    else:
-        import fcntl
-
+    def _unlock_file(handle: Any) -> None:
+        handle.seek(0)
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
