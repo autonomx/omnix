@@ -99,6 +99,20 @@ def isolated_secret_store():
 
 
 @pytest.fixture(autouse=True)
+def isolated_device_permits():
+    # Composing the production app installs the process-wide device permit
+    # service (WP-6.2); a later test in the same worker would otherwise queue
+    # its local-model calls behind PostgreSQL permits it never configured.
+    from app.persistence import device_permits
+
+    installed = device_permits._DEFAULT_SERVICE
+    try:
+        yield
+    finally:
+        device_permits._DEFAULT_SERVICE = installed
+
+
+@pytest.fixture(autouse=True)
 def capability_runtime_installed():
     # Composition installs the assistant-tools runtime behind
     # app.capabilities.executor (WP-4.5); tests that call capability paths
