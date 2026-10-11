@@ -407,6 +407,43 @@ describe('AudiobookWorkspace', () => {
   });
 
 
+  it('confirms every detected speaker at once', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/speakers') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'speaker', status: 'active', promoted: true }),
+          { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [],
+        speakers: [
+          { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'candidate-one', canonical_name: 'Time Traveller', kind: 'character', status: 'proposed', occurrence_count: 3, casting: null, aliases: [] },
+          { id: 'candidate-two', canonical_name: 'Weena', kind: 'character', status: 'proposed', occurrence_count: 2, casting: null, aliases: [] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm all 2' }));
+    await waitFor(() => expect(fetchMock.mock.calls
+      .filter(([url, init]) => String(url) === '/api/audiobook/projects/book-one/speakers' && init?.method === 'POST')
+      .map(([, init]) => init?.body)).toEqual([
+      JSON.stringify({ canonical_name: 'Time Traveller' }),
+      JSON.stringify({ canonical_name: 'Weena' }),
+    ]));
+  });
+
   it('dismisses an unused detected speaker', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
