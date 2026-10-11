@@ -1,6 +1,8 @@
+import type { Time } from 'lightweight-charts';
 import { describe, expect, it } from 'vitest';
 import {
   dateInputValue,
+  formatTradingChartTime,
   formatTradingTime,
   formatTradingTimezoneOffset,
   tradingDateRangeWithinLoadedHistory,
@@ -14,6 +16,16 @@ describe('TradingView-style timezone formatting', () => {
   it('formats UTC-7 as a local 12-hour clock time', () => {
     expect(formatTradingTime(sample, 'America/Vancouver')).toBe('9:16:00 PM');
     expect(formatTradingTimezoneOffset(sample, 'America/Vancouver')).toBe('UTC-7');
+  });
+
+  it('labels the crosshair time with the full date, as TradingView does', () => {
+    const time = Date.parse('2026-10-09T17:00:05.000Z') / 1_000 as Time;
+    expect(formatTradingChartTime(time, 'America/Vancouver', 3_600)).toBe("Fri 09 Oct '26 10:00");
+    expect(formatTradingChartTime(time, 'UTC', 60)).toBe("Fri 09 Oct '26 17:00");
+    expect(formatTradingChartTime(time, 'UTC', 5)).toBe("Fri 09 Oct '26 17:00:05");
+    expect(formatTradingChartTime(Date.parse('2026-10-09T00:00:00.000Z') / 1_000 as Time, 'UTC', 86_400)).toBe("Fri 09 Oct '26");
+    expect(formatTradingChartTime('2026-10-09', 'America/Vancouver')).toBe("Fri 09 Oct '26");
+    expect(formatTradingChartTime(Date.parse('2026-01-01T00:30:00.000Z') / 1_000 as Time, 'UTC')).toBe("Thu 01 Jan '26 00:30");
   });
 
   it('converts a selected timezone date range to UTC boundaries', () => {

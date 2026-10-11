@@ -903,7 +903,7 @@ export class TradingChartAdapter {
     this.assertActive();
     this.chart.applyOptions({
       localization: {
-        timeFormatter: (time: Time) => formatTradingChartTime(time, timeZone),
+        timeFormatter: (time: Time) => formatTradingChartTime(time, timeZone, this.intervalStepSeconds()),
       },
       timeScale: {
         tickMarkFormatter: (time: Time) => formatTradingChartTick(time, timeZone),

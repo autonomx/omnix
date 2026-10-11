@@ -113,8 +113,29 @@ function timeFromChartValue(value: Time): Date {
   return new Date(Date.UTC(value.year, value.month - 1, value.day));
 }
 
-export function formatTradingChartTime(value: Time, timeZone: string): string {
-  return formatTradingTime(timeFromChartValue(value), timeZone);
+/**
+ * The crosshair's time-axis label, as in TradingView: "Fri 09 Oct '26 10:00". Daily and longer bars show
+ * the date alone; bars shorter than a minute add seconds.
+ */
+export function formatTradingChartTime(value: Time, timeZone: string, barSeconds?: number | null): string {
+  const businessDay = typeof value !== 'number';
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: businessDay ? 'UTC' : validTimeZone(timeZone),
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(timeFromChartValue(value))
+    .filter((part) => part.type !== 'literal')
+    .map((part) => [part.type, part.value]));
+  const date = `${parts.weekday} ${parts.day} ${parts.month} '${parts.year}`;
+  if (businessDay || (barSeconds != null && barSeconds >= 86_400)) return date;
+  const seconds = barSeconds != null && barSeconds < 60 ? `:${parts.second}` : '';
+  return `${date} ${parts.hour}:${parts.minute}${seconds}`;
 }
 
 export function formatTradingChartTick(value: Time, timeZone: string): string {
