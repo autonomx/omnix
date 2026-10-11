@@ -814,6 +814,25 @@ class AudiobookService:
             work.commit()
         return result
 
+    def unconfirm_alias(self, context: TenantContext, *, project_id: str,
+                        speaker_id: str, alias: str) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            result = PostgresAudiobookReviewRepository(work.connection).unconfirm_alias(
+                context, project_id=project_id, speaker_id=speaker_id, alias=alias,
+            )
+            work.commit()
+        return result
+
+    def confirm_suggested_aliases(self, context: TenantContext, *, project_id: str) -> dict[str, int]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            result = PostgresAudiobookReviewRepository(work.connection).confirm_suggested_aliases(
+                context, project_id=project_id,
+            )
+            work.commit()
+        return result
+
     def reject_speaker(
         self, context: TenantContext, *, project_id: str, speaker_id: str,
     ) -> dict[str, object]:

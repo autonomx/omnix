@@ -61505,6 +61505,52 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/aliases/confirm-suggested": {
+      "post": {
+        "operationId": "confirm_suggested_aliases_api_audiobook_projects__project_id__aliases_confirm_suggested_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Confirm Suggested Aliases Api Audiobook Projects  Project Id  Aliases Confirm Suggested Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Suggested Aliases",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/assets/{asset_id}": {
       "delete": {
         "operationId": "delete_asset_api_audiobook_projects__project_id__assets__asset_id__delete",
@@ -63401,6 +63447,69 @@
           }
         },
         "summary": "Confirm Alias",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases/unconfirm": {
+      "post": {
+        "operationId": "unconfirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_unconfirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSpeakerAlias"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Unconfirm Alias Api Audiobook Projects  Project Id  Speakers  Speaker Id  Aliases Unconfirm Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unconfirm Alias",
         "tags": [
           "audiobook"
         ]

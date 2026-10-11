@@ -629,6 +629,29 @@ def confirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias
         raise HTTPException(status_code=404, detail="speaker not found") from exc
 
 
+@router.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases/unconfirm", tags=["audiobook"])
+def unconfirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.unconfirm_alias(context, project_id=project_id,
+                                       speaker_id=speaker_id, alias=request.alias)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="confirmed alias not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/aliases/confirm-suggested", tags=["audiobook"])
+def confirm_suggested_aliases(project_id: str) -> dict[str, int]:
+    service, context = _service_and_context()
+    try:
+        return service.confirm_suggested_aliases(context, project_id=project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+
+
 @router.post("/api/audiobook/projects/{project_id}/review/{issue_id}", tags=["audiobook"])
 def resolve_issue(project_id: str, issue_id: str, request: ResolveReviewIssue) -> dict[str, object]:
     service, context = _service_and_context()

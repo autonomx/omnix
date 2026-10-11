@@ -58,6 +58,23 @@ export interface paths {
         patch: operations["update_project_api_audiobook_projects__project_id__patch"];
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/aliases/confirm-suggested": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Suggested Aliases */
+        post: operations["confirm_suggested_aliases_api_audiobook_projects__project_id__aliases_confirm_suggested_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/assets/{asset_id}": {
         parameters: {
             query?: never;
@@ -581,6 +598,23 @@ export interface paths {
         put?: never;
         /** Confirm Alias */
         post: operations["confirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases/unconfirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unconfirm Alias */
+        post: operations["unconfirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_unconfirm_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1366,6 +1400,39 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_suggested_aliases_api_audiobook_projects__project_id__aliases_confirm_suggested_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
                     };
                 };
             };
@@ -2521,6 +2588,44 @@ export interface operations {
         };
     };
     confirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                speaker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmSpeakerAlias"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unconfirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_unconfirm_post: {
         parameters: {
             query?: never;
             header?: never;

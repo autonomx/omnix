@@ -82,6 +82,15 @@ export const audiobookApi = {
       params: { path: { project_id: projectId, speaker_id: speakerId } },
       body: { alias },
     })),
+  unconfirmAlias: (projectId: string, speakerId: string, alias: string) =>
+    view<unknown>(api.POST('/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases/unconfirm', {
+      params: { path: { project_id: projectId, speaker_id: speakerId } },
+      body: { alias },
+    })),
+  confirmSuggestedAliases: (projectId: string) =>
+    view<unknown>(api.POST('/api/audiobook/projects/{project_id}/aliases/confirm-suggested', {
+      params: { path: project(projectId) },
+    })),
   assignVoice: (projectId: string, speakerId: string, voiceProfileId: string) =>
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting', {
       params: { path: { project_id: projectId, speaker_id: speakerId } },

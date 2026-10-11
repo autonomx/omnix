@@ -444,6 +444,45 @@ describe('AudiobookWorkspace', () => {
     ]));
   });
 
+  it('shows confirmed aliases with an unconfirm control and confirms earlier suggestions in one step', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST') {
+        return new Response(JSON.stringify({ status: 'rejected' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [],
+        speakers: [
+          { id: 'knights', canonical_name: 'Temple Knights', kind: 'character', status: 'active', casting: null,
+            aliases: ['Keepers of Anastasia'], proposed_aliases: ['The other knights'] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Unconfirm alias Keepers of Anastasia for Temple Knights' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/speakers/knights/aliases/unconfirm',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ alias: 'Keepers of Anastasia' }) }),
+    ));
+    expect(screen.getByText(/1 suggested alias not yet confirmed/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm all suggested aliases' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm all suggested aliases' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/aliases/confirm-suggested',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+  });
+
   it('dismisses an unused detected speaker', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

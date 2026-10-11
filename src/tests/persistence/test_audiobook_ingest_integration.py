@@ -764,8 +764,9 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             "estimated_age": "20s",
             "gender_presentation": "female",
         }
-        assert nita["aliases"] == []
-        assert nita["proposed_aliases"] == ["Ms. Nita"]
+        # The classifier's suggested alias is confirmed when the analysis finishes.
+        assert nita["aliases"] == ["Ms. Nita"]
+        assert nita["proposed_aliases"] == []
         with pytest.raises(ValueError, match="reassign or resolve"):
             service.reject_speaker(
                 context, project_id=project["id"], speaker_id=nita["id"],
@@ -773,14 +774,14 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
 
         with unit_of_work(database) as work:
             alias = work.connection.execute(
-                """SELECT alias, status
+                """SELECT alias, status, provenance->>'mode'
                      FROM omnix_audiobook_speaker_aliases
                     WHERE workspace_id = %s AND project_id = %s
                       AND speaker_id = %s::uuid""",
                 (context.workspace_id, project["id"], nita["id"]),
             ).fetchone()
             work.rollback()
-        assert alias == ("Ms. Nita", "proposed")
+        assert alias == ("Ms. Nita", "confirmed", "auto_confirmed")
 
         with pytest.raises(ValueError, match="canonical name"):
             service.confirm_alias(
@@ -2253,6 +2254,88 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
         assert revised["annotation"]["speaker_id"] == nita["id"]
         assert revised["annotation"]["review_status"] == "user_resolved"
         assert revised["annotation"]["revision"] >= 2
+    finally:
+        database.close()
+
+
+def test_unconfirming_an_alias_restores_what_confirming_it_changed(tmp_path, monkeypatch) -> None:
+    def classifier():
+        def classify(payload):
+            source = str(payload["source_text"])
+            return {
+                "span_id": payload["span_id"],
+                "speaker": "Nita Sr." if '"' in source else "Narrator",
+                "role": "dialogue" if '"' in source else "narration",
+                "delivery": "quiet" if '"' in source else "",
+            }
+        return classify, {"mode": "test-classifier", "version": "1"}
+
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", classifier)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-unconfirm-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = ensure_local_identity(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Alias unconfirm")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=b'Chapter 1\n"Nita speaks."\nThe narrator continues.', filename="unconfirm.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:unconfirm-ingest")
+        _queue_analysis(database, context, project["id"])
+        assert run_analyze_once(database, context, worker_id="test:unconfirm-analyze")
+        before = service.get_project(context, project["id"])
+        issue = next(item for item in before["review_issues"] if item.get("speaker_candidate") == "Nita Sr.")
+        detected = next(item for item in before["speakers"] if item["canonical_name"] == "Nita Sr.")
+        chapter_before = service.get_chapter(context, project_id=project["id"], chapter_id=issue["chapter_id"])
+        span_before = next(item for item in chapter_before["spans"] if item["id"] == issue["span_id"])
+
+        nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")
+        assert service.confirm_alias(
+            context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.",
+        )["reconciled_spans"] >= 1
+        confirmed = service.get_project(context, project["id"])
+        assert all(item["id"] != detected["id"] for item in confirmed["speakers"])
+        assert all(item["id"] != issue["id"] for item in confirmed["review_issues"])
+
+        with pytest.raises(KeyError):
+            service.unconfirm_alias(context, project_id=project["id"], speaker_id=nita["id"], alias="Nobody")
+        result = service.unconfirm_alias(
+            context, project_id=project["id"], speaker_id=nita["id"], alias="nita  sr.",
+        )
+        assert result["restored_spans"] >= 1 and result["restored_speakers"] == 1
+
+        after = service.get_project(context, project["id"])
+        restored_nita = next(item for item in after["speakers"] if item["id"] == nita["id"])
+        assert restored_nita["aliases"] == [] and restored_nita["proposed_aliases"] == []
+        assert next(item for item in after["speakers"] if item["id"] == detected["id"])["status"] == "proposed"
+        assert any(item["id"] == issue["id"] for item in after["review_issues"])
+        assert after["state"] == "review_required"
+        chapter_after = service.get_chapter(context, project_id=project["id"], chapter_id=issue["chapter_id"])
+        span_after = next(item for item in chapter_after["spans"] if item["id"] == issue["span_id"])
+        for key in ("speaker_id", "speaker_candidate", "role", "review_status"):
+            assert span_after["annotation"][key] == span_before["annotation"][key]
+        assert span_after["annotation"]["revision"] > span_before["annotation"]["revision"] + 1
+
+        # An unconfirmed alias is not suggested (and so not confirmed) again when the speaker is rediscovered.
+        with unit_of_work(database) as work:
+            PostgresAudiobookAnalysisRepository(work.connection).register_proposed_speakers(
+                context, project_id=project["id"],
+                discoveries=[DiscoveredSpeaker(canonical_name="Nita", aliases=("Nita Sr.", "Old Nita"))],
+            )
+            work.commit()
+        rediscovered = next(
+            item for item in service.get_project(context, project["id"])["speakers"] if item["id"] == nita["id"]
+        )
+        assert rediscovered["proposed_aliases"] == ["Old Nita"]
+        assert service.confirm_suggested_aliases(context, project_id=project["id"])["confirmed"] == 1
+        final = next(item for item in service.get_project(context, project["id"])["speakers"] if item["id"] == nita["id"])
+        assert final["aliases"] == ["Old Nita"] and final["proposed_aliases"] == []
     finally:
         database.close()
 

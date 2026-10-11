@@ -27,8 +27,9 @@ class PostgresAudiobookAnalysisRepository:
         """Persist classifier discoveries without making them castable.
 
         Existing active speakers keep their identity and castability; classifier
-        metadata and proposed aliases may be enriched, but no alias becomes
-        authoritative until the user confirms it.
+        metadata and proposed aliases may be enriched. Proposed aliases become
+        authoritative when the analysis finishes (``confirm_suggested_aliases``),
+        and the user can unconfirm any of them.
         """
         touched = 0
         for discovery in discoveries:
@@ -179,6 +180,22 @@ class PostgresAudiobookAnalysisRepository:
                     ),
                 ).fetchone()
                 if alias_conflict is not None:
+                    continue
+                # An alias the user unconfirmed (or rejected) for this speaker is not suggested again;
+                # suggestions are confirmed automatically, so it would otherwise come straight back.
+                declined = self.connection.execute(
+                    """SELECT 1
+                         FROM omnix_audiobook_speaker_aliases
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status = 'rejected' AND speaker_id = %s::uuid
+                          AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
+                        LIMIT 1""",
+                    (
+                        context.workspace_id, project_id, speaker_id,
+                        alias_normalized,
+                    ),
+                ).fetchone()
+                if declined is not None:
                     continue
                 alias_id = f"ab:alias:{text_hash(f'{speaker_id}:{alias_normalized}')}"
                 self.connection.execute(

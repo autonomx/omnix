@@ -824,6 +824,10 @@
   .audiobook-ai-profile li { padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 28%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-violet-540) 12%, transparent); color: inherit; font-size: .76rem; line-height: 1.35; }
   .audiobook-proposed-aliases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
   .audiobook-proposed-aliases > small { width: 100%; color: var(--ab-text-muted); font-size: .72rem; }
+  .audiobook-cast-details .audiobook-proposed-aliases > button { border-style: dashed; }
+  .audiobook-alias-chip { display: inline-flex; align-items: center; gap: 2px; min-height: 30px; padding: 0 2px 0 10px; border: 1px solid color-mix(in srgb, var(--c-blue-770) 35%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-blue-460-2) 18%, transparent); font-size: .76rem; }
+  .audiobook-proposed-aliases .audiobook-alias-chip > button { display: grid; place-items: center; width: 24px; min-height: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ab-text-muted); font-size: .7rem; }
+  .audiobook-proposed-aliases .audiobook-alias-chip > button:hover:not(:disabled) { background: color-mix(in srgb, var(--c-red-560) 22%, transparent); color: inherit; }
   .audiobook-cast-details .audiobook-proposed-aliases > small { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   .audiobook-proposed-aliases > button { min-height: 30px; padding: 5px 9px; border-color: color-mix(in srgb, var(--c-blue-770) 35%, transparent); background: color-mix(in srgb, var(--c-blue-460-2) 18%, transparent); font-size: .72rem; }
 

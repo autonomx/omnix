@@ -23,6 +23,7 @@ from .document_structure_classifier import local_structure_classifier
 from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .repository import PostgresAudiobookRepository
+from .review_repository import PostgresAudiobookReviewRepository
 from .assembly_service import run_assemble_once
 from .export_service import run_export_once
 from .annotation import (
@@ -734,6 +735,10 @@ def _analyze_claimed(
                 work.commit()
                 return True
             else:
+                # Suggested aliases are confirmed automatically (rarely wrong); the user unconfirms any that are.
+                PostgresAudiobookReviewRepository(work.connection).confirm_suggested_aliases(
+                    context, project_id=payload["project_id"],
+                )
                 result = PostgresAudiobookAnalysisRepository(work.connection).finalize_review(
                     context, project_id=payload["project_id"],
                     source_revision_id=payload["source_revision_id"],
