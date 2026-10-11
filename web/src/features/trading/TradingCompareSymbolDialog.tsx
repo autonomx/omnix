@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument } from './tradingTypes';
 import type { TradingComparisonPlacement } from './tradingComparisons';
@@ -120,7 +121,8 @@ export function TradingCompareSymbolDialog({
   };
 
   if (!open) return null;
-  return (
+  // On the page itself: inside the chart panel its stacking context would leave the dialog under the toolbars.
+  return createPortal(
     <div className="trading-symbol-search-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="trading-symbol-search-dialog trading-compare-dialog" role="dialog" aria-modal="true" aria-labelledby="trading-compare-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="trading-symbol-search-header">
@@ -177,6 +179,7 @@ export function TradingCompareSymbolDialog({
         </div> : null}
         <footer className="trading-symbol-search-footer"><span>{instrumentsQuery.isFetching ? 'Searching instrument catalog…' : `${results.length} ${results.length === 1 ? 'symbol' : 'symbols'}`}</span><span>{mode === 'choose' ? 'Select a symbol' : 'Select a symbol, then choose its scale'}</span></footer>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
