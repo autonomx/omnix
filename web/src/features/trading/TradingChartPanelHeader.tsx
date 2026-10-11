@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { downloadUrl } from '../../shared/download';
 import { convertedPrice, intervalLabel } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
@@ -18,9 +19,22 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
     selectedDrawing, setCompareDialogOpen, streamStatus, toggleFullscreen,
   } = ws;
   const linkGroup = useTradingStore((state) => state.charts.find((chart) => chart.chartId === chartId)?.linkGroup);
+  const headerRef = useRef<HTMLElement | null>(null);
+  // The header floats over the chart; controls pinned to the chart's top read its height to sit below it.
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const panel = header?.parentElement;
+    if (!header || !panel) return undefined;
+    const publish = () => panel.style.setProperty('--trading-chart-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);
+    publish();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(publish);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
   return (
     <>
-      <header className="trading-chart-header">
+      <header ref={headerRef} className="trading-chart-header">
         <div className="trading-chart-heading">
           <div className="trading-chart-title-row">
             <button

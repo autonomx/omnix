@@ -210,7 +210,6 @@
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-blue-630) 18%, transparent);
   }
 
-  :root[data-omnix-appearance='light'] .trading-chart-header,
   :root[data-omnix-appearance='light'] .trading-chart-panel > footer {
     border-color: var(--trading-light-line-soft);
     background: var(--trading-light-surface-muted);

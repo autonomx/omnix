@@ -392,11 +392,14 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await page.getByRole('menu', { name: 'Lines' }).getByRole('menuitem', { name: 'Trend line', exact: true }).click();
   const overlay = page.locator('.trading-chart-panel.active .trading-drawing-overlay');
   const box = await overlay.boundingBox();
+  // The chart header floats over the top of the chart; draw on the chart below it.
+  const header = await page.locator('.trading-chart-panel.active .trading-chart-header').boundingBox();
   expect(box).not.toBeNull();
   if (box) {
-    await page.mouse.move(box.x + 100, box.y + 120);
+    const top = Math.max(box.y, header ? header.y + header.height : box.y);
+    await page.mouse.move(box.x + 100, top + 120);
     await page.mouse.down();
-    await page.mouse.move(box.x + 260, box.y + 70);
+    await page.mouse.move(box.x + 260, top + 70);
     await page.mouse.up();
   }
   await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);
@@ -426,11 +429,14 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
 
   const chartStage = page.locator('.trading-chart-panel.active .trading-chart-stage');
   const chartStageBox = await chartStage.boundingBox();
+  // Below the chart header, which floats over the top of the chart.
+  const chartHeaderBox = await page.locator('.trading-chart-panel.active .trading-chart-header').boundingBox();
   expect(chartStageBox).not.toBeNull();
   if (chartStageBox) {
+    const headerBottom = chartHeaderBox ? chartHeaderBox.y + chartHeaderBox.height - chartStageBox.y : 0;
     await chartStage.click({
       button: 'right',
-      position: { x: chartStageBox.width / 2, y: 12 },
+      position: { x: chartStageBox.width / 2, y: Math.max(0, headerBottom) + 12 },
       force: true,
     });
   }
