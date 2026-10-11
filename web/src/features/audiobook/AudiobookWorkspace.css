@@ -814,8 +814,17 @@
   .audiobook-confirmation-dialog > p:not(.eyebrow) { margin: 0; color: var(--ab-text-muted); font-size: .82rem; line-height: 1.5; }
   .audiobook-confirmation-actions { display: flex; justify-content: end; gap: 7px; margin-top: 1rem; }
 
+  /* The AI profile and suggested aliases: a row of their own across the card, under the name, voice and actions. */
+  .audiobook-characters-panel .audiobook-cast-card .audiobook-cast-details { display: flex; flex-wrap: wrap; align-items: start; gap: 10px 28px; grid-column: 1 / -1; }
+  .audiobook-cast-details:empty { display: none; }
+  .audiobook-cast-details > .audiobook-proposed-aliases { margin-top: 0; }
+  .audiobook-ai-profile { display: grid; justify-items: start; gap: 5px; min-width: 0; }
+  .audiobook-ai-profile > small { color: var(--ab-text-muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .audiobook-ai-profile ul { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
+  .audiobook-ai-profile li { padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 28%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-violet-540) 12%, transparent); color: inherit; font-size: .76rem; line-height: 1.35; }
   .audiobook-proposed-aliases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
   .audiobook-proposed-aliases > small { width: 100%; color: var(--ab-text-muted); font-size: .72rem; }
+  .audiobook-cast-details .audiobook-proposed-aliases > small { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   .audiobook-proposed-aliases > button { min-height: 30px; padding: 5px 9px; border-color: color-mix(in srgb, var(--c-blue-770) 35%, transparent); background: color-mix(in srgb, var(--c-blue-460-2) 18%, transparent); font-size: .72rem; }
 
   /* Audiobook library tiles follow the cover-first reference layout. */
