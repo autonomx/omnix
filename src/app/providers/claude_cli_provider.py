@@ -43,6 +43,23 @@ DEFAULT_CLAUDE_MODEL = "sonnet"
 DEFAULT_CLAUDE_PATH = "claude"
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 MODEL_ALIASES = ("sonnet", "opus", "haiku", "fable")
+# The models the Claude Code CLI offers in its picker (its own catalog, newest first), as (id, name, description).
+CLAUDE_CLI_MODELS = (
+    ("claude-opus-5-5", "Opus 5.5", "For complex work and everyday tasks"),
+    ("claude-fable-5-1", "Fable 5.1", "For your toughest challenges"),
+    ("claude-sonnet-5-5", "Sonnet 5.5", "Most efficient for simpler tasks"),
+    ("claude-haiku-5-5", "Haiku 5.5", "Fastest for quick answers"),
+    ("claude-haiku-4-5-20251001", "Haiku 4.5", "Fastest for quick answers"),
+    ("claude-sonnet-5", "Sonnet 5", "Efficient for routine tasks"),
+    ("claude-opus-5", "Opus 5", "Previous Opus version"),
+    ("claude-fable-5", "Fable 5", "Previous Fable version"),
+    ("claude-opus-4-8", "Opus 4.8", "Legacy"),
+    ("claude-opus-4-7", "Opus 4.7", "Legacy"),
+    ("claude-opus-4-6", "Opus 4.6", "Legacy"),
+    ("claude-sonnet-4-6", "Sonnet 4.6", "Legacy"),
+    ("claude-opus-4-1-20250805", "Opus 4.1", "Legacy"),
+)
+_ALIAS_NAMES = {alias: f"Latest {alias.capitalize()} ({alias})" for alias in MODEL_ALIASES}
 _ROLE_LABELS = {"user": "USER", "assistant": "ASSISTANT", "tool": "TOOL"}
 # Windows limits a command line to 32,767 characters; a larger schema stays in the prompt only.
 _MAX_SCHEMA_ARGUMENT = 16_000
@@ -88,6 +105,20 @@ def resolve_claude_executable(claude_path: str) -> str | None:
             if candidate.is_file():
                 return str(candidate.resolve())
     return None
+
+
+def claude_cli_models(configured: str = DEFAULT_CLAUDE_MODEL, provider_name: str = "claude_cli") -> list[ModelInfo]:
+    """Every model the CLI offers, then the aliases; a configured model outside them comes first."""
+    rows = [*CLAUDE_CLI_MODELS, *((alias, _ALIAS_NAMES[alias], "Always the newest model of this family")
+                                   for alias in MODEL_ALIASES)]
+    configured = str(configured or "").strip()
+    if configured and all(model_id != configured for model_id, _, _ in rows):
+        rows.insert(0, (configured, configured, "Configured model"))
+    return [
+        ModelInfo(id=model_id, name=name, provider=provider_name, description=description,
+                  capabilities=[ProviderCapability.CHAT])
+        for model_id, name, description in rows
+    ]
 
 
 def _response_schema(response_format: Any) -> dict[str, Any] | None:
@@ -170,11 +201,7 @@ class ClaudeCliProvider(BaseProvider):
         }
 
     def get_models(self) -> list[ModelInfo]:
-        names = list(dict.fromkeys([str(self.config.model or DEFAULT_CLAUDE_MODEL), *MODEL_ALIASES]))
-        return [
-            ModelInfo(id=name, name=name, provider=self.provider_name, capabilities=[ProviderCapability.CHAT])
-            for name in names
-        ]
+        return claude_cli_models(str(self.config.model or DEFAULT_CLAUDE_MODEL), self.provider_name)
 
     def test_connection(self) -> bool:
         executable = resolve_claude_executable(self.claude_path)

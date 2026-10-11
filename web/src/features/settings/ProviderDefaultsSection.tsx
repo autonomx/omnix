@@ -22,16 +22,17 @@ function optionsWithCurrent(options: Array<{ id: string; label: string }>, curre
   return current && !options.some((option) => option.id === current) ? [{ id: current, label: `${current} (unavailable)` }, ...options] : options;
 }
 
-function codexModelId(model: ProviderFacadePayload['models'][number]): string {
+function providerModelId(model: ProviderFacadePayload['models'][number]): string {
   const metadata = model.metadata as Record<string, unknown> | undefined;
   const metadataId = typeof metadata?.model_id === 'string' ? metadata.model_id.trim() : '';
-  return metadataId || model.id.replace(/^llm:chatgpt_codex:/, '');
+  return metadataId || model.id.replace(`${model.provider_id}:`, '');
 }
 
-function codexModelOptions(payload: ProviderFacadePayload | undefined, current: string) {
+/** A provider's own model ids (without the llm:<provider>: prefix), in catalog order. */
+export function providerModelOptions(payload: ProviderFacadePayload | undefined, providerId: string, current: string) {
   const options = (payload?.models ?? [])
-    .filter((model) => model.provider_id === 'llm:chatgpt_codex')
-    .map((model) => ({ id: codexModelId(model), label: model.label || codexModelId(model) }))
+    .filter((model) => model.provider_id === providerId)
+    .map((model) => ({ id: providerModelId(model), label: model.label || providerModelId(model) }))
     .filter((option, index, all) => option.id && all.findIndex((candidate) => candidate.id === option.id) === index);
   return optionsWithCurrent(options, current);
 }
@@ -48,7 +49,7 @@ function reasoningEffortId(value: unknown): string {
 
 export function codexReasoningOptions(payload: ProviderFacadePayload | undefined, modelId: string, current: string) {
   const model = (payload?.models ?? []).find((candidate) => (
-    candidate.provider_id === 'llm:chatgpt_codex' && codexModelId(candidate) === modelId
+    candidate.provider_id === 'llm:chatgpt_codex' && providerModelId(candidate) === modelId
   ));
   const metadata = model?.metadata as Record<string, unknown> | undefined;
   const supported = Array.isArray(metadata?.supported_reasoning_efforts)
@@ -88,16 +89,23 @@ function codexAuthLabel(status: CodexAuthStatus): string {
 }
 
 /** The Claude Code CLI provider's settings; it signs in on its own, so Omnix keeps no credentials for it. */
-function ClaudeCliSettings() {
+function ClaudeCliSettings({ payload }: { payload?: ProviderFacadePayload }) {
   const { state, dispatch } = useSettingsProfileContext();
   const config = state.draft.providerConfigs.claudeCli;
+  const models = providerModelOptions(payload, 'llm:claude_cli', config.model);
   return (
     <div className="provider-config-group">
       <h4>Claude (Claude Code CLI)</h4>
       <div className="settings-form-grid">
         <SettingsField label="Model">
-          <input value={config.model} onChange={updateString(dispatch, 'providerConfigs.claudeCli.model')} placeholder="sonnet" />
-          <small>An alias (sonnet, opus, haiku, fable) or a full model name.</small>
+          {models.length ? (
+            <select value={config.model} onChange={updateString(dispatch, 'providerConfigs.claudeCli.model')}>
+              {models.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          ) : (
+            <input value={config.model} onChange={updateString(dispatch, 'providerConfigs.claudeCli.model')} placeholder="sonnet" />
+          )}
+          <small>The models the Claude Code CLI offers; a Latest alias always follows that family&apos;s newest model.</small>
         </SettingsField>
         <SettingsField label="Effort">
           <select value={config.effort} onChange={updateString(dispatch, 'providerConfigs.claudeCli.effort')}>
@@ -129,7 +137,7 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
   const sttOptions = optionsWithCurrent(providerOptions(payload, 'stt'), providers.stt);
   const imageOptions = optionsWithCurrent(providerOptions(payload, 'image'), providers.image);
   const imageProviderId = providers.image.replace(/^image:/, '');
-  const codexModels = codexModelOptions(effectivePayload, configs.chatgptCodex.model);
+  const codexModels = providerModelOptions(effectivePayload, 'llm:chatgpt_codex', configs.chatgptCodex.model);
   const reasoningEffortOptions = codexReasoningOptions(
     effectivePayload,
     configs.chatgptCodex.model,
@@ -257,7 +265,7 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
             </div>
           </div>
         ) : null}
-        {providers.llm === 'claude_cli' ? <ClaudeCliSettings /> : null}
+        {providers.llm === 'claude_cli' ? <ClaudeCliSettings payload={payload} /> : null}
         {providers.llm === 'chatgpt_codex' ? (
           <div className="provider-config-group">
             <h4>ChatGPT Plus (Codex)</h4>

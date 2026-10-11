@@ -263,6 +263,9 @@ class ProviderFacade:
             model_id = _safe_str(model_id).strip()
             if not model_id or provider_id not in available_provider_ids:
                 continue
+            if provider_id == "llm:claude_cli":
+                models.extend(self._claude_cli_models(model_id))
+                continue
             capabilities = [ProviderCapability.TTS] if provider_id.startswith("tts:") else [ProviderCapability.CHAT]
             models.append(
                 ModelSummary(
@@ -276,6 +279,24 @@ class ProviderFacade:
             )
         models.extend(live_codex_models)
         return models
+
+    @staticmethod
+    def _claude_cli_models(configured: str) -> list[ModelSummary]:
+        """The Claude CLI's model catalog (the configured model included), as the CLI's picker lists it."""
+        from app.providers.claude_cli_provider import claude_cli_models
+
+        return [
+            ModelSummary(
+                id=f"llm:claude_cli:{model.id}",
+                label=model.name,
+                provider_id="llm:claude_cli",
+                capabilities=[ProviderCapability.CHAT],
+                location="remote",
+                metadata={"source": "catalog", "model_id": model.id, "description": model.description,
+                          "configured": model.id == configured},
+            )
+            for model in claude_cli_models(configured)
+        ]
 
     @staticmethod
     def _live_chatgpt_codex_models() -> list[ModelSummary]:
