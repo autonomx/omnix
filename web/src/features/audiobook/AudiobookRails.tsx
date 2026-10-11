@@ -1,5 +1,6 @@
 import { audiobookApi } from './audiobookApi';
 import { LibrarySection, base, documentRoleOptions, formatAssetCreationDate, formatCount, formatDuration, formatStorage, libraryCardStatus, libraryProjectStatus, setDocumentBlockAction } from './audiobookWorkspaceModel';
+import { reviewReasonLabel } from './AudiobookReviewQueue';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
 
 /** The library rail: sections, a new audiobook, and the projects. */
@@ -47,10 +48,10 @@ export function AudiobookInspectorRail({ ws }: { ws: AudiobookWorkspaceModel }) 
     action, activeChapterId, aliasNames, busy, completedRenderChapters, documentDetailTab, ebookLibraryOpen,
     exportFormat, findSpeakerSpan, getInstalledModelRevision, libraryProjects, librarySection, mobileRail,
     navigateLibrary, openDocument, openProject, openSourceUpload, project, queueChapterPreview,
-    renderChapterCount, reviewSpeakers, selectedAssetId, selectedChapter, selectedDocumentId, selectedLibraryProject,
+    renderChapterCount, selectedAssetId, selectedChapter, selectedDocumentId, selectedLibraryProject,
     selectedVoice, setAliasNames, setAssetDeleteConfirmation, setChapterId, setDocumentDetailTab,
     setEbookLibraryOpen, setExportFormat, setLibrarySection, setMobileRail, setProjectSettingsOpen,
-    setReviewSpeakers, setSelectedSpanId, setSourceTerm, setSpeakerName, setSpokenTerm, setWorkspaceMode,
+    setSelectedSpanId, setSourceTerm, setSpeakerName, setSpokenTerm, setWorkspaceMode,
     skippedRenderChapterCount, sourceTerm, speakerName, spokenTerm, startChapter, startNewProject,
     submitPronunciation, submitSpeaker, voiceTargetSpeakerId, voicesQuery, workspaceAssetList,
     workspaceDocumentList,
@@ -145,15 +146,9 @@ export function AudiobookInspectorRail({ ws }: { ws: AudiobookWorkspaceModel }) 
           </div>)}
           {voicesQuery.data?.voices.length === 0 && <p className="audiobook-hint">Add a voice profile in Voice Cloning to cast speakers.</p>}
         </section>
-        <section><div className="audiobook-panel-heading"><p className="eyebrow">Human review</p><h2>Review queue <span>{project.review_issues.length}</span></h2></div>
-          {project.review_issues.map((issue) => <article className="audiobook-review" key={issue.id}><small>{issue.chapter_title} · {issue.reason === 'POSSIBLE_MISSED_DIALOGUE' ? 'Possible missed dialogue' : issue.reason}{issue.speaker_candidate ? ` · proposed: ${issue.speaker_candidate}` : ''}</small><p>{issue.reason === 'POSSIBLE_MISSED_DIALOGUE' && typeof issue.evidence?.excerpt === 'string' ? issue.evidence.excerpt : issue.source_text}</p>
-            {issue.reason === 'POSSIBLE_MISSED_DIALOGUE' && <p className="audiobook-detail-muted">This passage contains a speech cue but was extracted as narration. Confirm it as narration only if that is correct. Speech inside a narration span needs corrected source segmentation before it can be voiced as dialogue.</p>}
-            {issue.speaker_candidate && <button type="button" disabled={busy} onClick={() => setSpeakerName(issue.speaker_candidate || '')}>Use proposed speaker name</button>}
-            <select aria-label={`Speaker for review ${issue.id}`} value={reviewSpeakers[issue.id] ?? issue.speaker_id ?? ''} onChange={(event) => setReviewSpeakers((previous) => ({ ...previous, [issue.id]: event.target.value }))}><option value="">Choose speaker</option>{project.speakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}</option>)}</select>
-            <button type="button" disabled={busy || !(reviewSpeakers[issue.id] ?? issue.speaker_id)} onClick={() => void action(() => audiobookApi.resolveReview(project.id, issue.id, { speaker_id: reviewSpeakers[issue.id] ?? issue.speaker_id, role: issue.structural_kind || 'narration' }), 'Review decision saved.')}>
-              {issue.reason === 'POSSIBLE_MISSED_DIALOGUE' ? 'Confirm narration' : 'Confirm speaker'}
-            </button></article>)}
-          {project.review_issues.length === 0 && <p>No open review issues.</p>}
+        <section className="audiobook-review-summary"><div className="audiobook-panel-heading"><p className="eyebrow">Human review</p><h2>Review queue <span>{project.review_issues.length}</span></h2></div>
+          {project.review_issues.length ? <>{Object.entries(project.review_issues.reduce<Record<string, number>>((counts, issue) => ({ ...counts, [issue.reason]: (counts[issue.reason] ?? 0) + 1 }), {})).sort(([, left], [, right]) => right - left).map(([reason, count]) => <p key={reason}>{reviewReasonLabel(reason)}<span>{count}</span></p>)}
+            <button type="button" onClick={() => navigateLibrary('review')}>Open review queue</button></> : <p>No open review issues.</p>}
         </section>
         <section id="audiobook-pronunciations"><div className="audiobook-panel-heading"><p className="eyebrow">Speech plan</p><h2>Pronunciations</h2></div>
           <form className="audiobook-form" onSubmit={submitPronunciation}>

@@ -42,7 +42,7 @@ export function AudiobookProjectTabs({ ws }: { ws: AudiobookWorkspaceModel }) {
   return (
     <>
        <nav className="audiobook-project-tabs" aria-label="Audiobook project sections">
-        {([['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents'], ['characters', 'Cast & Voice Tools'], ['exports', 'Render & Export']] as [LibrarySection, string][]).map(([section, label]) => (
+        {([['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents'], ['characters', 'Cast & Voice Tools'], ['review', project.review_issues.length ? `Human review (${project.review_issues.length})` : 'Human review'], ['exports', 'Render & Export']] as [LibrarySection, string][]).map(([section, label]) => (
           <button key={section} type="button" className={librarySection === section ? 'selected' : ''} aria-current={librarySection === section ? 'page' : undefined}
             onClick={() => navigateLibrary(section)}>{label}</button>
         ))}

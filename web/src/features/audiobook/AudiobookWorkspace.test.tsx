@@ -233,7 +233,8 @@ describe('AudiobookWorkspace', () => {
     expect(saveIndex).toBeGreaterThanOrEqual(0);
     expect(saveIndex).toBeLessThan(importIndex);
     expect(fetchMock.mock.calls[saveIndex][1]?.body).toBe(JSON.stringify({ custom_rules: 'Character quotes can also be in speaker: quote format.' }));
-    expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open review queue' }));
+    expect(within(screen.getByRole('region', { name: 'Human review queue' })).getByText('"Hello," she said.')).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /Books/ }).at(-1)!);
     expect(screen.getByRole('heading', { name: 'Books & chapters' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
@@ -481,6 +482,60 @@ describe('AudiobookWorkspace', () => {
       '/api/audiobook/projects/book-one/aliases/confirm-suggested',
       expect.objectContaining({ method: 'POST' }),
     ));
+  });
+
+  it('opens every open review issue in the main view, grouped by chapter and filterable', async () => {
+    const issue = (id: string, chapter: string, title: string, text: string, extra: Record<string, unknown> = {}) => ({
+      id, span_id: `span-${id}`, reason: 'LOW_CONFIDENCE_SPEAKER', evidence: {}, source_text: text, chapter_id: chapter,
+      chapter_title: title, speaker_id: null, speaker_candidate: null, structural_kind: 'dialogue', ...extra,
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }, { id: 'chapter-two', ordinal: 1, title: 'Closing', character_count: 6 }],
+        review_issues: [
+          issue('issue-one', 'chapter-one', 'Opening', '"Who goes there?"', { reason: 'UNSUPPORTED_SPEAKER', speaker_candidate: 'Gate Guard' }),
+          issue('issue-two', 'chapter-two', 'Closing', '"Farewell."'),
+        ],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'ada', canonical_name: 'Ada', kind: 'character', status: 'active', casting: null, aliases: [] }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open human review queue' }));
+    const queue = await screen.findByRole('region', { name: 'Human review queue' });
+    expect(within(queue).getByText(/2 open issues in 2 chapters/)).toBeInTheDocument();
+    expect(within(queue).getByRole('region', { name: 'Review issues in Opening' })).toBeInTheDocument();
+    expect(within(queue).getByRole('region', { name: 'Review issues in Closing' })).toBeInTheDocument();
+    expect(within(queue).getByText('Speaker not in the cast')).toBeInTheDocument();
+
+    fireEvent.change(within(queue).getByLabelText('Filter review issues by chapter'), { target: { value: 'chapter-two' } });
+    expect(within(queue).queryByRole('region', { name: 'Review issues in Opening' })).not.toBeInTheDocument();
+    expect(within(queue).getByText('1 of 2 issues')).toBeInTheDocument();
+    fireEvent.change(within(queue).getByLabelText('Filter review issues by chapter'), { target: { value: 'all' } });
+
+    fireEvent.click(within(queue).getByRole('button', { name: 'Add “Gate Guard” to the cast' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/speakers',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ canonical_name: 'Gate Guard' }) })));
+    fireEvent.change(within(queue).getByLabelText('Speaker for review issue-two'), { target: { value: 'ada' } });
+    await waitFor(() => expect(within(queue).getAllByRole('button', { name: 'Confirm speaker' })[1]).toBeEnabled());
+    fireEvent.click(within(queue).getAllByRole('button', { name: 'Confirm speaker' })[1]);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/review/issue-two',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ speaker_id: 'ada', role: 'dialogue' }) })));
   });
 
   it('dismisses an unused detected speaker', async () => {

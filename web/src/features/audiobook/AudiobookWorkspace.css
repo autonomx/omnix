@@ -822,6 +822,24 @@
   .audiobook-ai-profile > small { color: var(--ab-text-muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   .audiobook-ai-profile ul { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
   .audiobook-ai-profile li { padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 28%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-violet-540) 12%, transparent); color: inherit; font-size: .76rem; line-height: 1.35; }
+  /* Human review queue: every open issue in the main view, grouped by chapter. */
+  .audiobook-review-queue { display: grid; gap: 14px; scroll-margin-top: 90px; }
+  .audiobook-review-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
+  .audiobook-review-filters > label { display: grid; gap: 5px; color: var(--ab-text-muted); font-size: .78rem; }
+  .audiobook-review-filters > .audiobook-search-field { flex: 1 1 14rem; }
+  .audiobook-review-count { margin-left: auto; color: var(--ab-text-muted); font-size: .78rem; white-space: nowrap; }
+  .audiobook-review-group { display: grid; gap: 8px; }
+  .audiobook-review-group > h3 { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: .95rem; }
+  .audiobook-review-group > h3 > span, .audiobook-review-summary h2 > span { padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--c-violet-540) 22%, transparent); font-size: .74rem; font-weight: 600; }
+  .audiobook-review-item { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 20%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--c-indigo-170) 68%, transparent); }
+  .audiobook-review-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: .8rem; }
+  .audiobook-review-reason { padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--c-orange-580) 40%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-orange-580) 12%, transparent); font-size: .74rem; font-weight: 600; }
+  .audiobook-review-item blockquote { margin: 0; padding: 2px 0 2px 12px; border-left: 3px solid color-mix(in srgb, var(--c-violet-540) 55%, transparent); font-size: .9rem; line-height: 1.5; white-space: pre-wrap; }
+  .audiobook-review-item > p { margin: 0; font-size: .78rem; }
+  .audiobook-review-item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .audiobook-review-item-actions > select { flex: 0 1 16rem; width: auto; min-width: 12rem; }
+  .audiobook-review-summary > p { display: flex; justify-content: space-between; gap: 10px; margin: 4px 0; font-size: .8rem; }
+  .audiobook-review-summary > p > span { color: var(--ab-text-muted); }
   .audiobook-proposed-aliases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
   .audiobook-proposed-aliases > small { width: 100%; color: var(--ab-text-muted); font-size: .72rem; }
   .audiobook-cast-details .audiobook-proposed-aliases > button { border-style: dashed; }

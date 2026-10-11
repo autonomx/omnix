@@ -7,6 +7,7 @@ import { AudiobookProjectHeader } from './AudiobookProjectHeader';
 import { AudiobookProjectDialogs, AudiobookProjectTabs, AudiobookProduction } from './AudiobookProjectChrome';
 import { AudiobookReviewPanels } from './AudiobookReviewPanels';
 import { AudiobookManuscriptReview } from './AudiobookManuscriptReview';
+import { AudiobookReviewQueue } from './AudiobookReviewQueue';
 
 export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const ws = useAudiobookWorkspace(module);
@@ -32,6 +33,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           <AudiobookProjectTabs ws={ws} />
           <AudiobookReviewPanels ws={ws} />
           <AudiobookManuscriptReview ws={ws} />
+          <AudiobookReviewQueue ws={ws} />
           <AudiobookProduction ws={ws} />
         </>}
       </div>
