@@ -30,6 +30,8 @@ def test_service_validates_selected_occurrence_and_invalidates_current_audio(mon
             if "SELECT id FROM omnix_jobs" in sql:
                 return SimpleNamespace(fetchall=lambda: [("job",)])
             assert "UPDATE omnix_audiobook_projects" in sql
+            if "omnix_audiobook_review_issues" in sql:
+                return None
             assert "current_render_run_id" in sql
             return None
     committed = []
@@ -50,3 +52,35 @@ def test_service_validates_selected_occurrence_and_invalidates_current_audio(mon
         assert service.exclude_span_text(context, project_id="book", span_id="span", start_offset=0, end_offset=7, source_text=selected) == {"id": "exclusion"}
         assert calls[1][1][1:] == ("workspace", "book", "chapter-hash", 2, 40, 47, "Testing")
         assert canceled == ["job"] and committed == [True]
+        assert "omnix_audiobook_review_issues" in calls[-1][0]
+
+
+@pytest.mark.parametrize("chapter_text,error", [("Contents. Chapter 1.", None), ("", ValueError), (None, KeyError)])
+def test_removing_a_chapter_excludes_its_whole_text_and_refreshes_review_state(monkeypatch, chapter_text, error):
+    calls = []
+    class Connection:
+        def execute(self, sql, params):
+            calls.append((sql, params))
+            if "SELECT c.canonical_text" in sql:
+                assert params == ("workspace", "book", "contents")
+                row = None if chapter_text is None else (chapter_text, "chapter-hash", 0, None)
+                return SimpleNamespace(fetchone=lambda: row)
+            if "INSERT INTO omnix_audiobook_speech_exclusions" in sql:
+                return SimpleNamespace(fetchone=lambda: ("exclusion",))
+            assert "UPDATE omnix_audiobook_projects" in sql
+            return None
+    committed = []
+    @contextmanager
+    def work(_database):
+        yield SimpleNamespace(connection=Connection(), commit=lambda: committed.append(True), jobs=SimpleNamespace())
+    monkeypatch.setattr("app.apps.audiobook.service.unit_of_work", work)
+    service = AudiobookService(None, None)
+    context = SimpleNamespace(workspace_id="workspace")
+    if error:
+        with pytest.raises(error):
+            service.remove_chapter_from_audio(context, project_id="book", chapter_id="contents")
+        assert not committed
+        return
+    assert service.remove_chapter_from_audio(context, project_id="book", chapter_id="contents") == {"id": "exclusion"}
+    assert calls[1][1][1:] == ("workspace", "book", "chapter-hash", 0, 0, len(chapter_text), chapter_text)
+    assert "omnix_audiobook_review_issues" in calls[-1][0] and committed == [True]

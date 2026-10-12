@@ -116,3 +116,9 @@ def test_runtime_status_reports_the_remote_gpu_service():
     assert provider.get_runtime_status()['runtime_status']['model_loaded'] is True
     assert provider.get_runtime_status()['transport'] == 'http_streaming_pcm16'
     assert provider.stop() is True
+
+
+def test_an_older_tts_service_is_reported_as_needing_a_restart():
+    provider = _gateway(lambda request: httpx.Response(404, json={'detail': 'Not Found'}))
+    with pytest.raises(RuntimeError, match='restart the TTS service'):
+        provider.resolve_generation_parameters({'temperature': 0.7})

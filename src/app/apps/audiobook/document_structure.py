@@ -20,7 +20,7 @@ from .models import SourceRevision, SourceSpan
 logger = logging.getLogger(__name__)
 
 
-DOCUMENT_STRUCTURE_VERSION = "document-role-v1"
+DOCUMENT_STRUCTURE_VERSION = "document-role-v2"
 RENDER_POLICY_VERSION = "audiobook-render-policy-v1"
 ANALYSIS_POLICY_VERSION = "audiobook-analysis-policy-v1"
 _AI_FALLBACK_ACCEPT_THRESHOLD = 0.85
@@ -546,7 +546,12 @@ def _initial_roles(
                 and max(top_count, bottom_count) >= 2
             )
         )
-        if role is None and len(normalized) <= 120 and edge_occurrence:
+        # A repeated "Contents" heading still opens the table of contents (it
+        # also tops each of its pages); the TOC rule below claims it instead.
+        if (
+            role is None and len(normalized) <= 120 and edge_occurrence
+            and heading_normalized not in {"contents", "table of contents"}
+        ):
             if _PAGE.fullmatch(text) or text.isdigit():
                 role = _with_role(
                     block, "page_number", 0.999,
@@ -580,8 +585,9 @@ def _initial_roles(
         elif role is None and heading_normalized in optional_headings:
             optional_region = optional_headings[heading_normalized]
             role = _with_role(block, optional_region, 0.99, _evidence("sequence_rule", "optional_section_heading", heading_normalized))
-        elif role is None and _CHAPTER.fullmatch(heading_text):
-            toc_region = False
+        elif role is None and _CHAPTER.fullmatch(heading_text) and not toc_region:
+            # Inside a table of contents a "Chapter N" line is an entry; the
+            # chapter itself starts its own source chapter, which resets the region.
             optional_region = None
             role = _with_role(block, "chapter_heading", 0.995, _evidence("pattern", "chapter_heading", True))
         elif role is None and _PART.fullmatch(heading_text):

@@ -13,7 +13,7 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
@@ -164,6 +164,11 @@ class StartRender(BaseModel):
     model_revision: str
     generation_parameters: dict[str, object] = Field(default_factory=dict)
     seed: int | None = None
+
+
+class ReorderRenderQueue(BaseModel):
+    """Waiting chapters to render first, in this order; the rest follow in their current order."""
+    chapter_ids: list[str] = Field(min_length=1, max_length=1000)
 
 
 class StartPreview(StartRender):
@@ -566,6 +571,17 @@ def exclude_span_text(project_id: str, span_id: str, body: ExcludeSpanText) -> d
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.post("/api/audiobook/projects/{project_id}/chapters/{chapter_id}/speech-exclusion", tags=["audiobook"])
+def remove_chapter_from_audio(project_id: str, chapter_id: str) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.remove_chapter_from_audio(context, project_id=project_id, chapter_id=chapter_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="current source chapter not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.delete("/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}", tags=["audiobook"])
 def restore_span_text(project_id: str, exclusion_id: str) -> dict[str, bool]:
     service, context = _service_and_context()
@@ -735,6 +751,36 @@ def resume_audiobook_render_queue(project_id: str) -> dict[str, object]:
         return service.pause_render_queue(context, project_id=project_id, resume=True)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/render/order", tags=["audiobook"])
+def reorder_audiobook_render_queue(project_id: str, request: ReorderRenderQueue) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.reorder_render_queue(context, project_id=project_id, chapter_ids=request.chapter_ids)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get(
+    "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio",
+    response_model=None,
+    response_class=FileResponse,
+    responses=_binary_response("audio/wav"),
+    tags=["audiobook"],
+)
+def chapter_audio(project_id: str, chapter_id: str) -> FileResponse:
+    """A finished chapter's assembled audio, with range support for seeking."""
+    service, context = _service_and_context()
+    try:
+        path = service.open_chapter_audio(context, project_id=project_id, chapter_id=chapter_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="chapter audio not found") from exc
+    return FileResponse(path, media_type="audio/wav", headers={
+        "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff",
+    })
 
 
 @router.post("/api/audiobook/projects/{project_id}/render/stop", tags=["audiobook"])

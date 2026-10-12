@@ -21,7 +21,10 @@ from app.apps.audiobook.render_service import (
     run_preview_once,
     concatenate_preview_audio,
     _complete_span_preview,
+    _synthesize,
+    usable_cached_render,
 )
+from app.apps.audiobook.speech_budget import speech_token_budget
 from app.assets.voice_clone_identity import voice_reference_revision
 from app.persistence.blob_store import LocalBlobStore
 from app.apps.audiobook.render_planner import RenderUnit
@@ -253,10 +256,13 @@ def test_preview_processes_all_segments_and_combines_cached_and_generated_audio(
         return [{"success": True, "audio": base64.b64encode(_wav()).decode()}]
 
     monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider", lambda *args: SimpleNamespace(generate_audio_batch=generate))
+    persisted = []
+    monkeypatch.setattr("app.apps.audiobook.render_service._persist_effective_generation_parameters",
+                        lambda *args, **kwargs: persisted.append(kwargs["effective"]))
     cached_key = first.identity(provider_id="test", model_id="model", model_revision="revision",
-                                generation_parameters={}, seed=None).key()
+                                generation_parameters={"parity_mode": False, "use_cuda_graphs": True}, seed=None).key()
     monkeypatch.setattr("app.apps.audiobook.render_service.find_valid_render", lambda *args: (
-        {"id": "cached-first", "audio_asset_id": "audio-first"} if args[-1] == cached_key else None))
+        {"id": "cached-first", "audio_asset_id": "audio-first", "duration_seconds": 1.2} if args[-1] == cached_key else None))
     saved = []
 
     def save(*args, **kwargs):
@@ -269,6 +275,10 @@ def test_preview_processes_all_segments_and_combines_cached_and_generated_audio(
     monkeypatch.setattr("app.apps.audiobook.render_service._complete_span_preview", lambda *args, **kwargs: completed.extend(kwargs["refs"]))
     assert run_preview_once(None, None, local_tenant_context(), worker_id="worker")
     assert [request["text"] for request in calls] == ["Second segment."]
+    assert calls[0]["parameters"]["parity_mode"] is False
+    # Each request is bounded by its text's speech budget, not the provider's global cap.
+    assert calls[0]["parameters"]["max_new_tokens"] == speech_token_budget("Second segment.")
+    assert persisted == [{"parity_mode": False, "use_cuda_graphs": True}]
     assert saved == [1]
     assert [ref["render_id"] for ref in completed] == ["cached-first", "generated-second"]
 
@@ -340,3 +350,97 @@ def test_combined_preview_publication_honors_cancellation(tmp_path, monkeypatch,
         audio = blobs.read_bytes(created[0]["storage_key"], expected_checksum=created[0]["checksum_sha256"])
         with wave.open(io.BytesIO(audio), "rb") as reader:
             assert reader.getnframes() == 320
+
+
+def test_audiobook_renders_default_to_cuda_graph_decode_but_explicit_settings_win():
+    from app.apps.audiobook.render_service import _effective_generation_parameters
+
+    class Provider:
+        def resolve_generation_parameters(self, parameters=None):
+            return {"parity_mode": True, "use_cuda_graphs": True, "temperature": 0.9, **dict(parameters or {})}
+
+    assert _effective_generation_parameters(Provider(), {})["parity_mode"] is False
+    assert _effective_generation_parameters(Provider(), {"parity_mode": True})["parity_mode"] is True
+    assert _effective_generation_parameters(Provider(), {"temperature": 0.7}) == {
+        "parity_mode": False, "use_cuda_graphs": True, "temperature": 0.7}
+
+
+def _wav_seconds(seconds: float, rate: int = 16000) -> str:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as writer:
+        writer.setnchannels(1)
+        writer.setsampwidth(2)
+        writer.setframerate(rate)
+        writer.writeframes(bytes(2 * int(seconds * rate)))
+    return base64.b64encode(buffer.getvalue()).decode()
+
+
+def _unit(text: str) -> RenderUnit:
+    return RenderUnit(
+        span_id="span", ordinal=0, source_hash="a" * 64, annotation_id="annotation", annotation_revision=1,
+        speaker_id="speaker", casting_id="cast", casting_revision=1, voice_profile_id="voice",
+        voice_revision_hash="b" * 64, delivery="calm", language="en", speech_plan=build_speech_plan(text),
+    )
+
+
+@pytest.mark.parametrize("durations,settings,sent_parity,retries", [
+    ([1.0], {"parity_mode": False}, [False], 0),
+    ([60.0, 1.0], {"parity_mode": False}, [False, True], 1),
+    ([1.0], {"parity_mode": True}, [True], 0),
+])
+def test_synthesis_is_bounded_by_its_text_and_retries_a_runaway_in_parity_mode(durations, settings, sent_parity, retries):
+    requests = []
+
+    def generate(batch):
+        requests.extend(batch)
+        return [{"success": True, "audio": _wav_seconds(durations[len(requests) - 1])}]
+
+    unit = _unit("he began.")
+    response, _audio, duration, _rate, bounds = _synthesize(
+        SimpleNamespace(generate_audio_batch=generate), unit, "voice", {**settings, "max_new_tokens": 2048},
+    )
+    budget = speech_token_budget("he began.")
+    assert budget < 100
+    assert [request["parameters"]["parity_mode"] for request in requests] == sent_parity
+    assert all(request["parameters"]["max_new_tokens"] == budget for request in requests)
+    assert all(request["parameters"]["instruct"] == "calm" for request in requests)
+    assert duration == pytest.approx(1.0) and bounds == {"token_budget": budget, "runaway_retries": retries}
+    # Provenance records what was actually sent, including the retry's parity decode.
+    assert response["generation_parameters_used"]["parity_mode"] is sent_parity[-1]
+    assert "instruct" not in response["generation_parameters_used"]
+
+
+@pytest.mark.parametrize("parity_mode,calls", [(False, 2), (True, 1)])
+def test_synthesis_fails_the_unit_when_the_model_never_stops(parity_mode, calls):
+    requests = []
+
+    def generate(batch):
+        requests.extend(batch)
+        return [{"success": True, "audio": _wav_seconds(163.0)}]
+
+    with pytest.raises(RenderFailure, match="did not finish “Phew…”") as failure:
+        _synthesize(SimpleNamespace(generate_audio_batch=generate), _unit("Phew…"), "voice",
+                    {"parity_mode": parity_mode})
+    assert failure.value.retryable is True
+    assert len(requests) == calls
+
+
+def test_progress_reporting_providers_receive_the_bounded_request():
+    seen = []
+
+    def generate_with_progress(text, *, speaker, language, progress_callback, **parameters):
+        seen.append((text, speaker, language, parameters))
+        return {"success": True, "audio": _wav_seconds(0.5)}
+
+    provider = SimpleNamespace(generate_audio_with_progress=generate_with_progress,
+                               generate_audio_batch=lambda _batch: pytest.fail("batch path used"))
+    _synthesize(provider, _unit("Hello there."), "voice", {"parity_mode": False}, progress_callback=lambda *_: None)
+    assert seen[0][:3] == ("Hello there.", "voice", "en")
+    assert seen[0][3]["max_new_tokens"] == speech_token_budget("Hello there.")
+
+
+def test_cached_runaway_renders_are_generated_again():
+    budget = speech_token_budget("—Claire asked.")
+    assert usable_cached_render(None, budget) is None
+    assert usable_cached_render({"duration_seconds": 1.4}, budget) == {"duration_seconds": 1.4}
+    assert usable_cached_render({"duration_seconds": 162.9}, budget) is None

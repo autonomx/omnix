@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import base64
+import json
 import time
 
 import numpy as np
 
 from app.runtime.http_client import shared_http_client
 from app.security.service_token import service_headers
+from app.providers.tts_generation_parameters import generation_overrides
 
 
 def _number(value):
@@ -60,25 +62,61 @@ class QwenHttpGatewayProvider:
         response.raise_for_status()
         return response.json().get('speakers', [])
 
+    def resolve_generation_parameters(self, parameters=None):
+        """The service's complete settings for these overrides: render cache identity (audiobook)."""
+        response = self.http.post(self.base_url + '/api/tts/generation_parameters',
+            json={'parameters': generation_overrides(parameters)}, timeout=10, headers=service_headers())
+        if response.status_code == 404:
+            # The gateway and the TTS service restart separately; an older service lacks this route.
+            raise RuntimeError(
+                f'The TTS service at {self.base_url} predates audiobook rendering over HTTP; restart the TTS service'
+            )
+        response.raise_for_status()
+        resolved = response.json().get('parameters')
+        if not isinstance(resolved, dict):
+            raise RuntimeError('Qwen service returned invalid generation parameters')
+        return resolved
+
     def generate_audio(self, text, speaker=None, language=None, **kwargs):
         # The service sends the WAV bytes (WP-7.3); the provider contract's
         # base64 form is built here, in process, not on the wire.
+        payload = {'text': text, 'speaker': speaker or 'default', 'language': language or 'en'}
+        overrides = generation_overrides(kwargs)
+        if overrides:
+            payload['parameters'] = overrides
         response = self.http.post(self.base_url + '/api/tts/generate_audio',
-            json={'text': text, 'speaker': speaker or 'default', 'language': language or 'en'}, timeout=120,
+            json=payload, timeout=120,
             headers={**service_headers(), 'Accept': 'audio/wav, application/json;q=0.5'})
         response.raise_for_status()
         if response.headers.get('content-type', '').startswith('audio/wav'):
-            return {
+            result = {
                 'success': True,
                 'audio': base64.b64encode(response.content).decode('ascii'),
                 'sample_rate': _number(response.headers.get('X-Omnix-Sample-Rate')),
                 'duration': _number(response.headers.get('X-Omnix-Duration')),
                 'provider': self.provider_name,
             }
+            used = response.headers.get('X-Omnix-Generation-Parameters')
+            if used:
+                result['generation_parameters_used'] = json.loads(used)
+            revision = response.headers.get('X-Omnix-Generation-Strategy-Revision')
+            if revision:
+                result['generation_strategy_revision'] = revision
+            return result
         result = response.json()
         if not result.get('success') or result.get('is_fallback'):
             raise RuntimeError('Qwen service did not return real synthesized audio')
         return result
+
+    def generate_audio_batch(self, requests):
+        """One synthesis per request, in order: the service has no true batch endpoint."""
+        return [
+            self.generate_audio(
+                str(request['text']), speaker=request.get('speaker'), language=request.get('language'),
+                **dict(request.get('parameters') or {}),
+            )
+            for request in requests
+        ]
 
     def generate_audio_stream(self, text, speaker=None, language=None, **kwargs):
         started = time.perf_counter()

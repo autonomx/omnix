@@ -1,7 +1,18 @@
 import { audiobookApi } from './audiobookApi';
 import { audiobook, base, reclassifyAudiobook } from './audiobookWorkspaceModel';
+import type { ChapterSummary } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
 import { api } from './api/gateway';
+
+/** Leaves the whole chapter out of the audiobook, or brings it back. */
+function ChapterAudioToggle({ ws, chapter }: { ws: AudiobookWorkspaceModel; chapter: ChapterSummary }) {
+  const { action, busy, project } = ws;
+  if (!project) return null;
+  const removalId = chapter.audio_removal_id;
+  return removalId
+    ? <button type="button" disabled={busy} onClick={() => void action(() => audiobookApi.restoreSpeech(project.id, removalId), `“${chapter.title}” is back in the audiobook. Regenerate audio to hear it.`)}>Restore chapter</button>
+    : <button type="button" disabled={busy} onClick={() => void action(() => audiobookApi.removeChapterFromAudio(project.id, chapter.id), `“${chapter.title}” removed from the audiobook. Its text stays in the source.`)}>Remove chapter from audio</button>;
+}
 
 /** The manuscript review: source text and characterization spans. */
 export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel }) {
@@ -14,12 +25,17 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
     spokenTerm, submitPronunciation, visibleSpans, workspaceMode,
   } = ws;
   if (!project) return null;
+  const activeChapter = project.chapters.find((chapter) => chapter.id === activeChapterId);
   return (
     <>
       {workspaceMode === 'review' && librarySection === 'projects' &&
       <div className="audiobook-manuscript" id="audiobook-manuscript">
         <section className="audiobook-card audiobook-source-panel" aria-labelledby="audiobook-source-text-title">
-        <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2 id="audiobook-source-text-title">Source text</h2><p className="audiobook-subtitle">{selectedChapter?.title ?? project.chapters.find((chapter) => chapter.id === activeChapterId)?.title ?? 'Awaiting extraction'} · Select a passage to open its span below.</p></div><span>{project.chapters.length} chapters</span></div>
+        <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2 id="audiobook-source-text-title">Source text</h2><p className="audiobook-subtitle">{selectedChapter?.title ?? activeChapter?.title ?? 'Awaiting extraction'} · Select a passage to open its span below.</p></div>
+          <div className="audiobook-source-chapter-actions"><span>{project.chapters.length} chapters</span>
+            {activeChapter && <ChapterAudioToggle ws={ws} chapter={activeChapter} />}
+          </div></div>
+        {activeChapter?.audio_removal_id && <p className="audiobook-chapter-removed-notice" role="status">This chapter is left out of the audiobook: none of it is read, and its review issues no longer block rendering. Restore the chapter to read it again.</p>}
         {selectedChapter ?
           <div role="group" className="audiobook-text" aria-label="Canonical chapter text">
             {selectedChapter.spans.map((span) => <span key={span.id} role="button" tabIndex={0}
@@ -78,7 +94,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
                       : !speaker.casting
                         ? `Assign a voice to ${speaker.canonical_name} in Cast & Voice Tools to preview audio.`
                         : null;
-                const expanded = (expandedSpanId === undefined ? selectedChapter.spans[0]?.id : expandedSpanId) === span.id;
+                const expanded = expandedSpanId === span.id;
                 const issue = project.review_issues.find((item) => item.span_id === span.id);
                 return <article className="audiobook-preview-row" key={span.id}>
                   <div className="audiobook-span-summary"><div><small>{span.annotation?.role ?? span.structural_kind} · {speaker?.canonical_name ?? span.annotation?.speaker_candidate ?? 'Unassigned'}{span.annotation?.review_status === 'review_required' ? ' · Needs review' : ''}</small>
@@ -108,7 +124,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
                         setSelectedPronunciation(null);
                       }, 'Text removed from this passage’s audio. Regenerate audio to hear the change.')}>Remove from audio</button>
                     </div>}
-                    {span.speech_exclusions?.map((item) => <div className="audiobook-span-removal" key={item.id}>
+                    {span.speech_exclusions?.filter((item) => item.id !== activeChapter?.audio_removal_id).map((item) => <div className="audiobook-span-removal" key={item.id}>
                       <span>Removed from audio: “{item.source_text}”</span>
                       <button type="button" disabled={busy} onClick={() => void action(async () => {
                         await audiobook(api.DELETE('/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}', {

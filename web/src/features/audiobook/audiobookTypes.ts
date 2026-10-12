@@ -41,6 +41,8 @@ export interface ChapterSummary {
   span_count?: number;
   word_count?: number;
   estimated_runtime_seconds?: number;
+  /** The exclusion that leaves this whole chapter out of the audiobook, when it is removed. */
+  audio_removal_id?: string | null;
 }
 
 export interface DocumentBlockView {
@@ -115,6 +117,10 @@ export interface AudiobookJobView {
   type?: string;
   reason?: string;
   migration?: Record<string, unknown> | null;
+  /** A waiting render job's place in the render order, 1 first; absent once it starts. */
+  queue_position?: number | null;
+  /** A rendered chapter's assembled audio, once it can be played. */
+  audio?: { duration_seconds: number } | null;
 }
 
 export interface ProjectDetail extends ProjectSummary {

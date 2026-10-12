@@ -14,6 +14,7 @@ from .document_structure import (
 )
 from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 from .speech_plan import SpeechPlan, build_speech_plan, split_speech_plan
+from .speech_budget import has_speakable_text
 from .speech_exclusions import load_speech_exclusions, exclusions_for_span
 
 
@@ -179,7 +180,8 @@ def load_chapter_units(
             exclusions=tuple((item["start_offset"], item["end_offset"]) for item in
                              exclusions_for_span(exclusions, meta[0], meta[1])) if meta else (),
         )
-        if not plan.tts_input_text.strip():
+        # Nothing to pronounce ("—", "“…”"): the model tends to babble until its token cap.
+        if not has_speakable_text(plan.tts_input_text):
             continue
         if row[4] is None:
             raise ValueError('This span has no saved speaker assignment. Go to "Cast and direct" and click "Classify text" before previewing or rendering audio.')
@@ -189,7 +191,7 @@ def load_chapter_units(
             raise ValueError('Assign a voice to this span\'s speaker: go to "Cast and direct" and choose an "Assigned voice" before previewing or rendering audio.')
         segments = split_speech_plan(plan)
         for segment_index, (start, end, segment_plan) in enumerate(segments):
-            if not segment_plan.tts_input_text.strip():
+            if not has_speakable_text(segment_plan.tts_input_text):
                 continue
             units.append(RenderUnit(
                 span_id=str(row[0]), ordinal=int(row[1]), source_hash=str(row[3]),

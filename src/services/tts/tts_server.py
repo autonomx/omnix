@@ -5,6 +5,7 @@ import logging
 import base64
 import asyncio
 import io
+import json
 import os
 import socket
 import subprocess
@@ -36,6 +37,7 @@ from app.runtime.paths import VOICE_CLONES_DIR
 from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
 from app.providers.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
+from app.providers.tts_generation_parameters import generation_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,12 @@ class TtsGenerateRequest(BaseModel):
     pitch: float = 0.0
     emotion: str = "neutral"
     trace_id: str = ""
+    # Sampling overrides (audiobook renders); unknown keys are dropped.
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class TtsGenerationParametersRequest(BaseModel):
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class TtsGenerateStreamRequest(BaseModel):
@@ -538,12 +546,31 @@ async def generate_audio(
     return await _synthesis().run(_generate_audio, request, wants_wav)
 
 
+@app.post("/api/tts/generation_parameters")
+def generation_parameters(request: TtsGenerationParametersRequest) -> dict[str, Any]:
+    """The complete settings a synthesis with these overrides would use, for render cache identity."""
+    try:
+        provider = _require_provider()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="model_unavailable") from exc
+    overrides = generation_overrides(request.parameters)
+    resolver = getattr(provider, "resolve_generation_parameters", None)
+    resolved = resolver(overrides) if callable(resolver) else overrides
+    return {"parameters": dict(resolved)}
+
+
 def _wav_result_response(result: dict[str, Any], trace_id: str) -> Response:
     encoded = result.get("audio_base64") or result.get("audio") or ""
     headers = {"X-Omnix-Voice-Trace": trace_id}
-    for header, key in (("X-Omnix-Sample-Rate", "sample_rate"), ("X-Omnix-Duration", "duration")):
+    for header, key in (("X-Omnix-Sample-Rate", "sample_rate"), ("X-Omnix-Duration", "duration"),
+                        ("X-Omnix-Generation-Strategy-Revision", "generation_strategy_revision")):
         if result.get(key) is not None:
             headers[header] = str(result[key])
+    # The settings the model actually ran with: render provenance, not a guess.
+    if isinstance(result.get("generation_parameters_used"), dict):
+        headers["X-Omnix-Generation-Parameters"] = json.dumps(
+            result["generation_parameters_used"], sort_keys=True, separators=(",", ":"), default=str,
+        )
     return Response(content=base64.b64decode(encoded), media_type="audio/wav", headers=headers)
 
 
@@ -570,6 +597,7 @@ def _generate_audio(request: TtsGenerateRequest, wants_wav: bool = False):
                 speaker=request.speaker,
                 language=request.language,
                 voice_trace_id=trace_id,
+                **generation_overrides(request.parameters),
             )
         elif hasattr(provider, "generate_tts"):
             result = provider.generate_tts(

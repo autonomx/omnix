@@ -54,6 +54,17 @@ export function AudiobookReviewQueue({ ws }: { ws: AudiobookWorkspaceModel }) {
   const shownCount = groups.reduce((total, group) => total + group.issues.length, 0);
   const chaptersWithIssues = new Set(issues.map((issue) => issue.chapter_id)).size;
   const activeSpeakers = project.speakers.filter((speaker) => speaker.status === 'active');
+  const chosenSpeaker = (issue: ReviewIssue) => reviewSpeakers[issue.id] ?? issue.speaker_id ?? '';
+  // Only an issue whose chosen speaker is in the cast can be resolved; the rest wait for a decision.
+  const confirmable = groups.flatMap((group) => group.issues).filter((issue) => activeSpeakers.some((speaker) => speaker.id === chosenSpeaker(issue)));
+  const unconfirmable = shownCount - confirmable.length;
+  const projectId = project.id;
+  /** Confirms each shown issue's chosen speaker in turn; any confirmed before a failure stay confirmed. */
+  const confirmAll = () => void action(async () => {
+    for (const issue of confirmable) {
+      await audiobookApi.resolveReview(projectId, issue.id, { speaker_id: chosenSpeaker(issue), role: issue.structural_kind || 'narration' });
+    }
+  }, `${confirmable.length} review decision${confirmable.length === 1 ? '' : 's'} saved.`);
 
   return (
     <section ref={sectionRef} className="audiobook-card audiobook-review-queue" aria-label="Human review queue">
@@ -75,11 +86,15 @@ export function AudiobookReviewQueue({ ws }: { ws: AudiobookWorkspaceModel }) {
         </select></label>
         <label className="audiobook-search-field">Search<input aria-label="Search review issues" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search passages or speakers…" /></label>
         <span className="audiobook-review-count">{shownCount === issues.length ? `${issues.length} issues` : `${shownCount} of ${issues.length} issues`}</span>
+        {confirmable.length > 1 && <button type="button" disabled={busy} title={unconfirmable ? `${unconfirmable} shown issue${unconfirmable === 1 ? '' : 's'} without a confirmed speaker will be left open.` : 'Confirm the chosen speaker for every shown issue.'} onClick={confirmAll}>
+          {shownCount === issues.length ? `Confirm all ${confirmable.length}` : `Confirm ${confirmable.length} shown`}
+        </button>}
       </div>}
+      {confirmable.length > 1 && unconfirmable > 0 && <p className="audiobook-detail-muted">{unconfirmable} shown issue{unconfirmable === 1 ? ' has' : 's have'} no speaker from the cast yet and will stay open; choose one or confirm the detected speaker first.</p>}
       {groups.map(({ chapter, issues: chapterIssues }) => <section className="audiobook-review-group" key={chapter.id} aria-label={`Review issues in ${chapter.title}`}>
         <h3>{chapter.title}<span>{chapterIssues.length}</span></h3>
         {chapterIssues.map((issue) => {
-          const chosen = reviewSpeakers[issue.id] ?? issue.speaker_id ?? '';
+          const chosen = chosenSpeaker(issue);
           const candidateInCast = issue.speaker_candidate ? activeSpeakers.some((speaker) => sameName(speaker.canonical_name, issue.speaker_candidate ?? '')) : true;
           return <article className="audiobook-review-item" key={issue.id}>
             <div className="audiobook-review-item-head">

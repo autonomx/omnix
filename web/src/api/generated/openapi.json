@@ -37659,6 +37659,25 @@
         "title": "RenderedPrompt",
         "type": "object"
       },
+      "ReorderRenderQueue": {
+        "description": "Waiting chapters to render first, in this order; the rest follow in their current order.",
+        "properties": {
+          "chapter_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Chapter Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chapter_ids"
+        ],
+        "title": "ReorderRenderQueue",
+        "type": "object"
+      },
       "ReplayAdvanceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -61657,6 +61676,114 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio": {
+      "get": {
+        "description": "A finished chapter's assembled audio, with range support for seeking.",
+        "operationId": "chapter_audio_api_audiobook_projects__project_id__chapters__chapter_id__audio_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "File content returned with its source media type."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chapter Audio",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/speech-exclusion": {
+      "post": {
+        "operationId": "remove_chapter_from_audio_api_audiobook_projects__project_id__chapters__chapter_id__speech_exclusion_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Remove Chapter From Audio Api Audiobook Projects  Project Id  Chapters  Chapter Id  Speech Exclusion Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Chapter From Audio",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/classification-rules": {
       "post": {
         "operationId": "save_classification_rules_api_audiobook_projects__project_id__classification_rules_post",
@@ -62766,6 +62893,60 @@
           }
         },
         "summary": "Start Render",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/render/order": {
+      "post": {
+        "operationId": "reorder_audiobook_render_queue_api_audiobook_projects__project_id__render_order_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderRenderQueue"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reorder Audiobook Render Queue Api Audiobook Projects  Project Id  Render Order Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Audiobook Render Queue",
         "tags": [
           "audiobook"
         ]

@@ -14,6 +14,7 @@ from .annotation import (
 from .dialogue_coverage import audit_dialogue_coverage
 from .hashing import canonical_json, text_hash
 from .models import SourceSpan
+from .speech_exclusions import chapter_removed_sql
 
 
 class PostgresAudiobookAnalysisRepository:
@@ -412,8 +413,8 @@ class PostgresAudiobookAnalysisRepository:
                  JOIN omnix_audiobook_chapters c
                    ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
                 WHERE c.workspace_id = %s AND c.source_revision_id = %s
-                  AND i.status = 'open'""",
-            (context.workspace_id, source_revision_id),
+                  AND i.status = 'open' AND NOT """ + chapter_removed_sql("c", "%s"),
+            (context.workspace_id, source_revision_id, project_id),
         ).fetchone()[0]
         self.connection.execute(
             """
@@ -443,6 +444,7 @@ class PostgresAudiobookAnalysisRepository:
                 ON p.workspace_id = r.workspace_id AND p.id = r.project_id
                AND p.current_source_revision_id = r.id
              WHERE i.workspace_id = %s AND r.project_id = %s AND i.status = 'open'
+               AND NOT """ + chapter_removed_sql("c", "r.project_id") + """
              ORDER BY c.ordinal, s.ordinal
             """, (context.workspace_id, project_id),
         ).fetchall()

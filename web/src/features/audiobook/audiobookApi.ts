@@ -64,6 +64,14 @@ export const audiobookApi = {
     if (action === 'resume') return view<unknown>(api.POST('/api/audiobook/projects/{project_id}/render/resume', params));
     return view<unknown>(api.POST('/api/audiobook/projects/{project_id}/render/stop', params));
   },
+  /** Render these waiting chapters first, in this order; the others follow in their current order. */
+  reorderRender: (projectId: string, chapterIds: string[]) =>
+    view<{ render_run_id: string; chapter_ids: string[] }>(api.POST('/api/audiobook/projects/{project_id}/render/order', {
+      params: { path: project(projectId) }, body: { chapter_ids: chapterIds },
+    })),
+  /** Where a finished chapter's audio streams from (seekable). */
+  chapterAudioUrl: (projectId: string, chapterId: string) =>
+    `/api/audiobook/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/audio`,
   job: (projectId: string, jobId: string, action: AudiobookJobAction) => {
     const params = { params: { path: { project_id: projectId, job_id: jobId } } };
     if (action === 'pause') return view<unknown>(api.POST('/api/audiobook/projects/{project_id}/jobs/{job_id}/pause', params));
@@ -102,6 +110,14 @@ export const audiobookApi = {
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions', {
       params: { path: { project_id: projectId, span_id: spanId } },
       body,
+    })),
+  removeChapterFromAudio: (projectId: string, chapterId: string) =>
+    view<unknown>(api.POST('/api/audiobook/projects/{project_id}/chapters/{chapter_id}/speech-exclusion', {
+      params: { path: { project_id: projectId, chapter_id: chapterId } },
+    })),
+  restoreSpeech: (projectId: string, exclusionId: string) =>
+    view<unknown>(api.DELETE('/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}', {
+      params: { path: { project_id: projectId, exclusion_id: exclusionId } },
     })),
   reviseSpan: (projectId: string, spanId: string, body: Schemas['ReviseSpanAnnotation']) =>
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/spans/{span_id}/annotation', {

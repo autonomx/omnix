@@ -224,7 +224,7 @@ export function useAudiobookLibraryData(ws: { module: OmnixModuleDefinition } & 
   const activeChapterId = project?.chapters.find((chapter) => chapter.id === chapterId)?.id ?? project?.chapters[0]?.id ?? null;
 
   useEffect(() => {
-    setExpandedSpanId(undefined);
+    setExpandedSpanId(null);
     setSpeakerFilter('all');
     setSelectedPronunciation(null);
   }, [projectId, activeChapterId, setExpandedSpanId, setSpeakerFilter, setSelectedPronunciation]);

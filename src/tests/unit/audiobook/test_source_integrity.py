@@ -550,3 +550,65 @@ def test_seeded_punctuation_streams_are_lossless() -> None:
         revision = extract_source(project_id="book:property", content=sample.encode(), source_format="txt")
         validate_revision(revision)
         assert "".join(chapter.canonical_text for chapter in revision.chapters) == sample
+
+
+_CHAPTER_BODY = "The wind rose over the hills and the travellers walked on through the night. " * 12
+
+
+def _toc_book() -> bytes:
+    """A light-novel layout: a contents page listing the chapters, then each
+    chapter as "Chapter N:" with its title on the next line."""
+    contents = "Table of Contents\nColor Inserts\nChapter 1: Plans for the Future\nChapter 2: The Zanoba Store\nChapter 3: Onward, to Millishion...\nAbout the Author\n\n"
+    chapters = "".join(
+        f"Chapter {number}:\n{title}\n\n{_CHAPTER_BODY}\n\n"
+        for number, title in ((1, "Plans for the Future"), (2, "The Zanoba Store"), (3, "Onward, to Millishion..."))
+    )
+    return (contents + chapters).encode()
+
+
+def test_table_of_contents_stays_in_the_opening_and_chapter_titles_join_their_subtitle() -> None:
+    revision = extract_source(project_id="book:toc", content=_toc_book(), source_format="txt")
+
+    assert [chapter.title for chapter in revision.chapters] == [
+        "Opening",
+        "Chapter 1: Plans for the Future",
+        "Chapter 2: The Zanoba Store",
+        "Chapter 3: Onward, to Millishion...",
+    ]
+    assert "Chapter 2: The Zanoba Store" in revision.chapters[0].canonical_text
+    assert revision.chapters[1].canonical_text.startswith("Chapter 1:\nPlans for the Future\n")
+
+
+def test_a_full_sentence_after_a_bare_heading_is_prose_not_a_subtitle() -> None:
+    content = f"Chapter One\nIt was a cold morning in the valley.\n\n{_CHAPTER_BODY}".encode()
+    revision = extract_source(project_id="book:prose", content=content, source_format="txt")
+    assert [chapter.title for chapter in revision.chapters] == ["Chapter One"]
+
+
+def test_a_lone_short_chapter_whose_number_recurs_is_still_a_chapter() -> None:
+    # Two parts each with a Chapter 1; the first part's chapter is very short.
+    content = f"Chapter 1\nA short opening.\n\nChapter 2\n{_CHAPTER_BODY}\n\nChapter 1\n{_CHAPTER_BODY}".encode()
+    revision = extract_source(project_id="book:parts", content=content, source_format="txt")
+    assert [chapter.title for chapter in revision.chapters] == ["Chapter 1", "Chapter 2", "Chapter 1"]
+
+
+def test_a_bookmark_without_a_page_does_not_discard_the_other_bookmarks() -> None:
+    from app.apps.audiobook.extraction import _pdf_outline_chapters
+
+    class Bookmark:
+        def __init__(self, title: str, page_index: int | None) -> None:
+            self.title, self.page_index = title, page_index
+
+    class Reader:
+        # pypdf raises TypeError inside get_destination_page_number for a bookmark with no page.
+        outline = [Bookmark("Table of Contents", None), Bookmark("Chapter 1: Start", 1), Bookmark("Chapter 2: End", 2)]
+
+        @staticmethod
+        def get_destination_page_number(item: Bookmark) -> int:
+            if item.page_index is None:
+                raise TypeError("unsupported operand type(s) for +: 'NoneType' and 'int'")
+            return item.page_index
+
+    pages = [(1, "Contents\nChapter 1: Start\nChapter 2: End"), (2, "Chapter 1: Start\nThe story begins."), (3, "Chapter 2: End\nThe story ends.")]
+    chapters = _pdf_outline_chapters(Reader(), pages)
+    assert [title for title, _ in chapters] == ["Opening", "Chapter 1: Start", "Chapter 2: End"]

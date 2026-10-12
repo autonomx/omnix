@@ -172,6 +172,17 @@ def _disable_cuda_graphs_for_retry(model: Any) -> None:
         model._cuda_graphs_enabled = False
 
 
+def _decode_in_parity_mode(model: Any, kwargs: dict[str, Any], config: dict[str, Any]) -> bool:
+    """Whether this request decodes without CUDA graphs.
+
+    ``use_cuda_graphs=False`` is a per-request choice: it must not switch graphs off on the
+    shared model, or every later fast request replays a graph that was never captured.
+    A model whose graphs were disabled after a failure only decodes in parity mode.
+    """
+    requested = kwargs.get("parity_mode", config.get("parity_mode", True))
+    return bool(requested) or kwargs.get("use_cuda_graphs") is False or not getattr(model, "_cuda_graphs_enabled", True)
+
+
 def _generate_audio_with_streaming_fallback(model: Any, gen_kwargs: dict[str, Any]) -> tuple[list[Any], int]:
     stream_kwargs = dict(gen_kwargs)
     stream_kwargs.pop("progress_callback", None)
@@ -771,8 +782,6 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             
             # Load the model
             model = self._get_model()
-            if kwargs.get("use_cuda_graphs") is False:
-                _disable_cuda_graphs_for_retry(model)
             
             # Prepare generation parameters
             gen_kwargs = {
@@ -790,7 +799,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'xvec_only': xvec_only,
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
-                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
+                'parity_mode': _decode_in_parity_mode(model, kwargs, self._model_config),
                 'progress_callback': progress_callback,
             }
             
@@ -956,7 +965,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'xvec_only': xvec_only,
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
-                'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
+                'parity_mode': _decode_in_parity_mode(model, kwargs, self._model_config),
             }
             provider_setup_ms = (time.perf_counter() - provider_entry_at) * 1000.0
             

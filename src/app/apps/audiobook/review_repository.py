@@ -8,6 +8,7 @@ from app.persistence.tenant import TenantContext
 
 from .annotation import display_speaker_name, normalize_speaker_name
 from .hashing import canonical_json
+from .speech_exclusions import chapter_removed_sql
 
 
 class PostgresAudiobookReviewRepository:
@@ -134,7 +135,7 @@ class PostgresAudiobookReviewRepository:
                 ON p.workspace_id = ch.workspace_id
                AND p.current_source_revision_id = ch.source_revision_id
              WHERE i.workspace_id = %s AND p.id = %s AND i.status = 'open'
-            """, (context.workspace_id, project_id),
+               AND NOT """ + chapter_removed_sql("ch", "p.id"), (context.workspace_id, project_id),
         ).fetchone()[0])
         if reconciled:
             self.connection.execute(
@@ -590,7 +591,7 @@ class PostgresAudiobookReviewRepository:
                    ON p.workspace_id = ch.workspace_id
                   AND p.current_source_revision_id = ch.source_revision_id
                 WHERE i.workspace_id = %s AND p.id = %s
-                  AND i.status = 'open'""",
+                  AND i.status = 'open' AND NOT """ + chapter_removed_sql("ch", "p.id"),
             (context.workspace_id, project_id),
         ).fetchone()[0])
         self.connection.execute(
@@ -897,7 +898,7 @@ class PostgresAudiobookReviewRepository:
               JOIN omnix_audiobook_source_revisions AS r ON r.workspace_id = c.workspace_id AND r.id = c.source_revision_id
               JOIN omnix_audiobook_projects AS p ON p.workspace_id = r.workspace_id AND p.id = r.project_id AND p.current_source_revision_id = r.id
              WHERE i.workspace_id = %s AND i.status = 'open' AND r.project_id = %s
-            """, (context.workspace_id, project_id),
+               AND NOT """ + chapter_removed_sql("c", "r.project_id"), (context.workspace_id, project_id),
         ).fetchone()[0])
         if remaining == 0:
             self.connection.execute(

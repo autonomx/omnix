@@ -1,17 +1,110 @@
 import { LibrarySection, base, extractQuotes, formatCount, formatDuration, importLibrarySource, reclassifyAudiobook, saveClassificationRules, setAudiobookReadingMode, sourceAccept, updateProjectMetadata, uploadCover, uploadSource } from './audiobookWorkspaceModel';
+import { useState, type ReactNode } from 'react';
+import { productionPhases, type ProductionPhase } from './audiobookProductionPhases';
+import type { AudiobookJobView } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
+
+const EXTRACTING_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running']);
+const FAILED_STATUSES = new Set(['failed', 'dead_letter', 'stale']);
+
+/** The extraction to show: one that is running, else the newest still waiting. */
+function activeExtraction(jobs: AudiobookJobView[] | undefined): AudiobookJobView | undefined {
+  const ingests = (jobs ?? []).filter((job) => job.type === 'audiobook.ingest');
+  return ingests.find((job) => job.status === 'running' || job.status === 'leased')
+    ?? ingests.find((job) => EXTRACTING_STATUSES.has(job.status));
+}
+
+/** What the book source is doing right now: the upload, then the server's chapter extraction. */
+function SourceProgress({ uploadingName, extraction, failed }: { uploadingName: string | null; extraction?: AudiobookJobView; failed?: AudiobookJobView }) {
+  if (uploadingName) {
+    return <div className="audiobook-source-progress" role="status" aria-live="polite">
+      <span>Uploading {uploadingName}…</span>
+      <progress aria-label="Book upload progress" max={100} />
+    </div>;
+  }
+  if (extraction) {
+    const started = extraction.status === 'running' || extraction.status === 'leased';
+    const total = Number(extraction.progress?.total);
+    const current = Number(extraction.progress?.current);
+    const percent = started && total > 0 && Number.isFinite(current) ? Math.round((current / total) * 100) : null;
+    return <div className="audiobook-source-progress" role="status" aria-live="polite">
+      <span>{started ? `Extracting chapters · ${extraction.progress?.message || 'starting'}` : 'Book received · waiting to extract chapters'}</span>
+      <progress aria-label="Chapter extraction progress" max={100} {...(percent === null ? {} : { value: percent })} />
+      <small>Large books can take a few minutes. The book appears here when extraction finishes.</small>
+    </div>;
+  }
+  if (failed) {
+    return <p className="audiobook-source-progress error" role="alert">Chapter extraction failed{failed.error?.message ? `: ${failed.error.message}` : '.'} Upload the book again to retry.</p>;
+  }
+  return null;
+}
+
+/** One production phase in the book source editor: green once complete, else what is left to do. */
+function PhaseRow({ number, phase, description, note, children }: { number: number; phase: ProductionPhase; description: string; note?: string; children: ReactNode }) {
+  const title = `Phase ${number}: ${phase.title}`;
+  return <li className={`audiobook-source-reclassify${phase.complete ? ' complete' : ''}`}>
+    <div>
+      <div className="audiobook-source-phase-title"><strong>{title}</strong>{phase.complete && <span className="audiobook-source-state attached">Complete</span>}</div>
+      <p>{description}</p>
+      {note && <p>{note}</p>}
+      {!phase.complete && phase.todos.length > 0 && <ul className="audiobook-source-phase-todos" aria-label={`${title} to do`}>
+        {phase.todos.map((todo) => <li key={todo.label}>{todo.open ? <button type="button" onClick={todo.open}>{todo.label} →</button> : <span>{todo.label}</span>}</li>)}
+      </ul>}
+    </div>
+    {children}
+  </li>;
+}
+
+/** Phases 2 to 6 below the book source, each with its own next action. */
+function ProductionPhaseRows({ ws, phases }: { ws: AudiobookWorkspaceModel; phases: ProductionPhase[] }) {
+  const { action, busy, classificationRules, extractionRunning, project, reclassificationRunning, rulesNeedExtraction } = ws;
+  if (!project) return null;
+  const rules = classificationRules[project.id] ?? project.classification_rules ?? '';
+  return (
+    <ol className="audiobook-source-phases" aria-label="Production phases">
+      <PhaseRow number={2} phase={phases[1]} description="Extract quote spans using the rules above, then review the spans. Classification does not start automatically.">
+        <button type="button" disabled={busy || extractionRunning || reclassificationRunning || !project.current_source_revision_id}
+          onClick={() => void action(() => extractQuotes(project.id, rules), 'Quote extraction queued. Review quote spans before classifying text.')}>
+          {extractionRunning ? 'Extracting quotes…' : 'Extract quotes'}
+        </button>
+      </PhaseRow>
+      <PhaseRow number={3} phase={phases[2]} description="Review the extracted quote spans first, including unwanted text, then classify text to assign speakers."
+        note={rulesNeedExtraction ? 'Rules changed. Extract quotes again and review the new spans before classifying.' : undefined}>
+        <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
+          onClick={() => void action(() => reclassifyAudiobook(project.id, rules), 'Text classification queued.')}>
+          {reclassificationRunning ? 'Classifying…' : 'Classify text'}
+        </button>
+      </PhaseRow>
+      <PhaseRow number={4} phase={phases[3]} description="Assign a voice to every speaker, then adjust the delivery or emotion of dialogue.">
+        <button type="button" onClick={phases[3].open}>{phases[3].action}</button>
+      </PhaseRow>
+      <PhaseRow number={5} phase={phases[4]} description="Listen to a sample, then render the audio for every chapter.">
+        <button type="button" onClick={phases[4].open}>{phases[4].action}</button>
+      </PhaseRow>
+      <PhaseRow number={6} phase={phases[5]} description="Choose a format and export the finished audiobook.">
+        <button type="button" onClick={phases[5].open}>{phases[5].action}</button>
+      </PhaseRow>
+    </ol>
+  );
+}
 
 /** The open project's header, production path and settings. */
 export function AudiobookProjectHeader({ ws }: { ws: AudiobookWorkspaceModel }) {
   const {
-    action, assignedVoiceCount, busy, castableSpeakers, classificationRules, completedRenderChapters,
-    excludePageRanges, extractionRunning, librarySection, navigateLibrary, openManuscriptReview, openSourceLibrary,
-    openSourceUpload, project, projectAuthor, projectSettingsOpen, projectTitle, queueSamplePreview,
-    reclassificationRunning, renderChapterCount, renderProgressPercent, rulesNeedExtraction, setClassificationRules,
+    action, busy, classificationRules, completedRenderChapters, excludePageRanges, librarySection, navigateLibrary,
+    openSourceLibrary, project, projectAuthor, projectSettingsOpen, projectTitle, queueSamplePreview,
+    reclassificationRunning, renderChapterCount, renderProgressPercent, setClassificationRules,
     setDeleteConfirmationOpen, setExcludePageRanges, setProjectAuthor, setProjectSettingsOpen, setProjectTitle,
     setSourceLibraryFilename, setSourceLibraryOpen, sourceLibraryFilename, sourceLibraryOpen, sourceLibraryQuery,
   } = ws;
+  const [uploadingName, setUploadingName] = useState<string | null>(null);
   if (!project) return null;
+  const extraction = activeExtraction(project.pipeline_jobs);
+  const newestIngest = project.pipeline_jobs?.find((job) => job.type === 'audiobook.ingest');
+  const failedExtraction = !project.current_source_revision_id && newestIngest && FAILED_STATUSES.has(newestIngest.status) ? newestIngest : undefined;
+  const sourceBusy = Boolean(uploadingName || extraction);
+  const sourceState = uploadingName ? 'Uploading' : extraction ? 'Extracting' : project.current_source_revision_id ? 'Source attached' : 'Source needed';
+  const phases = productionPhases(ws);
   return (
     <>
       <nav className="audiobook-breadcrumb" aria-label="Audiobook breadcrumb"><button type="button" onClick={() => navigateLibrary('projects')}>Audiobook</button><span>›</span><strong>{project.title}</strong>{librarySection !== 'projects' && <><span>›</span><strong>{({ library: 'Library', books: 'Books', chapters: 'Chapters', assets: 'Assets', documents: 'Documents', characters: 'Cast & Voice Tools', voices: 'Voices', pronunciations: 'Pronunciations', exports: 'Render & Export', projects: 'Projects' } as Record<LibrarySection, string>)[librarySection]}</strong></>}</nav>
@@ -30,14 +123,7 @@ export function AudiobookProjectHeader({ ws }: { ws: AudiobookWorkspaceModel }) 
         <section className="audiobook-production-flow" aria-labelledby="audiobook-production-flow-title">
           <div className="audiobook-production-flow-heading"><div><p className="eyebrow">Production path</p><h2 id="audiobook-production-flow-title">From manuscript to audiobook</h2></div><p>Follow these steps in order. Open any step to continue your work.</p></div>
           <ol className="audiobook-production-flow-steps" aria-label="Audiobook production steps">
-            {[
-              { title: 'Add book', detail: 'Upload or choose a book; set title, author, and reading mode.', status: project.current_source_revision_id ? 'Source attached' : 'Source needed', complete: Boolean(project.current_source_revision_id), action: 'Open source', open: () => openSourceUpload(project.id) },
-              { title: 'Extract quotes', detail: 'Detect quote spans, then review them and remove unwanted spoken text.', status: extractionRunning ? 'Extracting quotes' : project.current_source_revision_id ? 'Ready for quote review' : 'Add a book first', complete: false, action: 'Review spans', open: openManuscriptReview },
-              { title: 'Classify text', detail: 'Review quote spans first. Start classification yourself to assign speakers.', status: reclassificationRunning ? 'Classifying' : project.state === 'extracted' ? 'Waiting for quote review' : project.review_issues.length ? `${project.review_issues.length} issues to review` : `${project.speakers.length} speakers found`, complete: false, action: 'Review speakers', open: openManuscriptReview },
-              { title: 'Cast and direct', detail: 'Assign voices and adjust the delivery or emotion of dialogue.', status: `${assignedVoiceCount} / ${castableSpeakers.length} voices assigned`, complete: castableSpeakers.length > 0 && assignedVoiceCount === castableSpeakers.length, action: 'Manage cast', open: () => navigateLibrary('characters') },
-              { title: 'Preview and render', detail: 'Listen to a sample, then generate the chapter audio.', status: `${renderProgressPercent}% rendered`, complete: renderChapterCount > 0 && completedRenderChapters === renderChapterCount, action: 'Open render', open: () => navigateLibrary('exports') },
-              { title: 'Export', detail: 'Choose a format and download the finished audiobook.', status: project.state === 'exported' ? 'Exported' : ['ready_to_export', 'exported'].includes(project.state) ? 'Ready to export' : 'After rendering', complete: project.state === 'exported', action: 'Open exports', open: () => navigateLibrary('exports') },
-            ].map((step, index) => <li key={step.title} className={step.complete ? 'complete' : ''}>
+            {phases.map((step, index) => <li key={step.title} className={step.complete ? 'complete' : ''}>
               <span className="audiobook-production-flow-number" aria-hidden="true">{index + 1}</span>
               <div className="audiobook-production-flow-copy"><strong>{step.title}</strong><small>{step.detail}</small></div>
               <span className="audiobook-production-flow-status">{step.status}</span>
@@ -47,15 +133,16 @@ export function AudiobookProjectHeader({ ws }: { ws: AudiobookWorkspaceModel }) 
         </section>
         {projectSettingsOpen && <div className="audiobook-project-actions">
           <section className="audiobook-settings-card audiobook-source-settings" aria-labelledby="audiobook-source-settings-title">
-            <div className="audiobook-settings-heading"><div><p className="eyebrow">Phase 1: Add book</p><h2 id="audiobook-source-settings-title" tabIndex={-1}>Book source</h2></div><span className={`audiobook-source-state ${project.current_source_revision_id ? 'attached' : 'needed'}`}>{project.current_source_revision_id ? 'Source attached' : 'Source needed'}</span></div>
-            <p className="audiobook-source-filename">{project.source_filename || 'No book uploaded yet'}</p>
+            <div className="audiobook-settings-heading"><div><p className="eyebrow">Phase 1: Add book</p><h2 id="audiobook-source-settings-title" tabIndex={-1}>Book source</h2></div><span className={`audiobook-source-state ${sourceBusy ? 'working' : project.current_source_revision_id ? 'attached' : 'needed'}`}>{sourceState}</span></div>
+            <p className="audiobook-source-filename">{project.source_filename || uploadingName || (extraction ? 'Book received' : 'No book uploaded yet')}</p>
             <p className="audiobook-settings-description">Upload a PDF, EPUB, DOCX, Markdown, HTML, or text file to extract chapters.</p>
+            <SourceProgress uploadingName={uploadingName} extraction={extraction} failed={failedExtraction} />
             <div className="audiobook-source-actions">
-              <label className="audiobook-source-file-button"><span>Upload from computer</span>
-                <input type="file" accept={sourceAccept} disabled={busy}
-                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(async () => { await uploadSource(project.id, file, excludePageRanges, classificationRules[project.id] ?? project.classification_rules ?? ''); setExcludePageRanges(''); }, 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
+              <label className={`audiobook-source-file-button${busy || sourceBusy ? ' disabled' : ''}`}><span>Upload from computer</span>
+                <input type="file" accept={sourceAccept} disabled={busy || sourceBusy}
+                  onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (!file) return; setUploadingName(file.name); void action(async () => { await uploadSource(project.id, file, excludePageRanges, classificationRules[project.id] ?? project.classification_rules ?? ''); setExcludePageRanges(''); }, 'Book uploaded. Extracting chapters now.').finally(() => setUploadingName(null)); }} />
               </label>
-              <button type="button" className="audiobook-source-library-trigger" disabled={busy} onClick={openSourceLibrary}>Choose from local library</button>
+              <button type="button" className="audiobook-source-library-trigger" disabled={busy || sourceBusy} onClick={openSourceLibrary}>Choose from local library</button>
             </div>
             <details className="audiobook-source-library" open={sourceLibraryOpen} onToggle={(event) => {
               setSourceLibraryOpen(event.currentTarget.open);
@@ -91,19 +178,7 @@ export function AudiobookProjectHeader({ ws }: { ws: AudiobookWorkspaceModel }) 
             </label>
             <button type="button" disabled={busy || reclassificationRunning}
               onClick={() => void action(() => saveClassificationRules(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Classification rules saved. They apply to the next import or classification run.')}>Save classification rules</button>
-            <div className="audiobook-source-reclassify"><div><strong>Phase 2: Extract quotes</strong><p>Extract quote spans using the rules above, then review the spans. Classification does not start automatically.</p></div>
-              <button type="button" disabled={busy || extractionRunning || reclassificationRunning || !project.current_source_revision_id}
-                onClick={() => void action(() => extractQuotes(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Quote extraction queued. Review quote spans before classifying text.')}>
-                {extractionRunning ? 'Extracting quotes…' : 'Extract quotes'}
-              </button>
-            </div>
-            <div className="audiobook-source-reclassify"><div><strong>Phase 3: Classify text</strong><p>Review the extracted quote spans first, including unwanted text, then classify text to assign speakers.</p>
-              {rulesNeedExtraction && <p>Rules changed. Extract quotes again and review the new spans before classifying.</p>}</div>
-              <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
-                onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
-                {reclassificationRunning ? 'Classifying…' : 'Classify text'}
-              </button>
-            </div>
+            <ProductionPhaseRows ws={ws} phases={phases} />
           </section>
           <div className="audiobook-settings-side">
             <section className="audiobook-settings-card" aria-labelledby="audiobook-details-settings-title">

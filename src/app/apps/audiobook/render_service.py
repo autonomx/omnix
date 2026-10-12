@@ -30,10 +30,15 @@ from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 from .render_cache import find_valid_render
 from .render_planner import RenderUnit, load_chapter_units
 from .model_identity import assert_model_revision
+from .speech_budget import CODEC_STEPS_PER_SECOND, exhausted_speech_budget, speech_token_budget
 
 
 _LOG = logging.getLogger(__name__)
 _HIGHER_PRIORITY = ("gpu:tts:realtime", "gpu:tts:preview", "gpu:tts")
+# Offline renders use the CUDA-graph decode path; the provider's parity default
+# (dynamic decode) measured slower than real time on a 4090. A job's explicit
+# settings still win, and the provider retries a failed fast decode in parity mode.
+_AUDIOBOOK_GENERATION_DEFAULTS: dict[str, Any] = {"parity_mode": False, "use_cuda_graphs": True}
 
 
 class RenderFailure(RuntimeError):
@@ -99,6 +104,7 @@ def _generation_progress_callback(
 
 
 def _effective_generation_parameters(provider: Any, requested: dict[str, Any]) -> dict[str, Any]:
+    requested = {**_AUDIOBOOK_GENERATION_DEFAULTS, **requested}
     resolver = getattr(provider, "resolve_generation_parameters", None)
     resolved = resolver(dict(requested)) if callable(resolver) else dict(requested)
     if not isinstance(resolved, dict):
@@ -153,6 +159,56 @@ def decode_pcm_wav(response: dict[str, Any]) -> tuple[bytes, float, int]:
     except (KeyError, ValueError, EOFError, wave.Error, TypeError) as exc:
         raise RenderFailure("TTS output is not valid PCM WAV", retryable=True) from exc
     return content, duration, sample_rate
+
+
+def unit_token_budget(unit: RenderUnit, settings: dict[str, Any]) -> int:
+    """The codec steps this unit may use under these settings (see ``speech_budget``)."""
+    return speech_token_budget(unit.speech_plan.tts_input_text, settings.get("max_new_tokens"))
+
+
+def usable_cached_render(cached: dict[str, Any] | None, budget: int) -> dict[str, Any] | None:
+    """A cached render, unless it is a model runaway that used up its budget: those are generated again."""
+    if cached is None or exhausted_speech_budget(float(cached["duration_seconds"]), budget):
+        return None
+    return cached
+
+
+def _synthesize(
+    provider: Any, unit: RenderUnit, speaker: str, settings: dict[str, Any], *,
+    progress_callback: Any = None,
+) -> tuple[dict[str, Any], bytes, float, int, dict[str, Any]]:
+    """Generate one unit within its token budget; a runaway is retried once in parity mode.
+
+    The budget and the retry are runtime safety bounds, not part of the render identity:
+    audio that ends on its own is the same with or without them.
+    """
+    text = unit.speech_plan.tts_input_text.strip()
+    budget = unit_token_budget(unit, settings)
+    bounded = {**settings, "max_new_tokens": budget, "instruct": unit.delivery}
+    attempts = [bounded] if settings.get("parity_mode") else [bounded, {**bounded, "parity_mode": True}]
+    for retries, parameters in enumerate(attempts):
+        generate_with_progress = getattr(provider, "generate_audio_with_progress", None)
+        if progress_callback is not None and callable(generate_with_progress):
+            response = generate_with_progress(
+                text, speaker=speaker, language=unit.language,
+                progress_callback=progress_callback, **parameters,
+            )
+        else:
+            response = provider.generate_audio_batch([{
+                "text": text, "speaker": speaker, "language": unit.language, "parameters": parameters,
+            }])[0]
+        audio, duration, sample_rate = decode_pcm_wav(response)
+        if not exhausted_speech_budget(duration, budget):
+            if not isinstance(response.get("generation_parameters_used"), dict):
+                sent = {key: value for key, value in parameters.items() if key != "instruct"}
+                response = {**response, "generation_parameters_used": sent}
+            return response, audio, duration, sample_rate, {"token_budget": budget, "runaway_retries": retries}
+        _LOG.warning("speech model ran out its %s-step budget for span %s (parity_mode=%s)",
+                     budget, unit.span_id, parameters.get("parity_mode"))
+    raise RenderFailure(
+        f"The speech model did not finish “{text[:60]}” within {budget / CODEC_STEPS_PER_SECOND:.0f} s, "
+        "even after a retry in parity mode. Edit or remove this passage in Span review, then render again.",
+    )
 
 
 def higher_priority_tts_pending(connection: Any, context: TenantContext) -> bool:
@@ -401,7 +457,8 @@ def _render_claimed(
                 ):
                     work.commit()
                     return True
-                cached = find_valid_render(work.connection, context, blobs, key)
+                cached = usable_cached_render(find_valid_render(work.connection, context, blobs, key),
+                                              unit_token_budget(unit, settings))
                 if cached is not None:
                     completed += 1
                     cache_hits += 1
@@ -439,7 +496,8 @@ def _render_claimed(
                     break
                 time.sleep(0.5)
             with unit_of_work(database) as work:
-                cached = find_valid_render(work.connection, context, blobs, key)
+                cached = usable_cached_render(find_valid_render(work.connection, context, blobs, key),
+                                              unit_token_budget(unit, settings))
                 if cached is not None:
                     completed += 1
                     cache_hits += 1
@@ -456,29 +514,16 @@ def _render_claimed(
             before_gpu = _gpu_memory_bytes()
             started_at = time.perf_counter()
             with generation_class("offline"):
-                request = {
-                    "text": unit.speech_plan.tts_input_text.strip(),
-                    "speaker": speaker, "language": unit.language,
-                    "parameters": {**settings, "instruct": unit.delivery},
-                }
-                generate_with_progress = getattr(provider, "generate_audio_with_progress", None)
-                if callable(generate_with_progress):
-                    callback = _generation_progress_callback(
+                response, audio, duration, sample_rate, bounds = _synthesize(
+                    provider, unit, speaker, settings,
+                    progress_callback=_generation_progress_callback(
                         database, context, job_id=job_id, worker_id=worker_id,
                         lease_token=token, completed=completed,
                         total=len(requests),
-                    )
-                    response = generate_with_progress(
-                        request["text"], speaker=request["speaker"],
-                        language=request["language"],
-                        progress_callback=callback,
-                        **request["parameters"],
-                    )
-                else:
-                    response = provider.generate_audio_batch([request])[0]
+                    ),
+                )
             wall_seconds = time.perf_counter() - started_at
             _voice_for(unit, profiles, payload["provider_id"])
-            audio, duration, sample_rate = decode_pcm_wav(response)
             completed += 1
             generated += 1
             _save_render(
@@ -499,7 +544,7 @@ def _render_claimed(
                              "generation_strategy_revision":
                                  response.get("generation_strategy_revision"),
                              "gpu_before_bytes": before_gpu,
-                             "gpu_after_bytes": _gpu_memory_bytes()},
+                             "gpu_after_bytes": _gpu_memory_bytes(), **bounds},
             )
         with unit_of_work(database) as work:
             work.connection.execute(
@@ -721,7 +766,8 @@ def _preview_claimed(
                     return True
                 work.jobs.renew_lease(context, job_id=job_id, worker_id=worker_id,
                                       lease_token=token, lease_seconds=JOB_LEASE_SECONDS)
-                cached = find_valid_render(work.connection, context, blobs, key)
+                cached = usable_cached_render(find_valid_render(work.connection, context, blobs, key),
+                                              unit_token_budget(unit, settings))
                 work.commit()
             if cached is not None:
                 refs.append({"render_id": cached["id"], "audio_asset_id": cached["audio_asset_id"]})
@@ -730,14 +776,9 @@ def _preview_claimed(
             before_gpu = _gpu_memory_bytes()
             started_at = time.perf_counter()
             with generation_class("preview"):
-                response = provider.generate_audio_batch([{
-                    "text": unit.speech_plan.tts_input_text.strip(),
-                    "speaker": speaker, "language": unit.language,
-                    "parameters": {**settings, "instruct": unit.delivery},
-                }])[0]
+                response, audio, duration, sample_rate, bounds = _synthesize(provider, unit, speaker, settings)
             wall_seconds = time.perf_counter() - started_at
             _voice_for(unit, profiles, payload["provider_id"])
-            audio, duration, sample_rate = decode_pcm_wav(response)
             refs.append(_save_render(
                 database, blobs, context, job_id=job_id, worker_id=worker_id,
                 lease_token=token, batch_id=None, unit=unit, render_key=key,
@@ -753,7 +794,7 @@ def _preview_claimed(
                              "real_time_factor": wall_seconds / duration,
                              "generation_strategy_revision": response.get("generation_strategy_revision"),
                              "gpu_before_bytes": before_gpu,
-                             "gpu_after_bytes": _gpu_memory_bytes()},
+                             "gpu_after_bytes": _gpu_memory_bytes(), **bounds},
             ))
         _complete_span_preview(
             database, blobs, context, job_id=job_id, worker_id=worker_id,

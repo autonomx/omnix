@@ -14,7 +14,7 @@ import pytest
 
 from app.apps.audiobook.service import AudiobookService
 from app.apps.audiobook.worker import run_analyze_once, run_ingest_once
-from app.apps.audiobook.render_service import run_preview_once, run_render_once
+from app.apps.audiobook.render_service import _AUDIOBOOK_GENERATION_DEFAULTS, run_preview_once, run_render_once
 from app.apps.audiobook.assembly_service import run_assemble_once
 from app.apps.audiobook.render_cache import find_valid_render
 from app.apps.audiobook.render_planner import load_chapter_units
@@ -1358,7 +1358,8 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
                                                project_id=project["id"], chapter_id=chapter["id"]):
                     key = unit.identity(provider_id="faster-qwen3-tts", model_id="Qwen3-TTS",
                                         model_revision="test-model-revision",
-                                        generation_parameters={}, seed=None).key()
+                                        generation_parameters=dict(_AUDIOBOOK_GENERATION_DEFAULTS),
+                                        seed=None).key()
                     assert find_valid_render(work.connection, context, blobs, key), (unit.span_id, key)
             work.rollback()
         first_chapter = service.get_project(context, project["id"])["chapters"][0]
@@ -1666,7 +1667,8 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
                                                project_id=project["id"], chapter_id=chapter["id"]):
                     key = unit.identity(provider_id="faster-qwen3-tts", model_id="Qwen3-TTS",
                                         model_revision="test-model-revision",
-                                        generation_parameters={}, seed=None).key()
+                                        generation_parameters=dict(_AUDIOBOOK_GENERATION_DEFAULTS),
+                                        seed=None).key()
                     if find_valid_render(work.connection, context, blobs, key) is None:
                         missing_after_crash += 1
             _expire_job_and_make_retry_due(work, context, checkpoint[1])
@@ -2484,4 +2486,92 @@ def test_stale_ingest_retry_is_rejected_after_canonical_source_exists(tmp_path, 
                 context, project_id=project["id"], job_id=submission["job_id"],
             )
     finally:
+        database.close()
+
+
+def test_render_queue_follows_book_order_can_be_reordered_and_finished_chapters_play(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.apps.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-render-order-test",
+    ))
+    rendering = None
+    try:
+        apply_migrations(database)
+        context = ensure_local_identity(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Render order")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt", filename="order.txt",
+            content=b"Chapter 1\nThe first chapter.\nChapter 2\nThe second chapter.\nChapter 3\nThe third chapter.",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:order-ingest")
+        _queue_analysis(database, context, project["id"])
+        assert run_analyze_once(database, context, worker_id="test:order-analyze")
+        detail = service.get_project(context, project["id"])
+        narrator = next(item for item in detail["speakers"] if item["kind"] == "narrator")
+        for issue in detail["review_issues"]:
+            service.resolve_issue(context, project_id=project["id"], issue_id=issue["id"],
+                                  speaker_id=narrator["id"], role=issue["structural_kind"])
+        reference = tmp_path / "narrator.wav"
+        reference.write_bytes(b"render-order narrator voice")
+        with unit_of_work(database) as work:
+            PostgresAudiobookReviewRepository(work.connection).assign_voice(
+                context, project_id=project["id"], speaker_id=narrator["id"],
+                voice_profile_id="voice-cloning:order", voice_revision_hash=bytes_hash(reference.read_bytes()),
+            )
+            work.commit()
+        monkeypatch.setattr("app.apps.audiobook.render_service.discover_canonical_voice_clone_assets",
+                            lambda: [SimpleNamespace(id="voice-cloning:order", storage_path=str(reference), metadata={})])
+        audio_buffer = io.BytesIO()
+        with wave.open(audio_buffer, "wb") as writer:
+            writer.setnchannels(1)
+            writer.setsampwidth(2)
+            writer.setframerate(16000)
+            writer.writeframes(b"\xe8\x03\x18\xfc" * 80)
+        encoded = base64.b64encode(audio_buffer.getvalue()).decode()
+        monkeypatch.setattr("app.apps.audiobook.render_service.get_tts_provider", lambda _name: SimpleNamespace(
+            generate_audio_batch=lambda requests: [{"success": True, "audio": encoded} for _ in requests]))
+
+        service.start_render(context, project_id=project["id"], model_revision="order-test-model")
+        rendering = project["id"]
+        chapters = [chapter["id"] for chapter in sorted(detail["chapters"], key=lambda item: item["ordinal"])]
+        assert len(chapters) == 3
+
+        def positions() -> list[int | None]:
+            jobs = {job["chapter_id"]: job for job in service.get_project(context, project["id"])["render_jobs"]}
+            return [jobs[chapter_id]["queue_position"] for chapter_id in chapters]
+
+        assert positions() == [1, 2, 3]  # a new run renders in book order
+        result = service.reorder_render_queue(context, project_id=project["id"], chapter_ids=[chapters[2]])
+        assert result["chapter_ids"] == [chapters[2], chapters[0], chapters[1]]
+        assert positions() == [2, 3, 1]
+
+        assert run_render_once(database, blobs, context, worker_id="test:order-render")
+        jobs = {job["chapter_id"]: job for job in service.get_project(context, project["id"])["render_jobs"]}
+        assert jobs[chapters[2]]["status"] == "completed"  # the worker honoured the new order
+        assert [jobs[chapter_id]["queue_position"] for chapter_id in chapters] == [1, 2, None]
+        with pytest.raises(ValueError, match="still waiting"):
+            service.reorder_render_queue(context, project_id=project["id"], chapter_ids=[chapters[2]])
+        with pytest.raises(ValueError, match="only once"):
+            service.reorder_render_queue(context, project_id=project["id"], chapter_ids=[chapters[0], chapters[0]])
+
+        # Rendered but not yet assembled: nothing to play.
+        assert jobs[chapters[2]]["audio"] is None
+        with pytest.raises(KeyError):
+            service.open_chapter_audio(context, project_id=project["id"], chapter_id=chapters[2])
+        assert run_assemble_once(database, blobs, context, worker_id="test:order-assemble")
+        jobs = {job["chapter_id"]: job for job in service.get_project(context, project["id"])["render_jobs"]}
+        assert jobs[chapters[2]]["audio"]["duration_seconds"] > 0
+        assert jobs[chapters[0]]["audio"] is None
+        path = service.open_chapter_audio(context, project_id=project["id"], chapter_id=chapters[2])
+        assert path.read_bytes()[:4] == b"RIFF"
+        with pytest.raises(KeyError):
+            service.open_chapter_audio(context, project_id=project["id"], chapter_id=chapters[0])
+    finally:
+        # The workspace's job queue is shared with later tests: leave no chapter waiting.
+        if rendering is not None:
+            service.stop_render_queue(context, project_id=rendering)
         database.close()

@@ -696,6 +696,7 @@ class PostgresJobRepository(_BaseJobRepository):
         progress: dict[str, Any] | None = None,
         error: Any = _UNSET,
         max_attempts: int | None = None,
+        priority: int | None = None,
         available_at_now: bool = False,
         clear_lease: bool = False,
         completed_at_now: bool = False,
@@ -724,6 +725,9 @@ class PostgresJobRepository(_BaseJobRepository):
         if max_attempts is not None:
             assignments.append("max_attempts = %s")
             parameters.append(max(1, int(max_attempts)))
+        if priority is not None:
+            assignments.append("priority = %s")
+            parameters.append(int(priority))
         if available_at_now:
             assignments.append("available_at = CURRENT_TIMESTAMP")
         if clear_lease:
