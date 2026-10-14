@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from app.apps.audiobook.document_structure import DOCUMENT_STRUCTURE_VERSION
 from app.apps.audiobook.service import AudiobookService
 from app.apps.audiobook.worker import run_analyze_once, run_ingest_once
 from app.apps.audiobook.review_repository import PostgresAudiobookReviewRepository
@@ -84,7 +85,7 @@ def test_ingest_persists_structure_and_scoped_override_history(
         )
         assert empty_structure["audiobook_mode"] == "story_only"
         assert empty_structure["blocks"] == []
-        assert empty_structure["document_structure_version"] == "document-role-v1"
+        assert empty_structure["document_structure_version"] == DOCUMENT_STRUCTURE_VERSION
 
         service.submit_source(
             context,
@@ -119,7 +120,7 @@ def test_ingest_persists_structure_and_scoped_override_history(
             context, project_id=project["id"]
         )
         assert structure["run_id"]
-        assert structure["document_structure_version"] == "document-role-v1"
+        assert structure["document_structure_version"] == DOCUMENT_STRUCTURE_VERSION
         assert structure["blocks"]
         page = next(
             item for item in structure["blocks"]

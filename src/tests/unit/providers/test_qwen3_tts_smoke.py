@@ -231,8 +231,11 @@ def test_generate_audio_can_disable_cuda_graphs_before_generation(monkeypatch, t
     class GraphRecordingModel:
         _cuda_graphs_enabled = True
 
+        def __init__(self):
+            self.calls = []
+
         def generate_voice_clone(self, **kwargs):
-            assert self._cuda_graphs_enabled is False
+            self.calls.append(kwargs)
             return [preview_audio], sample_rate
 
     model = GraphRecordingModel()
@@ -247,6 +250,10 @@ def test_generate_audio_can_disable_cuda_graphs_before_generation(monkeypatch, t
     )
 
     assert out["success"] is True
+    # The request decodes without graphs (parity mode); the shared model keeps its graphs
+    # for later requests, which would otherwise replay a graph that was never captured.
+    assert model.calls and all(call.get("parity_mode") is True for call in model.calls)
+    assert model._cuda_graphs_enabled is True
 
 
 def test_generate_audio_retries_tensor_size_generation_failure(monkeypatch, tmp_path):
