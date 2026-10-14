@@ -42,4 +42,19 @@ describe('RpgLiveDataStatus', () => {
     expect(screen.getByText('All live sources ready')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
   });
+
+  it('says which sources failed while its hidden details are collapsed', () => {
+    const cards = [
+      { id: 'sessions', label: 'Sessions', state: 'error' as const, detail: 'Omnix API request failed with status 503: unavailable' },
+      { id: 'jobs', label: 'Jobs', state: 'ready' as const, detail: '1 job visible.' },
+    ];
+    const { rerender } = render(<RpgLiveDataStatus cards={cards} expanded={false} hideWhenCollapsed />);
+
+    expect(screen.queryByRole('region', { name: 'RPG live data status' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Sessions could not be loaded: Omnix API request failed with status 503: unavailable');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Jobs');
+
+    rerender(<RpgLiveDataStatus cards={[{ ...cards[0], state: 'ready' }, cards[1]]} expanded={false} hideWhenCollapsed />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

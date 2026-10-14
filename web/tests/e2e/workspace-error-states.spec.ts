@@ -9,7 +9,6 @@ test.beforeEach(async ({ page }) => {
   await page.route((url) => url.pathname === '/events' || url.pathname.startsWith('/events/'), (route) => route.abort());
 });
 
-// RPG is being retired (DECISIONS, WP-9.3); its gateway errors stay in its hidden panels.
 const workspaces = [
   ['Chatbot', '/chatbot'],
   ['Storyteller', '/storyteller'],
@@ -20,6 +19,7 @@ const workspaces = [
   ['Image Generation', '/image-generation'],
   ['Audiobook', '/audiobook'],
   ['Trading', '/trading'],
+  ['RPG', '/rpg'],
   ['Providers', '/providers'],
   ['Models', '/models'],
   ['Jobs / Runs', '/jobs'],
