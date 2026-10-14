@@ -99,7 +99,7 @@ jobs:
 
       - name: Upload extension evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trading-v11-older-stress-isolated-evidence
           path: |

@@ -70,7 +70,7 @@ jobs:
         run: python scripts/check_architecture_benchmark.py --baseline resources/benchmarks/gateway/refactor-baseline.json --measured artifacts/nightly-gateway-benchmark.json
       - name: Upload nightly evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-validation
           path: artifacts/*.json
@@ -109,7 +109,7 @@ jobs:
         run: python scripts/rolling_upgrade_test.py --output artifacts/rolling-upgrade.json
       - name: Upload rolling-upgrade evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-rolling-upgrade
           path: artifacts/rolling-upgrade.json
@@ -136,7 +136,7 @@ jobs:
           docker compose -f docker-compose.multihost-test.yml logs --no-color --tail 2000 gateway-worker api-1 api-2 job-worker-1 job-worker-2 fake-models
       - name: Upload topology evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-multihost-topology
           path: artifacts/multihost-topology.json
@@ -201,7 +201,7 @@ jobs:
           --blob-root "${{ runner.temp }}/blobs-restored" --output artifacts/restore-rehearsal.json
       - name: Upload restore evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-restore-rehearsal
           path: artifacts/restore-rehearsal.json
