@@ -11,6 +11,7 @@ import {
   type RpgNewGameRequest,
   type RpgPowerSource,
 } from './api/rpgSessionClient';
+import { setRpgLauncherDialog, setRpgLauncherHomeGrid, useRpgLauncherView } from './rpgLauncherSlots';
 import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgSessionLauncher.css';
 
@@ -166,7 +167,7 @@ export function RpgActionComposer({
   const [launchStatus, setLaunchStatus] = useState<string>();
   const [launchError, setLaunchError] = useState<string>();
   const [isLaunching, setIsLaunching] = useState(false);
-  const [launcherView, setLauncherView] = useState<LauncherView>('closed');
+  const [launcherView, setLauncherView] = useRpgLauncherView<LauncherView>('closed', 'home'); // opens on the header's request
   const [campaignTemplate, setCampaignTemplate] = useState('classic_fantasy');
   const [genre, setGenre] = useState<RpgGenre>('classic_fantasy');
   const [tone, setTone] = useState('heroic adventure');
@@ -429,7 +430,7 @@ export function RpgActionComposer({
       {launcherView !== 'closed' ? (
         <div className="rpg-launcher-modal" role="dialog" aria-modal="true" aria-label={launcherTitle}>
           <button className="rpg-launcher-backdrop" type="button" aria-label="Close RPG launcher" onClick={closeLauncher} />
-          <section className={launcherView === 'campaign_wizard' ? 'rpg-launcher-dialog rpg-launcher-dialog-wide' : 'rpg-launcher-dialog'}>
+          <section ref={setRpgLauncherDialog} className={launcherView === 'campaign_wizard' ? 'rpg-launcher-dialog rpg-launcher-dialog-wide' : 'rpg-launcher-dialog'}>
             <div className="rpg-launcher-panel-heading">
               <div>
                 <p className="eyebrow">Campaign launcher</p>
@@ -441,7 +442,7 @@ export function RpgActionComposer({
             </div>
 
             {launcherView === 'home' ? (
-              <div className="rpg-launcher-home-grid">
+              <div ref={setRpgLauncherHomeGrid} className="rpg-launcher-home-grid">
                 <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending || !mostRecentLiveSession} onClick={() => mostRecentLiveSession && void continueSession(mostRecentLiveSession.id)}>
                   <strong>Continue</strong>
                   <span>{mostRecentLiveSession ? mostRecentLiveSession.title : 'No saved run yet'}</span>

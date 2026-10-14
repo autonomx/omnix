@@ -10,6 +10,7 @@ import { RpgWorldAuthoringWorkspace } from './RpgWorldAuthoringWorkspace';
 import { RpgWorldBundleTransfer } from './RpgWorldBundleTransfer';
 import { pushWorldEditorRoute } from './RpgWorldCompletionModels';
 import { RpgWorldEditorShell } from './RpgWorldEditorShell';
+import { requestRpgLauncherHome, useRpgLauncherSlots } from './rpgLauncherSlots';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgLoreOverlay.css';
 import './RpgPlayFocus.css';
@@ -29,9 +30,6 @@ interface RpgWorkspaceHeaderProps {
 
 const RPG_PLAY_FOCUS_CLASS = 'rpg-play-focus-mode';
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
-const RPG_LAUNCHER_HOME_GRID_SELECTOR = '.rpg-launcher-home-grid';
-const RPG_LAUNCHER_DIALOG_SELECTOR = '.rpg-launcher-dialog';
-const RPG_LAUNCHER_BUTTON_SELECTOR = '.rpg-session-launcher button';
 const RPG_WORLD_LIBRARY_DIALOG_CLASS = 'rpg-launcher-dialog-world-library';
 
 export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
@@ -48,8 +46,7 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
   const [isLoreOpen, setIsLoreOpen] = useState(false);
   const [isWorldLibraryOpen, setIsWorldLibraryOpen] = useState(false);
   const [worldLibraryRequested, setWorldLibraryRequested] = useState(false);
-  const [campaignLauncherHomeGrid, setCampaignLauncherHomeGrid] = useState<HTMLElement | null>(null);
-  const [campaignLauncherDialog, setCampaignLauncherDialog] = useState<HTMLElement | null>(null);
+  const { dialog: campaignLauncherDialog, homeGrid: campaignLauncherHomeGrid } = useRpgLauncherSlots();
   const worldLoreQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-lore', selectedSessionSummary.worldId],
     queryFn: () => rpgWorldLibraryClient.list(),
@@ -92,21 +89,8 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
   }, [isLoreOpen]);
 
   useEffect(() => {
-    const syncLauncherElements = () => {
-      const homeGrid = document.querySelector<HTMLElement>(RPG_LAUNCHER_HOME_GRID_SELECTOR);
-      const dialog = homeGrid?.closest<HTMLElement>(RPG_LAUNCHER_DIALOG_SELECTOR)
-        ?? document.querySelector<HTMLElement>(RPG_LAUNCHER_DIALOG_SELECTOR);
-      setCampaignLauncherHomeGrid(homeGrid);
-      setCampaignLauncherDialog(dialog);
-      if (!dialog) setIsWorldLibraryOpen(false);
-    };
-
-    syncLauncherElements();
-    const observer = new MutationObserver(syncLauncherElements);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => observer.disconnect();
-  }, []);
+    if (!campaignLauncherDialog) setIsWorldLibraryOpen(false);
+  }, [campaignLauncherDialog]);
 
   useEffect(() => {
     if (worldLibraryRequested && campaignLauncherDialog) {
@@ -126,7 +110,7 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
       return;
     }
     setWorldLibraryRequested(true);
-    document.querySelector<HTMLButtonElement>(RPG_LAUNCHER_BUTTON_SELECTOR)?.click();
+    requestRpgLauncherHome();
   };
 
   const selectLaunchedSession = (sessionId: string) => {
