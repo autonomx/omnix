@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "measurement": "TTS first-audio latency and long-synthesis memory (WP-7.3)",
+  "revision": "fdc747b124182c7087c62b336a555a499766040b",
+  "python": "3.11.12",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "service": {
+    "provider_class": "FasterQwen3TTSProvider",
+    "provider_name": "faster-qwen3-tts",
+    "configured_model": "F:/LLM/omnix/resources/models/tts/Qwen3-TTS-12Hz-0.6B-Base",
+    "configured_device": "cuda"
+  },
+  "transport": "http_streaming_pcm16 (live-call stream), audio/wav (whole utterance)",
+  "short_text_chars": 62,
+  "samples": 10,
+  "stream_first_audio": {
+    "p50_ms": 757.0,
+    "p95_ms": 883.8,
+    "max_ms": 883.8
+  },
+  "stream_total": {
+    "p50_ms": 7132.5,
+    "p95_ms": 21014.8,
+    "max_ms": 21014.8
+  },
+  "audio_seconds_per_utterance": 4.84,
+  "whole_utterance_wav": {
+    "p50_ms": 6732.8,
+    "p95_ms": 8216.2,
+    "max_ms": 8216.2
+  },
+  "long_synthesis": {
+    "audio_seconds": 609.1,
+    "requests": 47,
+    "wall_seconds": 984.0,
+    "real_time_factor": 1.615,
+    "memory_at_start": {
+      "service_rss_mb": 2116.8,
+      "client_rss_mb": 63.0,
+      "gpu_used_mb": 10250.0
+    },
+    "memory_peak": {
+      "service_rss_mb": 2118.0,
+      "client_rss_mb": 63.9,
+      "gpu_used_mb": 10285.0
+    }
+  },
+  "conditions": "A TTS service started for the measurement (port 5111, its own service token, scratch database) on the owner's RTX 4090 while the live installation's TTS, STT and gateway kept running on the same GPU; speaker 'default', the service's default sampling settings.",
+  "findings": [
+    "First audio through the gateway's streaming client (POST /api/tts/live-call/stream, PCM16) arrives in 757 ms p50 and 884 ms p95 for a 62-character sentence, about a tenth of the whole-utterance WAV time (6.7 s p50, 8.2 s p95).",
+    "A 10-minute synthesis (609 s of audio over 47 streamed paragraphs) keeps the service's resident memory flat (2,117 to 2,118 MB) and the client's flat (63 to 64 MB); device memory rose 35 MB. Nothing buffers the stream.",
+    "Synthesis ran at 1.6 times real time on the shared GPU; this is the measured throughput under that load, not a transport effect.",
+    "No 'before' exists to compare: the base64 JSON transport this replaced was deleted in WP-7.3, and no first-audio measurement of it was recorded."
+  ]
+}
