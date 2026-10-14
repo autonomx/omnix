@@ -461,6 +461,16 @@ def test_negative_cases_do_not_count_compliant_code():
         assert result["metrics"][key]["value"] == 0, key
 
 
+def test_a_model_service_app_behind_the_service_middleware_has_no_unpermitted_routes():
+    route = "app = FastAPI()\n{}@app.post('/api/tts/generate_audio')\ndef generate():\n    return {{}}\n"
+    guarded = observed({APP + "providers/a.py": route.format("app.add_middleware(ModelServiceMiddleware)\n")})
+    unguarded = observed({APP + "providers/a.py": route.format("")})
+    assert guarded["metrics"]["routes_without_permission"]["value"] == 0
+    assert unguarded["metrics"]["routes_without_permission"]["value"] == 1
+    assert unguarded["evidence"]["routes_without_permission"] == [
+        {"path": APP + "providers/a.py", "line": 3, "method": "POST", "route_path": "/api/tts/generate_audio"}]
+
+
 def test_nested_await_does_not_hide_a_blocking_async_handler():
     result = observed({APP + "composition/gateway/a.py": "@app.get('/api/a')\nasync def route():\n    async def unused():\n        await work()\n    return {}"})
     assert result["metrics"]["async_handlers_without_await"]["value"] == 1
