@@ -36,6 +36,14 @@ from app.apps.rpg.session.world_ability_integration import ensure_world_scale_ab
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgLaunchResponse,
+    RpgLoadoutActionResponse,
+    RpgPresetListResponse,
+    RpgSessionListResponse,
+    RpgSessionMutationResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -264,11 +272,11 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     register_rpg_campaign_lore_routes(router, state)
     register_rpg_narrative_delivery_routes(router, state)
 
-    @router.get("/api/rpg/presets", tags=["rpg-session"])
+    @router.get("/api/rpg/presets", tags=["rpg-session"], responses=documented(RpgPresetListResponse))
     def rpg_presets() -> dict[str, Any]:
         return list_rpg_presets()
 
-    @router.post("/api/rpg/presets/{preset_id}/start", tags=["rpg-session"])
+    @router.post("/api/rpg/presets/{preset_id}/start", tags=["rpg-session"], responses=documented(RpgLaunchResponse))
     def rpg_start_preset(preset_id: str) -> dict[str, Any]:
         return _with_rpg_response_surface(
             _raise_for_error(
@@ -277,7 +285,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             )
         )
 
-    @router.get("/api/rpg/sessions", tags=["rpg-session"])
+    @router.get("/api/rpg/sessions", tags=["rpg-session"], responses=documented(RpgSessionListResponse))
     def rpg_sessions(
         limit: int = Query(default=100, ge=1, le=500),
     ) -> dict[str, Any]:
@@ -287,7 +295,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
         ]
         return {"ok": True, "sessions": sessions}
 
-    @router.get("/api/rpg/sessions/{session_id}", tags=["rpg-session"])
+    @router.get("/api/rpg/sessions/{session_id}", tags=["rpg-session"], responses=documented(RpgLaunchResponse))
     def rpg_read_session(session_id: str) -> dict[str, Any]:
         session = load_session(session_id)
         if not session:
@@ -333,7 +341,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             "ability_coverage": _ability_coverage_payload(state),
         }
 
-    @router.post("/api/rpg/new-game", tags=["rpg-session"])
+    @router.post("/api/rpg/new-game", tags=["rpg-session"], responses=documented(RpgLaunchResponse))
     async def rpg_new_game(
         http_request: Request, request_body: RpgNewGameRequestBody,
     ) -> dict[str, Any]:
@@ -348,6 +356,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/continue",
         tags=["rpg-session"],
+        responses=documented(RpgLaunchResponse),
     )
     def rpg_continue_session(session_id: str) -> dict[str, Any]:
         return _with_rpg_response_surface(
@@ -404,6 +413,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/rename",
         tags=["rpg-session"],
+        responses=documented(RpgSessionMutationResponse),
     )
     def rpg_rename_session(
         session_id: str,
@@ -427,6 +437,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/delete",
         tags=["rpg-session"],
+        responses=documented(RpgSessionMutationResponse),
     )
     def rpg_delete_session(session_id: str) -> dict[str, Any]:
         return _raise_for_error(
@@ -437,6 +448,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/loadout-action",
         tags=["rpg-session"],
+        responses=documented(RpgLoadoutActionResponse),
     )
     def rpg_loadout_action(
         session_id: str,

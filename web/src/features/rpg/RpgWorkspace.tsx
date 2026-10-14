@@ -37,6 +37,7 @@ import {
   createRpgWorkspaceState,
   type RpgQuickActionPreview,
   type RpgStoryMessagePreview,
+  rpgTurnOutputText,
 } from './rpgUiState';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
@@ -133,7 +134,7 @@ function submittedTurnResponseContent(job: JobRecord | undefined): string | null
   const output = arrayValue(job?.output_refs)
     .map(recordValue)
     .find((candidate) => firstString(candidate.type, candidate.kind) === 'rpg_turn_response');
-  return cleanSubmittedTurnResponse(firstString(output?.content, output?.text));
+  return cleanSubmittedTurnResponse(rpgTurnOutputText(output) ?? null);
 }
 
 function submittedTurnCommand(job: JobRecord | undefined): string | null {

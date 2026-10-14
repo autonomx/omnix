@@ -15,6 +15,10 @@ from app.apps.rpg.genesis.worlds.progressive_materialization_job_service import 
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgDeferredMaterializationResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -69,6 +73,7 @@ def register_rpg_progressive_map_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/worlds/{world_id}/deferred-locations/{location_id}/materialize",
+        responses=documented(RpgDeferredMaterializationResponse),
     )
     def rpg_materialize_deferred_location(
         world_id: str,

@@ -24,6 +24,11 @@ from app.apps.rpg.genesis.worlds.topic_authoring import (
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgAuthoringEntityMutationResponse,
+    RpgAuthoringManifestResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -100,6 +105,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/authoring-manifest",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringManifestResponse),
     )
     def rpg_world_authoring_manifest(world_id: str) -> dict[str, Any]:
         try:
@@ -207,6 +213,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.patch(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringEntityMutationResponse),
     )
     def rpg_update_world_entity(
         world_id: str,
@@ -238,6 +245,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/regenerate",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringEntityMutationResponse),
     )
     def rpg_regenerate_world_entity(
         world_id: str,

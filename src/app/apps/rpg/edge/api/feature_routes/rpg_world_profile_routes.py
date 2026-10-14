@@ -15,6 +15,10 @@ from app.apps.rpg.genesis.worlds.profile_generation_jobs import retry_world_prof
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgWorldProfileResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -62,6 +66,7 @@ def register_rpg_world_profile_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/genre-profile",
         tags=["rpg-world"],
+        responses=documented(RpgWorldProfileResponse),
     )
     def rpg_read_world_genre_profile(world_id: str) -> dict[str, Any]:
         try:
@@ -73,6 +78,7 @@ def register_rpg_world_profile_routes(router: APIRouter, state) -> None:
     @router.patch(
         "/api/rpg/worlds/{world_id}/genre-profile",
         tags=["rpg-world"],
+        responses=documented(RpgWorldProfileResponse),
     )
     def rpg_update_world_genre_profile(
         world_id: str,
@@ -104,6 +110,7 @@ def register_rpg_world_profile_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/genre-profile/approve",
         tags=["rpg-world"],
+        responses=documented(RpgWorldProfileResponse),
     )
     def rpg_approve_world_genre_profile(
         world_id: str,
@@ -129,6 +136,7 @@ def register_rpg_world_profile_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/genre-profile/retry",
         tags=["rpg-world"],
+        responses=documented(RpgWorldProfileResponse),
     )
     def rpg_retry_world_genre_profile(world_id: str) -> dict[str, Any]:
         try:

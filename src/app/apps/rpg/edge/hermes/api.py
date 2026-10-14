@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.apps.rpg.edge.hermes.adapter_contract import hermes_adapter_preview_payload
 from app.apps.rpg.edge.hermes.context import hermes_rpg_context_payload
@@ -12,6 +12,16 @@ from app.apps.rpg.edge.hermes.suggestions import hermes_rpg_suggestions_payload
 from app.apps.rpg.edge.hermes.turn_readout import hermes_rpg_turn_readout_payload
 from app.apps.rpg.edge.hermes.mode_routing import omnix_mode_policy_payload
 from app.apps.rpg.edge.hermes.mode_routing import omnix_route_decision_payload
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    HermesApprovalResponse,
+    HermesCandidatePreviewResponse,
+    HermesRecentResponse,
+    HermesRouteDecisionResponse,
+    HermesRpgSuggestionsResponse,
+    HermesRpgTurnReadoutResponse,
+    HermesTestResponse,
+)
 
 router = APIRouter(prefix="/api/hermes", tags=["hermes"])
 
@@ -60,6 +70,15 @@ class HermesRpgPlanRequest(BaseModel):
     enabled: bool | None = None
 
 
+class HermesApprovalRequest(BaseModel):
+    """A candidate offered for approval; approvals are disabled, so it is echoed back."""
+
+    model_config = ConfigDict(extra="allow")
+
+    candidate: dict[str, Any] | None = None
+    preview_only: bool | None = None
+
+
 class HermesDiagnosticsPaths(BaseModel):
     status_path: str
     test_path: str
@@ -89,7 +108,7 @@ def hermes_status() -> dict[str, Any]:
     return hermes_assist_status_payload()
 
 
-@router.post("/test")
+@router.post("/test", responses=documented(HermesTestResponse))
 def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
     # Imported on use: diagnostics are not needed to compose the gateway.
     from app.platform.chat.contracts import hermes_assist_test_payload
@@ -103,7 +122,7 @@ def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
     )
 
 
-@router.get("/recent")
+@router.get("/recent", responses=documented(HermesRecentResponse))
 def hermes_recent() -> dict[str, Any]:
     return {"ok": True, "items": [], "count": 0, "source": "not_configured"}
 
@@ -118,12 +137,12 @@ def hermes_capabilities(mode: str | None = None) -> dict[str, Any]:
     return omnix_mode_policy_payload(mode)
 
 
-@router.get("/route-decision")
+@router.get("/route-decision", responses=documented(HermesRouteDecisionResponse))
 def hermes_route_decision(mode: str | None = None) -> dict[str, Any]:
     return omnix_route_decision_payload(mode)
 
 
-@router.get("/candidate/demo")
+@router.get("/candidate/demo", responses=documented(HermesCandidatePreviewResponse))
 def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
     from app.apps.rpg.edge.hermes.candidate import hermes_demo_candidate
 
@@ -135,12 +154,12 @@ def hermes_rpg_context(request: HermesRpgContextRequest) -> dict[str, Any]:
     return hermes_rpg_context_payload(request.model_dump())
 
 
-@router.post("/rpg/suggestions")
+@router.post("/rpg/suggestions", responses=documented(HermesRpgSuggestionsResponse))
 def hermes_rpg_suggestions(request: HermesRpgSuggestionsRequest) -> dict[str, Any]:
     return hermes_rpg_suggestions_payload(request.model_dump())
 
 
-@router.post("/rpg/turn-readout")
+@router.post("/rpg/turn-readout", responses=documented(HermesRpgTurnReadoutResponse))
 def hermes_rpg_turn_readout(request: HermesRpgTurnReadoutRequest) -> dict[str, Any]:
     return hermes_rpg_turn_readout_payload(request.model_dump())
 
@@ -150,14 +169,14 @@ def hermes_rpg_plan(request: HermesRpgPlanRequest) -> dict[str, Any]:
     return hermes_rpg_plan_payload(request.model_dump())
 
 
-@router.post("/approve")
-def hermes_approve(request: dict[str, Any] | None = None) -> dict[str, Any]:
+@router.post("/approve", responses=documented(HermesApprovalResponse))
+def hermes_approve(request: HermesApprovalRequest | None = None) -> dict[str, Any]:
     return {
         "ok": False,
         "error": "approvals_disabled",
         "approved": False,
         "mode": "blocked",
-        "request": request or {},
+        "request": request.model_dump(exclude_unset=True) if request is not None else {},
     }
 
 

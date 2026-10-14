@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from fastapi import APIRouter, Body
+from pydantic import BaseModel, ConfigDict
 
 from app.apps.rpg.edge.hermes.approved_config import (
     hermes_rpg_approved_flow_config_payload,
@@ -24,6 +25,14 @@ from app.apps.rpg.edge.hermes.sequence_contract import hermes_sequence_contract_
 from app.apps.rpg.edge.hermes.sequence_gate import hermes_sequence_apply_gate
 from app.apps.rpg.edge.hermes.sequence_loop_guard import hermes_sequence_loop_guard
 from app.apps.rpg.edge.hermes.sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    HermesRpgApprovedFlowConfig,
+    HermesRpgApprovedFlowResponse,
+    HermesRpgExecutionLedgerResponse,
+    HermesRpgSequenceResponse,
+    HermesRpgSequenceStateResponse,
+)
 
 hermes_rpg_approved_bp = APIRouter()
 
@@ -113,27 +122,58 @@ def hermes_rpg_sequence_review_payload(payload: dict[str, Any] | None) -> dict[s
     return result
 
 
-@hermes_rpg_approved_bp.post("/api/hermes/rpg/approved-flow")
-def hermes_rpg_approved_flow_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
-    return hermes_rpg_approved_flow_route_payload(payload)
+class HermesRpgApprovedFlowRequest(BaseModel):
+    """The approved-flow request; the flow validates its contents itself, so anything else passes through."""
+
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool | None = None
+    user_step: dict[str, Any] | None = None
+    replay_entry: dict[str, Any] | None = None
+    context: dict[str, Any] | None = None
 
 
-@hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/config")
+class HermesRpgSequenceRequest(BaseModel):
+    """A sequence to review; ``hermes_sequence_contract_validate`` checks it, so anything else passes through."""
+
+    model_config = ConfigDict(extra="allow")
+
+    session_id: str | None = None
+    assist_mode: str | None = None
+    sequence_id: str | None = None
+    objective: str | None = None
+    domain: str | None = None
+    state_owner: str | None = None
+    risk: str | None = None
+    status: str | None = None
+    items: list[dict[str, Any]] | None = None
+
+
+def _body(payload: BaseModel | None) -> dict[str, Any] | None:
+    return payload.model_dump(exclude_unset=True) if payload is not None else None
+
+
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/approved-flow", responses=documented(HermesRpgApprovedFlowResponse))
+def hermes_rpg_approved_flow_route(payload: HermesRpgApprovedFlowRequest | None = Body(default=None)) -> dict[str, Any]:
+    return hermes_rpg_approved_flow_route_payload(_body(payload))
+
+
+@hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/config", responses=documented(HermesRpgApprovedFlowConfig))
 def hermes_rpg_approved_flow_config_route() -> dict[str, Any]:
     return hermes_rpg_approved_flow_config_payload()
 
 
-@hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/ledger")
+@hermes_rpg_approved_bp.get("/api/hermes/rpg/approved-flow/ledger", responses=documented(HermesRpgExecutionLedgerResponse))
 def hermes_rpg_approved_flow_ledger_route(limit: int = 20, session_id: str = "", sequence_id: str = "") -> dict[str, Any]:
     return hermes_rpg_execution_ledger_recent(limit, session_id=session_id or None, sequence_id=sequence_id or None)
 
 
-@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/review")
-def hermes_rpg_sequence_review_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
-    return hermes_rpg_sequence_review_payload(payload)
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/review", responses=documented(HermesRpgSequenceResponse))
+def hermes_rpg_sequence_review_route(payload: HermesRpgSequenceRequest | None = Body(default=None)) -> dict[str, Any]:
+    return hermes_rpg_sequence_review_payload(_body(payload))
 
 
-@hermes_rpg_approved_bp.get("/api/hermes/rpg/sequence/state")
+@hermes_rpg_approved_bp.get("/api/hermes/rpg/sequence/state", responses=documented(HermesRpgSequenceStateResponse))
 def hermes_rpg_sequence_state_route(session_id: str = "") -> dict[str, Any]:
     return latest_hermes_sequence_state(session_id=session_id)
 

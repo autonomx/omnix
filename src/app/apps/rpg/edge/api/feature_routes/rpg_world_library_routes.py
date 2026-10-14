@@ -46,6 +46,16 @@ from app.apps.rpg.genesis.worlds.starter_bubble_service import promote_starter_b
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgPublishedLaunchResponse,
+    RpgStarterBubblePromotionResponse,
+    RpgStarterBubbleResponse,
+    RpgWorldDetailResponse,
+    RpgWorldGenerationMutationResponse,
+    RpgWorldLaunchRepairResponse,
+    RpgWorldLibraryResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -197,13 +207,13 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
         return
     setattr(state, _ROUTE_SENTINEL, True)
 
-    @router.get("/api/rpg/world-library")
+    @router.get("/api/rpg/world-library", responses=documented(RpgWorldLibraryResponse))
     def rpg_world_library(
         limit: int = Query(default=100, ge=1, le=500),
     ) -> dict[str, Any]:
         return read_world_library(limit=limit)
 
-    @router.get("/api/rpg/worlds/{world_id}/library")
+    @router.get("/api/rpg/worlds/{world_id}/library", responses=documented(RpgWorldDetailResponse))
     def rpg_world_detail(world_id: str) -> dict[str, Any]:
         try:
             return read_world_detail(world_id)
@@ -303,7 +313,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
             _raise_domain_error(exc)
             raise
 
-    @router.post("/api/rpg/worlds/{world_id}/generation")
+    @router.post("/api/rpg/worlds/{world_id}/generation", responses=documented(RpgWorldGenerationMutationResponse))
     def rpg_world_start_generation(
         world_id: str,
         request: Request, request_body: RpgWorldStartGenerationRequestBody,
@@ -382,6 +392,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/world-generation/{run_id}/retry-failed",
+        responses=documented(RpgWorldGenerationMutationResponse),
     )
     def rpg_world_retry_failed_generation(run_id: str) -> dict[str, Any]:
         diagnostic_id = new_rpg_trace_id("world-generation-retry")
@@ -402,6 +413,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/world-generation/{run_id}/continue",
+        responses=documented(RpgWorldGenerationMutationResponse),
     )
     def rpg_world_continue_generation(run_id: str) -> dict[str, Any]:
         diagnostic_id = new_rpg_trace_id("world-generation-continue")
@@ -449,6 +461,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.get(
         "/api/rpg/worlds/{world_id}/starter-bubble/preview",
+        responses=documented(RpgStarterBubbleResponse),
     )
     def rpg_world_starter_bubble_preview(
         world_id: str,
@@ -475,6 +488,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/worlds/{world_id}/repair-for-launch",
+        responses=documented(RpgWorldLaunchRepairResponse),
     )
     def rpg_world_repair_for_launch(
         world_id: str,
@@ -503,6 +517,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/worlds/{world_id}/starter-bubble/promote",
+        responses=documented(RpgStarterBubblePromotionResponse),
     )
     def rpg_world_starter_bubble_promote(
         world_id: str,
@@ -526,6 +541,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/scenarios/{scenario_id}/revisions/{scenario_revision}/launch",
+        responses=documented(RpgPublishedLaunchResponse),
     )
     def rpg_world_launch_scenario(
         scenario_id: str,

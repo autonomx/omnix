@@ -13,6 +13,11 @@ from app.apps.rpg.genesis.worlds.lifecycle_service import (
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgWorldDeletionEligibilityResponse,
+    RpgWorldDeletionResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -56,6 +61,7 @@ def register_rpg_world_deletion_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/deletion-eligibility",
         tags=["rpg-world"],
+        responses=documented(RpgWorldDeletionEligibilityResponse),
     )
     def rpg_world_deletion_eligibility(world_id: str) -> dict[str, Any]:
         try:
@@ -67,6 +73,7 @@ def register_rpg_world_deletion_routes(router: APIRouter, state) -> None:
     @router.delete(
         "/api/rpg/worlds/{world_id}",
         tags=["rpg-world"],
+        responses=documented(RpgWorldDeletionResponse),
     )
     def rpg_delete_world(world_id: str, request: Request, request_body: RpgDeleteWorldRequestBody) -> dict[str, Any]:
         payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))

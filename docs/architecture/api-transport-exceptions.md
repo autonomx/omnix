@@ -35,6 +35,7 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/source/download` | Source file bytes; format-specific media type |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/cover` | JPEG or PNG bytes |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/previews/{job_id}/audio` | WAV audio bytes |
+| `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio` | A finished chapter's WAV audio bytes, with range requests |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/exports/{export_id}/download` | Audio file bytes; format-specific media type |
 | `src/app/platform/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/google/callback` | 303 OAuth result redirect |
 | `src/app/platform/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/github/callback` | 303 OAuth result redirect |
@@ -95,6 +96,9 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/trading/scripts/scriptsApi.ts` | `ScriptPayload` | Script document content in `TradingDocument.payload` |
 | `web/src/features/trading/drawings/tools/types.ts` | `DrawingActionRequest` | What a drawing's context action asks of the chart (open the order ticket, say) |
 | `web/src/features/trading/intrabarData.ts` | `IntrabarRequest` | A request to the browser's intrabar loader and cache; the wire request is the query of `GET /api/trading/bars/intrabar` |
-| `web/src/features/rpg/*` | `*` | The RPG web surface, which is being retired and keeps its handwritten clients until then (DECISIONS 2026-10-03) |
+| `web/src/features/rpg/api/rpgGenesis.ts` | `LooseRequest` | The new-game form's fields before `withRpgGenesisContract` folds them into the genesis contract (the wire body is `RpgNewGameRequestBody`) |
+| `web/src/features/rpg/RpgLoadoutTabs.tsx` | `RpgItemPanelRequest` | An item panel action before it becomes a loadout-action or item-command call |
+| `web/src/features/rpg/RpgWorldGenerationDashboard.tsx` | `RetryRequest` | Mutation variables; the wire body is the generation review retry request |
+| `web/src/features/rpg/rpgTurnUiStore.ts` | `CachedResponse` | A turn response the fetch middleware keeps per session to replay into the turn UI |
 
 Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `web/src/features/assistant/workspace/live-voice-messages.ts`; story audio control messages in `web/src/features/storyteller/storyAudioMessages.ts`.

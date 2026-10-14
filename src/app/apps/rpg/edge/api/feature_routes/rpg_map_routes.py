@@ -31,6 +31,8 @@ class RpgMapActionRequestBody(_TypedRequestModel):
     target_object_id: str
     definition_revision: str
     overlay_revision: int = _typed_field(ge=0)
+    route_id: str | None = None
+    client_action_id: str | None = None
 
 
 class RpgMapDefinitionResponse(BaseModel):

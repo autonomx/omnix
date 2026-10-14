@@ -1,11 +1,27 @@
-import { omnixApiClient, type ApiRequestOptions } from '../../api/client';
+import type { ApiRequestOptions } from '../../api/client';
+import { unwrap } from '../../api/http';
+import { api } from './api/gateway';
+import type { components } from './api/generated';
 import type { RpgLaunchResponse } from './api/rpgSessionClient';
 
-export type RpgItemCompatResponse = RpgLaunchResponse & Record<string, unknown>;
+/** The compatibility route's envelope: a launch response with the action's own fields. */
+export type RpgItemCompatResponse = components['schemas']['RpgCompatibilityResponse'] & RpgLaunchResponse;
 
 export interface RpgItemApiClient {
   post<TRequest, TResponse>(path: `/api/${string}`, body: TRequest, options?: ApiRequestOptions): Promise<TResponse>;
 }
+
+/** Item actions go through the compatibility route; this sends them with the typed gateway client. */
+export const rpgItemGatewayClient: RpgItemApiClient = {
+  async post<TRequest, TResponse>(path: `/api/${string}`, body: TRequest): Promise<TResponse> {
+    if (path !== '/api/rpg/session/get') {
+      throw new Error(`RPG item actions use /api/rpg/session/get, not ${path}`);
+    }
+    return await unwrap(api.POST('/api/rpg/session/get', {
+      body: body as components['schemas']['RpgCompatibilityRequest'],
+    })) as TResponse;
+  },
+};
 
 export interface RpgItemResolveOptions {
   input?: Record<string, unknown>;
@@ -63,7 +79,7 @@ export interface RpgAbilityDetailOptions {
 export function applyRpgItemResolve(
   sessionId: string,
   options: RpgItemResolveOptions,
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {
@@ -84,7 +100,7 @@ export function applyRpgItemResolve(
 export function applyRpgItemCommand(
   sessionId: string,
   command: string,
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet({ action: 'item_command', session_id: sessionId, command }, client);
 }
@@ -92,7 +108,7 @@ export function applyRpgItemCommand(
 export function applyRpgStructuredItemAction(
   sessionId: string,
   itemAction: Record<string, unknown>,
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet({ action: 'item_action', session_id: sessionId, item_action: itemAction }, client);
 }
@@ -100,7 +116,7 @@ export function applyRpgStructuredItemAction(
 export function fetchRpgItemDetails(
   sessionId: string,
   options: RpgItemDetailOptions,
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {
@@ -118,7 +134,7 @@ export function fetchRpgItemDetails(
 export function fetchRpgAbilityDetails(
   sessionId: string,
   options: RpgAbilityDetailOptions,
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {
@@ -135,7 +151,7 @@ export function fetchRpgAbilityDetails(
 export function fetchRpgItemObjectives(
   sessionId: string,
   options: RpgItemPlanningOptions = {},
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {
@@ -153,7 +169,7 @@ export function fetchRpgItemObjectives(
 export function runRpgItemScenario(
   sessionId: string,
   options: RpgItemPlanningOptions = {},
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {
@@ -174,7 +190,7 @@ export function runRpgItemScenario(
 export function fetchRpgItemDiagnostics(
   sessionId: string,
   options: RpgItemDiagnosticsOptions = {},
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {
@@ -194,7 +210,7 @@ export function fetchRpgItemDiagnostics(
 export function runRpgItemMaintenance(
   sessionId: string,
   options: RpgItemDiagnosticsOptions = {},
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {
@@ -212,7 +228,7 @@ export function runRpgItemMaintenance(
 export function applyRpgMerchantCommand(
   sessionId: string,
   options: RpgMerchantCommandOptions,
-  client: RpgItemApiClient = omnixApiClient,
+  client: RpgItemApiClient = rpgItemGatewayClient,
 ): Promise<RpgItemCompatResponse> {
   return postRpgSessionGet(
     {

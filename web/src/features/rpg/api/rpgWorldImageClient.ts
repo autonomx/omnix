@@ -1,40 +1,11 @@
-import type { RpgWorldSummary } from './rpgWorldLibraryClient';
 import { pipelineFetch } from '../../../api/fetchPipeline';
 
-export interface RpgWorldImageAttempt {
-  job_id: string;
-  prompt: string;
-  source_content_hash: string;
-  status: string;
-  asset_id?: string | null;
-  error: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-}
+import type { components } from './generated';
+export type RpgWorldImageAttempt = components['schemas']['RpgWorldImageAttempt'];
 
-export interface RpgWorldImageTarget {
-  world_id: string;
-  target_id: string;
-  target_type: string;
-  entity_id: string;
-  role: string;
-  source_content_hash: string;
-  status: string;
-  review_state: string;
-  suggested_prompt: string;
-  active_asset_id?: string | null;
-  latest_job_id?: string | null;
-  metadata: Record<string, unknown>;
-  attempts: RpgWorldImageAttempt[];
-  created_at: string;
-  updated_at: string;
-}
+export type RpgWorldImageTarget = components['schemas']['RpgWorldImageTarget'];
 
-interface RpgWorldImageTargetsResponse {
-  ok: boolean;
-  world: RpgWorldSummary;
-  targets: RpgWorldImageTarget[];
-}
+type RpgWorldImageTargetsResponse = components['schemas']['RpgWorldImageTargetsResponse'];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await pipelineFetch(path, init);

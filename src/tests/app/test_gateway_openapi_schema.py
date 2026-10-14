@@ -25,6 +25,7 @@ _DOCUMENTED_NON_JSON_RESPONSES = {
     ("GET", "/api/audiobook/projects/{project_id}/source/download"),
     ("GET", "/api/audiobook/projects/{project_id}/cover"),
     ("GET", "/api/audiobook/projects/{project_id}/previews/{job_id}/audio"),
+    ("GET", "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio"),
     ("GET", "/api/audiobook/projects/{project_id}/exports/{export_id}/download"),
     ("GET", "/api/assistant/tools/connect/google/callback"),
     ("GET", "/api/assistant/tools/connect/github/callback"),

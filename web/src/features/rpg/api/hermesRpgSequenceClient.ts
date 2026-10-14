@@ -1,47 +1,20 @@
-import { omnixApiClient } from '../../../api/client';
+import { unwrap } from '../../../api/http';
+import { api } from './gateway';
 
-export type HermesRpgSequenceRequest = {
-  session_id?: string;
-  assist_mode?: string;
-  sequence_id?: string;
-  objective?: string;
-  domain?: string;
-  state_owner?: string;
-  risk?: string;
-  status?: string;
-  items?: Array<Record<string, unknown>>;
-};
+import type { components } from './generated';
+export type HermesRpgSequenceRequest = components['schemas']['HermesRpgSequenceRequest'];
 
-export type HermesRpgSequenceResponse = {
-  ok?: boolean;
-  source?: string;
-  validation?: Record<string, unknown>;
-  sequence?: Record<string, unknown>;
-  gate?: Record<string, unknown> | null;
-  checkpoint?: Record<string, unknown> | null;
-  loop_guard?: Record<string, unknown> | null;
-  assist_mode?: Record<string, unknown> | null;
-  sequence_state?: Record<string, unknown> | null;
-  state_changed?: boolean;
-};
+export type HermesRpgSequenceResponse = components['schemas']['HermesRpgSequenceResponse'];
 
-export type HermesRpgSequenceStateResponse = {
-  ok?: boolean;
-  source?: string;
-  state?: Record<string, unknown> | null;
-  error?: string | null;
-};
+export type HermesRpgSequenceStateResponse = components['schemas']['HermesRpgSequenceStateResponse'];
 
-export function checkHermesRpgSequence(
+export async function checkHermesRpgSequence(
   request: HermesRpgSequenceRequest,
 ): Promise<HermesRpgSequenceResponse> {
-  return omnixApiClient.post<HermesRpgSequenceRequest, HermesRpgSequenceResponse>(
-    '/api/hermes/rpg/sequence/review',
-    request,
-  );
+  return await unwrap(api.POST('/api/hermes/rpg/sequence/review', { body: request })) as HermesRpgSequenceResponse;
 }
 
-export function getHermesRpgSequenceState(sessionId = ''): Promise<HermesRpgSequenceStateResponse> {
-  const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
-  return omnixApiClient.get<HermesRpgSequenceStateResponse>(`/api/hermes/rpg/sequence/state${query}`);
+export async function getHermesRpgSequenceState(sessionId = ''): Promise<HermesRpgSequenceStateResponse> {
+  const query = sessionId ? { session_id: sessionId } : {};
+  return await unwrap(api.GET('/api/hermes/rpg/sequence/state', { params: { query } })) as HermesRpgSequenceStateResponse;
 }

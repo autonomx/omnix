@@ -13,6 +13,10 @@ from app.apps.rpg.genesis.worlds.world_bundle_import import (
     WorldBundleImportConflict,
     import_world_bundle,
 )
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgWorldBundleImportResponse,
+)
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_bundle_routes_registered"
 
@@ -73,6 +77,7 @@ def register_rpg_world_bundle_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/import",
         tags=["rpg-world"],
+        responses=documented(RpgWorldBundleImportResponse),
     )
     def rpg_import_world_bundle(
         request: Request,

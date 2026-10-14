@@ -1,126 +1,36 @@
 import { unwrap } from '../../../api/http';
 import { api } from './gateway';
 
-export type HermesStatusResponse = Record<string, unknown>;
+import type { components, paths } from './generated';
+export type HermesStatusResponse = paths['/api/hermes/status']['get']['responses'][200]['content']['application/json'];
 
-export type HermesRecentResponse = {
-  ok?: boolean;
-  items?: Array<Record<string, unknown>>;
-  count?: number;
-  source?: string;
-};
+export type HermesRecentResponse = components['schemas']['HermesRecentResponse'];
 
-export type HermesCandidatePreview = {
-  name?: string;
-  target?: string;
-  before?: Record<string, unknown>;
-  after?: Record<string, unknown>;
-  risk?: string;
-  note?: string;
-};
+export type HermesCandidatePreview = components['schemas']['HermesCandidatePreview'];
 
-export type HermesCandidatePreviewResponse = {
-  ok?: boolean;
-  candidate?: HermesCandidatePreview;
-  preview_only?: boolean;
-};
+export type HermesCandidatePreviewResponse = components['schemas']['HermesCandidatePreviewResponse'];
 
-export type HermesApprovalRequest = {
-  candidate?: HermesCandidatePreview | null;
-  preview_only?: boolean;
-};
+export type HermesApprovalRequest = components['schemas']['HermesApprovalRequest'];
 
-export type HermesApprovalResponse = {
-  ok?: boolean;
-  approved?: boolean;
-  error?: string | null;
-  mode?: string;
-  request?: Record<string, unknown>;
-};
+export type HermesApprovalResponse = components['schemas']['HermesApprovalResponse'];
 
-export type HermesRouteDecisionResponse = {
-  ok?: boolean;
-  source?: string;
-  mode?: string;
-  role?: string;
-  owner?: string;
-  review_required?: boolean;
-  capabilities?: string[];
-  boundary?: string;
-  error?: string | null;
-};
+export type HermesRouteDecisionResponse = components['schemas']['HermesRouteDecisionResponse'];
 
-export type HermesRpgSuggestion = {
-  id?: string;
-  label?: string;
-  command?: string;
-  kind?: string;
-  risk?: string;
-  requires_user_click?: boolean;
-  direct_state_write?: boolean;
-  processed_by?: string;
-  reason?: string;
-};
+export type HermesRpgSuggestion = components['schemas']['HermesRpgSuggestion'];
 
-export type HermesRpgSuggestionsRequest = {
-  session_id?: string;
-  context?: Record<string, unknown>;
-};
+export type HermesRpgSuggestionsRequest = components['schemas']['HermesRpgSuggestionsRequest'];
 
-export type HermesRpgSuggestionsResponse = {
-  ok?: boolean;
-  read_only?: boolean;
-  source?: string;
-  suggestions?: HermesRpgSuggestion[];
-  count?: number;
-  error?: string | null;
-};
+export type HermesRpgSuggestionsResponse = components['schemas']['HermesRpgSuggestionsResponse'];
 
-export type HermesRpgTurnReadoutRequest = {
-  session_id?: string;
-  turn?: Record<string, unknown>;
-  context?: Record<string, unknown>;
-};
+export type HermesRpgTurnReadoutRequest = components['schemas']['HermesRpgTurnReadoutRequest'];
 
-export type HermesRpgTurnReadoutResponse = {
-  ok?: boolean;
-  read_only?: boolean;
-  source?: string;
-  session_id?: string | null;
-  turn?: {
-    turn_id?: string | number | null;
-    command?: string;
-    category?: string;
-    narration_present?: boolean;
-  };
-  systems?: string[];
-  effect_count?: number;
-  grounding_status?: string;
-  notes?: string[];
-  error?: string | null;
-};
+export type HermesRpgTurnReadoutResponse = components['schemas']['HermesRpgTurnReadoutResponse'];
 
-export type HermesTestRequest = {
-  content?: string;
-  session_id?: string;
-  domain?: string;
-  dry_run?: boolean;
-  metadata?: Record<string, unknown>;
-};
+export type HermesTestRequest = components['schemas']['HermesTestRequest'];
 
-export type HermesTestResponse = {
-  ok?: boolean;
-  dry_run?: boolean;
-  result?: {
-    backend?: string;
-    result?: {
-      response?: string;
-    };
-  };
-  error?: string | null;
-};
+export type HermesTestResponse = components['schemas']['HermesTestResponse'];
 
-// The Hermes routes return untyped objects; these are the fields the UI reads.
+// The Hermes routes publish their responses as documentation-only contracts (web_contracts.py).
 async function hermes<T>(call: Promise<{ data?: unknown; error?: unknown; response: Response }>): Promise<T> {
   return (await unwrap(call)) as T;
 }

@@ -26,6 +26,10 @@ from app.apps.rpg.genesis.worlds.generation_worker import kick_world_generation_
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgWorldGenerationReviewListResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -189,6 +193,7 @@ def register_rpg_world_generation_review_routes(router: APIRouter, state) -> Non
 
     @router.get(
         "/api/rpg/world-generation/{run_id}/results",
+        responses=documented(RpgWorldGenerationReviewListResponse),
     )
     def rpg_world_generation_results(run_id: str) -> dict[str, Any]:
         try:

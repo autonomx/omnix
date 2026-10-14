@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { omnixApiClient } from '../../api/client';
+import { rpgItemGatewayClient } from './rpgItemApi';
 import { rpgSessionClient } from './api/rpgSessionClient';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { hotbarAbilities, inventoryItems } from './rpgUiState';
@@ -27,7 +27,7 @@ function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }
   const getRpgSession = vi.spyOn(rpgSessionClient, 'getRpgSession').mockResolvedValue(sessionPayload as never);
   const applyRpgLoadoutAction = vi.spyOn(rpgSessionClient, 'applyRpgLoadoutAction').mockResolvedValue({ ok: true } as never);
   const includeMerchantEntries = options.merchantEntries ?? true;
-  const post = vi.spyOn(omnixApiClient, 'post').mockImplementation(async (_path: `/api/${string}`, body: unknown) => {
+  const post = vi.spyOn(rpgItemGatewayClient, 'post').mockImplementation(async (_path: `/api/${string}`, body: unknown) => {
     const payload = body as Record<string, unknown>;
     if (payload.action === 'item_detail') {
       return {

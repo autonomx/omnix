@@ -16,6 +16,10 @@ from app.apps.rpg.genesis.worlds.profile_aware_world_images import (
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
 from app.prompts import prompt_template
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgWorldImageTargetsResponse,
+)
 
 _PROMPT_1 = prompt_template('rpg.api_feature_routes_rpg_world_image_routes.rpg_regenerate_world_image_prompts', "1", "/api/rpg/worlds/{world_id}/image-prompts/regenerate")
 
@@ -82,6 +86,7 @@ def register_rpg_world_image_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/image-targets",
         tags=["rpg-world"],
+        responses=documented(RpgWorldImageTargetsResponse),
     )
     def rpg_world_image_targets(world_id: str) -> dict[str, Any]:
         try:
@@ -149,6 +154,7 @@ def register_rpg_world_image_routes(router: APIRouter, state) -> None:
     @router.patch(
         "/api/rpg/worlds/{world_id}/image-targets/{target_id:path}",
         tags=["rpg-world"],
+        responses=documented(RpgWorldImageTargetsResponse),
     )
     def rpg_update_world_image_target(
         world_id: str,

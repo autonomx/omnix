@@ -20,6 +20,13 @@ from app.apps.rpg.genesis.worlds.dossier_regeneration_preview import (
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgAuthoringDossierPreviewResponse,
+    RpgAuthoringEntityMutationResponse,
+    RpgWorldDossierEnrichmentResponse,
+    RpgWorldDossierQualityResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -90,6 +97,7 @@ def register_rpg_world_dossier_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/dossier-quality",
         tags=["rpg-world"],
+        responses=documented(RpgWorldDossierQualityResponse),
     )
     def rpg_world_dossier_quality(world_id: str) -> dict[str, Any]:
         try:
@@ -101,6 +109,7 @@ def register_rpg_world_dossier_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/enrich-dossiers",
         tags=["rpg-world"],
+        responses=documented(RpgWorldDossierEnrichmentResponse),
     )
     def rpg_enrich_world_dossiers(
         world_id: str,
@@ -141,6 +150,7 @@ def register_rpg_world_dossier_routes(router: APIRouter, state) -> None:
     @router.patch(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/dossier",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringEntityMutationResponse),
     )
     def rpg_update_world_entity_dossier(
         world_id: str,
@@ -173,6 +183,7 @@ def register_rpg_world_dossier_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/regenerate-dossier-preview",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringDossierPreviewResponse),
     )
     def rpg_preview_world_entity_dossier_regeneration(
         world_id: str,
@@ -204,6 +215,7 @@ def register_rpg_world_dossier_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/regenerate-dossier",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringEntityMutationResponse),
     )
     def rpg_regenerate_world_entity_dossier(
         world_id: str,

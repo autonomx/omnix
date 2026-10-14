@@ -29,6 +29,10 @@ from app.apps.rpg.genesis.forge.runtime_materialization import (
 )
 from app.apps.rpg.session.service import load_session
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
+from app.apps.rpg.edge.api.web_contracts import (
+    documented,
+    RpgCampaignLoreResponse,
+)
 
 
 class LoreDiscoveryRequest(BaseModel):
@@ -127,6 +131,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/sessions/{session_id}/lore",
         tags=["rpg-session"],
+        responses=documented(RpgCampaignLoreResponse),
     )
     def rpg_campaign_lore(session_id: str) -> dict[str, Any]:
         session = _session_or_404(session_id)
