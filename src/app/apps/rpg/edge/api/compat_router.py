@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import JsonValue, RootModel
 
-from .compat.rpg_adventure_compat import (
+from .payloads.adventure import (
     adventure_simulation_state_payload,
     compare_adventure_entity_payload,
     compare_adventure_world_payload,
@@ -17,22 +17,22 @@ from .compat.rpg_adventure_compat import (
     simulate_adventure_step_payload,
     validate_adventure_payload,
 )
-from .compat.rpg_inspection_compat import (
+from .payloads.inspection import (
     inspect_npc_reasoning_payload,
     inspect_tick_diff_payload,
     inspect_timeline_payload,
     inspect_timeline_tick_payload,
     inspect_world_events_payload,
 )
-from .compat.rpg_player_compat import (
+from .payloads.player import (
     player_codex_payload,
     player_encounter_payload,
     player_journal_payload,
     player_objectives_payload,
     player_state_payload,
 )
-from .compat.rpg_session_compat import list_rpg_sessions_payload
-from .compat.rpg_session_genesis_compat import get_rpg_session_payload
+from .payloads.sessions import list_rpg_sessions_payload
+from .payloads.genesis_sessions import get_rpg_session_payload
 
 
 class RpgCompatibilityRequest(RootModel[dict[str, JsonValue]]):
