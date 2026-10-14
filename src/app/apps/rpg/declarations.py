@@ -30,6 +30,36 @@ def _delete_narration_events(connection: Any, retention_days: int, batch_size: i
     ).rowcount)
 
 
+SNAPSHOTS_KEPT_PER_CAMPAIGN = 20
+SNAPSHOT_KEPT_EVERY_REVISIONS = 100
+
+
+def _delete_snapshots(connection: Any, retention_days: int, batch_size: int) -> int:
+    """Snapshots outside each campaign's newest 20 and not at a 100th revision (WP-5.2).
+
+    ``retention_days`` is a grace period: a snapshot is kept at least that long.
+    Blob-backed snapshots are left to their asset's lifecycle.
+    """
+    return int(connection.execute(
+        """
+        DELETE FROM omnix_rpg_snapshots
+         WHERE id IN (
+             SELECT id
+               FROM (SELECT id, revision, created_at, blob_asset_id,
+                            row_number() OVER (PARTITION BY campaign_id ORDER BY revision DESC) AS newest
+                       FROM omnix_rpg_snapshots) AS ranked
+              WHERE newest > %s
+                AND revision %% %s <> 0
+                AND blob_asset_id IS NULL
+                AND created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+              ORDER BY created_at, id
+              LIMIT %s
+         )
+        """,
+        (SNAPSHOTS_KEPT_PER_CAMPAIGN, SNAPSHOT_KEPT_EVERY_REVISIONS, max(1, int(retention_days)), max(1, int(batch_size))),
+    ).rowcount)
+
+
 def _count(table: str) -> Any:
     def count(connection: Any) -> int:
         return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -39,10 +69,12 @@ def _count(table: str) -> Any:
 
 RETENTION = (
     RetentionDeclaration("rpg_narration_events", delete=_delete_narration_events, capacity_cleanup=True),
+    RetentionDeclaration("rpg_snapshots", delete=_delete_snapshots),
 )
 CAPACITY = (
     CapacityCount("rpg_turns", count=_count("omnix_rpg_turns")),
     CapacityCount("rpg_narration_events", count=_count("omnix_rpg_narration_events")),
+    CapacityCount("rpg_snapshots", count=_count("omnix_rpg_snapshots")),
 )
 
 

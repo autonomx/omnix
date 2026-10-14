@@ -202,3 +202,49 @@ def test_diagnostics_report_the_latest_run_without_its_error_text(database) -> N
     assert run["status"] == "failed" and run["deleted"] == {"jobs": 3}
     assert run["error_class"] == "UndefinedTable"
     assert "omnix_private_table" not in str(run)
+
+
+def _campaign_with_snapshots(admin, revisions: range, *, days_ago: int) -> str:
+    from app.runtime.tenant_context import LOCAL_USER_ID
+
+    campaign_id = f"campaign:retention:{uuid.uuid4().hex}"
+    admin.execute(
+        """INSERT INTO omnix_rpg_campaigns (id, workspace_id, owner_user_id, title, revision, state_jsonb,
+                                             state_hash, engine_version, schema_version, seed)
+           VALUES (%s, %s, %s, 'Retention', %s, '{}'::jsonb, %s, 'test', 'test', 'seed')""",
+        (campaign_id, WORKSPACE, LOCAL_USER_ID, revisions[-1], "0" * 64),
+    )
+    for revision in revisions:
+        admin.execute(
+            """INSERT INTO omnix_rpg_snapshots (id, workspace_id, campaign_id, revision, snapshot_jsonb, state_hash,
+                                                 engine_version, schema_version, created_at)
+               VALUES (%s, %s, %s, %s, '{}'::jsonb, %s, 'test', 'test', now() - make_interval(days => %s))""",
+            (f"snapshot:{campaign_id}:{revision}", WORKSPACE, campaign_id, revision, "0" * 64, days_ago),
+        )
+    return campaign_id
+
+
+def _snapshot_revisions(admin, campaign_id: str) -> list[int]:
+    rows = admin.execute(
+        "SELECT revision FROM omnix_rpg_snapshots WHERE campaign_id = %s ORDER BY revision", (campaign_id,)
+    ).fetchall()
+    return [int(row[0]) for row in rows]
+
+
+def test_rpg_snapshots_keep_the_newest_twenty_and_every_hundredth_revision(database) -> None:
+    with _admin() as admin:
+        long_game = _campaign_with_snapshots(admin, range(1, 251), days_ago=3)
+        short_game = _campaign_with_snapshots(admin, range(1, 6), days_ago=3)
+        recent_game = _campaign_with_snapshots(admin, range(1, 31), days_ago=0)
+    try:
+        report = RetentionWorker(database, batch_size=50).run_once()
+        with _admin() as admin:
+            assert _snapshot_revisions(admin, long_game) == [100, 200, *range(231, 251)]
+            assert _snapshot_revisions(admin, short_game) == [1, 2, 3, 4, 5]
+            # Inside the one-day grace period nothing goes, even past the newest 20.
+            assert _snapshot_revisions(admin, recent_game) == list(range(1, 31))
+        assert report.deleted["rpg_snapshots"] >= 228
+    finally:
+        with _admin() as admin:
+            for campaign_id in (long_game, short_game, recent_game):
+                admin.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))

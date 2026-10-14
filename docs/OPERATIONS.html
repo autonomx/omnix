@@ -524,6 +524,14 @@ docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 <td>Trading strategy events</td>
 <td>180 days, disabled by default</td>
 </tr>
+<tr>
+<td>RPG narration events</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td>RPG snapshots</td>
+<td>Each campaign&#x27;s newest 20 and every 100th revision; others after 1 day</td>
+</tr>
 </tbody></table></div>
 <p>Change a policy by updating its row (<code>retention_days</code>, <code>enabled</code>). Audit retention runs only through <code>python -m app.persistence retention</code>, which uses the migration role and runs every enabled policy. Each run is recorded in <code>omnix_lifecycle_cleanup_runs</code>.</p>
 <h3 id="live-events">Live events</h3>

@@ -497,6 +497,8 @@ The scheduler deletes old rows every hour, in small batches, following
 | Stopped runtime nodes | 7 days |
 | Audit events | 365 days, maintenance only |
 | Trading strategy events | 180 days, disabled by default |
+| RPG narration events | 1 day |
+| RPG snapshots | Each campaign's newest 20 and every 100th revision; others after 1 day |
 
 Change a policy by updating its row (`retention_days`, `enabled`). Audit
 retention runs only through `python -m app.persistence retention`, which
