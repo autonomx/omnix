@@ -44,6 +44,16 @@ def _campaign(row: Any) -> dict[str, Any]:
     }
 
 
+# Top-level state keys a session list row carries (``app.apps.rpg.session.list_summaries``).
+SESSION_SUMMARY_STATE_KEYS = (
+    "location",
+    "current_location",
+    "current_location_id",
+    "current_location_name",
+    "published_world",
+    "environment_snapshot",
+)
+
 _CAMPAIGN_COLUMNS = """
 id, workspace_id, owner_user_id, title, revision, state_jsonb, state_hash,
 engine_version, schema_version, seed, status, created_at, updated_at, metadata
@@ -175,6 +185,62 @@ class PostgresRpgRepository:
             ),
         ).fetchall()
         return [_campaign(row) for row in rows]
+
+    def list_campaign_summary_sources(
+        self,
+        context: TenantContext,
+        *,
+        limit: int = 100,
+        status: str = "active",
+        before: tuple[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """One page of campaigns, newest first, each with only what a list row reads of its state.
+
+        ``source`` keeps the session document's shape (``manifest``, and of
+        ``state`` the world and region environments, the scene's environment
+        context and the opening location keys), so the list never loads,
+        transfers or parses a whole saved game.
+        """
+        # The page is chosen first and each document decompressed once (``||``
+        # returns it in memory): every operator on the stored column would
+        # decompress the whole document again.
+        rows = self.connection.execute(
+            f"""
+            SELECT page.id, page.updated_at, jsonb_build_object(
+                       'manifest', page.manifest,
+                       'state', jsonb_build_object(
+                           'world', jsonb_build_object(
+                               'environment', page.state #> '{{world,environment}}',
+                               'regions', (
+                                   SELECT jsonb_object_agg(region.key, jsonb_build_object(
+                                              'environment', region.value -> 'environment'))
+                                     FROM jsonb_each(CASE
+                                              WHEN jsonb_typeof(page.state #> '{{world,regions}}') = 'object'
+                                              THEN page.state #> '{{world,regions}}'
+                                              ELSE '{{}}'::jsonb END) AS region
+                                    WHERE jsonb_typeof(region.value) = 'object')),
+                           'scene', jsonb_build_object(
+                               'environment_context', page.state #> '{{scene,environment_context}}'),
+                           {", ".join(f"'{key}', page.state -> '{key}'" for key in SESSION_SUMMARY_STATE_KEYS)}))
+              FROM (SELECT id, updated_at, doc -> 'manifest' AS manifest, doc -> 'state' AS state
+                      FROM (SELECT id, updated_at, state_jsonb || '{{}}'::jsonb AS doc
+                              FROM omnix_rpg_campaigns
+                             WHERE workspace_id = %s AND status = %s
+                               AND (%s::timestamptz IS NULL OR (updated_at, id) < (%s::timestamptz, %s::text))
+                             ORDER BY updated_at DESC, id DESC LIMIT %s) AS decompressed
+                    OFFSET 0) AS page
+             ORDER BY page.updated_at DESC, page.id DESC
+            """,
+            (
+                context.workspace_id,
+                status,
+                before[0] if before else None,
+                before[0] if before else None,
+                before[1] if before else None,
+                page_limit(limit, default=100),
+            ),
+        ).fetchall()
+        return [{"id": str(row[0]), "updated_at": row[1].isoformat(), "source": dict(row[2])} for row in rows]
 
     def iter_campaigns(self, context: TenantContext, *, status: str = "active"):
         """Every campaign with ``status``, newest first, a page at a time."""

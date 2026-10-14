@@ -10,6 +10,7 @@ from app.apps.rpg.foundation.persistence.rpg_repository import canonical_json, s
 from app.apps.rpg.foundation.persistence.rpg_session_save_policy import session_save_deferred
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import register_repository_specs
+from app.runtime.pagination import MAX_PAGE_SIZE
 
 
 def _database() -> PostgresDatabase:
@@ -189,10 +190,24 @@ def list_session_summaries_from_postgres(
 
     from app.apps.rpg.session.list_summaries import session_list_summary
 
-    sessions = list_sessions_from_postgres()
-    if limit is not None:
-        sessions = sessions[: max(0, int(limit))]
-    return [session_list_summary(session) for session in sessions]
+    wanted = None if limit is None else max(0, int(limit))
+    sources: list[dict[str, Any]] = []
+    database = _database()
+    context = _context(database)
+    with unit_of_work(database) as work:
+        # Active campaigns first, then archived, each newest first; only the rows the page shows.
+        for status in ("active", "archived"):
+            before: tuple[str, str] | None = None
+            while wanted is None or len(sources) < wanted:
+                size = MAX_PAGE_SIZE if wanted is None else min(MAX_PAGE_SIZE, wanted - len(sources))
+                page = work.rpg.list_campaign_summary_sources(context, limit=size, status=status, before=before)
+                sources.extend(page)
+                if len(page) < size:
+                    break
+                before = (page[-1]["updated_at"], page[-1]["id"])
+        work.rollback()
+    return [session_list_summary(_campaign_state_for_listing({"id": row["id"], "state": row["source"]}))
+            for row in sources]
 
 
 def archive_session_in_postgres(session_id: str) -> dict[str, Any]:

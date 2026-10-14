@@ -5,7 +5,7 @@ composed against ``OMNIX_DATABASE_URL`` (no background workers start) and
 each route is requested ``--samples`` times; the report gives p50/p95/max per
 route and flags routes whose p95 exceeds the budget.
 
-    OMNIX_DATABASE_URL=postgresql://omnix:omnix@127.0.0.1:55433/omnix_bench \\
+    OMNIX_AUTH_MODE=disabled OMNIX_DATABASE_URL=postgresql://omnix:omnix@127.0.0.1:55433/omnix_bench \\
         python scripts/benchmark_list_endpoints.py --output docs/measurements/query-pass.json
 """
 from __future__ import annotations
@@ -43,6 +43,7 @@ def _sample_ids(url: str) -> dict[str, str]:
             "session_id": one("SELECT session_id FROM omnix_chat_messages GROUP BY session_id ORDER BY count(*) DESC LIMIT 1"),
             "run_id": one("SELECT run_id FROM omnix_agent_run_events GROUP BY run_id ORDER BY count(*) DESC LIMIT 1"),
             "strategy_id": one("SELECT strategy_id FROM omnix_trading_strategy_events GROUP BY strategy_id ORDER BY count(*) DESC LIMIT 1"),
+            "campaign_id": one("SELECT id FROM omnix_rpg_campaigns WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1"),
         }
 
 
@@ -61,6 +62,8 @@ async def measure(samples: int) -> dict:
         f"/api/agent-runs/{ids['run_id']}/events?limit=500",
         "/api/trading/strategies",
         f"/api/trading/strategies/{ids['strategy_id']}/events",
+        "/api/rpg/sessions?limit=100",
+        f"/api/rpg/sessions/{ids['campaign_id']}",
     ]
     gateway = create_production_app()
     results = {}

@@ -17,6 +17,7 @@ from app.apps.rpg.session.durable_store import (
     ensure_session_dir,
 )
 from app.apps.rpg.session.migrations import migrate_session_payload
+from app.apps.rpg.foundation.persistence.rpg_repository import SESSION_SUMMARY_STATE_KEYS
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 logger = logging.getLogger(__name__)
@@ -86,14 +87,7 @@ def _state_environment_summary(state: Mapping[str, Any]) -> Dict[str, Any]:
     # response: the RPG shell is rendered from this bounded row before a full
     # session is requested.  Keeping these small fields prevents the generic
     # new-game template environment from leaking into a published world.
-    for key in (
-        "location",
-        "current_location",
-        "current_location_id",
-        "current_location_name",
-        "published_world",
-        "environment_snapshot",
-    ):
+    for key in SESSION_SUMMARY_STATE_KEYS:
         value = state.get(key)
         if isinstance(value, (str, int, float, bool, dict)):
             summary[key] = value
