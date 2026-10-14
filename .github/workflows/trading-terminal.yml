@@ -48,7 +48,7 @@ jobs:
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
       - name: Check out immutable workflow head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Verify exact checked-out head
