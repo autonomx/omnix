@@ -1,8 +1,13 @@
 import { audiobookApi } from './audiobookApi';
 import { audiobook, base, reclassifyAudiobook } from './audiobookWorkspaceModel';
-import type { ChapterSummary } from './audiobookTypes';
+import type { ChapterSummary, Span } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
 import { api } from './api/gateway';
+
+/** Pronunciation changes worth showing; page-layout whitespace folded into a line break is not one. */
+function wordChanges(transformations: Span['speech_plan']['transformations']) {
+  return transformations.filter((item) => item.rule !== 'layout_whitespace');
+}
 
 /** Leaves the whole chapter out of the audiobook, or brings it back. */
 function ChapterAudioToggle({ ws, chapter }: { ws: AudiobookWorkspaceModel; chapter: ChapterSummary }) {
@@ -138,7 +143,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
                       <button disabled={busy || !spokenTerm.trim()}>Save for whole book</button>
                     </form>}
                     <p className="audiobook-span-spoken"><strong>Spoken text</strong> {span.speech_plan.tts_input_text}</p>
-                    {span.speech_plan.transformations.length > 0 && <small>Speech changes: {span.speech_plan.transformations.map((item) => `${item.source} → ${item.spoken}`).join(', ')}</small>}
+                    {wordChanges(span.speech_plan.transformations).length > 0 && <small>Speech changes: {wordChanges(span.speech_plan.transformations).map((item) => `${item.source} → ${item.spoken}`).join(', ')}</small>}
                     {issue && <p className="audiobook-review-reason"><strong>Review: {issue.reason}</strong> {JSON.stringify(issue.evidence ?? {})}</p>}
                     {edit && <div role="group" className="audiobook-annotation-controls" aria-label="Span interpretation controls">
                       <label>Speaker<select aria-label="Selected span speaker" value={edit.speaker_id} onChange={(event) => changeSpanEdit({ speaker_id: event.target.value })}>
