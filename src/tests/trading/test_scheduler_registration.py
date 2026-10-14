@@ -17,9 +17,9 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
     assert FEATURE.background_workers == ()
-    # 25 monitors (with the alert notification outbox, TVP-0.5a, market breadth, TVP-6.6, and SEC fundamentals, TVP-9.1), the generic strategy runner and the
-    # prospective-gap input import (WP-8.3).
-    assert len(FEATURE.scheduled_tasks) == 27
+    # 26 monitors (with the alert notification outbox, TVP-0.5a, market breadth, TVP-6.6, SEC fundamentals, TVP-9.1,
+    # and the overnight SHADOW group), the generic strategy runner and the prospective-gap input import (WP-8.3).
+    assert len(FEATURE.scheduled_tasks) == 28
     config = RuntimeConfig()
     context = FeatureContext(
         feature_id="trading",
@@ -41,7 +41,7 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
 
     assert all(isinstance(task, ScheduledTaskSpec) for task in tasks)
     task_ids = [task.task_id for task in tasks]
-    assert len(task_ids) == len(set(task_ids)) == 25
+    assert len(task_ids) == len(set(task_ids)) == 26
     assert all(task.interval_seconds > 0 for task in tasks)
     assert any(task.executor.value == "async" for task in tasks)
     assert any(task.executor.value == "thread" for task in tasks)
@@ -57,6 +57,7 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     assert startup_tasks == {
         "metric_monitor",
         "strategy_monitor",
+        "strategy_overnight_monitor",  # provisions the overnight SHADOW group
         "strategy_solana_ai_monitor",
         "strategy_universe_archive_monitor",
     }
@@ -122,7 +123,7 @@ def test_monitors_share_the_scheduled_base_and_have_no_loops_of_their_own(monkey
     for factory in FEATURE.scheduled_tasks[:-2]:
         factory(context)
     monitors = list(vars(state).values())
-    assert len(monitors) == 25
+    assert len(monitors) == 26
     # Stream owners keep a connection open under their task; they are not loops.
     streams = {"AlpacaIexStatusMonitor"}
     for monitor in monitors:
@@ -167,6 +168,36 @@ def test_a_failed_cycle_is_logged_with_the_monitor_event_and_reaches_the_schedul
     for callback in spec.on_shutdown:
         callback()
     assert monitor.scheduled is False
+
+
+def test_monitor_cycles_get_a_trading_timeout_and_retry_after_one():
+    from app.apps.trading.monitor_task import (
+        TRADING_MONITOR_TIMEOUT_SECONDS,
+        ScheduledTradingMonitor,
+        TradingMonitorTask,
+        scheduled_task_spec,
+    )
+
+    class Quick(ScheduledTradingMonitor):
+        interval_seconds = 30.0
+
+        async def run_once(self):
+            return None
+
+    class Slow(Quick):
+        interval_seconds = 900.0
+
+    class Declared(Quick):
+        timeout_seconds = 42.0
+
+    def spec(monitor):
+        return scheduled_task_spec(TradingMonitorTask(name="tests.timeout", monitor=monitor, enabled=lambda: True))
+
+    # A busy open legitimately runs past a minute; one slow cycle must not stop the monitor.
+    assert spec(Quick()).timeout_seconds == TRADING_MONITOR_TIMEOUT_SECONDS == 300.0
+    assert spec(Slow()).timeout_seconds == 900.0
+    assert spec(Declared()).timeout_seconds == 42.0
+    assert all(spec(m()).disable_on_timeout is False for m in (Quick, Slow, Declared))
 
 
 def test_side_work_runs_once_per_key_beside_the_cycle_and_stops_with_the_task():

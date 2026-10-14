@@ -1989,6 +1989,34 @@
   },
   {
     "default": "1",
+    "description": "Controls trading overnight shadow autoprovision for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading overnight shadow autoprovision in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "1",
+    "description": "Controls trading overnight shadow monitor for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading overnight shadow monitor in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "1",
     "description": "Controls trading paper active interval seconds for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_PAPER_ACTIVE_INTERVAL_SECONDS",

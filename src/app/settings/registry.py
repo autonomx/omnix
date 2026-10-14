@@ -30,6 +30,7 @@ CORE_SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec("image", dict, deepcopy(DEFAULT_SETTINGS["image"])),
     SettingSpec("rpg_visual", dict, deepcopy(DEFAULT_SETTINGS["rpg_visual"])),
     SettingSpec("settings_control_center", dict, {}),
+    SettingSpec("trading_market_data", dict, {}),
 )
 
 

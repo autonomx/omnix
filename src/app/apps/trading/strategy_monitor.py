@@ -93,6 +93,18 @@ def _current_session_1m_integrity(
     )
 
 
+STRATEGY_MONITOR_OWNER = "strategy_monitor"
+
+
+def strategy_monitor_owns(config) -> bool:
+    """Whether this monitor evaluates the configuration's kind (registry ``owner``)."""
+
+    from .strategies.registry import MonitorOwnedStrategy
+
+    entry = type(config).strategy_registry.get(config.strategy_kind)
+    return isinstance(entry, MonitorOwnedStrategy) and entry.owner == STRATEGY_MONITOR_OWNER
+
+
 def _flag(name: str, default: str = "1") -> bool:
     return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -697,6 +709,10 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
             for config in configs:
                 # The strategy runner runs these instead (strategy runner WP).
                 if runner_owned(config):
+                    continue
+                # Kinds owned by another monitor (e.g. overnight_shadow_v1) are not
+                # gap-pullback or Stoch RSI configurations; never evaluate them here.
+                if not strategy_monitor_owns(config):
                     continue
                 try:
                     await self._run_config(config, strategy_repository, paper_repository, market_service)

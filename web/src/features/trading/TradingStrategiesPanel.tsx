@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
 import { tradingHermesResearchApi } from './tradingHermesResearchApi';
+import { OvernightShadowSummary } from './OvernightShadowSummary';
 import { TradingStrategyBacktest } from './TradingStrategyBacktest';
 import { TradingStrategyExecutionCredentials } from './TradingStrategyExecutionCredentials';
 import { TRADING_STRATEGY_DEFINITIONS } from './tradingStrategyCatalog';
@@ -266,6 +267,16 @@ function compact(value: string | number | null | undefined): string {
 function percent(value: string | number | null | undefined): string {
   const parsed = numberValue(value);
   return parsed === null ? '—' : `${parsed.toFixed(parsed >= 10 ? 1 : 2)}%`;
+}
+
+/** Which editor a configuration opens in; the SHADOW overnight group is read-only (no draft). */
+function editorDrafts(config: TradingStrategyConfig | null): {
+  draft: GapPullbackTradingStrategyConfig | null;
+  stochDraft: StochRsi5mTradingStrategyConfig | null;
+} {
+  if (config?.strategy_kind === 'stoch_rsi_5m_v1') return { draft: null, stochDraft: structuredClone(config) };
+  if (config?.strategy_kind === 'overnight_shadow_v1') return { draft: null, stochDraft: null };
+  return { draft: config ? structuredClone(config) : null, stochDraft: null };
 }
 
 function latestByEventType(events: StrategyEvent[], eventType: string): Map<string, StrategyEvent> {
@@ -590,13 +601,9 @@ export function TradingStrategiesPanel() {
         : nextStrategies[0]?.strategy_id ?? '';
       setSelectedId(nextId);
       const current = nextStrategies.find((item) => item.strategy_id === nextId) ?? null;
-      if (current?.strategy_kind === 'stoch_rsi_5m_v1') {
-        setDraft(null);
-        setStochDraft(structuredClone(current));
-      } else {
-        setStochDraft(null);
-        setDraft(current ? structuredClone(current) : null);
-      }
+      const drafts = editorDrafts(current);
+      setDraft(drafts.draft);
+      setStochDraft(drafts.stochDraft);
       if (current) await refreshDetail(current.strategy_id, current.active_universe_id);
       else {
         setEvents([]);
@@ -640,13 +647,9 @@ export function TradingStrategiesPanel() {
 
   useEffect(() => {
     if (!selected) return;
-    if (selected.strategy_kind === 'stoch_rsi_5m_v1') {
-      setDraft(null);
-      setStochDraft(structuredClone(selected));
-    } else {
-      setStochDraft(null);
-      setDraft(structuredClone(selected));
-    }
+    const drafts = editorDrafts(selected);
+    setDraft(drafts.draft);
+    setStochDraft(drafts.stochDraft);
     setResearchReviews([]);
     void refreshDetail(selected.strategy_id, selected.active_universe_id).catch((error) => {
       setNotice(error instanceof Error ? error.message : String(error));
@@ -1149,7 +1152,9 @@ export function TradingStrategiesPanel() {
       </aside>
 
       <section>
-        {stochDraft ? (
+        {selected?.strategy_kind === 'overnight_shadow_v1' ? (
+          <OvernightShadowSummary strategy={selected} events={events} />
+        ) : stochDraft ? (
           <StochRsi5mEditor
             draft={stochDraft}
             events={events}

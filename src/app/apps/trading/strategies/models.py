@@ -269,6 +269,84 @@ class StochRsi5mConfig(BaseModel):
         return self
 
 
+OvernightArmId = Literal["day2-runner", "strong-close"]
+
+
+class OvernightArmConfig(BaseModel):
+    """One overnight research arm: a candidate qualifies when every rule holds.
+
+    ``change`` is the decision price versus the prior regular close; ``volume_ratio``
+    is the session's regular volume so far versus the 20-session average daily
+    volume; ``close_location`` is where the price sits in the session's range
+    (0 = low, 1 = high).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    arm_id: OvernightArmId
+    enabled: bool = True
+    min_change: Decimal = Field(ge=0, le=10)
+    max_change: Decimal | None = Field(default=None, gt=0, le=100)
+    min_volume_ratio: Decimal = Field(ge=0, le=1_000)
+    min_close_location: Decimal = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_change_band(self):
+        if self.max_change is not None and self.max_change <= self.min_change:
+            raise ValueError("max_change must exceed min_change")
+        return self
+
+
+def _default_overnight_arms() -> tuple[OvernightArmConfig, ...]:
+    return (
+        OvernightArmConfig(arm_id="day2-runner", min_change=Decimal("0.30"),
+                           min_volume_ratio=Decimal("5"), min_close_location=Decimal("0.80")),
+        OvernightArmConfig(arm_id="strong-close", min_change=Decimal("0.10"), max_change=Decimal("0.30"),
+                           min_volume_ratio=Decimal("3"), min_close_location=Decimal("0.90")),
+    )
+
+
+class OvernightShadowConfig(BaseModel):
+    """Overnight-gap research group: pick near the close, label the next morning.
+
+    SHADOW only. At ``decision_et`` each enabled arm picks up to
+    ``max_picks_per_arm`` common stocks from a full-market scan of regular-session
+    5-minute SIP bars that ended by ``data_cutoff_et`` (the free SIP feed is
+    15 minutes delayed). Picks are labelled after ``label_after_et`` on the next
+    session: entry at the ``entry_et`` one-minute open, primary exit at the 09:30
+    open, plus the last premarket trade before 08:00 and the 09:45 open.
+    Nothing here places, sizes or routes an order.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    strategy_id: Literal["overnight_shadow_v1"] = "overnight_shadow_v1"
+    strategy_version: Literal["1.0.0"] = "1.0.0"
+    data_cutoff_et: time = time(15, 30)
+    decision_et: time = time(15, 50)
+    entry_et: time = time(15, 55)
+    label_after_et: time = time(10, 5)
+    minimum_price: Decimal = Field(default=Decimal("1"), gt=0)
+    maximum_price: Decimal = Field(default=Decimal("20"), gt=0)
+    max_picks_per_arm: int = Field(default=5, ge=1, le=20)
+    adv_sessions: int = Field(default=20, ge=5, le=60)
+    min_adv_sessions: int = Field(default=10, ge=1, le=60)
+    arms: tuple[OvernightArmConfig, ...] = Field(default_factory=_default_overnight_arms, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_overnight_config(self):
+        if self.maximum_price <= self.minimum_price:
+            raise ValueError("maximum_price must exceed minimum_price")
+        if not (self.data_cutoff_et < self.decision_et < self.entry_et):
+            raise ValueError("data_cutoff_et < decision_et < entry_et is required")
+        if self.min_adv_sessions > self.adv_sessions:
+            raise ValueError("min_adv_sessions must not exceed adv_sessions")
+        arm_ids = [arm.arm_id for arm in self.arms]
+        if len(set(arm_ids)) != len(arm_ids):
+            raise ValueError("overnight arm ids must be unique")
+        return self
+
+
 class GapPullbackFeatures(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

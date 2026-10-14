@@ -28599,6 +28599,348 @@
         "title": "OutcomeMeasurementsV1",
         "type": "object"
       },
+      "OvernightArmConfig-Input": {
+        "additionalProperties": false,
+        "description": "One overnight research arm: a candidate qualifies when every rule holds.\n\n``change`` is the decision price versus the prior regular close; ``volume_ratio``\nis the session's regular volume so far versus the 20-session average daily\nvolume; ``close_location`` is where the price sits in the session's range\n(0 = low, 1 = high).",
+        "properties": {
+          "arm_id": {
+            "enum": [
+              "day2-runner",
+              "strong-close"
+            ],
+            "title": "Arm Id",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "max_change": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 100,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Change"
+          },
+          "min_change": {
+            "anyOf": [
+              {
+                "maximum": 10,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Min Change"
+          },
+          "min_close_location": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Min Close Location"
+          },
+          "min_volume_ratio": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Min Volume Ratio"
+          }
+        },
+        "required": [
+          "arm_id",
+          "min_change",
+          "min_volume_ratio",
+          "min_close_location"
+        ],
+        "title": "OvernightArmConfig",
+        "type": "object"
+      },
+      "OvernightArmConfig-Output": {
+        "additionalProperties": false,
+        "description": "One overnight research arm: a candidate qualifies when every rule holds.\n\n``change`` is the decision price versus the prior regular close; ``volume_ratio``\nis the session's regular volume so far versus the 20-session average daily\nvolume; ``close_location`` is where the price sits in the session's range\n(0 = low, 1 = high).",
+        "properties": {
+          "arm_id": {
+            "enum": [
+              "day2-runner",
+              "strong-close"
+            ],
+            "title": "Arm Id",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "max_change": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Change"
+          },
+          "min_change": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Min Change",
+            "type": "string"
+          },
+          "min_close_location": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Min Close Location",
+            "type": "string"
+          },
+          "min_volume_ratio": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Min Volume Ratio",
+            "type": "string"
+          }
+        },
+        "required": [
+          "arm_id",
+          "min_change",
+          "min_volume_ratio",
+          "min_close_location",
+          "enabled",
+          "max_change"
+        ],
+        "title": "OvernightArmConfig",
+        "type": "object"
+      },
+      "OvernightShadowConfig-Input": {
+        "additionalProperties": false,
+        "description": "Overnight-gap research group: pick near the close, label the next morning.\n\nSHADOW only. At ``decision_et`` each enabled arm picks up to\n``max_picks_per_arm`` common stocks from a full-market scan of regular-session\n5-minute SIP bars that ended by ``data_cutoff_et`` (the free SIP feed is\n15 minutes delayed). Picks are labelled after ``label_after_et`` on the next\nsession: entry at the ``entry_et`` one-minute open, primary exit at the 09:30\nopen, plus the last premarket trade before 08:00 and the 09:45 open.\nNothing here places, sizes or routes an order.",
+        "properties": {
+          "adv_sessions": {
+            "default": 20,
+            "maximum": 60,
+            "minimum": 5,
+            "title": "Adv Sessions",
+            "type": "integer"
+          },
+          "arms": {
+            "items": {
+              "$ref": "#/components/schemas/OvernightArmConfig-Input"
+            },
+            "minItems": 1,
+            "title": "Arms",
+            "type": "array"
+          },
+          "data_cutoff_et": {
+            "default": "15:30:00",
+            "format": "time",
+            "title": "Data Cutoff Et",
+            "type": "string"
+          },
+          "decision_et": {
+            "default": "15:50:00",
+            "format": "time",
+            "title": "Decision Et",
+            "type": "string"
+          },
+          "entry_et": {
+            "default": "15:55:00",
+            "format": "time",
+            "title": "Entry Et",
+            "type": "string"
+          },
+          "label_after_et": {
+            "default": "10:05:00",
+            "format": "time",
+            "title": "Label After Et",
+            "type": "string"
+          },
+          "max_picks_per_arm": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Max Picks Per Arm",
+            "type": "integer"
+          },
+          "maximum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Maximum Price"
+          },
+          "min_adv_sessions": {
+            "default": 10,
+            "maximum": 60,
+            "minimum": 1,
+            "title": "Min Adv Sessions",
+            "type": "integer"
+          },
+          "minimum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1",
+            "title": "Minimum Price"
+          },
+          "strategy_id": {
+            "const": "overnight_shadow_v1",
+            "default": "overnight_shadow_v1",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          }
+        },
+        "title": "OvernightShadowConfig",
+        "type": "object"
+      },
+      "OvernightShadowConfig-Output": {
+        "additionalProperties": false,
+        "description": "Overnight-gap research group: pick near the close, label the next morning.\n\nSHADOW only. At ``decision_et`` each enabled arm picks up to\n``max_picks_per_arm`` common stocks from a full-market scan of regular-session\n5-minute SIP bars that ended by ``data_cutoff_et`` (the free SIP feed is\n15 minutes delayed). Picks are labelled after ``label_after_et`` on the next\nsession: entry at the ``entry_et`` one-minute open, primary exit at the 09:30\nopen, plus the last premarket trade before 08:00 and the 09:45 open.\nNothing here places, sizes or routes an order.",
+        "properties": {
+          "adv_sessions": {
+            "default": 20,
+            "maximum": 60,
+            "minimum": 5,
+            "title": "Adv Sessions",
+            "type": "integer"
+          },
+          "arms": {
+            "items": {
+              "$ref": "#/components/schemas/OvernightArmConfig-Output"
+            },
+            "minItems": 1,
+            "title": "Arms",
+            "type": "array"
+          },
+          "data_cutoff_et": {
+            "default": "15:30:00",
+            "format": "time",
+            "title": "Data Cutoff Et",
+            "type": "string"
+          },
+          "decision_et": {
+            "default": "15:50:00",
+            "format": "time",
+            "title": "Decision Et",
+            "type": "string"
+          },
+          "entry_et": {
+            "default": "15:55:00",
+            "format": "time",
+            "title": "Entry Et",
+            "type": "string"
+          },
+          "label_after_et": {
+            "default": "10:05:00",
+            "format": "time",
+            "title": "Label After Et",
+            "type": "string"
+          },
+          "max_picks_per_arm": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Max Picks Per Arm",
+            "type": "integer"
+          },
+          "maximum_price": {
+            "default": "20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Price",
+            "type": "string"
+          },
+          "min_adv_sessions": {
+            "default": 10,
+            "maximum": 60,
+            "minimum": 1,
+            "title": "Min Adv Sessions",
+            "type": "integer"
+          },
+          "minimum_price": {
+            "default": "1",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Price",
+            "type": "string"
+          },
+          "strategy_id": {
+            "const": "overnight_shadow_v1",
+            "default": "overnight_shadow_v1",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "strategy_version",
+          "data_cutoff_et",
+          "decision_et",
+          "entry_et",
+          "label_after_et",
+          "minimum_price",
+          "maximum_price",
+          "max_picks_per_arm",
+          "adv_sessions",
+          "min_adv_sessions",
+          "arms"
+        ],
+        "title": "OvernightShadowConfig",
+        "type": "object"
+      },
       "PairedForecastMetrics": {
         "additionalProperties": false,
         "properties": {
@@ -52872,6 +53214,9 @@
               },
               {
                 "$ref": "#/components/schemas/StochRsi5mConfig-Input"
+              },
+              {
+                "$ref": "#/components/schemas/OvernightShadowConfig-Input"
               }
             ],
             "title": "Config"
@@ -52935,7 +53280,8 @@
             "default": "gap_pullback_v1",
             "enum": [
               "gap_pullback_v1",
-              "stoch_rsi_5m_v1"
+              "stoch_rsi_5m_v1",
+              "overnight_shadow_v1"
             ],
             "title": "Strategy Kind",
             "type": "string"
@@ -53015,6 +53361,9 @@
               },
               {
                 "$ref": "#/components/schemas/StochRsi5mConfig-Output"
+              },
+              {
+                "$ref": "#/components/schemas/OvernightShadowConfig-Output"
               }
             ],
             "title": "Config"
@@ -53078,7 +53427,8 @@
             "default": "gap_pullback_v1",
             "enum": [
               "gap_pullback_v1",
-              "stoch_rsi_5m_v1"
+              "stoch_rsi_5m_v1",
+              "overnight_shadow_v1"
             ],
             "title": "Strategy Kind",
             "type": "string"

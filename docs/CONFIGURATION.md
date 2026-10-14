@@ -288,6 +288,10 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS` | boolean | `0` | trading | Controls trading liquidation collector in tests for trading. |
 | `OMNIX_TRADING_NOTIFICATION_MONITOR` | boolean | `1` | trading | Controls trading notification monitor for trading. |
 | `OMNIX_TRADING_NOTIFICATION_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading notification monitor in tests for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION` | boolean | `1` | trading | Controls trading overnight shadow autoprovision for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION_IN_TESTS` | boolean | `0` | trading | Controls trading overnight shadow autoprovision in tests for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading overnight shadow monitor for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading overnight shadow monitor in tests for trading. |
 | `OMNIX_TRADING_PAPER_ACTIVE_INTERVAL_SECONDS` | string | `1` | trading | Controls trading paper active interval seconds for trading. |
 | `OMNIX_TRADING_PAPER_INTERVAL_SECONDS` | string | `15` | trading | Controls trading paper interval seconds for trading. |
 | `OMNIX_TRADING_PAPER_MONITOR` | boolean | `1` | trading | Controls trading paper monitor for trading. |

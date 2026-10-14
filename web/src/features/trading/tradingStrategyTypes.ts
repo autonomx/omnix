@@ -141,7 +141,19 @@ export type StochRsi5mTradingStrategyConfig = TradingStrategyDocumentBase & {
   config: StochRsi5mConfig;
 };
 
-export type TradingStrategyConfig = GapPullbackTradingStrategyConfig | StochRsi5mTradingStrategyConfig;
+export type OvernightShadowConfig = components['schemas']['OvernightShadowConfig-Output'];
+
+/** SHADOW-only overnight research group; the server provisions it and the UI shows it read-only. */
+export type OvernightShadowTradingStrategyConfig = TradingStrategyDocumentBase & {
+  strategy_kind: 'overnight_shadow_v1';
+  strategy_version: '1.0.0';
+  config: OvernightShadowConfig;
+};
+
+export type TradingStrategyConfig =
+  | GapPullbackTradingStrategyConfig
+  | StochRsi5mTradingStrategyConfig
+  | OvernightShadowTradingStrategyConfig;
 
 export type GapperCandidate = {
   instrument_id: string;

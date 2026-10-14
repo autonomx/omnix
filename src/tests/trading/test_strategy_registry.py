@@ -123,7 +123,7 @@ def test_the_runner_skips_monitor_owned_and_disabled_configurations() -> None:
 
 
 def test_the_production_registry_validates_persisted_kinds() -> None:
-    assert STRATEGY_REGISTRY.kinds() == ("gap_pullback_v1", "stoch_rsi_5m_v1")
+    assert STRATEGY_REGISTRY.kinds() == ("gap_pullback_v1", "stoch_rsi_5m_v1", "overnight_shadow_v1")
     assert STRATEGY_REGISTRY.runner_strategies() == ()
     document = TradingStrategyConfigDocument(
         strategy_id="stoch", account_id="paper", strategy_kind="stoch_rsi_5m_v1", mode="shadow",

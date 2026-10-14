@@ -7376,6 +7376,218 @@ export interface components {
             /** Wall Clock Observed Occupancy Above Open */
             wall_clock_observed_occupancy_above_open: string;
         };
+        /**
+         * OvernightArmConfig
+         * @description One overnight research arm: a candidate qualifies when every rule holds.
+         *
+         *     ``change`` is the decision price versus the prior regular close; ``volume_ratio``
+         *     is the session's regular volume so far versus the 20-session average daily
+         *     volume; ``close_location`` is where the price sits in the session's range
+         *     (0 = low, 1 = high).
+         */
+        "OvernightArmConfig-Input": {
+            /**
+             * Arm Id
+             * @enum {string}
+             */
+            arm_id: "day2-runner" | "strong-close";
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled?: boolean;
+            /** Max Change */
+            max_change?: number | string | null;
+            /** Min Change */
+            min_change: number | string;
+            /** Min Close Location */
+            min_close_location: number | string;
+            /** Min Volume Ratio */
+            min_volume_ratio: number | string;
+        };
+        /**
+         * OvernightArmConfig
+         * @description One overnight research arm: a candidate qualifies when every rule holds.
+         *
+         *     ``change`` is the decision price versus the prior regular close; ``volume_ratio``
+         *     is the session's regular volume so far versus the 20-session average daily
+         *     volume; ``close_location`` is where the price sits in the session's range
+         *     (0 = low, 1 = high).
+         */
+        "OvernightArmConfig-Output": {
+            /**
+             * Arm Id
+             * @enum {string}
+             */
+            arm_id: "day2-runner" | "strong-close";
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Max Change */
+            max_change: string | null;
+            /** Min Change */
+            min_change: string;
+            /** Min Close Location */
+            min_close_location: string;
+            /** Min Volume Ratio */
+            min_volume_ratio: string;
+        };
+        /**
+         * OvernightShadowConfig
+         * @description Overnight-gap research group: pick near the close, label the next morning.
+         *
+         *     SHADOW only. At ``decision_et`` each enabled arm picks up to
+         *     ``max_picks_per_arm`` common stocks from a full-market scan of regular-session
+         *     5-minute SIP bars that ended by ``data_cutoff_et`` (the free SIP feed is
+         *     15 minutes delayed). Picks are labelled after ``label_after_et`` on the next
+         *     session: entry at the ``entry_et`` one-minute open, primary exit at the 09:30
+         *     open, plus the last premarket trade before 08:00 and the 09:45 open.
+         *     Nothing here places, sizes or routes an order.
+         */
+        "OvernightShadowConfig-Input": {
+            /**
+             * Adv Sessions
+             * @default 20
+             */
+            adv_sessions?: number;
+            /** Arms */
+            arms?: components["schemas"]["OvernightArmConfig-Input"][];
+            /**
+             * Data Cutoff Et
+             * Format: time
+             * @default 15:30:00
+             */
+            data_cutoff_et?: string;
+            /**
+             * Decision Et
+             * Format: time
+             * @default 15:50:00
+             */
+            decision_et?: string;
+            /**
+             * Entry Et
+             * Format: time
+             * @default 15:55:00
+             */
+            entry_et?: string;
+            /**
+             * Label After Et
+             * Format: time
+             * @default 10:05:00
+             */
+            label_after_et?: string;
+            /**
+             * Max Picks Per Arm
+             * @default 5
+             */
+            max_picks_per_arm?: number;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price?: number | string;
+            /**
+             * Min Adv Sessions
+             * @default 10
+             */
+            min_adv_sessions?: number;
+            /**
+             * Minimum Price
+             * @default 1
+             */
+            minimum_price?: number | string;
+            /**
+             * Strategy Id
+             * @default overnight_shadow_v1
+             * @constant
+             */
+            strategy_id?: "overnight_shadow_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             * @constant
+             */
+            strategy_version?: "1.0.0";
+        };
+        /**
+         * OvernightShadowConfig
+         * @description Overnight-gap research group: pick near the close, label the next morning.
+         *
+         *     SHADOW only. At ``decision_et`` each enabled arm picks up to
+         *     ``max_picks_per_arm`` common stocks from a full-market scan of regular-session
+         *     5-minute SIP bars that ended by ``data_cutoff_et`` (the free SIP feed is
+         *     15 minutes delayed). Picks are labelled after ``label_after_et`` on the next
+         *     session: entry at the ``entry_et`` one-minute open, primary exit at the 09:30
+         *     open, plus the last premarket trade before 08:00 and the 09:45 open.
+         *     Nothing here places, sizes or routes an order.
+         */
+        "OvernightShadowConfig-Output": {
+            /**
+             * Adv Sessions
+             * @default 20
+             */
+            adv_sessions: number;
+            /** Arms */
+            arms: components["schemas"]["OvernightArmConfig-Output"][];
+            /**
+             * Data Cutoff Et
+             * Format: time
+             * @default 15:30:00
+             */
+            data_cutoff_et: string;
+            /**
+             * Decision Et
+             * Format: time
+             * @default 15:50:00
+             */
+            decision_et: string;
+            /**
+             * Entry Et
+             * Format: time
+             * @default 15:55:00
+             */
+            entry_et: string;
+            /**
+             * Label After Et
+             * Format: time
+             * @default 10:05:00
+             */
+            label_after_et: string;
+            /**
+             * Max Picks Per Arm
+             * @default 5
+             */
+            max_picks_per_arm: number;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: string;
+            /**
+             * Min Adv Sessions
+             * @default 10
+             */
+            min_adv_sessions: number;
+            /**
+             * Minimum Price
+             * @default 1
+             */
+            minimum_price: string;
+            /**
+             * Strategy Id
+             * @default overnight_shadow_v1
+             * @constant
+             */
+            strategy_id: "overnight_shadow_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             * @constant
+             */
+            strategy_version: "1.0.0";
+        };
         /** PairedForecastMetrics */
         PairedForecastMetrics: {
             /** Mean Delta Abs Error V4 Minus V3 */
@@ -13423,7 +13635,7 @@ export interface components {
             /** Archived Reason */
             archived_reason?: string | null;
             /** Config */
-            config?: components["schemas"]["GapPullbackConfig-Input"] | components["schemas"]["StochRsi5mConfig-Input"];
+            config?: components["schemas"]["GapPullbackConfig-Input"] | components["schemas"]["StochRsi5mConfig-Input"] | components["schemas"]["OvernightShadowConfig-Input"];
             /** Created At */
             created_at?: string | null;
             /**
@@ -13452,7 +13664,7 @@ export interface components {
              * @default gap_pullback_v1
              * @enum {string}
              */
-            strategy_kind?: "gap_pullback_v1" | "stoch_rsi_5m_v1";
+            strategy_kind?: "gap_pullback_v1" | "stoch_rsi_5m_v1" | "overnight_shadow_v1";
             /**
              * Strategy Version
              * @default 1.0.0
@@ -13472,7 +13684,7 @@ export interface components {
             /** Archived Reason */
             archived_reason: string | null;
             /** Config */
-            config: components["schemas"]["GapPullbackConfig-Output"] | components["schemas"]["StochRsi5mConfig-Output"];
+            config: components["schemas"]["GapPullbackConfig-Output"] | components["schemas"]["StochRsi5mConfig-Output"] | components["schemas"]["OvernightShadowConfig-Output"];
             /** Created At */
             created_at: string | null;
             /**
@@ -13501,7 +13713,7 @@ export interface components {
              * @default gap_pullback_v1
              * @enum {string}
              */
-            strategy_kind: "gap_pullback_v1" | "stoch_rsi_5m_v1";
+            strategy_kind: "gap_pullback_v1" | "stoch_rsi_5m_v1" | "overnight_shadow_v1";
             /**
              * Strategy Version
              * @default 1.0.0

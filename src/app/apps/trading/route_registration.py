@@ -94,6 +94,7 @@ def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
     from app.apps.trading.ibkr_market_data_monitor import create_trading_ibkr_market_data_monitor_task
     from app.apps.trading.metric_monitor import create_trading_metric_monitor_task
     from app.apps.trading.paper_monitor import create_trading_paper_monitor_task
+    from app.apps.trading.strategy_overnight_monitor import create_overnight_shadow_monitor_task
     from app.apps.trading.prospective_gap_monitor import create_prospective_gap_monitor_task
     from app.apps.trading.providers.alpaca_iex_status import create_alpaca_iex_status_monitor_task
     from app.apps.trading.session_reconciliation_monitor import create_trading_session_reconciliation_monitor_task
@@ -122,6 +123,7 @@ def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
         create_trading_ibkr_market_data_monitor_task,
         create_trading_metric_monitor_task,
         create_trading_paper_monitor_task,
+        create_overnight_shadow_monitor_task,
         create_prospective_gap_monitor_task,
         create_alpaca_iex_status_monitor_task,
         create_trading_session_reconciliation_monitor_task,
