@@ -8,8 +8,6 @@ from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.persistence.tenant import TenantContext
 from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 
-from .state_delta import state_delta
-
 
 MAX_COMPACT_TURN_RESPONSE_BYTES = 20_000
 
@@ -90,6 +88,12 @@ resulting_revision, command_jsonb, canonical_effects_jsonb, state_hash_before,
 state_hash_after, engine_version, schema_version, interaction_id,
 compact_response, created_at, state_delta_jsonb
 """
+
+
+def _turn_delta(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
+    from .state_delta import state_delta
+
+    return state_delta(before, after)
 
 
 class CompactTurnResponseTooLarge(ValueError):
@@ -390,7 +394,7 @@ class PostgresRpgRepository:
                 schema_version,
                 interaction_id,
                 encoded_response.decode("utf-8"),
-                canonical_json(state_delta(campaign["state"], next_state)),
+                canonical_json(_turn_delta(campaign["state"], next_state)),
             ),
         ).fetchone()
         turn = _turn(row)

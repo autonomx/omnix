@@ -10,11 +10,11 @@ import traceback
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Iterator
 
+from app.caching.bounded_cache import bounded_lru_cache
 from app.runtime.paths import resources_root
 
 logger = logging.getLogger(__name__)
@@ -51,8 +51,7 @@ _configured = False
 _configuring = False
 _handler: logging.Handler | None = None
 _last_cleanup_date: str | None = None
-# Log directories this process has created (one per configured directory).
-_created_dirs: set[Path] = set()
+
 
 
 def rpg_debug_logging_enabled() -> bool:
@@ -65,12 +64,12 @@ def rpg_debug_log_dir() -> Path:
     return _resolved_log_dir(override)
 
 
-@lru_cache(maxsize=8)
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
 def _resolved_log_dir(override: str) -> Path:
-    """Resolving the directory walks the filesystem; a turn logs dozens of events (WP-5.6)."""
-    if override:
-        return Path(override).expanduser().resolve()
-    return resources_root() / "logs" / "rpg"
+    """The log directory, resolved and created once (WP-5.6: a turn logs dozens of events)."""
+    directory = Path(override).expanduser().resolve() if override else resources_root() / "logs" / "rpg"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 def rpg_debug_log_status() -> dict[str, Any]:
@@ -326,9 +325,6 @@ def _write_event(payload: dict[str, Any]) -> None:
         return
     directory = rpg_debug_log_dir()
     with _lock:
-        if directory not in _created_dirs:
-            directory.mkdir(parents=True, exist_ok=True)
-            _created_dirs.add(directory)
         _cleanup_expired_logs(directory)
         safe_payload = _sanitize(payload)
         line = json.dumps(safe_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"

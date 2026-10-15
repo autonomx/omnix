@@ -5,7 +5,7 @@ import copy
 
 import pytest
 
-from app.apps.rpg.session import interaction_lifecycle, narration_jobs, session_runtime_store
+from app.apps.rpg.session import narration_jobs, session_runtime_store
 from app.apps.rpg.session.jobs import narration_job
 from app.jobs.models import JobStatus
 from tests.support.in_memory_jobs import InMemoryJobStore

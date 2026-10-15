@@ -571,7 +571,6 @@
         "app.apps.rpg.session.jobs.debug_observer",
         "app.apps.rpg.session.jobs.handlers",
         "app.apps.rpg.session.jobs.turn_job_guard",
-        "app.apps.rpg.session.legacy_interaction_migration",
         "app.apps.rpg.session.list_summaries",
         "app.apps.rpg.session.loadout",
         "app.apps.rpg.session.migrations",
@@ -1968,7 +1967,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 9206,
+      "collected_tests": 9243,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2823,14 +2822,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-15T02:05:31.416426+00:00",
+  "measured_at": "2026-10-15T04:17:46.045318+00:00",
   "metrics": {
-    "boot_imported_modules": 1913,
+    "boot_imported_modules": 1912,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "2f838795ebb5661978c62f94c41ad9f1027fc9dc0cd69b9268e97df59a69645e"
+  "source_digest": "b53d47cd4ebe10785135628394f19cceea52db996937d52d1d0186641cf88c10"
 }

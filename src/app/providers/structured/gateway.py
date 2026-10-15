@@ -7,11 +7,12 @@ import math
 import hashlib
 import json
 import threading
-from functools import lru_cache
 from time import monotonic
 from typing import Any, Generic, Mapping, Sequence, TypeVar
 
 from pydantic import BaseModel, ValidationError
+
+from app.caching.bounded_cache import bounded_lru_cache
 
 from app.providers.base import (
     AuthenticationError,
@@ -91,7 +92,7 @@ class _NegativeCapabilityCache:
 _NEGATIVE_CAPABILITIES = _NegativeCapabilityCache()
 
 
-@lru_cache(maxsize=256)
+@bounded_lru_cache(max_entries=256, ttl_seconds=3600.0)
 def output_schema_text(output_model: type[BaseModel]) -> str:
     """An output model's JSON schema as canonical text, built once per model.
 

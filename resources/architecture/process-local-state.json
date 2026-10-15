@@ -1562,6 +1562,24 @@
       "symbol": "_PAYLOAD_LOCK",
       "category": "coordination",
       "reason": "Process-local re-entrant mutex serializing read-modify-write of the operating-system secret payload within this process; the secret store is the authority."
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/debug_logging.py",
+      "symbol": "_resolved_log_dir.__cache__",
+      "category": "cache",
+      "reason": "The resolved RPG debug-log directory per configured override (one or two entries); a path, not authority. Bounded, expiring, explicitly invalidatable.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_resolved_log_dir.cache_clear"
+    },
+    {
+      "path": "src/app/providers/structured/gateway.py",
+      "symbol": "output_schema_text.__cache__",
+      "category": "cache",
+      "reason": "Each structured output model's JSON schema text, a pure function of the model class; it carries no state. Bounded, expiring, explicitly invalidatable.",
+      "max_entries": 256,
+      "ttl_seconds": 3600.0,
+      "invalidation": "output_schema_text.cache_clear"
     }
   ]
 }

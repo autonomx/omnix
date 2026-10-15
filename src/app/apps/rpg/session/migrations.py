@@ -7,10 +7,8 @@ from __future__ import annotations
 from typing import Any
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
-from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION, upcast_campaign_document
 
 _CURRENT_SAVE_VERSION = "1.0"
-_CURRENT_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION
 
 
 def migrate_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -20,6 +18,8 @@ def migrate_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
     callers pass the session dictionary directly. Both shapes are migrated so a
     legacy on-disk transcript cannot bypass interaction conversion.
     """
+
+    from app.apps.rpg.session.campaign_state import upcast_campaign_document
 
     payload = _safe_dict(payload)
     nested = payload.get("session")
