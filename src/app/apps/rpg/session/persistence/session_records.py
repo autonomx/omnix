@@ -165,7 +165,12 @@ def load_session_from_postgres(session_id: str) -> dict[str, Any] | None:
     with unit_of_work(database) as work:
         campaign = work.rpg.get_campaign(context, session_id)
         work.rollback()
-    return dict(campaign["state"]) if campaign is not None else None
+    if campaign is None:
+        return None
+    from app.apps.rpg.session.campaign_state import upcast_if_outdated
+
+    # A campaign stored before the current schema loads upcast (WP-5.6).
+    return upcast_if_outdated(dict(campaign["state"]))
 
 
 def list_sessions_from_postgres() -> list[dict[str, Any]]:
@@ -224,8 +229,16 @@ def list_session_summaries_from_postgres(
                     break
                 before = (page[-1]["updated_at"], page[-1]["id"])
         work.rollback()
-    return [session_list_summary(_campaign_state_for_listing({"id": row["id"], "state": row["source"]}))
-            for row in sources]
+    summaries = []
+    for row in sources:
+        summary = session_list_summary(_campaign_state_for_listing({"id": row["id"], "state": row["source"]}))
+        summary["manifest"].update(
+            turn_count=row["turn_count"],
+            player_level=row["player_level"],
+            location_name=row["location_name"],
+        )
+        summaries.append(summary)
+    return summaries
 
 
 def archive_session_in_postgres(session_id: str) -> dict[str, Any]:

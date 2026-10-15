@@ -8,6 +8,7 @@ import uuid
 import psycopg
 import pytest
 
+from app.apps.rpg.narration.presentation.turn_response import _session_summary
 from app.apps.rpg.session.list_summaries import session_list_summary
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -95,7 +96,14 @@ def test_session_list_reads_one_page_with_the_summaries_full_states_give(workspa
                                                 + [(STATES[0], "archived"), (STATES[1], "archived")]):
             campaign_id = f"rpg:list:{index}:{uuid.uuid4().hex[:6]}"
             _insert(admin, workspace, campaign_id, state, status=status, minutes_ago=index)
-            expected.append(session_list_summary(_campaign_state_for_listing({"id": campaign_id, "state": state})))
+            row = session_list_summary(_campaign_state_for_listing({"id": campaign_id, "state": state}))
+            typed = _session_summary(state)  # the summary columns (migration 0157)
+            row["manifest"].update(
+                turn_count=typed.get("turn_count"),
+                player_level=typed.get("player_level"),
+                location_name=typed.get("location"),
+            )
+            expected.append(row)
 
     assert list_session_summaries_from_postgres() == expected
     # A page that ends inside the archived campaigns, and one that ends before them.

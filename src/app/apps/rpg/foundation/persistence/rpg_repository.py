@@ -8,6 +8,8 @@ from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.persistence.tenant import TenantContext
 from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 
+from .state_delta import state_delta
+
 
 MAX_COMPACT_TURN_RESPONSE_BYTES = 20_000
 
@@ -78,6 +80,7 @@ def _turn(row: Any) -> dict[str, Any]:
         "interaction_id": str(row[13]),
         "compact_response": dict(row[14]),
         "created_at": row[15].isoformat(),
+        "state_delta": list(row[16]) if row[16] is not None else None,
     }
 
 
@@ -85,7 +88,7 @@ _TURN_COLUMNS = """
 id, workspace_id, campaign_id, sequence, submission_id, expected_revision,
 resulting_revision, command_jsonb, canonical_effects_jsonb, state_hash_before,
 state_hash_after, engine_version, schema_version, interaction_id,
-compact_response, created_at
+compact_response, created_at, state_delta_jsonb
 """
 
 
@@ -210,42 +213,22 @@ class PostgresRpgRepository:
         status: str = "active",
         before: tuple[str, str] | None = None,
     ) -> list[dict[str, Any]]:
-        """One page of campaigns, newest first, each with only what a list row reads of its state.
+        """One page of campaigns, newest first, each with only what a list row reads.
 
         ``source`` keeps the session document's shape (``manifest``, and of
         ``state`` the world and region environments, the scene's environment
-        context and the opening location keys), so the list never loads,
-        transfers or parses a whole saved game.
+        context and the opening location keys). A trigger keeps it in
+        ``summary_jsonb`` with the turn count, player level and location name
+        on every state write (migration 0157), so a list never reads a saved
+        game's state.
         """
-        # The page is chosen first and each document decompressed once (``||``
-        # returns it in memory): every operator on the stored column would
-        # decompress the whole document again.
         rows = self.connection.execute(
-            f"""
-            SELECT page.id, page.updated_at, jsonb_build_object(
-                       'manifest', page.manifest,
-                       'state', jsonb_build_object(
-                           'world', jsonb_build_object(
-                               'environment', page.state #> '{{world,environment}}',
-                               'regions', (
-                                   SELECT jsonb_object_agg(region.key, jsonb_build_object(
-                                              'environment', region.value -> 'environment'))
-                                     FROM jsonb_each(CASE
-                                              WHEN jsonb_typeof(page.state #> '{{world,regions}}') = 'object'
-                                              THEN page.state #> '{{world,regions}}'
-                                              ELSE '{{}}'::jsonb END) AS region
-                                    WHERE jsonb_typeof(region.value) = 'object')),
-                           'scene', jsonb_build_object(
-                               'environment_context', page.state #> '{{scene,environment_context}}'),
-                           {", ".join(f"'{key}', page.state -> '{key}'" for key in SESSION_SUMMARY_STATE_KEYS)}))
-              FROM (SELECT id, updated_at, doc -> 'manifest' AS manifest, doc -> 'state' AS state
-                      FROM (SELECT id, updated_at, state_jsonb || '{{}}'::jsonb AS doc
-                              FROM omnix_rpg_campaigns
-                             WHERE workspace_id = %s AND status = %s
-                               AND (%s::timestamptz IS NULL OR (updated_at, id) < (%s::timestamptz, %s::text))
-                             ORDER BY updated_at DESC, id DESC LIMIT %s) AS decompressed
-                    OFFSET 0) AS page
-             ORDER BY page.updated_at DESC, page.id DESC
+            """
+            SELECT id, updated_at, summary_jsonb, turn_count, player_level, location_name
+              FROM omnix_rpg_campaigns
+             WHERE workspace_id = %s AND status = %s
+               AND (%s::timestamptz IS NULL OR (updated_at, id) < (%s::timestamptz, %s::text))
+             ORDER BY updated_at DESC, id DESC LIMIT %s
             """,
             (
                 context.workspace_id,
@@ -256,7 +239,17 @@ class PostgresRpgRepository:
                 page_limit(limit, default=100),
             ),
         ).fetchall()
-        return [{"id": str(row[0]), "updated_at": row[1].isoformat(), "source": dict(row[2])} for row in rows]
+        return [
+            {
+                "id": str(row[0]),
+                "updated_at": row[1].isoformat(),
+                "source": dict(row[2]),
+                "turn_count": row[3],
+                "player_level": row[4],
+                "location_name": row[5],
+            }
+            for row in rows
+        ]
 
     def iter_campaigns(self, context: TenantContext, *, status: str = "active"):
         """Every campaign with ``status``, newest first, a page at a time."""
@@ -340,10 +333,11 @@ class PostgresRpgRepository:
                 id, workspace_id, campaign_id, sequence, submission_id,
                 expected_revision, resulting_revision, command_jsonb,
                 canonical_effects_jsonb, state_hash_before, state_hash_after,
-                engine_version, schema_version, interaction_id, compact_response
+                engine_version, schema_version, interaction_id, compact_response,
+                state_delta_jsonb
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
-                %s, %s, %s, %s, %s, %s::jsonb
+                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb
             ) RETURNING {_TURN_COLUMNS}
             """,
             (
@@ -362,6 +356,7 @@ class PostgresRpgRepository:
                 schema_version,
                 interaction_id,
                 encoded_response.decode("utf-8"),
+                canonical_json(state_delta(campaign["state"], next_state)),
             ),
         ).fetchone()
         turn = _turn(row)
