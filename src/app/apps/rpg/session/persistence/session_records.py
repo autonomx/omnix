@@ -141,6 +141,24 @@ def save_session_to_postgres(
     return session
 
 
+def load_session_version_from_postgres(session_id: str) -> tuple[int, str] | None:
+    database = _database()
+    context = _context(database)
+    with unit_of_work(database) as work:
+        version = work.rpg.stored_version(context, session_id)
+        work.rollback()
+    return version
+
+
+def load_rng_seed_from_postgres(session_id: str) -> tuple[bool, Any]:
+    database = _database()
+    context = _context(database)
+    with unit_of_work(database) as work:
+        stored = work.rpg.stored_rng_seed(context, session_id)
+        work.rollback()
+    return stored
+
+
 def load_session_from_postgres(session_id: str) -> dict[str, Any] | None:
     database = _database()
     context = _context(database)

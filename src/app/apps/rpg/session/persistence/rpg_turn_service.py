@@ -12,6 +12,16 @@ from app.persistence.execution_repositories import JobClaimConflict
 from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
+from app.config.env import env_int
+
+SNAPSHOT_EVERY_ENV = "OMNIX_RPG_SNAPSHOT_EVERY"
+DEFAULT_SNAPSHOT_EVERY = 20
+
+
+def snapshot_due(state_revision: int) -> bool:
+    """A full snapshot every ``OMNIX_RPG_SNAPSHOT_EVERY`` revisions (WP-5.6); the campaign row holds the current state."""
+    every = env_int(SNAPSHOT_EVERY_ENV, DEFAULT_SNAPSHOT_EVERY, minimum=1, maximum=10_000)
+    return state_revision % every == 0
 
 
 def persist_foreground_turn(
@@ -138,8 +148,9 @@ def persist_foreground_turn(
             compact_response=compact_response,
             engine_version=str(campaign["engine_version"]),
             schema_version=str(campaign["schema_version"]),
-            create_snapshot=bool(event.get("stateful") is not False),
+            create_snapshot=bool(event.get("stateful") is not False) and snapshot_due(state_revision),
             snapshot_id=f"snapshot:{session_id}:{state_revision}",
+            locked_campaign=campaign,
         )
 
         completed_job: dict[str, Any] | None = None

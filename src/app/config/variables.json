@@ -1603,6 +1603,13 @@
     "type": "string"
   },
   {
+    "default": "20",
+    "description": "Controls rpg snapshot every for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_SNAPSHOT_EVERY",
+    "type": "integer"
+  },
+  {
     "default": null,
     "description": "Controls run token key for security.",
     "feature": "security",

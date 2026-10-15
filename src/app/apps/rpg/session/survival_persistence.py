@@ -59,19 +59,26 @@ def normalize_survival_for_persistence(simulation_state: Mapping[str, Any]) -> D
     climate/needs fields are left untouched for backward compatibility, but they
     no longer act as authoritative state after canonical survival is present.
     """
-    normalized = deepcopy(_safe_dict(simulation_state))
+    return _normalize_owned_simulation_state(deepcopy(_safe_dict(simulation_state)))
+
+
+def _normalize_owned_simulation_state(normalized: Dict[str, Any]) -> Dict[str, Any]:
     state = normalize_survival_state(_canonical_survival_seed(normalized))
     normalized[SURVIVAL_STATE_KEY] = state
     return normalized
 
 
-def normalize_session_survival_for_persistence(session: Mapping[str, Any]) -> Dict[str, Any]:
-    """Normalize a whole session at save/load/export/import boundaries."""
-    normalized_session = deepcopy(_safe_dict(session))
-    simulation_state = normalize_survival_for_persistence(
+def normalize_session_survival_for_persistence(session: Mapping[str, Any], *, owned: bool = False) -> Dict[str, Any]:
+    """Normalize a whole session at save/load/export/import boundaries.
+
+    ``owned``: the caller owns ``session`` (it was just decoded from storage), so
+    it is normalized in place instead of copied.
+    """
+    normalized_session = _safe_dict(session) if owned else deepcopy(_safe_dict(session))
+    # The copy owns its simulation state: normalize it in place rather than copying it again.
+    normalized_session["simulation_state"] = _normalize_owned_simulation_state(
         _safe_dict(normalized_session.get("simulation_state"))
     )
-    normalized_session["simulation_state"] = simulation_state
     return normalized_session
 
 

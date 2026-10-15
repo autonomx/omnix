@@ -12,6 +12,7 @@ from app.apps.rpg.session.ambient_builder import (
 from app.apps.rpg.session.durable_store import (
     archive_session_on_disk,
     list_sessions_from_disk,
+    load_persisted_rng_seed,
     load_session_from_disk,
     save_session_to_disk,
 )
@@ -27,13 +28,19 @@ from app.apps.rpg.rules.validation.integrity import (
     validate_session_integrity,
 )
 from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span_if_active
+from app.apps.rpg.foundation.persistence.rpg_session_save_policy import (
+    cached_turn_load,
+    remember_turn_load,
+    session_save_deferred,
+)
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
 
 
-def create_or_normalize_session(session: dict[str, Any]) -> dict[str, Any]:
+def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False) -> dict[str, Any]:
+    """Migrate and normalize a session; ``owned`` when the caller just decoded it from storage."""
     session = _safe_dict(session)
     session = migrate_session_payload(session)
     manifest = _safe_dict(session.get("manifest"))
@@ -59,7 +66,7 @@ def create_or_normalize_session(session: dict[str, Any]) -> dict[str, Any]:
         simulation_state["rng_seed"] = rng_seed
     session["simulation_state"] = simulation_state
     session = ensure_session_environment_seed_state(session)
-    session = normalize_session_survival_for_persistence(session)
+    session = normalize_session_survival_for_persistence(session, owned=owned)
     session = ensure_session_map_state(session)
     # Living-world: ensure ambient runtime state exists and is bounded
     runtime_state = _safe_dict(session.get("runtime_state"))
@@ -107,10 +114,9 @@ def _save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str
         or ""
     )
     if session_id:
-        previous = load_session_from_disk(session_id)
-        if previous is not None:
-            previous_state = _safe_dict(previous.get("simulation_state"))
-            previous_seed = previous_state.get("rng_seed")
+        # The seed is immutable: compare with the saved one, without loading the saved game.
+        saved, previous_seed = load_persisted_rng_seed(session_id)
+        if saved:
             if (
                 not isinstance(previous_seed, int)
                 or isinstance(previous_seed, bool)
@@ -181,13 +187,31 @@ def load_session(session_id: str) -> dict[str, Any]:
 
 
 def _load_session(session_id: str) -> dict[str, Any] | None:
+    version = _turn_scoped_version(session_id)
+    if version is not None:
+        cached = cached_turn_load(session_id, version)
+        if cached is not None:
+            return cached
     session = load_session_from_disk(session_id)
     if session is None:
         return None
     # Fix #2: soft validation on load — allow recovery / migration of older sessions
-    session = create_or_normalize_session(session)
+    session = create_or_normalize_session(session, owned=True)
     validate_session_integrity(session)  # log but don't fail
+    if version is not None:
+        remember_turn_load(session_id, version, session)
     return session
+
+
+def _turn_scoped_version(session_id: str) -> tuple[int, str] | None:
+    """The stored version to key this turn's shared load by; None outside a turn or off PostgreSQL."""
+    from app.persistence.runtime import uses_postgresql_runtime
+
+    if not session_save_deferred() or not uses_postgresql_runtime():
+        return None
+    from app.apps.rpg.session.persistence.session_records import load_session_version_from_postgres
+
+    return load_session_version_from_postgres(session_id)
 
 
 def list_sessions() -> list[dict[str, Any]]:

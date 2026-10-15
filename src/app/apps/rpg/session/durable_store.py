@@ -266,6 +266,18 @@ def _save_session_to_disk(
     return session
 
 
+def load_persisted_rng_seed(session_id: str, *, session_dir: Path | None = None) -> tuple[bool, Any]:
+    """Whether the session is saved, and the ``rng_seed`` its saved simulation state holds."""
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime() and session_dir is None:
+        from app.apps.rpg.session.persistence.session_records import load_rng_seed_from_postgres
+        return load_rng_seed_from_postgres(session_id)
+    previous = load_session_from_disk(session_id, session_dir=session_dir)
+    if previous is None:
+        return (False, None)
+    return (True, _safe_dict(previous.get("simulation_state")).get("rng_seed"))
+
+
 def load_session_from_disk(
     session_id: str,
     *,

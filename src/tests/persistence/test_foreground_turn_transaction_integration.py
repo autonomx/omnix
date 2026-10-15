@@ -217,7 +217,8 @@ def test_foreground_turn_commits_every_authoritative_record_together() -> None:
                 (campaign_id, submission_id),
             ).fetchone()
         assert int(row[0]) == 1
-        assert tuple(int(value) for value in counts[:3]) == (1, 1, 1)
+        # Revision 1 writes no full snapshot: one is due every OMNIX_RPG_SNAPSHOT_EVERY revisions (WP-5.6).
+        assert tuple(int(value) for value in counts[:3]) == (1, 1, 0)
         assert int(counts[3]) == 0  # RPG events have no outbox consumer (WP-5.3)
         assert str(job[0]) == "completed"
         assert str(submission[0]) == "completed"

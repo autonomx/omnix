@@ -161,6 +161,22 @@ class PostgresRpgRepository:
         ).fetchone()
         return _campaign(row) if row is not None else None
 
+    def stored_version(self, context: TenantContext, campaign_id: str) -> tuple[int, str] | None:
+        """The campaign's stored (revision, state_hash), without its state."""
+        row = self.connection.execute(
+            "SELECT revision, state_hash FROM omnix_rpg_campaigns WHERE id = %s AND workspace_id = %s",
+            (campaign_id, context.workspace_id),
+        ).fetchone()
+        return (int(row[0]), str(row[1])) if row is not None else None
+
+    def stored_rng_seed(self, context: TenantContext, campaign_id: str) -> tuple[bool, Any]:
+        """Whether the campaign exists, and its stored ``simulation_state.rng_seed`` (without loading the state)."""
+        row = self.connection.execute(
+            "SELECT state_jsonb #> '{simulation_state,rng_seed}' FROM omnix_rpg_campaigns WHERE id = %s AND workspace_id = %s",
+            (campaign_id, context.workspace_id),
+        ).fetchone()
+        return (row is not None, row[0] if row is not None else None)
+
     def list_campaigns(
         self,
         context: TenantContext,
@@ -283,7 +299,9 @@ class PostgresRpgRepository:
         schema_version: str,
         create_snapshot: bool = False,
         snapshot_id: str | None = None,
+        locked_campaign: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Commit one turn. ``locked_campaign`` is the row the caller already read ``FOR UPDATE`` in this transaction."""
         encoded_response = canonical_json(compact_response).encode("utf-8")
         if not 0 < len(encoded_response) <= MAX_COMPACT_TURN_RESPONSE_BYTES:
             raise CompactTurnResponseTooLarge(
@@ -291,8 +309,8 @@ class PostgresRpgRepository:
                 f"limit is {MAX_COMPACT_TURN_RESPONSE_BYTES}"
             )
 
-        campaign = self.get_campaign(context, campaign_id, for_update=True)
-        if campaign is None:
+        campaign = locked_campaign if locked_campaign is not None else self.get_campaign(context, campaign_id, for_update=True)
+        if campaign is None or campaign["id"] != campaign_id:
             raise EntityNotFound(campaign_id)
 
         existing = self.get_turn_by_submission(context, campaign_id, submission_id)
@@ -313,7 +331,9 @@ class PostgresRpgRepository:
 
         resulting_revision = expected_revision + 1
         sequence = resulting_revision
-        after_hash = state_hash(next_state)
+        # Serialized and hashed once: the campaign row and the snapshot store the same text.
+        encoded_state = canonical_json(next_state)
+        after_hash = hashlib.sha256(encoded_state.encode("utf-8")).hexdigest()
         row = self.connection.execute(
             f"""
             INSERT INTO omnix_rpg_turns (
@@ -359,7 +379,7 @@ class PostgresRpgRepository:
             RETURNING {_CAMPAIGN_COLUMNS}
             """,
             (
-                canonical_json(next_state),
+                encoded_state,
                 after_hash,
                 resulting_revision,
                 engine_version,
@@ -402,6 +422,7 @@ class PostgresRpgRepository:
                 state_hash_value=after_hash,
                 engine_version=engine_version,
                 schema_version=schema_version,
+                encoded_state=encoded_state,
             )
         return {
             "idempotent_replay": False,
@@ -421,9 +442,11 @@ class PostgresRpgRepository:
         state_hash_value: str,
         engine_version: str,
         schema_version: str,
+        encoded_state: str | None = None,
     ) -> dict[str, Any]:
-        calculated = state_hash(state)
-        if calculated != state_hash_value:
+        """``encoded_state``, when given, is ``canonical_json(state)`` already computed by the caller."""
+        encoded = encoded_state if encoded_state is not None else canonical_json(state)
+        if hashlib.sha256(encoded.encode("utf-8")).hexdigest() != state_hash_value:
             raise StateHashConflict("snapshot state hash does not match snapshot state")
         row = self.connection.execute(
             """
@@ -439,7 +462,7 @@ class PostgresRpgRepository:
                 context.workspace_id,
                 campaign_id,
                 revision,
-                canonical_json(state),
+                encoded,
                 state_hash_value,
                 engine_version,
                 schema_version,
