@@ -40,7 +40,6 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
     from app.apps.trading.strategy_prospective_economic_api import (
         create_trading_strategy_prospective_economic_router,
     )
-    from app.apps.trading.strategy_solana_ai_monitor import create_trading_solana_ai_control_router
 
     router = APIRouter()
     for factory in (
@@ -70,7 +69,6 @@ def create_trading_router(context: FeatureContext) -> APIRouter:
         create_trading_strategy_router,
         create_trading_strategy_prospective_economic_router,
         create_trading_strategy_operations_router,
-        create_trading_solana_ai_control_router,
         create_trading_catalyst_router,
         create_trading_model_router,
         create_trading_market_data_router,
@@ -108,7 +106,6 @@ def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
     from app.apps.trading.strategy_prospective_economic_monitor import create_trading_strategy_prospective_economic_monitor_task
     from app.apps.trading.strategy_research_monitor import create_trading_strategy_research_monitor_task
     from app.apps.trading.strategy_research_outcome_monitor import create_trading_strategy_research_outcome_monitor_task
-    from app.apps.trading.strategy_solana_ai_monitor import create_trading_solana_ai_monitor_task
     from app.apps.trading.strategy_universe_archive_monitor import create_trading_strategy_universe_archive_monitor_task
     from app.apps.trading.strategy_v2_qualification_monitor import create_trading_strategy_v2_qualification_monitor_task
     from app.apps.trading.yahoo_acquisition_monitor import create_trading_yahoo_acquisition_monitor_task
@@ -137,7 +134,6 @@ def trading_scheduled_task_factories() -> tuple[ScheduledTaskFactory, ...]:
         create_trading_strategy_prospective_economic_monitor_task,
         create_trading_strategy_research_monitor_task,
         create_trading_strategy_research_outcome_monitor_task,
-        create_trading_solana_ai_monitor_task,
         create_trading_strategy_universe_archive_monitor_task,
         create_trading_strategy_v2_qualification_monitor_task,
         create_trading_yahoo_acquisition_monitor_task,

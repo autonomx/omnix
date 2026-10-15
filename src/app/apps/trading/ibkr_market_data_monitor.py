@@ -380,6 +380,8 @@ class TradingIbkrMarketDataMonitor(ScheduledTradingMonitor):
             connected=bool(runtime_diagnostics.get("connected")),
             reconnect_count=int(runtime_diagnostics.get("reconnect_count", 0) or 0),
             active_subscriptions=int(runtime_diagnostics.get("active_quote_subscriptions", 0) or 0),
+            historical_request_count=int(runtime_diagnostics.get("historical_request_count", 0) or 0),
+            historical_cache_hit_count=int(runtime_diagnostics.get("historical_cache_hit_count", 0) or 0),
         )
 
         before = self.recorded_observation_count

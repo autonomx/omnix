@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
@@ -44,6 +45,7 @@ from .strategy_shadow_universe import (
     resolve_stoch_rsi_5m_runtime_archive,
 )
 from .strategy_stoch_rsi_5m_monitor import record_stoch_rsi_5m_candidates
+from .strategy_tape_prefetch import prefetch_candidate_tapes
 from .strategy_timeframes import proposal_priority
 from .strategy_v2_qualification import (
     V2_PROSPECTIVE_START,
@@ -165,6 +167,28 @@ def _v2_qualification_events(
         if event.event_type in V2_QUALIFICATION_EVENT_TYPES
         and start <= event.observed_at.astimezone(timezone.utc) < end
     ]
+
+
+# Start no new configuration once a pass has used this share of its timeout.
+PASS_BUDGET_FRACTION = 0.8
+
+
+def _recovery_snapshot(market_service) -> dict[str, dict[str, float]] | None:
+    metrics = getattr(market_service, "recovery_metrics", None)
+    return metrics.snapshot() if metrics is not None else None
+
+
+def _recovery_delta(before, after) -> dict[str, dict[str, float]] | None:
+    """Bar-recovery work done process-wide while the pass ran (all monitors)."""
+    if before is None or after is None:
+        return None
+    delta = {}
+    for stage, values in after.items():
+        calls = values["calls"] - before.get(stage, {}).get("calls", 0)
+        if calls:
+            seconds = values["seconds"] - before.get(stage, {}).get("seconds", 0.0)
+            delta[stage] = {"calls": calls, "seconds": round(seconds, 3)}
+    return delta
 
 
 def _run_id(prefix: str, observed_at: datetime) -> str:
@@ -572,6 +596,7 @@ class StrategyRunHost:
             )
             return
 
+        await prefetch_candidate_tapes(market_service, universe, interval="5m", as_of=now_utc)
         await record_stoch_rsi_5m_candidates(
             record_event=self._event,
             current_run_id=self.current_run_id,
@@ -651,6 +676,8 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
     """
 
     error_event = "monitor_loop_error"
+    # Configurations a previous pass did not finish; they run first next pass.
+    _resume_first: tuple[str, ...] = ()
 
     def error_log_fields(self) -> dict[str, Any]:
         return {"run_id": self.current_run_id}
@@ -705,18 +732,30 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
                 paper_order_count_before=self.paper_order_count,
                 rejection_count_before=self.rejection_count,
             )
+        pass_started = perf_counter()
+        recovery_before = _recovery_snapshot(market_service)
+        budget_seconds = self.run_timeout_seconds() * PASS_BUDGET_FRACTION
+        timings: dict[str, float] = {}
+        deferred: list[str] = []
+        # The strategy runner runs runner-owned configurations; kinds owned by
+        # another monitor (e.g. overnight_shadow_v1) are never evaluated here.
+        eligible = [
+            config for config in configs
+            if not runner_owned(config) and strategy_monitor_owns(config)
+        ]
+        unfinished = [config.strategy_id for config in self._pass_order(eligible)]
         try:
-            for config in configs:
-                # The strategy runner runs these instead (strategy runner WP).
-                if runner_owned(config):
+            for config in self._pass_order(eligible):
+                if perf_counter() - pass_started >= budget_seconds:
+                    # Out of time: start no new configuration; it runs first next pass.
+                    deferred.append(config.strategy_id)
                     continue
-                # Kinds owned by another monitor (e.g. overnight_shadow_v1) are not
-                # gap-pullback or Stoch RSI configurations; never evaluate them here.
-                if not strategy_monitor_owns(config):
-                    continue
+                config_started = perf_counter()
                 try:
                     await self._run_config(config, strategy_repository, paper_repository, market_service)
+                    unfinished.remove(config.strategy_id)
                 except Exception as exc:
+                    unfinished.remove(config.strategy_id)
                     self.last_error = f"{config.strategy_id}: {type(exc).__name__}: {exc}"
                     self._set_auto_paper_readiness(
                         config,
@@ -732,6 +771,8 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
                         error_type=type(exc).__name__,
                         detail=str(exc),
                     )
+                finally:
+                    timings[config.strategy_id] = round(perf_counter() - config_started, 3)
             readiness = list(self.auto_paper_readiness_by_strategy.values())
             self.auto_paper_ready_strategy_count = sum(
                 1 for item in readiness if item.get("state") == "ready"
@@ -767,7 +808,26 @@ class TradingStrategyMonitor(ScheduledTradingMonitor, StrategyRunHost):
                 )
             return new_orders
         finally:
+            # Anything not finished (out of budget, or interrupted by the
+            # scheduler's timeout) runs first next pass, so no configuration is
+            # starved by the ones ahead of it.
+            self._resume_first = tuple(unfinished)
+            trade_log(
+                "auto_trading",
+                "monitor_pass_timing",
+                run_id=self.current_run_id,
+                pass_seconds=round(perf_counter() - pass_started, 3),
+                strategy_seconds=timings,
+                unfinished=list(unfinished),
+                deferred_for_budget=deferred,
+                bar_recovery=_recovery_delta(recovery_before, _recovery_snapshot(market_service)),
+                execution_authority=False,
+            )
             self.current_run_id = None
+
+    def _pass_order(self, configs: list[TradingStrategyConfigDocument]) -> list[TradingStrategyConfigDocument]:
+        first = [config for config in configs if config.strategy_id in self._resume_first]
+        return first + [config for config in configs if config.strategy_id not in self._resume_first]
 
     def diagnostics(self) -> dict[str, Any]:
         return {

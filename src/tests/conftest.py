@@ -52,6 +52,9 @@ def pytest_configure(config) -> None:
     # without it, including module-scoped gateways built before any per-test
     # fixture; sign-in tests set OMNIX_AUTH_MODE (or pass settings) themselves.
     os.environ.setdefault("OMNIX_AUTH_MODE", "disabled")
+    # The trading research call budget is process-wide and durable; tests that
+    # are about it construct their own budget.
+    os.environ.setdefault("OMNIX_TRADING_AI_DAILY_CALL_BUDGET", "0")
     # Before anything reads a database URL: each xdist worker gets its own database.
     from tests.conftest_databases import configure_worker_database
 

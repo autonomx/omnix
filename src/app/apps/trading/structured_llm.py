@@ -1,6 +1,6 @@
 """Trading research model calls through the structured-output gateway (WP-8.4).
 
-The trading research analyzers (AI shadow v2/v3, intraday LLM, Solana AI) ask
+The trading research analyzers (AI shadow v2/v3, intraday LLM) ask
 for one JSON object per call. The gateway decodes it (a fenced object is
 accepted, as before), detects truncation, validates it against the caller's
 model and records diagnostics; the analyzers keep their own checks of which
@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from app.providers import ChatMessage
 from app.providers.base import ChatResponse
-from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_id_of, provider_supports
+from app.providers.catalog import CLOSED_OBJECT_SCHEMA, NATIVE_JSON_SCHEMA, provider_id_of, provider_supports
 from app.providers.structured import (
     ProviderEmptyResponse,
     ProviderTruncatedResponse,
@@ -39,6 +39,8 @@ from app.providers.structured import (
 )
 from app.providers.structured.errors import StructuredDecodeError, StructuredSchemaError
 from app.providers.structured.schema_projection import project_provider_schema
+
+from .trading_ai_budget import TradingAIBudget, default_trading_ai_budget
 
 T = TypeVar("T", bound=BaseModel)
 OutputFailure = Literal["empty", "truncated", "syntax", "schema"]
@@ -60,9 +62,27 @@ class TradingModelReply(Generic[T]):
     response: Any  # the provider's reply: content, usage and serving model
 
 
+# Providers whose native schema support validates the reply before returning it:
+# the Claude CLI passes ``--json-schema`` and returns ``structured_output``.
+_VALIDATING_NATIVE_SCHEMA_PROVIDERS = frozenset({"claude_cli"})
+
+
+def sends_json_schema(provider: Any) -> bool:
+    """Whether the provider receives the output's JSON schema rather than a bare JSON-object request.
+
+    The Claude CLI gets it too: without it the model saw only a prose description
+    of the shape, and most of its research replies failed schema validation.
+    """
+    if provider_supports(provider, CLOSED_OBJECT_SCHEMA):
+        return True
+    return provider_supports(provider, NATIVE_JSON_SCHEMA) and (
+        provider_id_of(provider) in _VALIDATING_NATIVE_SCHEMA_PROVIDERS
+    )
+
+
 def trading_response_format(provider: Any, output_model: type[BaseModel], schema_name: str) -> dict[str, Any]:
-    """The response format the analyzers send: strict schema or a JSON object."""
-    if not provider_supports(provider, CLOSED_OBJECT_SCHEMA):
+    """The response format the analyzers send: the output's schema, or a JSON object."""
+    if not sends_json_schema(provider):
         return {"type": "json_object"}
     schema = project_provider_schema(
         output_model.model_json_schema(),
@@ -123,13 +143,16 @@ def trading_model_call(
     max_tokens: int,
     request_timeout_seconds: float = 45.0,
     response_format: dict[str, Any] | None = None,
+    budget: TradingAIBudget | None = None,
 ) -> TradingModelReply[T]:
     """One provider call for one ``output_model`` object.
 
     Unusable output raises ``TradingModelOutputError`` (its ``response`` is
     the provider reply when there was one); a provider failure is raised
-    unchanged.
+    unchanged. A call over the day's research budget for its priority raises
+    ``TradingAIBudgetExhausted`` before reaching the provider.
     """
+    (budget or default_trading_ai_budget()).acquire(contract_id)
     request = {
         "model": model,
         "response_format": response_format or trading_response_format(provider, output_model, schema_name),
@@ -178,6 +201,7 @@ def trading_model_call(
 
 __all__ = [
     "TradingModelOutputError",
+    "sends_json_schema",
     "TradingModelReply",
     "trading_model_call",
     "trading_response_format",

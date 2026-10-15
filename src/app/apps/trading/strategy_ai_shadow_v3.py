@@ -31,10 +31,9 @@ from .feature_qualification import (
 from .models import MarketBar
 from .research import _provider_identity, default_research_provider
 from .strategy_ai_shadow_v2 import build_market_structure_snapshot
-from .structured_llm import TradingModelOutputError, trading_model_call
+from .structured_llm import TradingModelOutputError, trading_model_call, sends_json_schema
 from .trigger_plan import AuthoritativeTradeGeometry, TriggerCondition
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
-from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 
 
 AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-1"
@@ -318,7 +317,7 @@ class AIShadowV3Analyzer:
             ),
         ]
         response_format: dict[str, Any]
-        if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
+        if sends_json_schema(provider_name):
             schema = project_provider_schema(
                 AIShadowV3BatchResponse.model_json_schema(),
                 mode=StructuredMode.JSON_SCHEMA,

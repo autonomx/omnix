@@ -1785,6 +1785,13 @@
     "type": "string"
   },
   {
+    "default": "400",
+    "description": "Controls trading ai daily call budget for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_AI_DAILY_CALL_BUDGET",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading ai shadow circuit persistence for trading.",
     "feature": "trading",
@@ -2160,20 +2167,6 @@
     "description": "Controls trading session reconciliation monitor in tests for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS",
-    "type": "boolean"
-  },
-  {
-    "default": "0",
-    "description": "Controls trading solana ai monitor for trading.",
-    "feature": "trading",
-    "name": "OMNIX_TRADING_SOLANA_AI_MONITOR",
-    "type": "boolean"
-  },
-  {
-    "default": "0",
-    "description": "Controls trading solana ai monitor in tests for trading.",
-    "feature": "trading",
-    "name": "OMNIX_TRADING_SOLANA_AI_MONITOR_IN_TESTS",
     "type": "boolean"
   },
   {

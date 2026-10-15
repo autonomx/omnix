@@ -302,12 +302,17 @@ def test_finished_historical_ranges_are_asked_once_including_empty_answers(monke
     assert runtime.historical_request_count == 2
     assert runtime.historical_cache_hit_count == 4
 
-    # A range that ended moments ago may still change, so it is asked again.
+    # A range that ended moments ago may still change: strategies asking for it
+    # within 30 seconds share one answer, and it is asked again after that.
     now[0] = start + 12 * minute
+    recent = dict(start=start + 10 * minute, end=start + 12 * minute)
     for _ in range(2):
-        runtime.historical_bars(contract, start=start + 10 * minute, end=start + 11 * minute + minute)
+        runtime.historical_bars(contract, **recent)
+    assert runtime.historical_request_count == 3
+    now[0] += timedelta(seconds=31)
+    runtime.historical_bars(contract, **recent)
     assert runtime.historical_request_count == 4
-    assert runtime.diagnostics()["historical_cache_entries"] == 2
+    assert runtime.diagnostics()["historical_cache_entries"] == 3
 
 
 class _ScriptedClient:

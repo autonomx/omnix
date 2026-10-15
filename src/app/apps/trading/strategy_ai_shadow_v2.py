@@ -11,10 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.providers import ChatMessage
 from app.providers.structured.contracts import StructuredMode
 from app.providers.structured.schema_projection import project_provider_schema
-from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 
 from .models import MarketBar
-from .structured_llm import trading_model_call
+from .structured_llm import trading_model_call, sends_json_schema
 from .research import _call_provider, _json_payload, _provider_identity, default_research_provider
 from .research.contracts import TradingEvidence, TradingResearchReport
 
@@ -566,7 +565,7 @@ class CatalystIntelligenceAnalyzer:
             ChatMessage(role="user", content=json.dumps(payload, sort_keys=True, default=str)),
         ]
         if hasattr(provider, "chat_completion") and callable(provider.chat_completion):
-            if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
+            if sends_json_schema(provider_name):
                 schema = project_provider_schema(
                     CatalystSemanticResponse.model_json_schema(),
                     mode=StructuredMode.JSON_SCHEMA,
@@ -725,7 +724,7 @@ class AIShadowV2Analyzer:
             ChatMessage(role="system", content=system),
             ChatMessage(role="user", content=json.dumps({"arm": arm, "candidates": rows}, sort_keys=True, default=str)),
         ]
-        if provider_supports(provider_name, CLOSED_OBJECT_SCHEMA):
+        if sends_json_schema(provider_name):
             schema = project_provider_schema(
                 AIShadowV2BatchResponse.model_json_schema(),
                 mode=StructuredMode.JSON_SCHEMA,

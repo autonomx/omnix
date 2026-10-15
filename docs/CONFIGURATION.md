@@ -259,6 +259,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TIMEZONE` | string | `UTC` | assistant-tools | Controls timezone for assistant-tools. |
 | `OMNIX_TRADE_AUDIT_LOGGING` | string | `1` | trading | Controls trade audit logging for trading. |
 | `OMNIX_TRADE_LOG_DIR` | string | — | trading | Controls trade log dir for trading. |
+| `OMNIX_TRADING_AI_DAILY_CALL_BUDGET` | string | `400` | trading | Controls trading ai daily call budget for trading. |
 | `OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE` | string | `1` | trading | Controls trading ai shadow circuit persistence for trading. |
 | `OMNIX_TRADING_AI_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading ai shadow monitor for trading. |
 | `OMNIX_TRADING_AI_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading ai shadow monitor in tests for trading. |
@@ -313,8 +314,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_RESEARCH_UNRESOLVED_RETRY_SECONDS` | integer | `300` | trading | Controls trading research unresolved retry seconds for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR` | boolean | `1` | trading | Controls trading session reconciliation monitor for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading session reconciliation monitor in tests for trading. |
-| `OMNIX_TRADING_SOLANA_AI_MONITOR` | boolean | `0` | trading | Controls trading solana ai monitor for trading. |
-| `OMNIX_TRADING_SOLANA_AI_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading solana ai monitor in tests for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR` | boolean | `1` | trading | Controls trading strategy monitor for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading strategy monitor in tests for trading. |
 | `OMNIX_TRADING_UNIVERSE_ARCHIVER` | boolean | `1` | trading | Controls trading universe archiver for trading. |

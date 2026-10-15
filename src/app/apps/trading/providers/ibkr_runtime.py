@@ -25,8 +25,11 @@ from typing import Any, Protocol
 from app.apps.trading.ibkr_settings import IbkrSettings, load_ibkr_settings
 
 # A range that ended this long ago is final: its answer, including "no trades",
-# is remembered instead of asking the Gateway again on every repair cycle.
+# is remembered instead of asking the Gateway again on every repair cycle. A
+# more recent range is remembered briefly, so strategies evaluating the same
+# stock moments apart share one request.
 HISTORICAL_CACHE_SETTLE = timedelta(minutes=3)
+HISTORICAL_CACHE_RECENT_TTL = timedelta(seconds=30)
 HISTORICAL_CACHE_MAX_ENTRIES = 50_000
 
 
@@ -733,7 +736,10 @@ class IbkrRuntime:
         self.contract_failure_count = 0
         self.historical_request_count = 0
         self.historical_cache_hit_count = 0
-        self._historical_cache: OrderedDict[tuple[Any, ...], tuple[IbkrHistoricalBar, ...]] = OrderedDict()
+        # key -> (rows, expires_at); expires_at None for a final range.
+        self._historical_cache: OrderedDict[
+            tuple[Any, ...], tuple[tuple[IbkrHistoricalBar, ...], datetime | None]
+        ] = OrderedDict()
         self._historical_cache_lock = threading.Lock()
         self._next_connect_attempt_monotonic = 0.0
         self._last_historical_request_monotonic = 0.0
@@ -1001,10 +1007,10 @@ class IbkrRuntime:
         key = (contract.con_id, start_utc, end_utc, bar_size, what_to_show, bool(use_rth))
         with self._historical_cache_lock:
             cached = self._historical_cache.get(key)
-            if cached is not None:
+            if cached is not None and (cached[1] is None or self._clock() < cached[1]):
                 self._historical_cache.move_to_end(key)
                 self.historical_cache_hit_count += 1
-                return list(cached)
+                return list(cached[0])
         self.connect()
         assert self.transport is not None
         duration = int((end_utc - start_utc).total_seconds())
@@ -1031,12 +1037,13 @@ class IbkrRuntime:
             self._last_historical_request_monotonic = time_module.monotonic()
             self.historical_request_count += 1
         result = [row for row in rows if start_utc <= row.start_time < end_utc]
-        if end_utc <= self._clock() - HISTORICAL_CACHE_SETTLE:
-            with self._historical_cache_lock:
-                self._historical_cache[key] = tuple(result)
-                self._historical_cache.move_to_end(key)
-                while len(self._historical_cache) > HISTORICAL_CACHE_MAX_ENTRIES:
-                    self._historical_cache.popitem(last=False)
+        now = self._clock()
+        expires_at = None if end_utc <= now - HISTORICAL_CACHE_SETTLE else now + HISTORICAL_CACHE_RECENT_TTL
+        with self._historical_cache_lock:
+            self._historical_cache[key] = (tuple(result), expires_at)
+            self._historical_cache.move_to_end(key)
+            while len(self._historical_cache) > HISTORICAL_CACHE_MAX_ENTRIES:
+                self._historical_cache.popitem(last=False)
         return result
 
     def diagnostics(self) -> dict[str, Any]:

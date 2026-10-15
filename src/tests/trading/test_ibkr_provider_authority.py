@@ -320,3 +320,48 @@ def test_ibkr_reconnect_requires_fresh_new_socket_quote_before_live_authority(mo
     restored = provider.authority_decision(INSTRUMENT)
     assert restored.authoritative is True
     assert restored.health == "READY"
+
+
+def test_execution_observation_falls_back_to_an_authoritative_ibkr_quote_when_iex_has_none(monkeypatch):
+    from app.apps.trading.providers.errors import ProviderContractError
+
+    monkeypatch.setattr(registry_module, "alpaca_iex_configured", lambda: True)
+
+    class _NoIexQuote:
+        def execution_observation(self, instrument_id, policy=None, cancellation=None):
+            raise ProviderContractError("Alpaca IEX snapshot is missing executable prices")
+
+    class _AuthoritativeIbkr(_UnavailableIbkr):
+        def __init__(self, authoritative: bool) -> None:
+            self.authoritative = authoritative
+
+        def authority_decision(self, instrument_id):
+            return super().authority_decision(instrument_id).model_copy(update={"authoritative": self.authoritative})
+
+        def live_observation(self, instrument_id, *, policy=None):
+            binding = next(item for item in bindings_for_instrument(instrument_id) if item.provider == "ibkr")
+            observation = ExecutionObservation(
+                instrument_id=instrument_id, binding_id=binding.binding_id, provider="ibkr",
+                bid=Decimal("10"), ask=Decimal("10.01"), last=Decimal("10.005"),
+                source_time=NOW, received_at=NOW, session="regular", freshness_mode="live",
+                market_data_type="LIVE", live_entitled=True,
+            )
+            return assess_execution_observation(observation, policy, binding_purpose="LIVE_DATA")
+
+    def registry(authoritative: bool) -> ProviderRegistry:
+        return ProviderRegistry(factories={
+            "alpaca_iex": lambda: _NoIexQuote(),
+            "ibkr": lambda: _AuthoritativeIbkr(authoritative),
+        })
+
+    observation = registry(True).execution_observation(INSTRUMENT)
+    assert observation.provider == "ibkr"  # attributed to its real source
+    assert observation.paper_fill_eligible is True
+    assert observation.broker_execution_authorized is False  # LIVE_DATA never authorizes orders
+
+    try:
+        registry(False).execution_observation(INSTRUMENT)
+    except ProviderContractError as exc:
+        assert "missing executable prices" in str(exc)  # without IBKR authority: the IEX error stands
+    else:
+        raise AssertionError("no fallback without IBKR live-data authority")

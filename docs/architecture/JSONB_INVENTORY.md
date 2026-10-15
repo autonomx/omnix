@@ -315,7 +315,7 @@ Decisions for queried columns are in `resources/architecture/jsonb-decisions.jso
 | `omnix_trading_scanners` | `instrument_ids` | opaque | keep opaque |
 | `omnix_trading_scanners` | `rules` | opaque | keep opaque |
 | `omnix_trading_session_evidence_manifests` | `payload` | opaque | keep opaque |
-| `omnix_trading_solana_ai_decisions` | `payload` | opaque | keep opaque |
+| `omnix_trading_solana_ai_decisions` | `payload` | opaque | retired experiment (2026-10-15): no code reads or writes it; kept as history |
 | `omnix_trading_strategy_archives` | `config_snapshot` | opaque | keep opaque |
 | `omnix_trading_strategy_archives` | `events` | opaque | keep opaque |
 | `omnix_trading_strategy_archives` | `protections` | opaque | keep opaque |

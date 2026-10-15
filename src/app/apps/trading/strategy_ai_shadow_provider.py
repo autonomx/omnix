@@ -28,12 +28,12 @@ from app.config.env import environment
 from app.providers.service import get_provider
 from app.providers import ChatMessage, ConnectionError as ProviderConnectionError, get_registry
 from app.providers.structured.contracts import StructuredMode
-from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 from app.providers.structured.schema_projection import project_provider_schema
 from app.providers.structured.errors import StructuredDecodeError
 from app.providers.structured.parsing import decode_json_object
 
 from . import strategy_ai_shadow as shadow
+from .structured_llm import sends_json_schema
 from .strategy_repository import StrategyEvent, default_strategy_repository
 
 logger = logging.getLogger(__name__)
@@ -351,7 +351,7 @@ def assess_intraday_with_shared_circuit(
         provider = get_trading_research_provider()
         if provider is None:
             return None
-        if provider_supports(provider, CLOSED_OBJECT_SCHEMA):
+        if sends_json_schema(provider):
             from .strategy_intraday_llm import _IntradaySchemaProviderProxy
 
             return _IntradaySchemaProviderProxy(provider)

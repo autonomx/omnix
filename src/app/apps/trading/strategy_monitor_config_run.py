@@ -23,6 +23,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
 )
 from .strategy_shadow_execution import observe_shadow_execution
+from .strategy_tape_prefetch import prefetch_candidate_tapes
 from .strategy_shadow_universe import (
     resolve_v2_runtime_archive,
 )
@@ -293,6 +294,7 @@ async def run_config(
         universe_id=universe.universe_id,
     )
 
+    await prefetch_candidate_tapes(market_service, universe, interval="1m", as_of=now_utc)
     proposals = await monitor._evaluate_candidates(
         config,
         strategy_repository,

@@ -33,7 +33,7 @@ from .ibkr import IbkrEquityProvider
 from .coinmarketcap import CoinMarketCapProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
-from .errors import ProviderFallbackEligibleError
+from .errors import ProviderContractError, ProviderFallbackEligibleError
 
 
 class ProviderRegistry:
@@ -484,11 +484,20 @@ class ProviderRegistry:
         binding = self.resolve_execution_binding(instrument_id, requested.binding_id)
         provider = self.provider(binding.provider)
         if binding.provider == "alpaca_iex":
-            observation = provider.execution_observation(
-                instrument_id,
-                policy=policy,
-                cancellation=cancellation,
-            )
+            try:
+                observation = provider.execution_observation(
+                    instrument_id,
+                    policy=policy,
+                    cancellation=cancellation,
+                )
+            except (ProviderContractError, ProviderFallbackEligibleError):
+                # IEX sees part of the market; thin stocks often have no IEX
+                # quote. A quote from IBKR is used only while IBKR holds
+                # per-contract live-data authority, and stays attributed to it.
+                fallback = self._ibkr_execution_fallback(instrument_id, policy)
+                if fallback is None:
+                    raise
+                observation = fallback
             if requested.binding_id != binding.binding_id:
                 observation = observation.model_copy(update={"binding_id": requested.binding_id})
             return observation
@@ -506,6 +515,28 @@ class ProviderRegistry:
             provider=binding.provider,
         )
         return assess_execution_observation(observation, policy)
+
+    def _ibkr_execution_fallback(
+        self,
+        instrument_id: str,
+        policy: ExecutionEligibilityPolicy | None,
+    ) -> ExecutionObservation | None:
+        """An IBKR live observation, or None unless IBKR's live-data authority holds now.
+
+        Authority requires the rollout gate, a connected Gateway, a uniquely
+        qualified contract, LIVE market-data type, proven entitlement and a fresh
+        quote. The observation keeps its LIVE_DATA purpose, so it can support a
+        paper or shadow fill but never broker execution authority.
+        """
+        if not instrument_id.startswith("equity:"):
+            return None
+        try:
+            ibkr = self.provider("ibkr")
+            if not ibkr.authority_decision(instrument_id).authoritative:
+                return None
+            return ibkr.live_observation(instrument_id, policy=policy)
+        except Exception:
+            return None
 
     def execution_indicator_bars(
         self,
