@@ -39,6 +39,24 @@ def _revision(session: dict[str, Any]) -> int:
     return max(0, int(runtime.get("state_revision") or manifest.get("turn_count") or 0))
 
 
+class TurnStateRewriteConflict(RevisionConflict):
+    """A save inside a turn would rewrite the revision that turn committed."""
+
+
+def _refuse_rewrite_inside_turn(campaign_id: str, revision: int) -> None:
+    """A turn commits its state once (WP-5.6): within its execution, saving
+    different content at the committed revision would make a revision with no
+    turn behind it, so it is a conflict (HTTP 409) instead of a silent bump."""
+    from app.jobs.foreground_execution import current_foreground_execution
+
+    execution = current_foreground_execution()
+    if execution is not None and execution.session_id == campaign_id:
+        raise TurnStateRewriteConflict(
+            f"RPG turn {execution.submission_id} attempted to rewrite revision {revision} "
+            f"of {campaign_id} after committing it"
+        )
+
+
 def save_session_to_postgres(
     session: dict[str, Any],
     *,
@@ -104,6 +122,9 @@ def save_session_to_postgres(
                 work.rollback()
                 return existing["state"]
             if revision == existing["revision"] and digest != existing["state_hash"]:
+                _refuse_rewrite_inside_turn(campaign_id, revision)
+                # An edit outside a turn (rename, lore, settings): the session
+                # was loaded at this revision, so the edit is the next one.
                 revision = existing["revision"] + 1
                 runtime = session.get("runtime_state")
                 if not isinstance(runtime, dict):

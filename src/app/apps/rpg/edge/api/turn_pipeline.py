@@ -49,12 +49,27 @@ async def execute_foreground_rpg_turn(
     Every stage loads or saves the session in PostgreSQL or may call a model,
     so none of it may run on the gateway's event loop (PERF1).
     """
-    return await asyncio.to_thread(
-        _execute_foreground_rpg_turn,
-        session_id=session_id,
-        command=command,
-        request=request,
-    )
+    from app.persistence.errors import RevisionConflict
+
+    try:
+        return await asyncio.to_thread(
+            _execute_foreground_rpg_turn,
+            session_id=session_id,
+            command=command,
+            request=request,
+        )
+    except RevisionConflict as exc:
+        # Another write won the campaign revision, or the turn would rewrite
+        # what it committed (WP-5.6): the client reloads and resubmits.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "ok": False,
+                "error": "rpg_state_revision_conflict",
+                "session_id": session_id,
+                "message": str(exc),
+            },
+        ) from exc
 
 
 def _execute_foreground_rpg_turn(

@@ -17,8 +17,10 @@ from app.apps.rpg.edge.api.feature_routes.rpg_campaign_lore_routes import _kick_
 
 from app.apps.rpg.session.jobs.turn_job_guard import rpg_turn_submission_policy
 from app.apps.rpg.session.jobs.handlers import (
+    RpgNarrationJobInput,
     RpgReportJobInput,
     RpgTurnJobInput,
+    execute_rpg_narration_job,
     execute_rpg_report_job,
     execute_rpg_turn_job,
 )
@@ -31,6 +33,10 @@ def _turn(context: JobExecutionContext, job):
 
 def _report(context: JobExecutionContext, job):
     return execute_rpg_report_job(context.job_store, job)
+
+
+def _narration(context: JobExecutionContext, job):
+    return execute_rpg_narration_job(context.job_store, job)
 
 
 def _rpg_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
@@ -101,6 +107,15 @@ FEATURE = FeatureModule(
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=900,
             submission_policy=_rpg_submission_policy,
+        ),
+        JobHandlerSpec(
+            # Deferred narration (WP-5.6); the jobs system owns its claims and retries.
+            type="rpg.narration",
+            handler=_narration,
+            input_model=RpgNarrationJobInput,
+            resource_class=ResourceClass.GPU_LLM,
+            timeout_seconds=300,
+            max_attempts=3,
         ),
         JobHandlerSpec(
             type="rpg.report.last10",

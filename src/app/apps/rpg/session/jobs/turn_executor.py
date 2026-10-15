@@ -167,49 +167,24 @@ def _queue_deferred_rpg_turn_narration(session_id: str, result: dict[str, Any]) 
         return False
     tick = int(narration_request.get("tick") or result.get("tick") or 0)
 
-    from app.apps.rpg.session.narration_worker import (
-        ensure_narration_worker_running,
-        signal_narration_work,
-    )
-    from app.apps.rpg.session.semantic_response_projection import (
-        _enqueue_narration_request as _enqueue_narration_request,
-    )
-    from app.apps.rpg.session.session_runtime_store import (
-        load_runtime_session as load_runtime_session,
-        save_runtime_session as save_runtime_session,
-    )
-
-    session = load_runtime_session(session_id)
-    if session is None:
-        return False
+    from app.apps.rpg.session.jobs.narration_job import enqueue_rpg_narration
 
     narration_request = deepcopy(narration_request)
     narration_request["session_id"] = session_id
     performance = _dict_value(narration_request.get("performance"))
     performance["enable_live_narration_llm"] = True
     narration_request["performance"] = performance
-
-    runtime_state = _dict_value(session.get("runtime_state"))
-    runtime_state["session_id"] = session_id
-    runtime_state, narration_job, is_new = _enqueue_narration_request(
-        runtime_state,
+    result["narration_job"] = enqueue_rpg_narration(
+        session_id,
         turn_id,
-        tick,
         narration_request,
+        interaction_id=_text(result.get("interaction_id")) or "",
+        tick=tick,
     )
-    session["runtime_state"] = runtime_state
-    save_runtime_session(session)
-
-    result["narration_job"] = narration_job
-    result["narration_status"] = _text(narration_job.get("status")) or "queued"
+    result["narration_status"] = "queued"
     if isinstance(result.get("result"), dict):
         result["result"]["narration_status"] = result["narration_status"]
-    if is_new:
-        try:
-            ensure_narration_worker_running()
-            signal_narration_work(session_id)
-        except Exception:
-            return True
+    return True
     return True
 
 

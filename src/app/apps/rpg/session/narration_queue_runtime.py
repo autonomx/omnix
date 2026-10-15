@@ -9,7 +9,7 @@ from app.apps.rpg.session.state_normalization import (
 )
 from app.apps.rpg.session.companion_turn_runtime import (
     _DEFAULT_INTERACTION_DURATION_TICKS as _DEFAULT_INTERACTION_DURATION_TICKS, _INTERACTION_STALE_GRACE_TICKS as _INTERACTION_STALE_GRACE_TICKS,
-    _MAX_ACTIVE_INTERACTIONS as _MAX_ACTIVE_INTERACTIONS, _get_narration_job_for_turn as _get_narration_job_for_turn, _is_narration_job_active as _is_narration_job_active,
+    _MAX_ACTIVE_INTERACTIONS as _MAX_ACTIVE_INTERACTIONS,
 )
 from app.apps.rpg.narration.ai.npc_reaction_layer import (
     apply_npc_reactions as apply_npc_reactions, build_interaction_reaction_context as build_interaction_reaction_context,
@@ -21,9 +21,6 @@ from app.apps.rpg.narration.ai.conversation_threads import (
 )
 import hashlib as hashlib
 import logging
-from app.apps.rpg.session.narration_worker import (
-    ensure_narration_worker_running as ensure_narration_worker_running, signal_narration_work as signal_narration_work,
-)
 from typing import (
     Any as Any, Dict as Dict, List as List, Tuple as Tuple,
 )
@@ -31,145 +28,7 @@ from typing import (
 logger = logging.getLogger(__name__)
 
 
-def _enqueue_narration_request(
-    runtime_state: dict[str, Any],
-    turn_id: str,
-    tick: int,
-    narration_request: dict[str, Any],
-    job_kind: str = "player_turn",
-    priority: int = 100,
-) -> tuple[dict[str, Any], dict[str, Any], bool]:
-    from app.apps.rpg.session.combat_intent import (
-        _utc_now_iso as _utc_now_iso, ensure_ambient_runtime_state as ensure_ambient_runtime_state,
-    )
-
-    runtime_state = ensure_ambient_runtime_state(_copy_dict(runtime_state))
-    turn_id = _safe_str(turn_id).strip()
-    tick = int(tick or 0)
-    narration_request = _safe_dict(narration_request)
-    request_session_id = _safe_str(narration_request.get("session_id")).strip()
-    if request_session_id:
-        runtime_state["session_id"] = request_session_id
-    else:
-        runtime_session_id = _safe_str(runtime_state.get("session_id")).strip()
-        if runtime_session_id:
-            narration_request["session_id"] = runtime_session_id
-    job_kind = _safe_str(job_kind).strip() or "player_turn"
-    is_new = False
-
-    if not turn_id:
-        return runtime_state, {}, False
-
-    existing_artifact = _safe_dict(
-        _safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id)
-    )
-    if existing_artifact:
-        return runtime_state, {}, False
-
-    existing_job = _get_narration_job_for_turn(runtime_state, turn_id)
-    if existing_job and _is_narration_job_active(existing_job):
-        return runtime_state, existing_job, False
-
-    is_new = True
-    created_at = _utc_now_iso()
-    job_id = f"narration:{turn_id}"
-    job = {
-        "job_id": job_id,
-        "turn_id": turn_id,
-        "tick": tick,
-        "job_kind": job_kind,
-        "priority": priority,
-        "status": "queued",
-        "created_at": created_at,
-        "started_at": None,
-        "completed_at": None,
-        "error": "",
-        "attempts": 0,
-        "max_attempts": 3,
-        "narration_request": narration_request,
-    }
-
-    jobs = _safe_list(runtime_state.get("narration_jobs"))
-    jobs = [
-        _safe_dict(existing_job)
-        for existing_job in jobs
-        if _safe_str(_safe_dict(existing_job).get("turn_id")).strip() != turn_id
-    ]
-    jobs.append(job)
-    runtime_state["narration_jobs"] = jobs
-
-    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
-    by_turn[turn_id] = job
-    runtime_state["narration_jobs_by_turn"] = by_turn
-
-    logger.info(
-        "[RPG NARRATION QUEUE] enqueue session=%s turn_id=%s tick=%s job_kind=%s priority=%s existing_active=%s queue_len=%d",
-        runtime_state.get('session_id', 'unknown'),
-        turn_id,
-        tick,
-        job_kind,
-        priority,
-        bool(existing_job and _is_narration_job_active(existing_job)),
-        len(_safe_list(runtime_state.get("narration_jobs"))),
-    )
-    return runtime_state, job, is_new
-
-
-def _enqueue_grounding_soft_audit_request(
-    runtime_state: dict[str, Any],
-    turn_id: str,
-    tick: int,
-    audit_request: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any], bool]:
-    audit_turn_id = f"{_safe_str(turn_id)}:grounding_soft_audit"
-    return _enqueue_narration_request(
-        runtime_state,
-        audit_turn_id,
-        tick,
-        audit_request,
-        job_kind="grounding_soft_audit",
-        priority=10,
-    )
-
-
 # Backward compatibility wrapper
-def _enqueue_narration_request_old(
-    session_id: str,
-    narration_request: dict[str, Any],
-) -> dict[str, Any]:
-    from app.apps.rpg.session.session_runtime_store import (
-        load_runtime_session as load_runtime_session, save_runtime_session as save_runtime_session,
-    )
-
-    session = load_runtime_session(session_id)
-    if session is None:
-        return {"ok": False, "error": "session_not_found"}
-
-    runtime_state = _copy_dict(session.get("runtime_state"))
-    turn_id = _safe_str(narration_request.get("turn_id")).strip()
-    tick = int(narration_request.get("tick", 0) or 0)
-    job_kind = _safe_str(narration_request.get("job_kind")).strip() or "player_turn"
-
-    runtime_state, job, is_new = _enqueue_narration_request(runtime_state, turn_id, tick, narration_request, job_kind, 100)
-
-    session["runtime_state"] = runtime_state
-    save_runtime_session(session)
-
-    if is_new:
-        try:
-            ensure_narration_worker_running()
-            signal_narration_work(session_id)
-        except Exception:
-            logger.debug("suppressed error in %s", "_enqueue_narration_request_old", exc_info=True)
-
-    return {
-        "ok": True,
-        "status": "queued",
-        "job": job,
-        "session": session,
-    }
-
-
 # ── Fast-turn performance helpers ─────────────────────────────────────────
 
 _FAST_TURN_DEFAULTS = {
@@ -864,4 +723,4 @@ def _resolve_until_next_command_interactions(
         )
     return simulation_state
 
-__all__ = ['_DEFAULT_INTERACTION_DURATION_TICKS', '_FAST_TURN_DEFAULTS', '_INTERACTION_STALE_GRACE_TICKS', '_MAX_ACTIVE_INTERACTIONS', '_apply_dialogue_state_update_from_narration', '_build_active_interaction_from_semantic_action', '_build_active_interaction_prompt_context', '_build_dialogue_state_update_payload', '_build_fast_semantic_action_record', '_build_last_player_action_record', '_clear_stale_last_player_action', '_compute_interaction_expires_tick', '_dialogue_semantic_action_from_player_input', '_enqueue_grounding_soft_audit_request', '_enqueue_narration_request_old', '_expire_stale_active_interactions', '_get_interaction_duration_mode', '_get_interaction_duration_ticks', '_interaction_duration_for_record', '_persist_player_interaction_state_after_turn', '_refresh_active_interactions_for_tick', '_resolve_until_next_command_interactions', '_run_npc_reaction_pass', '_runtime_action_advisory_enabled', '_runtime_compact_save_enabled', '_runtime_continuity_grounding_enabled', '_runtime_fast_turn_enabled', '_runtime_narration_enabled', '_runtime_narration_retry_enabled', '_runtime_semantic_advisory_enabled', '_seed_conversation_thread_from_active_interaction', '_semantic_action_matches_active_interaction', '_semantic_action_starts_persistent_interaction', '_upsert_active_interaction_from_semantic_action']
+__all__ = ['_DEFAULT_INTERACTION_DURATION_TICKS', '_FAST_TURN_DEFAULTS', '_INTERACTION_STALE_GRACE_TICKS', '_MAX_ACTIVE_INTERACTIONS', '_apply_dialogue_state_update_from_narration', '_build_active_interaction_from_semantic_action', '_build_active_interaction_prompt_context', '_build_dialogue_state_update_payload', '_build_fast_semantic_action_record', '_build_last_player_action_record', '_clear_stale_last_player_action', '_compute_interaction_expires_tick', '_dialogue_semantic_action_from_player_input', '_expire_stale_active_interactions', '_get_interaction_duration_mode', '_get_interaction_duration_ticks', '_interaction_duration_for_record', '_persist_player_interaction_state_after_turn', '_refresh_active_interactions_for_tick', '_resolve_until_next_command_interactions', '_run_npc_reaction_pass', '_runtime_action_advisory_enabled', '_runtime_compact_save_enabled', '_runtime_continuity_grounding_enabled', '_runtime_fast_turn_enabled', '_runtime_narration_enabled', '_runtime_narration_retry_enabled', '_runtime_semantic_advisory_enabled', '_seed_conversation_thread_from_active_interaction', '_semantic_action_matches_active_interaction', '_semantic_action_starts_persistent_interaction', '_upsert_active_interaction_from_semantic_action']

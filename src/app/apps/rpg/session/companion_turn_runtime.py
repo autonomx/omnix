@@ -601,18 +601,6 @@ def _narration_artifact_completes_turn(artifact: dict[str, Any]) -> bool:
     return True
 
 
-def _ensure_narration_job_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
-    runtime_state = _copy_dict(runtime_state)
-    runtime_state.setdefault("narration_jobs", [])
-    runtime_state.setdefault("narration_jobs_by_turn", {})
-    return runtime_state
-
-
-def _build_narration_job_id(turn_id: str) -> str:
-    turn_id = _safe_str(turn_id).strip() or "turn:unknown"
-    return f"narration:{turn_id}"
-
-
 def _build_ambient_turn_id(thread_id: str, beat_id: str) -> str:
     thread_id = _safe_str(thread_id).strip() or "conv:unknown"
     beat_id = _safe_str(beat_id).strip() or "beat:unknown"
@@ -661,27 +649,6 @@ def _has_narration_artifact_for_turn(runtime_state: dict[str, Any], turn_id: str
     by_turn = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
     artifact = _safe_dict(by_turn.get(_safe_str(turn_id).strip()))
     return _narration_artifact_completes_turn(artifact)
-
-
-def _get_narration_job_for_turn(runtime_state: dict[str, Any], turn_id: str) -> dict[str, Any]:
-    runtime_state = _safe_dict(runtime_state)
-    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
-    return _safe_dict(by_turn.get(_safe_str(turn_id).strip()))
-
-
-def _is_narration_job_terminal(job: dict[str, Any]) -> bool:
-    status = _safe_str(_safe_dict(job).get("status")).strip().lower()
-    return status in {"completed", "failed", "stale", "cancelled"}
-
-
-def _is_narration_job_active(job: dict[str, Any]) -> bool:
-    status = _safe_str(_safe_dict(job).get("status")).strip().lower()
-    return status in {"queued", "processing"}
-
-
-def _get_authoritative_narration_job_id(runtime_state: dict[str, Any], turn_id: str) -> str:
-    job = _get_narration_job_for_turn(runtime_state, turn_id)
-    return _safe_str(job.get("job_id")).strip()
 
 
 def _has_active_player_turn_request(runtime_state: dict[str, Any]) -> bool:
@@ -805,9 +772,7 @@ def _maybe_enqueue_latest_ambient_conversation_narration(
     simulation_state: dict[str, Any],
     runtime_state: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.apps.rpg.session.semantic_response_projection import (
-        _enqueue_narration_request as _enqueue_narration_request,
-    )
+    from app.apps.rpg.session.jobs.narration_job import enqueue_rpg_narration
 
     runtime_state = _ensure_ambient_narration_state(runtime_state)
     settings = _safe_dict(runtime_state.get("conversation_settings"))
@@ -841,7 +806,9 @@ def _maybe_enqueue_latest_ambient_conversation_narration(
         if _has_narration_artifact_for_turn(runtime_state, turn_id):
             continue
 
-        runtime_state, job, _ = _enqueue_narration_request(runtime_state, turn_id, beat_tick, request, "ambient_conversation", 20)
+        job = enqueue_rpg_narration(
+            session_id, turn_id, request, tick=beat_tick, job_kind="ambient_conversation",
+        )
         results.append({"ok": bool(job), "job": job})
 
         if job:
@@ -857,87 +824,4 @@ def _maybe_enqueue_latest_ambient_conversation_narration(
     }
 
 
-def _prune_narration_jobs(runtime_state: dict[str, Any], max_items: int = 64) -> dict[str, Any]:
-    runtime_state = _ensure_narration_job_state(runtime_state)
-    jobs = _safe_list(runtime_state.get("narration_jobs"))
-    if len(jobs) > max_items:
-        jobs = jobs[-max_items:]
-    runtime_state["narration_jobs"] = jobs
-
-    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
-    allowed_turn_ids = {
-        _safe_str(_safe_dict(job).get("turn_id")).strip()
-        for job in jobs
-        if isinstance(job, dict)
-    }
-    runtime_state["narration_jobs_by_turn"] = {
-        k: v for k, v in by_turn.items() if k in allowed_turn_ids
-    }
-    return runtime_state
-
-
-def _upsert_narration_job(runtime_state: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
-    runtime_state = _ensure_narration_job_state(runtime_state)
-    job = _safe_dict(job)
-    turn_id = _safe_str(job.get("turn_id")).strip()
-    if not turn_id:
-        return runtime_state
-
-    jobs = _safe_list(runtime_state.get("narration_jobs"))
-    jobs = [j for j in jobs if _safe_str(_safe_dict(j).get("turn_id")).strip() != turn_id]
-    jobs.append(job)
-    runtime_state["narration_jobs"] = jobs
-
-    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
-    by_turn[turn_id] = job
-    runtime_state["narration_jobs_by_turn"] = by_turn
-
-    return _prune_narration_jobs(runtime_state)
-
-
-def _mark_narration_job_status(
-    runtime_state: dict[str, Any],
-    turn_id: str,
-    *,
-    status: str,
-    worker_token: str = "",
-    error: str = "",
-) -> dict[str, Any]:
-    from app.apps.rpg.session.combat_intent import (
-        _utc_now_iso as _utc_now_iso,
-    )
-
-    runtime_state = _ensure_narration_job_state(runtime_state)
-    turn_id = _safe_str(turn_id).strip()
-    if not turn_id:
-        return runtime_state
-
-    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
-    job = _safe_dict(by_turn.get(turn_id))
-    if not job:
-        job = {
-            "job_id": _build_narration_job_id(turn_id),
-            "turn_id": turn_id,
-            "tick": 0,
-            "status": "queued",
-            "created_at": _utc_now_iso(),
-            "started_at": None,
-            "completed_at": None,
-            "error": "",
-            "attempts": 0,
-            "max_attempts": 3,
-        }
-
-    job["status"] = status
-    if status == "processing" and not job.get("started_at"):
-        job["started_at"] = _utc_now_iso()
-    if status in {"completed", "failed", "stale"}:
-        job["completed_at"] = _utc_now_iso()
-    if error:
-        job["error"] = _safe_str(error)
-    if worker_token:
-        job["worker_token"] = _safe_str(worker_token)
-
-    return _upsert_narration_job(runtime_state, job)
-
-__all__ = ['_ALLOWED_IDLE_SECONDS', '_ALLOWED_REACTION_STYLES', '_AMBIENT_NARRATION_THREAD_COOLDOWN_TICKS', '_COMPLETED_NARRATION_ARTIFACT_SOURCES', '_DEFAULT_POST_PLAYER_QUIET_TICKS', '_DEFAULT_STORY_POLICY', '_DETERMINISTIC_NARRATION_ARTIFACT_SOURCES', '_MAX_AMBIENT_NARRATION_ENQUEUES_PER_TICK', '_MAX_HISTORY', '_MAX_PERF_TRACE_ENTRIES', '_MAX_RECENT_CHANGES', '_MAX_RECENT_EVENTS', '_active_companion_profiles_summary', '_advance_simulation_for_idle', '_build_ambient_conversation_narration_request', '_build_ambient_turn_id', '_build_idle_player_context', '_build_narration_job_id', '_build_turn_id', '_companion_runtime_mutated_state', '_drop_item_action', '_ensure_ambient_narration_state', '_ensure_narration_artifact_state', '_ensure_narration_job_state', '_equip_item_action', '_extract_equipment', '_fallback_general_interaction_narration', '_first_active_companion_actor_id', '_get_authoritative_narration_job_id', '_get_last_ambient_narrated_tick', '_get_narration_job_for_turn', '_has_active_player_turn_request', '_has_blocking_player_turn_narration', '_has_narration_artifact_for_turn', '_is_companion_actor_id', '_is_narration_job_active', '_is_narration_job_terminal', '_mark_narration_job_status', '_maybe_enqueue_latest_ambient_conversation_narration', '_narration_artifact_completes_turn', '_narration_artifact_has_structured_llm_content', '_narration_artifact_is_echo_fallback', '_narration_artifact_norm_text', '_narration_artifact_text', '_pickup_item_action', '_player_input_requests_general_interaction', '_player_input_requests_reposition', '_player_party_state_from_simulation', '_prune_narration_artifacts', '_prune_narration_jobs', '_record_ambient_narration_enqueue', '_requested_reposition_values', '_select_latest_ambient_conversation_beats_per_active_thread', '_service_action_from_result', '_service_authoritative_result', '_service_semantic_action_from_result', '_store_narration_artifact', '_sync_session_if_companion_runtime_mutated', '_sync_session_simulation_state_for_early_return', '_try_resolve_pending_companion_offer_at_turn_start', '_unequip_item_action', '_upsert_narration_job']
+__all__ = ['_ALLOWED_IDLE_SECONDS', '_ALLOWED_REACTION_STYLES', '_AMBIENT_NARRATION_THREAD_COOLDOWN_TICKS', '_COMPLETED_NARRATION_ARTIFACT_SOURCES', '_DEFAULT_POST_PLAYER_QUIET_TICKS', '_DEFAULT_STORY_POLICY', '_DETERMINISTIC_NARRATION_ARTIFACT_SOURCES', '_MAX_AMBIENT_NARRATION_ENQUEUES_PER_TICK', '_MAX_HISTORY', '_MAX_PERF_TRACE_ENTRIES', '_MAX_RECENT_CHANGES', '_MAX_RECENT_EVENTS', '_active_companion_profiles_summary', '_advance_simulation_for_idle', '_build_ambient_conversation_narration_request', '_build_ambient_turn_id', '_build_idle_player_context', '_build_turn_id', '_companion_runtime_mutated_state', '_drop_item_action', '_ensure_ambient_narration_state', '_ensure_narration_artifact_state', '_equip_item_action', '_extract_equipment', '_fallback_general_interaction_narration', '_first_active_companion_actor_id', '_get_last_ambient_narrated_tick', '_has_active_player_turn_request', '_has_blocking_player_turn_narration', '_has_narration_artifact_for_turn', '_is_companion_actor_id', '_maybe_enqueue_latest_ambient_conversation_narration', '_narration_artifact_completes_turn', '_narration_artifact_has_structured_llm_content', '_narration_artifact_is_echo_fallback', '_narration_artifact_norm_text', '_narration_artifact_text', '_pickup_item_action', '_player_input_requests_general_interaction', '_player_input_requests_reposition', '_player_party_state_from_simulation', '_prune_narration_artifacts', '_record_ambient_narration_enqueue', '_requested_reposition_values', '_select_latest_ambient_conversation_beats_per_active_thread', '_service_action_from_result', '_service_authoritative_result', '_service_semantic_action_from_result', '_store_narration_artifact', '_sync_session_if_companion_runtime_mutated', '_sync_session_simulation_state_for_early_return', '_try_resolve_pending_companion_offer_at_turn_start', '_unequip_item_action']
