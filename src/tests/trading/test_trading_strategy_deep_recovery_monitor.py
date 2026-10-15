@@ -204,3 +204,21 @@ def test_deep_recovery_monitor_persists_one_shadow_signal_with_no_execution_auth
     assert signal.payload["execution"]["prospective_signal_features"]["immutable_fingerprint"] == "a" * 64
     assert monitor.signal_count == 1
     assert monitor.execution_observation_count == 1
+
+
+def test_deep_recovery_monitor_reads_no_bars_once_the_session_settles() -> None:
+    class UntouchedMarket:
+        def bars(self, *args, **kwargs):
+            raise AssertionError("a settled session's bars are final; nothing is re-read")
+
+    repository = FakeRepository()
+    repository.configs[0].active_universe_id = repository.universe.universe_id
+    settled = datetime(2026, 8, 24, 20, 31, tzinfo=timezone.utc)  # 16:31 ET
+    monitor = TradingStrategyDeepRecoveryShadowMonitor(
+        strategy_repository_factory=lambda: repository,
+        market_service_factory=lambda: UntouchedMarket(),
+        now_factory=lambda: settled,
+        interval_seconds=30,
+    )
+    assert asyncio.run(monitor.run_once()) == 0
+    assert repository.events == []

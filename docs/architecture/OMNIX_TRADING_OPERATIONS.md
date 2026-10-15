@@ -38,6 +38,7 @@ The paper monitor owns market observations and manual paper stop/target protecti
 - `OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS` controls the polling interval with a five-second minimum.
 - In `legacy_test` mode, enable only with `OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS=1`.
 - Strategy runtime modes are `off`, `shadow`, and `auto_paper`. There is no live-broker mode.
+- Live evaluation stops once the session settles, 30 minutes after the regular close (`regular_session_settled`; 13:30 ET on early-close days): the session's bars are final, so every later pass would repeat the last one, provider requests included. Protections are still reconciled every cycle, and skipped passes log `strategy_cycle_skipped` with reason `session_settled`. The deep-recovery and execution-observation monitors stop at the same point; post-close research (interday discovery, AI shadow labelling, overnight shadow) is unaffected.
 
 ### Provider configuration
 

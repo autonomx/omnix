@@ -79,6 +79,8 @@ budget; diagnostics expose both total demand and budget-denied demand.
 
 The runtime serializes connection attempts, applies reconnect backoff, tracks Gateway reconnects, request-specific errors, entitlement denials, and IBKR farm health, and paces historical requests. Historical recovery coalesces adjacent missing ranges rather than requesting one minute at a time.
 
+A historical range that ended at least three minutes ago is final, so the runtime remembers its answer for the life of the process (up to 50,000 ranges), including IBKR's "no data" answer for minutes without trades. Repair cycles that find the same Yahoo gaps again are answered from memory; diagnostics report `historical_cache_hit_count` and `historical_cache_entries`. A request error ends the request immediately instead of waiting for the timeout; only "no data" counts as an empty answer, and a socket reset is reported as a disconnect, never cached.
+
 ## Prospective acceptance
 
 Do not enable either authority flag merely because a socket connects. Keep trading parameters frozen and observe multiple live sessions. Durable session records are kept in PostgreSQL

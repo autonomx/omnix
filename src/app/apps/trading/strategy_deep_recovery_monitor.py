@@ -40,6 +40,7 @@ from .strategy_session_evidence import (
     _PartialCurrentSessionMarketDataProxy,
 )
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_session_settled
 from typing import Any, cast
 
 
@@ -209,6 +210,8 @@ class TradingStrategyDeepRecoveryShadowMonitor(ScheduledTradingMonitor):
         ))
         if not _eligible(config):
             return 0
+        if regular_session_settled(now):
+            return 0  # the session's bars are final; a later pass repeats the last one
         today_et = now.astimezone(_ET).date()
         day_start_et = datetime(today_et.year, today_et.month, today_et.day, tzinfo=_ET)
         day_start = day_start_et.astimezone(timezone.utc)

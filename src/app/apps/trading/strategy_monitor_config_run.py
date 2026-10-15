@@ -5,6 +5,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
+from app.apps.trading.us_equity_calendar import regular_session_settled
 
 from .order_gateway import StrategyPaperAccess, strategy_paper_access
 from .paper_repository import TradingPaperRepository
@@ -84,6 +85,27 @@ async def run_config(
         return
 
     now_utc = datetime.now(timezone.utc)
+    if regular_session_settled(now_utc):
+        # The session's bars are final: every later pass would repeat the last one,
+        # and its provider requests, until midnight. Protections were reconciled above.
+        if config.mode == "auto_paper":
+            monitor._set_auto_paper_readiness(
+                config,
+                state="blocked",
+                reason="session_settled",
+                observed_at=now_utc,
+            )
+        if log_cycle_heartbeat:
+            trade_log(
+                "auto_trading",
+                "strategy_cycle_skipped",
+                run_id=monitor.current_run_id,
+                strategy_id=config.strategy_id,
+                reason="session_settled",
+                execution_authority=False,
+            )
+        return
+
     if config.strategy_kind == "stoch_rsi_5m_v1":
         await monitor._run_stoch_rsi_5m_config(
             config,
