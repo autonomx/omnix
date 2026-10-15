@@ -10,6 +10,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
+from tests.support.database import truncate_memory_v2_data
 
 
 pytestmark = pytest.mark.skipif(
@@ -41,18 +42,7 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_conversation_segments, omnix_character_versions, omnix_characters, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
         )
-        # Curated records live in Memory v2 (WP-8.5), keyed by workspace without a
-        # foreign key: clear its data, but keep the authority that makes v2 current.
-        v2_tables = [
-            str(row[0])
-            for row in connection.execute(
-                "SELECT tablename FROM pg_tables WHERE schemaname = current_schema() "
-                "AND tablename LIKE 'omnix_memory_v2_%' "
-                "AND tablename NOT IN ('omnix_memory_v2_authority_epochs', 'omnix_memory_v2_authority_current')"
-            ).fetchall()
-        ]
-        if v2_tables:
-            connection.execute("TRUNCATE " + ", ".join(v2_tables) + " CASCADE")
+        truncate_memory_v2_data(connection)
         connection.execute(
             """
             UPDATE omnix_persistence_cutover

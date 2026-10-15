@@ -10,6 +10,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
+from tests.support.database import truncate_memory_v2_data
 
 
 pytestmark = pytest.mark.skipif(
@@ -51,6 +52,7 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_audit_events, omnix_idempotency_keys, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
         )
+        truncate_memory_v2_data(connection)
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
@@ -342,7 +344,12 @@ session = {
     "runtime_state": {"state_revision": 0, "interaction_seq": 0},
 }
 save_session_to_postgres(session)
-assert load_session_from_postgres("campaign:runtime") == session
+loaded = load_session_from_postgres("campaign:runtime")
+# A document without a schema version loads upcast to the current one (WP-5.6).
+from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION
+assert loaded["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION
+assert {key: loaded["manifest"][key] for key in session["manifest"]} == session["manifest"]
+assert loaded["state"] == session["state"]
 
 from app import assets as assets_package
 from app.assets import store as asset_store_module
