@@ -17,9 +17,9 @@ def get_runtime_llm_provider() -> Any:
     Keep this tiny and defensive so tests can monkeypatch it easily.
     """
     try:
-        from app.providers.service import get_provider
+        from app.apps.rpg.foundation.provider_access import routed_provider
 
-        return get_provider()
+        return routed_provider()
     except Exception:
         logger.debug("suppressed error in %s", "get_runtime_llm_provider", exc_info=True)
         return None

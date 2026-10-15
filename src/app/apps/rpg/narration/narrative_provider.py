@@ -4,7 +4,7 @@ from app.config.env import environment as _environment
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import monotonic, perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
@@ -101,6 +101,9 @@ class _ConfiguredProviderView:
         return StructuredCapabilities.default_for_provider(self.provider_name)
 
 
+_OFFLINE_MODES = frozenset({"offline", "deterministic", "test", "disabled"})
+
+
 @dataclass(frozen=True)
 class NarrativeProviderConfig:
     mode: str = "auto"
@@ -156,12 +159,7 @@ class NarrativeProviderConfig:
 
     @property
     def live_enabled(self) -> bool:
-        return self.mode not in {
-            "offline",
-            "deterministic",
-            "test",
-            "disabled",
-        } and bool(self.provider)
+        return self.mode not in _OFFLINE_MODES and bool(self.provider)
 
 
 def _system_prompt() -> str:
@@ -383,6 +381,18 @@ def build_production_narrative_writer(
     """Create the configured live typed writer or an explicit safe fallback."""
 
     resolved = config or NarrativeProviderConfig.from_environment()
+    if config is None and not resolved.provider and resolved.mode not in _OFFLINE_MODES:
+        # No override in the environment: the writer uses RPG's settings route,
+        # the provider and model the rest of the turn uses. It used to fall back
+        # to deterministic prose, which turns that need model-written dialogue
+        # refuse to publish.
+        from app.apps.rpg.foundation.provider_access import routed_provider, rpg_llm_route
+
+        route = rpg_llm_route()
+        provider = routed_provider() if route is not None else None
+        if route is not None and provider is not None:
+            resolved = replace(resolved, provider=route[0], model=route[1])
+            return ProductionStructuredNarrativeWriter(ProviderNarrativeGenerator(provider, resolved))
     if not resolved.live_enabled:
         return DeterministicNarrativeWriter()
     try:

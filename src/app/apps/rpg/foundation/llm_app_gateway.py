@@ -324,9 +324,10 @@ def build_app_llm_gateway() -> Optional[AppLLMGateway]:
     """Build an RPG gateway from the application's centralized provider layer."""
 
     try:
+        from app.apps.rpg.foundation.provider_access import routed_provider
         from app.providers import service as provider_service
 
-        provider = provider_service.get_provider()
+        provider = routed_provider()
         if not provider:
             logger.debug(
                 "RPG LLM gateway unavailable: app.provider_service.get_provider() returned no provider"

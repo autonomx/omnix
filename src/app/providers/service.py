@@ -209,9 +209,16 @@ def _provider_config(
     return name, config
 
 
-def _cached_provider(provider_name: Optional[str], *, lease: bool) -> _CachedProvider:
+def _cached_provider(
+    provider_name: Optional[str],
+    *,
+    lease: bool,
+    model: Optional[str] = None,
+) -> _CachedProvider:
     _subscribe_provider_cache_invalidation()
     name, config = _provider_config(provider_name, load_settings(), load_secrets())
+    if model:
+        config.model = model
     key = _cache_key(name, config)
     closable: list[Any] = []
     try:
@@ -254,6 +261,20 @@ def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
 
 
 _CACHED_GET_PROVIDER = get_provider
+
+
+def get_routed_provider(provider_name: Optional[str], model: Optional[str]) -> Optional[BaseProvider]:
+    """The cached provider of a feature's settings route: ``provider_name`` with ``model``.
+
+    ``get_provider`` builds a provider with the provider's own configured
+    model; a feature whose route names another model (the settings' model
+    roles, ``effective_llm_route``) asks here. When ``get_provider`` has been
+    replaced (a test double), the replacement serves, as ``provider_lease`` does.
+    """
+    lookup = globals()["get_provider"]
+    if lookup is not _CACHED_GET_PROVIDER:
+        return lookup()
+    return _cached_provider(provider_name, lease=False, model=model).instance
 
 
 @contextmanager
