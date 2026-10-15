@@ -11,6 +11,7 @@ from app.apps.rpg.world.causal_runtime import (
 from app.apps.rpg.world.causal_runtime_projection import (
     project_causal_runtime_to_subsystems,
 )
+from app.apps.rpg.foundation.safe_values import copy_state
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -147,7 +148,7 @@ def advance_causal_runtime_for_turn(
     session_raw = loader(session_id)
     if not isinstance(session_raw, Mapping):
         return result
-    session = deepcopy(dict(session_raw))
+    session = copy_state(dict(session_raw))
     simulation = _dict(session.get("simulation_state"))
     runtime_state = _dict(session.get("runtime_state"))
     runtime = simulation.get("causal_world_runtime")

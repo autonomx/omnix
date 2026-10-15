@@ -12,6 +12,7 @@ from typing import Any
 
 from app.apps.rpg.rules.survival import SURVIVAL_STATE_KEY, normalize_survival_state
 from app.apps.rpg.foundation.safe_values import mapping_copy as _safe_dict
+from app.apps.rpg.foundation.safe_values import copy_state
 
 SURVIVAL_PERSISTENCE_SOURCE = "runtime_survival_persistence"
 
@@ -75,7 +76,7 @@ def normalize_session_survival_for_persistence(session: Mapping[str, Any], *, ow
     ``owned``: the caller owns ``session`` (it was just decoded from storage), so
     it is normalized in place instead of copied.
     """
-    normalized_session = _safe_dict(session) if owned else deepcopy(_safe_dict(session))
+    normalized_session = _safe_dict(session) if owned else copy_state(_safe_dict(session))
     # The copy owns its simulation state: normalize it in place rather than copying it again.
     normalized_session["simulation_state"] = _normalize_owned_simulation_state(
         _safe_dict(normalized_session.get("simulation_state"))

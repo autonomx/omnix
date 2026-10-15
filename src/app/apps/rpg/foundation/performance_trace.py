@@ -272,17 +272,20 @@ def _measured_pipeline_span(
     else:
         duration_ms = (perf_counter() - started_at) * 1000.0
         _attach_span_resources(mutable_fields, cpu_started, rss_started)
-        level = "warning" if duration_ms >= slow_span_threshold_ms() else "info"
+        slow = duration_ms >= slow_span_threshold_ms()
         _record_span(trace, name, duration_ms, mutable_fields, failed=False, depth=depth)
-        log_rpg_event(
-            f"{name}.completed",
-            category="performance",
-            level=level,
-            session_id=trace.session_id if trace else None,
-            trace_id=trace.trace_id if trace else None,
-            duration_ms=duration_ms,
-            fields=mutable_fields,
-        )
+        # Within a trace, the trace's completion event lists every span; a span
+        # gets its own line only when it is slow (WP-5.6: a turn has ~60 spans).
+        if trace is None or slow:
+            log_rpg_event(
+                f"{name}.completed",
+                category="performance",
+                level="warning" if slow else "info",
+                session_id=trace.session_id if trace else None,
+                trace_id=trace.trace_id if trace else None,
+                duration_ms=duration_ms,
+                fields=mutable_fields,
+            )
     finally:
         _SPAN_DEPTH.reset(depth_token)
 

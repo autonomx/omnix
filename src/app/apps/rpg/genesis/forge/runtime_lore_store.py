@@ -36,8 +36,8 @@ def _campaign_exists(
     campaign_id: str,
     session: Mapping[str, Any],
 ) -> None:
-    campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
-    if campaign is not None:
+    # The lock is what matters here; a turn's campaign row is the whole saved game (WP-5.6).
+    if work.rpg.lock_campaign(context, campaign_id):
         return
     manifest = _mapping(session.get("manifest"))
     setup = _mapping(session.get("setup_payload"))

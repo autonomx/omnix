@@ -29,9 +29,10 @@ from app.apps.rpg.rules.validation.integrity import (
 )
 from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span_if_active
 from app.apps.rpg.foundation.persistence.rpg_session_save_policy import (
-    cached_turn_load,
-    remember_turn_load,
+    cached_turn_session,
+    remember_turn_session,
     session_save_deferred,
+    turn_persisted_rng_seed,
 )
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
@@ -115,7 +116,7 @@ def _save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str
     )
     if session_id:
         # The seed is immutable: compare with the saved one, without loading the saved game.
-        saved, previous_seed = load_persisted_rng_seed(session_id)
+        saved, previous_seed = turn_persisted_rng_seed(session_id, load_persisted_rng_seed)
         if saved:
             if (
                 not isinstance(previous_seed, int)
@@ -143,6 +144,13 @@ def load_session(session_id: str) -> dict[str, Any]:
         "session.load_total",
         fields={"session_id": session_id},
     ) as span:
+        turn_scoped = _turn_scoped_loads()
+        if turn_scoped:
+            cached = cached_turn_session(session_id)
+            if cached is not None:
+                if span is not None:
+                    span["turn_cache_hit"] = True
+                return cached
         session = _load_session(session_id)
         if not isinstance(session, dict):
             # A missing session is returned as None (callers check for it).
@@ -183,35 +191,26 @@ def load_session(session_id: str) -> dict[str, Any]:
             )
             span["interaction_seq"] = runtime_state.get("interaction_seq")
             span["state_revision"] = runtime_state.get("state_revision")
+        if turn_scoped:
+            remember_turn_session(session_id, session)
         return session
 
 
 def _load_session(session_id: str) -> dict[str, Any] | None:
-    version = _turn_scoped_version(session_id)
-    if version is not None:
-        cached = cached_turn_load(session_id, version)
-        if cached is not None:
-            return cached
     session = load_session_from_disk(session_id)
     if session is None:
         return None
     # Fix #2: soft validation on load — allow recovery / migration of older sessions
     session = create_or_normalize_session(session, owned=True)
     validate_session_integrity(session)  # log but don't fail
-    if version is not None:
-        remember_turn_load(session_id, version, session)
     return session
 
 
-def _turn_scoped_version(session_id: str) -> tuple[int, str] | None:
-    """The stored version to key this turn's shared load by; None outside a turn or off PostgreSQL."""
+def _turn_scoped_loads() -> bool:
+    """Whether this load is inside a turn that defers its writes to PostgreSQL."""
     from app.persistence.runtime import uses_postgresql_runtime
 
-    if not session_save_deferred() or not uses_postgresql_runtime():
-        return None
-    from app.apps.rpg.session.persistence.session_records import load_session_version_from_postgres
-
-    return load_session_version_from_postgres(session_id)
+    return session_save_deferred() and uses_postgresql_runtime()
 
 
 def list_sessions() -> list[dict[str, Any]]:

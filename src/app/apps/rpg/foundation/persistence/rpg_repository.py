@@ -164,6 +164,41 @@ class PostgresRpgRepository:
         ).fetchone()
         return _campaign(row) if row is not None else None
 
+    def lock_campaign(self, context: TenantContext, campaign_id: str) -> bool:
+        """Lock the campaign row ``FOR UPDATE`` without reading its state; False when there is none."""
+        row = self.connection.execute(
+            "SELECT 1 FROM omnix_rpg_campaigns WHERE id = %s AND workspace_id = %s FOR UPDATE",
+            (campaign_id, context.workspace_id),
+        ).fetchone()
+        return row is not None
+
+    def launch_gate_source(self, context: TenantContext, campaign_id: str) -> dict[str, Any] | None:
+        """What the launch-readiness gate reads of the state, without decoding the saved game.
+
+        ``campaign_launch_readiness`` asks whether the setup's world forge is a
+        non-empty object, whether the state has a (truthy) campaign bible, and
+        reads the runtime's launch gate; the truthiness is evaluated here.
+        """
+        row = self.connection.execute(
+            """
+            SELECT COALESCE(jsonb_typeof(state_jsonb #> '{setup_payload,world_forge}') = 'object'
+                            AND state_jsonb #> '{setup_payload,world_forge}' <> '{}'::jsonb, FALSE),
+                   COALESCE(state_jsonb #> '{state,campaign_bible}' NOT IN
+                            ('null'::jsonb, 'false'::jsonb, '0'::jsonb, '""'::jsonb, '{}'::jsonb, '[]'::jsonb), FALSE),
+                   state_jsonb #> '{runtime_state,campaign_launch_gate}'
+              FROM omnix_rpg_campaigns WHERE id = %s AND workspace_id = %s
+            """,
+            (campaign_id, context.workspace_id),
+        ).fetchone()
+        if row is None:
+            return None
+        gate = row[2] if isinstance(row[2], dict) else {}
+        return {
+            "setup_payload": {"world_forge": {"enabled": True} if row[0] else {}},
+            "state": {"campaign_bible": True if row[1] else None},
+            "runtime_state": {"campaign_launch_gate": dict(gate)},
+        }
+
     def stored_version(self, context: TenantContext, campaign_id: str) -> tuple[int, str] | None:
         """The campaign's stored (revision, state_hash), without its state."""
         row = self.connection.execute(
@@ -315,12 +350,11 @@ class PostgresRpgRepository:
                 f"campaign {campaign_id} expected revision {expected_revision}; "
                 f"current {campaign['revision']}"
             )
+        # The row's state and hash are always written together, and the commit
+        # is conditional on the revision: re-hashing the stored state (a full
+        # canonical serialization) on every turn caught only out-of-band edits
+        # to the row (WP-5.6). Snapshots still verify the hash they store.
         before_hash = campaign["state_hash"]
-        calculated_before = state_hash(campaign["state"])
-        if before_hash != calculated_before:
-            raise StateHashConflict(
-                f"campaign {campaign_id} stored state hash does not match authoritative state"
-            )
 
         resulting_revision = expected_revision + 1
         sequence = resulting_revision

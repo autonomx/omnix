@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -168,9 +169,13 @@ def _attach_first_call_diagnostics(
     action_fast_path_reason = _safe_str(advisory.get("pre_runtime_intent_fast_path_reason"))
     diagnostics = {
         "source": source,
-        "prompt": prompt,
-        "prompt_preview": prompt[:4000],
-        "prompt_truncated": len(prompt) > 4000,
+        # The prompt itself stays out of the turn's diagnostics: they are kept in
+        # the saved game (the action, the last turn, each history entry), where
+        # copies of an 8 KB prompt were most of a turn's state change (WP-5.6).
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else "",
+        "prompt_chars": len(prompt),
+        "prompt_preview": prompt[:240],
+        "prompt_truncated": len(prompt) > 240,
         "prompt_built": prompt_built,
         "prompt_available": prompt_built,
         "semantic_prompt_built": prompt_built,

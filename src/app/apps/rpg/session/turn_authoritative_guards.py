@@ -38,6 +38,7 @@ from .semantic_direct_response import (
     _patch_semantic_direct_response as _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE,
 )
 from .player_turn_execution import apply_turn as _PHASE8_PART39_BASE_APPLY_TURN
+from app.apps.rpg.foundation.safe_values import copy_state
 
 _PHASE8_PART39_SOURCE = "phase8_social_claim_travel_mismatch_guard_v1"
 _CANONICAL_PUBLICATION_PIPELINE = StrictRpgProductionResponsePipeline()
@@ -328,7 +329,7 @@ def _apply_turn_authoritative(
     guarded_action = _safe_dict(action)
     service_result: dict[str, Any] = {}
     session = hydrate_simulation_player(
-        deepcopy(_safe_dict(load_runtime_session(session_id)))
+        copy_state(_safe_dict(load_runtime_session(session_id)))
     )
     if session:
         service_result = resolve_service_turn(
@@ -356,7 +357,7 @@ def _apply_turn_authoritative(
         service_result=service_result,
     ):
         latest_session = hydrate_simulation_player(
-            deepcopy(_safe_dict(load_runtime_session(session_id)))
+            copy_state(_safe_dict(load_runtime_session(session_id)))
         )
         if latest_session:
             authoritative = service_authoritative_result(

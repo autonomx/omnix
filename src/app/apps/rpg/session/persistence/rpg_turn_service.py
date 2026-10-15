@@ -238,6 +238,10 @@ def persist_foreground_turn(
             },
         )
         work.commit()
+    from app.apps.rpg.foundation.persistence.rpg_session_save_policy import forget_turn_session
+
+    # Loads after the commit read the committed session, not the turn's shared pre-commit load.
+    forget_turn_session(session_id)
 
     return {
         "idempotent_replay": bool(persisted.get("idempotent_replay")),

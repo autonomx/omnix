@@ -59,6 +59,11 @@ def test_turn_stages_run_off_the_event_loop(monkeypatch) -> None:
         return None
 
     monkeypatch.setattr(service, "load_session", load_session)
+    # On PostgreSQL the launch gate reads its projection instead (WP-5.6); either read is off the loop.
+    monkeypatch.setattr(
+        "app.apps.rpg.session.persistence.session_records.load_launch_gate_source_from_postgres",
+        load_session,
+    )
     app = FastAPI(title="rpg-turn-routes")
     include_router_registrar(app, register_rpg_session_routes)
 

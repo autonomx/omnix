@@ -6,6 +6,8 @@ return the value itself; ``dict_copy``, ``list_copy`` and ``mapping_copy`` a sha
 """
 from __future__ import annotations
 
+import copy
+import pickle
 from collections.abc import Mapping
 from typing import Any
 
@@ -38,3 +40,29 @@ def safe_str(value: Any) -> str:
 def mapping_copy(value: Any) -> dict[str, Any]:
     """A plain dict copy of the value if it is any Mapping, else an empty dict."""
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def freeze_state(value: Any) -> bytes | Any:
+    """A frozen copy of in-memory state: pickled bytes, or a deep copy when it cannot be pickled."""
+    try:
+        return pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+    except (pickle.PicklingError, TypeError, AttributeError):
+        return copy.deepcopy(value)
+
+
+def thaw_state(frozen: bytes | Any) -> Any:
+    """A fresh copy of what ``freeze_state`` froze."""
+    if isinstance(frozen, bytes):
+        # Only bytes this process just produced from its own state: never untrusted input.
+        return pickle.loads(frozen)
+    return copy.deepcopy(frozen)
+
+
+def copy_state(value: Any) -> Any:
+    """A deep copy of session state, about 2.5x faster than ``copy.deepcopy`` (WP-5.6).
+
+    A pickle round trip of the process's own state: it keeps shared references
+    and container types as ``deepcopy`` does, and falls back to it for a value
+    pickle cannot carry.
+    """
+    return thaw_state(freeze_state(value))

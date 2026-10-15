@@ -14,6 +14,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
 from app.prompts import prompt_template
+from app.apps.rpg.foundation.safe_values import copy_state
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -436,7 +437,7 @@ def _hydrate_session(
     revision: int,
     content_hash: str,
 ) -> dict[str, Any]:
-    hydrated = deepcopy(dict(session))
+    hydrated = copy_state(dict(session))
     projection = {
         key: deepcopy(
             bible.get(

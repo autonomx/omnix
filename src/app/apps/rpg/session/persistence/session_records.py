@@ -194,6 +194,16 @@ def load_session_from_postgres(session_id: str) -> dict[str, Any] | None:
     return upcast_if_outdated(dict(campaign["state"]))
 
 
+def load_launch_gate_source_from_postgres(session_id: str) -> dict[str, Any] | None:
+    """What the launch-readiness gate reads of a campaign; None when it does not exist."""
+    database = _database()
+    context = _context(database)
+    with unit_of_work(database) as work:
+        source = work.rpg.launch_gate_source(context, session_id)
+        work.rollback()
+    return source
+
+
 def list_sessions_from_postgres() -> list[dict[str, Any]]:
     database = _database()
     context = _context(database)

@@ -10,6 +10,7 @@ import traceback
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Iterator
@@ -50,6 +51,8 @@ _configured = False
 _configuring = False
 _handler: logging.Handler | None = None
 _last_cleanup_date: str | None = None
+# Log directories this process has created (one per configured directory).
+_created_dirs: set[Path] = set()
 
 
 def rpg_debug_logging_enabled() -> bool:
@@ -59,6 +62,12 @@ def rpg_debug_logging_enabled() -> bool:
 
 def rpg_debug_log_dir() -> Path:
     override = env_str(RPG_DEBUG_LOG_DIR_ENV, "").strip()
+    return _resolved_log_dir(override)
+
+
+@lru_cache(maxsize=8)
+def _resolved_log_dir(override: str) -> Path:
+    """Resolving the directory walks the filesystem; a turn logs dozens of events (WP-5.6)."""
     if override:
         return Path(override).expanduser().resolve()
     return resources_root() / "logs" / "rpg"
@@ -317,7 +326,9 @@ def _write_event(payload: dict[str, Any]) -> None:
         return
     directory = rpg_debug_log_dir()
     with _lock:
-        directory.mkdir(parents=True, exist_ok=True)
+        if directory not in _created_dirs:
+            directory.mkdir(parents=True, exist_ok=True)
+            _created_dirs.add(directory)
         _cleanup_expired_logs(directory)
         safe_payload = _sanitize(payload)
         line = json.dumps(safe_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
@@ -330,7 +341,12 @@ def _write_event(payload: dict[str, Any]) -> None:
             targets.append(_dated_log_path(directory, "errors"))
         encoded = line.encode("utf-8", errors="replace")
         for path in dict.fromkeys(targets):
-            fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+            try:
+                fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+            except FileNotFoundError:
+                # The directory was removed while running: create it again.
+                directory.mkdir(parents=True, exist_ok=True)
+                fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
             try:
                 os.write(fd, encoded)
             finally:

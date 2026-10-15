@@ -53,7 +53,7 @@ async def execute_foreground_rpg_turn(
 
     try:
         return await asyncio.to_thread(
-            _execute_foreground_rpg_turn,
+            _execute_with_authority_snapshot,
             session_id=session_id,
             command=command,
             request=request,
@@ -70,6 +70,26 @@ async def execute_foreground_rpg_turn(
                 "message": str(exc),
             },
         ) from exc
+
+
+def _launch_gate_session(session_id: str) -> dict[str, Any] | None:
+    """What the launch gate reads; on PostgreSQL without loading the saved game (WP-5.6)."""
+    from app.persistence.runtime import uses_postgresql_runtime
+
+    if uses_postgresql_runtime():
+        from app.apps.rpg.session.persistence.session_records import load_launch_gate_source_from_postgres
+
+        return load_launch_gate_source_from_postgres(session_id)
+    from app.apps.rpg.session.service import load_session
+
+    return load_session(session_id)
+
+
+def _execute_with_authority_snapshot(**kwargs: Any) -> Response:
+    from app.persistence.authority import authority_snapshot_scope
+
+    with authority_snapshot_scope():
+        return _execute_foreground_rpg_turn(**kwargs)
 
 
 def _execute_foreground_rpg_turn(
@@ -111,9 +131,7 @@ def _execute_foreground_rpg_turn(
                 CampaignLaunchBlockedError,
                 require_campaign_launch_ready,
             )
-            from app.apps.rpg.session.service import load_session
-
-            launch_session = load_session(session_id)
+            launch_session = _launch_gate_session(session_id)
             if not launch_session:
                 raise HTTPException(
                     status_code=404,

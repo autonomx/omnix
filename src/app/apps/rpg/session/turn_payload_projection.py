@@ -17,6 +17,7 @@ from app.apps.rpg.session.companion_turn_runtime import (
 )
 
 from .combat_quest_narrative import _apply_combat_quest_narrative as _base_apply_turn_authoritative
+from app.apps.rpg.foundation.safe_values import copy_state
 
 _PHASE4_SESSION_TRAVEL_SOURCE = "deterministic_phase4_session_travel_command_integration"
 _PHASE4_FRONTEND_MAP_LOCATION_SOURCE = "deterministic_phase4_frontend_map_location_ui_panel"
@@ -293,8 +294,8 @@ def _phase8_objective_journal_panel_payload(
 ) -> dict[str, Any]:
     """Build the player-visible objective/journal panel without mutating state."""
 
-    simulation_copy = deepcopy(_safe_dict(simulation_state))
-    runtime_copy = deepcopy(_safe_dict(runtime_state))
+    simulation_copy = copy_state(_safe_dict(simulation_state))
+    runtime_copy = copy_state(_safe_dict(runtime_state))
     objectives = _phase8_grouped_objectives(simulation_copy)
     active_objective = (objectives.get("active") or objectives.get("available") or [{}])[0]
     if not active_objective:
@@ -431,8 +432,8 @@ def _phase8_combat_panel_payload(
 ) -> dict[str, Any]:
     """Build player-visible combat state/action affordances without mutating state."""
 
-    simulation_copy = deepcopy(_safe_dict(simulation_state))
-    runtime_copy = deepcopy(_safe_dict(runtime_state))
+    simulation_copy = copy_state(_safe_dict(simulation_state))
+    runtime_copy = copy_state(_safe_dict(runtime_state))
     combat_state = _phase8_combat_source_state(simulation_copy, runtime_copy)
     participants = _phase8_combat_participants(combat_state)
     current_actor_id = _safe_str(combat_state.get("current_actor_id") or combat_state.get("turn_actor_id"))
@@ -463,8 +464,8 @@ def _phase8_player_visible_hud_payload(
 ) -> dict[str, Any]:
     """Build a read-only player HUD payload from deterministic runtime state."""
 
-    simulation_copy = deepcopy(_safe_dict(simulation_state))
-    runtime_copy = deepcopy(_safe_dict(runtime_state))
+    simulation_copy = copy_state(_safe_dict(simulation_state))
+    runtime_copy = copy_state(_safe_dict(runtime_state))
     player_state = _safe_dict(simulation_copy.get("player_state"))
     map_panel = _phase4_frontend_map_location_panel_payload(simulation_copy)
     time_state = _safe_dict(map_panel.get("time_state") or simulation_copy.get("time_state"))

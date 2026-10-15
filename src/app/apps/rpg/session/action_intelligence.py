@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any, Dict
 
@@ -156,9 +157,13 @@ def _attach_first_call_diagnostics(
         provider_status = "not_called"
     diagnostics = {
         "source": source,
-        "prompt": prompt,
-        "prompt_preview": prompt[:4000],
-        "prompt_truncated": len(prompt) > 4000,
+        # The prompt itself stays out of the turn's diagnostics: they are kept in
+        # the saved game (the action, the last turn, each history entry), where
+        # copies of an 8 KB prompt were most of a turn's state change (WP-5.6).
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else "",
+        "prompt_chars": len(prompt),
+        "prompt_preview": prompt[:240],
+        "prompt_truncated": len(prompt) > 240,
         "prompt_built": bool(prompt),
         "prompt_available": bool(prompt),
         "turn_grounding_packet": _safe_dict(payload.get("turn_grounding_packet")),

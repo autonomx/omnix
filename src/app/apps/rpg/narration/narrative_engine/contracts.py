@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from functools import cached_property
 from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
 from typing import Any, Mapping, cast
@@ -230,8 +231,9 @@ class CanonicalNarrativeResponse:
     def content_payload(self) -> dict[str, Any]:
         return self.semantic_content_payload()
 
-    @property
+    @cached_property
     def semantic_hash(self) -> str:
+        """Computed once per response: the response and its blocks are frozen (WP-5.6)."""
         return stable_hash(self.semantic_content_payload())
 
     def as_dict(self) -> dict[str, Any]:

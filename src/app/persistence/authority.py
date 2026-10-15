@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -70,11 +73,47 @@ def current_authority_policy(connection: Any, *, for_update: bool = False) -> Po
     return authority_policy(mode=str(row[0]), authority_state=str(row[1]))
 
 
+# Within an authority snapshot scope, one read of the cutover authority per
+# database serves every unit of work (``authority_snapshot_scope``).
+_SNAPSHOT: ContextVar[dict[tuple[Any, ...], PostgresAuthorityPolicy] | None] = ContextVar(
+    "omnix_persistence_authority_snapshot",
+    default=None,
+)
+
+
+@contextmanager
+def authority_snapshot_scope() -> Iterator[None]:
+    """Reuse the first read of the cutover authority for one short request.
+
+    The check reads the authority without locking it, so it already holds for
+    the moment a transaction starts; a foreground RPG turn opens about thirty
+    units of work in under a second, and reading the singleton for each was a
+    tenth of the turn's statements (WP-5.6). Inside this scope the policy is
+    read once per database and reused until the scope ends.
+    """
+    token = _SNAPSHOT.set({})
+    try:
+        yield
+    finally:
+        _SNAPSHOT.reset(token)
+
+
+def _snapshot_key(connection: Any) -> tuple[Any, ...]:
+    info = getattr(connection, "info", None)
+    return (getattr(info, "host", None), getattr(info, "port", None), getattr(info, "dbname", None))
+
+
 def require_authority_operation(
     connection: Any,
     operation: AuthorityOperation,
 ) -> PostgresAuthorityPolicy:
-    policy = current_authority_policy(connection)
+    snapshot = _SNAPSHOT.get()
+    key = _snapshot_key(connection) if snapshot is not None else ()
+    policy = snapshot.get(key) if snapshot is not None else None
+    if policy is None:
+        policy = current_authority_policy(connection)
+        if snapshot is not None:
+            snapshot[key] = policy
     allowed = {
         AuthorityOperation.RUNTIME_START: policy.runtime_start_allowed,
         AuthorityOperation.RUNTIME_MUTATION: policy.runtime_writes_allowed,

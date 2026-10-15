@@ -12,10 +12,12 @@ def test_rpg_turn_jobs_are_registered_by_the_rpg_feature() -> None:
 
     turn = registry.require("rpg.turn")
     report = registry.require("rpg.report.last10")
+    narration = registry.require("rpg.narration")
 
     assert turn.input_model.__name__ == "RpgTurnJobInput"
     assert report.input_model.__name__ == "RpgReportJobInput"
-    assert registry.types() == ("rpg.report.last10", "rpg.turn")
+    assert narration.input_model.__name__ == "RpgNarrationJobInput"
+    assert registry.types() == ("rpg.narration", "rpg.report.last10", "rpg.turn")
 
 
 def test_foreground_rpg_turn_visible_text_has_deterministic_fallback() -> None:
