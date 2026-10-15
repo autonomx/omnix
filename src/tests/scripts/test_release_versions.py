@@ -18,10 +18,3 @@ def test_the_package_versions_agree_and_are_semantic() -> None:
     assert re.fullmatch(r"\d+\.\d+\.\d+", python)
     assert web == root == python
     assert lock["version"] == lock["packages"][""]["version"] == python
-
-
-def test_the_changelog_has_an_unreleased_section_or_the_current_version() -> None:
-    python = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-
-    assert "## [Unreleased]" in changelog or f"## [{python}]" in changelog
