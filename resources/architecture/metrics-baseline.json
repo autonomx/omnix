@@ -42,6 +42,7 @@
       "app.apps.audiobook.routes",
       "app.apps.audiobook.service",
       "app.apps.audiobook.spans",
+      "app.apps.audiobook.speech_budget",
       "app.apps.audiobook.speech_exclusions",
       "app.apps.audiobook.speech_plan",
       "app.apps.audiobook.streaming",
@@ -242,6 +243,7 @@
       "app.providers.stt_segment_scheduler",
       "app.providers.stt_streaming_audio",
       "app.providers.tts_artifacts",
+      "app.providers.tts_generation_parameters",
       "app.providers.tts_http_client",
       "app.providers.tts_priority",
       "app.providers.tts_service",
@@ -470,6 +472,16 @@
       },
       {
         "call": "asyncio.sleep",
+        "line": 679,
+        "path": "src/tests/app/test_scheduler_runtime.py"
+      },
+      {
+        "call": "asyncio.sleep",
+        "line": 705,
+        "path": "src/tests/app/test_scheduler_runtime.py"
+      },
+      {
+        "call": "asyncio.sleep",
         "line": 150,
         "path": "src/tests/app/test_stt_streaming_audio.py"
       },
@@ -530,7 +542,7 @@
       },
       {
         "call": "asyncio.sleep",
-        "line": 191,
+        "line": 223,
         "path": "src/tests/trading/test_scheduler_registration.py"
       },
       {
@@ -662,7 +674,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 35,
+        "line": 38,
         "path": "src/app/apps/rpg/genesis/forge/async_coordinator.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_worker_lock"
@@ -671,7 +683,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 38,
+        "line": 41,
         "path": "src/app/apps/rpg/genesis/forge/async_coordinator.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_worker_stop"
@@ -858,9 +870,76 @@
       },
       {
         "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "_output_profile.cache_clear",
+        "kind": "function_cache",
+        "line": 339,
+        "max_entries": 512,
+        "maxsize": 512,
+        "path": "src/app/apps/trading/alert_conditions.py",
+        "reason": "Output keys of an indicator at given inputs, computed on a fixed synthetic series: pure and deterministic; a source-declared capacity, expiry and cache_clear bound it.",
+        "symbol": "_output_profile.__cache__",
+        "ttl_seconds": 86400.0
+      },
+      {
+        "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "_synthetic_series.cache_clear",
+        "kind": "function_cache",
+        "line": 277,
+        "max_entries": 1,
+        "maxsize": 1,
+        "path": "src/app/apps/trading/alert_conditions.py",
+        "reason": "The one fixed synthetic bar series indicator output profiles are computed on: pure and deterministic; a source-declared capacity of one, expiry and cache_clear bound it.",
+        "symbol": "_synthetic_series.__cache__",
+        "ttl_seconds": 86400.0
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "kind": "executor",
+        "line": 447,
+        "path": "src/app/apps/trading/alerts_delivery.py",
+        "reason": "Fixed process-local worker pool (four threads) that bounds webhook host lookups; delivery state and retries live in PostgreSQL.",
+        "symbol": "_RESOLVERS"
+      },
+      {
+        "approved": true,
+        "category": "coordination",
+        "kind": "lock",
+        "line": 448,
+        "path": "src/app/apps/trading/alerts_delivery.py",
+        "reason": "Process-local semaphore that keeps webhook host lookups from queueing behind a stuck resolver thread; it holds no durable state.",
+        "symbol": "_RESOLVER_SLOTS"
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "invalidation": "clear_script_sources",
+        "kind": "container",
+        "line": 42,
+        "max_entries": 128,
+        "path": "src/app/apps/trading/alerts_scripts.py",
+        "reason": "Immutable script versions by (workspace, script, revision) for script alerts; PostgreSQL is the authority. Source enforces a size cap and expiry and exposes the named invalidation.",
+        "symbol": "_sources",
+        "ttl_seconds": 3600.0
+      },
+      {
+        "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 416,
+        "line": 43,
+        "path": "src/app/apps/trading/alerts_scripts.py",
+        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
+        "symbol": "_sources_guard"
+      },
+      {
+        "approved": true,
+        "category": "cache",
+        "kind": "lock",
+        "line": 431,
         "path": "src/app/apps/trading/catalog.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_catalog_lock"
@@ -870,7 +949,7 @@
         "category": "cache",
         "invalidation": "clear_dynamic_catalog_cache",
         "kind": "container",
-        "line": 420,
+        "line": 435,
         "max_entries": 4096,
         "path": "src/app/apps/trading/catalog.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -882,7 +961,7 @@
         "category": "cache",
         "invalidation": "clear_dynamic_catalog_cache",
         "kind": "container",
-        "line": 419,
+        "line": 434,
         "max_entries": 4096,
         "path": "src/app/apps/trading/catalog.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -921,9 +1000,32 @@
       },
       {
         "approved": true,
+        "category": "coordination",
+        "kind": "container",
+        "line": 196,
+        "path": "src/app/apps/trading/indicators/registry.py",
+        "reason": "Registry of the indicators declared in code: every process registers the same indicators when it imports their modules; bounded by the code and never written at run time.",
+        "symbol": "_REGISTRY"
+      },
+      {
+        "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "_zone.cache_clear",
+        "kind": "function_cache",
+        "line": 39,
+        "max_entries": 256,
+        "maxsize": 256,
+        "path": "src/app/apps/trading/indicators/server_indicators/_sessions.py",
+        "reason": "ZoneInfo objects by IANA name, as zoneinfo itself caches them; a source-declared capacity, expiry and cache_clear bound it.",
+        "symbol": "_zone.__cache__",
+        "ttl_seconds": 86400.0
+      },
+      {
+        "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 294,
+        "line": 339,
         "path": "src/app/apps/trading/instrument_catalog_service.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_catalog_lock"
@@ -936,6 +1038,20 @@
         "path": "src/app/apps/trading/metric_data.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_metric_lock"
+      },
+      {
+        "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "_weekday_holidays.cache_clear",
+        "kind": "function_cache",
+        "line": 129,
+        "max_entries": 256,
+        "maxsize": 256,
+        "path": "src/app/apps/trading/providers/clock_aggregation.py",
+        "reason": "The weekday market holidays of a year, derived from the exchange calendar: pure and deterministic; a source-declared capacity, expiry and cache_clear bound it.",
+        "symbol": "_weekday_holidays.__cache__",
+        "ttl_seconds": 86400.0
       },
       {
         "approved": true,
@@ -971,9 +1087,32 @@
       },
       {
         "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "_indicator_catalog.cache_clear",
+        "kind": "function_cache",
+        "line": 72,
+        "max_entries": 1,
+        "maxsize": 1,
+        "path": "src/app/apps/trading/screener_words.py",
+        "reason": "The indicator catalog shown to the screener's language model, derived from the code-declared indicators: pure; a source-declared capacity of one, expiry and cache_clear bound it.",
+        "symbol": "_indicator_catalog.__cache__",
+        "ttl_seconds": 86400.0
+      },
+      {
+        "approved": true,
+        "category": "coordination",
+        "kind": "lock",
+        "line": 265,
+        "path": "src/app/apps/trading/scripts_service.py",
+        "reason": "Process-local mutex serializing the one-time construction of this process's script worker pool; script runs carry no durable state.",
+        "symbol": "_service_guard"
+      },
+      {
+        "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 861,
+        "line": 868,
         "path": "src/app/apps/trading/service.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_lock"
@@ -2724,6 +2863,15 @@
       },
       {
         "approved": true,
+        "category": "coordination",
+        "kind": "lock",
+        "line": 71,
+        "path": "src/app/security/provider_secret_store.py",
+        "reason": "Process-local re-entrant mutex serializing read-modify-write of the operating-system secret payload within this process; the secret store is the authority.",
+        "symbol": "_PAYLOAD_LOCK"
+      },
+      {
+        "approved": true,
         "category": "cache",
         "kind": "lock",
         "line": 53,
@@ -2892,6 +3040,36 @@
       },
       {
         "approved": true,
+        "path": "src/app/apps/trading/alert_conditions.py",
+        "symbol": "_output_profile.__cache__"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/alert_conditions.py",
+        "symbol": "_synthetic_series.__cache__"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/alerts_delivery.py",
+        "symbol": "_RESOLVERS"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/alerts_delivery.py",
+        "symbol": "_RESOLVER_SLOTS"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/alerts_scripts.py",
+        "symbol": "_sources"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/alerts_scripts.py",
+        "symbol": "_sources_guard"
+      },
+      {
+        "approved": true,
         "path": "src/app/apps/trading/catalog.py",
         "symbol": "_catalog_lock"
       },
@@ -2922,6 +3100,16 @@
       },
       {
         "approved": true,
+        "path": "src/app/apps/trading/indicators/registry.py",
+        "symbol": "_REGISTRY"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/indicators/server_indicators/_sessions.py",
+        "symbol": "_zone.__cache__"
+      },
+      {
+        "approved": true,
         "path": "src/app/apps/trading/instrument_catalog_service.py",
         "symbol": "_default_catalog_lock"
       },
@@ -2929,6 +3117,11 @@
         "approved": true,
         "path": "src/app/apps/trading/metric_data.py",
         "symbol": "_default_metric_lock"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/providers/clock_aggregation.py",
+        "symbol": "_weekday_holidays.__cache__"
       },
       {
         "approved": true,
@@ -2944,6 +3137,16 @@
         "approved": true,
         "path": "src/app/apps/trading/scanner_manager.py",
         "symbol": "_default_lock"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/screener_words.py",
+        "symbol": "_indicator_catalog.__cache__"
+      },
+      {
+        "approved": true,
+        "path": "src/app/apps/trading/scripts_service.py",
+        "symbol": "_service_guard"
       },
       {
         "approved": true,
@@ -3782,6 +3985,11 @@
       },
       {
         "approved": true,
+        "path": "src/app/security/provider_secret_store.py",
+        "symbol": "_PAYLOAD_LOCK"
+      },
+      {
+        "approved": true,
         "path": "src/app/security/run_tokens.py",
         "symbol": "_KEY_LOCK"
       },
@@ -3803,6 +4011,92 @@
     ],
     "process_local_state_inventory_kind": "module_scope_scan_plus_reviewed_entries",
     "python_syntax_errors": [],
+    "routes_without_permission": [
+      {
+        "line": 470,
+        "method": "GET",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/"
+      },
+      {
+        "line": 480,
+        "method": "GET",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services"
+      },
+      {
+        "line": 486,
+        "method": "POST",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services/start-auto"
+      },
+      {
+        "line": 491,
+        "method": "POST",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services/stop-all"
+      },
+      {
+        "line": 496,
+        "method": "POST",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/open-app-private"
+      },
+      {
+        "line": 504,
+        "method": "GET",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services/{service_id}"
+      },
+      {
+        "line": 512,
+        "method": "POST",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services/{service_id}/start"
+      },
+      {
+        "line": 520,
+        "method": "POST",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services/{service_id}/stop"
+      },
+      {
+        "line": 528,
+        "method": "POST",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services/{service_id}/restart"
+      },
+      {
+        "line": 536,
+        "method": "GET",
+        "path": "src/app/composition/launcher/control_app.py",
+        "route_path": "/api/services/{service_id}/logs"
+      },
+      {
+        "line": 19,
+        "method": "GET",
+        "path": "src/app/composition/worker/health.py",
+        "route_path": "/health/ready"
+      },
+      {
+        "line": 28,
+        "method": "GET",
+        "path": "src/app/composition/worker/health.py",
+        "route_path": "/metrics"
+      },
+      {
+        "line": 384,
+        "method": "WEBSOCKET",
+        "path": "src/app/providers/nemotron_eou_live_websocket.py",
+        "route_path": "/ws/transcribe"
+      },
+      {
+        "line": 309,
+        "method": "WEBSOCKET",
+        "path": "src/app/providers/stt_live_websocket.py",
+        "route_path": "/ws/transcribe"
+      }
+    ],
     "unbounded_fetchall_calls": [],
     "unreachable_rpg_modules": [],
     "web_api_path_prefixes": [
@@ -3888,8 +4182,11 @@
       "/api/audiobook/models/current",
       "/api/audiobook/projects",
       "/api/audiobook/projects/{}",
+      "/api/audiobook/projects/{}/aliases/confirm-suggested",
       "/api/audiobook/projects/{}/assets/{}",
       "/api/audiobook/projects/{}/chapters/{}",
+      "/api/audiobook/projects/{}/chapters/{}/audio",
+      "/api/audiobook/projects/{}/chapters/{}/speech-exclusion",
       "/api/audiobook/projects/{}/classification-rules",
       "/api/audiobook/projects/{}/document-overrides",
       "/api/audiobook/projects/{}/exports",
@@ -3903,6 +4200,7 @@
       "/api/audiobook/projects/{}/reading-policy",
       "/api/audiobook/projects/{}/reclassify",
       "/api/audiobook/projects/{}/render",
+      "/api/audiobook/projects/{}/render/order",
       "/api/audiobook/projects/{}/render/pause",
       "/api/audiobook/projects/{}/render/resume",
       "/api/audiobook/projects/{}/render/stop",
@@ -3912,6 +4210,7 @@
       "/api/audiobook/projects/{}/spans/{}/speech-exclusions",
       "/api/audiobook/projects/{}/speakers",
       "/api/audiobook/projects/{}/speakers/{}/aliases",
+      "/api/audiobook/projects/{}/speakers/{}/aliases/unconfirm",
       "/api/audiobook/projects/{}/speakers/{}/casting",
       "/api/audiobook/projects/{}/speakers/{}/reject",
       "/api/audiobook/projects/{}/speech-exclusions/{}",
@@ -4099,14 +4398,23 @@
       "/api/task-graph-runs/{}/events",
       "/api/trading/alerts",
       "/api/trading/alerts/evaluate",
+      "/api/trading/alerts/indicators",
       "/api/trading/alerts/triggers",
+      "/api/trading/alerts/watchlist-capacity",
       "/api/trading/alerts/{}",
       "/api/trading/bars",
+      "/api/trading/bars/intrabar",
+      "/api/trading/corporate-events",
+      "/api/trading/corporate-events/calendar",
       "/api/trading/currency-rates",
       "/api/trading/diagnostics",
       "/api/trading/drawings",
       "/api/trading/drawings/{}",
+      "/api/trading/economic-calendar",
       "/api/trading/execution/providers/alpaca-iex/credentials",
+      "/api/trading/fundamentals",
+      "/api/trading/heatmaps/crypto",
+      "/api/trading/heatmaps/stocks",
       "/api/trading/hermes-research/attribution",
       "/api/trading/hermes-research/audit",
       "/api/trading/hermes-research/start",
@@ -4115,10 +4423,22 @@
       "/api/trading/hermes-research/validation/{}",
       "/api/trading/indicator-presets",
       "/api/trading/indicator-presets/{}",
+      "/api/trading/indicators/latest",
       "/api/trading/instruments/search",
+      "/api/trading/macro/yield-curve",
       "/api/trading/market-data/providers/coinmarketcap/credentials",
+      "/api/trading/market-data/providers/fred/credentials",
       "/api/trading/market-data/providers/ibkr/settings",
+      "/api/trading/market-status",
       "/api/trading/metrics",
+      "/api/trading/notifications/email",
+      "/api/trading/notifications/email/test",
+      "/api/trading/notifications/push",
+      "/api/trading/notifications/push/subscriptions",
+      "/api/trading/notifications/push/subscriptions/{}",
+      "/api/trading/notifications/push/test",
+      "/api/trading/options/chain",
+      "/api/trading/options/expirations",
       "/api/trading/paper-analytics/epochs",
       "/api/trading/paper-analytics/journal",
       "/api/trading/paper-analytics/overview",
@@ -4131,6 +4451,7 @@
       "/api/trading/paper/accounts/{}/protections/{}",
       "/api/trading/paper/accounts/{}/reset",
       "/api/trading/paper/accounts/{}/risk-orders",
+      "/api/trading/paper/accounts/{}/risk-orders/{}/move",
       "/api/trading/paper/accounts/{}/risk-preview",
       "/api/trading/providers/status",
       "/api/trading/quotes",
@@ -4141,11 +4462,22 @@
       "/api/trading/replay/execution/orders",
       "/api/trading/research",
       "/api/trading/scanners",
+      "/api/trading/scanners/propose",
       "/api/trading/scanners/runs",
       "/api/trading/scanners/runs/{}/cancel",
       "/api/trading/scanners/runs/{}/results",
       "/api/trading/scanners/{}",
       "/api/trading/scanners/{}/runs",
+      "/api/trading/scripts",
+      "/api/trading/scripts/backtest",
+      "/api/trading/scripts/check",
+      "/api/trading/scripts/reference",
+      "/api/trading/scripts/run",
+      "/api/trading/scripts/screen",
+      "/api/trading/scripts/{}",
+      "/api/trading/scripts/{}/versions",
+      "/api/trading/scripts/{}/versions/{}",
+      "/api/trading/snapshots",
       "/api/trading/solana-ai/decisions",
       "/api/trading/solana-ai/start",
       "/api/trading/solana-ai/stop",
@@ -4171,6 +4503,8 @@
       "/api/trading/strategies/{}/v2/qualification/review",
       "/api/trading/strategy-operations/health",
       "/api/trading/strategy-operations/status",
+      "/api/trading/watchlist-flags",
+      "/api/trading/watchlist-flags/{}",
       "/api/trading/watchlists",
       "/api/trading/watchlists/{}",
       "/api/trading/workspaces",
@@ -4299,232 +4633,12 @@
         "RpgItemPanelRequest"
       ],
       [
-        "web/src/features/rpg/RpgLorePanel.tsx",
-        "LoreResponse"
-      ],
-      [
         "web/src/features/rpg/RpgWorldGenerationDashboard.tsx",
         "RetryRequest"
       ],
       [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesApprovalRequest"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesApprovalResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesCandidatePreviewResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesRecentResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesRouteDecisionResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesRpgSuggestionsRequest"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesRpgSuggestionsResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesRpgTurnReadoutRequest"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesRpgTurnReadoutResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesStatusResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesTestRequest"
-      ],
-      [
-        "web/src/features/rpg/api/hermesClient.ts",
-        "HermesTestResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesRpgApprovedFlowClient.ts",
-        "HermesRpgApprovedFlowRequest"
-      ],
-      [
-        "web/src/features/rpg/api/hermesRpgApprovedFlowClient.ts",
-        "HermesRpgApprovedFlowResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesRpgApprovedFlowClient.ts",
-        "HermesRpgExecutionLedgerResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesRpgSequenceClient.ts",
-        "HermesRpgSequenceRequest"
-      ],
-      [
-        "web/src/features/rpg/api/hermesRpgSequenceClient.ts",
-        "HermesRpgSequenceResponse"
-      ],
-      [
-        "web/src/features/rpg/api/hermesRpgSequenceClient.ts",
-        "HermesRpgSequenceStateResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgCampaignLoreClient.ts",
-        "RpgCampaignLoreResponse"
-      ],
-      [
         "web/src/features/rpg/api/rpgGenesis.ts",
         "LooseRequest"
-      ],
-      [
-        "web/src/features/rpg/api/rpgMapActionClient.ts",
-        "RpgMapActionRequest"
-      ],
-      [
-        "web/src/features/rpg/api/rpgMapActionClient.ts",
-        "RpgMapActionResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgMapClient.ts",
-        "RpgMapDefinitionResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgMapClient.ts",
-        "RpgMapOverlayResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgFeatureOptions"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgForegroundTurnResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgLaunchResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgLoadoutActionRequest"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgLoadoutActionResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgNewGameRequest"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgPlayerOptions"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgPresetListResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgSessionListResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgSessionClient.ts",
-        "RpgSessionMutationResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldAuthoringClient.ts",
-        "RpgAuthoringDossierPreviewResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldAuthoringClient.ts",
-        "RpgAuthoringEntityMutationResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldAuthoringClient.ts",
-        "RpgAuthoringManifestResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldAuthoringClient.ts",
-        "RpgDossierEnrichmentRequest"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldAuthoringClient.ts",
-        "RpgWorldDossierEnrichmentResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldAuthoringClient.ts",
-        "RpgWorldDossierQualityResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldBundleClient.ts",
-        "RpgWorldBundleImportResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldDeletionClient.ts",
-        "RpgWorldDeletionEligibilityResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldDeletionClient.ts",
-        "RpgWorldDeletionResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldGenerationReviewClient.ts",
-        "ReviewListResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldImageClient.ts",
-        "RpgWorldImageTargetsResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgDeferredMaterializationResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgPublishedLaunchResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgStarterBubblePromotionResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgStarterBubbleResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgWorldDetailResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgWorldGenerationMutationResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgWorldLaunchRepairResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldLibraryClient.ts",
-        "RpgWorldLibraryResponse"
-      ],
-      [
-        "web/src/features/rpg/api/rpgWorldProfileClient.ts",
-        "RpgWorldProfileResponse"
-      ],
-      [
-        "web/src/features/rpg/rpgItemApi.ts",
-        "RpgItemCompatResponse"
       ],
       [
         "web/src/features/rpg/rpgTurnUiStore.ts",
@@ -4539,8 +4653,12 @@
         "StoryGenerationRequest"
       ],
       [
-        "web/src/features/trading/TradingWatchlist.tsx",
-        "WatchlistPayload"
+        "web/src/features/trading/drawings/drawingDocument.ts",
+        "DrawingDocumentPayload"
+      ],
+      [
+        "web/src/features/trading/drawings/tools/types.ts",
+        "DrawingActionRequest"
       ],
       [
         "web/src/features/trading/indicators/indicatorScheduler.ts",
@@ -4555,6 +4673,10 @@
         "IndicatorWorkerResponse"
       ],
       [
+        "web/src/features/trading/intrabarData.ts",
+        "IntrabarRequest"
+      ],
+      [
         "web/src/features/trading/persistence/workspaceDocument.ts",
         "TradingTabPayload"
       ],
@@ -4563,8 +4685,20 @@
         "TradingWorkspacePayload"
       ],
       [
+        "web/src/features/trading/scripts/scriptsApi.ts",
+        "ScriptPayload"
+      ],
+      [
         "web/src/features/trading/tradingFormula.ts",
         "TradingFormulaPayload"
+      ],
+      [
+        "web/src/features/trading/tradingWatchlistModel.ts",
+        "WatchlistFlagsPayload"
+      ],
+      [
+        "web/src/features/trading/tradingWatchlistModel.ts",
+        "WatchlistPayload"
       ]
     ],
     "web_handwritten_api_types": [],
@@ -4600,7 +4734,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 1965
+      "value": 1919
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
@@ -4620,7 +4754,7 @@
     "compat_modules": {
       "direction": "lower",
       "target": 0,
-      "value": 7
+      "value": 0
     },
     "composition_imports_outside_composition": {
       "direction": "lower",
@@ -4645,7 +4779,7 @@
     "eslint_baseline_disables": {
       "direction": "lower",
       "target": 0,
-      "value": 91
+      "value": 90
     },
     "fastapi_init_patchers": {
       "direction": "lower",
@@ -4775,7 +4909,7 @@
     "routes_without_permission": {
       "direction": "lower",
       "target": 0,
-      "value": 21
+      "value": 14
     },
     "rpg_nondeterminism": {
       "direction": "lower",
@@ -4885,7 +5019,7 @@
     "web_mutation_observer_files": {
       "direction": "lower",
       "target": 2,
-      "value": 1
+      "value": 0
     },
     "web_omnix_window_flags": {
       "direction": "lower",
@@ -4915,5 +5049,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "e7fb7da216dccad72de10604c9a95035febfec3385020f590eba92aee08c94e1"
+  "source_digest": "6472443a7d86e03d9f7161822ae35c37e189f5fe1fdf388ce43461f88d2bf277"
 }

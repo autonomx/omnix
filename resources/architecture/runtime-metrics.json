@@ -84,12 +84,6 @@
         "app.apps.rpg.declarations",
         "app.apps.rpg.edge",
         "app.apps.rpg.edge.api",
-        "app.apps.rpg.edge.api.compat",
-        "app.apps.rpg.edge.api.compat.rpg_adventure_compat",
-        "app.apps.rpg.edge.api.compat.rpg_inspection_compat",
-        "app.apps.rpg.edge.api.compat.rpg_player_compat",
-        "app.apps.rpg.edge.api.compat.rpg_session_compat",
-        "app.apps.rpg.edge.api.compat.rpg_session_genesis_compat",
         "app.apps.rpg.edge.api.compat_router",
         "app.apps.rpg.edge.api.feature_routes",
         "app.apps.rpg.edge.api.feature_routes.rpg_campaign_lore_routes",
@@ -113,8 +107,15 @@
         "app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes",
         "app.apps.rpg.edge.api.feature_routes.rpg_world_profile_routes",
         "app.apps.rpg.edge.api.feature_routes.rpg_world_routes",
+        "app.apps.rpg.edge.api.payloads",
+        "app.apps.rpg.edge.api.payloads.adventure",
+        "app.apps.rpg.edge.api.payloads.genesis_sessions",
+        "app.apps.rpg.edge.api.payloads.inspection",
+        "app.apps.rpg.edge.api.payloads.player",
+        "app.apps.rpg.edge.api.payloads.sessions",
         "app.apps.rpg.edge.api.traced_response",
         "app.apps.rpg.edge.api.turn_pipeline",
+        "app.apps.rpg.edge.api.web_contracts",
         "app.apps.rpg.edge.hermes",
         "app.apps.rpg.edge.hermes.adapter_contract",
         "app.apps.rpg.edge.hermes.api",
@@ -200,6 +201,7 @@
         "app.apps.rpg.foundation.persistence.rpg_hermes_research_repository",
         "app.apps.rpg.foundation.persistence.rpg_map_instance_repository",
         "app.apps.rpg.foundation.persistence.rpg_repository",
+        "app.apps.rpg.foundation.persistence.rpg_session_save_policy",
         "app.apps.rpg.foundation.persistence.rpg_world_forge_repository",
         "app.apps.rpg.foundation.persistence.rpg_world_generation_repository",
         "app.apps.rpg.foundation.persistence.rpg_world_library_repository",
@@ -856,6 +858,9 @@
         "app.apps.trading.strategy_monitor",
         "app.apps.trading.strategy_operations_api",
         "app.apps.trading.strategy_operations_health",
+        "app.apps.trading.strategy_overnight_monitor",
+        "app.apps.trading.strategy_overnight_scan",
+        "app.apps.trading.strategy_overnight_shadow",
         "app.apps.trading.strategy_prospective_economic",
         "app.apps.trading.strategy_prospective_economic_api",
         "app.apps.trading.strategy_prospective_economic_monitor",
@@ -1940,7 +1945,7 @@
           "pytest-playwright": null,
           "pytest-xdist": null,
           "python-multipart": "0.0.32",
-          "requests": null,
+          "requests": "2.34.2",
           "rich": null,
           "ruff": null,
           "uvicorn": "0.54.0",
@@ -1969,7 +1974,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 9180,
+      "collected_tests": 9245,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2021,6 +2026,7 @@
         "outbox_dead_letters",
         "outbox_events",
         "rpg_narration_events",
+        "rpg_snapshots",
         "runtime_failure_evidence",
         "runtime_nodes"
       ],
@@ -2034,6 +2040,7 @@
         "outbox_dead_letters",
         "outbox_events",
         "rpg_narration_events",
+        "rpg_snapshots",
         "runtime_failure_evidence",
         "runtime_nodes"
       ],
@@ -2822,14 +2829,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-10T05:54:13.850818+00:00",
+  "measured_at": "2026-10-15T00:10:14.318086+00:00",
   "metrics": {
-    "boot_imported_modules": 1914,
+    "boot_imported_modules": 1919,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "56f13a175fc5c92fc45300c8c04f9ec93bddda4e5a3355e41d5bbe8cfab4b9ac"
+  "source_digest": "6472443a7d86e03d9f7161822ae35c37e189f5fe1fdf388ce43461f88d2bf277"
 }
