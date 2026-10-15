@@ -19,10 +19,10 @@ def _patch_latest_interaction(
     turn_id: str,
     bundle: Mapping[str, Any],
     canonical: Mapping[str, Any],
-    telemetry: Mapping[str, Any],
     grounding: Mapping[str, Any],
     grounding_footer: Mapping[str, Any],
 ) -> bool:
+    """Write the canonical projection into the turn's interaction; False when it was already there."""
     runtime = _mapping(session.get("runtime_state"))
     interactions = runtime.get("recent_interactions")
     if not isinstance(interactions, list) or not interactions:
@@ -41,16 +41,20 @@ def _patch_latest_interaction(
         selected = interactions[-1] if isinstance(interactions[-1], dict) else None
     if selected is None:
         return False
+    visible = dict(bundle.get("visible_response") or {})
+    if (
+        selected.get("narrative_response_id") == response_id
+        and selected.get("narrative_content_hash") == str(bundle.get("content_hash") or "")
+        and selected.get("visible_response") == visible
+    ):
+        return False
     selected["narrative_response_id"] = response_id
     selected["narrative_content_hash"] = str(bundle.get("content_hash") or "")
     selected["narrative_publisher"] = CANONICAL_PUBLISHER
-    selected["narrative_publisher_telemetry"] = dict(telemetry)
     selected["canonical_narrative_response"] = dict(canonical)
     selected["narrative_projections"] = dict(bundle)
-    selected["visible_response"] = dict(bundle.get("visible_response") or {})
-    selected["narration"] = str(
-        _mapping(bundle.get("visible_response")).get("narration") or ""
-    )
+    selected["visible_response"] = visible
+    selected["narration"] = str(visible.get("narration") or "")
     if grounding:
         selected["narrative_grounding"] = dict(grounding)
     if grounding_footer:
@@ -58,6 +62,29 @@ def _patch_latest_interaction(
     runtime["recent_interactions"] = interactions
     session["runtime_state"] = runtime
     return True
+
+
+def patch_session_canonical_projection(result: Mapping[str, Any]) -> bool:
+    """Put the canonical projection into the session before the turn commits (WP-5.6).
+
+    The turn's committed state then carries it, so publishing the response
+    afterwards finds it there and nothing saves the session a second time. The
+    publisher guard's process counters stay out of the durable state.
+    """
+    canonical_raw = result.get("canonical_narrative_response")
+    session = result.get("session")
+    if not isinstance(canonical_raw, Mapping) or not isinstance(session, dict):
+        return False
+    response = canonical_response_from_dict(canonical_raw)
+    return _patch_latest_interaction(
+        session,
+        response_id=response.response_id,
+        turn_id=response.turn_id,
+        bundle=canonical_consumer_bundle(response),
+        canonical=response.as_dict(),
+        grounding=_mapping(result.get("narrative_grounding")),
+        grounding_footer=_mapping(result.get("narrative_grounding_footer")),
+    )
 
 
 def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
@@ -108,7 +135,6 @@ def attach_canonical_consumer_bundle(result: dict[str, Any]) -> dict[str, Any]:
             turn_id=response.turn_id,
             bundle=bundle,
             canonical=canonical,
-            telemetry=telemetry,
             grounding=grounding,
             grounding_footer=grounding_footer,
         )
