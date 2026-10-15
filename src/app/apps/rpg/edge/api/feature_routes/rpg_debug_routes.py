@@ -14,6 +14,11 @@ from app.apps.rpg.foundation.debug_logging import (
 )
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgDebugClientEventResponse,
+    RpgDebugLogStatusResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -36,11 +41,11 @@ def register_rpg_debug_routes(router: APIRouter, state) -> None:
         return
     setattr(state, _ROUTE_SENTINEL, True)
 
-    @router.get("/api/rpg/debug/log-status", tags=["rpg-debug"])
+    @router.get("/api/rpg/debug/log-status", tags=["rpg-debug"], responses=documented(RpgDebugLogStatusResponse))
     def rpg_debug_status() -> dict[str, Any]:
         return {"ok": True, **rpg_debug_log_status()}
 
-    @router.post("/api/rpg/debug/event", tags=["rpg-debug"])
+    @router.post("/api/rpg/debug/event", tags=["rpg-debug"], responses=documented(RpgDebugClientEventResponse))
     def rpg_debug_client_event(request: Request, request_body: RpgDebugClientEventRequestBody) -> dict[str, Any]:
         payload = request_body.model_dump(exclude_unset=True, by_alias=True)
         if not isinstance(payload, dict):

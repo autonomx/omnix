@@ -16,6 +16,10 @@ from app.apps.rpg.world.tactical_spatial import (
 from app.apps.rpg.world.tactical_spatial_service import attack_tactically, move_actor_tactically
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgTacticalResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -78,6 +82,7 @@ def register_rpg_tactical_spatial_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/map-instances/{map_instance_id}/tactical/move",
         tags=["rpg-tactical-spatial"],
+        responses=documented(RpgTacticalResponse),
     )
     def rpg_tactical_move(
         map_instance_id: str,
@@ -101,6 +106,7 @@ def register_rpg_tactical_spatial_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/map-instances/{map_instance_id}/tactical/attack",
         tags=["rpg-tactical-spatial"],
+        responses=documented(RpgTacticalResponse),
     )
     def rpg_tactical_attack(
         map_instance_id: str,

@@ -21,6 +21,12 @@ from app.apps.rpg.narration.narrative_engine.delivery import (
     NarrativeDeliveryRepository,
 )
 from app.apps.rpg.narration.narrative_repository import build_production_narrative_repository
+from app.apps.rpg.edge.api.route_contracts import (
+    NARRATIVE_DELIVERY_STREAM,
+    RpgNarrativeDeliveryCancelResponse,
+    RpgNarrativeDeliveryResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 
 class NarrativeDeliveryCancelRequest(BaseModel):
@@ -163,6 +169,7 @@ def register_rpg_narrative_delivery_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/narrative-responses/{response_id}/delivery",
         tags=["rpg-session"],
+        responses=documented(RpgNarrativeDeliveryResponse),
     )
     def rpg_narrative_delivery_status(
         response_id: str,
@@ -191,6 +198,7 @@ def register_rpg_narrative_delivery_routes(router: APIRouter, state) -> None:
         "/api/rpg/narrative-responses/{response_id}/stream",
         tags=["rpg-session"],
         include_in_schema=False,
+        responses=NARRATIVE_DELIVERY_STREAM,
     )
     def rpg_narrative_delivery_stream(
         response_id: str,
@@ -246,6 +254,7 @@ def register_rpg_narrative_delivery_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/narrative-responses/{response_id}/cancel",
         tags=["rpg-session"],
+        responses=documented(RpgNarrativeDeliveryCancelResponse),
     )
     def rpg_narrative_delivery_cancel(
         response_id: str,

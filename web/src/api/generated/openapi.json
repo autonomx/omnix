@@ -20041,6 +20041,52 @@
         "title": "HermesAdapterPreviewRequest",
         "type": "object"
       },
+      "HermesAdapterPreviewResponse": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "intent": {
+            "title": "Intent",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "request": {
+            "additionalProperties": true,
+            "title": "Request",
+            "type": "object"
+          },
+          "response_contract": {
+            "additionalProperties": true,
+            "title": "Response Contract",
+            "type": "object"
+          },
+          "route": {
+            "additionalProperties": true,
+            "title": "Route",
+            "type": "object"
+          },
+          "source": {
+            "const": "hermes_adapter",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "source"
+        ],
+        "title": "HermesAdapterPreviewResponse",
+        "type": "object"
+      },
       "HermesApprovalRequest": {
         "additionalProperties": true,
         "description": "A candidate offered for approval; approvals are disabled, so it is echoed back.",
@@ -20251,6 +20297,41 @@
         "title": "HermesCandidatePreviewResponse",
         "type": "object"
       },
+      "HermesCapabilitiesResponse": {
+        "description": "One mode's ``policy`` when a mode is named, otherwise every mode's ``policies``.",
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "policies": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Policies",
+            "type": "array"
+          },
+          "policy": {
+            "additionalProperties": true,
+            "title": "Policy",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "HermesCapabilitiesResponse",
+        "type": "object"
+      },
       "HermesDiagnosticsPaths": {
         "properties": {
           "status_path": {
@@ -20290,6 +20371,104 @@
           "name"
         ],
         "title": "HermesLookupRequest",
+        "type": "object"
+      },
+      "HermesLookupResponse": {
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "mode": {
+            "const": "lookup",
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "name",
+          "dry_run",
+          "mode"
+        ],
+        "title": "HermesLookupResponse",
+        "type": "object"
+      },
+      "HermesNarrativeResearchResponse": {
+        "description": "Read-only research over the campaign bible; it never changes the bible.",
+        "properties": {
+          "campaign_bible_changed": {
+            "title": "Campaign Bible Changed",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "policy": {
+            "additionalProperties": true,
+            "title": "Policy",
+            "type": "object"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          },
+          "source": {
+            "const": "hermes_rpg_narrative_research",
+            "title": "Source",
+            "type": "string"
+          },
+          "state_changed": {
+            "title": "State Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "source",
+          "read_only",
+          "state_changed"
+        ],
+        "title": "HermesNarrativeResearchResponse",
         "type": "object"
       },
       "HermesRecentResponse": {
@@ -20510,6 +20689,97 @@
         "title": "HermesRpgApprovedFlowResponse",
         "type": "object"
       },
+      "HermesRpgContextPackResponse": {
+        "description": "A bounded read-only pack of the session; over ``char_budget`` it is truncated.",
+        "properties": {
+          "active_combat": {
+            "additionalProperties": true,
+            "title": "Active Combat",
+            "type": "object"
+          },
+          "active_quests": {
+            "items": {},
+            "title": "Active Quests",
+            "type": "array"
+          },
+          "active_service": {
+            "additionalProperties": true,
+            "title": "Active Service",
+            "type": "object"
+          },
+          "active_travel": {
+            "additionalProperties": true,
+            "title": "Active Travel",
+            "type": "object"
+          },
+          "char_budget": {
+            "title": "Char Budget",
+            "type": "integer"
+          },
+          "current_location": {
+            "title": "Current Location",
+            "type": "string"
+          },
+          "inventory": {
+            "items": {},
+            "title": "Inventory",
+            "type": "array"
+          },
+          "item_limit": {
+            "title": "Item Limit",
+            "type": "integer"
+          },
+          "known_npcs": {
+            "items": {},
+            "title": "Known Npcs",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "party": {
+            "items": {},
+            "title": "Party",
+            "type": "array"
+          },
+          "player_stats": {
+            "additionalProperties": true,
+            "title": "Player Stats",
+            "type": "object"
+          },
+          "recent_events": {
+            "items": {},
+            "title": "Recent Events",
+            "type": "array"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "version": {
+            "const": "hermes_rpg_context_pack_v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "source",
+          "version",
+          "truncated"
+        ],
+        "title": "HermesRpgContextPackResponse",
+        "type": "object"
+      },
       "HermesRpgContextRequest": {
         "properties": {
           "include_recent_turns": {
@@ -20524,6 +20794,42 @@
           }
         },
         "title": "HermesRpgContextRequest",
+        "type": "object"
+      },
+      "HermesRpgContextResponse": {
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "title": "Context",
+            "type": "object"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "read_only",
+          "source"
+        ],
+        "title": "HermesRpgContextResponse",
         "type": "object"
       },
       "HermesRpgExecutionLedgerItem": {
@@ -20707,6 +21013,57 @@
           }
         },
         "title": "HermesRpgPlanRequest",
+        "type": "object"
+      },
+      "HermesRpgPlanResponse": {
+        "description": "A reviewed plan proposal; nothing changes state.",
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "plan": {
+            "additionalProperties": true,
+            "title": "Plan",
+            "type": "object"
+          },
+          "planner_context": {
+            "additionalProperties": true,
+            "title": "Planner Context",
+            "type": "object"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "state_changed": {
+            "title": "State Changed",
+            "type": "boolean"
+          },
+          "ticket": {
+            "additionalProperties": true,
+            "title": "Ticket",
+            "type": "object"
+          },
+          "validation": {
+            "additionalProperties": true,
+            "title": "Validation",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "state_changed"
+        ],
+        "title": "HermesRpgPlanResponse",
         "type": "object"
       },
       "HermesRpgSequenceRequest": {
@@ -21159,6 +21516,142 @@
           }
         },
         "title": "HermesRpgTurnReadoutResponseTurn",
+        "type": "object"
+      },
+      "HermesSequenceExecuteStepResponse": {
+        "properties": {
+          "approved_flow": {
+            "additionalProperties": true,
+            "title": "Approved Flow",
+            "type": "object"
+          },
+          "assist_mode": {
+            "additionalProperties": true,
+            "title": "Assist Mode",
+            "type": "object"
+          },
+          "command_text": {
+            "title": "Command Text",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "item_index": {
+            "title": "Item Index",
+            "type": "integer"
+          },
+          "next_item_preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Item Preview"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "rpg_turn_result": {
+            "additionalProperties": true,
+            "title": "Rpg Turn Result",
+            "type": "object"
+          },
+          "sequence_state": {
+            "additionalProperties": true,
+            "title": "Sequence State",
+            "type": "object"
+          },
+          "source": {
+            "const": "hermes_sequence_approved_executor",
+            "title": "Source",
+            "type": "string"
+          },
+          "state_changed": {
+            "title": "State Changed",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "blocked",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
+          }
+        },
+        "required": [
+          "ok",
+          "source",
+          "state_changed"
+        ],
+        "title": "HermesSequenceExecuteStepResponse",
+        "type": "object"
+      },
+      "HermesSequencePlanResponse": {
+        "description": "The critiqued sequence and its checkpoint; ``ok`` is false when the critique blocks it.",
+        "properties": {
+          "checkpoint": {
+            "additionalProperties": true,
+            "title": "Checkpoint",
+            "type": "object"
+          },
+          "critique_summary": {
+            "additionalProperties": true,
+            "title": "Critique Summary",
+            "type": "object"
+          },
+          "loop_guard": {
+            "additionalProperties": true,
+            "title": "Loop Guard",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "sequence": {
+            "additionalProperties": true,
+            "title": "Sequence",
+            "type": "object"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "state_changed": {
+            "title": "State Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "source",
+          "sequence",
+          "critique_summary",
+          "checkpoint",
+          "loop_guard",
+          "state_changed"
+        ],
+        "title": "HermesSequencePlanResponse",
         "type": "object"
       },
       "HermesStatusResponse": {
@@ -40757,6 +41250,132 @@
         "title": "RouteRequest",
         "type": "object"
       },
+      "RpgAbilityCoverage": {
+        "description": "``RpgAbilityCoverageReport`` without its observations.",
+        "properties": {
+          "ability_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Ability Counts",
+            "type": "object"
+          },
+          "capability_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Capability Counts",
+            "type": "object"
+          },
+          "coverage_score": {
+            "title": "Coverage Score",
+            "type": "number"
+          },
+          "covered_dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Covered Dimensions",
+            "type": "array"
+          },
+          "dimension_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Dimension Counts",
+            "type": "object"
+          },
+          "kind_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Kind Counts",
+            "type": "object"
+          },
+          "missing_dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Dimensions",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "purpose_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Purpose Counts",
+            "type": "object"
+          },
+          "required_dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Dimensions",
+            "type": "array"
+          },
+          "source_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Source Counts",
+            "type": "object"
+          },
+          "total_observations": {
+            "title": "Total Observations",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "total_observations",
+          "coverage_score",
+          "required_dimensions",
+          "covered_dimensions",
+          "missing_dimensions",
+          "dimension_counts",
+          "kind_counts",
+          "purpose_counts",
+          "capability_counts",
+          "ability_counts",
+          "source_counts",
+          "warnings"
+        ],
+        "title": "RpgAbilityCoverage",
+        "type": "object"
+      },
+      "RpgAbilityCoverageResponse": {
+        "properties": {
+          "ability_coverage": {
+            "$ref": "#/components/schemas/RpgAbilityCoverage"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "ability_coverage"
+        ],
+        "title": "RpgAbilityCoverageResponse",
+        "type": "object"
+      },
       "RpgAdvanceCampaignSpatialTickRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -40960,6 +41579,38 @@
         "title": "RpgAuthoringCardPresentation",
         "type": "object"
       },
+      "RpgAuthoringDocumentBlock": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "RpgAuthoringDocumentBlock",
+        "type": "object"
+      },
       "RpgAuthoringDossierPreviewResponse": {
         "properties": {
           "canonical_fields_preserved": {
@@ -41143,6 +41794,41 @@
         "title": "RpgAuthoringEntityCard",
         "type": "object"
       },
+      "RpgAuthoringEntityDetailResponse": {
+        "properties": {
+          "entity": {
+            "additionalProperties": true,
+            "title": "Entity",
+            "type": "object"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/RpgAuthoringEntityHistoryEntry"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/RpgAuthoringTopic"
+          },
+          "world": {
+            "$ref": "#/components/schemas/RpgWorldSummary"
+          }
+        },
+        "required": [
+          "ok",
+          "world",
+          "topic",
+          "entity",
+          "history"
+        ],
+        "title": "RpgAuthoringEntityDetailResponse",
+        "type": "object"
+      },
       "RpgAuthoringEntityDossier": {
         "properties": {
           "generated_from_legacy": {
@@ -41208,6 +41894,52 @@
           "related_entity_ids"
         ],
         "title": "RpgAuthoringEntityDossier",
+        "type": "object"
+      },
+      "RpgAuthoringEntityHistoryEntry": {
+        "properties": {
+          "after": {
+            "additionalProperties": true,
+            "title": "After",
+            "type": "object"
+          },
+          "before": {
+            "additionalProperties": true,
+            "title": "Before",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "history_sequence": {
+            "title": "History Sequence",
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "operation": {
+            "title": "Operation",
+            "type": "string"
+          },
+          "topic_content_hash": {
+            "title": "Topic Content Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "history_sequence",
+          "operation",
+          "before",
+          "after",
+          "topic_content_hash",
+          "metadata",
+          "created_at"
+        ],
+        "title": "RpgAuthoringEntityHistoryEntry",
         "type": "object"
       },
       "RpgAuthoringEntityMutationResponse": {
@@ -41390,6 +42122,82 @@
         "title": "RpgAuthoringSection",
         "type": "object"
       },
+      "RpgAuthoringSectionPage": {
+        "description": "One authoring page: a document (``summary``, ``body``) or a collection (``entities``).",
+        "properties": {
+          "body": {
+            "items": {
+              "$ref": "#/components/schemas/RpgAuthoringDocumentBlock"
+            },
+            "title": "Body",
+            "type": "array"
+          },
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/RpgAuthoringEntityCard"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "filters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "page_kind": {
+            "enum": [
+              "document",
+              "collection"
+            ],
+            "title": "Page Kind",
+            "type": "string"
+          },
+          "related_entities": {
+            "items": {
+              "$ref": "#/components/schemas/RpgAuthoringEntityCard"
+            },
+            "title": "Related Entities",
+            "type": "array"
+          },
+          "section_id": {
+            "title": "Section Id",
+            "type": "string"
+          },
+          "sort_options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sort Options",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/RpgAuthoringTopic"
+          }
+        },
+        "required": [
+          "ok",
+          "section_id",
+          "page_kind",
+          "title"
+        ],
+        "title": "RpgAuthoringSectionPage",
+        "type": "object"
+      },
       "RpgAuthoringTopic": {
         "properties": {
           "content": {
@@ -41459,6 +42267,199 @@
         "title": "RpgAuthoringTopic",
         "type": "object"
       },
+      "RpgAuthoringTopicDetailResponse": {
+        "properties": {
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldTopicHistoryEntry"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/RpgAuthoringTopic"
+          },
+          "world": {
+            "$ref": "#/components/schemas/RpgWorldSummary"
+          }
+        },
+        "required": [
+          "ok",
+          "world",
+          "topic",
+          "history"
+        ],
+        "title": "RpgAuthoringTopicDetailResponse",
+        "type": "object"
+      },
+      "RpgAuthoringTopicMutationResponse": {
+        "description": "An edited or restored topic; ``replaced_content_hash`` only on restore.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "replaced_content_hash": {
+            "title": "Replaced Content Hash",
+            "type": "string"
+          },
+          "stale_topic_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Topic Ids",
+            "type": "array"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/RpgAuthoringTopic"
+          }
+        },
+        "required": [
+          "ok",
+          "topic",
+          "stale_topic_ids"
+        ],
+        "title": "RpgAuthoringTopicMutationResponse",
+        "type": "object"
+      },
+      "RpgAuthorshipAuditTopic": {
+        "properties": {
+          "artifact_status": {
+            "title": "Artifact Status",
+            "type": "string"
+          },
+          "blocked_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked Paths",
+            "type": "array"
+          },
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "entities": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "generation_artifact_id": {
+            "title": "Generation Artifact Id",
+            "type": "string"
+          },
+          "lore_string_count": {
+            "title": "Lore String Count",
+            "type": "integer"
+          },
+          "origin_count": {
+            "title": "Origin Count",
+            "type": "integer"
+          },
+          "publishable": {
+            "title": "Publishable",
+            "type": "boolean"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_id",
+          "source",
+          "status",
+          "classification",
+          "publishable",
+          "artifact_status",
+          "generation_artifact_id",
+          "lore_string_count",
+          "origin_count",
+          "blocked_paths",
+          "entities"
+        ],
+        "title": "RpgAuthorshipAuditTopic",
+        "type": "object"
+      },
+      "RpgAuthorshipImmutableHistory": {
+        "properties": {
+          "mutated": {
+            "title": "Mutated",
+            "type": "boolean"
+          },
+          "world_release_count": {
+            "title": "World Release Count",
+            "type": "integer"
+          },
+          "world_revision_count": {
+            "title": "World Revision Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "world_revision_count",
+          "world_release_count",
+          "mutated"
+        ],
+        "title": "RpgAuthorshipImmutableHistory",
+        "type": "object"
+      },
+      "RpgAuthorshipRemediation": {
+        "properties": {
+          "generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RpgWorldGenerationMutationResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation_error": {
+            "title": "Generation Error",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "not_required",
+              "queued",
+              "marked_stale",
+              "queue_failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "topic_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Topic Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "topic_ids"
+        ],
+        "title": "RpgAuthorshipRemediation",
+        "type": "object"
+      },
       "RpgBindCampaignWorldRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -41490,6 +42491,117 @@
           "world_release"
         ],
         "title": "RpgBindCampaignWorldRequestBody",
+        "type": "object"
+      },
+      "RpgCampaignGenesisProgress": {
+        "properties": {
+          "audit": {
+            "additionalProperties": true,
+            "title": "Audit",
+            "type": "object"
+          },
+          "background_expansion": {
+            "additionalProperties": true,
+            "title": "Background Expansion",
+            "type": "object"
+          },
+          "campaign_bible_content_hash": {
+            "title": "Campaign Bible Content Hash",
+            "type": "string"
+          },
+          "campaign_bible_revision": {
+            "title": "Campaign Bible Revision",
+            "type": "integer"
+          },
+          "compilation": {
+            "additionalProperties": true,
+            "title": "Compilation",
+            "type": "object"
+          },
+          "completed_jobs": {
+            "title": "Completed Jobs",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/RpgLoreGenerationJob"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "launch_ready": {
+            "title": "Launch Ready",
+            "type": "boolean"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "integer"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "topic_graph": {
+            "additionalProperties": true,
+            "title": "Topic Graph",
+            "type": "object"
+          },
+          "total_jobs": {
+            "title": "Total Jobs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "status",
+          "stage",
+          "launch_ready",
+          "percent",
+          "completed_jobs",
+          "total_jobs",
+          "jobs",
+          "topic_graph",
+          "audit",
+          "compilation",
+          "campaign_bible_revision",
+          "campaign_bible_content_hash",
+          "background_expansion"
+        ],
+        "title": "RpgCampaignGenesisProgress",
+        "type": "object"
+      },
+      "RpgCampaignGenesisResponse": {
+        "properties": {
+          "generation": {
+            "$ref": "#/components/schemas/RpgCampaignGenesisProgress"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/RpgLoreStorage"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "generation",
+          "storage"
+        ],
+        "title": "RpgCampaignGenesisResponse",
         "type": "object"
       },
       "RpgCampaignLoreResponse": {
@@ -41586,6 +42698,26 @@
           }
         },
         "title": "RpgCampaignLoreResponseDossierCards",
+        "type": "object"
+      },
+      "RpgCampaignWorldBindingResponse": {
+        "description": "``binding`` is the stored ``CampaignWorldBinding`` document.",
+        "properties": {
+          "binding": {
+            "additionalProperties": true,
+            "title": "Binding",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "binding"
+        ],
+        "title": "RpgCampaignWorldBindingResponse",
         "type": "object"
       },
       "RpgCompatibilityRequest": {
@@ -41826,6 +42958,95 @@
           }
         },
         "title": "RpgDebugClientEventRequestBody",
+        "type": "object"
+      },
+      "RpgDebugClientEventResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "ok",
+          "trace_id"
+        ],
+        "title": "RpgDebugClientEventResponse",
+        "type": "object"
+      },
+      "RpgDebugLogFile": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "size_bytes",
+          "updated_at"
+        ],
+        "title": "RpgDebugLogFile",
+        "type": "object"
+      },
+      "RpgDebugLogStatusResponse": {
+        "properties": {
+          "directory": {
+            "title": "Directory",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/RpgDebugLogFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "max_field_chars": {
+            "title": "Max Field Chars",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "enabled",
+          "directory",
+          "retention_days",
+          "max_field_chars",
+          "files"
+        ],
+        "title": "RpgDebugLogStatusResponse",
         "type": "object"
       },
       "RpgDeferredMaterializationResponse": {
@@ -42094,6 +43315,32 @@
         "title": "RpgFeatureOptions",
         "type": "object"
       },
+      "RpgGeometryPatchResponse": {
+        "description": "The map event the patch recorded and the resulting map snapshot.",
+        "properties": {
+          "event": {
+            "additionalProperties": true,
+            "title": "Event",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "snapshot": {
+            "additionalProperties": true,
+            "title": "Snapshot",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "event",
+          "snapshot"
+        ],
+        "title": "RpgGeometryPatchResponse",
+        "type": "object"
+      },
       "RpgGridPerformanceProfileRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -42111,6 +43358,30 @@
           }
         },
         "title": "RpgGridPerformanceProfileRequestBody",
+        "type": "object"
+      },
+      "RpgGridPerformanceProfileResponse": {
+        "properties": {
+          "knowledge_source": {
+            "title": "Knowledge Source",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "profile": {
+            "additionalProperties": true,
+            "title": "Profile",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "knowledge_source",
+          "profile"
+        ],
+        "title": "RpgGridPerformanceProfileResponse",
         "type": "object"
       },
       "RpgImportLegacyCampaignBibleRequestBody": {
@@ -42179,6 +43450,57 @@
           "ok"
         ],
         "title": "RpgLaunchResponse",
+        "type": "object"
+      },
+      "RpgLegacyWorldImportResponse": {
+        "description": "A campaign bible imported as a world; ``reused`` when it was imported before.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "scenario_revision": {
+            "$ref": "#/components/schemas/RpgStoredScenarioRevision"
+          },
+          "source_campaign_id": {
+            "title": "Source Campaign Id",
+            "type": "string"
+          },
+          "source_campaign_rebound": {
+            "title": "Source Campaign Rebound",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "imported",
+            "title": "Status",
+            "type": "string"
+          },
+          "world": {
+            "$ref": "#/components/schemas/RpgWorldSummary"
+          },
+          "world_release": {
+            "$ref": "#/components/schemas/RpgStoredWorldRelease"
+          },
+          "world_revision": {
+            "$ref": "#/components/schemas/RpgStoredWorldRevision"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "reused",
+          "source_campaign_id",
+          "world",
+          "world_revision",
+          "world_release",
+          "scenario_revision",
+          "source_campaign_rebound"
+        ],
+        "title": "RpgLegacyWorldImportResponse",
         "type": "object"
       },
       "RpgLoadoutActionRequest": {
@@ -42398,6 +43720,45 @@
         "title": "RpgLocalDialogueFixtureRequestBody",
         "type": "object"
       },
+      "RpgLocalDialogueFixtureResponse": {
+        "description": "A dialogue benchmark case provisioned for local qualification.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "fixture_version": {
+            "title": "Fixture Version",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "fixture_version",
+          "case_id",
+          "run_id",
+          "session_id",
+          "created"
+        ],
+        "title": "RpgLocalDialogueFixtureResponse",
+        "type": "object"
+      },
       "RpgLoreCategory": {
         "properties": {
           "documents": {
@@ -42417,6 +43778,137 @@
           "documents"
         ],
         "title": "RpgLoreCategory",
+        "type": "object"
+      },
+      "RpgLoreDiscoveryResponse": {
+        "description": "``lore`` is the campaign lore payload (``RpgCampaignLoreResponse`` without ``session_id``).",
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "lore": {
+            "additionalProperties": true,
+            "title": "Lore",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/RpgLoreStorage"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "document_id",
+          "status",
+          "lore",
+          "storage"
+        ],
+        "title": "RpgLoreDiscoveryResponse",
+        "type": "object"
+      },
+      "RpgLoreDocument": {
+        "properties": {
+          "canon_revision": {
+            "title": "Canon Revision",
+            "type": "number"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "full_text": {
+            "title": "Full Text",
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary_120": {
+            "title": "Summary 120",
+            "type": "string"
+          },
+          "summary_500": {
+            "title": "Summary 500",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          },
+          "visibility": {
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "topic_id",
+          "category",
+          "summary_120",
+          "summary_500",
+          "keywords",
+          "visibility",
+          "status",
+          "canon_revision",
+          "full_text"
+        ],
+        "title": "RpgLoreDocument",
+        "type": "object"
+      },
+      "RpgLoreDocumentResponse": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/RpgLoreDocument"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/RpgLoreStorage"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "document",
+          "storage"
+        ],
+        "title": "RpgLoreDocumentResponse",
         "type": "object"
       },
       "RpgLoreDocumentSummary": {
@@ -42675,6 +44167,73 @@
         "title": "RpgLoreGenerationJob",
         "type": "object"
       },
+      "RpgLoreMaterializationResponse": {
+        "description": "A lore document generated in play; ``definition`` is the entity it describes.",
+        "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "document": {
+            "$ref": "#/components/schemas/RpgLoreDocument"
+          },
+          "lore": {
+            "$ref": "#/components/schemas/RpgCampaignLoreResponse"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/RpgLoreStorage"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "document",
+          "lore",
+          "storage",
+          "definition"
+        ],
+        "title": "RpgLoreMaterializationResponse",
+        "type": "object"
+      },
+      "RpgLoreRegenerationResponse": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/RpgLoreDocument"
+          },
+          "lore": {
+            "$ref": "#/components/schemas/RpgCampaignLoreResponse"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/RpgLoreStorage"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "document",
+          "lore",
+          "storage"
+        ],
+        "title": "RpgLoreRegenerationResponse",
+        "type": "object"
+      },
       "RpgLoreStorage": {
         "properties": {
           "current_location": {
@@ -42863,6 +44422,71 @@
         "title": "RpgMapActionResponse",
         "type": "object"
       },
+      "RpgMapBlueprintListResponse": {
+        "properties": {
+          "map_blueprints": {
+            "items": {
+              "$ref": "#/components/schemas/RpgMapBlueprintRevision"
+            },
+            "title": "Map Blueprints",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "map_blueprints"
+        ],
+        "title": "RpgMapBlueprintListResponse",
+        "type": "object"
+      },
+      "RpgMapBlueprintMaterializeResponse": {
+        "description": "Blueprints created for generated locations that had none.",
+        "properties": {
+          "created": {
+            "items": {
+              "$ref": "#/components/schemas/RpgMapBlueprintRevision"
+            },
+            "title": "Created",
+            "type": "array"
+          },
+          "created_count": {
+            "title": "Created Count",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "created",
+          "created_count"
+        ],
+        "title": "RpgMapBlueprintMaterializeResponse",
+        "type": "object"
+      },
+      "RpgMapBlueprintResponse": {
+        "properties": {
+          "map_blueprint": {
+            "$ref": "#/components/schemas/RpgMapBlueprintRevision"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "map_blueprint"
+        ],
+        "title": "RpgMapBlueprintResponse",
+        "type": "object"
+      },
       "RpgMapBlueprintRevision": {
         "properties": {
           "blueprint_revision": {
@@ -43002,6 +44626,270 @@
         "title": "RpgMapOverlayResponse",
         "type": "object"
       },
+      "RpgMaterializationJob": {
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "max_attempts": {
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "progress": {
+            "additionalProperties": true,
+            "title": "Progress",
+            "type": "object"
+          },
+          "source_world_revision": {
+            "title": "Source World Revision",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trigger Reasons",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "source_world_revision",
+          "location_id",
+          "campaign_id",
+          "trigger_reasons",
+          "priority",
+          "attempt_count",
+          "max_attempts",
+          "progress",
+          "error",
+          "created_at",
+          "updated_at",
+          "completed_at"
+        ],
+        "title": "RpgMaterializationJob",
+        "type": "object"
+      },
+      "RpgMaterializationScheduleResponse": {
+        "description": "Predictive materialization queued around the current location.\n\n``not_applicable`` (with ``reason``) when the world has no starter-bubble plan.",
+        "properties": {
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "current_location_id": {
+            "title": "Current Location Id",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "route_intent_location_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Intent Location Id"
+          },
+          "scheduled": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Scheduled",
+            "type": "array"
+          },
+          "source_world_revision": {
+            "title": "Source World Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "scheduled",
+              "idle",
+              "not_applicable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "worker_started": {
+            "title": "Worker Started",
+            "type": "boolean"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "world_id",
+          "source_world_revision",
+          "scheduled",
+          "worker_started"
+        ],
+        "title": "RpgMaterializationScheduleResponse",
+        "type": "object"
+      },
+      "RpgMaterializationTelemetryResponse": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "completed_location_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Completed Location Ids",
+            "type": "array"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "failed_location_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Location Ids",
+            "type": "array"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/RpgMaterializationJob"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "source_world_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source World Revision"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "failed",
+              "idle"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "source_world_revision",
+          "status",
+          "counts",
+          "pending",
+          "attempts",
+          "failed_location_ids",
+          "completed_location_ids",
+          "jobs"
+        ],
+        "title": "RpgMaterializationTelemetryResponse",
+        "type": "object"
+      },
       "RpgMaterializeDeferredLocationRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -43010,6 +44898,135 @@
           }
         },
         "title": "RpgMaterializeDeferredLocationRequestBody",
+        "type": "object"
+      },
+      "RpgNarrativeDelivery": {
+        "properties": {
+          "block_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
+          "cancel_reason": {
+            "title": "Cancel Reason",
+            "type": "string"
+          },
+          "delivered_block_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Delivered Block Ids",
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "next_index": {
+            "title": "Next Index",
+            "type": "integer"
+          },
+          "response_id": {
+            "title": "Response Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "semantic_hash": {
+            "title": "Semantic Hash",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "semantic_hash",
+          "mode",
+          "status",
+          "block_ids",
+          "delivered_block_ids",
+          "next_index",
+          "revision",
+          "cancel_reason",
+          "metadata"
+        ],
+        "title": "RpgNarrativeDelivery",
+        "type": "object"
+      },
+      "RpgNarrativeDeliveryCancelResponse": {
+        "description": "``delivery`` is the record, or the projection's metadata when none was stored.",
+        "properties": {
+          "delivery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RpgNarrativeDelivery"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "title": "Delivery"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "response_id": {
+            "title": "Response Id",
+            "type": "string"
+          },
+          "semantic_hash": {
+            "title": "Semantic Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "response_id",
+          "semantic_hash",
+          "delivery"
+        ],
+        "title": "RpgNarrativeDeliveryCancelResponse",
+        "type": "object"
+      },
+      "RpgNarrativeDeliveryResponse": {
+        "properties": {
+          "delivery": {
+            "$ref": "#/components/schemas/RpgNarrativeDelivery"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "response_id": {
+            "title": "Response Id",
+            "type": "string"
+          },
+          "semantic_hash": {
+            "title": "Semantic Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "response_id",
+          "semantic_hash",
+          "delivery"
+        ],
+        "title": "RpgNarrativeDeliveryResponse",
         "type": "object"
       },
       "RpgNewGameRequestBody": {
@@ -43244,6 +45261,99 @@
         "title": "RpgObserveMapRequestBody",
         "type": "object"
       },
+      "RpgObserveMapResponse": {
+        "description": "``reused`` (status ``current``) when the observer already knew this map state.",
+        "properties": {
+          "event": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "knowledge": {
+            "additionalProperties": true,
+            "title": "Knowledge",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "projection": {
+            "additionalProperties": true,
+            "title": "Projection",
+            "type": "object"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "observed",
+              "current"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "reused",
+          "knowledge",
+          "projection",
+          "event"
+        ],
+        "title": "RpgObserveMapResponse",
+        "type": "object"
+      },
+      "RpgObserverProjectionResponse": {
+        "description": "``stale`` when the map changed after the observer last looked.",
+        "properties": {
+          "knowledge": {
+            "additionalProperties": true,
+            "title": "Knowledge",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "projection": {
+            "additionalProperties": true,
+            "title": "Projection",
+            "type": "object"
+          },
+          "recent_events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Recent Events",
+            "type": "array"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "stale",
+          "knowledge",
+          "projection",
+          "recent_events"
+        ],
+        "title": "RpgObserverProjectionResponse",
+        "type": "object"
+      },
       "RpgPlayerOptions": {
         "properties": {
           "background": {
@@ -43285,6 +45395,67 @@
           }
         },
         "title": "RpgPlayerOptions",
+        "type": "object"
+      },
+      "RpgPrepareOpeningsResponse": {
+        "description": "Openings made launchable; while the world still generates, nothing is prepared.",
+        "properties": {
+          "generation_run_id": {
+            "title": "Generation Run Id",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "prepared": {
+            "items": {
+              "$ref": "#/components/schemas/RpgPreparedOpening"
+            },
+            "title": "Prepared",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "generating",
+              "review_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "prepared"
+        ],
+        "title": "RpgPrepareOpeningsResponse",
+        "type": "object"
+      },
+      "RpgPreparedOpening": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/RpgWorldLaunchRepairResponse"
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_id",
+          "title",
+          "result"
+        ],
+        "title": "RpgPreparedOpening",
         "type": "object"
       },
       "RpgPresetListResponse": {
@@ -44037,6 +46208,45 @@
         "title": "RpgSaveCampaignSpatialRoutineRequestBody",
         "type": "object"
       },
+      "RpgScenarioLifecycleResponse": {
+        "properties": {
+          "idempotent": {
+            "title": "Idempotent",
+            "type": "boolean"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/RpgScenarioSummary"
+          }
+        },
+        "required": [
+          "ok",
+          "scenario",
+          "idempotent"
+        ],
+        "title": "RpgScenarioLifecycleResponse",
+        "type": "object"
+      },
+      "RpgScenarioResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/RpgScenarioSummary"
+          }
+        },
+        "required": [
+          "ok",
+          "scenario"
+        ],
+        "title": "RpgScenarioResponse",
+        "type": "object"
+      },
       "RpgScenarioRevision": {
         "properties": {
           "content_hash": {
@@ -44074,6 +46284,23 @@
           "created_at"
         ],
         "title": "RpgScenarioRevision",
+        "type": "object"
+      },
+      "RpgScenarioRevisionResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "scenario_revision": {
+            "$ref": "#/components/schemas/RpgStoredScenarioRevision"
+          }
+        },
+        "required": [
+          "ok",
+          "scenario_revision"
+        ],
+        "title": "RpgScenarioRevisionResponse",
         "type": "object"
       },
       "RpgScenarioSummary": {
@@ -44265,6 +46492,492 @@
         "title": "RpgSessionMutationResponse",
         "type": "object"
       },
+      "RpgSpatialClock": {
+        "properties": {
+          "aggregate_metrics": {
+            "additionalProperties": true,
+            "title": "Aggregate Metrics",
+            "type": "object"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "policy": {
+            "additionalProperties": true,
+            "title": "Policy",
+            "type": "object"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "world_tick": {
+            "title": "World Tick",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "world_tick",
+          "policy",
+          "aggregate_metrics",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RpgSpatialClock",
+        "type": "object"
+      },
+      "RpgSpatialClockResponse": {
+        "properties": {
+          "clock": {
+            "$ref": "#/components/schemas/RpgSpatialClock"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "clock"
+        ],
+        "title": "RpgSpatialClockResponse",
+        "type": "object"
+      },
+      "RpgSpatialGoal": {
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "blocked_attempts": {
+            "title": "Blocked Attempts",
+            "type": "integer"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_after_tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires After Tick"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "goal_revision": {
+            "title": "Goal Revision",
+            "type": "integer"
+          },
+          "goal_type": {
+            "title": "Goal Type",
+            "type": "string"
+          },
+          "issued_tick": {
+            "title": "Issued Tick",
+            "type": "integer"
+          },
+          "last_decision": {
+            "additionalProperties": true,
+            "title": "Last Decision",
+            "type": "object"
+          },
+          "map_instance_id": {
+            "title": "Map Instance Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "not_before_tick": {
+            "title": "Not Before Tick",
+            "type": "integer"
+          },
+          "portal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portal Id"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "routine_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_cell": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Cell"
+          },
+          "target_map_instance_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Map Instance Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "goal_revision",
+          "campaign_id",
+          "actor_id",
+          "map_instance_id",
+          "goal_type",
+          "target_cell",
+          "portal_id",
+          "target_map_instance_id",
+          "priority",
+          "issued_tick",
+          "not_before_tick",
+          "expires_after_tick",
+          "status",
+          "routine_id",
+          "blocked_attempts",
+          "last_decision",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RpgSpatialGoal",
+        "type": "object"
+      },
+      "RpgSpatialGoalResponse": {
+        "properties": {
+          "goal": {
+            "$ref": "#/components/schemas/RpgSpatialGoal"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "goal"
+        ],
+        "title": "RpgSpatialGoalResponse",
+        "type": "object"
+      },
+      "RpgSpatialRoutine": {
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "emission_count": {
+            "title": "Emission Count",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_ticks": {
+            "title": "Interval Ticks",
+            "type": "integer"
+          },
+          "last_issued_tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Issued Tick"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "next_due_tick": {
+            "title": "Next Due Tick",
+            "type": "integer"
+          },
+          "next_step_index": {
+            "title": "Next Step Index",
+            "type": "integer"
+          },
+          "routine_id": {
+            "title": "Routine Id",
+            "type": "string"
+          },
+          "routine_revision": {
+            "title": "Routine Revision",
+            "type": "integer"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_id",
+          "routine_revision",
+          "actor_id",
+          "enabled",
+          "interval_ticks",
+          "steps",
+          "next_step_index",
+          "emission_count",
+          "next_due_tick",
+          "last_issued_tick",
+          "metadata",
+          "created_at",
+          "updated_at",
+          "campaign_id"
+        ],
+        "title": "RpgSpatialRoutine",
+        "type": "object"
+      },
+      "RpgSpatialRoutineResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "routine": {
+            "$ref": "#/components/schemas/RpgSpatialRoutine"
+          }
+        },
+        "required": [
+          "ok",
+          "routine"
+        ],
+        "title": "RpgSpatialRoutineResponse",
+        "type": "object"
+      },
+      "RpgSpatialRoutineState": {
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "emission_count": {
+            "title": "Emission Count",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_ticks": {
+            "title": "Interval Ticks",
+            "type": "integer"
+          },
+          "last_issued_tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Issued Tick"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "next_due_tick": {
+            "title": "Next Due Tick",
+            "type": "integer"
+          },
+          "next_step_index": {
+            "title": "Next Step Index",
+            "type": "integer"
+          },
+          "routine_id": {
+            "title": "Routine Id",
+            "type": "string"
+          },
+          "routine_revision": {
+            "title": "Routine Revision",
+            "type": "integer"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_id",
+          "routine_revision",
+          "actor_id",
+          "enabled",
+          "interval_ticks",
+          "steps",
+          "next_step_index",
+          "emission_count",
+          "next_due_tick",
+          "last_issued_tick",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RpgSpatialRoutineState",
+        "type": "object"
+      },
+      "RpgSpatialStateResponse": {
+        "properties": {
+          "clock": {
+            "$ref": "#/components/schemas/RpgSpatialClock"
+          },
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/RpgSpatialGoal"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "recent_ticks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Recent Ticks",
+            "type": "array"
+          },
+          "routines": {
+            "items": {
+              "$ref": "#/components/schemas/RpgSpatialRoutineState"
+            },
+            "title": "Routines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "clock",
+          "goals",
+          "routines",
+          "recent_ticks"
+        ],
+        "title": "RpgSpatialStateResponse",
+        "type": "object"
+      },
+      "RpgSpatialTickResponse": {
+        "description": "One simulation tick: the advanced clock, the tick's result and its metrics.",
+        "properties": {
+          "clock": {
+            "$ref": "#/components/schemas/RpgSpatialClock"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "title": "Metrics",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "clock",
+          "result",
+          "metrics"
+        ],
+        "title": "RpgSpatialTickResponse",
+        "type": "object"
+      },
       "RpgStarterBubblePromotionResponse": {
         "properties": {
           "ok": {
@@ -44320,6 +47033,138 @@
           "predictive_materialization"
         ],
         "title": "RpgStarterBubbleResponse",
+        "type": "object"
+      },
+      "RpgStoredScenarioRevision": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "number"
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          },
+          "world_revision": {
+            "title": "World Revision",
+            "type": "number"
+          }
+        },
+        "required": [
+          "revision",
+          "world_id",
+          "world_revision",
+          "document",
+          "content_hash",
+          "created_at",
+          "workspace_id",
+          "scenario_id"
+        ],
+        "title": "RpgStoredScenarioRevision",
+        "type": "object"
+      },
+      "RpgStoredWorldRelease": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "release": {
+            "title": "Release",
+            "type": "number"
+          },
+          "release_hash": {
+            "title": "Release Hash",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          },
+          "world_revision": {
+            "title": "World Revision",
+            "type": "number"
+          }
+        },
+        "required": [
+          "world_revision",
+          "release",
+          "document",
+          "release_hash",
+          "created_at",
+          "workspace_id",
+          "world_id"
+        ],
+        "title": "RpgStoredWorldRelease",
+        "type": "object"
+      },
+      "RpgStoredWorldRevision": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "number"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "document",
+          "content_hash",
+          "created_at",
+          "workspace_id",
+          "world_id"
+        ],
+        "title": "RpgStoredWorldRevision",
         "type": "object"
       },
       "RpgTacticalAttackRequestBody": {
@@ -44449,6 +47294,93 @@
           "expected_campaign_revision"
         ],
         "title": "RpgTacticalMoveRequestBody",
+        "type": "object"
+      },
+      "RpgTacticalResponse": {
+        "description": "A committed tactical move or attack, or its replay (``idempotent_replay``, with ``turn_id``).",
+        "properties": {
+          "actor_cell": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Actor Cell",
+            "type": "array"
+          },
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "campaign_revision": {
+            "title": "Campaign Revision",
+            "type": "integer"
+          },
+          "campaign_state_hash": {
+            "title": "Campaign State Hash",
+            "type": "string"
+          },
+          "idempotent_replay": {
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "tactical_move",
+              "tactical_attack"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "map_event": {
+            "additionalProperties": true,
+            "title": "Map Event",
+            "type": "object"
+          },
+          "map_event_id": {
+            "title": "Map Event Id",
+            "type": "string"
+          },
+          "map_instance_id": {
+            "title": "Map Instance Id",
+            "type": "string"
+          },
+          "map_state_revision": {
+            "title": "Map State Revision",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tactical": {
+            "additionalProperties": true,
+            "title": "Tactical",
+            "type": "object"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "kind",
+          "campaign_id",
+          "map_instance_id",
+          "map_state_revision",
+          "actor_id",
+          "tactical",
+          "idempotent_replay",
+          "campaign_revision"
+        ],
+        "title": "RpgTacticalResponse",
         "type": "object"
       },
       "RpgTurnResponse": {
@@ -45037,6 +47969,144 @@
         "title": "RpgUpdateWorldTopicRequestBody",
         "type": "object"
       },
+      "RpgWorldAuthorshipAuditResponse": {
+        "properties": {
+          "audited_at": {
+            "title": "Audited At",
+            "type": "string"
+          },
+          "blocked_topic_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked Topic Ids",
+            "type": "array"
+          },
+          "classification_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Classification Counts",
+            "type": "object"
+          },
+          "draft_revision": {
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "immutable_history": {
+            "$ref": "#/components/schemas/RpgAuthorshipImmutableHistory"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "publishable": {
+            "title": "Publishable",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": "rpg_world_authorship_audit_v2",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/RpgAuthorshipAuditTopic"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "ok",
+          "world_id",
+          "draft_revision",
+          "audited_at",
+          "publishable",
+          "classification_counts",
+          "blocked_topic_ids",
+          "topics",
+          "immutable_history"
+        ],
+        "title": "RpgWorldAuthorshipAuditResponse",
+        "type": "object"
+      },
+      "RpgWorldAuthorshipRemediationResponse": {
+        "properties": {
+          "audited_at": {
+            "title": "Audited At",
+            "type": "string"
+          },
+          "blocked_topic_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked Topic Ids",
+            "type": "array"
+          },
+          "classification_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Classification Counts",
+            "type": "object"
+          },
+          "draft_revision": {
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "immutable_history": {
+            "$ref": "#/components/schemas/RpgAuthorshipImmutableHistory"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "publishable": {
+            "title": "Publishable",
+            "type": "boolean"
+          },
+          "remediation": {
+            "$ref": "#/components/schemas/RpgAuthorshipRemediation"
+          },
+          "schema_version": {
+            "const": "rpg_world_authorship_audit_v2",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/RpgAuthorshipAuditTopic"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "ok",
+          "world_id",
+          "draft_revision",
+          "audited_at",
+          "publishable",
+          "classification_counts",
+          "blocked_topic_ids",
+          "topics",
+          "immutable_history",
+          "remediation"
+        ],
+        "title": "RpgWorldAuthorshipRemediationResponse",
+        "type": "object"
+      },
       "RpgWorldBundleImportResponse": {
         "properties": {
           "bundle_sha256": {
@@ -45567,6 +48637,47 @@
         "title": "RpgWorldDossierQualityResponse",
         "type": "object"
       },
+      "RpgWorldDraftRestoreResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "previous_current_draft_revision": {
+            "title": "Previous Current Draft Revision",
+            "type": "integer"
+          },
+          "restored_draft_revision": {
+            "title": "Restored Draft Revision",
+            "type": "integer"
+          },
+          "source_draft_revision": {
+            "title": "Source Draft Revision",
+            "type": "integer"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldTopic"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "source_draft_revision",
+          "previous_current_draft_revision",
+          "restored_draft_revision",
+          "topics"
+        ],
+        "title": "RpgWorldDraftRestoreResponse",
+        "type": "object"
+      },
       "RpgWorldGenerationAcceptAllRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -45591,6 +48702,74 @@
           }
         },
         "title": "RpgWorldGenerationAcceptCandidateRequestBody",
+        "type": "object"
+      },
+      "RpgWorldGenerationAcceptanceResponse": {
+        "description": "Accepted candidates, the decision recorded per topic, and the reconciled run.",
+        "properties": {
+          "accepted_topic_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Topic Ids",
+            "type": "array"
+          },
+          "decisions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RpgWorldGenerationReviewDecision"
+            },
+            "title": "Decisions",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RpgWorldGenerationRun"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "run_id",
+          "accepted_topic_ids",
+          "decisions",
+          "run"
+        ],
+        "title": "RpgWorldGenerationAcceptanceResponse",
+        "type": "object"
+      },
+      "RpgWorldGenerationDiagnosticsResponse": {
+        "properties": {
+          "contains_generated_content": {
+            "title": "Contains Generated Content",
+            "type": "boolean"
+          },
+          "format": {
+            "const": "jsonl",
+            "title": "Format",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "path",
+          "format",
+          "contains_generated_content"
+        ],
+        "title": "RpgWorldGenerationDiagnosticsResponse",
         "type": "object"
       },
       "RpgWorldGenerationFailureArtifact": {
@@ -45824,6 +49003,41 @@
         "title": "RpgWorldGenerationMutationResponse",
         "type": "object"
       },
+      "RpgWorldGenerationPublishResponse": {
+        "description": "``reused`` when the run was already published.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "publication": {
+            "additionalProperties": true,
+            "title": "Publication",
+            "type": "object"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RpgWorldGenerationRun"
+          },
+          "status": {
+            "const": "ready",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "run",
+          "publication",
+          "reused"
+        ],
+        "title": "RpgWorldGenerationPublishResponse",
+        "type": "object"
+      },
       "RpgWorldGenerationRepairEvaluation": {
         "properties": {
           "candidate_changed": {
@@ -45948,6 +49162,46 @@
           }
         },
         "title": "RpgWorldGenerationRetryDecisionRequestBody",
+        "type": "object"
+      },
+      "RpgWorldGenerationRetryDecisionResponse": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "keep",
+              "replace"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_record": {
+            "$ref": "#/components/schemas/RpgWorldGenerationReviewDecision"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RpgWorldGenerationRun"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "run_id",
+          "topic_id",
+          "decision",
+          "decision_record",
+          "run"
+        ],
+        "title": "RpgWorldGenerationRetryDecisionResponse",
         "type": "object"
       },
       "RpgWorldGenerationRetryReviewRequestBody": {
@@ -46556,6 +49810,31 @@
         "title": "RpgWorldGenerationRun",
         "type": "object"
       },
+      "RpgWorldGenerationStatusResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RpgWorldGenerationRun"
+          },
+          "topic_results": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldGenerationTopicResult"
+            },
+            "title": "Topic Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "run",
+          "topic_results"
+        ],
+        "title": "RpgWorldGenerationStatusResponse",
+        "type": "object"
+      },
       "RpgWorldGenerationTopicResult": {
         "properties": {
           "candidate": {
@@ -46685,6 +49964,40 @@
           "updated_at"
         ],
         "title": "RpgWorldGenerationTopicResult",
+        "type": "object"
+      },
+      "RpgWorldGenerationTopicResultResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "topic_result": {
+            "$ref": "#/components/schemas/RpgWorldGenerationTopicResult"
+          }
+        },
+        "required": [
+          "ok",
+          "run_id",
+          "parent_run_id",
+          "topic_result"
+        ],
+        "title": "RpgWorldGenerationTopicResultResponse",
         "type": "object"
       },
       "RpgWorldGenerationValidationAttempt": {
@@ -46941,6 +50254,83 @@
         "title": "RpgWorldImageGenerationRequestBody",
         "type": "object"
       },
+      "RpgWorldImageGenerationResponse": {
+        "description": "The image jobs queued, one per target.",
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldImageJob"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "jobs"
+        ],
+        "title": "RpgWorldImageGenerationResponse",
+        "type": "object"
+      },
+      "RpgWorldImageJob": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "target_id",
+          "status"
+        ],
+        "title": "RpgWorldImageJob",
+        "type": "object"
+      },
+      "RpgWorldImagePromptsResponse": {
+        "description": "The selected targets with their rebuilt suggested prompts; no image job is created.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldImageTarget"
+            },
+            "title": "Targets",
+            "type": "array"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "targets"
+        ],
+        "title": "RpgWorldImagePromptsResponse",
+        "type": "object"
+      },
       "RpgWorldImageTarget": {
         "properties": {
           "active_asset_id": {
@@ -47173,6 +50563,50 @@
           "generation_runs"
         ],
         "title": "RpgWorldLibraryResponse",
+        "type": "object"
+      },
+      "RpgWorldLifecycleResponse": {
+        "description": "Archive or restore; ``idempotent`` when the world was already there.",
+        "properties": {
+          "idempotent": {
+            "title": "Idempotent",
+            "type": "boolean"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "world": {
+            "$ref": "#/components/schemas/RpgWorldSummary"
+          }
+        },
+        "required": [
+          "ok",
+          "world",
+          "idempotent"
+        ],
+        "title": "RpgWorldLifecycleResponse",
+        "type": "object"
+      },
+      "RpgWorldListResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "worlds": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldSummary"
+            },
+            "title": "Worlds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "worlds"
+        ],
+        "title": "RpgWorldListResponse",
         "type": "object"
       },
       "RpgWorldProfileDomain": {
@@ -47474,6 +50908,23 @@
         "title": "RpgWorldRelease",
         "type": "object"
       },
+      "RpgWorldReleaseResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "world_release": {
+            "$ref": "#/components/schemas/RpgStoredWorldRelease"
+          }
+        },
+        "required": [
+          "ok",
+          "world_release"
+        ],
+        "title": "RpgWorldReleaseResponse",
+        "type": "object"
+      },
       "RpgWorldRepairForLaunchRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -47485,6 +50936,23 @@
           }
         },
         "title": "RpgWorldRepairForLaunchRequestBody",
+        "type": "object"
+      },
+      "RpgWorldResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "world": {
+            "$ref": "#/components/schemas/RpgWorldSummary"
+          }
+        },
+        "required": [
+          "ok",
+          "world"
+        ],
+        "title": "RpgWorldResponse",
         "type": "object"
       },
       "RpgWorldRevision": {
@@ -47514,6 +50982,23 @@
           "created_at"
         ],
         "title": "RpgWorldRevision",
+        "type": "object"
+      },
+      "RpgWorldRevisionResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "world_revision": {
+            "$ref": "#/components/schemas/RpgStoredWorldRevision"
+          }
+        },
+        "required": [
+          "ok",
+          "world_revision"
+        ],
+        "title": "RpgWorldRevisionResponse",
         "type": "object"
       },
       "RpgWorldSaveMapBlueprintRequestBody": {
@@ -47849,6 +51334,123 @@
           "updated_at"
         ],
         "title": "RpgWorldTopic",
+        "type": "object"
+      },
+      "RpgWorldTopicHistoryEntry": {
+        "properties": {
+          "captured_at": {
+            "title": "Captured At",
+            "type": "string"
+          },
+          "content": {
+            "additionalProperties": true,
+            "title": "Content",
+            "type": "object"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "dependency_hashes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Dependency Hashes",
+            "type": "object"
+          },
+          "directives": {
+            "additionalProperties": true,
+            "title": "Directives",
+            "type": "object"
+          },
+          "draft_revision": {
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "history_sequence": {
+            "title": "History Sequence",
+            "type": "integer"
+          },
+          "input_hash": {
+            "title": "Input Hash",
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "title": "Provenance",
+            "type": "object"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          },
+          "topic_updated_at": {
+            "title": "Topic Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "history_sequence",
+          "topic_id",
+          "draft_revision",
+          "source",
+          "status",
+          "content",
+          "directives",
+          "dependency_hashes",
+          "input_hash",
+          "content_hash",
+          "provenance",
+          "topic_updated_at",
+          "captured_at"
+        ],
+        "title": "RpgWorldTopicHistoryEntry",
+        "type": "object"
+      },
+      "RpgWorldTopicHistoryResponse": {
+        "properties": {
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldTopicHistoryEntry"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "history"
+        ],
+        "title": "RpgWorldTopicHistoryResponse",
+        "type": "object"
+      },
+      "RpgWorldTopicResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/RpgWorldTopic"
+          }
+        },
+        "required": [
+          "ok",
+          "topic"
+        ],
+        "title": "RpgWorldTopicResponse",
         "type": "object"
       },
       "RunChangeSet": {
@@ -73575,13 +77177,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesAdapterPreviewResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Adapter Preview Api Hermes Adapter Preview Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -73764,13 +77367,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesCapabilitiesResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Capabilities Api Hermes Capabilities Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -73807,13 +77411,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesLookupResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Lookup Api Hermes Lookup Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -73850,13 +77455,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesRpgPlanResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Rpg Plan Api Hermes Plan Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -74101,13 +77707,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesRpgContextResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Rpg Context Api Hermes Rpg Context Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -74152,13 +77759,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesRpgContextPackResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Rpg Context Pack Route Api Hermes Rpg Context Pack Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -74200,13 +77808,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesNarrativeResearchResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Rpg Narrative Research Route Api Hermes Rpg Narrative Research Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -74248,13 +77857,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesSequenceExecuteStepResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Rpg Sequence Execute Step Route Api Hermes Rpg Sequence Execute Step Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -74296,13 +77906,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HermesSequencePlanResponse",
                   "additionalProperties": true,
                   "title": "Response Hermes Rpg Sequence Plan Route Api Hermes Rpg Sequence Plan Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77028,13 +80639,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgLegacyWorldImportResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Import Legacy Campaign Bible Api Rpg Campaigns  Campaign Id  Legacy World Import Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77082,13 +80694,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgMaterializationScheduleResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Schedule Campaign Materialization Api Rpg Campaigns  Campaign Id  Materialization Signals Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77133,13 +80746,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSpatialGoalResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Save Campaign Spatial Goal Api Rpg Campaigns  Campaign Id  Spatial Goals Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77184,13 +80798,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSpatialClockResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Configure Campaign Spatial Policy Api Rpg Campaigns  Campaign Id  Spatial Policy Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77235,13 +80850,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSpatialRoutineResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Save Campaign Spatial Routine Api Rpg Campaigns  Campaign Id  Spatial Routines Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77288,13 +80904,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSpatialStateResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Read Campaign Spatial State Api Rpg Campaigns  Campaign Id  Spatial State Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77339,13 +80956,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgSpatialTickResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Advance Campaign Spatial Tick Api Rpg Campaigns  Campaign Id  Spatial Ticks Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77380,13 +80998,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgCampaignWorldBindingResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Read Campaign World Binding Api Rpg Campaigns  Campaign Id  World Binding Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77432,13 +81051,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgCampaignWorldBindingResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Bind Campaign World Api Rpg Campaigns  Campaign Id  World Binding Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77475,13 +81095,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgDebugClientEventResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Debug Client Event Api Rpg Debug Event Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77508,13 +81129,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgDebugLogStatusResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Debug Status Api Rpg Debug Log Status Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           }
         },
         "summary": "Rpg Debug Status",
@@ -77746,13 +81368,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgLocalDialogueFixtureResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Local Dialogue Fixture Api Rpg Local Qualification Dialogue Fixture Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77924,13 +81547,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgGeometryPatchResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Apply Geometry Patch Api Rpg Map Instances  Map Instance Id  Geometry Patches Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -77984,13 +81608,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgObserveMapResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Observe Map Api Rpg Map Instances  Map Instance Id  Observers  Observer Actor Id  Observe Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78051,13 +81676,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgObserverProjectionResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Observer Projection Api Rpg Map Instances  Map Instance Id  Observers  Observer Actor Id  Projection Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78102,13 +81728,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgGridPerformanceProfileResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Grid Performance Profile Api Rpg Map Instances  Map Instance Id  Performance Profile Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78156,13 +81783,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgTacticalResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Tactical Attack Api Rpg Map Instances  Map Instance Id  Tactical Attack Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78210,13 +81838,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgTacticalResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Tactical Move Api Rpg Map Instances  Map Instance Id  Tactical Move Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78338,13 +81967,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgNarrativeDeliveryCancelResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Narrative Delivery Cancel Api Rpg Narrative Responses  Response Id  Cancel Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78393,13 +82023,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgNarrativeDeliveryResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Narrative Delivery Status Api Rpg Narrative Responses  Response Id  Delivery Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78754,13 +82385,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgScenarioResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Create Scenario Api Rpg Scenarios Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78798,13 +82430,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgScenarioLifecycleResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Archive Scenario Api Rpg Scenarios  Scenario Id  Archive Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78842,13 +82475,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgScenarioLifecycleResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Restore Scenario Api Rpg Scenarios  Scenario Id  Restore Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -78896,13 +82530,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgScenarioRevisionResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Publish Scenario Revision Api Rpg Scenarios  Scenario Id  Revisions Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -79156,13 +82791,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgAbilityCoverageResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Ability Coverage Api Rpg Sessions  Session Id  Ability Coverage Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -79200,13 +82836,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgCampaignGenesisResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Campaign Genesis Api Rpg Sessions  Session Id  Campaign Genesis Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -79444,13 +83081,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgLoreDiscoveryResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Campaign Lore Discovery Api Rpg Sessions  Session Id  Lore Discovery Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -79499,13 +83137,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgLoreDocumentResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Campaign Lore Document Api Rpg Sessions  Session Id  Lore Document Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -79553,13 +83192,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgLoreMaterializationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Campaign Lore Materialize Api Rpg Sessions  Session Id  Lore Materialize Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -79607,13 +83247,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgLoreRegenerationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Campaign Lore Regenerate Api Rpg Sessions  Session Id  Lore Regenerate Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -79927,13 +83568,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationDiagnosticsResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Generation Diagnostics Api Rpg World Generation Diagnostics Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           }
         },
         "summary": "Rpg World Generation Diagnostics"
@@ -79968,13 +83610,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationStatusResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Generation Status Api Rpg World Generation  Run Id  Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80019,13 +83662,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationAcceptanceResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Generation Accept All Api Rpg World Generation  Run Id  Accept All Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80102,13 +83746,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationPublishResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Publish Generation Api Rpg World Generation  Run Id  Publish Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80194,13 +83839,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationTopicResultResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Generation Topic Result Api Rpg World Generation  Run Id  Results  Topic Id  Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80254,13 +83900,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationAcceptanceResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Generation Accept Candidate Api Rpg World Generation  Run Id  Results  Topic Id  Accept Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80314,13 +83961,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationRetryDecisionResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Generation Retry Decision Api Rpg World Generation  Run Id  Results  Topic Id  Decision Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80407,13 +84055,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldGenerationMutationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Generation Retry Review Api Rpg World Generation  Run Id  Retry Review Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80496,13 +84145,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldListResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg List Worlds Api Rpg Worlds Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80537,13 +84187,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Create World Api Rpg Worlds Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80708,13 +84359,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Update World Metadata Api Rpg Worlds  World Id  Patch",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80752,13 +84404,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldLifecycleResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Archive World Api Rpg Worlds  World Id  Archive Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80850,13 +84503,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgAuthoringSectionPage",
                   "additionalProperties": true,
                   "title": "Response Rpg World Authoring Section Api Rpg Worlds  World Id  Authoring Sections  Section Id  Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80894,13 +84548,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldAuthorshipAuditResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Audit World Authorship Api Rpg Worlds  World Id  Authorship Audit Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -80948,13 +84603,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldAuthorshipRemediationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Remediate World Authorship Api Rpg Worlds  World Id  Authorship Audit Remediate Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -81162,13 +84818,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldDraftRestoreResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Restore World Topic Draft Api Rpg Worlds  World Id  Drafts  Source Draft Revision  Restore Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -81564,13 +85221,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldImageGenerationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Image Generation Api Rpg Worlds  World Id  Image Generation Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -81618,13 +85276,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldImagePromptsResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Regenerate World Image Prompts Api Rpg Worlds  World Id  Image Prompts Regenerate Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -81790,13 +85449,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldImageGenerationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Regenerate World Image Target Api Rpg Worlds  World Id  Image Targets  Target Id  Regenerate Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -81886,13 +85546,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgMapBlueprintListResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Map Blueprints Api Rpg Worlds  World Id  Map Blueprints Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -81927,13 +85588,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgMapBlueprintMaterializeResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Materialize Map Blueprints Api Rpg Worlds  World Id  Map Blueprints Materialize Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -81987,13 +85649,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgMapBlueprintResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Save Map Blueprint Api Rpg Worlds  World Id  Map Blueprints  Map Id  Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82045,13 +85708,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgMaterializationTelemetryResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Materialization Telemetry Api Rpg Worlds  World Id  Materialization Jobs Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82096,13 +85760,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgMaterializationScheduleResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Schedule World Materialization Api Rpg Worlds  World Id  Materialization Jobs Schedule Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82137,13 +85802,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgPrepareOpeningsResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Prepare Openings For Launch Api Rpg Worlds  World Id  Prepare Openings For Launch Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82230,13 +85896,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldLifecycleResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Restore World Api Rpg Worlds  World Id  Restore Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82284,13 +85951,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldRevisionResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Publish World Revision Api Rpg Worlds  World Id  Revisions Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82347,13 +86015,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldReleaseResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Publish World Release Api Rpg Worlds  World Id  Revisions  World Revision  Releases Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82548,13 +86217,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldTopicHistoryResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Topic History Api Rpg Worlds  World Id  Topic History Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82602,13 +86272,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgWorldTopicResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg World Save Topic Api Rpg Worlds  World Id  Topics Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82652,13 +86323,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgAuthoringTopicDetailResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Read World Topic Api Rpg Worlds  World Id  Topics  Topic Id  Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82713,13 +86385,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgAuthoringTopicMutationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Update World Topic Api Rpg Worlds  World Id  Topics  Topic Id  Patch",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -82775,13 +86448,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgAuthoringEntityDetailResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Read World Entity Api Rpg Worlds  World Id  Topics  Topic Id  Entities  Entity Id  Get",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {
@@ -83201,13 +86875,14 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/RpgAuthoringTopicMutationResponse",
                   "additionalProperties": true,
                   "title": "Response Rpg Restore World Topic Api Rpg Worlds  World Id  Topics  Topic Id  Restore Post",
                   "type": "object"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "The fields the RPG web client reads; the response is not filtered."
           },
           "422": {
             "content": {

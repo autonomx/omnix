@@ -12,6 +12,10 @@ from app.apps.rpg.world.grid_runtime_performance_service import profile_campaign
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgGridPerformanceProfileResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -43,6 +47,7 @@ def register_rpg_grid_performance_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/map-instances/{map_instance_id}/performance-profile",
         tags=["rpg-grid-performance"],
+        responses=documented(RpgGridPerformanceProfileResponse),
     )
     def rpg_grid_performance_profile(
         map_instance_id: str,

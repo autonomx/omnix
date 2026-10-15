@@ -23,6 +23,14 @@ from app.apps.rpg.world.npc_spatial_campaign_contracts import (
 from app.apps.rpg.world.npc_spatial_campaign_runtime import advance_campaign_spatial_tick
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgSpatialClockResponse,
+    RpgSpatialGoalResponse,
+    RpgSpatialRoutineResponse,
+    RpgSpatialStateResponse,
+    RpgSpatialTickResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -110,6 +118,7 @@ def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-goals",
+        responses=documented(RpgSpatialGoalResponse),
     )
     def rpg_save_campaign_spatial_goal(
         campaign_id: str,
@@ -130,6 +139,7 @@ def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-routines",
+        responses=documented(RpgSpatialRoutineResponse),
     )
     def rpg_save_campaign_spatial_routine(
         campaign_id: str,
@@ -150,6 +160,7 @@ def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-policy",
+        responses=documented(RpgSpatialClockResponse),
     )
     def rpg_configure_campaign_spatial_policy(
         campaign_id: str,
@@ -175,6 +186,7 @@ def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-ticks",
+        responses=documented(RpgSpatialTickResponse),
     )
     def rpg_advance_campaign_spatial_tick(
         campaign_id: str,
@@ -191,6 +203,7 @@ def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
 
     @router.get(
         "/api/rpg/campaigns/{campaign_id}/spatial-state",
+        responses=documented(RpgSpatialStateResponse),
     )
     def rpg_read_campaign_spatial_state(
         campaign_id: str,

@@ -22,6 +22,13 @@ from app.apps.rpg.edge.api.web_contracts import (
     HermesRpgTurnReadoutResponse,
     HermesTestResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    HermesAdapterPreviewResponse,
+    HermesCapabilitiesResponse,
+    HermesLookupResponse,
+    HermesRpgContextResponse,
+    HermesRpgPlanResponse,
+)
 
 router = APIRouter(prefix="/api/hermes", tags=["hermes"])
 
@@ -127,12 +134,12 @@ def hermes_recent() -> dict[str, Any]:
     return {"ok": True, "items": [], "count": 0, "source": "not_configured"}
 
 
-@router.post("/adapter/preview")
+@router.post("/adapter/preview", responses=documented(HermesAdapterPreviewResponse))
 def hermes_adapter_preview(request: HermesAdapterPreviewRequest) -> dict[str, Any]:
     return hermes_adapter_preview_payload(request.model_dump())
 
 
-@router.get("/capabilities")
+@router.get("/capabilities", responses=documented(HermesCapabilitiesResponse))
 def hermes_capabilities(mode: str | None = None) -> dict[str, Any]:
     return omnix_mode_policy_payload(mode)
 
@@ -149,7 +156,7 @@ def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
     return hermes_demo_candidate(note=note)
 
 
-@router.post("/rpg/context")
+@router.post("/rpg/context", responses=documented(HermesRpgContextResponse))
 def hermes_rpg_context(request: HermesRpgContextRequest) -> dict[str, Any]:
     return hermes_rpg_context_payload(request.model_dump())
 
@@ -164,7 +171,7 @@ def hermes_rpg_turn_readout(request: HermesRpgTurnReadoutRequest) -> dict[str, A
     return hermes_rpg_turn_readout_payload(request.model_dump())
 
 
-@router.post("/plan")
+@router.post("/plan", responses=documented(HermesRpgPlanResponse))
 def hermes_rpg_plan(request: HermesRpgPlanRequest) -> dict[str, Any]:
     return hermes_rpg_plan_payload(request.model_dump())
 
@@ -180,7 +187,7 @@ def hermes_approve(request: HermesApprovalRequest | None = None) -> dict[str, An
     }
 
 
-@router.post("/lookup")
+@router.post("/lookup", responses=documented(HermesLookupResponse))
 def hermes_lookup(request: HermesLookupRequest) -> dict[str, Any]:
     from app.platform.chat.contracts import hermes_assist_readout_payload
 

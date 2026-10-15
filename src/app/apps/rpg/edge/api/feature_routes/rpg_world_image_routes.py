@@ -20,6 +20,10 @@ from app.apps.rpg.edge.api.web_contracts import (
     documented,
     RpgWorldImageTargetsResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgWorldImageGenerationResponse,
+    RpgWorldImagePromptsResponse,
+)
 
 _PROMPT_1 = prompt_template('rpg.api_feature_routes_rpg_world_image_routes.rpg_regenerate_world_image_prompts', "1", "/api/rpg/worlds/{world_id}/image-prompts/regenerate")
 
@@ -98,6 +102,7 @@ def register_rpg_world_image_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/image-generation",
         tags=["rpg-world"],
+        responses=documented(RpgWorldImageGenerationResponse),
     )
     def rpg_world_image_generation(
         world_id: str,
@@ -128,6 +133,7 @@ def register_rpg_world_image_routes(router: APIRouter, state) -> None:
     @router.post(
         _PROMPT_1.text,
         tags=["rpg-world"],
+        responses=documented(RpgWorldImagePromptsResponse),
     )
     def rpg_regenerate_world_image_prompts(
         world_id: str,
@@ -189,6 +195,7 @@ def register_rpg_world_image_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/image-targets/{target_id:path}/regenerate",
         tags=["rpg-world"],
+        responses=documented(RpgWorldImageGenerationResponse),
     )
     def rpg_regenerate_world_image_target(
         world_id: str,

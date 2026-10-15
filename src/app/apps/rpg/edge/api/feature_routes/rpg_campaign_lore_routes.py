@@ -33,6 +33,13 @@ from app.apps.rpg.edge.api.web_contracts import (
     documented,
     RpgCampaignLoreResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgCampaignGenesisResponse,
+    RpgLoreDiscoveryResponse,
+    RpgLoreDocumentResponse,
+    RpgLoreMaterializationResponse,
+    RpgLoreRegenerationResponse,
+)
 
 
 class LoreDiscoveryRequest(BaseModel):
@@ -111,6 +118,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/sessions/{session_id}/campaign-genesis",
         tags=["rpg-session"],
+        responses=documented(RpgCampaignGenesisResponse),
     )
     def rpg_campaign_genesis(session_id: str) -> dict[str, Any]:
         _kick_genesis_recovery()
@@ -150,6 +158,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/sessions/{session_id}/lore/document",
         tags=["rpg-session"],
+        responses=documented(RpgLoreDocumentResponse),
     )
     def rpg_campaign_lore_document(
         session_id: str,
@@ -177,6 +186,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/lore/regenerate",
         tags=["rpg-session"],
+        responses=documented(RpgLoreRegenerationResponse),
     )
     def rpg_campaign_lore_regenerate(
         session_id: str,
@@ -221,6 +231,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/lore/discovery",
         tags=["rpg-session"],
+        responses=documented(RpgLoreDiscoveryResponse),
     )
     def rpg_campaign_lore_discovery(
         session_id: str,
@@ -255,6 +266,7 @@ def register_rpg_campaign_lore_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/sessions/{session_id}/lore/materialize",
         tags=["rpg-session"],
+        responses=documented(RpgLoreMaterializationResponse),
     )
     def rpg_campaign_lore_materialize(
         session_id: str,

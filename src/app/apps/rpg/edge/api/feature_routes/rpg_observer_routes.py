@@ -14,6 +14,11 @@ from app.apps.rpg.world.map_observer_service import (
 )
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgObserveMapResponse,
+    RpgObserverProjectionResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -60,6 +65,7 @@ def register_rpg_observer_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/map-instances/{map_instance_id}/observers/{observer_actor_id}/observe",
+        responses=documented(RpgObserveMapResponse),
     )
     def rpg_observe_map(
         map_instance_id: str,
@@ -84,6 +90,7 @@ def register_rpg_observer_routes(router: APIRouter, state) -> None:
 
     @router.get(
         "/api/rpg/map-instances/{map_instance_id}/observers/{observer_actor_id}/projection",
+        responses=documented(RpgObserverProjectionResponse),
     )
     def rpg_observer_projection(
         map_instance_id: str,

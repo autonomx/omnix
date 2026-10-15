@@ -29,6 +29,13 @@ from app.apps.rpg.edge.api.web_contracts import (
     RpgAuthoringEntityMutationResponse,
     RpgAuthoringManifestResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgAuthoringEntityDetailResponse,
+    RpgAuthoringSectionPage,
+    RpgAuthoringTopicDetailResponse,
+    RpgAuthoringTopicMutationResponse,
+    RpgWorldResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -117,6 +124,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/authoring-sections/{section_id}",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringSectionPage),
     )
     def rpg_world_authoring_section(
         world_id: str,
@@ -131,6 +139,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.patch(
         "/api/rpg/worlds/{world_id}",
         tags=["rpg-world"],
+        responses=documented(RpgWorldResponse),
     )
     def rpg_update_world_metadata(
         world_id: str,
@@ -156,6 +165,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringTopicDetailResponse),
     )
     def rpg_read_world_topic(world_id: str, topic_id: str) -> dict[str, Any]:
         try:
@@ -167,6 +177,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.patch(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringTopicMutationResponse),
     )
     def rpg_update_world_topic(
         world_id: str,
@@ -198,6 +209,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringEntityDetailResponse),
     )
     def rpg_read_world_entity(
         world_id: str,
@@ -277,6 +289,7 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/restore",
         tags=["rpg-world"],
+        responses=documented(RpgAuthoringTopicMutationResponse),
     )
     def rpg_restore_world_topic(
         world_id: str,

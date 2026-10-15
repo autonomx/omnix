@@ -48,6 +48,23 @@ from .rpg_world_library_routes import register_rpg_world_library_routes
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
 from typing import Any as _TypedRequestAny
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgCampaignWorldBindingResponse,
+    RpgLegacyWorldImportResponse,
+    RpgScenarioLifecycleResponse,
+    RpgScenarioResponse,
+    RpgScenarioRevisionResponse,
+    RpgWorldAuthorshipAuditResponse,
+    RpgWorldAuthorshipRemediationResponse,
+    RpgWorldDraftRestoreResponse,
+    RpgWorldLifecycleResponse,
+    RpgWorldListResponse,
+    RpgWorldReleaseResponse,
+    RpgWorldResponse,
+    RpgWorldRevisionResponse,
+    RpgWorldTopicHistoryResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -168,6 +185,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds",
         tags=["rpg-world"],
+        responses=documented(RpgWorldListResponse),
     )
     def rpg_list_worlds(
         limit: int = Query(default=100, ge=1, le=500),
@@ -177,6 +195,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds",
         tags=["rpg-world"],
+        responses=documented(RpgWorldResponse),
     )
     def rpg_create_world(request: Request, request_body: RpgCreateWorldRequestBody) -> dict[str, Any]:
         try:
@@ -188,6 +207,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/archive",
         tags=["rpg-world"],
+        responses=documented(RpgWorldLifecycleResponse),
     )
     def rpg_archive_world(world_id: str) -> dict[str, Any]:
         try:
@@ -198,6 +218,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/restore",
         tags=["rpg-world"],
+        responses=documented(RpgWorldLifecycleResponse),
     )
     def rpg_restore_world(world_id: str) -> dict[str, Any]:
         try:
@@ -208,6 +229,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/authorship-audit",
         tags=["rpg-world"],
+        responses=documented(RpgWorldAuthorshipAuditResponse),
     )
     def rpg_audit_world_authorship(world_id: str) -> dict[str, Any]:
         try:
@@ -218,6 +240,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/authorship-audit/remediate",
         tags=["rpg-world"],
+        responses=documented(RpgWorldAuthorshipRemediationResponse),
     )
     def rpg_remediate_world_authorship(
         world_id: str,
@@ -235,6 +258,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/worlds/{world_id}/topic-history",
         tags=["rpg-world"],
+        responses=documented(RpgWorldTopicHistoryResponse),
     )
     def rpg_world_topic_history(
         world_id: str,
@@ -256,6 +280,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/drafts/{source_draft_revision}/restore",
         tags=["rpg-world"],
+        responses=documented(RpgWorldDraftRestoreResponse),
     )
     def rpg_restore_world_topic_draft(
         world_id: str,
@@ -277,6 +302,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/revisions",
         tags=["rpg-world"],
+        responses=documented(RpgWorldRevisionResponse),
     )
     def rpg_publish_world_revision(
         world_id: str,
@@ -300,6 +326,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/revisions/{world_revision}/releases",
         tags=["rpg-world"],
+        responses=documented(RpgWorldReleaseResponse),
     )
     def rpg_publish_world_release(
         world_id: str,
@@ -321,6 +348,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/scenarios",
         tags=["rpg-world"],
+        responses=documented(RpgScenarioResponse),
     )
     def rpg_create_scenario(request: Request, request_body: RpgCreateScenarioRequestBody) -> dict[str, Any]:
         try:
@@ -334,6 +362,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/scenarios/{scenario_id}/archive",
         tags=["rpg-world"],
+        responses=documented(RpgScenarioLifecycleResponse),
     )
     def rpg_archive_scenario(scenario_id: str) -> dict[str, Any]:
         try:
@@ -344,6 +373,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/scenarios/{scenario_id}/restore",
         tags=["rpg-world"],
+        responses=documented(RpgScenarioLifecycleResponse),
     )
     def rpg_restore_scenario(scenario_id: str) -> dict[str, Any]:
         try:
@@ -354,6 +384,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/scenarios/{scenario_id}/revisions",
         tags=["rpg-world"],
+        responses=documented(RpgScenarioRevisionResponse),
     )
     def rpg_publish_scenario_revision(
         scenario_id: str,
@@ -373,6 +404,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/campaigns/{campaign_id}/legacy-world-import",
         tags=["rpg-world"],
+        responses=documented(RpgLegacyWorldImportResponse),
     )
     def rpg_import_legacy_campaign_bible(
         campaign_id: str,
@@ -391,6 +423,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/campaigns/{campaign_id}/world-binding",
         tags=["rpg-world"],
+        responses=documented(RpgCampaignWorldBindingResponse),
     )
     def rpg_read_campaign_world_binding(campaign_id: str) -> dict[str, Any]:
         binding = read_campaign_world_binding(campaign_id)
@@ -408,6 +441,7 @@ def register_rpg_world_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/campaigns/{campaign_id}/world-binding",
         tags=["rpg-world"],
+        responses=documented(RpgCampaignWorldBindingResponse),
     )
     def rpg_bind_campaign_world(
         campaign_id: str,

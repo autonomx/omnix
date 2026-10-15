@@ -2720,6 +2720,34 @@ export interface components {
              */
             mode?: string;
         };
+        /** HermesAdapterPreviewResponse */
+        HermesAdapterPreviewResponse: {
+            /** Error */
+            error?: string;
+            /** Intent */
+            intent?: string;
+            /** Mode */
+            mode?: string;
+            /** Ok */
+            ok: boolean;
+            /** Request */
+            request?: {
+                [key: string]: unknown;
+            };
+            /** Response Contract */
+            response_contract?: {
+                [key: string]: unknown;
+            };
+            /** Route */
+            route?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source
+             * @constant
+             */
+            source: "hermes_adapter";
+        };
         /**
          * HermesApprovalRequest
          * @description A candidate offered for approval; approvals are disabled, so it is echoed back.
@@ -2776,6 +2804,26 @@ export interface components {
             /** Preview Only */
             preview_only?: boolean;
         };
+        /**
+         * HermesCapabilitiesResponse
+         * @description One mode's ``policy`` when a mode is named, otherwise every mode's ``policies``.
+         */
+        HermesCapabilitiesResponse: {
+            /** Error */
+            error?: string;
+            /** Mode */
+            mode?: string;
+            /** Ok */
+            ok: boolean;
+            /** Policies */
+            policies?: {
+                [key: string]: unknown;
+            }[];
+            /** Policy */
+            policy?: {
+                [key: string]: unknown;
+            };
+        };
         /** HermesDiagnosticsPaths */
         HermesDiagnosticsPaths: core["schemas"]["HermesDiagnosticsPaths"];
         /** HermesLookupRequest */
@@ -2786,6 +2834,61 @@ export interface components {
             };
             /** Name */
             name: string;
+        };
+        /** HermesLookupResponse */
+        HermesLookupResponse: {
+            /** Dry Run */
+            dry_run: boolean;
+            /** Error */
+            error?: string;
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "lookup";
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * HermesNarrativeResearchResponse
+         * @description Read-only research over the campaign bible; it never changes the bible.
+         */
+        HermesNarrativeResearchResponse: {
+            /** Campaign Bible Changed */
+            campaign_bible_changed?: boolean;
+            /** Detail */
+            detail?: string;
+            /** Error */
+            error?: string;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            }[];
+            /** Ok */
+            ok: boolean;
+            /** Policy */
+            policy?: {
+                [key: string]: unknown;
+            };
+            /** Read Only */
+            read_only: boolean;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source
+             * @constant
+             */
+            source: "hermes_rpg_narrative_research";
+            /** State Changed */
+            state_changed: boolean;
         };
         /** HermesRecentResponse */
         HermesRecentResponse: {
@@ -2886,6 +2989,57 @@ export interface components {
             /** State Changed */
             state_changed?: boolean;
         };
+        /**
+         * HermesRpgContextPackResponse
+         * @description A bounded read-only pack of the session; over ``char_budget`` it is truncated.
+         */
+        HermesRpgContextPackResponse: {
+            /** Active Combat */
+            active_combat?: {
+                [key: string]: unknown;
+            };
+            /** Active Quests */
+            active_quests?: unknown[];
+            /** Active Service */
+            active_service?: {
+                [key: string]: unknown;
+            };
+            /** Active Travel */
+            active_travel?: {
+                [key: string]: unknown;
+            };
+            /** Char Budget */
+            char_budget?: number;
+            /** Current Location */
+            current_location?: string;
+            /** Inventory */
+            inventory?: unknown[];
+            /** Item Limit */
+            item_limit?: number;
+            /** Known Npcs */
+            known_npcs?: unknown[];
+            /** Ok */
+            ok: boolean;
+            /** Party */
+            party?: unknown[];
+            /** Player Stats */
+            player_stats?: {
+                [key: string]: unknown;
+            };
+            /** Recent Events */
+            recent_events?: unknown[];
+            /** Session Id */
+            session_id?: string;
+            /** Source */
+            source: string;
+            /** Truncated */
+            truncated: boolean;
+            /**
+             * Version
+             * @constant
+             */
+            version: "hermes_rpg_context_pack_v1";
+        };
         /** HermesRpgContextRequest */
         HermesRpgContextRequest: {
             /**
@@ -2898,6 +3052,23 @@ export interface components {
              * @default
              */
             session_id?: string;
+        };
+        /** HermesRpgContextResponse */
+        HermesRpgContextResponse: {
+            /** Context */
+            context?: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error?: string;
+            /** Ok */
+            ok: boolean;
+            /** Read Only */
+            read_only: boolean;
+            /** Session Id */
+            session_id?: string;
+            /** Source */
+            source: string;
         };
         /** HermesRpgExecutionLedgerItem */
         HermesRpgExecutionLedgerItem: {
@@ -2952,6 +3123,38 @@ export interface components {
             session_id?: string;
             /** Turn Id */
             turn_id?: number | string | null;
+        };
+        /**
+         * HermesRpgPlanResponse
+         * @description A reviewed plan proposal; nothing changes state.
+         */
+        HermesRpgPlanResponse: {
+            /** Error */
+            error?: string;
+            /** Mode */
+            mode?: string;
+            /** Ok */
+            ok: boolean;
+            /** Plan */
+            plan?: {
+                [key: string]: unknown;
+            };
+            /** Planner Context */
+            planner_context?: {
+                [key: string]: unknown;
+            };
+            /** Source */
+            source?: string;
+            /** State Changed */
+            state_changed: boolean;
+            /** Ticket */
+            ticket?: {
+                [key: string]: unknown;
+            };
+            /** Validation */
+            validation?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * HermesRpgSequenceRequest
@@ -3127,6 +3330,79 @@ export interface components {
             narration_present?: boolean;
             /** Turn Id */
             turn_id?: string | number | null;
+        };
+        /** HermesSequenceExecuteStepResponse */
+        HermesSequenceExecuteStepResponse: {
+            /** Approved Flow */
+            approved_flow?: {
+                [key: string]: unknown;
+            };
+            /** Assist Mode */
+            assist_mode?: {
+                [key: string]: unknown;
+            };
+            /** Command Text */
+            command_text?: string;
+            /** Error */
+            error?: string;
+            /** Item Index */
+            item_index?: number;
+            /** Next Item Preview */
+            next_item_preview?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ok */
+            ok: boolean;
+            /** Rpg Turn Result */
+            rpg_turn_result?: {
+                [key: string]: unknown;
+            };
+            /** Sequence State */
+            sequence_state?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source
+             * @constant
+             */
+            source: "hermes_sequence_approved_executor";
+            /** State Changed */
+            state_changed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status?: "accepted" | "blocked" | "completed";
+            /** Stop Reason */
+            stop_reason?: string | null;
+        };
+        /**
+         * HermesSequencePlanResponse
+         * @description The critiqued sequence and its checkpoint; ``ok`` is false when the critique blocks it.
+         */
+        HermesSequencePlanResponse: {
+            /** Checkpoint */
+            checkpoint: {
+                [key: string]: unknown;
+            };
+            /** Critique Summary */
+            critique_summary: {
+                [key: string]: unknown;
+            };
+            /** Loop Guard */
+            loop_guard: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Sequence */
+            sequence: {
+                [key: string]: unknown;
+            };
+            /** Source */
+            source: string;
+            /** State Changed */
+            state_changed: boolean;
         };
         /**
          * HermesStatusResponse
@@ -3522,6 +3798,58 @@ export interface components {
         RevokeSessionsRequest: core["schemas"]["RevokeSessionsRequest"];
         /** RevokeSessionsResponse */
         RevokeSessionsResponse: core["schemas"]["RevokeSessionsResponse"];
+        /**
+         * RpgAbilityCoverage
+         * @description ``RpgAbilityCoverageReport`` without its observations.
+         */
+        RpgAbilityCoverage: {
+            /** Ability Counts */
+            ability_counts: {
+                [key: string]: number;
+            };
+            /** Capability Counts */
+            capability_counts: {
+                [key: string]: number;
+            };
+            /** Coverage Score */
+            coverage_score: number;
+            /** Covered Dimensions */
+            covered_dimensions: string[];
+            /** Dimension Counts */
+            dimension_counts: {
+                [key: string]: number;
+            };
+            /** Kind Counts */
+            kind_counts: {
+                [key: string]: number;
+            };
+            /** Missing Dimensions */
+            missing_dimensions: string[];
+            /** Ok */
+            ok: boolean;
+            /** Purpose Counts */
+            purpose_counts: {
+                [key: string]: number;
+            };
+            /** Required Dimensions */
+            required_dimensions: string[];
+            /** Source Counts */
+            source_counts: {
+                [key: string]: number;
+            };
+            /** Total Observations */
+            total_observations: number;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** RpgAbilityCoverageResponse */
+        RpgAbilityCoverageResponse: {
+            ability_coverage: components["schemas"]["RpgAbilityCoverage"];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+        };
         /** RpgAdvanceCampaignSpatialTickRequestBody */
         RpgAdvanceCampaignSpatialTickRequestBody: {
             /**
@@ -3597,6 +3925,21 @@ export interface components {
             highlights: components["schemas"]["RpgAuthoringCardHighlight"][];
             /** Variant */
             variant: string;
+        };
+        /** RpgAuthoringDocumentBlock */
+        RpgAuthoringDocumentBlock: {
+            /** Body */
+            body?: string;
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[];
+            /** Kind */
+            kind: string;
+            /** Title */
+            title?: string;
+            /** Value */
+            value?: unknown;
         };
         /** RpgAuthoringDossierPreviewResponse */
         RpgAuthoringDossierPreviewResponse: {
@@ -3675,6 +4018,19 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** RpgAuthoringEntityDetailResponse */
+        RpgAuthoringEntityDetailResponse: {
+            /** Entity */
+            entity: {
+                [key: string]: unknown;
+            };
+            /** History */
+            history: components["schemas"]["RpgAuthoringEntityHistoryEntry"][];
+            /** Ok */
+            ok: boolean;
+            topic: components["schemas"]["RpgAuthoringTopic"];
+            world: components["schemas"]["RpgWorldSummary"];
+        };
         /** RpgAuthoringEntityDossier */
         RpgAuthoringEntityDossier: {
             /** Generated From Legacy */
@@ -3692,6 +4048,29 @@ export interface components {
             sections: components["schemas"]["RpgAuthoringDossierSection"][];
             /** Subtitle */
             subtitle?: string;
+        };
+        /** RpgAuthoringEntityHistoryEntry */
+        RpgAuthoringEntityHistoryEntry: {
+            /** After */
+            after: {
+                [key: string]: unknown;
+            };
+            /** Before */
+            before: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at: string;
+            /** History Sequence */
+            history_sequence: number;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Operation */
+            operation: string;
+            /** Topic Content Hash */
+            topic_content_hash: string;
         };
         /** RpgAuthoringEntityMutationResponse */
         RpgAuthoringEntityMutationResponse: {
@@ -3759,6 +4138,38 @@ export interface components {
             /** Topic Ids */
             topic_ids: string[];
         };
+        /**
+         * RpgAuthoringSectionPage
+         * @description One authoring page: a document (``summary``, ``body``) or a collection (``entities``).
+         */
+        RpgAuthoringSectionPage: {
+            /** Body */
+            body?: components["schemas"]["RpgAuthoringDocumentBlock"][];
+            /** Entities */
+            entities?: components["schemas"]["RpgAuthoringEntityCard"][];
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            }[];
+            /** Ok */
+            ok: boolean;
+            /**
+             * Page Kind
+             * @enum {string}
+             */
+            page_kind: "document" | "collection";
+            /** Related Entities */
+            related_entities?: components["schemas"]["RpgAuthoringEntityCard"][];
+            /** Section Id */
+            section_id: string;
+            /** Sort Options */
+            sort_options?: string[];
+            /** Summary */
+            summary?: string;
+            /** Title */
+            title: string;
+            topic?: components["schemas"]["RpgAuthoringTopic"];
+        };
         /** RpgAuthoringTopic */
         RpgAuthoringTopic: {
             /** Content */
@@ -3792,6 +4203,77 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** RpgAuthoringTopicDetailResponse */
+        RpgAuthoringTopicDetailResponse: {
+            /** History */
+            history: components["schemas"]["RpgWorldTopicHistoryEntry"][];
+            /** Ok */
+            ok: boolean;
+            topic: components["schemas"]["RpgAuthoringTopic"];
+            world: components["schemas"]["RpgWorldSummary"];
+        };
+        /**
+         * RpgAuthoringTopicMutationResponse
+         * @description An edited or restored topic; ``replaced_content_hash`` only on restore.
+         */
+        RpgAuthoringTopicMutationResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Replaced Content Hash */
+            replaced_content_hash?: string;
+            /** Stale Topic Ids */
+            stale_topic_ids: string[];
+            topic: components["schemas"]["RpgAuthoringTopic"];
+        };
+        /** RpgAuthorshipAuditTopic */
+        RpgAuthorshipAuditTopic: {
+            /** Artifact Status */
+            artifact_status: string;
+            /** Blocked Paths */
+            blocked_paths: string[];
+            /** Classification */
+            classification: string;
+            /** Entities */
+            entities: {
+                [key: string]: unknown;
+            }[];
+            /** Generation Artifact Id */
+            generation_artifact_id: string;
+            /** Lore String Count */
+            lore_string_count: number;
+            /** Origin Count */
+            origin_count: number;
+            /** Publishable */
+            publishable: boolean;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Topic Id */
+            topic_id: string;
+        };
+        /** RpgAuthorshipImmutableHistory */
+        RpgAuthorshipImmutableHistory: {
+            /** Mutated */
+            mutated: boolean;
+            /** World Release Count */
+            world_release_count: number;
+            /** World Revision Count */
+            world_revision_count: number;
+        };
+        /** RpgAuthorshipRemediation */
+        RpgAuthorshipRemediation: {
+            generation?: components["schemas"]["RpgWorldGenerationMutationResponse"] | null;
+            /** Generation Error */
+            generation_error?: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_required" | "queued" | "marked_stale" | "queue_failed";
+            /** Topic Ids */
+            topic_ids: string[];
+        };
         /** RpgBindCampaignWorldRequestBody */
         RpgBindCampaignWorldRequestBody: {
             /** World Id */
@@ -3804,6 +4286,54 @@ export interface components {
             world_revision_hash: string;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgCampaignGenesisProgress */
+        RpgCampaignGenesisProgress: {
+            /** Audit */
+            audit: {
+                [key: string]: unknown;
+            };
+            /** Background Expansion */
+            background_expansion: {
+                [key: string]: unknown;
+            };
+            /** Campaign Bible Content Hash */
+            campaign_bible_content_hash: string;
+            /** Campaign Bible Revision */
+            campaign_bible_revision: number;
+            /** Compilation */
+            compilation: {
+                [key: string]: unknown;
+            };
+            /** Completed Jobs */
+            completed_jobs: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Jobs */
+            jobs: components["schemas"]["RpgLoreGenerationJob"][];
+            /** Launch Ready */
+            launch_ready: boolean;
+            /** Percent */
+            percent: number;
+            /** Stage */
+            stage: string;
+            /** Status */
+            status: string;
+            /** Topic Graph */
+            topic_graph: {
+                [key: string]: unknown;
+            };
+            /** Total Jobs */
+            total_jobs: number;
+        };
+        /** RpgCampaignGenesisResponse */
+        RpgCampaignGenesisResponse: {
+            generation: components["schemas"]["RpgCampaignGenesisProgress"];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+            storage: components["schemas"]["RpgLoreStorage"];
         };
         /**
          * RpgCampaignLoreResponse
@@ -3841,6 +4371,18 @@ export interface components {
             factions?: components["schemas"]["RpgAuthoringEntityCard"][];
             /** Locations */
             locations?: components["schemas"]["RpgAuthoringEntityCard"][];
+        };
+        /**
+         * RpgCampaignWorldBindingResponse
+         * @description ``binding`` is the stored ``CampaignWorldBinding`` document.
+         */
+        RpgCampaignWorldBindingResponse: {
+            /** Binding */
+            binding: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
         };
         /**
          * RpgCompatibilityRequest
@@ -3976,6 +4518,37 @@ export interface components {
             turn_id?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgDebugClientEventResponse */
+        RpgDebugClientEventResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Trace Id */
+            trace_id: string | null;
+        };
+        /** RpgDebugLogFile */
+        RpgDebugLogFile: {
+            /** Name */
+            name: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** RpgDebugLogStatusResponse */
+        RpgDebugLogStatusResponse: {
+            /** Directory */
+            directory: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Files */
+            files: components["schemas"]["RpgDebugLogFile"][];
+            /** Max Field Chars */
+            max_field_chars: number;
+            /** Ok */
+            ok: boolean;
+            /** Retention Days */
+            retention_days: number;
         };
         /** RpgDeferredMaterializationResponse */
         RpgDeferredMaterializationResponse: {
@@ -4116,6 +4689,22 @@ export interface components {
              */
             validator?: boolean;
         };
+        /**
+         * RpgGeometryPatchResponse
+         * @description The map event the patch recorded and the resulting map snapshot.
+         */
+        RpgGeometryPatchResponse: {
+            /** Event */
+            event: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+        };
         /** RpgGridPerformanceProfileRequestBody */
         RpgGridPerformanceProfileRequestBody: {
             /** Budget */
@@ -4128,6 +4717,17 @@ export interface components {
             path_probe_destination?: unknown;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgGridPerformanceProfileResponse */
+        RpgGridPerformanceProfileResponse: {
+            /** Knowledge Source */
+            knowledge_source: string;
+            /** Ok */
+            ok: boolean;
+            /** Profile */
+            profile: {
+                [key: string]: unknown;
+            };
         };
         /** RpgImportLegacyCampaignBibleRequestBody */
         RpgImportLegacyCampaignBibleRequestBody: {
@@ -4172,6 +4772,29 @@ export interface components {
             session_id?: string;
             /** Status */
             status?: string;
+        };
+        /**
+         * RpgLegacyWorldImportResponse
+         * @description A campaign bible imported as a world; ``reused`` when it was imported before.
+         */
+        RpgLegacyWorldImportResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Reused */
+            reused: boolean;
+            scenario_revision: components["schemas"]["RpgStoredScenarioRevision"];
+            /** Source Campaign Id */
+            source_campaign_id: string;
+            /** Source Campaign Rebound */
+            source_campaign_rebound: boolean;
+            /**
+             * Status
+             * @constant
+             */
+            status: "imported";
+            world: components["schemas"]["RpgWorldSummary"];
+            world_release: components["schemas"]["RpgStoredWorldRelease"];
+            world_revision: components["schemas"]["RpgStoredWorldRevision"];
         };
         /** RpgLoadoutActionRequest */
         RpgLoadoutActionRequest: {
@@ -4251,12 +4874,83 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RpgLocalDialogueFixtureResponse
+         * @description A dialogue benchmark case provisioned for local qualification.
+         */
+        RpgLocalDialogueFixtureResponse: {
+            /** Case Id */
+            case_id: string;
+            /** Created */
+            created: boolean;
+            /** Fixture Version */
+            fixture_version: string;
+            /** Ok */
+            ok: boolean;
+            /** Run Id */
+            run_id: string;
+            /** Session Id */
+            session_id: string;
+        };
         /** RpgLoreCategory */
         RpgLoreCategory: {
             /** Documents */
             documents: components["schemas"]["RpgLoreDocumentSummary"][];
             /** Label */
             label: string;
+        };
+        /**
+         * RpgLoreDiscoveryResponse
+         * @description ``lore`` is the campaign lore payload (``RpgCampaignLoreResponse`` without ``session_id``).
+         */
+        RpgLoreDiscoveryResponse: {
+            /** Document Id */
+            document_id: string;
+            /** Lore */
+            lore: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+            /** Status */
+            status: string;
+            storage: components["schemas"]["RpgLoreStorage"];
+        };
+        /** RpgLoreDocument */
+        RpgLoreDocument: {
+            /** Canon Revision */
+            canon_revision: number;
+            /** Category */
+            category: string;
+            /** Document Id */
+            document_id: string;
+            /** Full Text */
+            full_text: string;
+            /** Keywords */
+            keywords: string[];
+            /** Status */
+            status: string;
+            /** Summary 120 */
+            summary_120: string;
+            /** Summary 500 */
+            summary_500: string;
+            /** Title */
+            title: string;
+            /** Topic Id */
+            topic_id: string;
+            /** Visibility */
+            visibility: string;
+        };
+        /** RpgLoreDocumentResponse */
+        RpgLoreDocumentResponse: {
+            document: components["schemas"]["RpgLoreDocument"];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+            storage: components["schemas"]["RpgLoreStorage"];
         };
         /** RpgLoreDocumentSummary */
         RpgLoreDocumentSummary: {
@@ -4362,6 +5056,33 @@ export interface components {
             /** Topic Id */
             topic_id?: string;
         };
+        /**
+         * RpgLoreMaterializationResponse
+         * @description A lore document generated in play; ``definition`` is the entity it describes.
+         */
+        RpgLoreMaterializationResponse: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            document: components["schemas"]["RpgLoreDocument"];
+            lore: components["schemas"]["RpgCampaignLoreResponse"];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+            storage: components["schemas"]["RpgLoreStorage"];
+        };
+        /** RpgLoreRegenerationResponse */
+        RpgLoreRegenerationResponse: {
+            document: components["schemas"]["RpgLoreDocument"];
+            lore: components["schemas"]["RpgCampaignLoreResponse"];
+            /** Ok */
+            ok: boolean;
+            /** Session Id */
+            session_id: string;
+            storage: components["schemas"]["RpgLoreStorage"];
+        };
         /** RpgLoreStorage */
         RpgLoreStorage: {
             current_location?: components["schemas"]["RpgLoreStorageCurrentLocation"] | null;
@@ -4440,6 +5161,31 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RpgMapBlueprintListResponse */
+        RpgMapBlueprintListResponse: {
+            /** Map Blueprints */
+            map_blueprints: components["schemas"]["RpgMapBlueprintRevision"][];
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * RpgMapBlueprintMaterializeResponse
+         * @description Blueprints created for generated locations that had none.
+         */
+        RpgMapBlueprintMaterializeResponse: {
+            /** Created */
+            created: components["schemas"]["RpgMapBlueprintRevision"][];
+            /** Created Count */
+            created_count: number;
+            /** Ok */
+            ok: boolean;
+        };
+        /** RpgMapBlueprintResponse */
+        RpgMapBlueprintResponse: {
+            map_blueprint: components["schemas"]["RpgMapBlueprintRevision"];
+            /** Ok */
+            ok: boolean;
+        };
         /** RpgMapBlueprintRevision */
         RpgMapBlueprintRevision: {
             /** Blueprint Revision */
@@ -4500,12 +5246,159 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RpgMaterializationJob */
+        RpgMaterializationJob: {
+            /** Attempt Count */
+            attempt_count: number;
+            /** Campaign Id */
+            campaign_id: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Created At */
+            created_at: string;
+            /** Error */
+            error: {
+                [key: string]: unknown;
+            } | null;
+            /** Job Id */
+            job_id: string;
+            /** Location Id */
+            location_id: string;
+            /** Max Attempts */
+            max_attempts: number;
+            /** Priority */
+            priority: number;
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            };
+            /** Source World Revision */
+            source_world_revision: number;
+            /** Status */
+            status: string;
+            /** Trigger Reasons */
+            trigger_reasons: string[];
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * RpgMaterializationScheduleResponse
+         * @description Predictive materialization queued around the current location.
+         *
+         *     ``not_applicable`` (with ``reason``) when the world has no starter-bubble plan.
+         */
+        RpgMaterializationScheduleResponse: {
+            /** Campaign Id */
+            campaign_id?: string | null;
+            /** Current Location Id */
+            current_location_id?: string;
+            /** Ok */
+            ok: boolean;
+            /** Reason */
+            reason?: string;
+            /** Route Intent Location Id */
+            route_intent_location_id?: string | null;
+            /** Scheduled */
+            scheduled: {
+                [key: string]: unknown;
+            }[];
+            /** Source World Revision */
+            source_world_revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "idle" | "not_applicable";
+            /** Worker Started */
+            worker_started: boolean;
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgMaterializationTelemetryResponse */
+        RpgMaterializationTelemetryResponse: {
+            /** Attempts */
+            attempts: number;
+            /** Completed Location Ids */
+            completed_location_ids: string[];
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Failed Location Ids */
+            failed_location_ids: string[];
+            /** Jobs */
+            jobs: components["schemas"]["RpgMaterializationJob"][];
+            /** Ok */
+            ok: boolean;
+            /** Pending */
+            pending: number;
+            /** Source World Revision */
+            source_world_revision: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "failed" | "idle";
+            /** World Id */
+            world_id: string;
+        };
         /** RpgMaterializeDeferredLocationRequestBody */
         RpgMaterializeDeferredLocationRequestBody: {
             /** Source World Revision */
             source_world_revision?: unknown;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgNarrativeDelivery */
+        RpgNarrativeDelivery: {
+            /** Block Ids */
+            block_ids: string[];
+            /** Cancel Reason */
+            cancel_reason: string;
+            /** Delivered Block Ids */
+            delivered_block_ids: string[];
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Mode */
+            mode: string;
+            /** Next Index */
+            next_index: number;
+            /** Response Id */
+            response_id: string;
+            /** Revision */
+            revision: number;
+            /** Semantic Hash */
+            semantic_hash: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * RpgNarrativeDeliveryCancelResponse
+         * @description ``delivery`` is the record, or the projection's metadata when none was stored.
+         */
+        RpgNarrativeDeliveryCancelResponse: {
+            /** Delivery */
+            delivery: components["schemas"]["RpgNarrativeDelivery"] | {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Response Id */
+            response_id: string;
+            /** Semantic Hash */
+            semantic_hash: string;
+        };
+        /** RpgNarrativeDeliveryResponse */
+        RpgNarrativeDeliveryResponse: {
+            delivery: components["schemas"]["RpgNarrativeDelivery"];
+            /** Ok */
+            ok: boolean;
+            /** Response Id */
+            response_id: string;
+            /** Semantic Hash */
+            semantic_hash: string;
         };
         /** RpgNewGameRequestBody */
         RpgNewGameRequestBody: {
@@ -4596,6 +5489,55 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RpgObserveMapResponse
+         * @description ``reused`` (status ``current``) when the observer already knew this map state.
+         */
+        RpgObserveMapResponse: {
+            /** Event */
+            event: {
+                [key: string]: unknown;
+            } | null;
+            /** Knowledge */
+            knowledge: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Projection */
+            projection: {
+                [key: string]: unknown;
+            };
+            /** Reused */
+            reused: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "observed" | "current";
+        };
+        /**
+         * RpgObserverProjectionResponse
+         * @description ``stale`` when the map changed after the observer last looked.
+         */
+        RpgObserverProjectionResponse: {
+            /** Knowledge */
+            knowledge: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Projection */
+            projection: {
+                [key: string]: unknown;
+            };
+            /** Recent Events */
+            recent_events: {
+                [key: string]: unknown;
+            }[];
+            /** Stale */
+            stale: boolean;
+        };
         /** RpgPlayerOptions */
         RpgPlayerOptions: {
             /**
@@ -4621,6 +5563,33 @@ export interface components {
              * @default she/her
              */
             pronouns?: string;
+        };
+        /**
+         * RpgPrepareOpeningsResponse
+         * @description Openings made launchable; while the world still generates, nothing is prepared.
+         */
+        RpgPrepareOpeningsResponse: {
+            /** Generation Run Id */
+            generation_run_id?: string;
+            /** Ok */
+            ok: boolean;
+            /** Prepared */
+            prepared: components["schemas"]["RpgPreparedOpening"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status?: "generating" | "review_required";
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgPreparedOpening */
+        RpgPreparedOpening: {
+            result: components["schemas"]["RpgWorldLaunchRepairResponse"];
+            /** Scenario Id */
+            scenario_id: string;
+            /** Title */
+            title: string;
         };
         /** RpgPresetListResponse */
         RpgPresetListResponse: {
@@ -5047,6 +6016,20 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RpgScenarioLifecycleResponse */
+        RpgScenarioLifecycleResponse: {
+            /** Idempotent */
+            idempotent: boolean;
+            /** Ok */
+            ok: boolean;
+            scenario: components["schemas"]["RpgScenarioSummary"];
+        };
+        /** RpgScenarioResponse */
+        RpgScenarioResponse: {
+            /** Ok */
+            ok: boolean;
+            scenario: components["schemas"]["RpgScenarioSummary"];
+        };
         /** RpgScenarioRevision */
         RpgScenarioRevision: {
             /** Content Hash */
@@ -5063,6 +6046,12 @@ export interface components {
             world_id: string;
             /** World Revision */
             world_revision: number;
+        };
+        /** RpgScenarioRevisionResponse */
+        RpgScenarioRevisionResponse: {
+            /** Ok */
+            ok: boolean;
+            scenario_revision: components["schemas"]["RpgStoredScenarioRevision"];
         };
         /** RpgScenarioSummary */
         RpgScenarioSummary: {
@@ -5153,6 +6142,189 @@ export interface components {
             /** Session Id */
             session_id?: string;
         };
+        /** RpgSpatialClock */
+        RpgSpatialClock: {
+            /** Aggregate Metrics */
+            aggregate_metrics: {
+                [key: string]: unknown;
+            };
+            /** Campaign Id */
+            campaign_id: string;
+            /** Created At */
+            created_at: string;
+            /** Policy */
+            policy: {
+                [key: string]: unknown;
+            };
+            /** Updated At */
+            updated_at: string;
+            /** World Tick */
+            world_tick: number;
+        };
+        /** RpgSpatialClockResponse */
+        RpgSpatialClockResponse: {
+            clock: components["schemas"]["RpgSpatialClock"];
+            /** Ok */
+            ok: boolean;
+        };
+        /** RpgSpatialGoal */
+        RpgSpatialGoal: {
+            /** Actor Id */
+            actor_id: string;
+            /** Blocked Attempts */
+            blocked_attempts: number;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Created At */
+            created_at: string;
+            /** Expires After Tick */
+            expires_after_tick: number | null;
+            /** Goal Id */
+            goal_id: string;
+            /** Goal Revision */
+            goal_revision: number;
+            /** Goal Type */
+            goal_type: string;
+            /** Issued Tick */
+            issued_tick: number;
+            /** Last Decision */
+            last_decision: {
+                [key: string]: unknown;
+            };
+            /** Map Instance Id */
+            map_instance_id: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Not Before Tick */
+            not_before_tick: number;
+            /** Portal Id */
+            portal_id: string | null;
+            /** Priority */
+            priority: number;
+            /** Routine Id */
+            routine_id: string | null;
+            /** Status */
+            status: string;
+            /** Target Cell */
+            target_cell: number[] | null;
+            /** Target Map Instance Id */
+            target_map_instance_id: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** RpgSpatialGoalResponse */
+        RpgSpatialGoalResponse: {
+            goal: components["schemas"]["RpgSpatialGoal"];
+            /** Ok */
+            ok: boolean;
+        };
+        /** RpgSpatialRoutine */
+        RpgSpatialRoutine: {
+            /** Actor Id */
+            actor_id: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Created At */
+            created_at: string;
+            /** Emission Count */
+            emission_count: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Interval Ticks */
+            interval_ticks: number;
+            /** Last Issued Tick */
+            last_issued_tick: number | null;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Next Due Tick */
+            next_due_tick: number;
+            /** Next Step Index */
+            next_step_index: number;
+            /** Routine Id */
+            routine_id: string;
+            /** Routine Revision */
+            routine_revision: number;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Updated At */
+            updated_at: string;
+        };
+        /** RpgSpatialRoutineResponse */
+        RpgSpatialRoutineResponse: {
+            /** Ok */
+            ok: boolean;
+            routine: components["schemas"]["RpgSpatialRoutine"];
+        };
+        /** RpgSpatialRoutineState */
+        RpgSpatialRoutineState: {
+            /** Actor Id */
+            actor_id: string;
+            /** Created At */
+            created_at: string;
+            /** Emission Count */
+            emission_count: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Interval Ticks */
+            interval_ticks: number;
+            /** Last Issued Tick */
+            last_issued_tick: number | null;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Next Due Tick */
+            next_due_tick: number;
+            /** Next Step Index */
+            next_step_index: number;
+            /** Routine Id */
+            routine_id: string;
+            /** Routine Revision */
+            routine_revision: number;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Updated At */
+            updated_at: string;
+        };
+        /** RpgSpatialStateResponse */
+        RpgSpatialStateResponse: {
+            clock: components["schemas"]["RpgSpatialClock"];
+            /** Goals */
+            goals: components["schemas"]["RpgSpatialGoal"][];
+            /** Ok */
+            ok: boolean;
+            /** Recent Ticks */
+            recent_ticks: {
+                [key: string]: unknown;
+            }[];
+            /** Routines */
+            routines: components["schemas"]["RpgSpatialRoutineState"][];
+        };
+        /**
+         * RpgSpatialTickResponse
+         * @description One simulation tick: the advanced clock, the tick's result and its metrics.
+         */
+        RpgSpatialTickResponse: {
+            clock: components["schemas"]["RpgSpatialClock"];
+            /** Metrics */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            };
+        };
         /** RpgStarterBubblePromotionResponse */
         RpgStarterBubblePromotionResponse: {
             /** Ok */
@@ -5178,6 +6350,63 @@ export interface components {
             starter_bubble: {
                 [key: string]: unknown;
             };
+        };
+        /** RpgStoredScenarioRevision */
+        RpgStoredScenarioRevision: {
+            /** Content Hash */
+            content_hash: string;
+            /** Created At */
+            created_at: string;
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Revision */
+            revision: number;
+            /** Scenario Id */
+            scenario_id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** World Id */
+            world_id: string;
+            /** World Revision */
+            world_revision: number;
+        };
+        /** RpgStoredWorldRelease */
+        RpgStoredWorldRelease: {
+            /** Created At */
+            created_at: string;
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Release */
+            release: number;
+            /** Release Hash */
+            release_hash: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** World Id */
+            world_id: string;
+            /** World Revision */
+            world_revision: number;
+        };
+        /** RpgStoredWorldRevision */
+        RpgStoredWorldRevision: {
+            /** Content Hash */
+            content_hash: string;
+            /** Created At */
+            created_at: string;
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Revision */
+            revision: number;
+            /** Workspace Id */
+            workspace_id: string;
+            /** World Id */
+            world_id: string;
         };
         /** RpgTacticalAttackRequestBody */
         RpgTacticalAttackRequestBody: {
@@ -5223,6 +6452,49 @@ export interface components {
             submission_id: string;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * RpgTacticalResponse
+         * @description A committed tactical move or attack, or its replay (``idempotent_replay``, with ``turn_id``).
+         */
+        RpgTacticalResponse: {
+            /** Actor Cell */
+            actor_cell?: number[];
+            /** Actor Id */
+            actor_id: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Campaign Revision */
+            campaign_revision: number;
+            /** Campaign State Hash */
+            campaign_state_hash?: string;
+            /** Idempotent Replay */
+            idempotent_replay: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tactical_move" | "tactical_attack";
+            /** Map Event */
+            map_event?: {
+                [key: string]: unknown;
+            };
+            /** Map Event Id */
+            map_event_id?: string;
+            /** Map Instance Id */
+            map_instance_id: string;
+            /** Map State Revision */
+            map_state_revision: number;
+            /** Ok */
+            ok: boolean;
+            /** Tactical */
+            tactical: {
+                [key: string]: unknown;
+            };
+            /** Target Id */
+            target_id?: string;
+            /** Turn Id */
+            turn_id?: string;
         };
         /** RpgTurnResponse */
         RpgTurnResponse: {
@@ -5418,6 +6690,61 @@ export interface components {
             generation_lock?: boolean | null;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgWorldAuthorshipAuditResponse */
+        RpgWorldAuthorshipAuditResponse: {
+            /** Audited At */
+            audited_at: string;
+            /** Blocked Topic Ids */
+            blocked_topic_ids: string[];
+            /** Classification Counts */
+            classification_counts: {
+                [key: string]: number;
+            };
+            /** Draft Revision */
+            draft_revision: number;
+            immutable_history: components["schemas"]["RpgAuthorshipImmutableHistory"];
+            /** Ok */
+            ok: boolean;
+            /** Publishable */
+            publishable: boolean;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "rpg_world_authorship_audit_v2";
+            /** Topics */
+            topics: components["schemas"]["RpgAuthorshipAuditTopic"][];
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgWorldAuthorshipRemediationResponse */
+        RpgWorldAuthorshipRemediationResponse: {
+            /** Audited At */
+            audited_at: string;
+            /** Blocked Topic Ids */
+            blocked_topic_ids: string[];
+            /** Classification Counts */
+            classification_counts: {
+                [key: string]: number;
+            };
+            /** Draft Revision */
+            draft_revision: number;
+            immutable_history: components["schemas"]["RpgAuthorshipImmutableHistory"];
+            /** Ok */
+            ok: boolean;
+            /** Publishable */
+            publishable: boolean;
+            remediation: components["schemas"]["RpgAuthorshipRemediation"];
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "rpg_world_authorship_audit_v2";
+            /** Topics */
+            topics: components["schemas"]["RpgAuthorshipAuditTopic"][];
+            /** World Id */
+            world_id: string;
         };
         /** RpgWorldBundleImportResponse */
         RpgWorldBundleImportResponse: {
@@ -5617,6 +6944,21 @@ export interface components {
             /** World Id */
             world_id: string;
         };
+        /** RpgWorldDraftRestoreResponse */
+        RpgWorldDraftRestoreResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Previous Current Draft Revision */
+            previous_current_draft_revision: number;
+            /** Restored Draft Revision */
+            restored_draft_revision: number;
+            /** Source Draft Revision */
+            source_draft_revision: number;
+            /** Topics */
+            topics: components["schemas"]["RpgWorldTopic"][];
+            /** World Id */
+            world_id: string;
+        };
         /** RpgWorldGenerationAcceptAllRequestBody */
         RpgWorldGenerationAcceptAllRequestBody: {
             /** Waiver Reason */
@@ -5634,6 +6976,37 @@ export interface components {
             waiver_reason?: unknown;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * RpgWorldGenerationAcceptanceResponse
+         * @description Accepted candidates, the decision recorded per topic, and the reconciled run.
+         */
+        RpgWorldGenerationAcceptanceResponse: {
+            /** Accepted Topic Ids */
+            accepted_topic_ids: string[];
+            /** Decisions */
+            decisions: {
+                [key: string]: components["schemas"]["RpgWorldGenerationReviewDecision"];
+            };
+            /** Ok */
+            ok: boolean;
+            run: components["schemas"]["RpgWorldGenerationRun"];
+            /** Run Id */
+            run_id: string;
+        };
+        /** RpgWorldGenerationDiagnosticsResponse */
+        RpgWorldGenerationDiagnosticsResponse: {
+            /** Contains Generated Content */
+            contains_generated_content: boolean;
+            /**
+             * Format
+             * @constant
+             */
+            format: "jsonl";
+            /** Ok */
+            ok: boolean;
+            /** Path */
+            path: string;
         };
         /** RpgWorldGenerationFailureArtifact */
         RpgWorldGenerationFailureArtifact: {
@@ -5724,6 +7097,26 @@ export interface components {
             /** Worker Started */
             worker_started: boolean;
         };
+        /**
+         * RpgWorldGenerationPublishResponse
+         * @description ``reused`` when the run was already published.
+         */
+        RpgWorldGenerationPublishResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Publication */
+            publication: {
+                [key: string]: unknown;
+            };
+            /** Reused */
+            reused: boolean;
+            run: components["schemas"]["RpgWorldGenerationRun"];
+            /**
+             * Status
+             * @constant
+             */
+            status: "ready";
+        };
         /** RpgWorldGenerationRepairEvaluation */
         RpgWorldGenerationRepairEvaluation: {
             /** Candidate Changed */
@@ -5764,6 +7157,22 @@ export interface components {
             decision?: unknown;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgWorldGenerationRetryDecisionResponse */
+        RpgWorldGenerationRetryDecisionResponse: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "keep" | "replace";
+            decision_record: components["schemas"]["RpgWorldGenerationReviewDecision"];
+            /** Ok */
+            ok: boolean;
+            run: components["schemas"]["RpgWorldGenerationRun"];
+            /** Run Id */
+            run_id: string;
+            /** Topic Id */
+            topic_id: string;
         };
         /** RpgWorldGenerationRetryReviewRequestBody */
         RpgWorldGenerationRetryReviewRequestBody: {
@@ -5989,6 +7398,14 @@ export interface components {
             /** World Id */
             world_id: string;
         };
+        /** RpgWorldGenerationStatusResponse */
+        RpgWorldGenerationStatusResponse: {
+            /** Ok */
+            ok: boolean;
+            run: components["schemas"]["RpgWorldGenerationRun"];
+            /** Topic Results */
+            topic_results: components["schemas"]["RpgWorldGenerationTopicResult"][];
+        };
         /** RpgWorldGenerationTopicResult */
         RpgWorldGenerationTopicResult: {
             /** Candidate */
@@ -6033,6 +7450,16 @@ export interface components {
             validation: components["schemas"]["RpgWorldGenerationReviewReport"];
             /** World Id */
             world_id: string;
+        };
+        /** RpgWorldGenerationTopicResultResponse */
+        RpgWorldGenerationTopicResultResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Parent Run Id */
+            parent_run_id: string | null;
+            /** Run Id */
+            run_id: string;
+            topic_result: components["schemas"]["RpgWorldGenerationTopicResult"];
         };
         /** RpgWorldGenerationValidationAttempt */
         RpgWorldGenerationValidationAttempt: {
@@ -6139,6 +7566,39 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RpgWorldImageGenerationResponse
+         * @description The image jobs queued, one per target.
+         */
+        RpgWorldImageGenerationResponse: {
+            /** Jobs */
+            jobs: components["schemas"]["RpgWorldImageJob"][];
+            /** Ok */
+            ok: boolean;
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgWorldImageJob */
+        RpgWorldImageJob: {
+            /** Job Id */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Target Id */
+            target_id: string;
+        };
+        /**
+         * RpgWorldImagePromptsResponse
+         * @description The selected targets with their rebuilt suggested prompts; no image job is created.
+         */
+        RpgWorldImagePromptsResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Targets */
+            targets: components["schemas"]["RpgWorldImageTarget"][];
+            /** World Id */
+            world_id: string;
+        };
         /** RpgWorldImageTarget */
         RpgWorldImageTarget: {
             /** Active Asset Id */
@@ -6229,6 +7689,24 @@ export interface components {
             ok: boolean;
             /** Scenarios */
             scenarios: components["schemas"]["RpgScenarioSummary"][];
+            /** Worlds */
+            worlds: components["schemas"]["RpgWorldSummary"][];
+        };
+        /**
+         * RpgWorldLifecycleResponse
+         * @description Archive or restore; ``idempotent`` when the world was already there.
+         */
+        RpgWorldLifecycleResponse: {
+            /** Idempotent */
+            idempotent: boolean;
+            /** Ok */
+            ok: boolean;
+            world: components["schemas"]["RpgWorldSummary"];
+        };
+        /** RpgWorldListResponse */
+        RpgWorldListResponse: {
+            /** Ok */
+            ok: boolean;
             /** Worlds */
             worlds: components["schemas"]["RpgWorldSummary"][];
         };
@@ -6337,6 +7815,12 @@ export interface components {
             /** World Revision */
             world_revision: number;
         };
+        /** RpgWorldReleaseResponse */
+        RpgWorldReleaseResponse: {
+            /** Ok */
+            ok: boolean;
+            world_release: components["schemas"]["RpgStoredWorldRelease"];
+        };
         /** RpgWorldRepairForLaunchRequestBody */
         RpgWorldRepairForLaunchRequestBody: {
             /** Scenario Id */
@@ -6345,6 +7829,12 @@ export interface components {
             starting_location_id?: unknown;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgWorldResponse */
+        RpgWorldResponse: {
+            /** Ok */
+            ok: boolean;
+            world: components["schemas"]["RpgWorldSummary"];
         };
         /** RpgWorldRevision */
         RpgWorldRevision: {
@@ -6358,6 +7848,12 @@ export interface components {
             };
             /** Revision */
             revision: number;
+        };
+        /** RpgWorldRevisionResponse */
+        RpgWorldRevisionResponse: {
+            /** Ok */
+            ok: boolean;
+            world_revision: components["schemas"]["RpgStoredWorldRevision"];
         };
         /** RpgWorldSaveMapBlueprintRequestBody */
         RpgWorldSaveMapBlueprintRequestBody: {
@@ -6525,6 +8021,56 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** RpgWorldTopicHistoryEntry */
+        RpgWorldTopicHistoryEntry: {
+            /** Captured At */
+            captured_at: string;
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            };
+            /** Content Hash */
+            content_hash: string;
+            /** Dependency Hashes */
+            dependency_hashes: {
+                [key: string]: string;
+            };
+            /** Directives */
+            directives: {
+                [key: string]: unknown;
+            };
+            /** Draft Revision */
+            draft_revision: number;
+            /** History Sequence */
+            history_sequence: number;
+            /** Input Hash */
+            input_hash: string;
+            /** Provenance */
+            provenance: {
+                [key: string]: unknown;
+            };
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Topic Id */
+            topic_id: string;
+            /** Topic Updated At */
+            topic_updated_at: string;
+        };
+        /** RpgWorldTopicHistoryResponse */
+        RpgWorldTopicHistoryResponse: {
+            /** History */
+            history: components["schemas"]["RpgWorldTopicHistoryEntry"][];
+            /** Ok */
+            ok: boolean;
+        };
+        /** RpgWorldTopicResponse */
+        RpgWorldTopicResponse: {
+            /** Ok */
+            ok: boolean;
+            topic: components["schemas"]["RpgWorldTopic"];
+        };
         /**
          * RuntimeDiagnostics
          * @description One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md.
@@ -6631,15 +8177,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesAdapterPreviewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6728,15 +8272,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesCapabilitiesResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6763,15 +8305,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesLookupResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6798,15 +8338,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesRpgPlanResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6970,15 +8508,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesRpgContextResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7007,15 +8543,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesRpgContextPackResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7044,15 +8578,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesNarrativeResearchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7081,15 +8613,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesSequenceExecuteStepResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7118,15 +8648,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesSequencePlanResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7622,15 +9150,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgLegacyWorldImportResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7659,15 +9185,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgMaterializationScheduleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7696,15 +9220,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSpatialGoalResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7733,15 +9255,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSpatialClockResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7770,15 +9290,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSpatialRoutineResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7805,15 +9323,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSpatialStateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7842,15 +9358,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgSpatialTickResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7875,15 +9389,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCampaignWorldBindingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7912,15 +9424,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCampaignWorldBindingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7947,15 +9457,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgDebugClientEventResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7978,15 +9486,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgDebugLogStatusResponse"];
                 };
             };
         };
@@ -8169,15 +9675,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgLocalDialogueFixtureResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8307,15 +9811,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgGeometryPatchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8345,15 +9847,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgObserveMapResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8381,15 +9881,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgObserverProjectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8418,15 +9916,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgGridPerformanceProfileResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8455,15 +9951,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgTacticalResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8492,15 +9986,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgTacticalResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8563,15 +10055,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgNarrativeDeliveryCancelResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8598,15 +10088,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgNarrativeDeliveryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8882,15 +10370,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgScenarioResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8915,15 +10401,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgScenarioLifecycleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8948,15 +10432,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgScenarioLifecycleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8985,15 +10467,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgScenarioRevisionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9169,15 +10649,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgAbilityCoverageResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9202,15 +10680,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCampaignGenesisResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9367,15 +10843,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgLoreDiscoveryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9402,15 +10876,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgLoreDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9439,15 +10911,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgLoreMaterializationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9476,15 +10946,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgLoreRegenerationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9679,15 +11147,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationDiagnosticsResponse"];
                 };
             };
         };
@@ -9705,15 +11171,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9742,15 +11206,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationAcceptanceResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9806,15 +11268,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationPublishResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9871,15 +11331,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationTopicResultResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9909,15 +11367,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationAcceptanceResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9947,15 +11403,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationRetryDecisionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10015,15 +11469,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldGenerationMutationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10079,15 +11531,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10114,15 +11564,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10221,15 +11669,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10254,15 +11700,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldLifecycleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10319,15 +11763,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgAuthoringSectionPage"];
                 };
             };
             /** @description Validation Error */
@@ -10352,15 +11794,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldAuthorshipAuditResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10389,15 +11829,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldAuthorshipRemediationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10525,15 +11963,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldDraftRestoreResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10795,15 +12231,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldImageGenerationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10832,15 +12266,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldImagePromptsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10937,15 +12369,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldImageGenerationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11003,15 +12433,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgMapBlueprintListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11036,15 +12464,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgMapBlueprintMaterializeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11074,15 +12500,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgMapBlueprintResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11109,15 +12533,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgMaterializationTelemetryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11146,15 +12568,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgMaterializationScheduleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11179,15 +12599,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgPrepareOpeningsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11247,15 +12665,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldLifecycleResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11284,15 +12700,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldRevisionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11322,15 +12736,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldReleaseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11428,15 +12840,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldTopicHistoryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11465,15 +12875,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgWorldTopicResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11499,15 +12907,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgAuthoringTopicDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11537,15 +12943,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgAuthoringTopicMutationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11572,15 +12976,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgAuthoringEntityDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11795,15 +13197,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description The fields the RPG web client reads; the response is not filtered. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgAuthoringTopicMutationResponse"];
                 };
             };
             /** @description Validation Error */

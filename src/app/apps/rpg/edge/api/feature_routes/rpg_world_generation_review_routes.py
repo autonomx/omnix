@@ -28,7 +28,13 @@ from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRe
 from typing import Any as _TypedRequestAny
 from app.apps.rpg.edge.api.web_contracts import (
     documented,
+    RpgWorldGenerationMutationResponse,
     RpgWorldGenerationReviewListResponse,
+)
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgWorldGenerationAcceptanceResponse,
+    RpgWorldGenerationRetryDecisionResponse,
+    RpgWorldGenerationTopicResultResponse,
 )
 
 class _TypedRequestModel(_TypedRequestBaseModel):
@@ -211,6 +217,7 @@ def register_rpg_world_generation_review_routes(router: APIRouter, state) -> Non
 
     @router.get(
         "/api/rpg/world-generation/{run_id}/results/{topic_id}",
+        responses=documented(RpgWorldGenerationTopicResultResponse),
     )
     def rpg_world_generation_topic_result(
         run_id: str,
@@ -241,6 +248,7 @@ def register_rpg_world_generation_review_routes(router: APIRouter, state) -> Non
 
     @router.post(
         "/api/rpg/world-generation/{run_id}/retry-review",
+        responses=documented(RpgWorldGenerationMutationResponse),
     )
     def rpg_world_generation_retry_review(
         run_id: str,
@@ -270,6 +278,7 @@ def register_rpg_world_generation_review_routes(router: APIRouter, state) -> Non
 
     @router.post(
         "/api/rpg/world-generation/{run_id}/results/{topic_id}/accept",
+        responses=documented(RpgWorldGenerationAcceptanceResponse),
     )
     def rpg_world_generation_accept_candidate(
         run_id: str,
@@ -296,6 +305,7 @@ def register_rpg_world_generation_review_routes(router: APIRouter, state) -> Non
 
     @router.post(
         "/api/rpg/world-generation/{run_id}/accept-all",
+        responses=documented(RpgWorldGenerationAcceptanceResponse),
     )
     def rpg_world_generation_accept_all(
         run_id: str,
@@ -314,6 +324,7 @@ def register_rpg_world_generation_review_routes(router: APIRouter, state) -> Non
 
     @router.post(
         "/api/rpg/world-generation/{run_id}/results/{topic_id}/decision",
+        responses=documented(RpgWorldGenerationRetryDecisionResponse),
     )
     def rpg_world_generation_retry_decision(
         run_id: str,

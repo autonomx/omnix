@@ -19,6 +19,10 @@ from app.apps.rpg.edge.api.web_contracts import (
     documented,
     RpgDeferredMaterializationResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgMaterializationScheduleResponse,
+    RpgMaterializationTelemetryResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -93,6 +97,7 @@ def register_rpg_progressive_map_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/worlds/{world_id}/materialization-jobs/schedule",
+        responses=documented(RpgMaterializationScheduleResponse),
     )
     def rpg_schedule_world_materialization(
         world_id: str,
@@ -124,6 +129,7 @@ def register_rpg_progressive_map_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/campaigns/{campaign_id}/materialization-signals",
+        responses=documented(RpgMaterializationScheduleResponse),
     )
     def rpg_schedule_campaign_materialization(
         campaign_id: str,
@@ -154,6 +160,7 @@ def register_rpg_progressive_map_routes(router: APIRouter, state) -> None:
 
     @router.get(
         "/api/rpg/worlds/{world_id}/materialization-jobs",
+        responses=documented(RpgMaterializationTelemetryResponse),
     )
     def rpg_materialization_telemetry(
         world_id: str,

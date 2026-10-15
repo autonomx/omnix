@@ -27,13 +27,7 @@ export type RpgAuthoringEntityDossier = components['schemas']['RpgAuthoringEntit
 
 export type RpgAuthoringEntityCard = components['schemas']['RpgAuthoringEntityCard'];
 
-export interface RpgAuthoringDocumentBlock {
-  kind: 'section' | 'facts' | 'json' | string;
-  title?: string;
-  body?: string;
-  items?: Array<Record<string, unknown>>;
-  value?: unknown;
-}
+export type RpgAuthoringDocumentBlock = components['schemas']['RpgAuthoringDocumentBlock'];
 
 export type RpgAuthoringTopic = components['schemas']['RpgAuthoringTopic'];
 

@@ -33,6 +33,12 @@ from app.apps.rpg.edge.api.web_contracts import (
     HermesRpgSequenceResponse,
     HermesRpgSequenceStateResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    HermesNarrativeResearchResponse,
+    HermesRpgContextPackResponse,
+    HermesSequenceExecuteStepResponse,
+    HermesSequencePlanResponse,
+)
 
 hermes_rpg_approved_bp = APIRouter()
 
@@ -178,12 +184,12 @@ def hermes_rpg_sequence_state_route(session_id: str = "") -> dict[str, Any]:
     return latest_hermes_sequence_state(session_id=session_id)
 
 
-@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/execute-step")
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/execute-step", responses=documented(HermesSequenceExecuteStepResponse))
 def hermes_rpg_sequence_execute_step_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     return hermes_rpg_sequence_execute_step_payload(payload)
 
 
-@hermes_rpg_approved_bp.post("/api/hermes/rpg/context-pack")
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/context-pack", responses=documented(HermesRpgContextPackResponse))
 def hermes_rpg_context_pack_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     data = payload if isinstance(payload, dict) else {}
     session = raw_session if isinstance(raw_session := data.get("session"), dict) else data
@@ -192,7 +198,7 @@ def hermes_rpg_context_pack_route(payload: dict[str, Any] | None = Body(default=
     return build_hermes_rpg_context_pack(session, item_limit=item_limit, char_budget=char_budget)
 
 
-@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/plan")
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/sequence/plan", responses=documented(HermesSequencePlanResponse))
 def hermes_rpg_sequence_plan_route(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
     data = payload if isinstance(payload, dict) else {}
     sequence = raw_sequence if isinstance(raw_sequence := data.get("sequence"), dict) else data
@@ -200,7 +206,7 @@ def hermes_rpg_sequence_plan_route(payload: dict[str, Any] | None = Body(default
     return hermes_sequence_planner_loop(sequence, context_pack)
 
 
-@hermes_rpg_approved_bp.post("/api/hermes/rpg/narrative-research")
+@hermes_rpg_approved_bp.post("/api/hermes/rpg/narrative-research", responses=documented(HermesNarrativeResearchResponse))
 def hermes_rpg_narrative_research_route(
     payload: dict[str, Any] | None = Body(default=None),
 ) -> dict[str, Any]:

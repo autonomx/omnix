@@ -9,6 +9,10 @@ from pydantic import ValidationError
 
 from app.apps.rpg.world.map_geometry_patch import ApplyGeometryPatchCommand
 from app.apps.rpg.world.map_geometry_patch_service import apply_campaign_geometry_patch
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgGeometryPatchResponse,
+)
+from app.apps.rpg.edge.api.web_contracts import documented
 
 RpgApplyGeometryPatchRequestBody = ApplyGeometryPatchCommand
 
@@ -48,6 +52,7 @@ def register_rpg_geometry_patch_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/map-instances/{map_instance_id}/geometry-patches",
+        responses=documented(RpgGeometryPatchResponse),
     )
     def rpg_apply_geometry_patch(
         map_instance_id: str,

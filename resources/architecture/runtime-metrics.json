@@ -113,6 +113,7 @@
         "app.apps.rpg.edge.api.payloads.inspection",
         "app.apps.rpg.edge.api.payloads.player",
         "app.apps.rpg.edge.api.payloads.sessions",
+        "app.apps.rpg.edge.api.route_contracts",
         "app.apps.rpg.edge.api.traced_response",
         "app.apps.rpg.edge.api.turn_pipeline",
         "app.apps.rpg.edge.api.web_contracts",
@@ -1967,7 +1968,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 9203,
+      "collected_tests": 9206,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2822,14 +2823,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-15T01:23:12.948560+00:00",
+  "measured_at": "2026-10-15T02:05:31.416426+00:00",
   "metrics": {
-    "boot_imported_modules": 1912,
+    "boot_imported_modules": 1913,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "1bd240c40e356a8a44e8ce221bb0611b222b9a9c3fe722f708fa7ae51fe179d3"
+  "source_digest": "2f838795ebb5661978c62f94c41ad9f1027fc9dc0cd69b9268e97df59a69645e"
 }

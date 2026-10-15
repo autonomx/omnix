@@ -44,6 +44,10 @@ from app.apps.rpg.edge.api.web_contracts import (
     RpgSessionListResponse,
     RpgSessionMutationResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgAbilityCoverageResponse,
+    RpgLocalDialogueFixtureResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -319,6 +323,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     @router.get(
         "/api/rpg/sessions/{session_id}/ability-coverage",
         tags=["rpg-session"],
+        responses=documented(RpgAbilityCoverageResponse),
     )
     def rpg_ability_coverage(session_id: str) -> dict[str, Any]:
         session = load_session(session_id)
@@ -386,6 +391,7 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/local-qualification/dialogue-fixture",
         tags=["rpg-session"],
+        responses=documented(RpgLocalDialogueFixtureResponse),
     )
     async def rpg_local_dialogue_fixture(http_request: Request, request_body: RpgLocalDialogueFixtureRequestBody) -> dict[str, Any]:
         _require_local_dialogue_fixture_request(http_request)

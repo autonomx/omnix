@@ -154,6 +154,31 @@ def test_browser_routes_have_typed_contracts_or_documented_transport_responses()
     assert model_less_routes <= _DOCUMENTED_NON_JSON_RESPONSES
 
 
+# A downloaded file: the map editor's own canonical document, opaque to the gateway.
+_OPAQUE_JSON_DOWNLOADS = {("POST", "/api/rpg/map-editor/export")}
+
+
+def test_rpg_and_hermes_routes_publish_their_200_response() -> None:
+    """Every RPG and Hermes JSON route names its response shape (WP-8.6), not a bare object."""
+    app = create_gateway_app()
+    schema = app.openapi()
+    unnamed: list[str] = []
+    checked = 0
+    for route_path, operations in schema["paths"].items():
+        if not route_path.startswith(("/api/rpg", "/api/hermes")):
+            continue
+        for method, operation in operations.items():
+            if (method.upper(), route_path) in _DOCUMENTED_NON_JSON_RESPONSES | _OPAQUE_JSON_DOWNLOADS:
+                continue
+            checked += 1
+            media = operation.get("responses", {}).get("200", {}).get("content", {}).get("application/json", {})
+            if "$ref" not in json.dumps(media.get("schema", {})):
+                unnamed.append(f"{method.upper()} {route_path}")
+
+    assert checked > 100, "route walk must see the RPG and Hermes routes"
+    assert unnamed == []
+
+
 def test_generated_route_owners_are_current() -> None:
     generated_dir = Path(__file__).resolve().parents[3] / "web" / "src" / "api" / "generated"
     generated = json.loads((generated_dir / ROUTE_OWNERS_FILE).read_text(encoding="utf-8"))["operations"]

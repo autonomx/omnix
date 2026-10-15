@@ -56,6 +56,16 @@ from app.apps.rpg.edge.api.web_contracts import (
     RpgWorldLaunchRepairResponse,
     RpgWorldLibraryResponse,
 )
+from app.apps.rpg.edge.api.route_contracts import (
+    RpgMapBlueprintListResponse,
+    RpgMapBlueprintMaterializeResponse,
+    RpgMapBlueprintResponse,
+    RpgPrepareOpeningsResponse,
+    RpgWorldGenerationDiagnosticsResponse,
+    RpgWorldGenerationPublishResponse,
+    RpgWorldGenerationStatusResponse,
+    RpgWorldTopicResponse,
+)
 
 class _TypedRequestModel(_TypedRequestBaseModel):
     model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
@@ -223,6 +233,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.get(
         "/api/rpg/worlds/{world_id}/map-blueprints",
+        responses=documented(RpgMapBlueprintListResponse),
     )
     def rpg_world_map_blueprints(
         world_id: str,
@@ -242,6 +253,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/worlds/{world_id}/map-blueprints/materialize",
+        responses=documented(RpgMapBlueprintMaterializeResponse),
     )
     def rpg_world_materialize_map_blueprints(world_id: str) -> dict[str, Any]:
         try:
@@ -252,6 +264,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/worlds/{world_id}/map-blueprints/{map_id}",
+        responses=documented(RpgMapBlueprintResponse),
     )
     def rpg_world_save_map_blueprint(
         world_id: str,
@@ -280,7 +293,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
             _raise_domain_error(exc)
             raise
 
-    @router.post("/api/rpg/worlds/{world_id}/topics")
+    @router.post("/api/rpg/worlds/{world_id}/topics", responses=documented(RpgWorldTopicResponse))
     def rpg_world_save_topic(
         world_id: str,
         request: Request, request_body: RpgWorldSaveTopicRequestBody,
@@ -381,7 +394,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
             )
             raise
 
-    @router.get("/api/rpg/world-generation/diagnostics")
+    @router.get("/api/rpg/world-generation/diagnostics", responses=documented(RpgWorldGenerationDiagnosticsResponse))
     def rpg_world_generation_diagnostics() -> dict[str, Any]:
         return {
             "ok": True,
@@ -432,7 +445,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
             )
             raise
 
-    @router.get("/api/rpg/world-generation/{run_id}")
+    @router.get("/api/rpg/world-generation/{run_id}", responses=documented(RpgWorldGenerationStatusResponse))
     def rpg_world_generation_status(
         run_id: str,
         reconcile: bool = Query(default=True),
@@ -451,6 +464,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/world-generation/{run_id}/publish",
+        responses=documented(RpgWorldGenerationPublishResponse),
     )
     def rpg_world_publish_generation(run_id: str) -> dict[str, Any]:
         try:
@@ -507,6 +521,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
 
     @router.post(
         "/api/rpg/worlds/{world_id}/prepare-openings-for-launch",
+        responses=documented(RpgPrepareOpeningsResponse),
     )
     def rpg_world_prepare_openings_for_launch(world_id: str) -> dict[str, Any]:
         try:
