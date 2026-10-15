@@ -134,7 +134,9 @@ def _save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str
                 raise ValueError("RPG session rng_seed is immutable")
             simulation_state["rng_seed"] = previous_seed
             session["simulation_state"] = simulation_state
-    session = create_or_normalize_session(session)
+    # A deferred save (inside a turn) writes nothing yet: normalize the caller's
+    # session in place instead of copying the whole saved game (WP-5.6).
+    session = create_or_normalize_session(session, owned=session_save_deferred())
     assert_session_integrity(session)
     return save_session_to_disk(session, compact=compact)
 

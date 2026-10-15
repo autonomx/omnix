@@ -43,7 +43,12 @@ _PHASE8_PART35_NON_NPC_SPEAKERS = {
 def _phase8_part35_iter_dicts(value: Any) -> Iterable[dict[str, Any]]:
     if isinstance(value, dict):
         yield value
-        for child in value.values():
+        for key, child in value.items():
+            # The embedded saved game is not this turn's response: its stored
+            # last-turn data holds an earlier turn's semantic advisory, and
+            # walking it cost a whole-state traversal per lookup (WP-5.6).
+            if key == "session":
+                continue
             yield from _phase8_part35_iter_dicts(child)
     elif isinstance(value, list):
         for child in value:
