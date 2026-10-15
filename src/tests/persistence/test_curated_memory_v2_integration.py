@@ -1,36 +1,36 @@
-"""Curated memory after the switch to Memory v2 (WP-8.5).
+"""Curated memory in Memory v2 (WP-8.5).
 
-v1's own service, policy and management code runs on the authority-routed
-repository; with v2 authoritative every record operation lands in the v2
-observation log and becomes retrievable (or stops being retrievable) at once.
+The memory service, policy and management code run on ``CuratedMemoryRepository``:
+every record operation lands in the v2 observation log and becomes retrievable
+(or stops being retrievable) at once. Memory v1 is retired: migration 0156 moves
+an empty v1 installation to v2 and refuses one whose v1 still holds records.
 """
 from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
+import psycopg
 import pytest
 
 from app.platform.assistant_memory.owner_service import OwnerAwareMemoryService
 from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 from app.platform.assistant_memory.scope import resolve_chat_scope
-from app.platform.assistant_memory.service import LegacyMemoryReadOnlyError
 from app.platform.assistant_memory.v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
-from app.platform.assistant_memory.v2.authority import CutoverNotReadyError, PostgresMemoryV2AuthorityStore
+from app.platform.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
 from app.platform.assistant_memory.v2.curated_records import MemoryV2CuratedConvergence
-from app.platform.assistant_memory.v2.memory_repository import MemoryAuthorityRoutedRepository
-from app.platform.assistant_memory.v2.runtime import PostgresMemoryV2Runtime, UnsafeMemoryRollbackError
-from app.platform.assistant_memory.v2.shadow_runner import run_shadow
+from app.platform.assistant_memory.v2.memory_repository import CuratedMemoryRepository
+from app.platform.assistant_memory.v2.runtime import PostgresMemoryV2Runtime
 from app.conversation.memory_contracts import MemoryConflictError, MemoryRecord
+from app.persistence.config import DatabaseSettings
+from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.tenant_scope import system_scope
 from app.runtime.tenant_context import TenantContext, pop_tenant, push_tenant
-from tests.persistence.test_memory_v2_authority_cutover_integration import (
-    _database,
-    _reset_global_authority_to_v1,
-)
+from tests.support.database import admin_database_url
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -38,25 +38,33 @@ pytestmark = pytest.mark.skipif(
 )
 
 PROFILE = "profile:alice"
+RETIREMENT_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "app/platform/assistant_memory/migrations/0156_memory_v1_retired.sql"
+)
+
+
+def _database() -> PostgresDatabase:
+    return PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=12, connect_timeout_seconds=10,
+        statement_timeout_ms=60_000, lock_timeout_ms=30_000, application_name="omnix-curated-memory-v2-tests",
+    ))
 
 
 @pytest.fixture
 def switched():
-    """v2 authoritative with no v1 memory, a tenant installed, and v1's service on the routed repository."""
+    """Memory v2 authoritative, a tenant installed, and the memory service on the curated repository."""
     database = _database()
     apply_migrations(database)
-    _reset_global_authority_to_v1(database)
+    assert PostgresMemoryV2AuthorityStore(database).current().epoch.authority == "v2"
     tenant = ensure_local_identity(database)
     token = push_tenant(tenant)
-    authority = PostgresMemoryV2AuthorityStore(database)
-    authority.activate_v2((), activated_by="test:switch", reason="empty v1")
     legacy = PostgresOwnerAwareMemoryRepository(database)
-    service = OwnerAwareMemoryService(MemoryAuthorityRoutedRepository(legacy, database=database))
+    service = OwnerAwareMemoryService(CuratedMemoryRepository(legacy, database=database))
     try:
         yield database, tenant, service, legacy
     finally:
         pop_tenant(token)
-        _reset_global_authority_to_v1(database)
         database.close()
 
 
@@ -209,39 +217,6 @@ def test_v2_memory_stays_inside_its_tenant(switched) -> None:
             connection.execute("DELETE FROM omnix_workspaces WHERE id = %s", (other,))
 
 
-def test_v1_record_writes_are_refused_inside_their_transaction(switched) -> None:
-    _database_, _tenant, _service, legacy = switched
-    record = MemoryRecord(
-        id=f"memory:{uuid4().hex}", owner_type="character", owner_id="sofia", scope="global",
-        scope_id=PROFILE, category="fact", source="user_saved", content="Written to v1 after the switch",
-        normalized_content="written to v1 after the switch", provenance_type="user_message",
-        created_at=datetime.now(timezone.utc).isoformat(), updated_at=datetime.now(timezone.utc).isoformat(),
-    )
-    with pytest.raises(LegacyMemoryReadOnlyError, match="read-only"):
-        legacy.create_record(record)
-
-
-def test_rollback_is_refused_once_memory_was_written_under_v2(switched) -> None:
-    database, _tenant, service, _legacy = switched
-    _save(service, f"sofia-{uuid4().hex}", "Skyrim is my favorite game")
-
-    with pytest.raises(UnsafeMemoryRollbackError, match="discard or resurrect"):
-        PostgresMemoryV2Runtime(database).rollback_to_v1(activated_by="test:switch", reason="undo")
-
-
-def test_an_empty_switch_can_be_rolled_back_until_something_is_written() -> None:
-    database = _database()
-    try:
-        apply_migrations(database)
-        _reset_global_authority_to_v1(database)
-        PostgresMemoryV2AuthorityStore(database).activate_v2((), activated_by="test:switch", reason="empty v1")
-        state = PostgresMemoryV2Runtime(database).rollback_to_v1(activated_by="test:switch", reason="undo")
-        assert state.epoch.authority == "v1"
-    finally:
-        _reset_global_authority_to_v1(database)
-        database.close()
-
-
 def test_the_sweep_converges_a_write_whose_inline_convergence_failed(switched) -> None:
     database, tenant, _service, legacy = switched
 
@@ -250,7 +225,7 @@ def test_the_sweep_converges_a_write_whose_inline_convergence_failed(switched) -
             raise RuntimeError("inline convergence unavailable")
 
     service = OwnerAwareMemoryService(
-        MemoryAuthorityRoutedRepository(legacy, database=database, convergence=_Broken()),
+        CuratedMemoryRepository(legacy, database=database, convergence=_Broken()),
     )
     owner = f"sofia-{uuid4().hex}"
     _save(service, owner, "Skyrim is my favorite game")
@@ -261,61 +236,52 @@ def test_the_sweep_converges_a_write_whose_inline_convergence_failed(switched) -
     assert _retrieve(database, tenant, owner, "Which game do I like?") == ["Skyrim is my favorite game"]
 
 
-def _v1_record(database, owner_id: str, content: str) -> None:
-    # The local tenant's workspace: the one the switched service serves.
-    workspace_id = ensure_local_identity(database).workspace_id
-    with system_scope("operator.cli"), database.transaction() as connection:
+def _authority(connection) -> str:
+    return str(connection.execute(
+        "SELECT e.authority FROM omnix_memory_v2_authority_current c "
+        "JOIN omnix_memory_v2_authority_epochs e ON e.epoch = c.current_epoch"
+    ).fetchone()[0])
+
+
+def _back_to_v1(connection) -> None:
+    """Inside a transaction the test rolls back: a v1 epoch, as a database before 0156 had."""
+    connection.execute(
+        "INSERT INTO omnix_memory_v2_authority_epochs (epoch, authority, previous_epoch, activated_by, reason) "
+        "SELECT MAX(epoch) + 1, 'v1', MAX(epoch), 'test:v1', 'before 0156' FROM omnix_memory_v2_authority_epochs"
+    )
+    connection.execute(
+        "UPDATE omnix_memory_v2_authority_current "
+        "SET current_epoch = (SELECT MAX(epoch) FROM omnix_memory_v2_authority_epochs)"
+    )
+
+
+def test_the_retirement_migration_moves_an_empty_v1_installation_to_v2(switched) -> None:
+    sql = RETIREMENT_MIGRATION.read_text(encoding="utf-8")
+    with psycopg.connect(admin_database_url()) as connection:
+        connection.execute("SELECT set_config('omnix.system', 'on', true)")
+        connection.execute("DELETE FROM omnix_memory_records")
+        _back_to_v1(connection)
+        assert _authority(connection) == "v1"
+        connection.execute(sql)
+        assert _authority(connection) == "v2"
+        connection.rollback()
+
+
+def test_the_retirement_migration_refuses_while_v1_holds_records(switched) -> None:
+    _database_, tenant, _service, _legacy = switched
+    sql = RETIREMENT_MIGRATION.read_text(encoding="utf-8")
+    now = datetime.now(timezone.utc)
+    with psycopg.connect(admin_database_url()) as connection:
+        connection.execute("SELECT set_config('omnix.system', 'on', true)")
+        _back_to_v1(connection)
         connection.execute(
-            """
-            INSERT INTO omnix_memory_records (
-                id, workspace_id, owner_type, owner_id, scope, scope_id, category, kind,
-                content, normalized_content, source, trust_level, provenance_type
-            ) VALUES (%s, %s, 'character', %s, 'global', %s, 'preference', 'preference',
-                      %s, %s, 'user_saved', 'user_approved', 'user_message')
-            """,
-            (f"v1:{uuid4().hex}", workspace_id, owner_id, PROFILE, content, content.lower()),
+            "INSERT INTO omnix_memory_records (id, workspace_id, owner_type, owner_id, scope, scope_id, category, "
+            "content, normalized_content, confidence, pinned, trust_level, sensitivity, provenance_type, source, "
+            "status, revision, created_at, updated_at) VALUES (%s, %s, 'system', 'system-assistant', 'global', "
+            "%s, 'fact', 'A v1 memory', 'a v1 memory', 1.0, FALSE, 'user_approved', 'normal', 'user_message', "
+            "'user_saved', 'active', 1, %s, %s)",
+            (f"memory:{uuid4().hex}", tenant.workspace_id, PROFILE, now, now),
         )
-
-
-def test_activation_refuses_v1_changes_made_after_the_shadow_run() -> None:
-    database = _database()
-    owner = f"sofia-{uuid4().hex}"
-    try:
-        apply_migrations(database)
-        _reset_global_authority_to_v1(database)
-        _v1_record(database, owner, "Skyrim is my favorite game")
-        report = run_shadow(database, owners={("character", owner)}, deadline_ms=5000)
-        assert report.all_ready
-        receipts = tuple(item.receipt_id for item in report.spaces)
-        _v1_record(database, owner, "Saved after the shadow run")
-
-        with pytest.raises(CutoverNotReadyError, match="changed since the shadow run"):
-            PostgresMemoryV2AuthorityStore(database).activate_v2(receipts, activated_by="test:switch")
-        with pytest.raises(CutoverNotReadyError):
-            PostgresMemoryV2AuthorityStore(database).activate_v2((), activated_by="test:switch")
-        assert PostgresMemoryV2AuthorityStore(database).current().epoch.authority == "v1"
-
-        report = run_shadow(database, owners={("character", owner)}, deadline_ms=5000)
-        state = PostgresMemoryV2AuthorityStore(database).activate_v2(
-            tuple(item.receipt_id for item in report.spaces), activated_by="test:switch",
-        )
-        assert state.epoch.authority == "v2"
-        # Imported v1 memories are managed and served as curated memory now.
-        tenant = ensure_local_identity(database)
-        token = push_tenant(tenant)
-        try:
-            service = OwnerAwareMemoryService(
-                MemoryAuthorityRoutedRepository(PostgresOwnerAwareMemoryRepository(database), database=database),
-            )
-            context = _context(owner)
-            imported = sorted(service.list_active(context), key=lambda item: item.content)
-            assert [item.content for item in imported] == ["Saved after the shadow run", "Skyrim is my favorite game"]
-            edited = service.edit_memory(context, imported[1].id, content="Morrowind is my favorite game",
-                                         expected_revision=imported[1].revision)
-            assert edited.revision == imported[1].revision + 1
-            assert _retrieve(database, tenant, owner, "favorite game") == ["Morrowind is my favorite game"]
-        finally:
-            pop_tenant(token)
-    finally:
-        _reset_global_authority_to_v1(database)
-        database.close()
+        with pytest.raises(psycopg.errors.RaiseException, match="still holds curated records"):
+            connection.execute(sql)
+        connection.rollback()

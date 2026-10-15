@@ -13,6 +13,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.platform.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
+from app.platform.assistant_memory.v2.memory_repository import CuratedMemoryRepository
 
 
 pytestmark = pytest.mark.skipif(
@@ -45,7 +46,9 @@ def test_typed_memory_round_trip_and_supersession() -> None:
                 "TRUNCATE omnix_memory_snapshot_items, omnix_memory_snapshots, "
                 "omnix_memory_candidates, omnix_memory_events, omnix_memory_records CASCADE"
             )
-        service = OwnerAwareMemoryService(PostgresOwnerAwareMemoryRepository(database))
+        service = OwnerAwareMemoryService(
+            CuratedMemoryRepository(PostgresOwnerAwareMemoryRepository(database), database=database),
+        )
         scope = MemoryScopeContext(
             profile_id="profile:default",
             workspace_id=context.workspace_id,

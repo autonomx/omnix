@@ -42,11 +42,13 @@ def test_a_reset_owner_leaves_no_chat_session_pinned_to_its_snapshots(database) 
         connection.execute("INSERT INTO omnix_chat_sessions (id, workspace_id, title) VALUES (%s, %s, 'unpinned')",
                            (other, workspace))
 
-    counts = PostgresOwnerAwareMemoryRepository(database).delete_owner(owner_type="character", owner_id=owner)
+    counts = PostgresOwnerAwareMemoryRepository(database).delete_owner_candidates_and_snapshots(
+        owner_type="character", owner_id=owner,
+    )
 
     with database.connection() as connection:
         pinned = dict(connection.execute(
             "SELECT id, memory_snapshot_id FROM omnix_chat_sessions WHERE id = ANY(%s)", ([session_id, other],),
         ).fetchall())
-    assert counts[2] == 1
+    assert counts[1] == 1  # the owner's snapshot
     assert pinned == {session_id: None, other: None}

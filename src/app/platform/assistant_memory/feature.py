@@ -17,9 +17,6 @@ from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import JobRecord, ResourceClass
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.ports import ContributionSpec
-from app.platform.assistant_memory.persistence.repository_specs import (
-    ASSISTANT_MEMORY_REPOSITORY_SPECS,
-)
 from app.platform.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
 
 from .routes import register_assistant_memory_routes
@@ -101,6 +98,5 @@ FEATURE = FeatureModule(
     outbox_consumers=(_TURN_SUGGESTIONS,),
     # Chat's memory: prompt memory, memory commands, snapshots and settings (PA-3.2).
     contributions=(ContributionSpec(CHAT_MEMORY, _chat_memory),),
-    repositories=ASSISTANT_MEMORY_REPOSITORY_SPECS,
     settings=(assistant_memory_setting_spec(),),
 )

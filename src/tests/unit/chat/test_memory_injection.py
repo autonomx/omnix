@@ -21,6 +21,17 @@ import pytest
 pytestmark = pytest.mark.postgres
 
 
+@pytest.fixture(autouse=True)
+def frozen_snapshot_prompts(monkeypatch):
+    """These cover the frozen session snapshot, the provider-free prompt path.
+
+    Under PostgreSQL, prompts read Memory v2 (WP-8.5); that path has its own tests.
+    """
+    from app.platform.assistant_memory import chat_prompt
+
+    monkeypatch.setattr(chat_prompt, "_memory_v2_runtime", lambda _factory: None)
+
+
 class RecordingProvider:
     def __init__(self) -> None:
         self.calls: list[dict] = []

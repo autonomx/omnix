@@ -76,7 +76,7 @@ maya = system.model_copy(
 )
 
 service = default_memory_service()
-assert service.repository.__class__.__name__ == "PostgresOwnerAwareMemoryRepository"
+assert service.repository.__class__.__name__ == "CuratedMemoryRepository"
 system_record = service.create_explicit_memory(
     system,
     scope="workspace",
@@ -113,7 +113,7 @@ assert snapshot.session_id == system.session_id
 reset_default_memory_service()
 reconstructed = default_memory_service()
 assert reconstructed is not service
-assert reconstructed.repository.__class__.__name__ == "PostgresOwnerAwareMemoryRepository"
+assert reconstructed.repository.__class__.__name__ == "CuratedMemoryRepository"
 assert reconstructed.repository.get_record(system_record.id).scope == "workspace"
 assert reconstructed.repository.get_record(maya_record.id).owner_id == "character:maya"
 print("owner-memory-write-ok")

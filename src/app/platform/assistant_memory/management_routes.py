@@ -41,7 +41,8 @@ from app.conversation.memory_contracts import MemoryCandidate, MemoryCategory, M
 from .observability import MemoryUsageResponse, memory_usage_snapshot
 from .paging import iter_records
 from .repository import MemoryConflictError, MemoryNotFoundError
-from .service import MemoryPolicyError, MemoryService, default_memory_service
+from .owner_defaults import default_memory_service
+from .service import MemoryPolicyError, MemoryService
 
 
 def _not_found(detail: str) -> HTTPException:

@@ -67,9 +67,6 @@ class DesktopCompanionMemoryBridge:
             return DesktopMemoryBridgeOutcome("skipped", reason)
 
         runtime = self._memory_runtime_factory()
-        authority = runtime.current()
-        if authority.epoch.authority != "v2":
-            return DesktopMemoryBridgeOutcome("skipped", "memory_v2_not_authoritative")
         context = resolve_session_memory_scope(session)
         # Memory v2 spaces belong to the tenant workspace (as Chat reads them).
         space = MemorySpaceKey(

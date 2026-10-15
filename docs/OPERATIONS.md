@@ -653,21 +653,23 @@ returns its key. A gateway on another host then never needs the image
 service's disk. Voice clones are still file-managed on the voice/TTS host;
 moving them into blob-backed asset records is a follow-up.
 
-## Memory v2 switch
+## Curated memory (Memory v2)
 
 Curated memory (what a person saves, approves, edits, pins, moves, archives or
-forgets) is served by Memory v1 until an operator switches it to Memory v2.
-After the switch every process reads and writes curated memory in the v2
-observation log: one `curated_memory` observation per record revision, where
-a new revision retires the previous one in the same transaction and
-forgetting purges every revision's text. The memory screens, chat memory
-commands, suggestion approvals, session snapshots and live voice keep working
-unchanged; v1's record table becomes read-only. Chat prompts put pinned
-memories first, then the memories v2 retrieval ranks highest for the turn;
-character sessions with shared memory access still get the System Assistant's
-allowed categories. Only active, non-secret, approved memories are
-retrievable, and each stops at its expiry, the same rule v1 applies. Every v2
-memory space belongs to a tenant workspace, so workspaces never share memory.
+forgets) lives in the Memory v2 observation log: one `curated_memory`
+observation per record revision, where a new revision retires the previous one
+in the same transaction and forgetting purges every revision's text. Memory v1,
+which kept records in `omnix_memory_records`, is retired: migration
+`0156_memory_v1_retired` moves an installation still under v1 to v2 when v1
+holds no records, and refuses to upgrade one whose v1 still holds records
+(switch it with an earlier release first, which still has the v1 import).
+Candidates awaiting approval and session snapshots keep their own tables.
+
+Chat prompts put pinned memories first, then the memories v2 retrieval ranks
+highest for the turn; character sessions with shared memory access still get
+the System Assistant's allowed categories. Only active, non-secret, approved
+memories are retrievable, and each stops at its expiry. Every v2 memory space
+belongs to a tenant workspace, so workspaces never share memory.
 
 Memory v2 retrieves by meaning as well as by words, as VoiceMem does, when its
 embedding model is installed. `setup.bat` / `setup.sh` download it; on a host
@@ -676,68 +678,11 @@ once on each host that runs the scheduler or serves retrieval (about
 490 MB, pinned `intfloat/multilingual-e5-small`, SHA-256 checked, stored under
 `resources/models/multilingual-e5-small` or `OMNIX_MEMORY_EMBEDDING_MODEL_DIR`).
 Without the model, retrieval uses words only. `OMNIX_MEMORY_EMBEDDINGS=0`
-turns it off. `python scripts/compare_memory_retrieval.py --database-url
-<disposable test database>` compares v1 and v2 retrieval on the same memories.
+turns it off.
 
 Each write derives and indexes its memory immediately; the scheduler's
-`memory-v2.convergence` task (every 10 s, only once v2 is authoritative)
-retries anything that did not converge, with the worker's backoff.
-
-### Switching
-
-The switch is a human decision. With the gateway running this code (migration
-`0119_memory_v2_curated_records` applied):
-
-```powershell
-$env:PYTHONPATH = "src"
-python scripts/backup_omnix.py --output-dir <backup folder>        # 1. back up
-python -m app.platform.assistant_memory.v2.shadow_runner                   # 2. import and compare
-python -m app.platform.assistant_memory.v2.shadow_report --require-ready   # 3. verdict
-python -m app.platform.assistant_memory.v2.cutover activate --by <name> --reason "<why>"   # 4. switch
-python -m app.platform.assistant_memory.v2.cutover status                  # 5. confirm
-```
-
-The shadow runner works only while v1 is authoritative, one run at a time,
-across every workspace. For each memory owner it imports every v1 record
-(archived, secret and unapproved ones too, so they stay manageable),
-revoking revisions v1 replaced and purging records v1 forgot, derives the
-retrievable memories without a model, rebuilds the search index and
-embeddings, then asks v2 for up to `--probes` (default 200) prompt-eligible
-records by their own words, under the record's scope, with Chat's limits
-(top 12, 50 ms; `--deadline-ms` to change). Recall is the share of records v2
-found (`--required-recall`, default 0.95); precision is the share of returned
-memories backed only by eligible v1 records visible to the question
-(`--required-precision`, default 1.0). It then validates replay and records a
-readiness receipt. Its output lists each space's counts, recall, precision,
-`embeddings` (`synced`, or `model_absent` when the probes measured word
-retrieval) and verdict; it exits 1 unless every space is ready. `--owner
-character:<id>` (repeatable) runs one owner. An owner with a v1 row the v1
-contract rejects is skipped and listed.
-
-The report is read-only and covers every workspace. It prints the current
-authority epoch and, for each v2 memory space, its watermarks, latest shadow
-retrieval evaluation (recall, precision, pass) and latest cutover readiness
-receipt, with a status: `not_evaluated`, `v1_changed` (the owner's v1 records
-changed since the last run: run the runner again), `evaluation_stale`
-(observations arrived after the evaluation), `shadow_failed`, `not_ready` (no
-current ready receipt) or `ready`. It also lists v1 owners with memories that
-have no v2 space yet. `--require-ready` exits 1 unless every space is `ready`
-and every v1 owner is imported.
-
-`activate` refuses unless the report is ready, or v1 holds no memory at all.
-Under the authority lock it re-checks every receipt and that v1 did not change
-since the shadow run (in-flight v1 saves finish first; later ones are
-refused), then switches. If a person saved a memory in between, it refuses
-with "v1 memory changed since the shadow run": run the shadow runner again.
-
-### Rolling back
-
-`python -m app.platform.assistant_memory.v2.cutover rollback --by <name> --reason
-"<why>"` returns curated memory to v1 only while nothing has been saved,
-edited or forgotten under v2 (v1 would lose or resurrect those memories);
-otherwise it refuses. Rollback is meant for the minutes right after a switch.
-Later, restore the step 1 backup instead, accepting the loss of memory saved
-since.
+`memory-v2.convergence` task (every 10 s) retries anything that did not
+converge, with the worker's backoff.
 
 ## Secrets and networked integrations
 

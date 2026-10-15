@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import pytest
 
 from app.platform.assistant_memory.v2 import MemorySpaceKey, ObservationProvenance, VisibilityScope
 from app.platform.assistant_memory.v2.contracts import Observation
-from app.platform.assistant_memory.v2.cutover import CutoverRefused, ready_receipts
-from app.platform.assistant_memory.v2.legacy_shadow import curated_projector
+
+from app.platform.assistant_memory.v2.curated_projection import curated_projector
 
 SPACE = MemorySpaceKey(principal_id="workspace:local", owner_type="character", owner_id="sofia")
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
@@ -71,30 +70,4 @@ def test_a_curated_record_keeps_one_assertion_across_revisions() -> None:
     assert first[0].assertion_id == edited[0].assertion_id
 
 
-def _report(*statuses: str, unimported: int = 0) -> SimpleNamespace:
-    return SimpleNamespace(
-        unimported_v1_owner_count=unimported,
-        spaces=[
-            SimpleNamespace(status=status, readiness=SimpleNamespace(receipt_id=f"receipt:{index}"))
-            for index, status in enumerate(statuses)
-        ],
-    )
 
-
-def test_activation_takes_every_ready_receipt() -> None:
-    assert ready_receipts(_report("ready", "ready"), v1_records=2) == ("receipt:0", "receipt:1")
-
-
-def test_activation_with_nothing_to_migrate_takes_no_receipt() -> None:
-    assert ready_receipts(_report(), v1_records=0) == ()
-
-
-@pytest.mark.parametrize(("report", "v1_records", "message"), [
-    (_report("ready", unimported=1), 1, "not imported"),
-    (_report("ready", "v1_changed"), 2, "not ready"),
-    (_report("ready", "shadow_failed"), 2, "not ready"),
-    (_report(), 3, "nothing is imported"),
-])
-def test_activation_waits_for_a_complete_shadow_run(report, v1_records: int, message: str) -> None:
-    with pytest.raises(CutoverRefused, match=message):
-        ready_receipts(report, v1_records=v1_records)

@@ -118,9 +118,11 @@ def test_derived_candidate_and_job_result_commit_together(runtime, monkeypatch, 
 
     monkeypatch.setenv("OMNIX_COMPANION_ROLLOUT_STAGE", "review_required")
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "1")
-    repository = PostgresOwnerAwareMemoryRepository(database)
-    repository.context = store.context
-    service = OwnerAwareMemoryService(repository)
+    from app.platform.assistant_memory.v2.memory_repository import CuratedMemoryRepository
+
+    legacy = PostgresOwnerAwareMemoryRepository(database)
+    legacy.context = store.context
+    service = OwnerAwareMemoryService(CuratedMemoryRepository(legacy, database=database))
     session = ChatSession(
         id="chat:test", title="Memory lease test", created_at="2026-09-26T00:00:00Z",
         updated_at="2026-09-26T00:00:00Z", message_count=1,

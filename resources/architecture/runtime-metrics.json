@@ -1101,8 +1101,6 @@
         "app.platform.assistant_memory.paging",
         "app.platform.assistant_memory.paralinguistic_state",
         "app.platform.assistant_memory.persistence",
-        "app.platform.assistant_memory.persistence.repository",
-        "app.platform.assistant_memory.persistence.repository_specs",
         "app.platform.assistant_memory.persistence.settings_store",
         "app.platform.assistant_memory.policy",
         "app.platform.assistant_memory.repository",
@@ -1120,21 +1118,16 @@
         "app.platform.assistant_memory.temporal_retrieval",
         "app.platform.assistant_memory.typed_memory",
         "app.platform.assistant_memory.v2",
-        "app.platform.assistant_memory.v2.affect_store",
         "app.platform.assistant_memory.v2.authority",
-        "app.platform.assistant_memory.v2.consolidation",
         "app.platform.assistant_memory.v2.contracts",
-        "app.platform.assistant_memory.v2.convergence",
         "app.platform.assistant_memory.v2.derived_state",
         "app.platform.assistant_memory.v2.episode_store",
         "app.platform.assistant_memory.v2.federated_retrieval",
         "app.platform.assistant_memory.v2.grant_store",
         "app.platform.assistant_memory.v2.graph_store",
-        "app.platform.assistant_memory.v2.legacy_shadow",
         "app.platform.assistant_memory.v2.observation_store",
         "app.platform.assistant_memory.v2.policy",
         "app.platform.assistant_memory.v2.relationship_store",
-        "app.platform.assistant_memory.v2.replay",
         "app.platform.assistant_memory.v2.retrieval",
         "app.platform.assistant_memory.v2.runtime",
         "app.platform.assistant_memory.v2.search_index",
@@ -1974,7 +1967,7 @@
       ]
     },
     "collection": {
-      "collected_tests": 9245,
+      "collected_tests": 9203,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -2829,14 +2822,14 @@
       ]
     }
   },
-  "measured_at": "2026-10-15T00:10:14.318086+00:00",
+  "measured_at": "2026-10-15T01:23:12.948560+00:00",
   "metrics": {
-    "boot_imported_modules": 1919,
+    "boot_imported_modules": 1912,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 100.0,
     "retention_policies_executed_pct": 100.0,
     "rls_coverage_pct": 100.0
   },
   "schema_version": 1,
-  "source_digest": "6472443a7d86e03d9f7161822ae35c37e189f5fe1fdf388ce43461f88d2bf277"
+  "source_digest": "1bd240c40e356a8a44e8ce221bb0611b222b9a9c3fe722f708fa7ae51fe179d3"
 }

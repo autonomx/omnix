@@ -276,9 +276,9 @@ assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
 from app.conversation.memory_contracts import MemoryRecord
-from app.platform.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
+from app.platform.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
 
-memories = PostgresMemoryRepositoryAdapter()
+memories = production_owner_memory_repository()
 record = MemoryRecord(
     id="memory:runtime",
     owner_type="system",

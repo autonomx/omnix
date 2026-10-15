@@ -35,10 +35,6 @@ class MemoryPolicyError(ValueError):
     """Raised when a requested operation violates memory policy."""
 
 
-class LegacyMemoryReadOnlyError(MemoryPolicyError):
-    """Raised after Memory v2 becomes canonical and v1 is retired read-only."""
-
-
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -71,8 +67,10 @@ class MemoryService:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.platform.assistant_memory.persistence.memory_store import production_memory_repository
-                repository = production_memory_repository()
+                from app.platform.assistant_memory.persistence.owner_memory_store import (
+                    production_owner_memory_repository,
+                )
+                repository = production_owner_memory_repository()
             else:
                 repository = InMemoryMemoryRepository()
         self.repository: MemoryRepository = repository
@@ -383,21 +381,3 @@ class MemoryService:
         if not is_visible_in_scope(record, context):
             raise MemoryPolicyError("scope_mismatch")
         return record
-
-
-def _default_legacy_write_guard() -> None:
-    """Block direct default-service v1 writes after production v2 cutover."""
-
-    from app.persistence.runtime import uses_postgresql_runtime
-    if not uses_postgresql_runtime():
-        return
-    from app.platform.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
-
-    if PostgresMemoryV2AuthorityStore().current().epoch.authority != "v1":
-        raise LegacyMemoryReadOnlyError(
-            "legacy assistant_memory is read-only while Memory v2 is authoritative"
-        )
-
-
-def default_memory_service() -> MemoryService:
-    return MemoryService(write_guard=_default_legacy_write_guard)

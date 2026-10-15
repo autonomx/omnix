@@ -379,7 +379,7 @@ def curated_planner(
 ) -> Any:
     """Derive plan for curated memory: the deterministic curated projector, no model."""
     from .convergence import DerivedPlanPayload
-    from .legacy_shadow import curated_projector
+    from .curated_projection import curated_projector
 
     return DerivedPlanPayload(assertions=curated_projector(window), consolidator_version=CURATED_SCHEMA)
 

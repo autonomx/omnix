@@ -20,6 +20,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.document_schemas import register_document_schema
+from app.platform.assistant_memory.v2.curated_records import PostgresMemoryV2CuratedRecords
 
 # The bundles import a legacy kind no current code reads; stored kinds need a shape (WP-5.9).
 register_document_schema("assist-core", "policy", dict)
@@ -58,7 +59,7 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_dead_letters, omnix_job_events, omnix_job_attempts, omnix_jobs, "
             "omnix_chat_messages, omnix_chat_sessions, omnix_memory_snapshot_items, "
             "omnix_memory_snapshots, omnix_memory_candidates, omnix_memory_events, "
-            "omnix_memory_records, omnix_conversation_segments, "
+            "omnix_memory_records, omnix_memory_v2_observations, omnix_conversation_segments, "
             "omnix_character_versions, omnix_characters, omnix_asset_versions, "
             "omnix_assets, omnix_settings, omnix_secret_references, "
             "omnix_audit_events, omnix_idempotency_keys, "
@@ -289,7 +290,8 @@ def test_end_to_end_import_is_verified_resumable_and_cutover_gated(tmp_path: Pat
                 "SELECT (SELECT COUNT(*) FROM omnix_assets), "
                 "(SELECT COUNT(*) FROM omnix_characters), "
                 "(SELECT COUNT(*) FROM omnix_character_versions), "
-                "(SELECT COUNT(*) FROM omnix_memory_records), "
+                "(SELECT COUNT(*) FROM omnix_memory_v2_observations "
+                "WHERE idempotency_key LIKE 'legacy-import:%%'), "
                 "(SELECT COUNT(*) FROM omnix_chat_sessions), "
                 "(SELECT COUNT(*) FROM omnix_chat_messages), "
                 "(SELECT COUNT(*) FROM omnix_jobs), "
@@ -317,6 +319,12 @@ def test_end_to_end_import_is_verified_resumable_and_cutover_gated(tmp_path: Pat
             1,
             1,
         )
+        imported_memory = PostgresMemoryV2CuratedRecords(database).get(context.workspace_id, "memory:legacy")
+        assert imported_memory is not None
+        assert (imported_memory.owner_type, imported_memory.owner_id) == ("system", "system-assistant")
+        assert (imported_memory.scope, imported_memory.scope_id) == ("workspace", context.workspace_id)
+        assert (imported_memory.category, imported_memory.source) == ("project", "imported")
+        assert imported_memory.trust_level == "unverified_import"
         assert store.read_bytes("legacy/reports/report.json") == b"{}"
     finally:
         _restore_runtime_authority(database)

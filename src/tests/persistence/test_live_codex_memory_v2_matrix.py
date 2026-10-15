@@ -28,7 +28,6 @@ from uuid import uuid4
 
 import pytest
 
-from app.conversation.memory_contracts import MemoryRecord
 from app.platform.assistant_memory.v2 import (
     AffectObservation,
     Episode,
@@ -47,10 +46,6 @@ from app.platform.assistant_memory.v2.affect_store import PostgresMemoryV2Affect
 from app.platform.assistant_memory.v2.assistant_output import (
     PostgresMemoryV2AssistantOutputLifecycle,
 )
-from app.platform.assistant_memory.v2.authority import (
-    PostgresMemoryV2AuthorityStore,
-    StaleCutoverReceiptError,
-)
 from app.platform.assistant_memory.v2.convergence import (
     DerivedPlanPayload,
     PostgresMemoryV2DerivedCoordinator,
@@ -63,13 +58,7 @@ from app.platform.assistant_memory.v2.federated_retrieval import FederatedMemory
 from app.platform.assistant_memory.v2.grant_store import PostgresMemoryV2GrantStore
 from app.platform.assistant_memory.v2.graph_store import (
     GraphEvidenceError,
-    GraphReplayValidator,
     PostgresMemoryV2GraphStore,
-)
-from app.platform.assistant_memory.v2.legacy_shadow import (
-    LegacyMemoryV2Importer,
-    PostgresMemoryV2ShadowEvaluationStore,
-    compare_shadow_retrieval,
 )
 from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
@@ -83,7 +72,6 @@ from app.platform.assistant_memory.v2.retrieval import UnifiedMemoryV2Retriever
 from app.platform.assistant_memory.v2.runtime import (
     AuthoritativeIngestSequenceError,
     PostgresMemoryV2Runtime,
-    UnsafeMemoryRollbackError,
 )
 from app.platform.assistant_memory.v2.search_index import PostgresMemoryV2SearchIndex
 from app.platform.assistant_memory.v2.semantic_enrichment import (
@@ -612,111 +600,20 @@ def _query(
     )
 
 
-def _reset_global_authority_to_v1(database: PostgresDatabase) -> None:
-    with database.transaction() as connection:
-        connection.execute(
-            "UPDATE omnix_memory_v2_authority_current SET current_epoch = 1, updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
-        )
-        connection.execute("DELETE FROM omnix_memory_v2_authority_epochs WHERE epoch > 1")
-
-
-def _prepare_ready_space(
-    ctx: MatrixContext,
-) -> tuple[PostgresMemoryV2AuthorityStore, MemorySpaceKey, str, str]:
-    _reset_global_authority_to_v1(ctx.database)
-    shadow = PostgresMemoryV2ShadowEvaluationStore(
-        ctx.database,
-        graph_store=ctx.graph,
-        observation_store=ctx.observations,
-    )
-    authority = PostgresMemoryV2AuthorityStore(
-        ctx.database,
-        observation_store=ctx.observations,
-        graph_store=ctx.graph,
-        search_index=ctx.search,
-        shadow_store=shadow,
-        derived_store=ctx.derived,
-        derived_replay_validator=ctx.replay,
-    )
-    space = _space("cutover")
-    observation = _append(ctx.observations, space, "Skyrim is my favorite game", "cutover")
-    authority.advance_authoritative_event_watermark(space, observation.authority_sequence)
-    _commit(
-        ctx,
-        space,
-        lambda _space, window, _existing: DerivedPlanPayload(
-            assertions=(
-                _assertion(
-                    space,
-                    window[0].observation_id,
-                    predicate="favorite_game",
-                    value="Skyrim is my favorite game",
-                ),
-            ),
-            consolidator_version="live-memory-v2-matrix@1",
-        ),
-    )
-    ctx.search.rebuild(space)
-    result = ctx.local_retriever.retrieve(_query(space, "favorite game Skyrim"))
-    graph_state = ctx.graph.state(space)
-    shadow_report = compare_shadow_retrieval(
-        space=space,
-        v1_contents=["Skyrim is my favorite game"],
-        v2_result=result,
-        observation_watermark=ctx.observations.watermark(space),
-        graph_revision=graph_state.graph_revision,
-        required_recall=0.8,
-        required_precision=0.8,
-    )
-    assert shadow_report.passed is True
-    shadow.record(shadow_report)
-    replay = GraphReplayValidator(ctx.graph, ctx.observations).validate(
-        space,
-        lambda window: tuple(
-            _assertion(
-                space,
-                item.observation_id,
-                predicate="favorite_game",
-                value="Skyrim is my favorite game",
-            )
-            for item in window
-        ),
-    )
-    readiness = authority.evaluate_space(space, graph_validation=replay)
-    assert readiness.readiness.ready is True
-    return authority, space, readiness.receipt_id, observation.observation_id
-
 
 @pytest.mark.live_codex
 def test_live_memory_v2_matrix_declares_all_milestones() -> None:
-    expected = {f"M{index}" for index in range(1, 21)}
+    # M13 (v1 import), M14 (cutover readiness) and M16 (rollback to v1) retired with Memory v1 (WP-8.5).
+    expected = {f"M{index}" for index in range(1, 21)} - {"M13", "M14", "M16"}
     declared = {
-        "M1",
-        "M2",
-        "M3",
-        "M4",
-        "M5",
-        "M6",
-        "M7",
-        "M8",
-        "M9",
-        "M10",
-        "M11",
-        "M12",
-        "M13",
-        "M14",
-        "M15",
-        "M16",
-        "M17",
-        "M18",
-        "M19",
-        "M20",
+        "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10",
+        "M11", "M12", "M15", "M17", "M18", "M19", "M20",
     }
     assert declared == expected
 
 
 @pytest.mark.live_codex
-def test_M1_authority_concurrency_idempotency_and_rollback(matrix_context: MatrixContext) -> None:
+def test_M1_authority_concurrency_and_idempotency(matrix_context: MatrixContext) -> None:
     ctx = matrix_context
     space = _space("authority")
 
@@ -1045,95 +942,22 @@ def test_M12_barge_in_only_promotes_delivered_experienced_prefix(matrix_context:
     assert ctx.observations.list(space)[-1].payload["text"] == delivered
 
 
-@pytest.mark.live_codex
-def test_M13_migration_import_is_idempotent_and_provenance_preserving(matrix_context: MatrixContext) -> None:
-    ctx = matrix_context
-    record = MemoryRecord(
-        id=f"v1:{uuid4().hex}",
-        owner_type="character",
-        owner_id=f"sofia-{uuid4().hex}",
-        scope="global",
-        scope_id="profile:alice",
-        category="preference",
-        kind="preference",
-        source="user_saved",
-        content="Skyrim is my favorite game",
-        normalized_content="skyrim is my favorite game",
-        trust_level="user_approved",
-        provenance_type="user_message",
-        provenance_id="message:v1",
-        created_at="2026-09-13T12:00:00+00:00",
-        updated_at="2026-09-13T12:00:00+00:00",
-    )
-    imported = LegacyMemoryV2Importer(ctx.observations)
-    first = imported.import_record(principal_id="profile:alice", record=record)
-    second = imported.import_record(principal_id="profile:alice", record=record)
-    assert first is not None and second is not None
-    assert first.observation_id == second.observation_id
-    assert first.authority_sequence == second.authority_sequence == 1
-    assert first.provenance.source_type == "migration"
-    assert first.event_type == "imported_legacy_memory"
-    assert first.payload["legacy_record"] == record.model_dump(mode="json")
-
 
 @pytest.mark.live_codex
-def test_M14_cutover_rejects_stale_readiness(matrix_context: MatrixContext) -> None:
+def test_M15_authoritative_ingest_is_exactly_sequenced_and_idempotent(matrix_context: MatrixContext) -> None:
     ctx = matrix_context
-    authority, space, receipt_id, _observation_id = _prepare_ready_space(ctx)
-    _append(ctx.observations, space, "new event after readiness", "cutover-race")
-    with pytest.raises(StaleCutoverReceiptError, match="stale"):
-        authority.activate_v2((receipt_id,), activated_by="live-matrix:stale-cutover")
-    assert authority.current().epoch.authority == "v1"
-
-
-@pytest.mark.live_codex
-def test_M15_post_cutover_ingest_is_exactly_sequenced_and_idempotent(matrix_context: MatrixContext) -> None:
-    ctx = matrix_context
-    try:
-        authority, space, receipt_id, _observation_id = _prepare_ready_space(ctx)
-        authority.activate_v2((receipt_id,), activated_by="live-matrix:cutover")
-        runtime = PostgresMemoryV2Runtime(ctx.database, authority_store=authority)
-        request = _runtime_request(space, "post-cutover-2", "post-cutover evidence")
-        first = runtime.append_authoritative(request, authoritative_event_sequence=2)
-        retry = runtime.append_authoritative(request, authoritative_event_sequence=2)
-        assert retry.observation_id == first.observation_id
-        with pytest.raises(AuthoritativeIngestSequenceError):
-            runtime.append_authoritative(
-                _runtime_request(space, "post-cutover-4", "skipped event"),
-                authoritative_event_sequence=4,
-            )
-    finally:
-        _reset_global_authority_to_v1(ctx.database)
-
-
-@pytest.mark.live_codex
-def test_M16_rollback_cannot_discard_or_resurrect_post_cutover_state(matrix_context: MatrixContext) -> None:
-    ctx = matrix_context
-    try:
-        authority, space, receipt_id, observation_id = _prepare_ready_space(ctx)
-        authority.activate_v2((receipt_id,), activated_by="live-matrix:cutover")
-        runtime = PostgresMemoryV2Runtime(ctx.database, authority_store=authority)
+    runtime = PostgresMemoryV2Runtime(ctx.database)
+    space = _space("ingest")
+    runtime.append_authoritative_next(_runtime_request(space, "ingest-1", "first evidence"))
+    request = _runtime_request(space, "ingest-2", "second evidence")
+    first = runtime.append_authoritative(request, authoritative_event_sequence=2)
+    retry = runtime.append_authoritative(request, authoritative_event_sequence=2)
+    assert retry.observation_id == first.observation_id
+    with pytest.raises(AuthoritativeIngestSequenceError):
         runtime.append_authoritative(
-            _runtime_request(space, "rollback-evidence", "evidence that must survive"),
-            authoritative_event_sequence=2,
+            _runtime_request(space, "ingest-4", "skipped event"),
+            authoritative_event_sequence=4,
         )
-        with pytest.raises(UnsafeMemoryRollbackError, match="discard"):
-            runtime.rollback_to_v1(activated_by="live-matrix:rollback", reason="unsafe")
-        _reset_global_authority_to_v1(ctx.database)
-
-        authority, space, receipt_id, observation_id = _prepare_ready_space(ctx)
-        authority.activate_v2((receipt_id,), activated_by="live-matrix:cutover")
-        ctx.observations.set_disposition(
-            space,
-            observation_id,
-            state="revoked",
-            actor_id="live-matrix:privacy",
-        )
-        runtime = PostgresMemoryV2Runtime(ctx.database, authority_store=authority)
-        with pytest.raises(UnsafeMemoryRollbackError, match="resurrect"):
-            runtime.rollback_to_v1(activated_by="live-matrix:rollback", reason="unsafe")
-    finally:
-        _reset_global_authority_to_v1(ctx.database)
 
 
 @pytest.mark.live_codex

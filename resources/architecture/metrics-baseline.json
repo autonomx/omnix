@@ -1057,7 +1057,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 1044,
+        "line": 1085,
         "path": "src/app/apps/trading/providers/ibkr_runtime.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DEFAULT_LOCK"
@@ -1806,7 +1806,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 19,
+        "line": 18,
         "path": "src/app/platform/assistant_memory/owner_defaults.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_lock"
@@ -4734,7 +4734,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 1919
+      "value": 1912
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
@@ -4789,7 +4789,7 @@
     "files_over_1200_lines": {
       "direction": "lower",
       "target": 5,
-      "value": 36
+      "value": 35
     },
     "fixed_sleeps_in_tests": {
       "direction": "lower",
@@ -4804,7 +4804,7 @@
     "functions_over_150_lines": {
       "direction": "lower",
       "target": 20,
-      "value": 346
+      "value": 345
     },
     "historical_owner_map_additions": {
       "direction": "lower",
@@ -5049,5 +5049,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "6472443a7d86e03d9f7161822ae35c37e189f5fe1fdf388ce43461f88d2bf277"
+  "source_digest": "8c7abdabb0d9c618f842fa9e917bd1694e9bdabab0c72a790b330a4134716349"
 }
