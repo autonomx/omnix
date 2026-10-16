@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { audiobookApi } from './audiobookApi';
+import { AudiobookPerformancePanel } from './AudiobookPerformancePanel';
 import { WorkspaceAsset, base, formatAssetCreationDate, formatAssetSize, formatDuration, reclassifyAudiobook, sourceAccept } from './audiobookWorkspaceModel';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
 
@@ -133,6 +134,7 @@ export function AudiobookReviewPanels({ ws }: { ws: AudiobookWorkspaceModel }) {
         })()}
         {project.review_issues.length > 0 && <div className="audiobook-message" role="status"><strong>Human review required · {project.review_issues.length} open issue{project.review_issues.length === 1 ? '' : 's'}</strong><p>Resolve low-confidence, ambiguous, or contradictory span interpretations before rendering.</p><button type="button" onClick={() => navigateLibrary('review')}>Open human review queue</button></div>}
         {project.speakers.length === 0 && <p>No speakers have been detected yet. Upload a source book or add one above.</p>}
+        <AudiobookPerformancePanel project={project} busy={busy} action={action} />
       </section>}
       {workspaceMode === 'review' && librarySection === 'voices' && <section className="audiobook-card audiobook-voices-panel">
         <div className="audiobook-section-title"><div><p className="eyebrow">Voice library</p><h2>Choose a voice</h2><p className="audiobook-subtitle">Use installed voice profiles and preview them against a cast member.</p></div><label>Assign to speaker<select aria-label="Voice assignment target" value={voiceTargetSpeakerId} onChange={(event) => setVoiceTargetSpeakerId(event.target.value)}><option value="">Choose speaker</option>{castableSpeakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}{speaker.status === 'proposed' ? ' · detected' : ''}</option>)}</select></label></div>

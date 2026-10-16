@@ -17,6 +17,22 @@ from .models import SourceSpan
 from .speech_exclusions import chapter_removed_sql
 
 
+def _carried_direction(previous: Any, *, role: str, speaker_id: Any, delivery: str) -> str:
+    """A generated delivery direction that survives re-classification.
+
+    It carries over when the line is still dialogue spoken by the same speaker
+    and the classifier gives no delivery of its own; a re-assigned line loses it,
+    since the direction was written for the other speaker.
+    """
+    if previous is None or delivery or role != "dialogue":
+        return ""
+    _id, _revision, _status, previous_role, previous_speaker, previous_delivery, evidence = previous
+    if (previous_role != "dialogue" or str(previous_speaker or "") != str(speaker_id or "")
+            or dict(evidence or {}).get("delivery_source") != "performance_director"):
+        return ""
+    return str(previous_delivery or "")
+
+
 class PostgresAudiobookAnalysisRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
@@ -277,7 +293,7 @@ class PostgresAudiobookAnalysisRepository:
             previous = None
             if force_reclassify:
                 previous = self.connection.execute(
-                    """SELECT id, revision, review_status
+                    """SELECT id, revision, review_status, role, speaker_id, delivery, evidence
                          FROM omnix_audiobook_annotations
                         WHERE workspace_id = %s AND span_id = %s
                         ORDER BY revision DESC LIMIT 1""",
@@ -338,6 +354,10 @@ class PostgresAudiobookAnalysisRepository:
                     (canonical_json({"mode": "reclassified", "user_id": context.user_id}),
                      context.workspace_id, str(previous[0])),
                 )
+            role = interpreted.role if interpreted else kind
+            speaker_id = interpreted.speaker_id if interpreted else narrator
+            delivery = interpreted.delivery if interpreted else ""
+            carried = _carried_direction(previous, role=role, speaker_id=speaker_id, delivery=delivery)
             self.connection.execute(
                 """
                 INSERT INTO omnix_audiobook_annotations
@@ -346,14 +366,16 @@ class PostgresAudiobookAnalysisRepository:
                 VALUES (%s, %s, %s, %s, %s, %s::uuid, %s, %s, %s::jsonb, %s::jsonb, %s)
                 """ + ("" if force_reclassify else "ON CONFLICT (span_id, revision) DO NOTHING"),
                 (annotation_id, context.workspace_id, span_id, revision,
-                 interpreted.role if interpreted else kind,
-                 interpreted.speaker_id if interpreted else narrator,
+                 role, speaker_id,
                  candidate or None,
-                 interpreted.delivery if interpreted else "",
+                 carried or delivery,
                  canonical_json({"detector_role": kind, "source_text_untouched": True,
                                  **(interpreted.evidence if interpreted else {}),
                                  **({"dialogue_coverage": coverage_evidence}
-                                    if coverage_evidence else {})}),
+                                    if coverage_evidence else {}),
+                                 **({"delivery_source": "performance_director",
+                                     "delivery_carried_from_revision": int(previous[1])}
+                                    if carried else {})}),
                  canonical_json(classifier or {"mode": "deterministic_fallback", "version": "audiobook-analysis-v1"}),
                  status),
             )

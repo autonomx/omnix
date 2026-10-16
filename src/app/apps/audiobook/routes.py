@@ -8,7 +8,7 @@ import tempfile
 import threading
 from contextvars import copy_context
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -159,8 +159,9 @@ class ReviseSpanAnnotation(ResolveReviewIssue):
 
 
 class StartRender(BaseModel):
-    provider_id: str = "faster-qwen3-tts"
-    model_id: str = "Qwen3-TTS"
+    # Omitted: Omnix's selected TTS engine (the one /models/current reports).
+    provider_id: str | None = None
+    model_id: str | None = None
     model_revision: str
     generation_parameters: dict[str, object] = Field(default_factory=dict)
     seed: int | None = None
@@ -188,6 +189,35 @@ class SetPronunciation(BaseModel):
 
 class SetAudiobookMode(BaseModel):
     mode: str = Field(pattern="^(standard|story_only|verbatim)$")
+
+
+class CharacterPerformance(BaseModel):
+    """A character's own levels; an omitted one follows the book."""
+    stability: float | None = Field(default=None, ge=0, le=1)
+    style: float | None = Field(default=None, ge=0, le=1)
+
+
+class BookPerformance(BaseModel):
+    """Stability and Style Exaggeration for every render (Voice Studio's sliders)."""
+    stability: float = Field(default=0.75, ge=0, le=1)
+    style: float = Field(default=0.35, ge=0, le=1)
+    speakers: dict[str, CharacterPerformance] = Field(default_factory=dict)
+
+
+class SetAutoDirect(BaseModel):
+    """After classifying: direct the dialogue always, only while Fish S2 Pro is the engine, or never."""
+    policy: Literal["always", "fish", "never"]
+
+
+class DirectPerformance(BaseModel):
+    """Chapters to direct; empty directs the whole book."""
+    chapter_ids: list[str] = Field(default_factory=list, max_length=1000)
+
+
+class SetPerformanceResult(BaseModel):
+    project_id: str
+    performance: BookPerformance
+    changed: bool
 
 
 class SetDocumentOverride(BaseModel):
@@ -359,6 +389,47 @@ def get_document_structure(
         raise HTTPException(
             status_code=404, detail="audiobook project not found"
         ) from exc
+
+
+@router.put(
+    "/api/audiobook/projects/{project_id}/performance",
+    tags=["audiobook"], response_model=SetPerformanceResult,
+)
+def set_performance(project_id: str, request: BookPerformance) -> dict[str, object]:
+    """Store the book's Stability/Style and per-character overrides; the render run restarts."""
+    service, context = _service_and_context()
+    try:
+        return service.set_performance(
+            context, project_id=project_id, performance=request.model_dump(exclude_none=True),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.put("/api/audiobook/projects/{project_id}/auto-direct", tags=["audiobook"])
+def set_auto_direct(project_id: str, request: SetAutoDirect) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.set_auto_direct(context, project_id=project_id, policy=request.policy)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.post(
+    "/api/audiobook/projects/{project_id}/direct-performance",
+    tags=["audiobook"], status_code=202,
+)
+def direct_performance(project_id: str, request: DirectPerformance) -> dict[str, str]:
+    """Queue an LLM pass that writes a delivery direction (emotion) for each dialogue line."""
+    service, context = _service_and_context()
+    try:
+        return service.direct_performance(context, project_id=project_id, chapter_ids=request.chapter_ids)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.patch(
@@ -972,12 +1043,14 @@ class _AudiobookWorkers:
     def _pipeline_loop(self) -> None:
         from .assembly_service import run_assemble_once
         from .export_service import run_export_once
+        from .performance_direction import run_direction_once
         from .worker import run_analyze_once, run_ingest_once
 
         def step(database: Any, blobs: Any, context: Any, worker_id: str) -> bool:
             return bool(
                 run_ingest_once(database, blobs, context, worker_id=worker_id)
                 or run_analyze_once(database, context, worker_id=worker_id)
+                or run_direction_once(database, blobs, context, worker_id=worker_id)
                 or run_assemble_once(database, blobs, context, worker_id=worker_id)
                 or run_export_once(database, blobs, context, worker_id=worker_id)
             )

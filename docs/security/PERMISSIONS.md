@@ -169,6 +169,7 @@ role to permission list; `owner` cannot be changed).
 | POST | `/api/trading/strategies` | `trading:strategies:admin` |
 | DELETE | `/api/trading/strategies/{strategy_id}` | `trading:strategies:admin` |
 | PUT | `/api/trading/strategies/{strategy_id}` | `trading:strategies:admin` |
+| POST | `/api/tts/engines/select` | `settings:write` |
 | POST | `/api/tts/runtime/unload` | `settings:write` |
 | POST | `/api/workflows` | `agent:workflows:admin` |
 

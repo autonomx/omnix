@@ -347,8 +347,11 @@ def resolve_live_voice_tts_provider(default_provider: TTSProvider) -> tuple[TTSP
 
     runtime_config = get_runtime_config()
     capabilities = RuntimeCapabilities.from_config(runtime_config)
+    from app.providers.catalog import LOCAL_DEVICE, provider_supports
+
+    local_gpu = provider_supports(provider_name, LOCAL_DEVICE, "tts")
     remote_qwen = (
-        provider_name == "faster-qwen3-tts"
+        local_gpu
         and runtime_config.use_remote_tts
         and runtime_config.tts is not None
     )
@@ -379,11 +382,11 @@ def resolve_live_voice_tts_provider(default_provider: TTSProvider) -> tuple[TTSP
         if remote_qwen:
             from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
 
-            provider = QwenHttpGatewayProvider(runtime_config.tts.url)
+            provider = QwenHttpGatewayProvider(runtime_config.tts.url, provider_name=provider_name)
         else:
             capabilities.require(RuntimeCapability.RUN_LOCAL_TTS)
             registry = get_audio_registry()
-            if provider_name == "faster-qwen3-tts":
+            if local_gpu:
                 provider_config = provider_settings
             else:
                 provider_config = {

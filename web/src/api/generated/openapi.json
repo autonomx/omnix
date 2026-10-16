@@ -5002,6 +5002,67 @@
         "title": "BinaryForecastMetrics",
         "type": "object"
       },
+      "BookPerformance": {
+        "description": "Stability and Style Exaggeration for every render (Voice Studio's sliders).",
+        "properties": {
+          "speakers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CharacterPerformance"
+            },
+            "title": "Speakers",
+            "type": "object"
+          },
+          "stability": {
+            "default": 0.75,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Stability",
+            "type": "number"
+          },
+          "style": {
+            "default": 0.35,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Style",
+            "type": "number"
+          }
+        },
+        "required": [
+          "stability",
+          "style",
+          "speakers"
+        ],
+        "title": "BookPerformance",
+        "type": "object"
+      },
+      "BookPerformance-Input": {
+        "description": "Stability and Style Exaggeration for every render (Voice Studio's sliders).",
+        "properties": {
+          "speakers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CharacterPerformance-Input"
+            },
+            "title": "Speakers",
+            "type": "object"
+          },
+          "stability": {
+            "default": 0.75,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Stability",
+            "type": "number"
+          },
+          "style": {
+            "default": 0.35,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Style",
+            "type": "number"
+          }
+        },
+        "title": "BookPerformance",
+        "type": "object"
+      },
       "BounceFeatureVector-Input": {
         "additionalProperties": false,
         "properties": {
@@ -8084,6 +8145,76 @@
           "memory_snapshot_id"
         ],
         "title": "CharacterLiveCallRuntime",
+        "type": "object"
+      },
+      "CharacterPerformance": {
+        "description": "A character's own levels; an omitted one follows the book.",
+        "properties": {
+          "stability": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stability"
+          },
+          "style": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style"
+          }
+        },
+        "required": [
+          "stability",
+          "style"
+        ],
+        "title": "CharacterPerformance",
+        "type": "object"
+      },
+      "CharacterPerformance-Input": {
+        "description": "A character's own levels; an omitted one follows the book.",
+        "properties": {
+          "stability": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stability"
+          },
+          "style": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style"
+          }
+        },
+        "title": "CharacterPerformance",
         "type": "object"
       },
       "CharacterProfile": {
@@ -13758,6 +13889,21 @@
           "runtime"
         ],
         "title": "DiagnosticsPayload",
+        "type": "object"
+      },
+      "DirectPerformance": {
+        "description": "Chapters to direct; empty directs the whole book.",
+        "properties": {
+          "chapter_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Chapter Ids",
+            "type": "array"
+          }
+        },
+        "title": "DirectPerformance",
         "type": "object"
       },
       "EconomicCalendar": {
@@ -52886,6 +53032,21 @@
         "title": "ScriptVersionSummary",
         "type": "object"
       },
+      "SelectTtsEngine": {
+        "properties": {
+          "provider_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id"
+        ],
+        "title": "SelectTtsEngine",
+        "type": "object"
+      },
       "SelectedPriceEvent": {
         "additionalProperties": false,
         "properties": {
@@ -53332,6 +53493,25 @@
         "title": "SetAudiobookMode",
         "type": "object"
       },
+      "SetAutoDirect": {
+        "description": "After classifying: direct the dialogue always, only while Fish S2 Pro is the engine, or never.",
+        "properties": {
+          "policy": {
+            "enum": [
+              "always",
+              "fish",
+              "never"
+            ],
+            "title": "Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy"
+        ],
+        "title": "SetAutoDirect",
+        "type": "object"
+      },
       "SetDocumentOverride": {
         "properties": {
           "action": {
@@ -53368,6 +53548,28 @@
           "scope_key"
         ],
         "title": "SetDocumentOverride",
+        "type": "object"
+      },
+      "SetPerformanceResult": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "performance": {
+            "$ref": "#/components/schemas/BookPerformance"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "performance",
+          "changed"
+        ],
+        "title": "SetPerformanceResult",
         "type": "object"
       },
       "SetPronunciation": {
@@ -54544,18 +54746,30 @@
             "type": "object"
           },
           "model_id": {
-            "default": "Qwen3-TTS",
-            "title": "Model Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "model_revision": {
             "title": "Model Revision",
             "type": "string"
           },
           "provider_id": {
-            "default": "faster-qwen3-tts",
-            "title": "Provider Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
           },
           "seed": {
             "anyOf": [
@@ -54600,18 +54814,30 @@
             "type": "object"
           },
           "model_id": {
-            "default": "Qwen3-TTS",
-            "title": "Model Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           },
           "model_revision": {
             "title": "Model Revision",
             "type": "string"
           },
           "provider_id": {
-            "default": "faster-qwen3-tts",
-            "title": "Provider Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
           },
           "seed": {
             "anyOf": [
@@ -62241,6 +62467,131 @@
         "title": "TrendlineSource",
         "type": "object"
       },
+      "TtsEngine": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "needs_transcripts": {
+            "title": "Needs Transcripts",
+            "type": "boolean"
+          },
+          "selected": {
+            "title": "Selected",
+            "type": "boolean"
+          },
+          "unavailable_reason": {
+            "title": "Unavailable Reason",
+            "type": "string"
+          },
+          "voice_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Voice Controls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "selected",
+          "installed",
+          "unavailable_reason",
+          "needs_transcripts",
+          "voice_controls"
+        ],
+        "title": "TtsEngine",
+        "type": "object"
+      },
+      "TtsEngineSwitch": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "phase": {
+            "enum": [
+              "idle",
+              "unloading",
+              "preparing_voices",
+              "loading",
+              "ready",
+              "failed"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "voices": {
+            "$ref": "#/components/schemas/VoiceTranscriptPreparation"
+          }
+        },
+        "required": [
+          "provider",
+          "phase",
+          "error",
+          "voices"
+        ],
+        "title": "TtsEngineSwitch",
+        "type": "object"
+      },
+      "TtsEnginesResponse": {
+        "properties": {
+          "engines": {
+            "items": {
+              "$ref": "#/components/schemas/TtsEngine"
+            },
+            "title": "Engines",
+            "type": "array"
+          },
+          "selected": {
+            "title": "Selected",
+            "type": "string"
+          },
+          "switch": {
+            "$ref": "#/components/schemas/TtsEngineSwitch"
+          }
+        },
+        "required": [
+          "selected",
+          "engines",
+          "switch"
+        ],
+        "title": "TtsEnginesResponse",
+        "type": "object"
+      },
       "TtsPronunciationEntry": {
         "properties": {
           "locale": {
@@ -65161,6 +65512,53 @@
           "pressure_score"
         ],
         "title": "VoiceSessionEvaluationRecord",
+        "type": "object"
+      },
+      "VoiceTranscriptFailure": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id",
+          "error"
+        ],
+        "title": "VoiceTranscriptFailure",
+        "type": "object"
+      },
+      "VoiceTranscriptPreparation": {
+        "properties": {
+          "already_ready": {
+            "title": "Already Ready",
+            "type": "integer"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceTranscriptFailure"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "prepared": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prepared",
+            "type": "array"
+          }
+        },
+        "required": [
+          "prepared",
+          "failed",
+          "already_ready"
+        ],
+        "title": "VoiceTranscriptPreparation",
         "type": "object"
       },
       "WatchlistAlertCapacity": {
@@ -70642,6 +71040,62 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/auto-direct": {
+      "put": {
+        "operationId": "set_auto_direct_api_audiobook_projects__project_id__auto_direct_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAutoDirect"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Set Auto Direct Api Audiobook Projects  Project Id  Auto Direct Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Auto Direct",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/chapters/{chapter_id}": {
       "get": {
         "operationId": "get_chapter_api_audiobook_projects__project_id__chapters__chapter_id__get",
@@ -70969,6 +71423,63 @@
           }
         },
         "summary": "Upload Cover",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/direct-performance": {
+      "post": {
+        "description": "Queue an LLM pass that writes a delivery direction (emotion) for each dialogue line.",
+        "operationId": "direct_performance_api_audiobook_projects__project_id__direct_performance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectPerformance"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Direct Performance Api Audiobook Projects  Project Id  Direct Performance Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Direct Performance",
         "tags": [
           "audiobook"
         ]
@@ -71579,6 +72090,59 @@
           }
         },
         "summary": "Retry Audiobook Job",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/performance": {
+      "put": {
+        "description": "Store the book's Stability/Style and per-character overrides; the render run restarts.",
+        "operationId": "set_performance_api_audiobook_projects__project_id__performance_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookPerformance-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetPerformanceResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Performance",
         "tags": [
           "audiobook"
         ]
@@ -96170,6 +96734,64 @@
         "tags": [
           "trading"
         ]
+      }
+    },
+    "/api/tts/engines": {
+      "get": {
+        "description": "The local TTS engines, the selected one, and the progress of the last switch.",
+        "operationId": "engines_api_tts_engines_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtsEnginesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Engines"
+      }
+    },
+    "/api/tts/engines/select": {
+      "post": {
+        "description": "Make an engine Omnix's default TTS: unloads the current one, then loads it.",
+        "operationId": "select_engine_api_tts_engines_select_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectTtsEngine"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TtsEnginesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Engine"
       }
     },
     "/api/tts/live-call/capabilities": {

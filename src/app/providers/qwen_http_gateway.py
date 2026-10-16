@@ -1,4 +1,9 @@
-"""Gateway facade for the separately managed Qwen GPU service."""
+"""Gateway facade for the separately managed GPU TTS service.
+
+The service serves one local engine at a time (Qwen3-TTS or Fish S2 Pro).
+Every request names the engine this facade stands for; the service switches
+to it first when it is serving the other one.
+"""
 from __future__ import annotations
 
 import base64
@@ -31,14 +36,28 @@ class TtsServiceSaturated(RuntimeError):
 class QwenHttpGatewayProvider:
     provider_name = 'faster-qwen3-tts'
 
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, provider_name: str = 'faster-qwen3-tts'):
         self.base_url = base_url.strip().strip('"').strip("'").replace(' ', '').rstrip('/')
+        self.provider_name = provider_name
         # Shares the TTS service's connection pool with app.tts_http_client.
         self.http = shared_http_client("tts-service")
 
     def start(self):
         health = self._health()
+        if health.get('provider') != self.provider_name:
+            health = self.select_engine()
         return {'running': bool(health.get('ok')), 'message': health.get('error', '')}
+
+    def select_engine(self):
+        """Make the service serve this facade's engine (unloading the other one)."""
+        response = self.http.post(self.base_url + '/api/tts/provider', json={'provider': self.provider_name},
+                                  timeout=900, headers=service_headers(), retry=False)
+        if response.status_code == 404:
+            raise RuntimeError(
+                f'The TTS service at {self.base_url} predates engine selection; restart the TTS service'
+            )
+        response.raise_for_status()
+        return response.json()
 
     def _health(self):
         response = self.http.get(self.base_url + '/health', timeout=5, retry=False)
@@ -64,8 +83,11 @@ class QwenHttpGatewayProvider:
 
     def resolve_generation_parameters(self, parameters=None):
         """The service's complete settings for these overrides: render cache identity (audiobook)."""
+        overrides = generation_overrides(parameters)
+        overrides.pop('instruct', None)  # A span's delivery is part of render identity on its own.
         response = self.http.post(self.base_url + '/api/tts/generation_parameters',
-            json={'parameters': generation_overrides(parameters)}, timeout=10, headers=service_headers())
+            json={'parameters': overrides, 'provider': self.provider_name},
+            timeout=900, headers=service_headers())
         if response.status_code == 404:
             # The gateway and the TTS service restart separately; an older service lacks this route.
             raise RuntimeError(
@@ -80,7 +102,8 @@ class QwenHttpGatewayProvider:
     def generate_audio(self, text, speaker=None, language=None, **kwargs):
         # The service sends the WAV bytes (WP-7.3); the provider contract's
         # base64 form is built here, in process, not on the wire.
-        payload = {'text': text, 'speaker': speaker or 'default', 'language': language or 'en'}
+        payload = {'text': text, 'speaker': speaker or 'default', 'language': language or 'en',
+                   'provider': self.provider_name}
         overrides = generation_overrides(kwargs)
         if overrides:
             payload['parameters'] = overrides
@@ -122,7 +145,8 @@ class QwenHttpGatewayProvider:
         started = time.perf_counter()
         allowed = {'chunk_size', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'append_silence', 'max_new_tokens'}
         payload = {key: value for key, value in kwargs.items() if key in allowed and value is not None}
-        payload.update(text=text, speaker=speaker or 'default', language=language or 'en')
+        payload.update(text=text, speaker=speaker or 'default', language=language or 'en',
+                       provider=self.provider_name)
         # Realtime: a saturated service is reported at once (no retry); the
         # caller decides whether to wait for Retry-After.
         response = self.http.open_stream(

@@ -54,7 +54,9 @@ def test_the_committed_template_parses_to_the_defaults():
     template = (ROOT / "resources/config/launcher.example.toml").read_text(encoding="utf-8")
     import tomllib
 
-    assert tomllib.loads(template)["python"]["environments"] == {"app": "rpg-flux", "tts": "rpg-tts", "stt": "rpg-stt"}
+    assert tomllib.loads(template)["python"]["environments"] == {
+        "app": "rpg-flux", "tts": "rpg-tts", "stt": "rpg-stt", "fish": "fish-speech",
+    }
 
 
 def test_no_launcher_source_names_a_developer_home_directory():

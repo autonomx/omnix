@@ -749,6 +749,14 @@ def _analyze_claimed(
                     progress={"current": result["spans"], "total": result["spans"],
                               "message": "review queue prepared"},
                 )
+                if classifier is not None:
+                    # The chat model that just classified the book also directs its dialogue.
+                    from .performance_direction import queue_after_classification
+
+                    queue_after_classification(
+                        work, context, project_id=payload["project_id"],
+                        source_revision_id=payload["source_revision_id"],
+                    )
             work.commit()
     except (_AnalysisPaused, _AnalysisCanceled):
         _LOG.info("Audiobook analysis job %s stopped by operator control", job_id)

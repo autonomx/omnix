@@ -27,7 +27,8 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
     active = PostgresJobRepository(connection).query_jobs(
         context,
         module="audiobook",
-        job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.render-chapter", "audiobook.assemble-chapter"),
+        job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.direct-performance",
+                   "audiobook.render-chapter", "audiobook.assemble-chapter"),
         input_fields=(("project_id", str(project_id)),),
         statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
         limit=500,
@@ -43,6 +44,8 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
             result.blockers.append('Wait for quote extraction to finish, then go to "Span review" to review the quotes before clicking "Classify text".')
         elif "audiobook.analyze" in job_types:
             result.blockers.append('Wait for text classification to finish, then go to "Span review" and resolve any review issues. If classification is paused, use "Resume" or "Cancel" in its progress controls.')
+        elif "audiobook.direct-performance" in job_types:
+            result.blockers.append('Wait for "Direct performance" to finish writing the dialogue delivery directions, or cancel it.')
         else:
             result.blockers.append('Rendering or chapter assembly is already in progress. Go to "Render & Export" to check progress, resume paused chapter jobs, or stop the current render before starting another.')
         return result

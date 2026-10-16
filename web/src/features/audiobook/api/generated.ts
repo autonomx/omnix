@@ -92,6 +92,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/auto-direct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Auto Direct */
+        put: operations["set_auto_direct_api_audiobook_projects__project_id__auto_direct_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/chapters/{chapter_id}": {
         parameters: {
             query?: never;
@@ -175,6 +192,26 @@ export interface paths {
         put?: never;
         /** Upload Cover */
         post: operations["upload_cover_api_audiobook_projects__project_id__cover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/direct-performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Direct Performance
+         * @description Queue an LLM pass that writes a delivery direction (emotion) for each dialogue line.
+         */
+        post: operations["direct_performance_api_audiobook_projects__project_id__direct_performance_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -346,6 +383,26 @@ export interface paths {
         put?: never;
         /** Retry Audiobook Job */
         post: operations["retry_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Performance
+         * @description Store the book's Stability/Style and per-character overrides; the render run restarts.
+         */
+        put: operations["set_performance_api_audiobook_projects__project_id__performance_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -806,10 +863,70 @@ export interface components {
         AuthSessionResponse: core["schemas"]["AuthSessionResponse"];
         /** AuthSessionSummary */
         AuthSessionSummary: core["schemas"]["AuthSessionSummary"];
+        /**
+         * BookPerformance
+         * @description Stability and Style Exaggeration for every render (Voice Studio's sliders).
+         */
+        BookPerformance: {
+            /** Speakers */
+            speakers: {
+                [key: string]: components["schemas"]["CharacterPerformance"];
+            };
+            /**
+             * Stability
+             * @default 0.75
+             */
+            stability: number;
+            /**
+             * Style
+             * @default 0.35
+             */
+            style: number;
+        };
+        /**
+         * BookPerformance
+         * @description Stability and Style Exaggeration for every render (Voice Studio's sliders).
+         */
+        "BookPerformance-Input": {
+            /** Speakers */
+            speakers?: {
+                [key: string]: components["schemas"]["CharacterPerformance-Input"];
+            };
+            /**
+             * Stability
+             * @default 0.75
+             */
+            stability?: number;
+            /**
+             * Style
+             * @default 0.35
+             */
+            style?: number;
+        };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
         CancelState: core["schemas"]["CancelState"];
+        /**
+         * CharacterPerformance
+         * @description A character's own levels; an omitted one follows the book.
+         */
+        CharacterPerformance: {
+            /** Stability */
+            stability: number | null;
+            /** Style */
+            style: number | null;
+        };
+        /**
+         * CharacterPerformance
+         * @description A character's own levels; an omitted one follows the book.
+         */
+        "CharacterPerformance-Input": {
+            /** Stability */
+            stability?: number | null;
+            /** Style */
+            style?: number | null;
+        };
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -901,6 +1018,14 @@ export interface components {
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /**
+         * DirectPerformance
+         * @description Chapters to direct; empty directs the whole book.
+         */
+        DirectPerformance: {
+            /** Chapter Ids */
+            chapter_ids?: string[];
+        };
         /** EmailChangeRequest */
         EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
@@ -1159,6 +1284,17 @@ export interface components {
             /** Mode */
             mode: string;
         };
+        /**
+         * SetAutoDirect
+         * @description After classifying: direct the dialogue always, only while Fish S2 Pro is the engine, or never.
+         */
+        SetAutoDirect: {
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "always" | "fish" | "never";
+        };
         /** SetDocumentOverride */
         SetDocumentOverride: {
             /**
@@ -1172,6 +1308,14 @@ export interface components {
             scope: string;
             /** Scope Key */
             scope_key: string;
+        };
+        /** SetPerformanceResult */
+        SetPerformanceResult: {
+            /** Changed */
+            changed: boolean;
+            performance: components["schemas"]["BookPerformance"];
+            /** Project Id */
+            project_id: string;
         };
         /** SetPronunciation */
         SetPronunciation: {
@@ -1212,18 +1356,12 @@ export interface components {
             generation_parameters?: {
                 [key: string]: unknown;
             };
-            /**
-             * Model Id
-             * @default Qwen3-TTS
-             */
-            model_id?: string;
+            /** Model Id */
+            model_id?: string | null;
             /** Model Revision */
             model_revision: string;
-            /**
-             * Provider Id
-             * @default faster-qwen3-tts
-             */
-            provider_id?: string;
+            /** Provider Id */
+            provider_id?: string | null;
             /** Seed */
             seed?: number | null;
             /** Span Id */
@@ -1237,18 +1375,12 @@ export interface components {
             generation_parameters?: {
                 [key: string]: unknown;
             };
-            /**
-             * Model Id
-             * @default Qwen3-TTS
-             */
-            model_id?: string;
+            /** Model Id */
+            model_id?: string | null;
             /** Model Revision */
             model_revision: string;
-            /**
-             * Provider Id
-             * @default faster-qwen3-tts
-             */
-            provider_id?: string;
+            /** Provider Id */
+            provider_id?: string | null;
             /** Seed */
             seed?: number | null;
         };
@@ -1543,6 +1675,43 @@ export interface operations {
             };
         };
     };
+    set_auto_direct_api_audiobook_projects__project_id__auto_direct_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAutoDirect"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_chapter_api_audiobook_projects__project_id__chapters__chapter_id__get: {
         parameters: {
             query?: never;
@@ -1731,6 +1900,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    direct_performance_api_audiobook_projects__project_id__direct_performance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectPerformance"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2122,6 +2328,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_performance_api_audiobook_projects__project_id__performance_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookPerformance-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetPerformanceResult"];
                 };
             };
             /** @description Validation Error */

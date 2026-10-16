@@ -3,17 +3,58 @@ from __future__ import annotations
 
 import asyncio
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from app.providers.service import get_tts_provider
 
+from .tts_engines import select_tts_engine, tts_engines
 from .tts_runtime_actions import unload_tts_runtime, warm_tts_runtime
 from .tts_runtime_state import STATE, STATE_LOCK, WARMUP_STREAM_ID, snapshot, startup_warmup_enabled
 from app.observability.tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_tts_runtime_routes_registered"
+
+
+class SelectTtsEngine(BaseModel):
+    provider_id: str = Field(min_length=1, max_length=64)
+
+
+class TtsEngine(BaseModel):
+    id: str
+    label: str
+    description: str
+    selected: bool
+    installed: bool
+    unavailable_reason: str
+    needs_transcripts: bool
+    voice_controls: list[str]
+
+
+class VoiceTranscriptFailure(BaseModel):
+    voice_id: str
+    error: str
+
+
+class VoiceTranscriptPreparation(BaseModel):
+    prepared: list[str]
+    failed: list[VoiceTranscriptFailure]
+    already_ready: int
+
+
+class TtsEngineSwitch(BaseModel):
+    provider: str | None
+    phase: Literal["idle", "unloading", "preparing_voices", "loading", "ready", "failed"]
+    error: str | None
+    voices: VoiceTranscriptPreparation
+
+
+class TtsEnginesResponse(BaseModel):
+    selected: str
+    engines: list[TtsEngine]
+    switch: TtsEngineSwitch
 
 
 def register_tts_runtime_routes(router: APIRouter, state: Any) -> None:
@@ -59,3 +100,18 @@ def register_tts_runtime_routes(router: APIRouter, state: Any) -> None:
     @router.post("/api/tts/runtime/unload")
     async def unload() -> dict[str, Any]:
         return await asyncio.to_thread(unload_tts_runtime, "api")
+
+    @router.get("/api/tts/engines", response_model=TtsEnginesResponse)
+    def engines() -> dict[str, Any]:
+        """The local TTS engines, the selected one, and the progress of the last switch."""
+        return tts_engines()
+
+    @router.post("/api/tts/engines/select", response_model=TtsEnginesResponse)
+    async def select_engine(request: SelectTtsEngine) -> dict[str, Any]:
+        """Make an engine Omnix's default TTS: unloads the current one, then loads it."""
+        try:
+            return await asyncio.to_thread(select_tts_engine, request.provider_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc

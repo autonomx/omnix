@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import numpy as np
-from app.assets.voice_clone_identity import reference_transcript
 
 from app.runtime.paths import VOICE_CLONES_DIR
 from .audio_base import (
@@ -25,6 +24,8 @@ from .audio_base import (
     BaseTTSProvider,
 )
 from .tts_priority import generation_slot
+from .voice_references import clone_reference as _clone_reference
+from .voice_references import clone_speakers
 from .vendor.qwen3_tts.loader import _resolve_model_source
 from .vendor.qwen3_tts import (
     ensure_vendored_qwen3_tts_available,
@@ -44,31 +45,6 @@ FALLBACK_HARMONIC_FREQ_HZ = 330.0
 
 
 DEFAULT_QWEN3_TTS_MODEL_REPO = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-
-
-def _clone_reference(speaker: Optional[str]) -> tuple[Optional[str], str]:
-    """Resolve a saved clone and its exact reference transcript together."""
-    if speaker:
-        from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
-        from app.assets.content import asset_available, materialize_asset
-
-        clone_id = speaker.removeprefix("voice-cloning:").casefold()
-        for asset in discover_canonical_voice_clone_assets():
-            if asset.id.removeprefix("voice-cloning:").casefold() == clone_id and asset_available(asset):
-                path = materialize_asset(asset)
-                return str(path), reference_transcript(path)
-        if speaker.startswith("voice-cloning:"):
-            return None, ""
-
-    clone_dir = Path(VOICE_CLONES_DIR)
-    if speaker:
-        path = clone_dir / f"{speaker}.wav"
-        if path.is_file():
-            return str(path), ""
-    default_ref = clone_dir / "default_ref.wav"
-    if default_ref.is_file():
-        return str(default_ref), ""
-    return next((str(path) for path in clone_dir.glob("*.wav") if path.is_file()), None), ""
 
 
 def _clone_conditioning(kwargs: dict[str, Any], model_config: dict[str, Any], saved_text: str) -> tuple[str, bool]:
@@ -660,35 +636,12 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         Get list of available speakers/voices.
         
         For faster-qwen3-tts, speakers are derived from voice clones.
-        
+
         Returns:
             List of speaker dictionaries with 'id', 'name', 'language' keys
         """
-        speakers = []
-        
-        # Add default speaker
-        speakers.append({
-            "id": "default",
-            "name": "Default",
-            "language": "en",
-            "description": "Default voice"
-        })
-        
-        # Add custom voice clones
-        voice_clones_dir = Path(VOICE_CLONES_DIR)
-        if voice_clones_dir.exists():
-            for wav_file in voice_clones_dir.glob('*.wav'):
-                voice_id = wav_file.stem
-                speakers.append({
-                    "id": voice_id,
-                    "name": voice_id,
-                    "language": "en",  # Could be detected from metadata or config
-                    "path": str(wav_file),
-                    "description": f"Custom voice: {voice_id}"
-                })
-        
-        return speakers
-    
+        return clone_speakers()
+
     def _map_language(self, language: Optional[str]) -> str:
         """Map language codes to model-supported language names."""
         if not language:
@@ -1213,6 +1166,10 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                     # Clear the model to free memory
                     _model_loader.model = None
                     _model_loader.initialized = False
+                    _model_loader.artifact_signature = None
+                    # The vendored loader caches the same model; without this
+                    # the weights stay on the GPU after an unload.
+                    reset_tts_model_cache()
                     
                     # Force garbage collection
                     import gc

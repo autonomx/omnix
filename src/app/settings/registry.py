@@ -26,6 +26,7 @@ CORE_SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec("stt_worker_url", str, ""),
     SettingSpec("image_worker_url", str, ""),
     SettingSpec("faster-qwen3-tts", dict, deepcopy(DEFAULT_SETTINGS["faster-qwen3-tts"])),
+    SettingSpec("fish-s2-pro", dict, deepcopy(DEFAULT_SETTINGS["fish-s2-pro"])),
     SettingSpec("parakeet", dict, deepcopy(DEFAULT_SETTINGS["parakeet"])),
     SettingSpec("image", dict, deepcopy(DEFAULT_SETTINGS["image"])),
     SettingSpec("rpg_visual", dict, deepcopy(DEFAULT_SETTINGS["rpg_visual"])),

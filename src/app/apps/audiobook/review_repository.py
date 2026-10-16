@@ -908,6 +908,88 @@ class PostgresAudiobookReviewRepository:
         return {"annotation_id": annotation_id, "span_id": str(row[1]),
                 "revision": next_revision, "remaining_review_issues": remaining}
 
+    def apply_performance_directions(
+        self, context: TenantContext, *, project_id: str,
+        directions: dict[str, str], director: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write generated delivery directions as new annotation revisions.
+
+        Each revision copies its predecessor (role, speaker, review status,
+        classifier and evidence) and changes only the delivery, so user
+        decisions and confirmed aliases keep their meaning. A span is left
+        alone when it is not dialogue, has an open review issue, or carries a
+        delivery the user wrote (one not marked as directed).
+        """
+        project = self.connection.execute(
+            """SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        if project is None:
+            raise KeyError(project_id)
+        changed: list[str] = []
+        kept_user_delivery = 0
+        for span_id, delivery in directions.items():
+            row = self.connection.execute(
+                """SELECT a.revision, a.role, a.speaker_id, a.speaker_candidate, a.delivery,
+                          a.evidence, a.classifier, a.review_status,
+                          EXISTS (SELECT 1 FROM omnix_audiobook_review_issues i
+                                    JOIN omnix_audiobook_annotations ia
+                                      ON ia.workspace_id = i.workspace_id AND ia.id = i.annotation_id
+                                   WHERE i.workspace_id = a.workspace_id AND ia.span_id = a.span_id
+                                     AND i.status = 'open')
+                     FROM omnix_audiobook_spans s
+                     JOIN omnix_audiobook_chapters c
+                       ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                     JOIN omnix_audiobook_projects p
+                       ON p.workspace_id = c.workspace_id
+                      AND p.current_source_revision_id = c.source_revision_id
+                     JOIN LATERAL (
+                        SELECT * FROM omnix_audiobook_annotations
+                         WHERE workspace_id = s.workspace_id AND span_id = s.id
+                         ORDER BY revision DESC LIMIT 1
+                     ) a ON TRUE
+                    WHERE s.workspace_id = %s AND p.id = %s AND s.id = %s""",
+                (context.workspace_id, project_id, span_id),
+            ).fetchone()
+            if row is None:
+                continue
+            revision, role, speaker_id, candidate, current, evidence, classifier, review_status, open_issue = row
+            evidence = dict(evidence or {})
+            if role != "dialogue" or open_issue or str(current) == delivery:
+                continue
+            if str(current) and evidence.get("delivery_source") != "performance_director":
+                kept_user_delivery += 1
+                continue
+            self.connection.execute(
+                """INSERT INTO omnix_audiobook_annotations
+                    (id, workspace_id, span_id, revision, role, speaker_id,
+                     speaker_candidate, delivery, evidence, classifier, review_status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)""",
+                (f"ab:an:{uuid4().hex}", context.workspace_id, span_id, int(revision) + 1, role,
+                 speaker_id, candidate, delivery,
+                 canonical_json({**evidence, "previous_revision": int(revision),
+                                 "delivery_source": "performance_director"}),
+                 canonical_json({**dict(classifier or {}), "performance_direction": director}),
+                 review_status),
+            )
+            changed.append(span_id)
+        if changed:
+            if project[0]:
+                self._cancel_render_jobs(context, str(project[0]))
+            self.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered',
+                                                    'ready_to_export', 'exported')
+                                       THEN 'ready_to_render' ELSE state END,
+                          settings = settings - 'current_render_run_id',
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project_id),
+            )
+        return {"changed_span_ids": changed, "kept_user_delivery": kept_user_delivery}
+
     def revise_span(
         self, context: TenantContext, *, project_id: str, span_id: str,
         speaker_id: str, role: str, delivery: str = "",

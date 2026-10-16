@@ -176,6 +176,8 @@ def test_offline_render_uses_exact_cast_voice_profile(tmp_path) -> None:
     profiles = {unit.voice_profile_id: SimpleNamespace(
         storage_path=str(reference), metadata={"voice_clone_id": "character"})}
     assert _voice_for(unit, profiles, "faster-qwen3-tts") == unit.voice_profile_id
+    # Fish S2 Pro resolves the same Voice Library id to the sample and its transcript.
+    assert _voice_for(unit, profiles, "fish-s2-pro") == unit.voice_profile_id
     reference.write_bytes(b"new reference")
     with pytest.raises(RenderFailure, match="changed since casting"):
         _voice_for(unit, profiles, "faster-qwen3-tts")

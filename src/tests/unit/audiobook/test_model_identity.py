@@ -46,3 +46,19 @@ def test_model_revision_tracks_weights_and_tokenizer(tmp_path, monkeypatch) -> N
     with pytest.raises(model_identity.ModelIdentityError, match="does not match"):
         model_identity.assert_model_revision("faster-qwen3-tts", "other",
                                              str(updated["model_revision"]))
+
+
+def test_the_default_identity_is_the_selected_engine(tmp_path, monkeypatch) -> None:
+    (tmp_path / "model-00001-of-00002.safetensors").write_bytes(b"fish weights")
+    (tmp_path / "codec.pth").write_bytes(b"fish codec")
+    monkeypatch.setattr("app.providers.service.load_settings", lambda: {"audio_provider_tts": "fish-s2-pro"})
+    monkeypatch.setattr(tts_artifacts, "local_model_artifacts", lambda provider_id: (
+        tts_artifacts.LocalModelArtifacts(model_id="Fish-Audio-S2-Pro", directory=tmp_path)
+        if provider_id == "fish-s2-pro" else pytest.fail(f"asked for {provider_id}")))
+
+    identity = model_identity.current_model_identity()
+
+    assert identity["provider_id"] == "fish-s2-pro"
+    assert identity["model_id"] == "Fish-Audio-S2-Pro"
+    # The codec weights are part of the revision.
+    assert identity["artifact_count"] == 2

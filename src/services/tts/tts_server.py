@@ -52,6 +52,8 @@ MAX_TTS_TEXT_CHARS = 20_000
 
 class TtsGenerateRequest(BaseModel):
     text: str = Field(max_length=MAX_TTS_TEXT_CHARS)
+    # The engine the caller expects; empty serves whichever engine is loaded.
+    provider: str = ""
     speaker: str = "default"
     language: str = "en"
     speed: float = 1.0
@@ -64,10 +66,16 @@ class TtsGenerateRequest(BaseModel):
 
 class TtsGenerationParametersRequest(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
+    provider: str = ""
+
+
+class TtsProviderSelectRequest(BaseModel):
+    provider: str = Field(min_length=1, max_length=64)
 
 
 class TtsGenerateStreamRequest(BaseModel):
     text: str = Field(max_length=MAX_TTS_TEXT_CHARS)
+    provider: str = ""
     speaker: str = "default"
     language: str = "en"
     chunk_size: int = 6
@@ -92,8 +100,10 @@ class TtsVoiceCloneRequest(BaseModel):
 
 _TTS_PROVIDER: Any = None
 _TTS_PROVIDER_ERROR: str = ""
-_TTS_PROVIDER_NAME: str = "qwen3_tts"
+_TTS_PROVIDER_NAME: str = "faster-qwen3-tts"
 _TTS_MODEL_OWNER_GUARD: Any = None
+# Serializes engine switches: one engine is loaded at a time.
+_TTS_SWITCH_LOCK = threading.Lock()
 
 
 def _provider_payload_ok(details: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -223,20 +233,32 @@ def _preflight_tts_port(host: str, port: int) -> bool:
     return False
 
 
-def _load_qwen3_provider() -> Any:
-    """Load the dedicated TTS provider while keeping failures local."""
-    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+def _load_provider(name: str) -> Any:
+    """Construct one local TTS engine from its settings, without loading it."""
+    from app.providers.audio_registry import get_audio_registry
+    from app.providers.catalog import LOCAL_DEVICE, provider_supports
     from app.settings.access import load_settings
 
+    if not provider_supports(name, LOCAL_DEVICE, "tts"):
+        raise ValueError(f"{name!r} is not a local TTS engine")
     settings = load_settings() or {}
-    provider_settings = dict(settings.get("faster-qwen3-tts") or {})
-    return FasterQwen3TTSProvider(config=provider_settings)
+    provider = get_audio_registry().create_tts_provider(name, config=dict(settings.get(name) or {}))
+    if provider is None:
+        raise RuntimeError(f"TTS provider {name} could not be constructed")
+    return provider
 
 
-def initialize_tts_provider() -> Dict[str, Any]:
-    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR
+def _configured_provider_name() -> str:
+    from app.providers.service import selected_tts_provider_id
+
+    return selected_tts_provider_id()
+
+
+def initialize_tts_provider(name: str | None = None) -> Dict[str, Any]:
+    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR, _TTS_PROVIDER_NAME
     try:
-        provider = _load_qwen3_provider()
+        _TTS_PROVIDER_NAME = name or _configured_provider_name()
+        provider = _load_provider(_TTS_PROVIDER_NAME)
         startup_result: Dict[str, Any] = {}
         if hasattr(provider, "start"):
             startup_result = provider.start() or {}
@@ -298,6 +320,39 @@ def _handle_tts_model_owner_loss(provider: Any, guard: Any) -> None:
         _TTS_PROVIDER_ERROR = "local TTS model-owner lease was lost"
     if _TTS_MODEL_OWNER_GUARD is guard:
         _TTS_MODEL_OWNER_GUARD = None
+
+
+def select_tts_provider(name: str) -> dict[str, Any]:
+    """Serve ``name``: unload the current engine first, then load the new one."""
+    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR
+    from app.providers.catalog import LOCAL_DEVICE, provider_supports
+
+    if not provider_supports(name, LOCAL_DEVICE, "tts"):
+        # Checked before unloading: a bad name must not leave the service empty.
+        raise ValueError(f"{name!r} is not a local TTS engine")
+    with _TTS_SWITCH_LOCK:
+        if _TTS_PROVIDER is not None and _TTS_PROVIDER_NAME == name:
+            return get_tts_service_status()
+        previous, _TTS_PROVIDER = _TTS_PROVIDER, None
+        stop = getattr(previous, "stop", None)
+        if callable(stop):
+            stop()
+        _TTS_PROVIDER_ERROR = f"switching to {name}"
+        status = initialize_tts_provider(name)
+        guard = _TTS_MODEL_OWNER_GUARD
+        if status.get("ok") and guard is not None:
+            provider = _TTS_PROVIDER
+            if not guard.set_on_lost(lambda: _handle_tts_model_owner_loss(provider, guard)):
+                status = get_tts_service_status()
+        voice_debug_log("tts", "tts_provider_selected", provider=name, provider_ready=bool(status.get("ok")),
+                        provider_error=status.get("error", ""))
+        return status
+
+
+def _ensure_provider(name: str) -> None:
+    """Switch to the engine a request names; an empty name accepts the current one."""
+    if name and name != _TTS_PROVIDER_NAME:
+        select_tts_provider(name)
 
 
 def get_tts_service_status() -> Dict[str, Any]:
@@ -493,6 +548,18 @@ def health() -> Dict[str, Any]:
     }
 
 
+@app.post("/api/tts/provider")
+async def select_provider(request: TtsProviderSelectRequest) -> dict[str, Any]:
+    """Load ``provider`` as the served engine, unloading the current one."""
+    try:
+        status = await asyncio.to_thread(select_tts_provider, request.provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not status.get("ok"):
+        return JSONResponse(status, status_code=503)
+    return status
+
+
 @app.get("/api/tts/speakers")
 async def speakers() -> Dict[str, Any]:
     return await _synthesis().run(_speakers)
@@ -550,10 +617,13 @@ async def generate_audio(
 def generation_parameters(request: TtsGenerationParametersRequest) -> dict[str, Any]:
     """The complete settings a synthesis with these overrides would use, for render cache identity."""
     try:
+        _ensure_provider(request.provider)
         provider = _require_provider()
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="model_unavailable") from exc
     overrides = generation_overrides(request.parameters)
+    # A span's delivery is its own part of the render identity, not a setting.
+    overrides.pop("instruct", None)
     resolver = getattr(provider, "resolve_generation_parameters", None)
     resolved = resolver(overrides) if callable(resolver) else overrides
     return {"parameters": dict(resolved)}
@@ -589,6 +659,7 @@ def _generate_audio(request: TtsGenerateRequest, wants_wav: bool = False):
         **snapshot,
     )
     try:
+        _ensure_provider(request.provider)
         provider = _require_provider()
 
         if hasattr(provider, "generate_audio"):
@@ -699,6 +770,7 @@ def _generate_stream_audio(request: TtsGenerateStreamRequest):
     )
     provider = None
     try:
+        _ensure_provider(request.provider)
         provider = _require_provider()
         if not hasattr(provider, "generate_audio_stream"):
             voice_debug_log(
@@ -783,6 +855,7 @@ def _generate_stream_audio(request: TtsGenerateStreamRequest):
 async def generate_live_call_stream(request: TtsGenerateStreamRequest):
     """Stream little-endian PCM16 while holding admission through disconnect."""
     trace_id = _request_trace_id(request.trace_id, "tts-live-stream")
+    await asyncio.to_thread(_ensure_provider, request.provider)
     provider = _require_provider()
     if not hasattr(provider, "generate_audio_stream"):
         return JSONResponse(

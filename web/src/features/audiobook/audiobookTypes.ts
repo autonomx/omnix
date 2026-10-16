@@ -105,6 +105,11 @@ export interface AudiobookJobView {
     message?: string;
     cache_hits?: number;
     generated?: number;
+    /** Direct performance: lines given a direction, lines changed, user notes kept. */
+    directed?: number;
+    changed?: number;
+    kept_user_delivery?: number;
+    failed_windows?: number;
   };
   error?: { message?: string; code?: string; retryable?: boolean } | null;
   attempts?: number;
@@ -123,7 +128,17 @@ export interface AudiobookJobView {
   audio?: { duration_seconds: number } | null;
 }
 
+/** Stability and Style Exaggeration (0–1) for the book, and characters' own levels. */
+export interface BookPerformance {
+  stability: number;
+  style: number;
+  speakers: Record<string, { stability?: number; style?: number }>;
+}
+
 export interface ProjectDetail extends ProjectSummary {
+  performance?: BookPerformance;
+  /** After classifying: direct the dialogue always, only while Fish S2 Pro is the TTS engine, or never. */
+  auto_direct_performance?: 'always' | 'fish' | 'never';
   render_readiness?: { ready: boolean; blockers: string[] };
   classification_rules?: string;
   quote_extraction_rules?: string | null;

@@ -251,6 +251,53 @@ class PostgresAudiobookProjectRepository:
             (mode, context.workspace_id, project_id),
         )
 
+    def performance(self, context: TenantContext, project_id: str) -> Any:
+        """The stored ``settings.performance`` object, or None."""
+        row = self.connection.execute(
+            """SELECT settings->'performance' FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        return row[0] if row else None
+
+    def project_speaker_ids(self, context: TenantContext, project_id: str) -> set[str]:
+        rows = self.connection.execute(
+            """SELECT id FROM omnix_audiobook_speakers
+                WHERE workspace_id = %s AND project_id = %s""",
+            (context.workspace_id, project_id),
+        ).fetchall()
+        return {str(row[0]) for row in rows}
+
+    def set_setting(self, context: TenantContext, project_id: str, key: str, value: str) -> bool:
+        """Store one project setting that does not affect rendered audio."""
+        row = self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET settings = jsonb_set(settings, ARRAY[%s], to_jsonb(%s::text), true),
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                RETURNING id""",
+            (key, value, context.workspace_id, project_id),
+        ).fetchone()
+        return row is not None
+
+    def set_performance(self, context: TenantContext, project_id: str, performance: str) -> None:
+        """Store the book's performance (JSON) and drop the render run it invalidates."""
+        self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET settings = jsonb_set(
+                          settings - 'current_render_run_id',
+                          '{performance}', %s::jsonb, true
+                      ),
+                      state = CASE
+                          WHEN state IN ('rendering', 'mastering', 'rendered', 'ready_to_export', 'exported')
+                          THEN 'ready_to_render' ELSE state END,
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s""",
+            (performance, context.workspace_id, project_id),
+        )
+
     def set_state_clearing_render(self, context: TenantContext, project_id: str,
                                   state: str) -> None:
         self.connection.execute(

@@ -277,6 +277,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
                 "provider_success": metadata.get("provider_success"),
                 "provider_fallback": metadata.get("provider_fallback"),
                 "provider_error": metadata.get("provider_error"),
+                "voice_controls": metadata.get("voice_controls"),
             }
         )
 
@@ -336,18 +337,21 @@ def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -
     try:
         from app.providers.service import get_tts_provider
 
-        provider = get_tts_provider("faster-qwen3-tts")
+        from .output_settings import adjust_wav, audio_adjustments, sampling_overrides
+
+        provider = get_tts_provider()
         if provider is None:
             raise RuntimeError("Configured TTS provider is unavailable")
+        output_settings = payload.get("output_settings") if isinstance(payload.get("output_settings"), dict) else {}
+        sampling = sampling_overrides(str(getattr(provider, "provider_name", "") or ""), output_settings)
         result = provider.generate_audio(
             text,
             speaker=speaker,
             language=_tts_language_code(payload.get("language")),
-            output_settings=payload.get("output_settings") or {},
-            audio_effects=payload.get("audio_effects") or [],
             parity_mode=True,
             non_streaming_mode=True,
             use_cuda_graphs=False,
+            **sampling,
         )
         if not isinstance(result, dict):
             raise RuntimeError("TTS provider returned an invalid response")
@@ -367,12 +371,18 @@ def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -
             raise RuntimeError("TTS provider returned invalid base64 audio") from exc
         if not wav_bytes:
             raise RuntimeError("TTS provider returned empty speech audio")
+        adjustments = audio_adjustments(output_settings)
+        if adjustments:
+            wav_bytes = adjust_wav(wav_bytes, adjustments)
+        timing = _wav_metadata(wav_bytes) if adjustments else {
+            "sample_rate": result.get("sample_rate"), "duration": result.get("duration"),
+        }
         return wav_bytes, {
-            "sample_rate": result.get("sample_rate"),
-            "duration": result.get("duration"),
+            **timing,
             "provider_success": True,
             "provider_fallback": False,
             "provider_error": "",
+            "voice_controls": {"sampling": sampling, "audio": adjustments},
         }
     except Exception as exc:
         raise RuntimeError(f"Real TTS generation failed for speaker '{speaker}': {exc}") from exc

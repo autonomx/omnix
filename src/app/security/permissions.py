@@ -244,6 +244,8 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/image-generation/model/load"): "image:models:admin",
     ("POST", "/api/image-generation/model/unload"): "image:models:admin",
     ("POST", "/api/tts/runtime/unload"): "settings:write",
+    # Choosing the TTS engine changes Omnix's default and swaps the loaded model.
+    ("POST", "/api/tts/engines/select"): "settings:write",
     ("POST", "/api/jobs/{job_id}/cancel"): "jobs:cancel",
     ("POST", "/api/image-generation/assets/{asset_id}/delete"): "assets:delete",
     # Trading: members place paper orders; strategy changes are admin.

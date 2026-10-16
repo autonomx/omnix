@@ -15,7 +15,7 @@ def generate_audio_bytes(
     from app.providers.service import get_tts_provider
 
     try:
-        provider = get_tts_provider("faster-qwen3-tts")
+        provider = get_tts_provider()
         if provider is None:
             raise RuntimeError("Configured TTS provider is unavailable")
         result = provider.generate_audio(

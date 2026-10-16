@@ -22,6 +22,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.job_repository import PostgresJobRepository
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
+from app.providers.catalog import LOCAL_DEVICE, provider_supports
 from app.providers.service import get_tts_provider
 from app.providers.tts_priority import generation_class, other_process_priority_pending
 
@@ -113,15 +114,42 @@ def _effective_generation_parameters(provider: Any, requested: dict[str, Any]) -
     return dict(resolved)
 
 
+def _resolved_job_parameters(
+    database: PostgresDatabase, context: TenantContext, provider: Any, payload: dict[str, Any],
+    job_id: str,
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """The job's and each character's complete generation parameters, pinned in the job.
+
+    Characters with their own performance levels carry their own parameters
+    (``speaker_generation_parameters``); everyone else uses the job's.
+    """
+    requested = dict(payload.get("generation_parameters") or {})
+    requested_speakers = {str(key): dict(value) for key, value in
+                          dict(payload.get("speaker_generation_parameters") or {}).items()}
+    settings = _effective_generation_parameters(provider, requested)
+    speakers = {key: _effective_generation_parameters(provider, value)
+                for key, value in requested_speakers.items()}
+    if settings != requested or speakers != requested_speakers:
+        _persist_effective_generation_parameters(
+            database, context, job_id=job_id, effective=settings,
+            speakers=speakers if requested_speakers else None,
+        )
+        payload["generation_parameters"] = settings
+        payload["speaker_generation_parameters"] = speakers
+    return settings, speakers
+
+
 def _persist_effective_generation_parameters(
     database: PostgresDatabase, context: TenantContext, *, job_id: str,
-    effective: dict[str, Any],
+    effective: dict[str, Any], speakers: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     with unit_of_work(database) as work:
         current = work.jobs.get_job(context, job_id)
         if current is not None and current["module"] == "audiobook":
             input_payload = dict(current.get("input_payload") or {})
             input_payload["generation_parameters"] = effective
+            if speakers is not None:
+                input_payload["speaker_generation_parameters"] = speakers
             work.jobs.patch_job(
                 context,
                 job_id=job_id,
@@ -161,14 +189,21 @@ def decode_pcm_wav(response: dict[str, Any]) -> tuple[bytes, float, int]:
     return content, duration, sample_rate
 
 
+def codec_steps_per_second(settings: dict[str, Any]) -> float:
+    """The engine's codec rate: its resolved parameters name it unless it is Qwen's 12.5 Hz."""
+    return float(settings.get("codec_steps_per_second") or CODEC_STEPS_PER_SECOND)
+
+
 def unit_token_budget(unit: RenderUnit, settings: dict[str, Any]) -> int:
     """The codec steps this unit may use under these settings (see ``speech_budget``)."""
-    return speech_token_budget(unit.speech_plan.tts_input_text, settings.get("max_new_tokens"))
+    return speech_token_budget(unit.speech_plan.tts_input_text, settings.get("max_new_tokens"),
+                               codec_steps_per_second(settings))
 
 
-def usable_cached_render(cached: dict[str, Any] | None, budget: int) -> dict[str, Any] | None:
+def usable_cached_render(cached: dict[str, Any] | None, budget: int,
+                         steps_per_second: float = CODEC_STEPS_PER_SECOND) -> dict[str, Any] | None:
     """A cached render, unless it is a model runaway that used up its budget: those are generated again."""
-    if cached is None or exhausted_speech_budget(float(cached["duration_seconds"]), budget):
+    if cached is None or exhausted_speech_budget(float(cached["duration_seconds"]), budget, steps_per_second):
         return None
     return cached
 
@@ -184,6 +219,7 @@ def _synthesize(
     """
     text = unit.speech_plan.tts_input_text.strip()
     budget = unit_token_budget(unit, settings)
+    rate = codec_steps_per_second(settings)
     bounded = {**settings, "max_new_tokens": budget, "instruct": unit.delivery}
     attempts = [bounded] if settings.get("parity_mode") else [bounded, {**bounded, "parity_mode": True}]
     for retries, parameters in enumerate(attempts):
@@ -198,7 +234,7 @@ def _synthesize(
                 "text": text, "speaker": speaker, "language": unit.language, "parameters": parameters,
             }])[0]
         audio, duration, sample_rate = decode_pcm_wav(response)
-        if not exhausted_speech_budget(duration, budget):
+        if not exhausted_speech_budget(duration, budget, rate):
             if not isinstance(response.get("generation_parameters_used"), dict):
                 sent = {key: value for key, value in parameters.items() if key != "instruct"}
                 response = {**response, "generation_parameters_used": sent}
@@ -206,7 +242,7 @@ def _synthesize(
         _LOG.warning("speech model ran out its %s-step budget for span %s (parity_mode=%s)",
                      budget, unit.span_id, parameters.get("parity_mode"))
     raise RenderFailure(
-        f"The speech model did not finish “{text[:60]}” within {budget / CODEC_STEPS_PER_SECOND:.0f} s, "
+        f"The speech model did not finish “{text[:60]}” within {budget / rate:.0f} s, "
         "even after a retry in parity mode. Edit or remove this passage in Span review, then render again.",
     )
 
@@ -283,7 +319,8 @@ def _voice_for(unit: RenderUnit, profiles: dict[str, Any], provider_id: str) -> 
         raise RenderFailure(f"voice profile {unit.voice_profile_id} is unavailable", retryable=False)
     if voice_reference_revision(materialize_asset(profile)) != unit.voice_revision_hash:
         raise RenderFailure(f"voice profile {unit.voice_profile_id} changed since casting", retryable=False)
-    if provider_id == "faster-qwen3-tts":
+    if provider_supports(provider_id, LOCAL_DEVICE, "tts"):
+        # The local engines resolve Voice Library ids to sample + transcript.
         return unit.voice_profile_id
     return str(profile.metadata.get("voice_clone_id") or profile.metadata.get("voice_id") or "")
 
@@ -402,13 +439,9 @@ def _render_claimed(
         provider = get_tts_provider(payload["provider_id"])
         if provider is None:
             raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
-        requested_settings = dict(payload.get("generation_parameters") or {})
-        settings = _effective_generation_parameters(provider, requested_settings)
-        if settings != requested_settings:
-            _persist_effective_generation_parameters(
-                database, context, job_id=job_id, effective=settings,
-            )
-            payload["generation_parameters"] = settings
+        job_settings, speaker_settings = _resolved_job_parameters(
+            database, context, provider, payload, job_id,
+        )
         with unit_of_work(database) as work:
             units = load_chapter_units(
                 work.connection, context, project_id=payload["project_id"],
@@ -420,7 +453,8 @@ def _render_claimed(
             (unit, unit.identity(
                 provider_id=payload["provider_id"], model_id=payload["model_id"],
                 model_revision=payload["model_revision"],
-                generation_parameters=settings, seed=payload.get("seed"),
+                generation_parameters=speaker_settings.get(unit.speaker_id, job_settings),
+                seed=payload.get("seed"),
             ).key()) for unit in units
         ]
         batch_id = f"ab:batch:{job_id}"
@@ -441,6 +475,7 @@ def _render_claimed(
         cache_hits = 0
         generated = 0
         for unit, key in requests:
+            settings = speaker_settings.get(unit.speaker_id, job_settings)
             assert_model_revision(payload["provider_id"], payload["model_id"],
                                   payload["model_revision"])
             speaker = _voice_for(unit, profiles, payload["provider_id"])
@@ -458,7 +493,8 @@ def _render_claimed(
                     work.commit()
                     return True
                 cached = usable_cached_render(find_valid_render(work.connection, context, blobs, key),
-                                              unit_token_budget(unit, settings))
+                                              unit_token_budget(unit, settings),
+                                              codec_steps_per_second(settings))
                 if cached is not None:
                     completed += 1
                     cache_hits += 1
@@ -497,7 +533,8 @@ def _render_claimed(
                 time.sleep(0.5)
             with unit_of_work(database) as work:
                 cached = usable_cached_render(find_valid_render(work.connection, context, blobs, key),
-                                              unit_token_budget(unit, settings))
+                                              unit_token_budget(unit, settings),
+                                              codec_steps_per_second(settings))
                 if cached is not None:
                     completed += 1
                     cache_hits += 1
@@ -740,16 +777,13 @@ def _preview_claimed(
         provider = get_tts_provider(payload["provider_id"])
         if provider is None:
             raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
-        requested_settings = dict(payload.get("generation_parameters") or {})
-        settings = _effective_generation_parameters(provider, requested_settings)
-        if settings != requested_settings:
-            _persist_effective_generation_parameters(
-                database, context, job_id=job_id, effective=settings,
-            )
-            payload["generation_parameters"] = settings
+        job_settings, speaker_settings = _resolved_job_parameters(
+            database, context, provider, payload, job_id,
+        )
         profiles = {item.id: item for item in discover_canonical_voice_clone_assets()}
         refs = []
         for unit in units:
+            settings = speaker_settings.get(unit.speaker_id, job_settings)
             speaker = _voice_for(unit, profiles, payload["provider_id"])
             key = unit.identity(
                 provider_id=payload["provider_id"], model_id=payload["model_id"],
@@ -767,7 +801,8 @@ def _preview_claimed(
                 work.jobs.renew_lease(context, job_id=job_id, worker_id=worker_id,
                                       lease_token=token, lease_seconds=JOB_LEASE_SECONDS)
                 cached = usable_cached_render(find_valid_render(work.connection, context, blobs, key),
-                                              unit_token_budget(unit, settings))
+                                              unit_token_budget(unit, settings),
+                                              codec_steps_per_second(settings))
                 work.commit()
             if cached is not None:
                 refs.append({"render_id": cached["id"], "audio_asset_id": cached["audio_asset_id"]})

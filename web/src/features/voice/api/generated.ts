@@ -55,6 +55,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tts/engines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Engines
+         * @description The local TTS engines, the selected one, and the progress of the last switch.
+         */
+        get: operations["engines_api_tts_engines_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tts/engines/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Select Engine
+         * @description Make an engine Omnix's default TTS: unloads the current one, then loads it.
+         */
+        post: operations["select_engine_api_tts_engines_select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tts/runtime/status": {
         parameters: {
             query?: never;
@@ -459,6 +499,11 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** SelectTtsEngine */
+        SelectTtsEngine: {
+            /** Provider Id */
+            provider_id: string;
+        };
         /** SendChatMessageRequest */
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
@@ -483,10 +528,66 @@ export interface components {
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
         StateHashResponse: core["schemas"]["StateHashResponse"];
+        /** TtsEngine */
+        TtsEngine: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Label */
+            label: string;
+            /** Needs Transcripts */
+            needs_transcripts: boolean;
+            /** Selected */
+            selected: boolean;
+            /** Unavailable Reason */
+            unavailable_reason: string;
+            /** Voice Controls */
+            voice_controls: string[];
+        };
+        /** TtsEngineSwitch */
+        TtsEngineSwitch: {
+            /** Error */
+            error: string | null;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "idle" | "unloading" | "preparing_voices" | "loading" | "ready" | "failed";
+            /** Provider */
+            provider: string | null;
+            voices: components["schemas"]["VoiceTranscriptPreparation"];
+        };
+        /** TtsEnginesResponse */
+        TtsEnginesResponse: {
+            /** Engines */
+            engines: components["schemas"]["TtsEngine"][];
+            /** Selected */
+            selected: string;
+            switch: components["schemas"]["TtsEngineSwitch"];
+        };
         /** ValidationError */
         ValidationError: core["schemas"]["ValidationError"];
         /** VersionDiagnostics */
         VersionDiagnostics: core["schemas"]["VersionDiagnostics"];
+        /** VoiceTranscriptFailure */
+        VoiceTranscriptFailure: {
+            /** Error */
+            error: string;
+            /** Voice Id */
+            voice_id: string;
+        };
+        /** VoiceTranscriptPreparation */
+        VoiceTranscriptPreparation: {
+            /** Already Ready */
+            already_ready: number;
+            /** Failed */
+            failed: components["schemas"]["VoiceTranscriptFailure"][];
+            /** Prepared */
+            prepared: string[];
+        };
         /** WorkerHealth */
         WorkerHealth: core["schemas"]["WorkerHealth"];
         /** WorkerHealthPayload */
@@ -571,6 +672,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["STTProxyResponse"];
+                };
+            };
+        };
+    };
+    engines_api_tts_engines_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtsEnginesResponse"];
+                };
+            };
+        };
+    };
+    select_engine_api_tts_engines_select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectTtsEngine"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtsEnginesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

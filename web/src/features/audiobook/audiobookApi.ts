@@ -104,6 +104,18 @@ export const audiobookApi = {
       params: { path: { project_id: projectId, speaker_id: speakerId } },
       body: { voice_profile_id: voiceProfileId },
     })),
+  setPerformance: (projectId: string, body: Schemas['BookPerformance-Input']) =>
+    view<{ performance: Schemas['BookPerformance']; changed: boolean }>(api.PUT('/api/audiobook/projects/{project_id}/performance', {
+      params: { path: project(projectId) }, body,
+    })),
+  setAutoDirect: (projectId: string, policy: Schemas['SetAutoDirect']['policy']) =>
+    view<unknown>(api.PUT('/api/audiobook/projects/{project_id}/auto-direct', {
+      params: { path: project(projectId) }, body: { policy },
+    })),
+  directPerformance: (projectId: string, chapterIds: string[] = []) =>
+    view<{ job_id: string }>(api.POST('/api/audiobook/projects/{project_id}/direct-performance', {
+      params: { path: project(projectId) }, body: { chapter_ids: chapterIds },
+    })),
   setPronunciation: (projectId: string, body: Schemas['SetPronunciation']) =>
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/pronunciations', { params: { path: project(projectId) }, body })),
   excludeSpeech: (projectId: string, spanId: string, body: Schemas['ExcludeSpanText']) =>

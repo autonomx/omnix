@@ -31,3 +31,11 @@ def test_audio_that_ran_out_its_budget_is_a_runaway():
     # The slowest finished passage in rendered books used 61% of its budget.
     budget = speech_token_budget("“U-um…”")
     assert not exhausted_speech_budget(0.61 * budget / CODEC_STEPS_PER_SECOND, budget)
+
+
+def test_budget_and_runaway_check_follow_the_engine_codec_rate():
+    qwen, fish = speech_token_budget("he began."), speech_token_budget("he began.", steps_per_second=21.5)
+    # The same allowance in seconds, counted in the faster codec's frames.
+    assert fish == 119 and qwen == 69
+    assert not exhausted_speech_budget(5.0, fish, 21.5)
+    assert exhausted_speech_budget(5.3, fish, 21.5)

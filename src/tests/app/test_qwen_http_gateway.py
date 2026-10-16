@@ -50,7 +50,8 @@ def test_streaming_pcm16_is_decoded_without_loading_a_gpu_model():
     assert sum(len(audio) for audio, _, _ in chunks) == 5000
     np.testing.assert_allclose(chunks[0][0][:2], [.25, -.25])
     assert chunks[0][1] == 24000
-    assert json.loads(calls[0].content) == {'text': 'hello', 'speaker': 'Alex', 'language': 'en', 'max_new_tokens': 32}
+    assert json.loads(calls[0].content) == {'text': 'hello', 'speaker': 'Alex', 'language': 'en', 'max_new_tokens': 32,
+                                            'provider': 'faster-qwen3-tts'}
     assert calls[0].headers['X-Omnix-Client'] == 'gateway'
     assert str(calls[0].url).endswith('/api/tts/live-call/stream')
     assert body.closed
@@ -122,3 +123,52 @@ def test_an_older_tts_service_is_reported_as_needing_a_restart():
     provider = _gateway(lambda request: httpx.Response(404, json={'detail': 'Not Found'}))
     with pytest.raises(RuntimeError, match='restart the TTS service'):
         provider.resolve_generation_parameters({'temperature': 0.7})
+
+
+def test_the_facade_has_the_service_serve_the_engine_it_names():
+    requests = []
+
+    def handler(request):
+        requests.append((request.method, request.url.path, json.loads(request.content) if request.content else None))
+        if request.url.path == '/health':
+            return httpx.Response(200, json={'ok': True, 'provider': 'faster-qwen3-tts'})
+        if request.url.path == '/api/tts/provider':
+            return httpx.Response(200, json={'ok': True, 'provider': 'fish-s2-pro'})
+        return httpx.Response(200, content=b'RIFF', headers={'content-type': 'audio/wav', 'X-Omnix-Sample-Rate': '44100'})
+
+    provider = QwenHttpGatewayProvider('http://127.0.0.1:5101', provider_name='fish-s2-pro')
+    provider.http = mock_http_client(handler)
+
+    assert provider.start()['running'] is True
+    provider.generate_audio('Hello.', speaker='voice-cloning:jinx')
+
+    assert requests[1] == ('POST', '/api/tts/provider', {'provider': 'fish-s2-pro'})
+    assert requests[2][2]['provider'] == 'fish-s2-pro'
+
+
+def test_an_older_tts_service_cannot_switch_engines():
+    def handler(request):
+        if request.url.path == '/health':
+            return httpx.Response(200, json={'ok': True, 'provider': 'qwen3_tts'})
+        return httpx.Response(404, json={'detail': 'Not Found'})
+
+    provider = QwenHttpGatewayProvider('http://127.0.0.1:5101', provider_name='fish-s2-pro')
+    provider.http = mock_http_client(handler)
+    with pytest.raises(RuntimeError, match='restart the TTS service'):
+        provider.start()
+
+
+def test_gateway_http_selection_serves_the_selected_engine(monkeypatch):
+    from app.providers import service as provider_service
+    monkeypatch.setenv('OMNIX_GATEWAY_TTS_HTTP', '1')
+    monkeypatch.setenv('OMNIX_TTS_URL', 'http://127.0.0.1:5101')
+    monkeypatch.setattr(shared, 'load_settings', lambda: {'audio_provider_tts': 'fish-s2-pro'})
+    monkeypatch.setattr(shared, '_tts_provider_instance', None)
+    monkeypatch.setattr(shared, '_tts_provider_name', None)
+    monkeypatch.setattr(shared, 'get_audio_registry', lambda: pytest.fail('constructed a local engine'))
+
+    provider = provider_service.get_tts_provider()
+
+    assert isinstance(provider, QwenHttpGatewayProvider)
+    assert provider.provider_name == 'fish-s2-pro'
+    assert provider_service.get_tts_provider('faster-qwen3-tts').provider_name == 'faster-qwen3-tts'

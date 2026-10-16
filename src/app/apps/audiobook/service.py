@@ -37,7 +37,10 @@ from .render_readiness import check_book_render_readiness
 from .speech_exclusions import load_removed_chapters
 from .export_service import start_export as create_export_job
 from .report import audit_export
-from .model_identity import assert_model_revision
+from .hashing import canonical_json
+from .model_identity import assert_model_revision, current_model_identity
+from .performance import normalize_performance, render_generation_parameters
+from .performance_direction import AUTO_DIRECT_POLICIES, AUTO_DIRECT_SETTING, auto_direct_policy
 from .document_structure import (
     ANALYSIS_POLICY_VERSION, DOCUMENT_STRUCTURE_VERSION, RENDER_POLICY_VERSION,
     READ_ONCE, analysis_policy, effective_render_action, effective_role,
@@ -234,6 +237,8 @@ class AudiobookService:
             project["audiobook_mode"] = str(
                 project_settings.get("audiobook_mode") or "standard"
             )
+            project["performance"] = normalize_performance(project_settings.get("performance"))
+            project["auto_direct_performance"] = auto_direct_policy(project_settings.get(AUTO_DIRECT_SETTING))
             project["document_structure_version"] = DOCUMENT_STRUCTURE_VERSION
             project["render_policy_version"] = RENDER_POLICY_VERSION
             project["analysis_policy_version"] = ANALYSIS_POLICY_VERSION
@@ -274,7 +279,8 @@ class AudiobookService:
             pipeline_rows = work.jobs.query_jobs(
                 context,
                 module="audiobook",
-                job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.assemble-chapter"),
+                job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.assemble-chapter",
+                           "audiobook.direct-performance"),
                 input_fields=(("project_id", project_id),),
                 order_by="created_desc",
                 limit=30,
@@ -564,6 +570,46 @@ class AudiobookService:
             "project_id": project_id, "audiobook_mode": mode,
             "render_policy_version": RENDER_POLICY_VERSION,
         }
+
+    def set_performance(
+        self, context: TenantContext, *, project_id: str, performance: dict[str, Any],
+    ) -> dict[str, object]:
+        """Store the book's Stability/Style and per-character overrides; the render run restarts."""
+        normalized = normalize_performance(performance)
+        with unit_of_work(self.database) as work:
+            projects = _projects(work)
+            project = projects.lock_render_settings(context, project_id)
+            if project is None:
+                raise KeyError(project_id)
+            unknown = set(normalized["speakers"]) - projects.project_speaker_ids(context, project_id)
+            if unknown:
+                raise ValueError(f"unknown speaker: {sorted(unknown)[0]}")
+            if normalize_performance(projects.performance(context, project_id)) == normalized:
+                work.rollback()
+                return {"project_id": project_id, "performance": normalized, "changed": False}
+            if project[1]:
+                cancel_render_run_jobs(work.jobs, context, str(project[1]))
+            projects.set_performance(context, project_id, canonical_json(normalized))
+            work.commit()
+        return {"project_id": project_id, "performance": normalized, "changed": True}
+
+    def set_auto_direct(self, context: TenantContext, *, project_id: str, policy: str) -> dict[str, str]:
+        """Whether classification is followed by directing the dialogue: always, with Fish, or never."""
+        if policy not in AUTO_DIRECT_POLICIES:
+            raise ValueError(f"policy must be one of {', '.join(AUTO_DIRECT_POLICIES)}")
+        with unit_of_work(self.database) as work:
+            if not _projects(work).set_setting(context, project_id, AUTO_DIRECT_SETTING, policy):
+                raise KeyError(project_id)
+            work.commit()
+        return {"project_id": project_id, "auto_direct_performance": policy}
+
+    def direct_performance(
+        self, context: TenantContext, *, project_id: str, chapter_ids: list[str] | None = None,
+    ) -> dict[str, str]:
+        """Queue an LLM pass that writes a delivery direction for each dialogue line."""
+        from .performance_direction import start_direction
+
+        return start_direction(self.database, context, project_id=project_id, chapter_ids=chapter_ids)
 
     def set_document_override(
         self, context: TenantContext, *, project_id: str, scope: str,
@@ -1350,9 +1396,17 @@ class AudiobookService:
             "source_revision_id": str(source_revision_id),
         }
 
+    @staticmethod
+    def _render_engine(provider_id: str | None, model_id: str | None) -> tuple[str, str]:
+        """The engine a render names; by default Omnix's selected TTS engine."""
+        if provider_id and model_id:
+            return provider_id, model_id
+        identity = current_model_identity(provider_id or None)
+        return str(identity["provider_id"]), str(model_id or identity["model_id"])
+
     def start_render(
         self, context: TenantContext, *, project_id: str,
-        provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",
+        provider_id: str | None = None, model_id: str | None = None,
         model_revision: str, generation_parameters: dict[str, object] | None = None,
         seed: int | None = None,
     ) -> dict[str, object]:
@@ -1360,12 +1414,16 @@ class AudiobookService:
             raise ValueError("a pinned model revision is required for reproducible rendering")
         if seed is not None or "seed" in (generation_parameters or {}):
             raise ValueError("this TTS provider does not apply generation seeds")
+        provider_id, model_id = self._render_engine(provider_id, model_id)
         assert_model_revision(provider_id, model_id, model_revision)
         with unit_of_work(self.database) as work:
             projects = _projects(work)
             project = projects.lock_render_source(context, project_id)
             if project is None:
                 raise KeyError(project_id)
+            book_parameters, speaker_parameters = render_generation_parameters(
+                provider_id, projects.performance(context, project_id), generation_parameters,
+            )
             readiness = check_book_render_readiness(
                 work.connection, context, project_id=project_id,
                 source_revision_id=project[0],
@@ -1387,7 +1445,8 @@ class AudiobookService:
                                       "chapter_id": chapter["id"],
                                       "provider_id": provider_id, "model_id": model_id,
                                       "model_revision": model_revision,
-                                      "generation_parameters": generation_parameters or {},
+                                      "generation_parameters": book_parameters,
+                                      "speaker_generation_parameters": speaker_parameters,
                                       "seed": seed},
                     "max_attempts": 5,
                 })
@@ -1467,7 +1526,7 @@ class AudiobookService:
     def start_preview(
         self, context: TenantContext, *, project_id: str,
         chapter_id: str, span_id: str, model_revision: str,
-        provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",
+        provider_id: str | None = None, model_id: str | None = None,
         generation_parameters: dict[str, object] | None = None,
         seed: int | None = None,
         voice_profile_id: str | None = None,
@@ -1476,6 +1535,7 @@ class AudiobookService:
             raise ValueError("a pinned model revision is required")
         if seed is not None or "seed" in (generation_parameters or {}):
             raise ValueError("this TTS provider does not apply generation seeds")
+        provider_id, model_id = self._render_engine(provider_id, model_id)
         assert_model_revision(provider_id, model_id, model_revision)
         voice_revision_hash = None
         if voice_profile_id is not None:
@@ -1497,6 +1557,9 @@ class AudiobookService:
                                        voice_revision_hash=voice_revision_hash)
             if not any(unit.span_id == span_id for unit in units):
                 raise ValueError("span is not renderable in this chapter")
+            book_parameters, speaker_parameters = render_generation_parameters(
+                provider_id, projects.performance(context, project_id), generation_parameters,
+            )
             job_id = f"ab:preview:{uuid4().hex}"
             work.jobs.create_job(context, {
                 "id": job_id, "module": "audiobook", "job_type": "audiobook.preview-span",
@@ -1505,7 +1568,8 @@ class AudiobookService:
                                   "source_revision_id": str(project[0]), "span_id": span_id,
                                   "provider_id": provider_id, "model_id": model_id,
                                   "model_revision": model_revision,
-                                  "generation_parameters": generation_parameters or {},
+                                  "generation_parameters": book_parameters,
+                                  "speaker_generation_parameters": speaker_parameters,
                                   "voice_profile_id": voice_profile_id,
                                   "voice_revision_hash": voice_revision_hash,
                                   "seed": seed},

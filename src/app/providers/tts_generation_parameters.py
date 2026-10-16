@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-# The sampling and conditioning settings the Qwen provider reads. Anything else
-# (private hints, delivery text the model does not consume) stays on the caller.
+# The sampling and conditioning settings the local providers read (Qwen, then
+# Fish S2 Pro, which also reads the audiobook delivery ``instruct``). Anything
+# else (private hints) stays on the caller.
 TTS_GENERATION_PARAMETER_KEYS = frozenset({
     "ref_text", "max_new_tokens", "min_new_tokens", "temperature", "top_k", "top_p",
     "do_sample", "repetition_penalty", "xvec_only", "non_streaming_mode",
     "append_silence", "parity_mode", "use_cuda_graphs",
+    "chunk_length", "normalize", "seed", "instruct",
 })
 
 
