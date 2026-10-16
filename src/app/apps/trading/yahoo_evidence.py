@@ -463,7 +463,6 @@ class YahooEvidenceStore:
                     continue
                 try:
                     start = datetime.fromisoformat(str(row["start_time"])).astimezone(_ET)
-                    received = datetime.fromisoformat(str(row["received_at"])).astimezone(timezone.utc)
                     value = Decimal(str(row.get("volume") or "0"))
                     close = Decimal(str(row.get("close") or "0"))
                 except Exception:

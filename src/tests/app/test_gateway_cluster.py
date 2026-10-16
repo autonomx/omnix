@@ -31,6 +31,12 @@ def test_api_children_have_explicit_narrow_role(monkeypatch):
     assert cluster['child_environment']('worker')['OMNIX_GATEWAY_BACKGROUND_ROLE'] == 'worker'
 
 
+def test_children_dump_a_native_crash_stack_to_the_log(monkeypatch):
+    monkeypatch.delenv('PYTHONFAULTHANDLER', raising=False)
+    for role in ('worker', 'api', 'job-worker'):
+        assert cluster['child_environment'](role)['PYTHONFAULTHANDLER'] == '1'
+
+
 def test_local_launcher_starts_one_job_worker_by_default_only_in_local_mode(monkeypatch):
     assert cluster['should_start_local_job_worker']({'OMNIX_ENV': 'development'})
     assert cluster['should_start_local_job_worker']({'OMNIX_ENV': 'local'})

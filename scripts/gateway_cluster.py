@@ -71,6 +71,8 @@ def child_environment(role: str) -> dict[str, str]:
     if role not in {"worker", "api", "job-worker"}:
         raise ValueError("Invalid gateway role")
     env = dict(os.environ, OMNIX_GATEWAY_BACKGROUND_ROLE=role)
+    # A child that dies in native code otherwise exits without a word in the log.
+    env.setdefault("PYTHONFAULTHANDLER", "1")
     if role == "job-worker":
         env.pop("OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME", None)
         env.pop("OMNIX_GATEWAY_ALLOW_LOCAL_TTS", None)
