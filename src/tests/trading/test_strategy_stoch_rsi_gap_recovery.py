@@ -85,6 +85,47 @@ def test_open_position_spanning_gap_exits_on_first_usable_post_gap_signal(
 ) -> None:
     # The prefix enters immediately before the gap. The first usable post-gap
     # close is below the 5m EMA, so the next observed bar is the exit.
+    # Two missing buckets (55, 56): longer than the one-bucket bridge.
+    bars = [_bar(index) for index in range(55)]
+    bars[52] = _bar(52, open_="10.8", close_="11.0")
+    bars[53] = _bar(53, open_="11.0", close_="11.1")
+    bars += [
+        _bar(57, open_="8.98", close_="9.0"),
+        _bar(58, open_="9.0", close_="9.1"),
+    ]
+    bars.extend(_bar(index) for index in range(59, 62))
+
+    def active_trade_indicators(values, **_kwargs):
+        count = len(list(values))
+        k = [Decimal("50")] * count
+        d = [Decimal("40")] * count
+        if count >= 55:
+            k[49], d[49] = Decimal("5"), Decimal("8")
+            k[50], d[50] = Decimal("9"), Decimal("7")
+            k[51], d[51] = Decimal("22"), Decimal("15")
+            k[52], d[52] = Decimal("40"), Decimal("30")
+        return k, d
+
+    monkeypatch.setattr(strategy, "_stochastic_rsi_aligned", active_trade_indicators)
+
+    snapshot = strategy.evaluate_stoch_rsi_5m(bars)
+
+    assert snapshot.state == "exited"
+    assert snapshot.reason_code == "STOCH_RSI_5M_CLOSE_BELOW_5_5M_EMA"
+    assert len(snapshot.trades) == 1
+    assert snapshot.entry_time == _bar(52).start_time
+    assert snapshot.entry_price == Decimal("10.8")
+    assert snapshot.exit_signal_time == _bar(57).end_time
+    assert snapshot.exit_time == _bar(58).start_time
+    assert snapshot.exit_price == Decimal("9.0")
+    assert snapshot.data_gap_start == _bar(55).start_time
+    assert snapshot.data_gap_resume == _bar(57).start_time
+
+
+def test_an_open_position_continues_across_a_single_missing_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Only bucket 55 is missing (a short halt): no gap state, the trade just continues.
     bars = [_bar(index) for index in range(55)]
     bars[52] = _bar(52, open_="10.8", close_="11.0")
     bars[53] = _bar(53, open_="11.0", close_="11.1")
@@ -110,12 +151,7 @@ def test_open_position_spanning_gap_exits_on_first_usable_post_gap_signal(
     snapshot = strategy.evaluate_stoch_rsi_5m(bars)
 
     assert snapshot.state == "exited"
-    assert snapshot.reason_code == "STOCH_RSI_5M_CLOSE_BELOW_5_5M_EMA"
-    assert len(snapshot.trades) == 1
     assert snapshot.entry_time == _bar(52).start_time
-    assert snapshot.entry_price == Decimal("10.8")
     assert snapshot.exit_signal_time == _bar(56).end_time
     assert snapshot.exit_time == _bar(57).start_time
-    assert snapshot.exit_price == Decimal("9.0")
-    assert snapshot.data_gap_start == _bar(55).start_time
-    assert snapshot.data_gap_resume == _bar(56).start_time
+    assert snapshot.data_gap_start is None

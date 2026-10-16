@@ -101,7 +101,7 @@ class StochRsi5mTrade(BaseModel):
 class StochRsi5mSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["stoch-rsi-5min-v15"] = "stoch-rsi-5min-v15"
+    policy_version: Literal["stoch-rsi-5min-v16"] = "stoch-rsi-5min-v16"
     state: StochRsi5mState
     reason_code: str
     session_date: str | None = None
@@ -224,6 +224,20 @@ def _first_current_gap(
     return None
 
 
+def _bridgeable_span(gap: tuple[datetime, datetime | None], source_interval: str) -> bool:
+    start, resume = gap
+    return (
+        source_interval == "5m"
+        and resume is not None
+        and resume - start <= timedelta(minutes=_SOURCE_INTERVAL_MINUTES["5m"])
+    )
+
+
+def _bridgeable_gap(gap, source_interval: str) -> bool:
+    """A single missing 5m bucket; 1m sources and longer gaps still reset."""
+    return source_interval == "5m" and gap.missing_bar_count == 1
+
+
 def _entry_in_window(bar: MarketBar, config: StochRsi5mConfig) -> bool:
     local_time = bar.start_time.astimezone(_ET).time()
     return config.entry_start_et <= local_time <= config.last_entry_et
@@ -299,12 +313,17 @@ def evaluate_stoch_rsi_5m(
     prior_trades: tuple[StochRsi5mTrade, ...] = ()
     carried_position: _CarriedPosition | None = None
     if gap is not None:
-        gaps = detect_session_gaps(
+        detected = detect_session_gaps(
             regular,
             session_date=session_date,
             interval=source_interval,
             as_of=regular[-1].end_time,
         )
+        # One missing 5m bucket (a short halt, a quiet bucket) is stepped over:
+        # the indicators continue on the bars that exist. Longer gaps reset.
+        gaps = [item for item in detected if not _bridgeable_gap(item, source_interval)]
+        if not gaps and (detected or _bridgeable_span(gap, source_interval)):
+            gap = None
         latest_gap = gaps[-1] if gaps else None
         if latest_gap is not None:
             gap = (latest_gap.start, latest_gap.end)
@@ -353,6 +372,7 @@ def evaluate_stoch_rsi_5m(
                     session_date=session_date,
                     interval=source_interval,
                     as_of=regular[-1].end_time,
+                    bridge_single_missing=source_interval == "5m",
                 )
             if not regular:
                 return _snapshot(
