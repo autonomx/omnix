@@ -317,16 +317,21 @@ class AlpacaIexStatusMonitor(ScheduledTradingMonitor):
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
-        if self._task is None:
+        if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._loop())
 
-    def run_once(self) -> None:
-        """Keep the reconnecting status stream under its scheduler task lock."""
+    async def run_once(self) -> None:
+        """Keep the reconnecting status stream under its scheduler task lock.
+
+        Async so the scheduler runs it on its event loop: the stream task needs
+        a running loop, which a thread-executor cycle does not have.
+        """
         if _enabled():
             self.start()
 
     async def stop(self) -> None:
         task = self._task
+        self._task = None
         if task is not None:
             task.cancel()
             try:

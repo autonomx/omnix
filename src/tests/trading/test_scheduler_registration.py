@@ -1,7 +1,6 @@
 """Trading monitor ownership is composed as per-task scheduler work."""
 
 import asyncio
-import inspect
 from datetime import datetime, timezone
 from logging import getLogger
 from types import SimpleNamespace
@@ -64,15 +63,17 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
 
 
 def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
+    """The stream task needs the scheduler's event loop, so the cycle must not run on a thread."""
     from app.apps.trading.providers import alpaca_iex_status
 
-    started = []
+    sessions = []
+
+    async def session(self):
+        sessions.append(self)
+        await asyncio.Event().wait()
+
     monkeypatch.setattr(alpaca_iex_status, "_enabled", lambda: True)
-    monkeypatch.setattr(
-        alpaca_iex_status.AlpacaIexStatusMonitor,
-        "start",
-        lambda self: started.append(self),
-    )
+    monkeypatch.setattr(alpaca_iex_status.AlpacaIexStatusMonitor, "_session", session)
     config = RuntimeConfig()
     context = FeatureContext(
         feature_id="trading",
@@ -90,17 +91,23 @@ def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
         if task is not None and task.task_id.endswith("alpaca_iex_status")
     )
 
-    result = task.run(
-        TaskContext(
-            task_id=task.task_id,
-            workspace_id="workspace-a",
-            scheduled_at=datetime.now(timezone.utc),
-        )
-    )
-    if inspect.isawaitable(result):
-        asyncio.run(result)
+    monitor = getattr(context.runtime_state, alpaca_iex_status._STATE_KEY)
+    assert task.executor == "async"
 
-    assert len(started) == 1
+    async def scheduled_cycle() -> None:
+        await task.run(
+            TaskContext(
+                task_id=task.task_id,
+                workspace_id="workspace-a",
+                scheduled_at=datetime.now(timezone.utc),
+            )
+        )
+        await asyncio.sleep(0)
+        await monitor.stop()
+
+    asyncio.run(scheduled_cycle())
+
+    assert sessions == [monitor]
 
 
 def test_monitors_share_the_scheduled_base_and_have_no_loops_of_their_own(monkeypatch):
