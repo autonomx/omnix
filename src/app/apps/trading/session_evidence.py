@@ -304,16 +304,43 @@ def begin_reconciliation(
     manifest: SessionEvidenceManifest,
     *,
     observed_at: datetime,
+    lease_until: datetime,
 ) -> SessionEvidenceManifest:
+    """Claim the manifest for one attempt.
+
+    ``lease_until`` is stored as ``next_retry_at`` so an attempt that never
+    records its outcome (process exit, cycle timeout) is retried only after the
+    lease lapses, not on every restart.
+    """
     if manifest.reconciliation_state in {"FINAL", "PERMANENTLY_UNSCORABLE"}:
         raise ValueError(
             f"terminal_manifest_cannot_retry:{manifest.reconciliation_state}"
         )
+    if lease_until <= observed_at:
+        raise ValueError("reconciliation_lease_must_follow_observation")
     return manifest.model_copy(
         update={
             "reconciliation_state": "RETRYING",
             "attempt_count": manifest.attempt_count + 1,
-            "next_retry_at": None,
+            "next_retry_at": lease_until,
+            "revision": manifest.revision + 1,
+            "updated_at": observed_at,
+        }
+    )
+
+
+def checkpoint_reconciliation(
+    manifest: SessionEvidenceManifest,
+    *,
+    observed_at: datetime,
+    payload: dict[str, Any],
+) -> SessionEvidenceManifest:
+    """Record an in-flight attempt's progress; the state and lease are unchanged."""
+    if manifest.reconciliation_state != "RETRYING":
+        raise ValueError("manifest_must_be_retrying_to_checkpoint")
+    return manifest.model_copy(
+        update={
+            "reconciliation_payload": payload,
             "revision": manifest.revision + 1,
             "updated_at": observed_at,
         }
@@ -567,6 +594,7 @@ __all__ = [
     "SessionEvidenceRepository",
     "begin_reconciliation",
     "build_session_evidence_manifest",
+    "checkpoint_reconciliation",
     "default_session_evidence_repository",
     "defer_reconciliation",
     "event_stream_input",
