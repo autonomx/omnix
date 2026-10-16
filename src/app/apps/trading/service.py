@@ -102,6 +102,20 @@ def _tape_reusable(recovered: RecoveredBars, observed: datetime) -> bool:
 
 
 IBKR_REPAIR_BLOCK = timedelta(minutes=15)
+# Yahoo publishes a minute's bar within moments; one still missing this long
+# after its bucket closed, after a successful exact repair, is not coming.
+YAHOO_REPAIR_SETTLE = timedelta(minutes=5)
+YAHOO_UNREPAIRABLE_MAX_KEYS = 4_096
+
+
+def _gap_bucket_starts(gap, step: timedelta) -> list[datetime]:
+    starts = []
+    cursor = gap.start.astimezone(timezone.utc)
+    end = gap.end.astimezone(timezone.utc)
+    while cursor < end:
+        starts.append(cursor)
+        cursor += step
+    return starts
 
 
 def _aligned_repair_blocks(starts: set[datetime], *, through: datetime) -> list[tuple[datetime, datetime]]:
@@ -170,6 +184,7 @@ class TradingMarketDataService:
         self.recovery_metrics = RecoveryStageMetrics()
         self._tape_lock = Lock()
         self._tapes: OrderedDict[tuple[Any, ...], tuple[datetime, RecoveredBars]] = OrderedDict()
+        self._yahoo_unrepairable: OrderedDict[tuple[str, str, date], set[datetime]] = OrderedDict()
 
     def bars(
         self,
@@ -447,13 +462,25 @@ class TradingMarketDataService:
 
             # A fresh request observed now cannot repair a historical causal
             # replay decision. Preserve that as explicit retroactive research.
-            if before_gaps and knowledge_mode != "causal_replay":
+            unrepairable_key = (instrument_id, interval, session_date)
+            repair_bucket = interval_duration(interval)
+            repair_window: tuple[datetime, datetime] | None = None
+            # Buckets an earlier repair proved Yahoo will not fill (a halt or a
+            # minute without trades) are not asked for again every cycle.
+            with self._tape_lock:
+                unrepairable = set(self._yahoo_unrepairable.get(unrepairable_key, ()))
+            open_gaps = [
+                gap
+                for gap in before_gaps
+                if not set(_gap_bucket_starts(gap, repair_bucket)) <= unrepairable
+            ]
+            if open_gaps and knowledge_mode != "causal_replay":
                 yahoo_provider = self.registry.provider("yahoo")
                 repair = getattr(yahoo_provider, "get_intraday_bars_range", None)
                 if callable(repair):
                     yahoo_repair_attempted = True
-                    repair_start = min(gap.start for gap in before_gaps)
-                    repair_end = max(gap.end for gap in before_gaps)
+                    repair_start = min(gap.start for gap in open_gaps)
+                    repair_end = max(gap.end for gap in open_gaps)
                     try:
                         with self.recovery_metrics.timed("yahoo_exact"):
                             exact = repair(
@@ -465,6 +492,7 @@ class TradingMarketDataService:
                             )
                         yahoo_1m.extend(list(exact.bars))
                         primary_bars = project_yahoo()
+                        repair_window = (repair_start, repair_end)
                     except Exception as exc:
                         detail = f"{type(exc).__name__}: {exc}"
                         primary_error = (
@@ -483,6 +511,22 @@ class TradingMarketDataService:
             )
             after_missing = sum(gap.missing_bar_count for gap in after_yahoo)
             yahoo_repaired_count = max(0, before_missing - after_missing)
+            if repair_window is not None:
+                # Only a successful answer for a bucket closed long enough ago is final.
+                settled_by = observed - YAHOO_REPAIR_SETTLE
+                proven = {
+                    start
+                    for gap in after_yahoo
+                    for start in _gap_bucket_starts(gap, repair_bucket)
+                    if repair_window[0] <= start < repair_window[1]
+                    and start + repair_bucket <= settled_by
+                }
+                if proven:
+                    with self._tape_lock:
+                        self._yahoo_unrepairable.setdefault(unrepairable_key, set()).update(proven)
+                        self._yahoo_unrepairable.move_to_end(unrepairable_key)
+                        while len(self._yahoo_unrepairable) > YAHOO_UNREPAIRABLE_MAX_KEYS:
+                            self._yahoo_unrepairable.popitem(last=False)
 
         primary_gaps = detect_session_gaps(
             primary_bars,

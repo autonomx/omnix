@@ -382,3 +382,37 @@ def test_official_transport_historical_errors_end_the_request_instead_of_waiting
         transport._historical_events[req_id].set()
     assert len(_request(_official_transport(notice_then_data))) == 1
     assert datetime.now(timezone.utc) - started < timedelta(seconds=3)
+
+
+def test_concurrent_requests_for_one_finished_range_reach_the_gateway_once(monkeypatch):
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    contract = _contract()
+    start = datetime(2026, 10, 14, 14, 0, tzinfo=timezone.utc)
+    transport = FakeIbkrTransport(contracts={"AAPL": [contract]}, history={contract.con_id: [_bar(start)]})
+    runtime = IbkrRuntime(
+        transport=transport, enabled=True, host="127.0.0.1", port=4002, client_id=71,
+        clock=lambda: start + timedelta(hours=1),
+    )
+    answer = transport.historical_bars
+    first_in_flight = threading.Event()
+    release = threading.Event()
+
+    def slow_gateway(*args, **kwargs):
+        first_in_flight.set()
+        release.wait(5)
+        return answer(*args, **kwargs)
+
+    monkeypatch.setattr(transport, "historical_bars", slow_gateway)
+    window = dict(start=start, end=start + timedelta(minutes=15))
+    results = []
+    # Tape warmers ask for the same block from several threads at once.
+    workers = [threading.Thread(target=lambda: results.append(runtime.historical_bars(contract, **window))) for _ in range(2)]
+    workers[0].start()
+    assert first_in_flight.wait(5)
+    workers[1].start()
+    release.set()
+    for worker in workers:
+        worker.join(5)
+
+    assert len(results) == 2 and results[0] == results[1]
+    assert runtime.historical_request_count == 1

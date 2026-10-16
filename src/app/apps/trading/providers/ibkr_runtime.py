@@ -1023,6 +1023,14 @@ class IbkrRuntime:
             )
         )
         with self._historical_lock:
+            # Concurrent tape warmers miss the cache together; whichever waited
+            # on this lock reuses the answer the first one stored.
+            with self._historical_cache_lock:
+                cached = self._historical_cache.get(key)
+                if cached is not None and (cached[1] is None or self._clock() < cached[1]):
+                    self._historical_cache.move_to_end(key)
+                    self.historical_cache_hit_count += 1
+                    return list(cached[0])
             elapsed = time_module.monotonic() - self._last_historical_request_monotonic
             if elapsed < min_interval:
                 time_module.sleep(min_interval - elapsed)
