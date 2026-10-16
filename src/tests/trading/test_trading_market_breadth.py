@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI
@@ -103,3 +103,14 @@ def test_the_monitor_backfills_then_adds_only_new_sessions() -> None:
     assert symbols == sorted(EXCHANGE) and start.date() < date(2025, 7, 1) and end > session_close(date(2026, 8, 5))
     # Nothing new until the next session closes.
     assert monitor.collect() == 0 and len(source.ranges) == 1
+
+
+def test_the_first_run_after_the_close_stays_outside_the_recent_sip_window() -> None:
+    # 30 minutes after the 16:00 ET close; Alpaca rejects SIP queries reaching into the last 15 minutes.
+    now = session_close(date(2026, 8, 5)) + timedelta(minutes=30)
+    repository, source = Repository(), Source()
+    monitor = BreadthMonitor(repository_factory=lambda: repository, source_factory=lambda: source, clock=lambda: now)
+
+    assert monitor.collect() == 4
+    _, _, end = source.ranges[0]
+    assert session_close(date(2026, 8, 5)) < end <= now - timedelta(minutes=15)

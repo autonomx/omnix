@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 EXCHANGES = ("NYSE", "NASDAQ")
 BACKFILL_SESSIONS = 400
 CHUNK_SYMBOLS = 200
+SIP_RECENT_DATA_DELAY = timedelta(minutes=16)
 BREADTH_METRICS = {"breadth.ad_line", "breadth.ad_ratio", "breadth.cvi"}
 
 
@@ -242,7 +243,9 @@ class BreadthMonitor(ScheduledTradingMonitor):
         first = (latest - timedelta(days=10)) if latest else target - timedelta(days=int(BACKFILL_SESSIONS * 1.45) + 10)
         source = self.source_factory()
         universe = source.universe()
-        bars = source.daily_bars(sorted(universe), datetime.combine(first, time(0), tzinfo=timezone.utc), session_close(target) + timedelta(hours=8))
+        # Alpaca refuses SIP queries reaching into the last 15 minutes without a paid plan.
+        end = min(session_close(target) + timedelta(hours=8), self.clock() - SIP_RECENT_DATA_DELAY)
+        bars = source.daily_bars(sorted(universe), datetime.combine(first, time(0), tzinfo=timezone.utc), end)
         days = [day for day in compute_breadth(bars, universe) if day.session_date <= target and (latest is None or day.session_date > latest)]
         return repository.save(days, f"alpaca_{getattr(source, 'feed', 'sip')}")
 
