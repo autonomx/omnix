@@ -8,7 +8,7 @@ Goal:
 
 TradingView features come from its public documentation (features page, plan comparison, Advanced Charts and Trading Platform docs, Help Center) and from inspecting the TradingView Desktop 3.4.1 package (see §10). Omnix status comes from a code search of `web/src/features/trading` and `src/app/apps/trading` on the baseline branch, checked a second time by a review. The rows first marked *verify* were checked against the code in TVP-0.1.
 
-TradingView is a reference for **features and behaviour only**. No TradingView code, assets, icons or text are copied into Omnix. Omnix implements each feature its own way, on its own stack (lightweight-charts 5, React, FastAPI, PostgreSQL).
+TradingView is a reference for **features and behaviour**, and since 2026-10-17 for the **look** as well: the terminal may visually resemble TradingView, built from Omnix's own CSS and assets with values matched by eye (DECISIONS, W-3). No TradingView code, CSS, markup, assets, icons, sounds, fonts or text are copied into Omnix. Omnix implements each feature its own way, on its own stack (lightweight-charts 5, React, FastAPI, PostgreSQL).
 
 ---
 
@@ -1083,7 +1083,7 @@ D-2 decided that paper accounts behave like TradingView's paper trading: shortin
 | D-5 | Fundamentals and earnings-date sources | **Decided 2026-10-09** | Free sources only: SEC XBRL company facts (statements, ratios, screener fundamentals), Alpaca corporate actions (dividends, splits), SEC 8-K item 2.02 (past earnings dates). Upcoming earnings dates wait for a paid calendar vendor the owner may choose later |
 | D-6 | Options data source | **Decided 2026-10-09** | Alpaca options market data (snapshots with Greeks and implied volatility; real-time OPRA needs Alpaca's paid data plan). Research only: no options orders |
 | D-7 | Manual live trading from the chart | Not in this roadmap | Live execution stays with deterministic strategies |
-| D-8 | Native desktop wrapper (Electron/Tauri) | Recommended, not formally decided | Not needed; TVP-4.5 shipped the installable PWA on this recommendation |
+| D-8 | Native desktop wrapper (Electron/Tauri) | Superseded 2026-10-17 | The desktop app is MarketPulse (Electron, its own runtime); Omnix keeps the installable PWA of TVP-4.5 (DECISIONS, D-8 (TVP)) |
 | D-9 | Server runtime for indicators and scripts | **Confirmed 2026-10-09** by the TVP-11.0 spike | Python only, no Node sidecar; scripts run on the server with a shared result cache (§6, TVP-11). Measured on 5,000 bars: median 48 ms per full run (max 285 ms), 0.016 ms per new bar; conditions for TVP-11.1 in `OMNIX_SCRIPTS_SPEC.md` §4 |
 
 ### 7.2 Data source recommendations
