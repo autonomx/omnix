@@ -78,3 +78,19 @@ describe('installed app (TVP-4.5)', () => {
     expect(view.container).toBeEmptyDOMElement();
   });
 });
+
+describe('desktop app (MarketPulse W-2)', () => {
+  afterEach(() => {
+    delete window.marketPulse;
+  });
+
+  it('counts the desktop app as the installed app and turns off web push there', async () => {
+    const { pushSupported } = await import('./alertNotificationsApi');
+    expect(isInstalledApp(media(false).query)).toBe(false);
+
+    window.marketPulse = { version: '1.0.0', platform: 'win32', setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), requestLoginCode: vi.fn() };
+
+    expect(isInstalledApp(media(false).query)).toBe(true);
+    expect(pushSupported()).toBe(false);
+  });
+});

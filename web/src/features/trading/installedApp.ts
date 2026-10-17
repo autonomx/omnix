@@ -3,6 +3,7 @@
 // There the browser-reserved keys (Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1..9)
 // reach the page, so the trading commands switch to TradingView's keys.
 import { useEffect, useSyncExternalStore } from 'react';
+import { isDesktopApp } from '../../shared/desktopBridge';
 import { installPrompt, onInstallPromptChange, takeInstallPrompt } from '../../shared/installPrompt';
 import { setTradingCommandAvailability } from './commands/useTradingCommands';
 
@@ -14,8 +15,9 @@ type MediaQueries = (query: string) => Pick<MediaQueryList, 'matches' | 'addEven
 
 const browserQueries: MediaQueries = (query) => window.matchMedia(query);
 
-/** Whether this page runs in the installed app's window. */
+/** Whether this page runs in the installed app's window, or in the desktop app (MarketPulse W-2). */
 export function isInstalledApp(media: MediaQueries = browserQueries): boolean {
+  if (isDesktopApp()) return true;
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return INSTALLED_QUERIES.some((query) => media(query).matches);
 }

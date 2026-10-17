@@ -3,6 +3,7 @@
  * Push needs a service worker (`/omnix-push-sw.js`), the user's permission and Omnix's VAPID key.
  */
 import { unwrapLabelled } from '../../api/http';
+import { isDesktopApp } from '../../shared/desktopBridge';
 import type { components } from './api/generated';
 import { api } from './api/gateway';
 
@@ -29,8 +30,9 @@ export const alertNotificationsApi = {
 
 export const PUSH_WORKER_URL = '/omnix-push-sw.js';
 
-/** Whether this browser can receive push notifications at all. */
+/** Whether this browser can receive push notifications at all; the desktop app uses its own notifications instead. */
 export function pushSupported(): boolean {
+  if (isDesktopApp()) return false;
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
 
