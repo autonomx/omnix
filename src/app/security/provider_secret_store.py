@@ -35,7 +35,6 @@ _RESEARCH_ENVIRONMENT_KEYS: dict[str, tuple[str, ...]] = {
 }
 _LEGACY_RESEARCH_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_API_KEY"
 _LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_PROVIDER"
-_TRADING_PROVIDERS = ("alpaca_iex", "coinmarketcap")
 _TRADING_ENVIRONMENT_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "alpaca_iex": {
         "api_key_id": ("OMNIX_ALPACA_API_KEY_ID", "APCA_API_KEY_ID"),
@@ -49,6 +48,8 @@ _TRADING_ENVIRONMENT_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
         "api_key": ("OMNIX_FRED_API_KEY", "FRED_API_KEY"),
     },
 }
+# Every provider in the table above is loaded and stored (a provider missing here was never read back).
+_TRADING_PROVIDERS = tuple(_TRADING_ENVIRONMENT_KEYS)
 _DESCRIPTION = "Omnix provider API keys"
 _CRYPTPROTECT_UI_FORBIDDEN = 0x01
 _ENVIRONMENT_OWNED_MARKER = b"OMNIX_ENVIRONMENT_OWNED_PROVIDER_KEYS\n"
