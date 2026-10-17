@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { audiobookApi } from './audiobookApi';
 import type { ReviewIssue } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
@@ -32,6 +33,7 @@ export function AudiobookReviewQueue({ ws }: { ws: AudiobookWorkspaceModel }) {
   const [reasonFilter, setReasonFilter] = useState('all');
   const [search, setSearch] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
+  const queryClient = useQueryClient();
   const issues = useMemo(() => project?.review_issues ?? [], [project?.review_issues]);
   const reasons = useMemo(() => [...new Set(issues.map((issue) => issue.reason))].sort((left, right) => reviewReasonLabel(left).localeCompare(reviewReasonLabel(right))), [issues]);
   const groups = useMemo(() => {
@@ -55,16 +57,57 @@ export function AudiobookReviewQueue({ ws }: { ws: AudiobookWorkspaceModel }) {
   const chaptersWithIssues = new Set(issues.map((issue) => issue.chapter_id)).size;
   const activeSpeakers = project.speakers.filter((speaker) => speaker.status === 'active');
   const chosenSpeaker = (issue: ReviewIssue) => reviewSpeakers[issue.id] ?? issue.speaker_id ?? '';
-  // Only an issue whose chosen speaker is in the cast can be resolved; the rest wait for a decision.
-  const confirmable = groups.flatMap((group) => group.issues).filter((issue) => activeSpeakers.some((speaker) => speaker.id === chosenSpeaker(issue)));
+  /**
+   * Who confirming an issue assigns: the chosen speaker, else a cast member named like the classifier's
+   * suggestion, else that suggested name, which Confirm all adds to the cast first. Null waits for a decision.
+   */
+  const target = (issue: ReviewIssue): { speakerId: string; name: string; inCast: boolean } | null => {
+    const chosen = project.speakers.find((speaker) => speaker.id === chosenSpeaker(issue) && speaker.status !== 'rejected');
+    if (chosen) return { speakerId: chosen.id, name: chosen.canonical_name, inCast: chosen.status === 'active' };
+    const candidate = issue.speaker_candidate?.trim();
+    if (!candidate) return null;
+    const named = activeSpeakers.find((speaker) => sameName(speaker.canonical_name, candidate));
+    return named ? { speakerId: named.id, name: named.canonical_name, inCast: true } : { speakerId: '', name: candidate, inCast: false };
+  };
+  const confirmable = groups.flatMap((group) => group.issues).filter((issue) => target(issue));
   const unconfirmable = shownCount - confirmable.length;
+  // Speakers Confirm all adds to the cast, each once.
+  const newSpeakers = confirmable.reduce<string[]>((names, issue) => {
+    const next = target(issue);
+    if (next && !next.inCast && !names.some((name) => sameName(name, next.name))) names.push(next.name);
+    return names;
+  }, []);
   const projectId = project.id;
-  /** Confirms each shown issue's chosen speaker in turn; any confirmed before a failure stay confirmed. */
+  /**
+   * Confirms the issues whose speaker is already in the cast, then adds the new speakers and confirms the rest
+   * that are still open. That order matters: adding a detected speaker resolves every open issue the classifier
+   * suggested it for, so a different speaker picked here must be saved first. A speaker the server refuses (its
+   * name is another speaker's alias, say) leaves its issues open; decisions saved before a failure stay saved.
+   */
   const confirmAll = () => void action(async () => {
+    const resolve = (issue: ReviewIssue, speakerId: string) =>
+      audiobookApi.resolveReview(projectId, issue.id, { speaker_id: speakerId, role: issue.structural_kind || 'narration' });
     for (const issue of confirmable) {
-      await audiobookApi.resolveReview(projectId, issue.id, { speaker_id: chosenSpeaker(issue), role: issue.structural_kind || 'narration' });
+      const next = target(issue);
+      if (next?.inCast) await resolve(issue, next.speakerId);
     }
-  }, `${confirmable.length} review decision${confirmable.length === 1 ? '' : 's'} saved.`);
+    const added: { name: string; id: string }[] = [];
+    const refused: string[] = [];
+    for (const name of newSpeakers) {
+      try { added.push({ name, id: (await audiobookApi.createSpeaker(projectId, { canonical_name: name }) as { id: string }).id }); } catch { refused.push(name); }
+    }
+    const stillOpen = newSpeakers.length ? new Set((await audiobookApi.project(projectId)).review_issues.map((issue) => issue.id)) : new Set<string>();
+    for (const issue of confirmable) {
+      const next = target(issue);
+      if (!next || next.inCast || !stillOpen.has(issue.id) || refused.some((name) => sameName(name, next.name))) continue;
+      const speakerId = next.speakerId || added.find((speaker) => sameName(speaker.name, next.name))?.id;
+      if (speakerId) await resolve(issue, speakerId);
+    }
+    if (refused.length) {
+      await queryClient.invalidateQueries({ queryKey: ['audiobook'] });
+      throw new Error(`Could not add ${refused.join(', ')} to the cast, so ${refused.length === 1 ? 'its' : 'their'} issues stay open. The other review decisions were saved.`);
+    }
+  }, `${confirmable.length} review decision${confirmable.length === 1 ? '' : 's'} saved${newSpeakers.length ? ` and ${newSpeakers.length} speaker${newSpeakers.length === 1 ? '' : 's'} added to the cast` : ''}.`);
 
   return (
     <section ref={sectionRef} className="audiobook-card audiobook-review-queue" aria-label="Human review queue">
@@ -86,11 +129,12 @@ export function AudiobookReviewQueue({ ws }: { ws: AudiobookWorkspaceModel }) {
         </select></label>
         <label className="audiobook-search-field">Search<input aria-label="Search review issues" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search passages or speakers…" /></label>
         <span className="audiobook-review-count">{shownCount === issues.length ? `${issues.length} issues` : `${shownCount} of ${issues.length} issues`}</span>
-        {confirmable.length > 1 && <button type="button" disabled={busy} title={unconfirmable ? `${unconfirmable} shown issue${unconfirmable === 1 ? '' : 's'} without a confirmed speaker will be left open.` : 'Confirm the chosen speaker for every shown issue.'} onClick={confirmAll}>
+        {confirmable.length > 1 && <button type="button" disabled={busy} title={unconfirmable ? `${unconfirmable} shown issue${unconfirmable === 1 ? '' : 's'} without a speaker will be left open.` : 'Confirm the chosen speaker for every shown issue.'} onClick={confirmAll}>
           {shownCount === issues.length ? `Confirm all ${confirmable.length}` : `Confirm ${confirmable.length} shown`}
         </button>}
       </div>}
-      {confirmable.length > 1 && unconfirmable > 0 && <p className="audiobook-detail-muted">{unconfirmable} shown issue{unconfirmable === 1 ? ' has' : 's have'} no speaker from the cast yet and will stay open; choose one or confirm the detected speaker first.</p>}
+      {confirmable.length > 1 && newSpeakers.length > 0 && <p className="audiobook-detail-muted">Confirming also adds {newSpeakers.length} speaker{newSpeakers.length === 1 ? '' : 's'} to the cast: {newSpeakers.join(', ')}. Adding a speaker resolves every open issue suggested for them, even ones the filters hide, so pick a different speaker on any issue where the suggestion is wrong before confirming.</p>}
+      {unconfirmable > 0 && <p className="audiobook-detail-muted">{unconfirmable} shown issue{unconfirmable === 1 ? ' has' : 's have'} no speaker yet and will stay open; choose one for each.</p>}
       {groups.map(({ chapter, issues: chapterIssues }) => <section className="audiobook-review-group" key={chapter.id} aria-label={`Review issues in ${chapter.title}`}>
         <h3>{chapter.title}<span>{chapterIssues.length}</span></h3>
         {chapterIssues.map((issue) => {

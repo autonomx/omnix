@@ -209,6 +209,10 @@ describe('AudiobookWorkspace', () => {
     expect(sourcePanel).not.toContainElement(spanPanel);
     expect(sourcePanel.parentElement).toBe(spanPanel.parentElement);
     expect(within(spanPanel).getByRole('heading', { name: 'Span review' })).toBeInTheDocument();
+    const classifyPanel = screen.getByRole('region', { name: 'Text classification' });
+    expect(classifyPanel.parentElement?.firstElementChild).toBe(classifyPanel);
+    expect(within(classifyPanel).getByRole('button', { name: 'Classify text' })).toBeInTheDocument();
+    expect(within(spanPanel).queryByRole('button', { name: 'Classify text' })).not.toBeInTheDocument();
     expect(within(spanPanel).getByRole('button', { name: 'Preview' })).toBeDisabled();
     expect(within(spanPanel).getByText('Choose a speaker and save interpretation, or classify text, before previewing audio.')).toBeInTheDocument();
     expect(screen.queryByText(/ingest failed/)).not.toBeInTheDocument();
@@ -233,6 +237,9 @@ describe('AudiobookWorkspace', () => {
     expect(saveIndex).toBeGreaterThanOrEqual(0);
     expect(saveIndex).toBeLessThan(importIndex);
     expect(fetchMock.mock.calls[saveIndex][1]?.body).toBe(JSON.stringify({ custom_rules: 'Character quotes can also be in speaker: quote format.' }));
+    expect(screen.queryByRole('region', { name: 'Human review queue' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /issues to resolve/ }));
+    expect(screen.getByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open review queue' }));
     expect(within(screen.getByRole('region', { name: 'Human review queue' })).getByText('"Hello," she said.')).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /Books/ }).at(-1)!);
@@ -538,7 +545,7 @@ describe('AudiobookWorkspace', () => {
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ speaker_id: 'ada', role: 'dialogue' }) })));
   });
 
-  it('confirms every shown review issue that has a speaker from the cast at once', async () => {
+  it('confirms every shown review issue at once, adding detected speakers to the cast', async () => {
     const issue = (id: string, text: string, extra: Record<string, unknown> = {}) => ({
       id, span_id: `span-${id}`, reason: 'LOW_CONFIDENCE_SPEAKER', evidence: {}, source_text: text, chapter_id: 'chapter-one',
       chapter_title: 'Opening', speaker_id: null, speaker_candidate: null, structural_kind: 'dialogue', ...extra,
@@ -575,18 +582,83 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open human review queue' }));
     const queue = await screen.findByRole('region', { name: 'Human review queue' });
 
-    // Only issue-one has a cast speaker so far: one is not enough for a bulk action.
-    expect(within(queue).queryByRole('button', { name: /^Confirm all/ })).not.toBeInTheDocument();
+    // issue-two has no speaker yet; the detected Guard counts, and confirming adds it to the cast.
+    expect(within(queue).getByRole('button', { name: 'Confirm all 2' })).toBeInTheDocument();
+    expect(within(queue).getByText(/1 shown issue has no speaker yet/)).toBeInTheDocument();
+    expect(within(queue).getByText(/Confirming also adds 1 speaker to the cast: Guard\./)).toBeInTheDocument();
     fireEvent.change(within(queue).getByLabelText('Speaker for review issue-two'), { target: { value: 'narrator' } });
-    expect(within(queue).getByText(/1 shown issue has no speaker from the cast yet/)).toBeInTheDocument();
-    fireEvent.click(await within(queue).findByRole('button', { name: 'Confirm all 2' }));
+    fireEvent.click(await within(queue).findByRole('button', { name: 'Confirm all 3' }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/review/issue-two',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ speaker_id: 'narrator', role: 'dialogue' }) })));
-    expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/review/issue-one',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ speaker_id: 'ada', role: 'dialogue' }) }));
-    expect(fetchMock).not.toHaveBeenCalledWith('/api/audiobook/projects/book-one/review/issue-three', expect.anything());
-    expect(await screen.findByText('2 review decisions saved.')).toBeInTheDocument();
+    expect(await screen.findByText('3 review decisions saved and 1 speaker added to the cast.')).toBeInTheDocument();
+    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url, init]) => `${String(url).split('/book-one/')[1]} ${String(init?.body)}`);
+    // Decisions for cast speakers are saved before Guard is added, then Guard's issue is confirmed.
+    expect(posts).toEqual([
+      'review/issue-one {"speaker_id":"ada","role":"dialogue"}',
+      'review/issue-two {"speaker_id":"narrator","role":"dialogue"}',
+      'speakers {"canonical_name":"Guard"}',
+      'review/issue-three {"speaker_id":"guard","role":"dialogue"}',
+    ]);
+  });
+
+  it('confirms suggested speakers missing from the cast by adding them first', async () => {
+    const issue = (id: string, candidate: string, extra: Record<string, unknown> = {}) => ({
+      id, span_id: `span-${id}`, reason: 'LOW_CONFIDENCE_SPEAKER', evidence: {}, source_text: `"${id}"`, chapter_id: 'chapter-one',
+      chapter_title: 'Opening', speaker_id: null, speaker_candidate: candidate, structural_kind: 'dialogue', ...extra,
+    });
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    let guardAdded = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/speakers') && init?.method === 'POST') {
+        const name = JSON.parse(String(init.body)).canonical_name;
+        if (name === 'Roxy') return json({ detail: 'speaker name is already a confirmed alias of another speaker' }, 422);
+        if (name === 'Guard') guardAdded = true;
+        return json({ id: name === 'Guard' ? 'guard' : 'zanoba-new', canonical_name: name, status: 'active' });
+      }
+      if (init?.method === 'POST') return json({ ok: true });
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }],
+        review_issues: [
+          // Adding the detected Guard resolves both of its issues on the server.
+          ...(guardAdded ? [] : [issue('issue-one', 'Guard', { speaker_id: 'guard' }), issue('issue-two', ' guard ', { speaker_id: 'guard' })]),
+          issue('issue-three', 'Roxy'),
+          issue('issue-four', 'Zanoba'),
+          issue('issue-five', 'Ada', { speaker_id: 'ada' }),
+        ],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'ada', canonical_name: 'Ada', kind: 'character', status: 'active', casting: null, aliases: [] },
+          { id: 'guard', canonical_name: 'Guard', kind: 'character', status: guardAdded ? 'active' : 'proposed', casting: null, aliases: [] }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return json(body);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open human review queue' }));
+    const queue = await screen.findByRole('region', { name: 'Human review queue' });
+
+    expect(within(queue).getByText(/Confirming also adds 3 speakers to the cast: Guard, Roxy, Zanoba\./)).toBeInTheDocument();
+    fireEvent.click(within(queue).getByRole('button', { name: 'Confirm all 5' }));
+
+    expect(await screen.findByText(/Could not add Roxy to the cast, so its issues stay open/)).toBeInTheDocument();
+    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url, init]) => `${String(url).split('/book-one/')[1]} ${String(init?.body)}`);
+    expect(posts).toEqual([
+      'review/issue-five {"speaker_id":"ada","role":"dialogue"}',
+      'speakers {"canonical_name":"Guard"}',
+      'speakers {"canonical_name":"Roxy"}',
+      'speakers {"canonical_name":"Zanoba"}',
+      'review/issue-four {"speaker_id":"zanoba-new","role":"dialogue"}',
+    ]);
   });
 
   it('dismisses an unused detected speaker', async () => {
@@ -1380,6 +1452,42 @@ describe('AudiobookWorkspace', () => {
       expect(renderButton).toBeDisabled();
       expect(screen.getByRole('status', { name: 'Render book requirements' })).toHaveTextContent('Assign a voice to Ehsan');
     }
+  });
+
+  it('shows at the render button that a render is starting, then why it was refused', async () => {
+    let refuse: () => void = () => undefined;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/render') && init?.method === 'POST') {
+        await new Promise<void>((resolve) => { refuse = resolve; });
+        return new Response(JSON.stringify({ detail: 'Rendering or chapter assembly is already in progress.' }),
+          { status: 409, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'fish-s2-pro', model_id: 'S2-Pro', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'ready_to_render', chapters: [], review_issues: [], speakers: [],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 1 },
+        render_readiness: { ready: true, blockers: [] },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render book' }));
+
+    expect(await screen.findByRole('button', { name: 'Starting render…' })).toBeDisabled();
+    expect(screen.getByText('Checking the installed model and queuing chapters…')).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/render', expect.objectContaining({ method: 'POST' })));
+    refuse();
+    expect(await screen.findByText(/^Render not started: .*already in progress/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Render book' })).toBeEnabled();
   });
 
   it('offers a retry from persisted failed render state', async () => {

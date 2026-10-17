@@ -35,6 +35,23 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
     <>
       {workspaceMode === 'review' && librarySection === 'projects' &&
       <div className="audiobook-manuscript" id="audiobook-manuscript">
+        {selectedChapter && <section className="audiobook-card audiobook-classify-section" aria-labelledby="audiobook-classify-title">
+          <div className="audiobook-section-title"><div><p className="eyebrow">Phase 3</p><h2 id="audiobook-classify-title">Text classification</h2><p className="audiobook-subtitle">Review the quote spans below first, then classify text to assign each span to a speaker.</p></div>
+            <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
+              onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
+              {reclassificationRunning ? 'Classifying…' : 'Classify text'}
+            </button>
+          </div>
+          <label className="audiobook-classification-rules">Custom classification rules (optional)
+            <textarea value={classificationRules[project.id] ?? project.classification_rules ?? ''} maxLength={4000} rows={3}
+              disabled={busy || reclassificationRunning}
+              onChange={(event) => setClassificationRules((current) => ({ ...current, [project.id]: event.target.value }))}
+              placeholder="Character quotes can also be in speaker: quote format, e.g. Ehsan: It’s working again."
+              aria-describedby="classification-rules-help" />
+            <small id="classification-rules-help">Review the extracted quote spans before clicking Classify text. Classification assigns speakers to these spans and does not re-extract quotes.</small>
+            {rulesNeedExtraction && <small>Rules changed. Open Book source, extract quotes again, and review the spans first.</small>}
+          </label>
+        </section>}
         <section className="audiobook-card audiobook-source-panel" aria-labelledby="audiobook-source-text-title">
         <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2 id="audiobook-source-text-title">Source text</h2><p className="audiobook-subtitle">{selectedChapter?.title ?? activeChapter?.title ?? 'Awaiting extraction'} · Select a passage to open its span below.</p></div>
           <div className="audiobook-source-chapter-actions"><span>{project.chapters.length} chapters</span>
@@ -58,20 +75,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
         </section>
         {selectedChapter && <section className="audiobook-card audiobook-spans-section" aria-label="Characterization spans">
             <div className="audiobook-section-title"><div><p className="eyebrow">Speech review</p><h2>Span review</h2><p className="audiobook-subtitle">Review extracted quote spans before classifying text. Select text in a passage to remove it from audio or set a word’s pronunciation. Expand a span to edit its character and delivery.</p></div>
-              <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
-                onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
-                {reclassificationRunning ? 'Classifying…' : 'Classify text'}
-              </button>
             </div>
-            <label className="audiobook-classification-rules">Custom classification rules (optional)
-              <textarea value={classificationRules[project.id] ?? project.classification_rules ?? ''} maxLength={4000} rows={3}
-                disabled={busy || reclassificationRunning}
-                onChange={(event) => setClassificationRules((current) => ({ ...current, [project.id]: event.target.value }))}
-                placeholder="Character quotes can also be in speaker: quote format, e.g. Ehsan: It’s working again."
-                aria-describedby="classification-rules-help" />
-              <small id="classification-rules-help">Review the extracted quote spans before clicking Classify text. Classification assigns speakers to these spans and does not re-extract quotes.</small>
-              {rulesNeedExtraction && <small>Rules changed. Open Book source, extract quotes again, and review the spans first.</small>}
-            </label>
             <label className="audiobook-span-filter">Filter by character
               <select aria-label="Filter spans by character" value={speakerFilter} onChange={(event) => setSpeakerFilter(event.target.value)}>
                 <option value="all">All characters</option><option value="unassigned">Unassigned</option>

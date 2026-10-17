@@ -118,7 +118,9 @@ export function AudiobookProjectHeader({ ws }: { ws: AudiobookWorkspaceModel }) 
         </div>
         <div className="audiobook-project-header-side">
           <div className="audiobook-header-action-buttons"><button type="button" aria-expanded={projectSettingsOpen} onClick={() => setProjectSettingsOpen((open) => !open)}>{projectSettingsOpen ? 'Close editor' : 'Edit project'}</button><button type="button" className="audiobook-primary-action" disabled={busy} onClick={queueSamplePreview}>Play sample</button><button type="button" aria-label="More project actions" onClick={() => setProjectSettingsOpen(true)}>...</button></div>
-          <div className="audiobook-status-meter"><div><p className="eyebrow">Project status</p><strong>{project.review_issues.length ? 'Review required' : project.state.replaceAll('_', ' ')}</strong><span>{project.review_issues.length ? `${project.review_issues.length} issues to resolve` : `${completedRenderChapters} / ${renderChapterCount} audiobook chapters rendered`}</span></div><b>{renderProgressPercent}%</b><progress max={100} value={renderProgressPercent} /></div>
+          <div className={`audiobook-status-meter${project.review_issues.length ? ' has-issues' : ''}`}><div><p className="eyebrow">Project status</p><strong>{project.review_issues.length ? 'Review required' : project.state.replaceAll('_', ' ')}</strong>{project.review_issues.length
+            ? <button type="button" className="audiobook-status-issues" onClick={() => navigateLibrary('review')}>{project.review_issues.length} issues to resolve</button>
+            : <span>{`${completedRenderChapters} / ${renderChapterCount} audiobook chapters rendered`}</span>}</div><b>{renderProgressPercent}%</b><progress max={100} value={renderProgressPercent} /></div>
         </div>
         <section className="audiobook-production-flow" aria-labelledby="audiobook-production-flow-title">
           <div className="audiobook-production-flow-heading"><div><p className="eyebrow">Production path</p><h2 id="audiobook-production-flow-title">From manuscript to audiobook</h2></div><p>Follow these steps in order. Open any step to continue your work.</p></div>
