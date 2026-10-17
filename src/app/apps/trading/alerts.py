@@ -72,7 +72,7 @@ TrendlineMode = Literal[
     "greater_than",
     "less_than",
 ]
-AlertNotificationChannel = Literal["app", "toast", "sound", "webhook", "email", "push"]
+AlertNotificationChannel = Literal["app", "toast", "sound", "webhook", "email", "push", "desktop"]
 
 class AlertWebhookSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")

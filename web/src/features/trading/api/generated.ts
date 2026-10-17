@@ -7046,7 +7046,7 @@ export interface components {
              * Channel
              * @enum {string}
              */
-            channel: "webhook" | "email" | "push";
+            channel: "webhook" | "email" | "push" | "desktop";
             /**
              * Created At
              * Format: date-time
@@ -11412,10 +11412,10 @@ export interface components {
             oversold_arm_time: string | null;
             /**
              * Policy Version
-             * @default stoch-rsi-5min-v15
+             * @default stoch-rsi-5min-v16
              * @constant
              */
-            policy_version: "stoch-rsi-5min-v15";
+            policy_version: "stoch-rsi-5min-v16";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d: string | null;
             /** Previous Stochastic Rsi K */
@@ -12536,7 +12536,7 @@ export interface components {
              */
             name?: string;
             /** Notification Channels */
-            notification_channels?: ("app" | "toast" | "sound" | "webhook" | "email" | "push")[];
+            notification_channels?: ("app" | "toast" | "sound" | "webhook" | "email" | "push" | "desktop")[];
             /**
              * Period
              * @default 14
@@ -12604,7 +12604,7 @@ export interface components {
              */
             name: string;
             /** Notification Channels */
-            notification_channels: ("app" | "toast" | "sound" | "webhook" | "email" | "push")[];
+            notification_channels: ("app" | "toast" | "sound" | "webhook" | "email" | "push" | "desktop")[];
             /**
              * Period
              * @default 14

@@ -2,6 +2,7 @@ import { AlertEmailSetup, AlertPushSetup } from './AlertChannelSetup';
 import type { AlertDeliveryEditor } from './alertDelivery';
 import { ALERT_SOUNDS, playAlertSound, type AlertSoundName } from './alertSounds';
 import type { TradingAlertNotificationChannel } from './tradingTypes';
+import { isDesktopApp } from '../../shared/desktopBridge';
 
 const CHANNELS: Array<{ value: TradingAlertNotificationChannel; label: string }> = [
   { value: 'app', label: 'App' },
@@ -10,6 +11,12 @@ const CHANNELS: Array<{ value: TradingAlertNotificationChannel; label: string }>
   { value: 'webhook', label: 'Webhook' },
   { value: 'email', label: 'Email' },
   { value: 'push', label: 'Push' },
+];
+
+// Inside the desktop shell the app's own notifications replace web push (MarketPulse S-6).
+const DESKTOP_CHANNELS: Array<{ value: TradingAlertNotificationChannel; label: string }> = [
+  ...CHANNELS.filter((channel) => channel.value !== 'push'),
+  { value: 'desktop', label: 'Desktop' },
 ];
 
 /**
@@ -31,7 +38,7 @@ export function AlertDeliveryFields({
   const stored = editor.webhookDisplay ?? null;
   return (
     <>
-      {CHANNELS.map((option) => <label key={option.value}><input type="checkbox" checked={editor.notifications.includes(option.value)} onChange={() => toggle(option.value)} />{option.label}</label>)}
+      {(isDesktopApp() ? DESKTOP_CHANNELS : CHANNELS).map((option) => <label key={option.value}><input type="checkbox" checked={editor.notifications.includes(option.value)} onChange={() => toggle(option.value)} />{option.label}</label>)}
       {editor.notifications.includes('sound') ? (
         <select aria-label="Alert sound" value={editor.sound ?? 'chime'} onChange={(event) => { const sound = event.target.value as AlertSoundName; playAlertSound(sound); onChange({ sound }); }}>
           {ALERT_SOUNDS.map((sound) => <option key={sound} value={sound}>{sound[0].toUpperCase() + sound.slice(1)}</option>)}

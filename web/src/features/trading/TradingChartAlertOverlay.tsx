@@ -18,7 +18,7 @@ import {
   notifyTradingAlertsChanged,
   type TradingChartAlertState,
 } from './tradingChartAlerts';
-import { deliveryCreateFields, deliveryEditorOf, deliveryUpdatePatch } from './alertDelivery';
+import { deliveryCreateFields, deliveryEditorOf, deliveryUpdatePatch, defaultAlertNotifications } from './alertDelivery';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
 import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
@@ -102,7 +102,7 @@ export function editorDefaults(placement: ChartAlertPlacement, latestPrice: numb
     expiration: 'never',
     triggerPolicy: 'every_time',
     message: '',
-    notifications: ['app', 'toast'],
+    notifications: defaultAlertNotifications(),
     indicator: placement.indicatorId ?? 'rsi',
     period: String(placement.indicatorPeriod ?? 14),
     lookback: '1',

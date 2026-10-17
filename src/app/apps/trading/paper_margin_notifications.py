@@ -73,13 +73,18 @@ class PaperMarginCallNotifier:
         self.settings_factory = settings_factory
 
     def channels(self) -> list[str]:
-        """The channels the workspace can deliver on now: email with SMTP settings, push with a subscribed browser."""
+        """The channels the workspace can deliver on now: email with SMTP settings, push with a subscribed browser,
+        and the desktop app's notifications when it runs inside the desktop shell (MarketPulse S-6)."""
+        from .alerts_desktop import desktop_notifications_configured
+
         settings = self.settings_factory()
         channels = []
         if settings.email() is not None:
             channels.append("email")
         if settings.subscriptions():
             channels.append("push")
+        if desktop_notifications_configured():
+            channels.append("desktop")
         return channels
 
     def notify(self, account: PaperAccount, orders: Sequence[PaperOrder]) -> int:

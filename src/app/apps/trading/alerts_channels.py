@@ -3,7 +3,8 @@
 ``notification_channels`` accepts every channel the schema knows, but an alert
 may only select a channel whose sender is deployed. TVP-0.5a (webhook),
 TVP-0.5b (email) and TVP-0.5c (push) each add theirs to
-``AVAILABLE_ALERT_CHANNELS`` without a migration.
+``AVAILABLE_ALERT_CHANNELS`` without a migration. ``desktop`` (MarketPulse
+S-6) is available only when the desktop shell configured its listener.
 
 A webhook's URL and signing secret are credentials (chat webhooks embed their
 token in the URL). Both live in the OS-protected secret store under a
@@ -25,6 +26,13 @@ from app.security.provider_secret_store import (
 )
 
 AVAILABLE_ALERT_CHANNELS: frozenset[str] = frozenset({"app", "toast", "sound", "webhook", "email", "push"})
+
+
+def available_alert_channels() -> frozenset[str]:
+    """The channels an alert may select here: the deployed ones, plus ``desktop`` inside the desktop app."""
+    from .alerts_desktop import desktop_notifications_configured
+
+    return AVAILABLE_ALERT_CHANNELS | {"desktop"} if desktop_notifications_configured() else AVAILABLE_ALERT_CHANNELS
 
 
 def unavailable_channels(channels: Iterable[str], available: Iterable[str] = AVAILABLE_ALERT_CHANNELS) -> list[str]:
@@ -78,6 +86,7 @@ class ProtectedAlertWebhookStore:
 
 __all__ = [
     "AVAILABLE_ALERT_CHANNELS",
+    "available_alert_channels",
     "AlertWebhookStore",
     "ProtectedAlertWebhookStore",
     "alert_webhook_prefix",

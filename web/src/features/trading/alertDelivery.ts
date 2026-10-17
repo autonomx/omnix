@@ -4,7 +4,8 @@
 // and sends them only when the user types new ones (the server keeps the
 // stored ones otherwise).
 import { alertSoundName, soundChange, type AlertSoundName } from './alertSounds';
-import type { TradingAlert } from './tradingTypes';
+import type { TradingAlert, TradingAlertNotificationChannel } from './tradingTypes';
+import { isDesktopApp } from '../../shared/desktopBridge';
 
 export type AlertDeliveryEditor = {
   /** The alert's name ({{alert_name}}). */
@@ -23,6 +24,14 @@ export type AlertDeliveryEditor = {
 };
 
 /** The delivery fields of an alert being edited. */
+/**
+ * The channels a new alert starts with: in-app and toast, plus the desktop app's notifications inside the desktop
+ * shell (MarketPulse S-6).
+ */
+export function defaultAlertNotifications(): TradingAlertNotificationChannel[] {
+  return isDesktopApp() ? ['app', 'toast', 'desktop'] : ['app', 'toast'];
+}
+
 export function deliveryEditorOf(alert: TradingAlert): AlertDeliveryEditor {
   const delivery = alert.parameters.delivery;
   return {

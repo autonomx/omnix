@@ -11,7 +11,7 @@ import {
   formatAlertThreshold,
   notifyTradingAlertsChanged,
 } from './tradingChartAlerts';
-import { deliveryCreateFields, deliveryEditorOf, deliveryUpdatePatch } from './alertDelivery';
+import { deliveryCreateFields, deliveryEditorOf, deliveryUpdatePatch, defaultAlertNotifications } from './alertDelivery';
 import { applyConditionDrafts, conditionEditorFields } from './alertConditionDrafts';
 import { tradingApi } from './tradingApi';
 import type {
@@ -149,7 +149,7 @@ function editorDefaults(): TradingAlertEditorState {
     expiration: 'never',
     triggerPolicy: 'every_time',
     message: '',
-    notifications: ['app', 'toast'],
+    notifications: defaultAlertNotifications(),
     indicator: 'rsi',
     period: '14',
     lookback: '1',

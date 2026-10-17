@@ -29208,7 +29208,8 @@
             "enum": [
               "webhook",
               "email",
-              "push"
+              "push",
+              "desktop"
             ],
             "title": "Channel",
             "type": "string"
@@ -55715,8 +55716,8 @@
             "title": "Oversold Arm Time"
           },
           "policy_version": {
-            "const": "stoch-rsi-5min-v15",
-            "default": "stoch-rsi-5min-v15",
+            "const": "stoch-rsi-5min-v16",
+            "default": "stoch-rsi-5min-v16",
             "title": "Policy Version",
             "type": "string"
           },
@@ -59676,7 +59677,8 @@
                 "sound",
                 "webhook",
                 "email",
-                "push"
+                "push",
+                "desktop"
               ],
               "type": "string"
             },
@@ -59861,7 +59863,8 @@
                 "sound",
                 "webhook",
                 "email",
-                "push"
+                "push",
+                "desktop"
               ],
               "type": "string"
             },

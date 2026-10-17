@@ -20,7 +20,7 @@ from .alerts import WATCHLIST_SYMBOL_DEFAULT, watchlist_id_of, TradingAlert, Tra
 from .alerts_repository import TradingAlertRepository, TradingAlertUnreadable, default_alert_repository
 from .alerts_delivery import NotificationDelivery, NotificationDeliveryRepository, default_delivery_repository
 from .alerts_channels import (
-    AVAILABLE_ALERT_CHANNELS,
+    available_alert_channels,
     AlertWebhookStore,
     ProtectedAlertWebhookStore,
     alert_webhook_prefix,
@@ -207,7 +207,7 @@ def create_trading_alert_router(
     repository_factory: AlertRepositoryFactory = default_alert_repository,
     *,
     webhook_store: AlertWebhookStore | None = None,
-    available_channels: Iterable[str] = AVAILABLE_ALERT_CHANNELS,
+    available_channels: Iterable[str] | None = None,
     delivery_repository_factory: Callable[[], NotificationDeliveryRepository] = default_delivery_repository,
     document_repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
     market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
@@ -217,7 +217,7 @@ def create_trading_alert_router(
     routes = _AlertRoutes(
         repository_factory=repository_factory,
         store=webhook_store or ProtectedAlertWebhookStore(),
-        channels=frozenset(available_channels),
+        channels=frozenset(available_alert_channels() if available_channels is None else available_channels),
         delivery_repository_factory=delivery_repository_factory,
         document_repository_factory=document_repository_factory,
         market_service_factory=market_service_factory,

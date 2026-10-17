@@ -76,12 +76,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DeliveryChannel = Literal["webhook", "email", "push"]
+DeliveryChannel = Literal["webhook", "email", "push", "desktop"]
 DeliveryStatus = Literal["pending", "sending", "delivered", "failed"]
 DeliveryEventKind = Literal["alert", "margin_call"]
 
-# Channels the outbox delivers; TVP-0.5b (email) and TVP-0.5c (push) add theirs.
-OUTBOX_CHANNELS: tuple[DeliveryChannel, ...] = ("webhook", "email", "push")
+# Channels the outbox delivers; TVP-0.5b (email), TVP-0.5c (push) and MarketPulse S-6 (desktop) add theirs.
+OUTBOX_CHANNELS: tuple[DeliveryChannel, ...] = ("webhook", "email", "push", "desktop")
 
 MAX_WEBHOOK_ATTEMPTS = 8
 FIRST_RETRY_SECONDS = 30.0
@@ -182,8 +182,11 @@ class ClaimedDelivery:
     max_attempts: int
     webhook_ref: str | None
     workspace_id: str = ""
-    # 'alert', or 'margin_call' (no trigger or alert: their ids are empty, and the channel is email or push).
+    # 'alert', or 'margin_call' (no trigger or alert: their ids are empty, and the channel is email, push or desktop).
     event_kind: str = "alert"
+    # The alert's instrument (empty for a margin call) and when the delivery was queued, for the desktop shell.
+    instrument_id: str = ""
+    created_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -296,7 +299,10 @@ class NotificationDeliveryRepository:
                           (SELECT alert.notification_settings->>'webhook_ref'
                              FROM omnix_trading_alerts AS alert
                             WHERE alert.workspace_id = delivery.workspace_id AND alert.alert_id = delivery.alert_id),
-                          delivery.workspace_id, delivery.event_kind
+                          delivery.workspace_id, delivery.event_kind, delivery.created_at,
+                          (SELECT alert.instrument_id
+                             FROM omnix_trading_alerts AS alert
+                            WHERE alert.workspace_id = delivery.workspace_id AND alert.alert_id = delivery.alert_id)
                 """,
                 (workspace, workspace, now, now, limit, lease_end, lease_end, now, now),
             ).fetchall()
@@ -313,6 +319,8 @@ class NotificationDeliveryRepository:
                 webhook_ref=str(row[7]) if row[7] else None,
                 workspace_id=str(row[8]),
                 event_kind=str(row[9] or "alert"),
+                created_at=row[10],
+                instrument_id=str(row[11] or ""),
             )
             for row in rows
         ]
@@ -622,9 +630,14 @@ class NotificationDeliveryMonitor(ScheduledTradingMonitor):
     def senders(self) -> Mapping[str, NotificationSender]:
         if self._senders is None:
             # Email and web push (TVP-0.5b/c) read their workspace's settings in alerts_notify.py.
+            from .alerts_desktop import DesktopSender, desktop_notifications_configured
             from .alerts_notify_senders import EmailSender, PushSender
 
-            self._senders = {"webhook": WebhookSender(), "email": EmailSender(), "push": PushSender()}
+            senders: dict[str, NotificationSender] = {"webhook": WebhookSender(), "email": EmailSender(), "push": PushSender()}
+            if desktop_notifications_configured():
+                # MarketPulse S-6: only when the desktop shell gave its listener; otherwise desktop rows are unavailable.
+                senders["desktop"] = DesktopSender()
+            self._senders = senders
         return self._senders
 
     async def run_once(self) -> int:
