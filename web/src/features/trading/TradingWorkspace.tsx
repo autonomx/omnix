@@ -22,6 +22,8 @@ import { TradingOrderToastLayer } from './TradingOrderToastLayer';
 import { PaperOrderNotificationsWatch } from './PaperOrderNotificationsWatch';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { TradingSessionTabs } from './TradingSessionTabs';
+import { TradingDesktopTitleBar } from './TradingDesktopTitleBar';
+import { desktopBridge } from '../../shared/desktopBridge';
 import { openTradingWindow, useTradingWindowPresence } from './windowPresence';
 import { tradingApi } from './tradingApi';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
@@ -123,6 +125,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useInstalledAppCommandKeys();
   const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
+  const desktop = desktopBridge();
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
@@ -483,8 +486,24 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     ?? activeChart.instrumentId.split(':').at(-1)?.replace('-', '/')
     ?? 'Select symbol';
 
+  const sessionTabs = (
+    <TradingSessionTabs
+      tabs={windowTabs.visibleTabs}
+      activeTabId={activeTabId}
+      canAdd={tabs.length < MAX_TRADING_TABS}
+      onPopOut={windowTabs.popOut} onMoveToMain={windowTabs.moveToMain}
+      getTabLabel={sessionTabLabel}
+      onSelect={setActiveTab}
+      onClose={closeTabSession}
+      workspaceId={persistence.activeWorkspaceId} workspaces={persistence.workspaces} onSelectWorkspace={(id) => void persistence.selectWorkspace(id)}
+      onOpenTool={(tool) => (tool === 'paper' ? openPaperTrading() : (setToolPanelFullscreen(false), setToolPanel(tool)))}
+    />
+  );
+
   return (
     <main className={`trading-workspace${focusMode ? ' trading-focus-mode' : ''}`} aria-labelledby="trading-title">
+      {/* In the desktop app the session tabs live in the window's title bar (MarketPulse W-4). */}
+      {desktop ? <TradingDesktopTitleBar bridge={desktop}>{sessionTabs}</TradingDesktopTitleBar> : null}
       <header className="trading-terminal-header">
         <div className="trading-terminal-brand">
           <span className="trading-terminal-logo" aria-hidden="true" />
@@ -639,17 +658,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </header>
 
       <TradingWindowRestore windows={windowTabs.goneWindows} tabs={tabs} tabLabel={sessionTabLabel} onReopen={windowTabs.reopen} onBringBack={windowTabs.bringBack} />
-      <TradingSessionTabs
-        tabs={windowTabs.visibleTabs}
-        activeTabId={activeTabId}
-        canAdd={tabs.length < MAX_TRADING_TABS}
-        onPopOut={windowTabs.popOut} onMoveToMain={windowTabs.moveToMain}
-        getTabLabel={sessionTabLabel}
-        onSelect={setActiveTab}
-        onClose={closeTabSession}
-        workspaceId={persistence.activeWorkspaceId} workspaces={persistence.workspaces} onSelectWorkspace={(id) => void persistence.selectWorkspace(id)}
-        onOpenTool={(tool) => (tool === 'paper' ? openPaperTrading() : (setToolPanelFullscreen(false), setToolPanel(tool)))}
-      />
+      {desktop ? null : sessionTabs}
 
       <TradingSymbolSearch
         open={symbolSearchOpen}
