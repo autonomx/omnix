@@ -21,7 +21,9 @@ def register_feature_repositories_for_persistence_gates():
     from app.composition.runtime_composition import shared_service_repository_specs
 
     install_repository_specs(shared_service_repository_specs())
-    for feature_id in enabled_feature_ids(RuntimeConfig()):
+    # The features the environment enables, as composition reads them: all of them unless OMNIX_FEATURES narrows it
+    # (MarketPulse runs these tests trading-only, without other features' code).
+    for feature_id in enabled_feature_ids(RuntimeConfig.from_environment()):
         install_repository_specs(tuple(load_feature(feature_id).repositories))
     yield
     reset_repository_specs()
