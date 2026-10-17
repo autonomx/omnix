@@ -8,6 +8,7 @@ import {
   type AlertDeliveryTest, type AlertEmailState, type AlertPushState,
 } from './alertNotificationsApi';
 import './AlertChannelSetup.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const testNote = (result: AlertDeliveryTest) => (result.outcome === 'delivered' ? 'Sent.' : `Not sent: ${result.error ?? result.outcome}.`);
@@ -118,7 +119,7 @@ export function AlertPushSetup() {
             </p>
           ) : (
             <p>
-              Notifications reach your devices even when Omnix is closed.
+              Notifications reach your devices even when {PRODUCT_NAME} is closed.
               <button type="button" disabled={!state?.public_key} onClick={() => void enable()}>Allow notifications on this device</button>
             </p>
           )}

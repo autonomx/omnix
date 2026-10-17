@@ -5,6 +5,7 @@ import type { HermesResearchAudit, HermesResearchValidation, ResearchRecommendat
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type { GapperUniverse, TradingStrategyConfig } from './tradingStrategyTypes';
 import './TradingHermesResearchPanel.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 const RECOMMENDATION_LEVELS: ResearchRecommendation[] = ['observe_only', 'score_only', 'soft_gate', 'hard_gate'];
 
@@ -55,7 +56,7 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
   const [reviewNote, setReviewNote] = useState('');
   const [asOf, setAsOf] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'running' | 'error'>('idle');
-  const [notice, setNotice] = useState('Select a candidate to inspect exactly what Omnix knew and when it knew it.');
+  const [notice, setNotice] = useState(`Select a candidate to inspect exactly what ${PRODUCT_NAME} knew and when it knew it.`);
 
   useEffect(() => {
     let alive = true;
@@ -228,7 +229,7 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
             <article data-tone={statusTone(report.catalyst_status)}><small>Catalyst</small><strong>{report.catalyst_status}</strong><span>{facts?.catalyst.catalyst_type ?? 'unknown'} · {facts?.catalyst.same_day ? 'same day' : 'not confirmed same day'}</span></article>
             <article data-tone={statusTone(report.supply_status)}><small>Supply</small><strong>{report.supply_status.replaceAll('_', ' ')}</strong><span>{facts?.supply_metrics.supply_resolution_status ?? 'unresolved'}</span></article>
             <article data-tone={report.research_status === 'complete' ? 'complete' : 'unresolved'}><small>Research</small><strong>{report.research_status}</strong><span>report v{report.report_version} · {report.planner_backend}</span></article>
-            <article><small>Omnix knew report at</small><strong>{stamp(report.omnix_known_at)}</strong><span>decision reads require known_at ≤ decision_at</span></article>
+            <article><small>{PRODUCT_NAME} knew report at</small><strong>{stamp(report.omnix_known_at)}</strong><span>decision reads require known_at ≤ decision_at</span></article>
           </div>
 
           <div className="htr-columns">
@@ -257,7 +258,7 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
           <details className="htr-detail" open>
             <summary>Evidence visible as of {stamp(audit?.as_of)}</summary>
             <div className="htr-table-wrap">
-              <table><thead><tr><th>Source</th><th>Authority</th><th>Published / available</th><th>Captured</th><th>Omnix known</th><th>Extraction</th></tr></thead>
+              <table><thead><tr><th>Source</th><th>Authority</th><th>Published / available</th><th>Captured</th><th>{PRODUCT_NAME} known</th><th>Extraction</th></tr></thead>
                 <tbody>{visibleEvidence.map((item) => <tr key={item.evidence_id}><td><strong>{item.title ?? item.evidence_id}</strong><small>{item.source_type} · {item.source_locator}</small></td><td>Tier {item.source_authority_tier}</td><td>{stamp(item.source_published_at)}<small>{stamp(item.source_available_at)}</small></td><td>{stamp(item.captured_at)}</td><td><strong>{stamp(item.omnix_known_at)}</strong></td><td>{item.extraction_status}</td></tr>)}</tbody>
               </table>
               {!visibleEvidence.length ? <p>No causally visible evidence.</p> : <small>{sourceSummary}</small>}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 type ToggleSetting = 'allow_short' | 'notify_margin_calls';
 
@@ -78,7 +79,7 @@ export function PaperMarginCallNotifyField(props: ToggleProps) {
       setting="notify_margin_calls"
       legend="Margin calls"
       label="Send margin calls by email and push"
-      hint="Uses the email and push notifications set up for alerts. Margin calls always show in Omnix's notifications."
+      hint={`Uses the email and push notifications set up for alerts. Margin calls always show in ${PRODUCT_NAME}'s notifications.`}
       failure="The margin-call setting could not be changed."
     />
   );

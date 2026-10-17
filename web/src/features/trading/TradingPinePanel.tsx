@@ -11,6 +11,7 @@ import { ScriptHistory } from './scripts/ScriptHistory';
 import { isScriptIndicatorId, scriptIdOf } from './scripts/scriptIndicators';
 import { useScriptEditor, type ScriptEditorModel } from './scripts/useScriptEditor';
 import './TradingPinePanel.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 type BottomTab = 'console' | 'profiler' | 'history';
 /** The last source request the editor handled, so reopening the panel doesn't repeat it over the restored draft. */
@@ -137,9 +138,9 @@ export function TradingPinePanel({
   const problems = editor.diagnostics.length;
   const status = problems > 0 ? `${problems} problem${problems === 1 ? '' : 's'}` : !editing.record ? 'Not saved' : dirty ? 'Unsaved changes' : 'Saved';
   return (
-    <div role="group" className="trading-pine-panel trading-script-editor" aria-label="Omnix Scripts editor">
+    <div role="group" className="trading-pine-panel trading-script-editor" aria-label={`${PRODUCT_NAME} Scripts editor`}>
       <header className="trading-pine-header">
-        <div className="trading-pine-heading"><span className="trading-pine-glyph" aria-hidden="true">{'{}'}</span><strong>Omnix Scripts</strong></div>
+        <div className="trading-pine-heading"><span className="trading-pine-glyph" aria-hidden="true">{'{}'}</span><strong>{PRODUCT_NAME} Scripts</strong></div>
         <span className={`trading-script-status${problems > 0 ? ' has-problems' : dirty || !editing.record ? ' is-dirty' : ''}`} role="status">{status}</span>
       </header>
       <div className="trading-script-toolbar">

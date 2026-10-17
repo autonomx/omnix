@@ -6,6 +6,7 @@ import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 const TradingAlertsPanel = lazy(() => import('./TradingAlertsPanel').then((module) => ({ default: module.TradingAlertsPanel })));
 const TradingNewsPanel = lazy(() => import('./TradingNewsPanel').then((module) => ({ default: module.TradingNewsPanel })));
@@ -121,8 +122,8 @@ export function TradingSidePanel({
   }
   if (activeTab === 'pine') {
     return (
-      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Omnix Scripts editor">
-        <Suspense fallback={<p role="status">Loading Omnix Scripts editor…</p>}>
+      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label={`${PRODUCT_NAME} Scripts editor`}>
+        <Suspense fallback={<p role="status">Loading {PRODUCT_NAME} Scripts editor…</p>}>
         <TradingPinePanel
           indicators={indicators}
           activeIndicatorId={pineIndicatorId}

@@ -10,6 +10,7 @@ import { drawingToolDefinition } from './drawings/tools/registry';
 import { ChartCopyImageButton, ChartMarketStatusBadges, ChartSnapshotLinkButton } from './TradingChartWorkflowControls';
 import { ChartLinkGroupButton } from './ChartLinkGroupButton';
 import { useTradingStore } from './tradingStore';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 /** The chart's header: symbol, quote, interval and chart controls. */
 export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
@@ -56,7 +57,7 @@ export function ChartPanelHeader({ ws }: { ws: TradingChartPanelModel }) {
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => setCompareDialogOpen(true)}
             >+</button>
-            <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
+            <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? PRODUCT_NAME}</span>
             <i className={`trading-stream-dot ${streamStatus}`} role="img" aria-label={`Feed ${streamStatus}`} />
             <ChartMarketStatusBadges ws={ws} />
             <ChartLinkGroupButton chartId={chartId} group={linkGroup} />

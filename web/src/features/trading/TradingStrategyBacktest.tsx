@@ -11,6 +11,7 @@ import type {
   StrategyRangeBacktestResult,
 } from './tradingStrategyTypes';
 import { startTicker } from '../../shared/timers';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 function isoDate(offsetDays = 0): string {
   const value = new Date();
@@ -186,7 +187,7 @@ export function TradingStrategyBacktest({ strategy }: { strategy: GapPullbackTra
 
         <div className="strategy-backtest-causality-note">
           <strong>Historical evidence modes</strong>
-          <span><b>Captured</b> uses an immutable universe Omnix actually froze by the configured scan time and replays the full saved strategy. <b>Reconstructed</b> is explicitly approximate: for recent missing days it rebuilds the morning gap/price/volume/RVOL candidate set from Alpaca IEX historical data and today&apos;s active listing universe. Because point-in-time catalyst, dilution and float history is unavailable, those hard evidence gates are relaxed only for reconstructed sessions and every downgrade is reported in the result. Reconstructed output must not be interpreted as equivalent to captured point-in-time evidence.</span>
+          <span><b>Captured</b> uses an immutable universe {PRODUCT_NAME} actually froze by the configured scan time and replays the full saved strategy. <b>Reconstructed</b> is explicitly approximate: for recent missing days it rebuilds the morning gap/price/volume/RVOL candidate set from Alpaca IEX historical data and today&apos;s active listing universe. Because point-in-time catalyst, dilution and float history is unavailable, those hard evidence gates are relaxed only for reconstructed sessions and every downgrade is reported in the result. Reconstructed output must not be interpreted as equivalent to captured point-in-time evidence.</span>
         </div>
         <p className="strategy-backtest-notice" role="status">{notice}</p>
         {running ? (

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Literal
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
+from app.config.product import product_name
 from app.security.tenant_context import current_tenant
 
 from .alerts_notify import (
@@ -120,7 +121,7 @@ def create_trading_notification_router(
             raise HTTPException(status_code=422, detail="set up email delivery first")
         from .alerts_notify_senders import alert_email
 
-        message = alert_email(settings, "This is a test of Omnix alert emails. Alerts with the Email channel arrive like this.", test=True)
+        message = alert_email(settings, f"This is a test of {product_name()} alert emails. Alerts with the Email channel arrive like this.", test=True)
         result = await asyncio.to_thread(email().deliver, settings, workspace(), message)
         return DeliveryTestResponse(outcome=result.outcome, error=result.error)
 
@@ -162,7 +163,7 @@ def create_trading_notification_router(
             raise HTTPException(status_code=422, detail="turn on notifications in this browser first")
         from .alerts_notify_senders import push_payload
 
-        payload = push_payload("This is a test of Omnix alert notifications.", title="Omnix test notification")
+        payload = push_payload(f"This is a test of {product_name()} alert notifications.", title=f"{product_name()} test notification")
         result = await asyncio.to_thread(push().deliver, repository, workspace(), mine, payload)
         return DeliveryTestResponse(outcome=result.outcome, error=result.error)
 

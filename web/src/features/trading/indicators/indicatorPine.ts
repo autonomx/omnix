@@ -1,4 +1,5 @@
 import type { CoreIndicatorId, CoreIndicatorInstance } from './coreIndicators';
+import { PRODUCT_NAME } from '../../../shared/productIdentity';
 
 const indicatorPineTitles: Partial<Record<CoreIndicatorId, string>> = {
   sma: 'Simple Moving Average',
@@ -253,7 +254,7 @@ export function indicatorPineSource(indicator: CoreIndicatorInstance): string {
   if (!template) {
     return script([
       '//@version=6',
-      `// ${indicatorPineTitle(indicator.id)} is implemented by the Omnix deterministic chart-pattern engine.`,
+      `// ${indicatorPineTitle(indicator.id)} is implemented by the ${PRODUCT_NAME} deterministic chart-pattern engine.`,
       '// It is a native study and does not currently have a Pine-equivalent source template.',
     ]);
   }

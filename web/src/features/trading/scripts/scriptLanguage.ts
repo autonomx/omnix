@@ -8,6 +8,7 @@ import { StreamLanguage, type StringStream } from '@codemirror/language';
 import type { Diagnostic } from '@codemirror/lint';
 import type { Text } from '@codemirror/state';
 import type { ScriptDiagnostic, ScriptReference } from './scriptsApi';
+import { PRODUCT_NAME } from '../../../shared/productIdentity';
 
 const KEYWORDS = new Set([
   'if', 'else', 'for', 'to', 'by', 'in', 'while', 'switch', 'var', 'varip', 'and', 'or', 'not', 'break', 'continue',
@@ -143,6 +144,6 @@ export function scriptDiagnostics(doc: Text, problems: readonly ScriptDiagnostic
     const column = problem.column > 0 ? Math.min(problem.column - 1, line.length) : 0;
     const from = line.from + column;
     const to = problem.column > 0 ? Math.min(line.to, from + Math.max(1, (/^\w+/.exec(line.text.slice(column))?.[0].length ?? 1))) : line.to;
-    return { from, to: Math.max(to, from), severity: 'error', message: `${problem.kind === 'syntax' ? 'Syntax' : 'Error'}: ${problem.message}`, source: 'Omnix Scripts' };
+    return { from, to: Math.max(to, from), severity: 'error', message: `${problem.kind === 'syntax' ? 'Syntax' : 'Error'}: ${problem.message}`, source: `${PRODUCT_NAME} Scripts` };
   });
 }

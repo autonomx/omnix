@@ -11,6 +11,7 @@ import {
 } from './scriptIndicators';
 import { scriptsApi, type StrategyReport, type StrategySummary } from './scriptsApi';
 import './TradingStrategyTester.css';
+import { PRODUCT_NAME } from '../../../shared/productIdentity';
 
 type Tab = 'overview' | 'summary' | 'trades' | 'properties';
 type Shown = { report: StrategyReport; times: string[]; source: 'chart' | 'deep' };
@@ -130,7 +131,7 @@ export function TradingStrategyTester({
     return (
       <div className="trading-strategy-tester trading-strategy-empty">
         <strong>No strategy on this chart</strong>
-        <span>Write a script with strategy() in the Omnix Scripts editor and add it to the chart; its backtest shows here. Strategies trade a simulated account only.</span>
+        <span>Write a script with strategy() in the {PRODUCT_NAME} Scripts editor and add it to the chart; its backtest shows here. Strategies trade a simulated account only.</span>
       </div>
     );
   }

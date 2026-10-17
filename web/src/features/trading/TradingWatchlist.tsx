@@ -43,6 +43,7 @@ import { TradingWatchlistHeader, TradingWatchlistSectionRow, TradingWatchlistSym
 import { TradingWatchlistSymbolPicker } from './TradingWatchlistSymbolPicker';
 import { useTradingCommand } from './commands/useTradingCommands';
 import './TradingWatchlist.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 function mergeInstruments(
   current: readonly CanonicalInstrument[],
@@ -308,7 +309,7 @@ export function TradingWatchlist({
           })}
         </ul>
       </div>
-      {readOnly ? <p className="trading-watchlist-notice" role="status">This watchlist was saved by a newer version of Omnix and is read-only here.</p> : null}
+      {readOnly ? <p className="trading-watchlist-notice" role="status">This watchlist was saved by a newer version of {PRODUCT_NAME} and is read-only here.</p> : null}
       {importer.notice ? <p className="trading-watchlist-notice" role="status">{importer.notice}</p> : null}
       <span className="trading-watchlist-status" aria-live="polite">{status}</span>
       <input ref={importer.inputRef} type="file" accept=".txt,text/plain" hidden aria-label="Import watchlist file" onChange={importer.onInputChange} />

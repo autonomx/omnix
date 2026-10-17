@@ -1,6 +1,7 @@
 /** Imports a workspace file written by Export as a new workspace. */
 import { useRef, useState } from 'react';
 import type { WorkspaceImportResult } from './useTradingWorkspacePersistence';
+import { PRODUCT_NAME_WITH_ARTICLE } from '../../../shared/productIdentity';
 
 type Props = {
   disabled?: boolean;
@@ -26,7 +27,7 @@ export function WorkspaceImportButton({ disabled, onImport }: Props) {
     const name = window.prompt('Import workspace as', suggestedName(value, file.name));
     if (!name?.trim()) return;
     const result = await onImport(value, name);
-    if (result === 'invalid') setError(`${file.name} is not an Omnix workspace export.`);
+    if (result === 'invalid') setError(`${file.name} is not ${PRODUCT_NAME_WITH_ARTICLE} workspace export.`);
     else if (result === 'error') setError('The imported workspace could not be saved.');
     else setError('');
   };

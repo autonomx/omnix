@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MarketResearchResult } from './researchTypes';
 import { tradingResearchApi } from './tradingResearchApi';
 import './TradingResearch.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 export function TradingResearchPanel({
   instrumentId,
@@ -58,7 +59,7 @@ export function TradingResearchPanel({
         <span>{status}</span>
       </header>
       <p>
-        Uses the currently configured Omnix provider. It cannot place orders, create alerts,
+        Uses the currently configured {PRODUCT_NAME} provider. It cannot place orders, create alerts,
         or change paper accounts.
       </p>
       <div className="trading-research-form">

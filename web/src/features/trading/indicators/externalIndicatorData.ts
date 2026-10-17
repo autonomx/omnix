@@ -2,6 +2,7 @@ import type { MarketBar } from '../tradingTypes';
 import type { CoreIndicatorInstance, IndicatorOutput } from './coreIndicators';
 import type { components } from '../api/generated';
 import { api } from '../api/gateway';
+import { PRODUCT_NAME } from '../../../shared/productIdentity';
 
 export type ExternalIndicatorScope = 'binance-crypto' | 'equity' | 'bitcoin' | 'market';
 export type ExternalIndicatorDefinition = {
@@ -28,13 +29,13 @@ type MetricResponse = components['schemas']['MarketMetricResponse'];
 const BINANCE_REQUIREMENT = 'Available on Binance crypto symbols using public USD-M Futures market data.';
 const EQUITY_REQUIREMENT = 'Available on equity symbols with a Yahoo market-data binding.';
 const BITCOIN_REQUIREMENT = 'Available on BTC instruments using Blockchain.com public on-chain charts.';
-const BREADTH_REQUIREMENT = 'Market breadth of NYSE and Nasdaq stocks, computed by Omnix from Alpaca daily bars after each close; on any symbol.';
+const BREADTH_REQUIREMENT = `Market breadth of NYSE and Nasdaq stocks, computed by ${PRODUCT_NAME} from Alpaca daily bars after each close; on any symbol.`;
 
 const EXTERNAL_INDICATORS: Record<string, ExternalIndicatorDefinition> = {
   'tv-open-interest': { id: 'tv-open-interest', metric: 'binance.open_interest', pane: 1, scope: 'binance-crypto', seriesKeys: ['open-interest'], refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
   'tv-understanding-crypto-open-interest': { id: 'tv-understanding-crypto-open-interest', metric: 'binance.open_interest', pane: 1, scope: 'binance-crypto', seriesKeys: ['open-interest'], refreshMs: 30_000, requirement: BINANCE_REQUIREMENT },
   'tv-funding-rate-a-guide-to-market-sentiment': { id: 'tv-funding-rate-a-guide-to-market-sentiment', metric: 'binance.funding_rate', pane: 1, scope: 'binance-crypto', seriesKeys: ['funding-rate'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
-  'tv-liquidation-data-what-to-watch-and-why-it-matters': { id: 'tv-liquidation-data-what-to-watch-and-why-it-matters', metric: 'binance.liquidations', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-liquidations', 'short-liquidations'], refreshMs: 5_000, requirement: `${BINANCE_REQUIREMENT} Liquidation history starts when the Omnix runtime collector starts.` },
+  'tv-liquidation-data-what-to-watch-and-why-it-matters': { id: 'tv-liquidation-data-what-to-watch-and-why-it-matters', metric: 'binance.liquidations', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-liquidations', 'short-liquidations'], refreshMs: 5_000, requirement: `${BINANCE_REQUIREMENT} Liquidation history starts when the ${PRODUCT_NAME} runtime collector starts.` },
   'tv-long-short-ratio-accounts': { id: 'tv-long-short-ratio-accounts', metric: 'binance.global_long_short_accounts', pane: 1, scope: 'binance-crypto', seriesKeys: ['ratio'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
   'tv-long-short-accounts': { id: 'tv-long-short-accounts', metric: 'binance.global_long_short_accounts', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-percent', 'short-percent'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
   'tv-top-trader-long-short-accounts': { id: 'tv-top-trader-long-short-accounts', metric: 'binance.top_long_short_accounts', pane: 1, scope: 'binance-crypto', seriesKeys: ['long-percent', 'short-percent'], refreshMs: 60_000, requirement: BINANCE_REQUIREMENT },
@@ -48,7 +49,7 @@ const EXTERNAL_INDICATORS: Record<string, ExternalIndicatorDefinition> = {
 
   'tv-analyst-price-forecast': { id: 'tv-analyst-price-forecast', metric: 'yahoo.analyst_price_forecast', pane: 0, scope: 'equity', seriesKeys: ['target-low', 'target-mean', 'target-high'], refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical analyst-target snapshots are not fabricated.` },
   'tv-price-target-indicator': { id: 'tv-price-target-indicator', metric: 'yahoo.price_target', pane: 0, scope: 'equity', seriesKeys: ['target-low', 'target-mean', 'target-high'], refreshMs: 15 * 60_000, requirement: `${EQUITY_REQUIREMENT} Historical price-target snapshots are not fabricated.` },
-  'tv-dividend-yield': { id: 'tv-dividend-yield', metric: 'yahoo.dividend_yield', pane: 1, scope: 'equity', seriesKeys: ['dividend-yield'], refreshMs: 60 * 60_000, requirement: `${EQUITY_REQUIREMENT} Omnix calculates trailing-12-month dividends divided by current price.` },
+  'tv-dividend-yield': { id: 'tv-dividend-yield', metric: 'yahoo.dividend_yield', pane: 1, scope: 'equity', seriesKeys: ['dividend-yield'], refreshMs: 60 * 60_000, requirement: `${EQUITY_REQUIREMENT} ${PRODUCT_NAME} calculates trailing-12-month dividends divided by current price.` },
 
   // TVP-6.6: market breadth (breadth.py), one line per exchange, on any chart.
   'tv-advance-decline-line': { id: 'tv-advance-decline-line', metric: 'breadth.ad_line', pane: 1, scope: 'market', seriesKeys: ['nyse', 'nasdaq'], refreshMs: 60 * 60_000, requirement: BREADTH_REQUIREMENT },

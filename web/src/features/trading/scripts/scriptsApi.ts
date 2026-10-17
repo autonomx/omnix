@@ -6,8 +6,9 @@
 import { unwrapLabelled } from '../../../api/http';
 import type { components } from '../api/generated';
 import { api } from '../api/gateway';
+import { PRODUCT_NAME } from '../../../shared/productIdentity';
 
-const scripts = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, 'Omnix Scripts');
+const scripts = <T>(call: Promise<{ data?: T; error?: unknown; response: Response }>) => unwrapLabelled(call, `${PRODUCT_NAME} Scripts`);
 
 export type ScriptDiagnostic = components['schemas']['ScriptDiagnostic'];
 export type ScriptCheckResult = components['schemas']['ScriptCheckResponse'];

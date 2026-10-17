@@ -20,6 +20,7 @@ import {
 import { externalIndicatorRequirement, isExternalIndicatorId } from './indicators/externalIndicatorData';
 import { useTradingCommand } from './commands/useTradingCommands';
 import './TradingIndicatorManager.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 type PickerTab = 'indicators' | 'strategies' | 'profiles' | 'patterns';
 type PickerSection = 'favorites' | 'my-scripts' | 'technicals' | 'fundamentals' | 'top' | 'trending';
@@ -78,7 +79,7 @@ const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILT
 const patternDefinitions: IndicatorDefinition[] = AUTO_CHART_PATTERN_DEFINITIONS.map((definition) => indicatorDefinition({
   id: definition.id,
   name: definition.name,
-  author: 'Omnix',
+  author: PRODUCT_NAME,
   boosts: 'Built-in',
   section: 'technicals',
   kind: 'pattern',
