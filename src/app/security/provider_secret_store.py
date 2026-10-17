@@ -47,6 +47,10 @@ _TRADING_ENVIRONMENT_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "fred": {
         "api_key": ("OMNIX_FRED_API_KEY", "FRED_API_KEY"),
     },
+    # MarketPulse S-7: a read-only token for the research data repository, used when the gh CLI is absent.
+    "prospective_gap_github": {
+        "token": ("OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_TOKEN",),
+    },
 }
 # Every provider in the table above is loaded and stored (a provider missing here was never read back).
 _TRADING_PROVIDERS = tuple(_TRADING_ENVIRONMENT_KEYS)

@@ -2,11 +2,17 @@ from __future__ import annotations
 
 """API for the machine-readable prospective-gap experiment authority."""
 
+import shutil
+import sys
 from datetime import date, datetime, timezone
-from typing import Callable
+from typing import Any, Callable, Literal, cast
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.errors import LegacyPersistenceRetired
+from app.security.permissions import requires
+from app.security.provider_secret_store import save_trading_provider_secrets, trading_provider_credential_sources
 
 from .prospective_gap_repository import ProspectiveGapSessionLedger
 from .prospective_gap_runtime import (
@@ -44,6 +50,44 @@ class MarkdownProjectionResponse(BaseModel):
     authority: str = "prospective-gap StrategyEvent ledger"
 
 
+class ResearchRepositoryCredentialStatus(BaseModel):
+    """Where research handoffs are imported from (MarketPulse S-7)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    repository: str
+    ref: str
+    transport: Literal["gh", "http"]
+    token_configured: bool
+    token_masked: str
+    token_source: Literal["environment", "os_protected_store", "missing"]
+    token_editable: bool
+
+
+class ResearchRepositoryCredentialUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str | None = Field(default=None, max_length=500)
+    clear_token: bool = False
+
+
+def _github_credential_status() -> ResearchRepositoryCredentialStatus:
+    from .prospective_gap_inputs import github_repository, github_token
+
+    repository, ref = github_repository()
+    token = github_token()
+    source = trading_provider_credential_sources("prospective_gap_github")["token"]
+    return ResearchRepositoryCredentialStatus(
+        repository=repository,
+        ref=ref,
+        transport="gh" if shutil.which("gh") else "http",
+        token_configured=bool(token),
+        token_masked=f"***{token[-4:]}" if len(token) > 4 else ("****" if token else ""),
+        token_source=cast(Any, source),
+        token_editable=sys.platform == "win32" and source != "environment",
+    )
+
+
 def create_trading_prospective_gap_router(
     runtime_factory: RuntimeFactory = default_prospective_gap_runtime,
 ) -> APIRouter:
@@ -51,6 +95,33 @@ def create_trading_prospective_gap_router(
         prefix="/api/trading/prospective-gap",
         tags=["trading-prospective-gap"],
     )
+
+    @router.get(
+        "/github-credentials",
+        response_model=ResearchRepositoryCredentialStatus,
+        openapi_extra=requires("trading:control"),
+    )
+    def github_credentials() -> ResearchRepositoryCredentialStatus:
+        """The research repository and whether a read token is set; the token itself is never returned (S-7)."""
+        return _github_credential_status()
+
+    @router.put(
+        "/github-credentials",
+        response_model=ResearchRepositoryCredentialStatus,
+        openapi_extra=requires("trading:control"),
+    )
+    def update_github_credentials(request: ResearchRepositoryCredentialUpdate) -> ResearchRepositoryCredentialStatus:
+        updates: dict[str, str | None] = {}
+        if request.token is not None:
+            updates["token"] = request.token
+        if request.clear_token:
+            updates["token"] = ""
+        if updates:
+            try:
+                save_trading_provider_secrets("prospective_gap_github", updates)
+            except LegacyPersistenceRetired as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return _github_credential_status()
 
     @router.post("/premarket/freeze", response_model=PremarketFreezeResult)
     def freeze_premarket(request: PremarketFreezeRequest) -> PremarketFreezeResult:
@@ -89,6 +160,8 @@ def create_trading_prospective_gap_router(
 
 __all__ = [
     "ConfirmationRunRequest",
+    "ResearchRepositoryCredentialStatus",
+    "ResearchRepositoryCredentialUpdate",
     "MarkdownProjectionResponse",
     "PostcloseRunRequest",
     "create_trading_prospective_gap_router",

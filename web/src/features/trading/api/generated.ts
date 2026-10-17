@@ -1419,6 +1419,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/prospective-gap/github-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Github Credentials
+         * @description The research repository and whether a read token is set; the token itself is never returned (S-7).
+         */
+        get: operations["github_credentials_api_trading_prospective_gap_github_credentials_get"];
+        /** Update Github Credentials */
+        put: operations["update_github_credentials_api_trading_prospective_gap_github_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/prospective-gap/postclose/finalize": {
         parameters: {
             query?: never;
@@ -10379,6 +10400,42 @@ export interface components {
         ResearchReleaseAvailability: core["schemas"]["ResearchReleaseAvailability"];
         /** ResearchReleaseStatus */
         ResearchReleaseStatus: core["schemas"]["ResearchReleaseStatus"];
+        /**
+         * ResearchRepositoryCredentialStatus
+         * @description Where research handoffs are imported from (MarketPulse S-7).
+         */
+        ResearchRepositoryCredentialStatus: {
+            /** Ref */
+            ref: string;
+            /** Repository */
+            repository: string;
+            /** Token Configured */
+            token_configured: boolean;
+            /** Token Editable */
+            token_editable: boolean;
+            /** Token Masked */
+            token_masked: string;
+            /**
+             * Token Source
+             * @enum {string}
+             */
+            token_source: "environment" | "os_protected_store" | "missing";
+            /**
+             * Transport
+             * @enum {string}
+             */
+            transport: "gh" | "http";
+        };
+        /** ResearchRepositoryCredentialUpdate */
+        ResearchRepositoryCredentialUpdate: {
+            /**
+             * Clear Token
+             * @default false
+             */
+            clear_token?: boolean;
+            /** Token */
+            token?: string | null;
+        };
         /** ResearchRetentionStatus */
         ResearchRetentionStatus: core["schemas"]["ResearchRetentionStatus"];
         /** ResearchRuntimeStatus */
@@ -17215,6 +17272,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfirmationRunResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    github_credentials_api_trading_prospective_gap_github_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRepositoryCredentialStatus"];
+                };
+            };
+        };
+    };
+    update_github_credentials_api_trading_prospective_gap_github_credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchRepositoryCredentialUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRepositoryCredentialStatus"];
                 };
             };
             /** @description Validation Error */

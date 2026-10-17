@@ -40523,6 +40523,84 @@
         "title": "ResearchReleaseStatus",
         "type": "object"
       },
+      "ResearchRepositoryCredentialStatus": {
+        "additionalProperties": false,
+        "description": "Where research handoffs are imported from (MarketPulse S-7).",
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "token_configured": {
+            "title": "Token Configured",
+            "type": "boolean"
+          },
+          "token_editable": {
+            "title": "Token Editable",
+            "type": "boolean"
+          },
+          "token_masked": {
+            "title": "Token Masked",
+            "type": "string"
+          },
+          "token_source": {
+            "enum": [
+              "environment",
+              "os_protected_store",
+              "missing"
+            ],
+            "title": "Token Source",
+            "type": "string"
+          },
+          "transport": {
+            "enum": [
+              "gh",
+              "http"
+            ],
+            "title": "Transport",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "ref",
+          "transport",
+          "token_configured",
+          "token_masked",
+          "token_source",
+          "token_editable"
+        ],
+        "title": "ResearchRepositoryCredentialStatus",
+        "type": "object"
+      },
+      "ResearchRepositoryCredentialUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "clear_token": {
+            "default": false,
+            "title": "Clear Token",
+            "type": "boolean"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "title": "ResearchRepositoryCredentialUpdate",
+        "type": "object"
+      },
       "ResearchRetentionStatus": {
         "properties": {
           "extraction_cache_ttl_seconds": {
@@ -92751,6 +92829,69 @@
         "tags": [
           "trading-prospective-gap"
         ]
+      }
+    },
+    "/api/trading/prospective-gap/github-credentials": {
+      "get": {
+        "description": "The research repository and whether a read token is set; the token itself is never returned (S-7).",
+        "operationId": "github_credentials_api_trading_prospective_gap_github_credentials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRepositoryCredentialStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Github Credentials",
+        "tags": [
+          "trading-prospective-gap"
+        ],
+        "x-omnix-permission": "trading:control"
+      },
+      "put": {
+        "operationId": "update_github_credentials_api_trading_prospective_gap_github_credentials_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchRepositoryCredentialUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRepositoryCredentialStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Github Credentials",
+        "tags": [
+          "trading-prospective-gap"
+        ],
+        "x-omnix-permission": "trading:control"
       }
     },
     "/api/trading/prospective-gap/postclose/finalize": {

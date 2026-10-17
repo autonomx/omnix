@@ -548,6 +548,8 @@
     "POST /api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move": "trading",
     "POST /api/trading/paper/accounts/{account_id}/risk-preview": "trading",
     "POST /api/trading/prospective-gap/confirmation/run": "trading",
+    "GET /api/trading/prospective-gap/github-credentials": "trading",
+    "PUT /api/trading/prospective-gap/github-credentials": "trading",
     "POST /api/trading/prospective-gap/postclose/finalize": "trading",
     "POST /api/trading/prospective-gap/premarket/freeze": "trading",
     "GET /api/trading/prospective-gap/session/{session_date}": "trading",
