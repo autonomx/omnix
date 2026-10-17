@@ -1,8 +1,10 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerFetchMiddleware, resetFetchPipelineForTests, pipelineFetch } from '../api/fetchPipeline';
+import { moduleManifests } from './modules';
 import {
   activeViewModule,
+  configureViewModules,
   installViewApiFirewall,
   isApiAllowedForView,
   loginLocation,
@@ -12,6 +14,10 @@ import {
 } from './viewApiScope';
 
 describe('view API scope', () => {
+  beforeEach(() => {
+    configureViewModules(moduleManifests);
+  });
+
   afterEach(() => {
     resetViewApiFirewallForTests();
     resetFetchPipelineForTests();
@@ -47,7 +53,7 @@ describe('view API scope', () => {
     window.history.replaceState({}, '', '/trading');
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
 
     const blocked = await pipelineFetch('/api/chat/sessions');
     expect(blocked.status).toBe(403);
@@ -62,7 +68,7 @@ describe('view API scope', () => {
   it('follows browser navigation without reinstalling the firewall', async () => {
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
 
     window.history.replaceState({}, '', '/trading');
     expect(activeViewModule()).toBe('trading');
@@ -77,7 +83,7 @@ describe('view API scope', () => {
     window.history.replaceState({}, '', '/trading');
     const rawFetch = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = rawFetch;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     // A leftover assistant middleware cannot reach the chat API from the trading workspace.
     const remove = registerFetchMiddleware('assistant', (_input, init, next) => next('/api/chat/sessions', init));
 
@@ -93,7 +99,7 @@ describe('view API scope', () => {
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('adds the client header to same-origin %s', async (method) => {
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     await pipelineFetch('/api/chat/sessions', { method, headers: { 'X-Existing': 'preserved' } });
     const init = delegate.mock.calls[0][1];
     expect(new Headers(init?.headers).get('X-Omnix-Client')).toBe('web');
@@ -103,7 +109,7 @@ describe('view API scope', () => {
   it('preserves Request headers and recognizes its method', async () => {
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     const request = new Request(`${window.location.origin}/api/chat/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     await pipelineFetch(request);
     expect(delegate.mock.calls[0][0]).toBe(request);
@@ -115,7 +121,7 @@ describe('view API scope', () => {
   it('does not add headers to foreign-origin mutations; safe reads get only a request id', async () => {
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     await pipelineFetch('https://external.example/api/chat/sessions', { method: 'POST' });
     await pipelineFetch('/api/chat/sessions');
     const foreign = new Headers(delegate.mock.calls[0][1]?.headers);
@@ -129,7 +135,7 @@ describe('view API scope', () => {
   it('gives each gateway call its own request id and keeps a caller-supplied one', async () => {
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     await pipelineFetch('/api/chat/sessions', { method: 'POST' });
     await pipelineFetch('/api/chat/sessions', { method: 'POST' });
     await pipelineFetch('/api/chat/sessions', { headers: { 'X-Request-ID': 'caller-request-0001' } });
@@ -142,8 +148,8 @@ describe('view API scope', () => {
     window.history.replaceState({}, '', '/trading');
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
+    installViewApiFirewall(moduleManifests);
     await pipelineFetch('/api/trading/paper/accounts', { method: 'POST' });
     expect(new Headers(delegate.mock.calls[0][1]?.headers).get('X-Omnix-Client')).toBe('web');
   });
@@ -167,7 +173,7 @@ describe('view API scope sign-in integration', () => {
     document.cookie = 'omnix_csrf=csrf-123; path=/';
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     await pipelineFetch('/api/chat/sessions', { method: 'POST' });
     await pipelineFetch('https://external.example/api/chat/sessions', { method: 'POST' });
     await pipelineFetch('/api/chat/sessions');
@@ -192,7 +198,7 @@ describe('view API scope sign-in integration', () => {
       hash: '',
     });
     window.fetch = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 401 }));
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     expect((await pipelineFetch('/api/chat/sessions')).status).toBe(401);
     await pipelineFetch('/api/chat/sessions');
     expect(assign).toHaveBeenCalledTimes(1);
@@ -203,7 +209,7 @@ describe('view API scope sign-in integration', () => {
     const assign = vi.fn();
     vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, assign, pathname: '/chatbot' });
     window.fetch = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 401 }));
-    installViewApiFirewall();
+    installViewApiFirewall(moduleManifests);
     await pipelineFetch('/api/auth/local/login', { method: 'POST' });
     expect(assign).not.toHaveBeenCalled();
   });
@@ -211,5 +217,23 @@ describe('view API scope sign-in integration', () => {
   it('builds the sign-in location with the return path', () => {
     expect(loginLocation({ pathname: '/', search: '', hash: '' })).toBe('/login');
     expect(loginLocation({ pathname: '/trading', search: '?a=1', hash: '#x' })).toBe('/login?next=%2Ftrading%3Fa%3D1%23x');
+  });
+});
+
+describe('view API scope with an injected module list (MarketPulse W-1)', () => {
+  afterEach(() => {
+    resetViewApiFirewallForTests();
+    resetFetchPipelineForTests();
+    configureViewModules(moduleManifests);
+  });
+
+  it('knows only the modules it was given', () => {
+    configureViewModules([{ id: 'trading', route: '/trading', apiPrefixes: ['/api/trading'] }]);
+
+    expect(moduleIdFromPathname('/trading/chart')).toBe('trading');
+    expect(moduleIdFromPathname('/chatbot')).toBeNull();
+    expect(isApiAllowedForView('/api/trading/bars', 'trading')).toBe(true);
+    expect(isApiAllowedForView('/api/chat/sessions', 'chatbot')).toBe(false);
+    expect(isApiAllowedForView('/api/auth/session', null)).toBe(true);
   });
 });

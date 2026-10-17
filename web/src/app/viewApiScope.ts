@@ -1,22 +1,36 @@
  
 import { registerFetchMiddleware } from '../api/fetchPipeline';
-import { moduleManifests, type OmnixModuleId } from './modules';
+import type { OmnixModuleId } from './modules';
 
 let removeFirewall: (() => void) | null = null;
 let previousWebSocket: typeof window.WebSocket | null = null;
 let previousEventSource: typeof window.EventSource | null = null;
 
+/**
+ * What the firewall needs from a module manifest. The app passes its own module
+ * list (MarketPulse W-1), so this file never imports every feature's manifest.
+ */
+export interface ViewModuleScope {
+  readonly id: string;
+  readonly route: string;
+  readonly apiPrefixes: readonly string[];
+}
+
 // Longest route first, so /voice-cloning is not taken for /voice.
-const ROUTE_MODULES: ReadonlyArray<readonly [string, OmnixModuleId]> = [...moduleManifests]
-  .sort((left, right) => right.route.length - left.route.length)
-  .map((manifest) => [manifest.route, manifest.id] as const);
+let routeModules: ReadonlyArray<readonly [string, OmnixModuleId]> = [];
 
 // These are the API families each workspace is allowed to use. Keeping this
 // list at the browser boundary prevents a globally installed controller from
 // silently reaching another workspace's backend while the user is navigating.
-const MODULE_API_PREFIXES = Object.fromEntries(
-  moduleManifests.map((manifest) => [manifest.id, manifest.apiPrefixes]),
-) as Record<OmnixModuleId, readonly string[]>;
+let moduleApiPrefixes: Partial<Record<OmnixModuleId, readonly string[]>> = {};
+
+/** Sets the modules whose routes and API families the firewall knows; called by installViewApiFirewall. */
+export function configureViewModules(modules: readonly ViewModuleScope[]): void {
+  routeModules = [...modules]
+    .sort((left, right) => right.route.length - left.route.length)
+    .map((module) => [module.route, module.id as OmnixModuleId] as const);
+  moduleApiPrefixes = Object.fromEntries(modules.map((module) => [module.id, module.apiPrefixes]));
+}
 
 function pathMatchesPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
@@ -25,7 +39,7 @@ function pathMatchesPrefix(pathname: string, prefix: string): boolean {
 /** The module whose route contains `pathname`; null outside every workspace (no fallback, WP-9.7). */
 export function moduleIdFromPathname(pathname: string): OmnixModuleId | null {
   const normalized = pathname.split('?', 1)[0].replace(/\/+$/u, '') || '/';
-  return ROUTE_MODULES.find(([route]) => normalized === route || normalized.startsWith(`${route}/`))?.[1] ?? null;
+  return routeModules.find(([route]) => normalized === route || normalized.startsWith(`${route}/`))?.[1] ?? null;
 }
 
 export function activeViewModule(): OmnixModuleId | null {
@@ -60,7 +74,7 @@ export function isApiAllowedForView(pathname: string, moduleId: OmnixModuleId | 
   // Sign-in, session state and error reports belong to the shell, not to any workspace.
   if (AUTH_API_PATTERN.test(pathname) || pathMatchesPrefix(pathname, CLIENT_ERRORS_PATH)) return true;
   if (!moduleId) return false;
-  return MODULE_API_PREFIXES[moduleId].some((prefix) => pathMatchesPrefix(pathname, prefix));
+  return (moduleApiPrefixes[moduleId] ?? []).some((prefix) => pathMatchesPrefix(pathname, prefix));
 }
 
 function blockedApiResponse(pathname: string, moduleId: OmnixModuleId | null): Response {
@@ -148,9 +162,11 @@ function withClientHeader(input: RequestInfo | URL, init?: RequestInit): Request
 /**
  * The browser's API boundary: one transport middleware in the fetch pipeline
  * (scope to the active workspace, client/CSRF headers and request ids, sign-in
- * redirect on 401), plus scoped WebSocket and EventSource constructors.
+ * redirect on 401), plus scoped WebSocket and EventSource constructors, for
+ * the given modules.
  */
-export function installViewApiFirewall(): void {
+export function installViewApiFirewall(modules: readonly ViewModuleScope[]): void {
+  configureViewModules(modules);
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
   if (!removeFirewall) {
     removeFirewall = registerFetchMiddleware('view-api-firewall', async (input, init, next) => {
