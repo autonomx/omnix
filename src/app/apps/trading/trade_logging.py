@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Literal
 
-from app.runtime.paths import resources_root
+from app.runtime.paths import resources_logs_root
 
 
 TradeLogChannel = Literal["auto_trading", "backtest"]
@@ -38,7 +38,7 @@ def trade_log_dir() -> Path:
     override = environment().get("OMNIX_TRADE_LOG_DIR", "").strip()
     if override:
         return Path(override)
-    return resources_root() / "logs" / "trade"
+    return resources_logs_root() / "trade"
 
 
 def trade_log_path(channel: TradeLogChannel) -> Path:
