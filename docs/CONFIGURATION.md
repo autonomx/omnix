@@ -98,8 +98,10 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AUDIOBOOK_CLASSIFICATION_LOG_PATH` | string | — | audiobook | Controls audiobook classification log path for audiobook. |
 | `OMNIX_AUDIOBOOK_LOG_DIR` | string | — | audiobook | Controls audiobook log dir for audiobook. |
 | `OMNIX_AUTH_COOKIE_SECURE` | boolean | `false` | security | Controls auth cookie secure for security. |
+| `OMNIX_AUTH_DESKTOP_HANDOFF` | boolean | `false` | security | Controls auth desktop handoff for security. |
 | `OMNIX_AUTH_GUESTS` | boolean | — | security | Controls auth guests for security. |
 | `OMNIX_AUTH_GUEST_DAYS` | integer | `7` | security | Controls auth guest days for security. |
+| `OMNIX_AUTH_LAUNCHER_FIRST_PASSWORD` | boolean | — | security | Controls auth launcher first password for security. |
 | `OMNIX_AUTH_MODE` | string | — | production.py, security | Controls auth mode for production.py, security. |
 | `OMNIX_AUTH_REGISTRATION` | string | — | security | Controls auth registration for security. |
 | `OMNIX_AUTH_REMEMBER_DAYS` | integer | `30` | security | Controls auth remember days for security. |
@@ -174,6 +176,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_KASA_DEVICE_ALIAS` | string | — | assistant-tools | Controls kasa device alias for assistant-tools. |
 | `OMNIX_KASA_DEVICE_HOST` | string | — | assistant-tools | Controls kasa device host for assistant-tools. |
 | `OMNIX_KASA_ENABLED` | boolean | — | assistant-tools | Controls kasa enabled for assistant-tools. |
+| `OMNIX_KEYCHAIN_SERVICE` | string | `Omnix` | security | Controls keychain service for security. |
 | `OMNIX_LAUNCHER_AUTO_START` | string | `0` | launcher | Controls launcher auto start for launcher. |
 | `OMNIX_LAUNCHER_KILL_PORT` | boolean | `false` | tooling | Controls launcher kill port for tooling. |
 | `OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT` | string | `8` | tooling | Controls launcher port release timeout for tooling. |
@@ -223,10 +226,12 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |
+| `OMNIX_PRODUCT_NAME` | string | — | kernel | Controls product name for kernel. |
 | `OMNIX_PROVIDER_SECRETS_PATH` | string | — | security | Controls provider secrets path for security. |
 | `OMNIX_REQUIRE_ROLE_SEPARATION` | boolean | `false` | kernel | Controls require role separation for kernel. |
 | `OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED` | string | `1` | conversation | Controls research legacy aliases enabled for conversation. |
 | `OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET` | string | — | conversation | Controls research legacy alias sunset for conversation. |
+| `OMNIX_RESOURCES_DIR` | string | — | kernel | Controls resources dir for kernel. |
 | `OMNIX_ROLE_PERMISSIONS` | string | — | security | Controls role permissions for security. |
 | `OMNIX_RPG_DEBUG_LOGS` | string | `1` | rpg | Controls rpg debug logs for rpg. |
 | `OMNIX_RPG_LOG_DIR` | string | — | rpg | Controls rpg log dir for rpg. |
@@ -246,7 +251,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_SCHEDULER_THREAD_WORKERS` | integer | `4` | kernel | Controls scheduler thread workers for kernel. |
 | `OMNIX_SECRET_STORE` | string | — | security | Controls secret store for security. |
 | `OMNIX_SECRET_STORE_PATH` | string | — | security | Controls secret store path for security. |
-| `OMNIX_SEC_USER_AGENT` | string | `OmnixTradingResearch/1.0 local-research contact=local@localhost` | trading | Controls sec user agent for trading. |
+| `OMNIX_SEC_USER_AGENT` | string | — | trading | Controls sec user agent for trading. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |
 | `OMNIX_SOFTWARE_REVISION` | string | — | kernel | Controls software revision for kernel. |
 | `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |
@@ -273,6 +278,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_BREADTH_FEED` | string | `sip` | trading | Controls trading breadth feed for trading. |
 | `OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading deep recovery shadow monitor for trading. |
 | `OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading deep recovery shadow monitor in tests for trading. |
+| `OMNIX_TRADING_DESKTOP_NOTIFY_SECRET` | string | — | trading | Controls trading desktop notify secret for trading. |
+| `OMNIX_TRADING_DESKTOP_NOTIFY_URL` | string | — | trading | Controls trading desktop notify url for trading. |
 | `OMNIX_TRADING_DYNAMIC_DISCOVERY` | boolean | `1` | trading | Controls trading dynamic discovery for trading. |
 | `OMNIX_TRADING_DYNAMIC_DISCOVERY_IN_TESTS` | boolean | `0` | trading | Controls trading dynamic discovery in tests for trading. |
 | `OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS` | string | `3` | trading | Controls trading execution observation interval seconds for trading. |
