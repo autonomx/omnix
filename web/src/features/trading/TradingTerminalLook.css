@@ -53,3 +53,35 @@
     color: #d1d4dc;
   }
 }
+
+@layer features {
+  /* A compact header like the terminal's other controls: 13px type, short controls, one quiet brand line. */
+  .trading-terminal-header {
+    min-height: 40px;
+    gap: 10px;
+    box-shadow: none;
+  }
+
+  .trading-terminal-header button,
+  .trading-terminal-header select {
+    font-size: 13px;
+    line-height: 18px;
+    padding: 4px 8px;
+  }
+
+  .trading-workspace-switcher button:first-child {
+    min-width: 0;
+  }
+
+  .trading-terminal-brand {
+    min-width: 0;
+  }
+
+  .trading-terminal-brand small {
+    display: none;
+  }
+
+  .trading-session-tab-hint {
+    display: none;
+  }
+}
