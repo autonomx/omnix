@@ -217,6 +217,14 @@ class PostgresAuthRepository:
             for row in rows
         ]
 
+    def session_method_and_age(self, session_id: str) -> tuple[str, float] | None:
+        """The stored session's sign-in method and age in seconds."""
+        row = self.connection.execute(
+            "SELECT auth_method, EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - created_at) FROM omnix_auth_sessions WHERE id = %s",
+            (session_id,),
+        ).fetchone()
+        return (str(row[0]), float(row[1])) if row else None
+
     def session_age_seconds(self, session_id: str) -> float | None:
         row = self.connection.execute(
             "SELECT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - created_at) FROM omnix_auth_sessions WHERE id = %s",

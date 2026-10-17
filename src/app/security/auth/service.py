@@ -381,13 +381,23 @@ class AuthService:
         return revoked
 
     def _reauthenticated(
-        self, repository: PostgresAuthRepository, principal: AuthenticatedPrincipal, credential: str | None
+        self,
+        repository: PostgresAuthRepository,
+        principal: AuthenticatedPrincipal,
+        credential: str | None,
+        *,
+        first_password: bool = False,
     ) -> bool:
         """The caller proved it is still them.
 
         An account with a secret presents it again: its password, or the
         install credential for the owner. An account without one (Google only)
         must have signed in within the last few minutes.
+
+        With ``launcher_first_password`` (MarketPulse S-10), the owner setting a
+        *first* password may instead come from a launcher sign-in code (a stored
+        ``local`` session) issued within the same few minutes: the desktop app
+        signs its first window in that way and asks for a password at once.
         """
         stored_password = repository.password(principal.user_id)
         install = repository.install_credential()
@@ -405,6 +415,16 @@ class AuthService:
             ):
                 return True
             return False
+        if (
+            first_password
+            and stored_password is None
+            and owner_install is not None
+            and self.settings.accounts.launcher_first_password
+            and principal.session_id
+        ):
+            session = repository.session_method_and_age(principal.session_id)
+            if session is not None and session[0] == "local" and session[1] <= REAUTHENTICATION_WINDOW_SECONDS:
+                return True
         if stored_password is not None or owner_install is not None:
             return False
         age = repository.session_age_seconds(principal.session_id) if principal.session_id else None
@@ -597,7 +617,7 @@ class AuthService:
                     self._audit_failure(work, "password_change")
                     work.commit()
                     raise ReauthenticationRequired("invalid_credential")
-            elif not self._reauthenticated(repository, principal, current):
+            elif not self._reauthenticated(repository, principal, current, first_password=True):
                 work.rollback()
                 raise ReauthenticationRequired("recent_sign_in_required")
             self._store_password(work, principal.user_id, new_password)
