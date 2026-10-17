@@ -12,6 +12,8 @@ import {
   type AuthSession,
   type InviteSummary,
 } from '../../api/authClient';
+import { desktopGoogleSignIn } from '../../app/desktopGoogle';
+import { desktopBridge } from '../../shared/desktopBridge';
 import { SettingsSection } from './SettingsPrimitives';
 
 const MESSAGES: Record<string, string> = {
@@ -152,6 +154,18 @@ export function AccountSection() {
 
   const connectGoogle = () => {
     setBusy(true);
+    const desktop = desktopBridge();
+    if (desktop) {
+      // Inside the desktop app Google runs in the system browser; this window waits for the link (MarketPulse S-5).
+      void desktopGoogleSignIn(desktop, { next: '/settings', link: true })
+        .then(() => {
+          setStatus('Google is connected.');
+          reload();
+        })
+        .catch((error: unknown) => setStatus(message(error, minLength, 'Connecting Google did not finish.')))
+        .finally(() => setBusy(false));
+      return;
+    }
     void startGoogleLink('/settings')
       .then((url) => window.location.assign(url))
       .catch((error: unknown) => {

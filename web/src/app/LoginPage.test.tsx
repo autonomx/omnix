@@ -173,3 +173,31 @@ describe('LoginPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('connect Google in Settings');
   });
 });
+
+describe('LoginPage in the desktop app (MarketPulse S-5)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete window.marketPulse;
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('signs in with Google through the system browser and goes on', async () => {
+    const openExternal = vi.fn();
+    window.marketPulse = { version: '1.0.0', platform: 'win32', setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), openExternal, requestLoginCode: vi.fn() };
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === '/api/auth/session') return signedOut({ ...OPEN, google_desktop: true });
+      if (url === '/api/auth/google/desktop/start') return Response.json({ nonce: 'n', begin_url: '/api/auth/google/desktop/begin?token=t', expires_in: 600 });
+      if (url === '/api/auth/google/desktop/handoff') return Response.json({ status: 'signed_in', next: '/trading' });
+      throw new Error(`unexpected ${url}`);
+    });
+    renderLogin('?next=%2Ftrading');
+    const assign = mockLocationAssign();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with Google' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Finish signing in with Google in your browser');
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/trading'), { timeout: 4000 });
+    expect(openExternal).toHaveBeenCalledWith(expect.stringContaining('/api/auth/google/desktop/begin?token=t'));
+  });
+});

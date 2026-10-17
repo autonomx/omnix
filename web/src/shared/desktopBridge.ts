@@ -19,6 +19,8 @@ export interface DesktopBridge {
   setTitleBarOverlay(colors: TitleBarOverlayColors): void;
   /** Opens the folder holding the app's logs. */
   revealLogs(): void;
+  /** Opens a URL in the system browser (Google sign-in, which refuses embedded browsers). */
+  openExternal(url: string): void;
   /** Asks the shell for a fresh first-run sign-in code; false once first run is done. */
   requestLoginCode(): Promise<boolean>;
 }

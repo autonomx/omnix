@@ -5814,6 +5814,17 @@ export interface components {
              */
             requested_stage: "disabled" | "shadow" | "text" | "speech";
         };
+        /** DesktopGoogleHandoffRequest */
+        DesktopGoogleHandoffRequest: core["schemas"]["DesktopGoogleHandoffRequest"];
+        /** DesktopGoogleHandoffResponse */
+        DesktopGoogleHandoffResponse: core["schemas"]["DesktopGoogleHandoffResponse"];
+        /** DesktopGoogleStartRequest */
+        DesktopGoogleStartRequest: core["schemas"]["DesktopGoogleStartRequest"];
+        /**
+         * DesktopGoogleStartResponse
+         * @description The window keeps ``nonce``; the desktop app opens ``begin_url`` in the system browser.
+         */
+        DesktopGoogleStartResponse: core["schemas"]["DesktopGoogleStartResponse"];
         /**
          * DesktopObservation
          * @description A factual, uncertain and revisable vision result.

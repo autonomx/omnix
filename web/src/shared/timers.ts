@@ -39,6 +39,8 @@ export const POLL_INTERVALS_MS = {
   desktopCompanionStatus: 30_000,
   /** A job whose lifecycle events cannot arrive because the event stream is down. */
   jobWithoutEvents: 1_000,
+  /** A desktop Google sign-in finishing in the system browser: the gateway can't push to the window (MarketPulse S-5). */
+  desktopGoogleSignIn: 1_500,
 } as const;
 
 /** Runs `task` every `intervalMs` after the previous run finishes, skipping turns while the page is hidden. */

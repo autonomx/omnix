@@ -6,7 +6,7 @@ import { TradingDesktopTitleBar } from './TradingDesktopTitleBar';
 afterEach(() => cleanup());
 
 function bridge(platform = 'win32'): DesktopBridge {
-  return { version: '1.0.0', platform, setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), requestLoginCode: vi.fn() };
+  return { version: '1.0.0', platform, setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), openExternal: vi.fn(), requestLoginCode: vi.fn() };
 }
 
 describe('desktop title bar (MarketPulse W-4)', () => {

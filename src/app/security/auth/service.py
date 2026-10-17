@@ -6,7 +6,7 @@ in" sessions, single-use launcher links and the owner's install credential.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
@@ -15,7 +15,7 @@ import logging
 import re
 import secrets
 import uuid
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from app.runtime.tenant_context import (
     LOCAL_USER_ID,
@@ -38,6 +38,9 @@ SESSION_COOKIE = "omnix_session"
 SECURE_SESSION_COOKIE = "__Host-omnix_session"
 CSRF_COOKIE = "omnix_csrf"
 CSRF_HEADER = "x-omnix-csrf"
+
+# A desktop Google sign-in (MarketPulse S-5) has as long as a browser one: account choice and two-step checks.
+DESKTOP_HANDOFF_TTL_SECONDS = 600
 
 _SCRYPT_N = 2**15
 _SCRYPT_R = 8
@@ -147,6 +150,16 @@ class IssuedSession:
     csrf_token: str
     principal: AuthenticatedPrincipal
     max_age_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class DesktopHandoffOutcome:
+    """What a desktop window's nonce brings back (MarketPulse S-5)."""
+
+    status: Literal["pending", "signed_in", "linked", "failed"]
+    redirect_after: str
+    session: IssuedSession | None = None
+    error: str | None = None
 
 
 class Authenticator(Protocol):
@@ -743,7 +756,7 @@ class AuthService:
         return start.authorization_url, start.browser_binding
 
     def complete_google_login(
-        self, *, code: str, state: str, browser_binding: str, user_agent: str | None
+        self, *, code: str, state: str, browser_binding: str | Sequence[str], user_agent: str | None
     ) -> tuple[IssuedSession | None, str]:
         """Finish a Google sign-in or link. Returns (session or None, where to go).
 
@@ -751,34 +764,53 @@ class AuthService:
         Accounts are never merged by email: registration does not verify
         email, so a Google account whose email belongs to another account is
         refused, and its owner links Google from their settings instead.
+
+        A desktop sign-in (MarketPulse S-5) resolves the account the same way
+        but signs nobody in here: the identity, or the error, goes on its
+        handoff for the app's window, and ``where to go`` is ``desktop:done``
+        or ``desktop:error:<code>`` for the system browser's closing page.
         """
         self._require_accounts()
         settings = self.settings.accounts.google
-        if settings is None or not code or not state or not browser_binding:
+        bindings = [browser_binding] if isinstance(browser_binding, str) else [item for item in browser_binding if item]
+        if settings is None or not code or not state or not any(bindings):
             return None, "/login?error=sign_in_failed"
+        state_hash = digest(state)
         with self._work() as work:
             login = PostgresAuthRepository(work.connection).consume_oidc_state(
-                state_hash=digest(state), browser_binding_hash=digest(browser_binding)
+                state_hash=state_hash, browser_binding_hash=[digest(item) for item in bindings if item]
             )
             work.commit()
-        if login is None or login.purpose not in {"google", "google_link"}:
+        if login is None or login.purpose not in {"google", "google_link", "google_desktop", "google_link_desktop"}:
             return None, "/login?error=sign_in_failed"
+        desktop = login.purpose.endswith("_desktop")
+        purpose = login.purpose.removesuffix("_desktop")
+
+        def failed(target: str) -> tuple[None, str]:
+            if not desktop:
+                return None, target
+            code_name = target.split("=", 1)[1] if "=" in target else "sign_in_failed"
+            with self._work() as work:
+                PostgresAuthRepository(work.connection).complete_desktop_handoff(state_hash, error=code_name)
+                work.commit()
+            return None, f"desktop:error:{code_name}"
+
         claims = self.google.exchange_code(code=code, code_verifier=login.code_verifier, nonce=login.nonce)
         if claims is None:
-            return None, "/login?error=sign_in_failed"
+            return failed("/login?error=sign_in_failed")
         decision = self.google.admission(claims)
         if not decision.allowed:
-            return None, "/login?error=google_not_allowed"
+            return failed("/login?error=google_not_allowed")
         subject = str(claims["sub"])
         verified_email = decision.email if claims.get("email_verified") is True else None
         with self._work() as work:
             repository = PostgresAuthRepository(work.connection)
             identities = work.identities
             linked_user = repository.external_identity_user(issuer=GOOGLE_ISSUER, subject=subject)
-            if login.purpose == "google_link":
+            if purpose == "google_link":
                 if login.link_user_id is None or (linked_user is not None and linked_user != login.link_user_id):
                     work.rollback()
-                    return None, "/settings?account_error=google_linked_elsewhere"
+                    return failed("/settings?account_error=google_linked_elsewhere")
                 repository.link_external_identity(issuer=GOOGLE_ISSUER, subject=subject,
                                                   user_id=login.link_user_id, email=verified_email)
                 workspace_id = identities.primary_workspace(login.link_user_id)
@@ -786,8 +818,11 @@ class AuthService:
                     context = identities.load_context(user_id=login.link_user_id, workspace_id=workspace_id)
                     work.audit.append(context, aggregate_type="account", aggregate_id=login.link_user_id,
                                       action="auth.google.linked", payload={})
+                if desktop:
+                    repository.complete_desktop_handoff(state_hash, user_id=login.link_user_id,
+                                                        workspace_id=workspace_id)
                 work.commit()
-                return None, login.redirect_after
+                return None, "desktop:done" if desktop else login.redirect_after
             if linked_user is None:
                 try:
                     invite_hash = self._invite_allows(repository, None) if login.invite_token_hash is None else (
@@ -795,31 +830,128 @@ class AuthService:
                     )
                 except AccountError as exc:
                     work.rollback()
-                    return None, f"/login?error={exc.code}"
+                    return failed(f"/login?error={exc.code}")
                 if login.invite_token_hash is not None and invite_hash is None:
                     work.rollback()
-                    return None, "/login?error=invite_invalid"
+                    return failed("/login?error=invite_invalid")
                 if verified_email and identities.email_taken(verified_email):
                     work.rollback()
-                    return None, "/login?error=google_email_in_use"
+                    return failed("/login?error=google_email_in_use")
                 try:
                     context = self._new_account(work, display_name=decision.display_name, email=verified_email,
                                                 kind="standard", invite_hash=invite_hash)
                 except AccountError as exc:
                     work.rollback()
-                    return None, f"/login?error={exc.code}"
+                    return failed(f"/login?error={exc.code}")
                 linked_user = context.user_id
             else:
                 workspace_id = identities.primary_workspace(linked_user)
                 if workspace_id is None:
                     work.rollback()
-                    return None, "/login?error=sign_in_failed"
+                    return failed("/login?error=sign_in_failed")
                 context = identities.load_context(user_id=linked_user, workspace_id=workspace_id)
             repository.link_external_identity(issuer=GOOGLE_ISSUER, subject=subject, user_id=linked_user,
                                               email=verified_email)
+            if desktop:
+                # The system browser gets no session; the app's window takes it with its nonce.
+                repository.complete_desktop_handoff(state_hash, user_id=context.user_id,
+                                                    workspace_id=context.workspace_id)
+                work.commit()
+                return None, "desktop:done"
             issued = self._issue(work, context, auth_method="google", user_agent=user_agent, remember=login.remember)
             work.commit()
         return issued, login.redirect_after
+
+    # Desktop Google sign-in (MarketPulse S-5) ------------------------------
+
+    def _require_desktop_handoff(self) -> None:
+        self._require_accounts()
+        if not self.settings.accounts.desktop_handoff or self.settings.accounts.google is None:
+            raise AccountError("desktop_google_unavailable", 404)
+
+    def start_desktop_google(
+        self, *, redirect_after: str, invite: str | None = None, remember: bool = True, link_user: str | None = None
+    ) -> tuple[str, str]:
+        """(nonce, begin_token): the window keeps the nonce; the system browser opens the begin link."""
+        self._require_desktop_handoff()
+        nonce = secrets.token_urlsafe(32)
+        begin_token = secrets.token_urlsafe(32)
+        with self._work() as work:
+            PostgresAuthRepository(work.connection).insert_desktop_handoff(
+                nonce_hash=digest(nonce),
+                begin_token_hash=digest(begin_token),
+                purpose="google_link" if link_user else "google",
+                link_user_id=link_user,
+                invite_token_hash=digest(invite) if invite else None,
+                remember=remember,
+                redirect_after=redirect_after,
+                ttl_seconds=DESKTOP_HANDOFF_TTL_SECONDS,
+            )
+            work.commit()
+        return nonce, begin_token
+
+    def begin_desktop_google(self, begin_token: str) -> tuple[str, str] | None:
+        """(authorization_url, browser_binding) for the system browser, once per handoff; None when not valid."""
+        self._require_desktop_handoff()
+        if not begin_token:
+            return None
+        with self._work() as work:
+            repository = PostgresAuthRepository(work.connection)
+            handoff = repository.begin_desktop_handoff(digest(begin_token))
+            if handoff is None:
+                work.rollback()
+                return None
+            start = self.google.begin(redirect_after=handoff.redirect_after)
+            state_hash = digest(start.state)
+            repository.insert_oidc_state(
+                state_hash=state_hash,
+                browser_binding_hash=digest(start.browser_binding),
+                nonce=start.nonce,
+                code_verifier=start.code_verifier,
+                redirect_after=start.redirect_after,
+                ttl_seconds=DESKTOP_HANDOFF_TTL_SECONDS,
+                purpose=f"{handoff.purpose}_desktop",
+                link_user_id=handoff.link_user_id,
+                invite_token_hash=handoff.invite_token_hash,
+                remember=handoff.remember,
+            )
+            repository.attach_desktop_state(handoff.nonce_hash, state_hash)
+            work.commit()
+        return start.authorization_url, start.browser_binding
+
+    def take_desktop_handoff(self, nonce: str, *, user_agent: str | None) -> DesktopHandoffOutcome | None:
+        """What the window gets for its nonce: still pending, a session, a linked account, or an error.
+
+        None when the nonce is unknown, already used or expired.
+        """
+        self._require_desktop_handoff()
+        if not nonce:
+            return None
+        with self._work() as work:
+            repository = PostgresAuthRepository(work.connection)
+            result = repository.take_desktop_handoff(digest(nonce))
+            if result is None:
+                work.rollback()
+                return None
+            if result.pending:
+                work.rollback()
+                return DesktopHandoffOutcome(status="pending", redirect_after=result.redirect_after)
+            if result.error is not None or result.user_id is None:
+                work.commit()
+                return DesktopHandoffOutcome(status="failed", redirect_after=result.redirect_after,
+                                             error=result.error or "sign_in_failed")
+            if result.purpose == "google_link":
+                work.commit()
+                return DesktopHandoffOutcome(status="linked", redirect_after=result.redirect_after)
+            workspace_id = result.workspace_id or work.identities.primary_workspace(result.user_id)
+            if workspace_id is None:
+                work.commit()
+                return DesktopHandoffOutcome(status="failed", redirect_after=result.redirect_after,
+                                             error="sign_in_failed")
+            context = work.identities.load_context(user_id=result.user_id, workspace_id=workspace_id)
+            issued = self._issue(work, context, auth_method="google", user_agent=user_agent, remember=result.remember)
+            work.commit()
+        return DesktopHandoffOutcome(status="signed_in", redirect_after=result.redirect_after, session=issued)
 
     # Local mode -----------------------------------------------------------
 

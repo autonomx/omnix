@@ -27,23 +27,26 @@ import {
   type AuthOptions,
   type AuthSession,
 } from '../api/authClient';
+import { desktopBridge } from '../shared/desktopBridge';
+import { PRODUCT_NAME, PRODUCT_NAME_WITH_ARTICLE } from '../shared/productIdentity';
+import { desktopGoogleSignIn } from './desktopGoogle';
 
-const UNREACHABLE = 'Omnix is not reachable. Check that the gateway is running.';
+const UNREACHABLE = `${PRODUCT_NAME} is not reachable. Check that the gateway is running.`;
 
 const ERROR_MESSAGES: Record<string, string> = {
-  login_link_expired: 'That sign-in link has expired or was already used. Open Omnix from the launcher again, or sign in below.',
+  login_link_expired: `That sign-in link has expired or was already used. Open ${PRODUCT_NAME} from the launcher again, or sign in below.`,
   sign_in_failed: 'Sign-in did not complete. Try again.',
   invalid_credential: 'That install credential is not valid.',
   invalid_credentials: "That email and password don't match an account.",
   email_taken: 'An account with this email already exists. Sign in instead.',
   invalid_email: 'Enter a valid email address.',
   password_is_email: "Choose a password that isn't your email address.",
-  registration_closed: "This Omnix doesn't take new accounts. Ask its owner for an invite link.",
+  registration_closed: `This ${PRODUCT_NAME} doesn't take new accounts. Ask its owner for an invite link.`,
   invite_required: 'Creating an account here needs an invite link from the owner.',
   invite_invalid: 'That invite link has expired or was already used. Ask for a new one.',
   guests_disabled: 'Guest access is turned off here.',
   google_email_in_use:
-    "That Google account's email already belongs to an Omnix account. Sign in with your password, then connect Google in Settings.",
+    `That Google account's email already belongs to ${PRODUCT_NAME_WITH_ARTICLE} account. Sign in with your password, then connect Google in Settings.`,
   google_not_allowed: "That Google account isn't allowed to sign in here.",
   google_not_configured: 'Sign-in with Google is not set up here.',
   rate_limited: 'Too many attempts. Wait a minute and try again.',
@@ -83,11 +86,14 @@ function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => 
 }
 
 /** Google, guest access, or why there is no sign-up here. */
-function OtherWaysIn({ options, invite, canCreate, googleHref, submitting, onGuest }: {
+function OtherWaysIn({ options, invite, canCreate, googleHref, onDesktopGoogle, googleWaiting, submitting, onGuest }: {
   options: AuthOptions;
   invite: string | null;
   canCreate: boolean;
   googleHref: string;
+  /** Inside the desktop app: Google signs in through the system browser (MarketPulse S-5). */
+  onDesktopGoogle?: () => void;
+  googleWaiting?: boolean;
   submitting: boolean;
   onGuest: () => void;
 }) {
@@ -95,7 +101,16 @@ function OtherWaysIn({ options, invite, canCreate, googleHref, submitting, onGue
   return (
     <>
       {options.google || guests ? <Divider label="or" labelPosition="center" /> : null}
-      {options.google ? (
+      {options.google && onDesktopGoogle ? (
+        <>
+          <Button variant="default" loading={googleWaiting} onClick={onDesktopGoogle}>
+            Continue with Google
+          </Button>
+          {googleWaiting ? (
+            <Text size="sm" c="dimmed" role="status">Finish signing in with Google in your browser, then come back here.</Text>
+          ) : null}
+        </>
+      ) : options.google ? (
         <Button component="a" variant="default" href={googleHref}>
           Continue with Google
         </Button>
@@ -121,7 +136,7 @@ function InstallCredentialSignIn({ submitting, onSubmit }: { submitting: boolean
   return (
     <>
       <Text size="sm" c="dimmed">
-        On this computer, opening Omnix from the launcher signs you in automatically.{' '}
+        On this computer, opening {PRODUCT_NAME} from the launcher signs you in automatically.{' '}
         <Anchor component="button" type="button" size="sm" onClick={() => setOpen((value) => !value)}>
           Use the install credential
         </Anchor>
@@ -167,6 +182,8 @@ export function LoginPage() {
   const [inviteOk, setInviteOk] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(ERROR_MESSAGES[params.get('error') ?? ''] ?? null);
   const [submitting, setSubmitting] = useState(false);
+  const [googleWaiting, setGoogleWaiting] = useState(false);
+  const desktop = desktopBridge();
 
   useEffect(() => {
     let cancelled = false;
@@ -225,7 +242,7 @@ export function LoginPage() {
     <Center mih="100vh" p="md">
       <Paper withBorder p="xl" radius="md" maw={440} w="100%">
         <Stack gap="md">
-          <Title order={2}>{mode === 'create' ? 'Create your Omnix account' : 'Sign in to Omnix'}</Title>
+          <Title order={2}>{mode === 'create' ? `Create your ${PRODUCT_NAME} account` : `Sign in to ${PRODUCT_NAME}`}</Title>
           {error ? (
             <Alert color="red" role="alert">
               {error}
@@ -283,6 +300,15 @@ export function LoginPage() {
                   invite={invite}
                   canCreate={canCreate}
                   googleHref={googleLoginUrl(next, { invite, remember })}
+                  onDesktopGoogle={desktop && options.google_desktop ? () => {
+                    setError(null);
+                    setGoogleWaiting(true);
+                    void desktopGoogleSignIn(desktop, { next, invite, remember })
+                      .then((handed) => goTo(handed.next))
+                      .catch((caught: unknown) => setError(messageFor(caught, ERROR_MESSAGES.sign_in_failed, minLength)))
+                      .finally(() => setGoogleWaiting(false));
+                  } : undefined}
+                  googleWaiting={googleWaiting}
                   submitting={submitting}
                   onGuest={() => void run(signInAsGuest, ERROR_MESSAGES.guests_disabled)}
                 />

@@ -181,6 +181,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/google/desktop/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google Desktop Begin
+         * @description Opened once in the system browser: binds it to the login and sends it to Google.
+         */
+        get: operations["google_desktop_begin_api_auth_google_desktop_begin_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/google/desktop/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Google Desktop Handoff
+         * @description The window trades its nonce for its session once Google answered; 202 while it has not.
+         */
+        post: operations["google_desktop_handoff_api_auth_google_desktop_handoff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/google/desktop/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Google Desktop Start
+         * @description Start a Google sign-in (or link) for a desktop window; the nonce never leaves the window (S-5).
+         */
+        post: operations["google_desktop_start_api_auth_google_desktop_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/google/link": {
         parameters: {
             query?: never;
@@ -1466,6 +1526,11 @@ export interface components {
              */
             google: boolean;
             /**
+             * Google Desktop
+             * @default false
+             */
+            google_desktop: boolean;
+            /**
              * Guests
              * @default false
              */
@@ -2069,6 +2134,53 @@ export interface components {
             ok: boolean;
             /** Session Id */
             session_id: string;
+        };
+        /** DesktopGoogleHandoffRequest */
+        DesktopGoogleHandoffRequest: {
+            /** Nonce */
+            nonce: string;
+        };
+        /** DesktopGoogleHandoffResponse */
+        DesktopGoogleHandoffResponse: {
+            /** Next */
+            next: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "signed_in" | "linked";
+        };
+        /** DesktopGoogleStartRequest */
+        DesktopGoogleStartRequest: {
+            /** Invite */
+            invite?: string | null;
+            /**
+             * Link
+             * @default false
+             */
+            link?: boolean;
+            /**
+             * Next
+             * @default /
+             */
+            next?: string;
+            /**
+             * Remember
+             * @default true
+             */
+            remember?: boolean;
+        };
+        /**
+         * DesktopGoogleStartResponse
+         * @description The window keeps ``nonce``; the desktop app opens ``begin_url`` in the system browser.
+         */
+        DesktopGoogleStartResponse: {
+            /** Begin Url */
+            begin_url: string;
+            /** Expires In */
+            expires_in: number;
+            /** Nonce */
+            nonce: string;
         };
         /** DiagnosticsPayload */
         DiagnosticsPayload: {
@@ -4015,6 +4127,103 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_desktop_begin_api_auth_google_desktop_begin_get: {
+        parameters: {
+            query?: {
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_desktop_handoff_api_auth_google_desktop_handoff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopGoogleHandoffRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesktopGoogleHandoffResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_desktop_start_api_auth_google_desktop_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopGoogleStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesktopGoogleStartResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

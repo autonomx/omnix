@@ -133,3 +133,16 @@ export function googleLoginUrl(next: string, options: { invite?: string | null; 
 export async function startGoogleLink(next: string): Promise<string> {
   return (await postJson<{ url: string }>(`/api/auth/google/link?next=${encodeURIComponent(next)}`)).url;
 }
+
+export type DesktopGoogleStart = components['schemas']['DesktopGoogleStartResponse'];
+export type DesktopGoogleHandoff = components['schemas']['DesktopGoogleHandoffResponse'];
+
+/** Starts Google sign-in (or linking) for the desktop app; the nonce stays in this window (MarketPulse S-5). */
+export function startDesktopGoogle(body: components['schemas']['DesktopGoogleStartRequest']): Promise<DesktopGoogleStart> {
+  return postJson<DesktopGoogleStart>('/api/auth/google/desktop/start', body);
+}
+
+/** Trades the nonce for this window's session once Google answered; `pending` until then. */
+export function takeDesktopGoogleHandoff(nonce: string): Promise<DesktopGoogleHandoff> {
+  return postJson<DesktopGoogleHandoff>('/api/auth/google/desktop/handoff', { nonce });
+}

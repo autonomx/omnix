@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 const desktop = () => {
-  window.marketPulse = { version: '1.0.0', platform: 'win32', setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), requestLoginCode: vi.fn() };
+  window.marketPulse = { version: '1.0.0', platform: 'win32', setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), openExternal: vi.fn(), requestLoginCode: vi.fn() };
 };
 
 describe('desktop alert channel (MarketPulse S-6)', () => {

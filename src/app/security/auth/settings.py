@@ -61,6 +61,8 @@ class AccountPolicy:
     google: OidcSettings | None = None
     # MarketPulse S-10: the owner may set a first password from a fresh launcher sign-in code.
     launcher_first_password: bool = False
+    # MarketPulse S-5: Google sign-in through the system browser for the desktop app's windows.
+    desktop_handoff: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +162,7 @@ def _account_policy(env: Mapping[str, str] | None) -> AccountPolicy:
         guest_ttl_seconds=guest_days * 86400,
         google=_google_settings(env),
         launcher_first_password=env_bool("OMNIX_AUTH_LAUNCHER_FIRST_PASSWORD", False, env=env),
+        desktop_handoff=env_bool("OMNIX_AUTH_DESKTOP_HANDOFF", False, env=env),
     )
 
 

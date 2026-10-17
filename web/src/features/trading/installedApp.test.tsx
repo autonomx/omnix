@@ -88,7 +88,7 @@ describe('desktop app (MarketPulse W-2)', () => {
     const { pushSupported } = await import('./alertNotificationsApi');
     expect(isInstalledApp(media(false).query)).toBe(false);
 
-    window.marketPulse = { version: '1.0.0', platform: 'win32', setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), requestLoginCode: vi.fn() };
+    window.marketPulse = { version: '1.0.0', platform: 'win32', setTitleBarOverlay: vi.fn(), revealLogs: vi.fn(), openExternal: vi.fn(), requestLoginCode: vi.fn() };
 
     expect(isInstalledApp(media(false).query)).toBe(true);
     expect(pushSupported()).toBe(false);

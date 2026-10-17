@@ -266,7 +266,7 @@ def test_sign_up_and_guest_flows_through_the_gateway(database) -> None:
                         headers={"X-Omnix-Client": "test"}, follow_redirects=False)
     anonymous = client.get("/api/auth/session").json()
     assert anonymous["authenticated"] is False
-    assert anonymous["options"] == {"registration": "open", "guests": True, "google": False,
+    assert anonymous["options"] == {"registration": "open", "guests": True, "google": False, "google_desktop": False,
                                     "install_credential": True, "min_password_length": 12}
 
     assert client.post("/api/auth/register", json={"email": "not-an-email", "password": PASSWORD}).json()["detail"] == "invalid_email"

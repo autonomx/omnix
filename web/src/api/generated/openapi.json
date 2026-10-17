@@ -4064,6 +4064,11 @@
             "title": "Google",
             "type": "boolean"
           },
+          "google_desktop": {
+            "default": false,
+            "title": "Google Desktop",
+            "type": "boolean"
+          },
           "guests": {
             "default": false,
             "title": "Guests",
@@ -4094,6 +4099,7 @@
           "registration",
           "guests",
           "google",
+          "google_desktop",
           "install_credential",
           "min_password_length"
         ],
@@ -13569,6 +13575,102 @@
           "evidence_evaluation_ids"
         ],
         "title": "DesktopCompanionRolloutStatus",
+        "type": "object"
+      },
+      "DesktopGoogleHandoffRequest": {
+        "properties": {
+          "nonce": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Nonce",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nonce"
+        ],
+        "title": "DesktopGoogleHandoffRequest",
+        "type": "object"
+      },
+      "DesktopGoogleHandoffResponse": {
+        "properties": {
+          "next": {
+            "title": "Next",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "signed_in",
+              "linked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "next"
+        ],
+        "title": "DesktopGoogleHandoffResponse",
+        "type": "object"
+      },
+      "DesktopGoogleStartRequest": {
+        "properties": {
+          "invite": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite"
+          },
+          "link": {
+            "default": false,
+            "title": "Link",
+            "type": "boolean"
+          },
+          "next": {
+            "default": "/",
+            "maxLength": 2000,
+            "title": "Next",
+            "type": "string"
+          },
+          "remember": {
+            "default": true,
+            "title": "Remember",
+            "type": "boolean"
+          }
+        },
+        "title": "DesktopGoogleStartRequest",
+        "type": "object"
+      },
+      "DesktopGoogleStartResponse": {
+        "description": "The window keeps ``nonce``; the desktop app opens ``begin_url`` in the system browser.",
+        "properties": {
+          "begin_url": {
+            "title": "Begin Url",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "nonce": {
+            "title": "Nonce",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nonce",
+          "begin_url",
+          "expires_in"
+        ],
+        "title": "DesktopGoogleStartResponse",
         "type": "object"
       },
       "DesktopObservation": {
@@ -73652,6 +73754,132 @@
           }
         },
         "summary": "Google Callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/google/desktop/begin": {
+      "get": {
+        "description": "Opened once in the system browser: binds it to the login and sends it to Google.",
+        "operationId": "google_desktop_begin_api_auth_google_desktop_begin_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Desktop Begin",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/google/desktop/handoff": {
+      "post": {
+        "description": "The window trades its nonce for its session once Google answered; 202 while it has not.",
+        "operationId": "google_desktop_handoff_api_auth_google_desktop_handoff_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopGoogleHandoffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopGoogleHandoffResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Desktop Handoff",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/google/desktop/start": {
+      "post": {
+        "description": "Start a Google sign-in (or link) for a desktop window; the nonce never leaves the window (S-5).",
+        "operationId": "google_desktop_start_api_auth_google_desktop_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopGoogleStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopGoogleStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Desktop Start",
         "tags": [
           "auth"
         ]

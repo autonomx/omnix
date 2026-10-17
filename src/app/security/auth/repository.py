@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -46,6 +47,29 @@ class InstallCredentialRecord:
     n: int
     r: int
     p: int
+
+
+@dataclass(frozen=True, slots=True)
+class DesktopHandoff:
+    """A desktop Google sign-in whose begin link the system browser just opened."""
+
+    nonce_hash: str
+    purpose: str
+    link_user_id: str | None
+    invite_token_hash: str | None
+    remember: bool
+    redirect_after: str
+
+
+@dataclass(frozen=True, slots=True)
+class DesktopHandoffResult:
+    pending: bool
+    purpose: str
+    user_id: str | None
+    workspace_id: str | None
+    error: str | None
+    remember: bool
+    redirect_after: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,18 +403,22 @@ class PostgresAuthRepository:
              purpose, link_user_id, invite_token_hash, remember),
         )
 
-    def consume_oidc_state(self, *, state_hash: str, browser_binding_hash: str) -> OidcLoginState | None:
+    def consume_oidc_state(
+        self, *, state_hash: str, browser_binding_hash: str | Sequence[str]
+    ) -> OidcLoginState | None:
+        """Use a login state once; ``browser_binding_hash`` may list each binding cookie the browser sent."""
+        bindings = [browser_binding_hash] if isinstance(browser_binding_hash, str) else list(browser_binding_hash)
         row = self.connection.execute(
             """
             UPDATE omnix_oidc_login_states
                SET consumed_at = CURRENT_TIMESTAMP
              WHERE state_hash = %s
-               AND browser_binding_hash = %s
+               AND browser_binding_hash = ANY(%s)
                AND consumed_at IS NULL
                AND expires_at > CURRENT_TIMESTAMP
             RETURNING nonce, code_verifier, redirect_after, purpose, link_user_id, invite_token_hash, remember
             """,
-            (state_hash, browser_binding_hash),
+            (state_hash, bindings),
         ).fetchone()
         if row is None:
             return None
@@ -400,6 +428,103 @@ class PostgresAuthRepository:
             invite_token_hash=str(row[5]) if row[5] is not None else None,
             remember=bool(row[6]),
         )
+
+    # Desktop Google sign-in handoffs (MarketPulse S-5) --------------------
+
+    def insert_desktop_handoff(
+        self,
+        *,
+        nonce_hash: str,
+        begin_token_hash: str,
+        purpose: str,
+        link_user_id: str | None,
+        invite_token_hash: str | None,
+        remember: bool,
+        redirect_after: str,
+        ttl_seconds: int,
+    ) -> None:
+        self.connection.execute(
+            "DELETE FROM omnix_auth_desktop_handoffs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 hour'"
+        )
+        self.connection.execute(
+            """
+            INSERT INTO omnix_auth_desktop_handoffs
+                (nonce_hash, begin_token_hash, purpose, link_user_id, invite_token_hash, remember, redirect_after,
+                 expires_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP + make_interval(secs => %s))
+            """,
+            (nonce_hash, begin_token_hash, purpose, link_user_id, invite_token_hash, remember, redirect_after,
+             ttl_seconds),
+        )
+
+    def begin_desktop_handoff(self, begin_token_hash: str) -> DesktopHandoff | None:
+        """Opens a handoff's begin link once, while it is valid."""
+        row = self.connection.execute(
+            """
+            UPDATE omnix_auth_desktop_handoffs
+               SET begun_at = CURRENT_TIMESTAMP
+             WHERE begin_token_hash = %s AND begun_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+            RETURNING nonce_hash, purpose, link_user_id, invite_token_hash, remember, redirect_after
+            """,
+            (begin_token_hash,),
+        ).fetchone()
+        if row is None:
+            return None
+        return DesktopHandoff(nonce_hash=str(row[0]), purpose=str(row[1]),
+                              link_user_id=str(row[2]) if row[2] is not None else None,
+                              invite_token_hash=str(row[3]) if row[3] is not None else None,
+                              remember=bool(row[4]), redirect_after=str(row[5]))
+
+    def attach_desktop_state(self, nonce_hash: str, state_hash: str) -> None:
+        self.connection.execute(
+            "UPDATE omnix_auth_desktop_handoffs SET state_hash = %s WHERE nonce_hash = %s",
+            (state_hash, nonce_hash),
+        )
+
+    def complete_desktop_handoff(
+        self, state_hash: str, *, user_id: str | None = None, workspace_id: str | None = None, error: str | None = None
+    ) -> bool:
+        """Records the Google result on the handoff that started this login state."""
+        row = self.connection.execute(
+            """
+            UPDATE omnix_auth_desktop_handoffs
+               SET user_id = %s, workspace_id = %s, error = %s, completed_at = CURRENT_TIMESTAMP
+             WHERE state_hash = %s AND completed_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+            RETURNING nonce_hash
+            """,
+            (user_id, workspace_id, error, state_hash),
+        ).fetchone()
+        return row is not None
+
+    def take_desktop_handoff(self, nonce_hash: str) -> DesktopHandoffResult | None:
+        """The handoff's outcome for the window holding its nonce: used once when complete, else still pending."""
+        row = self.connection.execute(
+            """
+            UPDATE omnix_auth_desktop_handoffs
+               SET consumed_at = CURRENT_TIMESTAMP
+             WHERE nonce_hash = %s AND consumed_at IS NULL AND completed_at IS NOT NULL
+               AND expires_at > CURRENT_TIMESTAMP
+            RETURNING purpose, user_id, workspace_id, error, remember, redirect_after
+            """,
+            (nonce_hash,),
+        ).fetchone()
+        if row is not None:
+            return DesktopHandoffResult(
+                pending=False, purpose=str(row[0]), user_id=str(row[1]) if row[1] is not None else None,
+                workspace_id=str(row[2]) if row[2] is not None else None,
+                error=str(row[3]) if row[3] is not None else None, remember=bool(row[4]), redirect_after=str(row[5]),
+            )
+        waiting = self.connection.execute(
+            """
+            SELECT purpose, remember, redirect_after FROM omnix_auth_desktop_handoffs
+             WHERE nonce_hash = %s AND consumed_at IS NULL AND completed_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+            """,
+            (nonce_hash,),
+        ).fetchone()
+        if waiting is None:
+            return None
+        return DesktopHandoffResult(pending=True, purpose=str(waiting[0]), user_id=None, workspace_id=None, error=None,
+                                    remember=bool(waiting[1]), redirect_after=str(waiting[2]))
 
     def external_identity_user(self, *, issuer: str, subject: str) -> str | None:
         row = self.connection.execute(

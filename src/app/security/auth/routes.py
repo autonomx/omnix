@@ -9,12 +9,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 import hmac
+import html
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
+from app.config.product import product_name
 from app.observability.metrics import record_auth_rejection
 from app.security.rate_limit import rate_limited
 
@@ -22,6 +24,7 @@ from .oidc import safe_redirect_path
 from .service import (
     CSRF_COOKIE,
     CSRF_HEADER,
+    DESKTOP_HANDOFF_TTL_SECONDS,
     MAX_PASSWORD_LENGTH,
     SECURE_SESSION_COOKIE,
     SESSION_COOKIE,
@@ -36,6 +39,8 @@ from .settings import AuthMode
 OIDC_TX_COOKIE = "omnix_oidc_tx"
 _OIDC_TX_PATH = "/api/auth/oidc"
 GOOGLE_TX_COOKIE = "omnix_google_tx"
+# The system browser's binding for a desktop Google sign-in; its own name so it never meets the browser's own flow.
+GOOGLE_DESKTOP_TX_COOKIE = "omnix_google_desktop_tx"
 _GOOGLE_TX_PATH = "/api/auth/google"
 
 
@@ -45,6 +50,8 @@ class AuthOptionsResponse(BaseModel):
     registration: Literal["open", "invite", "closed"] = "closed"
     guests: bool = False
     google: bool = False
+    # Google through the system browser, for the desktop app's windows (MarketPulse S-5).
+    google_desktop: bool = False
     install_credential: bool = False
     min_password_length: int = 12
 
@@ -140,6 +147,31 @@ class RedirectUrlResponse(BaseModel):
     url: str
 
 
+class DesktopGoogleStartRequest(BaseModel):
+    next: str = Field(default="/", max_length=2000)
+    invite: str | None = Field(default=None, max_length=200)
+    remember: bool = True
+    # Connect Google to the signed-in account instead of signing in.
+    link: bool = False
+
+
+class DesktopGoogleStartResponse(BaseModel):
+    """The window keeps ``nonce``; the desktop app opens ``begin_url`` in the system browser."""
+
+    nonce: str
+    begin_url: str
+    expires_in: int
+
+
+class DesktopGoogleHandoffRequest(BaseModel):
+    nonce: str = Field(min_length=1, max_length=200)
+
+
+class DesktopGoogleHandoffResponse(BaseModel):
+    status: Literal["pending", "signed_in", "linked"]
+    next: str
+
+
 class AuthSessionSummary(BaseModel):
     id: str
     auth_method: str
@@ -176,6 +208,25 @@ def _secure(service: AuthService, request: Request) -> bool:
 
 def presented_session(request: Request) -> str | None:
     return request.cookies.get(SECURE_SESSION_COOKIE) or request.cookies.get(SESSION_COOKIE)
+
+
+def _desktop_google_page(error: str | None) -> HTMLResponse:
+    """What the system browser shows when a desktop Google sign-in ends there."""
+    product = html.escape(product_name())
+    if error is None:
+        title, message = "Signed in", f"You are signed in. Return to {product}; you can close this tab."
+    else:
+        title = "Sign-in did not finish"
+        message = f"Google sign-in did not finish ({html.escape(error)}). Return to {product} and try again."
+    body = (
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{title}</title>'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        "<style>body{font:16px system-ui,sans-serif;background:#131722;color:#d1d4dc;display:grid;place-items:center;"
+        "min-height:100vh;margin:0}main{max-width:28rem;padding:2rem;text-align:center}</style></head>"
+        f"<body><main><h1>{title}</h1><p>{message}</p></main></body></html>"
+    )
+    return HTMLResponse(body, status_code=200 if error is None else 400,
+                        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
 def _set_session_cookies(response: Response, issued: IssuedSession, *, secure: bool) -> None:
@@ -239,6 +290,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             registration=policy.registration,
             guests=policy.guests,
             google=policy.google is not None,
+            google_desktop=policy.google is not None and policy.desktop_handoff,
             install_credential=True,
         )
 
@@ -457,9 +509,14 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
                 dependencies=[Depends(login_rate_limit)])
     def google_callback(request: Request, code: str = "", state: str = "") -> RedirectResponse:
         service = service_for(AuthMode.LOCAL)
-        binding = request.cookies.get(GOOGLE_TX_COOKIE) or ""
-        issued, target = service.complete_google_login(code=code, state=state, browser_binding=binding,
+        bindings = [request.cookies.get(GOOGLE_TX_COOKIE) or "", request.cookies.get(GOOGLE_DESKTOP_TX_COOKIE) or ""]
+        issued, target = service.complete_google_login(code=code, state=state, browser_binding=bindings,
                                                        user_agent=_user_agent(request))
+        if target.startswith("desktop:"):
+            # A desktop sign-in: the system browser only says to go back to the app (MarketPulse S-5).
+            page = _desktop_google_page(None if target == "desktop:done" else target.removeprefix("desktop:error:"))
+            page.delete_cookie(GOOGLE_DESKTOP_TX_COOKIE, path=_GOOGLE_TX_PATH)
+            return page
         redirect = RedirectResponse(safe_redirect_path(target) if not target.startswith("/login?error=")
                                     else target, status_code=303)
         redirect.delete_cookie(GOOGLE_TX_COOKIE, path=_GOOGLE_TX_PATH)
@@ -467,6 +524,59 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             revoke_presented(service, request)
             _set_session_cookies(redirect, issued, secure=_secure(service, request))
         return redirect
+
+    @router.post("/google/desktop/start", response_model=DesktopGoogleStartResponse,
+                 dependencies=[Depends(login_rate_limit)])
+    def google_desktop_start(body: DesktopGoogleStartRequest, request: Request) -> DesktopGoogleStartResponse:
+        """Start a Google sign-in (or link) for a desktop window; the nonce never leaves the window (S-5)."""
+        service = service_for(AuthMode.LOCAL)
+        link_user = signed_in(service, request, check_csrf=True).user_id if body.link else None
+        try:
+            nonce, begin_token = service.start_desktop_google(
+                redirect_after=safe_redirect_path(body.next), invite=body.invite or None,
+                remember=body.remember, link_user=link_user,
+            )
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        return DesktopGoogleStartResponse(nonce=nonce, begin_url=f"/api/auth/google/desktop/begin?token={begin_token}",
+                                          expires_in=DESKTOP_HANDOFF_TTL_SECONDS)
+
+    @router.get("/google/desktop/begin", status_code=302)
+    def google_desktop_begin(request: Request, token: str = "") -> Response:
+        """Opened once in the system browser: binds it to the login and sends it to Google."""
+        service = service_for(AuthMode.LOCAL)
+        try:
+            started = service.begin_desktop_google(token)
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        if started is None:
+            return _desktop_google_page("login_link_expired")
+        url, binding = started
+        redirect = RedirectResponse(url, status_code=302)
+        redirect.set_cookie(GOOGLE_DESKTOP_TX_COOKIE, binding, max_age=DESKTOP_HANDOFF_TTL_SECONDS, httponly=True,
+                            samesite="lax", secure=_secure(service, request), path=_GOOGLE_TX_PATH)
+        return redirect
+
+    @router.post("/google/desktop/handoff", response_model=DesktopGoogleHandoffResponse)
+    def google_desktop_handoff(body: DesktopGoogleHandoffRequest, request: Request,
+                               response: Response) -> DesktopGoogleHandoffResponse:
+        """The window trades its nonce for its session once Google answered; 202 while it has not."""
+        service = service_for(AuthMode.LOCAL)
+        try:
+            outcome = service.take_desktop_handoff(body.nonce, user_agent=_user_agent(request))
+        except AccountError as exc:
+            raise account_failure(exc) from exc
+        if outcome is None:
+            raise HTTPException(status_code=410, detail="desktop_sign_in_expired")
+        if outcome.status == "failed":
+            record_auth_rejection(outcome.error or "sign_in_failed")
+            raise HTTPException(status_code=409, detail=outcome.error or "sign_in_failed")
+        if outcome.status == "pending":
+            response.status_code = 202
+        elif outcome.status == "signed_in" and outcome.session is not None:
+            revoke_presented(service, request)
+            _set_session_cookies(response, outcome.session, secure=_secure(service, request))
+        return DesktopGoogleHandoffResponse(status=outcome.status, next=safe_redirect_path(outcome.redirect_after))
 
     @router.get("/sessions", response_model=AuthSessionListResponse)
     def list_sessions(request: Request) -> AuthSessionListResponse:
