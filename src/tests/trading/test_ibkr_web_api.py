@@ -599,3 +599,125 @@ def test_failed_web_api_connections_back_off_a_minute_unless_the_user_retries() 
     # Pressing Connect in Settings tries again at once.
     with pytest.raises(IbkrRuntimeError, match="ibkr_web_api_credentials_missing"):
         runtime.connect(force=True)
+
+
+def test_rejected_history_ends_that_stream_instead_of_repeating_every_second() -> None:
+    transport, server, _ = _setup()
+    transport.connect("ignored", 0, 0)
+    events: list[IbkrBarStreamEvent] = []
+    transport.subscribe_bars(_contract(), events.append, duration_seconds=600, use_rth=False)
+    route = server._route
+
+    def reject_history(path, params, json):
+        if path == "/iserver/marketdata/history":
+            return FakeResponse(500, {"error": "chart data unavailable"})
+        return route(path, params, json)
+
+    server._route = reject_history
+
+    for _ in range(5):
+        transport.poll_once()
+
+    history_calls = [path for _, path, *_ in server.calls if path == "/iserver/marketdata/history"]
+    # One attempt, then the consumer is told, backs off and reopens on its own schedule.
+    assert len(history_calls) == 1
+    assert [(event.kind, event.reason) for event in events] == [("closed", "ibkr_web_api_http_500:/iserver/marketdata/history")]
+    assert transport.diagnostics()["active_bar_streams"] == 0
+    assert ("POST", "/iserver/marketdata/unsubscribe", None, {"conid": 265598}) in server.calls
+
+
+def test_closing_the_last_bar_stream_frees_ibkrs_market_data_line() -> None:
+    transport, server, _ = _setup()
+    transport.connect("ignored", 0, 0)
+    first = transport.subscribe_bars(_contract(), lambda _event: None, duration_seconds=600, use_rth=False)
+    second = transport.subscribe_bars(_contract(), lambda _event: None, duration_seconds=600, use_rth=False)
+    unsubscribe = ("POST", "/iserver/marketdata/unsubscribe", None, {"conid": 265598})
+
+    transport.unsubscribe_bars(first)
+    assert unsubscribe not in server.calls  # the other chart still reads it
+    transport.unsubscribe_bars(second)
+    assert unsubscribe in server.calls
+
+
+def test_a_quote_side_ibkr_stopped_sending_keeps_its_old_time() -> None:
+    transport, server, now = _setup()
+    transport.connect("ignored", 0, 0)
+    quotes = []
+    transport.subscribe_quote(_contract(), quotes.append)
+
+    server.snapshot_rows = [_quote_row(at=OPEN, **{"84": "100.00", "86": "100.02", "31": "100.01", "6509": "RpB"})]
+    transport.poll_once()
+    later = OPEN + timedelta(seconds=30)
+    now[0] = later
+    server.snapshot_rows = [_quote_row(at=later, **{"31": "100.05"})]
+    transport.poll_once()
+
+    quote = quotes[-1]
+    assert (quote.bid_observed_at, quote.ask_observed_at, quote.last_observed_at) == (OPEN, OPEN, later)
+    # The book is as old as its oldest side, so a freshness check sees a 30-second-old quote.
+    assert quote.source_time == OPEN
+
+
+def test_a_failed_token_renewal_waits_a_minute_and_the_session_stays_tickled() -> None:
+    clock = [OPEN]
+    monotonic = [1_000.0]
+    transport, server, now = _setup(clock)
+    transport._monotonic = lambda: monotonic[0]
+    transport.connect("ignored", 0, 0)
+    # Inside the last ten minutes of the token's 24 hours, with IBKR refusing to renew.
+    now[0] = OPEN + timedelta(hours=23, minutes=55)
+    server._live_session_token = lambda method, url, oauth: FakeResponse(503, {"error": "maintenance"})
+
+    for _ in range(5):
+        monotonic[0] += 1
+        transport.poll_once()
+    renewals = [path for _, path, *_ in server.calls if path == "/oauth/live_session_token"]
+    assert len(renewals) == 2  # the first connection, then one renewal attempt
+    monotonic[0] += 60
+    transport.poll_once()
+    renewals = [path for _, path, *_ in server.calls if path == "/oauth/live_session_token"]
+    assert len(renewals) == 3
+    assert ("POST", "/tickle", None, {}) in server.calls
+
+
+def test_reconnecting_quickly_gets_a_fresh_worker() -> None:
+    transport, server, _ = _setup()
+    transport._start_worker = True
+    transport.poll_interval_seconds = 3600  # the worker only waits in this test
+    transport.connect("ignored", 0, 0)
+    first_worker, first_stop = transport._worker, transport._stop
+
+    transport.disconnect()
+    transport.connect("ignored", 0, 0)
+
+    assert first_stop.is_set()
+    assert transport._worker is not first_worker
+    assert transport._worker.is_alive() and not transport._stop.is_set()
+    transport.disconnect()
+
+
+def test_credentials_never_show_their_secrets_in_a_repr() -> None:
+    transport, _, _ = _setup()
+    credentials = transport._credentials_loader()
+
+    text = repr(credentials) + repr(generate_oauth_keys())
+
+    assert CONSUMER_KEY in text
+    for secret in (credentials.access_token, credentials.access_token_secret, "PRIVATE KEY"):
+        assert secret not in text
+
+
+def test_a_failed_web_api_attempt_does_not_make_ibkr_look_set_up(monkeypatch) -> None:
+    from app.apps.trading.providers import ibkr_web_api
+
+    monkeypatch.setattr(ibkr_web_api, "load_web_api_credentials", lambda: None)
+    runtime = IbkrRuntime(enabled=True, host="127.0.0.1", port=4002, client_id=71)
+    runtime.connection = "web_api"
+    assert runtime.client_available() is False
+
+    with pytest.raises(IbkrRuntimeError, match="credentials_missing"):
+        runtime.connect()
+
+    # The runtime built a transport for the attempt, but there are still no credentials.
+    assert runtime.transport is not None
+    assert runtime.client_available() is False

@@ -323,6 +323,8 @@ class SharedBarStreamHub:
         self.max_backoff_seconds = max_backoff_seconds
         self.sleep = sleep
         self._upstreams: dict[str, asyncio.Task[None]] = {}
+        # Upstreams that dropped and have not delivered since.
+        self._down: set[str] = set()
 
     @asynccontextmanager
     async def listen(
@@ -355,6 +357,9 @@ class SharedBarStreamHub:
             self._upstreams[key] = asyncio.create_task(
                 self._run_upstream(key, provider_symbol, binding_id, instrument_id, interval, extended_hours)
             )
+        elif key in self._down:
+            # Joining an upstream that is reconnecting: say so now, not at the next drop.
+            offer(StreamingStatusUpdate(connected=False))
         try:
             yield queue
         finally:
@@ -380,43 +385,54 @@ class SharedBarStreamHub:
         last_final_start: datetime | None = None
         dropped = False
         scope: dict[str, Any] = {} if extended_hours is None else {"extended_hours": extended_hours}
-        while True:
-            try:
-                first = True
-                async for update in self.open_upstream(
-                    provider_symbol=provider_symbol,
-                    binding_id=binding_id,
-                    instrument_id=instrument_id,
-                    interval=interval,
-                    **scope,
-                ):
-                    if first:
-                        first = False
-                        backoff = 1.0
-                        self.subscriptions.mark_connected(key)
-                        if dropped:
-                            dropped = False
-                            self.subscriptions.publish_status(key, StreamingStatusUpdate(connected=True))
-                        window = recovery_window(last_final_start, update.start_time, interval=interval)
-                        if window is not None:
-                            for bar in await self.recover_gap(binding_id, instrument_id, interval, *window, **scope):
+        try:
+            while True:
+                try:
+                    first = True
+                    async for update in self.open_upstream(
+                        provider_symbol=provider_symbol,
+                        binding_id=binding_id,
+                        instrument_id=instrument_id,
+                        interval=interval,
+                        **scope,
+                    ):
+                        if first:
+                            window = recovery_window(last_final_start, update.start_time, interval=interval)
+                            recovered = (
+                                await self.recover_gap(binding_id, instrument_id, interval, *window, **scope)
+                                if window is not None
+                                else []
+                            )
+                            first = False
+                            # Delivering again only once the first bar is through: an upstream that
+                            # fails on every opening keeps backing off instead of retrying each second.
+                            backoff = 1.0
+                            self.subscriptions.mark_connected(key)
+                            if dropped:
+                                dropped = False
+                                self._down.discard(key)
+                                self.subscriptions.publish_status(key, StreamingStatusUpdate(connected=True))
+                            for bar in recovered:
                                 if extended_hours is not None:
                                     bar = replace(bar, extended_hours=extended_hours)
                                 self.subscriptions.publish(bar)
                                 last_final_start = bar.start_time
-                    self.subscriptions.publish(update)
-                    if update.is_final and (last_final_start is None or update.start_time > last_final_start):
-                        last_final_start = update.start_time
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.warning("market stream %s dropped: %s: %s", key, type(exc).__name__, exc)
-            self.subscriptions.mark_disconnected(key)
-            if not dropped:
-                dropped = True
-                self.subscriptions.publish_status(key, StreamingStatusUpdate(connected=False))
-            await self.sleep(backoff)
-            backoff = min(self.max_backoff_seconds, backoff * 2)
+                        self.subscriptions.publish(update)
+                        if update.is_final and (last_final_start is None or update.start_time > last_final_start):
+                            last_final_start = update.start_time
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("market stream %s dropped: %s: %s", key, type(exc).__name__, exc)
+                self.subscriptions.mark_disconnected(key)
+                if not dropped:
+                    dropped = True
+                    self._down.add(key)
+                    self.subscriptions.publish_status(key, StreamingStatusUpdate(connected=False))
+                await self.sleep(backoff)
+                backoff = min(self.max_backoff_seconds, backoff * 2)
+        finally:
+            self._down.discard(key)
 
 
 __all__ = [

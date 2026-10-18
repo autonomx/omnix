@@ -72,6 +72,10 @@ _FINALIZE_DELAY = timedelta(seconds=2)
 _HISTORY_WINDOW = timedelta(hours=12)
 # History bars report volume in hundreds of shares ("reported volume = actual volume/100").
 _HISTORY_VOLUME_FACTOR = Decimal("100")
+# The worker never waits long for history pacing: it also polls every quote.
+_WORKER_RATE_WAIT_SECONDS = 1.0
+# A failed live session token renewal is retried this often, not on every pass.
+_RENEWAL_RETRY_SECONDS = 60.0
 
 
 # --- Credentials and keys ----------------------------------------------------
@@ -80,11 +84,12 @@ _HISTORY_VOLUME_FACTOR = Decimal("100")
 @dataclass(frozen=True, slots=True)
 class IbkrWebApiCredentials:
     consumer_key: str
-    access_token: str
-    access_token_secret: str
-    signature_private_key: str
-    encryption_private_key: str
-    dh_prime: int
+    # Secrets stay out of repr, so a log line or traceback never carries them.
+    access_token: str = field(repr=False)
+    access_token_secret: str = field(repr=False)
+    signature_private_key: str = field(repr=False)
+    encryption_private_key: str = field(repr=False)
+    dh_prime: int = field(repr=False)
     realm: str = IBKR_OAUTH_REALM
 
 
@@ -92,8 +97,8 @@ class IbkrWebApiCredentials:
 class IbkrOAuthKeys:
     """Private keys Omnix keeps, and the public files the user uploads to IBKR."""
 
-    signature_private_key: str
-    encryption_private_key: str
+    signature_private_key: str = field(repr=False)
+    encryption_private_key: str = field(repr=False)
     dh_prime: int
 
     @property
@@ -460,6 +465,8 @@ class _LiveMinute:
 @dataclass(slots=True)
 class _ContractState:
     values: dict[str, Any] = field(default_factory=dict)
+    # When IBKR last sent each field.
+    observed: dict[str, datetime] = field(default_factory=dict)
     market_data_type: str = "UNKNOWN"
     availability: str = ""
     minute: _LiveMinute | None = None
@@ -476,7 +483,7 @@ class IbkrWebApiTransport:
     def __init__(
         self,
         *,
-        credentials_loader: Callable[[], IbkrWebApiCredentials | None] = load_web_api_credentials,
+        credentials_loader: Callable[[], IbkrWebApiCredentials | None] | None = None,
         client: Any | None = None,
         base_url: str = IBKR_WEB_API_BASE_URL,
         clock: Callable[[], datetime] | None = None,
@@ -486,7 +493,8 @@ class IbkrWebApiTransport:
         tickle_interval_seconds: float = 60.0,
         start_worker: bool = True,
     ) -> None:
-        self._credentials_loader = credentials_loader
+        # Read the store when connecting, so saved or replaced credentials are always current.
+        self._credentials_loader = credentials_loader or (lambda: load_web_api_credentials())
         self._client = client
         self.base_url = base_url.rstrip("/")
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -503,6 +511,7 @@ class IbkrWebApiTransport:
         self._connected = False
         self._competing = False
         self._last_tickle = 0.0
+        self._next_renewal_attempt = 0.0
         self._next_token = 1
         self._quotes: dict[int, _QuoteSubscription] = {}
         self._bars: dict[int, _BarSubscription] = {}
@@ -634,9 +643,13 @@ class IbkrWebApiTransport:
             self._connected = True
             self._last_tickle = self._monotonic()
             self.last_error = None
-        if self._start_worker and (self._worker is None or not self._worker.is_alive()):
-            self._stop.clear()
-            self._worker = threading.Thread(target=self._run_worker, name="omnix-ibkr-web-api", daemon=True)
+        if self._start_worker and (self._worker is None or not self._worker.is_alive() or self._stop.is_set()):
+            # A worker told to stop may still be finishing a request; it exits on its own
+            # flag, and this session gets a fresh worker and flag.
+            self._stop = threading.Event()
+            self._worker = threading.Thread(
+                target=self._run_worker, args=(self._stop,), name="omnix-ibkr-web-api", daemon=True
+            )
             self._worker.start()
 
     def disconnect(self) -> None:
@@ -694,9 +707,16 @@ class IbkrWebApiTransport:
         return rows
 
     def _history(
-        self, contract: IbkrContractIdentity, *, end: datetime, period: str, use_rth: bool, timeout_seconds: float
+        self,
+        contract: IbkrContractIdentity,
+        *,
+        end: datetime,
+        period: str,
+        use_rth: bool,
+        timeout_seconds: float,
+        rate_wait_seconds: float,
     ) -> list[IbkrHistoricalBar]:
-        self._history_limiter.acquire(timeout_seconds)
+        self._history_limiter.acquire(rate_wait_seconds)
         payload = self._request(
             "GET",
             "/iserver/marketdata/history",
@@ -722,20 +742,27 @@ class IbkrWebApiTransport:
         what_to_show: str,
         use_rth: bool,
         timeout_seconds: float = 20.0,
+        rate_wait_seconds: float | None = None,
     ) -> list[IbkrHistoricalBar]:
+        """IBKR's 1m TRADES bars in ``[end - duration, end)``; ``rate_wait_seconds`` caps the wait for pacing."""
         if bar_size != "1 min" or what_to_show != "TRADES":
             raise IbkrRuntimeError(f"ibkr_web_api_unsupported_history:{bar_size}:{what_to_show}")
         if end.tzinfo is None:
             raise ValueError("ibkr historical end must be timezone-aware")
         end_utc = end.astimezone(timezone.utc)
         start = end_utc - timedelta(seconds=max(1, int(duration_seconds)))
+        request = {
+            "use_rth": use_rth,
+            "timeout_seconds": timeout_seconds,
+            "rate_wait_seconds": timeout_seconds if rate_wait_seconds is None else rate_wait_seconds,
+        }
         if end_utc - start <= timedelta(hours=1):
-            rows = self._history(contract, end=end_utc, period="1h", use_rth=use_rth, timeout_seconds=timeout_seconds)
+            rows = self._history(contract, end=end_utc, period="1h", **request)
         else:
             rows = []
             window_end = end_utc
             while window_end > start:
-                window = self._history(contract, end=window_end, period="1d", use_rth=use_rth, timeout_seconds=timeout_seconds)
+                window = self._history(contract, end=window_end, period="1d", **request)
                 rows.extend(row for row in window if window_end - _HISTORY_WINDOW <= row.start_time < window_end)
                 window_end -= _HISTORY_WINDOW
         by_start = {row.start_time: row for row in rows if start <= row.start_time < end_utc}
@@ -763,11 +790,14 @@ class IbkrWebApiTransport:
             subscription = self._quotes.pop(int(token), None)
             if subscription is None:
                 return
-            con_id = subscription.contract.con_id
-            still_used = self._contract_in_use(con_id)
-            if not still_used:
-                self._contracts.pop(con_id, None)
-        if not still_used and self.is_connected():
+        self._release_contract(subscription.contract.con_id)
+
+    def _release_contract(self, con_id: int) -> None:
+        """Stop polling a contract nothing uses any more, and free IBKR's market-data line for it."""
+        with self._lock:
+            if self._contract_in_use(con_id) or self._contracts.pop(con_id, None) is None:
+                return
+        if self.is_connected():
             try:
                 self._request("POST", "/iserver/marketdata/unsubscribe", json={"conid": con_id})
             except IbkrRuntimeError:
@@ -793,8 +823,8 @@ class IbkrWebApiTransport:
     def unsubscribe_bars(self, token: int) -> None:
         with self._lock:
             subscription = self._bars.pop(int(token), None)
-            if subscription is not None and not self._contract_in_use(subscription.contract.con_id):
-                self._contracts.pop(subscription.contract.con_id, None)
+        if subscription is not None:
+            self._release_contract(subscription.contract.con_id)
 
     def _contract_in_use(self, con_id: int) -> bool:
         return any(item.contract.con_id == con_id for item in (*self._quotes.values(), *self._bars.values()))
@@ -815,8 +845,8 @@ class IbkrWebApiTransport:
 
     # -- Worker --------------------------------------------------------------
 
-    def _run_worker(self) -> None:
-        while not self._stop.wait(self.poll_interval_seconds):
+    def _run_worker(self, stop: threading.Event) -> None:
+        while not stop.wait(self.poll_interval_seconds):
             try:
                 self.poll_once()
             except Exception:
@@ -841,9 +871,14 @@ class IbkrWebApiTransport:
         with self._lock:
             credentials = self._credentials
             expires = self._live_session_token_expires_at
-        if credentials is not None and expires is not None and expires - self._clock() < timedelta(minutes=10):
+        renewal_due = credentials is not None and expires is not None and expires - self._clock() < timedelta(minutes=10)
+        if renewal_due and self._monotonic() >= self._next_renewal_attempt:
             # Renew the live session token before it lapses; the brokerage session carries over.
-            self._open_live_session(credentials)
+            try:
+                self._open_live_session(credentials)  # type: ignore[arg-type]
+            except IbkrRuntimeError:
+                # Try again in a minute, not on every pass, and keep the session tickled meanwhile.
+                self._next_renewal_attempt = self._monotonic() + _RENEWAL_RETRY_SECONDS
         if self._monotonic() - self._last_tickle < self.tickle_interval_seconds:
             return
         self._last_tickle = self._monotonic()
@@ -861,14 +896,27 @@ class IbkrWebApiTransport:
             pending = [(token, item) for token, item in self._bars.items() if not item.history_sent]
         for token, item in pending:
             now = self._clock()
-            rows = self.historical_bars(
-                item.contract,
-                end=now + _MINUTE,  # include the forming minute
-                duration_seconds=item.duration_seconds,
-                bar_size="1 min",
-                what_to_show="TRADES",
-                use_rth=item.use_rth,
-            )
+            try:
+                rows = self.historical_bars(
+                    item.contract,
+                    end=now + _MINUTE,  # include the forming minute
+                    duration_seconds=item.duration_seconds,
+                    bar_size="1 min",
+                    what_to_show="TRADES",
+                    use_rth=item.use_rth,
+                    rate_wait_seconds=_WORKER_RATE_WAIT_SECONDS,
+                )
+            except IbkrRuntimeError as exc:
+                # End this stream, like IBKR rejecting a Gateway keepUpToDate request: its consumer
+                # backs off and reopens, instead of this request repeating on every pass.
+                with self._lock:
+                    if self._bars.get(token) is item:
+                        del self._bars[token]
+                    else:
+                        continue
+                self._release_contract(item.contract.con_id)
+                self._deliver(item.listener, IbkrBarStreamEvent("closed", reason=str(exc)))
+                continue
             with self._lock:
                 if self._bars.get(token) is not item:
                     continue
@@ -917,6 +965,9 @@ class IbkrWebApiTransport:
             for key, value in row.items():
                 if key.isdigit():
                     state.values[key] = value
+                    # A field keeps the time IBKR last sent it, so a value IBKR stopped
+                    # updating never looks fresh.
+                    state.observed[key] = source_time
             if "6509" in row:
                 state.availability = str(row.get("6509") or "")
                 state.market_data_type = _AVAILABILITY_TYPES.get(state.availability[:1], "UNKNOWN")
@@ -927,6 +978,15 @@ class IbkrWebApiTransport:
             bid, ask = _price(values.get("84")), _price(values.get("86"))
             # The first answer to a new conid is IBKR's empty pre-flight row.
             if quote_subscriptions and (bid is not None or ask is not None or last is not None):
+                bid_at = state.observed.get("84") if bid is not None else None
+                ask_at = state.observed.get("86") if ask is not None else None
+                last_at = state.observed.get("31") if last is not None else None
+                # Like the Gateway's quotes: the older side of the book dates the quote.
+                quote_time = (
+                    min(bid_at, ask_at)
+                    if bid_at is not None and ask_at is not None
+                    else max((moment for moment in (bid_at, ask_at, last_at) if moment is not None), default=source_time)
+                )
                 for item in quote_subscriptions:
                     quote_events.append(
                         (
@@ -942,10 +1002,10 @@ class IbkrWebApiTransport:
                                 high=_price(values.get("70")),
                                 low=_price(values.get("71")),
                                 cumulative_volume=day_volume,
-                                bid_observed_at=source_time if bid is not None else None,
-                                ask_observed_at=source_time if ask is not None else None,
-                                last_observed_at=source_time if last is not None else None,
-                                source_time=source_time,
+                                bid_observed_at=bid_at,
+                                ask_observed_at=ask_at,
+                                last_observed_at=last_at,
+                                source_time=quote_time,
                                 received_at=received,
                                 market_data_type=state.market_data_type,
                                 provider_sequence=self.request_count,
@@ -1036,6 +1096,7 @@ class IbkrWebApiTransport:
                         bar_size="1 min",
                         what_to_show="TRADES",
                         use_rth=listeners[0].use_rth,
+                        rate_wait_seconds=_WORKER_RATE_WAIT_SECONDS,
                     )
                     official = [row for row in rows if row.start_time in set(closing)]
                 except IbkrRuntimeError:

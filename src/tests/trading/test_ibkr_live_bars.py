@@ -14,6 +14,7 @@ import pytest
 from app.apps.trading.catalog import bindings_for_instrument, instrument_by_id
 from app.apps.trading.providers.ibkr import IbkrEquityProvider
 from app.apps.trading.providers.ibkr_runtime import (
+    BAR_STREAM_NO_DATA,
     FakeIbkrTransport,
     IbkrBarStreamEvent,
     IbkrContractIdentity,
@@ -23,7 +24,12 @@ from app.apps.trading.providers.ibkr_runtime import (
 )
 from app.apps.trading.providers.registry import ProviderRegistry
 from app.apps.trading.service import TradingMarketDataService
-from app.apps.trading.streaming.ibkr_stream import IbkrBarStream, IbkrLiveBars, ibkr_streams_interval
+from app.apps.trading.streaming.ibkr_stream import (
+    NO_DATA_RETRY_SECONDS,
+    IbkrBarStream,
+    IbkrLiveBars,
+    ibkr_streams_interval,
+)
 
 INSTRUMENT = "equity:NASDAQ:AAPL"
 # Thursday 2026-09-17, 09:30 ET.
@@ -364,3 +370,90 @@ def test_service_streams_ibkr_intraday_charts_and_rejects_the_rest() -> None:
         asyncio.run(first(interval="1d", binding_id=binding_id))
     with pytest.raises(ValueError, match="does not support Omnix live streaming"):
         asyncio.run(first(interval="5m", binding_id=yahoo_id))
+
+
+def test_a_stream_cancelled_while_its_request_opens_still_releases_it() -> None:
+    opened = threading.Event()
+    proceed = threading.Event()
+    released: list[int] = []
+
+    class SlowProvider:
+        def subscribe_bars(self, instrument_id, listener, *, duration_seconds):
+            opened.set()
+            proceed.wait(5)  # contract qualification or the history lock, say
+            return 7, _contract()
+
+        def unsubscribe_bars(self, token):
+            released.append(token)
+
+    stream = IbkrBarStream(lambda: SlowProvider())
+
+    async def scenario():
+        updates = stream.messages(provider_symbol="AAPL", binding_id=_ibkr_binding_id(), instrument_id=INSTRUMENT, interval="1m")
+        pending = asyncio.ensure_future(anext(updates))
+        while not opened.is_set():
+            await asyncio.sleep(0.01)
+        pending.cancel()  # the chart switched symbol meanwhile
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        proceed.set()
+        for _ in range(200):
+            if released:
+                break
+            await asyncio.sleep(0.01)
+
+    asyncio.run(scenario())
+    assert released == [7]
+
+
+def test_no_trades_in_the_opening_window_reopens_after_a_pause_not_at_once(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    transport = FakeIbkrTransport(contracts={"AAPL": [_contract()]})
+    provider = IbkrEquityProvider(runtime=IbkrRuntime(transport=transport, enabled=True))
+    pauses: list[float] = []
+
+    async def pause(seconds: float) -> None:
+        pauses.append(seconds)
+
+    stream = IbkrBarStream(lambda: provider, idle_sleep=pause)
+
+    async def scenario():
+        updates = stream.messages(provider_symbol="AAPL", binding_id=_ibkr_binding_id(), instrument_id=INSTRUMENT, interval="1m")
+        pending = asyncio.ensure_future(anext(updates))
+        while not transport.bar_streams:
+            await asyncio.sleep(0.01)
+        (token,) = transport.bar_streams
+        transport.emit_bars(token, IbkrBarStreamEvent("closed", reason=f"{BAR_STREAM_NO_DATA}:162:HMDS query returned no data"))
+        with pytest.raises(ConnectionError):
+            await pending
+
+    asyncio.run(scenario())
+    # A weekend chart asks IBKR again in ten minutes, not every backoff cycle.
+    assert pauses == [NO_DATA_RETRY_SECONDS]
+
+
+def test_the_gateway_reports_no_data_apart_from_failures(monkeypatch) -> None:
+    _stub_ibapi(monkeypatch)
+    transport = OfficialIbapiTransport()
+    transport._connected.set()
+    events: list[IbkrBarStreamEvent] = []
+
+    no_data = transport.subscribe_bars(_contract(), events.append, duration_seconds=86_400, use_rth=False)
+    transport._wrapper.error(no_data, 162, "Historical Market Data Service error message:HMDS query returned no data: AAPL@SMART Trades", "")
+    failing = transport.subscribe_bars(_contract(), events.append, duration_seconds=86_400, use_rth=False)
+    transport._wrapper.error(failing, 162, "Historical Market Data Service error message:API historical data query cancelled: 1", "")
+
+    assert events[0].reason.startswith(BAR_STREAM_NO_DATA)
+    assert events[1].reason.startswith("ibkr_historical_error:162")
+
+
+def test_a_derived_bucket_closes_when_the_next_one_starts_even_with_a_slow_local_clock() -> None:
+    # The local clock trails IBKR: the first trade of 13:35 arrives at 13:34:59.7 local time.
+    now = [OPEN + timedelta(minutes=4, seconds=30)]
+    live = _live("5m", now)
+    live.apply(IbkrBarStreamEvent("history", tuple(_row(OPEN + offset * MINUTE, "100") for offset in range(5))))
+
+    now[0] = OPEN + timedelta(minutes=4, seconds=59.7)
+    updates = live.apply(IbkrBarStreamEvent("update", (_row(OPEN + 5 * MINUTE, "101"),)))
+
+    assert [(item.start_time, item.is_final) for item in updates] == [(OPEN, True), (OPEN + 5 * MINUTE, False)]

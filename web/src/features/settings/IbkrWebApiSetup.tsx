@@ -128,7 +128,7 @@ export function IbkrWebApiSetup({ status, onStatus }: {
               <input aria-label="IBKR consumer key" value={consumerKey} maxLength={9} autoComplete="off" disabled={busy || !editable} onChange={(event) => setConsumerKey(event.currentTarget.value.toUpperCase())} />
             </SettingsField>
             <SettingsField label="Access token" help={webApi?.access_token_masked ? `Saved: ${webApi.access_token_masked}` : undefined}>
-              <input aria-label="IBKR access token" value={accessToken} autoComplete="off" disabled={busy || !editable} onChange={(event) => setAccessToken(event.currentTarget.value)} />
+              <input aria-label="IBKR access token" type="password" value={accessToken} autoComplete="off" disabled={busy || !editable} onChange={(event) => setAccessToken(event.currentTarget.value)} />
             </SettingsField>
             <SettingsField label="Access token secret" help={webApi?.access_token_secret_saved ? 'Saved (hidden).' : undefined}>
               <input aria-label="IBKR access token secret" type="password" value={accessTokenSecret} autoComplete="off" disabled={busy || !editable} onChange={(event) => setAccessTokenSecret(event.currentTarget.value)} />

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -23,6 +23,7 @@ from app.apps.trading.models import AdjustmentMode, CanonicalInstrument, MarketB
 from app.apps.trading.providers.bar_semantics import interval_duration
 from app.apps.trading.providers.clock_aggregation import aggregate_market_bars_clock
 from app.apps.trading.providers.ibkr_runtime import (
+    BAR_STREAM_NO_DATA,
     IbkrBarStreamEvent,
     IbkrContractIdentity,
     IbkrHistoricalBar,
@@ -35,8 +36,12 @@ logger = logging.getLogger(__name__)
 
 _MINUTE = timedelta(minutes=1)
 _DAY = timedelta(days=1)
-# The opening history covers the current bucket of any intraday interval.
+# The opening history covers the current bucket of any intraday interval
+# (and is the longest window IBKR serves 1m bars for).
 HISTORY_SECONDS = 86_400
+# With no trades in that window (weekends, holidays) the stream reopens this much later,
+# instead of spending IBKR's historical-request pacing every backoff cycle.
+NO_DATA_RETRY_SECONDS = 600.0
 
 
 def ibkr_streams_interval(interval: str) -> bool:
@@ -153,8 +158,12 @@ class IbkrLiveBars:
         bars: dict[datetime, MarketBar] = {}
         for start in starts:
             bar = self._bucket(start)
-            if bar is not None:
-                bars[bar.start_time] = bar
+            if bar is None:
+                continue
+            if not bar.is_final and self._latest is not None and bar.end_time <= self._latest:
+                # A later minute has started, so IBKR closed this bucket, whatever the local clock says.
+                bar = bar.model_copy(update={"is_final": True})
+            bars[bar.start_time] = bar
         # Only the newest bucket can change from here on.
         self._prune()
         updates = []
@@ -214,9 +223,11 @@ class IbkrBarStream:
         provider_factory: Callable[[], Any],
         *,
         clock: Callable[[], datetime] | None = None,
+        idle_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.provider_factory = provider_factory
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.idle_sleep = idle_sleep
 
     async def messages(
         self,
@@ -242,12 +253,19 @@ class IbkrBarStream:
                 logger.debug("IBKR bar event arrived after its stream's loop closed")
 
         # Qualifying the contract and opening the request can wait on the Gateway.
-        token, contract = await asyncio.to_thread(
-            provider.subscribe_bars,
-            instrument_id,
-            deliver,
-            duration_seconds=HISTORY_SECONDS,
+        opening = asyncio.ensure_future(
+            asyncio.to_thread(provider.subscribe_bars, instrument_id, deliver, duration_seconds=HISTORY_SECONDS)
         )
+        try:
+            token, contract = await asyncio.shield(opening)
+        except asyncio.CancelledError:
+            # The thread still finishes opening the request; release it when it does.
+            def release(done: asyncio.Future[Any]) -> None:
+                if not done.cancelled() and done.exception() is None:
+                    provider.unsubscribe_bars(done.result()[0])
+
+            opening.add_done_callback(release)
+            raise
         try:
             live = IbkrLiveBars(
                 instrument=instrument,
@@ -260,6 +278,8 @@ class IbkrBarStream:
             while True:
                 event = await events.get()
                 if event.kind == "closed":
+                    if (event.reason or "").startswith(BAR_STREAM_NO_DATA):
+                        await self.idle_sleep(NO_DATA_RETRY_SECONDS)
                     raise ConnectionError(event.reason or "IBKR bar stream closed")
                 for update in live.apply(event):
                     yield update

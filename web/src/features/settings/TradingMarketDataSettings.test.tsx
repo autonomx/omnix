@@ -168,8 +168,10 @@ describe('IBKR Web API setup', () => {
       access_token_secret: 'c2VjcmV0',
     }));
     expect(await screen.findByText('Saved: OMNIXTEST')).toBeVisible();
-    // Secrets are not kept on the page once saved.
+    // Secrets are not kept on the page once saved, and are never shown while typed.
     expect(screen.queryByDisplayValue('c2VjcmV0')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('IBKR access token')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('IBKR access token secret')).toHaveAttribute('type', 'password');
     // Connecting needs the Web API connection to be saved, not just chosen.
     expect(screen.getByRole('button', { name: 'Connect to IBKR' })).toBeDisabled();
   });

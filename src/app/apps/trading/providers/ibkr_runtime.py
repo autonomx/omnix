@@ -111,6 +111,10 @@ class IbkrHistoricalBar:
     volume: Decimal
 
 
+# The reason a bar stream closes when IBKR has no trades in its opening window.
+BAR_STREAM_NO_DATA = "ibkr_historical_no_data"
+
+
 @dataclass(frozen=True, slots=True)
 class IbkrBarStreamEvent:
     """One message on a live 1m bar stream.
@@ -407,10 +411,10 @@ class OfficialIbapiTransport:
                 listener = self._bar_stream_listeners.pop(request_id, None)
                 self._bar_stream_rows.pop(request_id, None)
                 if listener is not None:
-                    self._deliver_bar_stream(
-                        listener,
-                        IbkrBarStreamEvent("closed", reason=f"ibkr_historical_error:{code}:{message}"),
-                    )
+                    # "No data": no trades in the opening window (a weekend or holiday), not a failure.
+                    no_data = code == 162 and "no data" in message.lower()
+                    reason = f"{BAR_STREAM_NO_DATA if no_data else 'ibkr_historical_error'}:{code}:{message}"
+                    self._deliver_bar_stream(listener, IbkrBarStreamEvent("closed", reason=reason))
 
         farm_names = {
             2103: ("market_data", "DISCONNECTED"),
@@ -879,6 +883,8 @@ class IbkrRuntime:
         self._live_authority_enabled = resolved_settings.live_authority_enabled
         self._recovery_authority_enabled = resolved_settings.recovery_authority_enabled
         self.transport = transport
+        # A transport the caller passed in (tests, embedding) is usable by definition.
+        self._transport_injected = transport is not None
         self._lock = threading.RLock()
         self._connect_lock = threading.Lock()
         self._historical_lock = threading.Lock()
@@ -959,8 +965,9 @@ class IbkrRuntime:
 
     def client_available(self) -> bool:
         """Whether the chosen connection can be tried: the ibapi client, or saved Web API credentials."""
-        if self.transport is not None:
+        if self._transport_injected:
             return True
+        # A transport the runtime built exists after any attempt, so it proves nothing.
         if self.connection == "web_api":
             from .ibkr_web_api import web_api_credentials_configured
 
@@ -1330,6 +1337,7 @@ def default_ibkr_runtime() -> IbkrRuntime:
 
 
 __all__ = [
+    "BAR_STREAM_NO_DATA",
     "FakeIbkrTransport",
     "IbkrBarStreamEvent",
     "IbkrClientUnavailableError",

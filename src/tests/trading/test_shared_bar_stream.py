@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -173,3 +174,97 @@ def test_extended_hours_streams_are_shared_separately_and_recover_with_their_sco
             (T0 + timedelta(minutes=10), scope),
             (T0 + timedelta(minutes=15), scope),
         ]
+
+
+def _bar_at(minute: int, interval: str, *, final: bool = True) -> StreamingBarUpdate:
+    start = T0 + timedelta(minutes=minute)
+    return replace(_bar(0, final=final), interval=interval, start_time=start, end_time=start + timedelta(minutes=2))
+
+
+def test_intervals_outside_the_recovery_table_still_recover_gaps_instead_of_reopening() -> None:
+    async def scenario():
+        opens = []
+        hold = asyncio.Event()
+
+        async def upstream(**kwargs):
+            opens.append(kwargs)
+            if len(opens) == 1:
+                yield _bar_at(0, "2m")
+                raise ConnectionError("gateway restarted")
+            yield _bar_at(6, "2m", final=False)
+            await hold.wait()
+
+        windows = []
+
+        async def recover(binding_id, instrument_id, interval, start, end):
+            windows.append((interval, start, end))
+            return [_bar_at(2, "2m"), _bar_at(4, "2m")]
+
+        async def no_wait(_seconds):
+            await asyncio.sleep(0)
+
+        hub = SharedBarStreamHub(SharedSubscriptionManager(), open_upstream=upstream, recover_gap=recover, sleep=no_wait)
+        async with hub.listen(provider_symbol="BTCUSDT", binding_id="binance:btc", instrument_id="crypto:BTCUSDT", interval="2m") as queue:
+            items = [await queue.get() for _ in range(6)]
+        return opens, windows, items
+
+    opens, windows, items = asyncio.run(scenario())
+
+    # 2m is not in gap_recovery's table; its duration comes from the interval itself.
+    assert len(opens) == 2
+    assert windows == [("2m", T0 + timedelta(minutes=2), T0 + timedelta(minutes=6))]
+    starts = [item.start_time for item in items if isinstance(item, StreamingBarUpdate)]
+    assert starts == [T0 + timedelta(minutes=minute) for minute in (0, 2, 4, 6)]
+
+
+def test_an_upstream_that_fails_on_every_opening_backs_off_instead_of_retrying_each_second() -> None:
+    async def scenario():
+        opens = []
+
+        async def upstream(**_kwargs):
+            opens.append(1)
+            yield _bar(len(opens) * 5)  # minutes apart, so every reopening has a gap to recover
+
+        async def recover(*_args):
+            raise ConnectionError("history unavailable")
+
+        sleeps = []
+
+        async def record(seconds):
+            sleeps.append(seconds)
+            await asyncio.sleep(0)
+
+        hub = SharedBarStreamHub(SharedSubscriptionManager(), open_upstream=upstream, recover_gap=recover, sleep=record)
+        async with hub.listen(provider_symbol="BTCUSDT", binding_id="binance:btc", instrument_id="crypto:BTCUSDT", interval="1m") as queue:
+            await queue.get()
+            while len(sleeps) < 4:
+                await asyncio.sleep(0)
+        return sleeps
+
+    # Delivered once, then every opening fails before delivering: the backoff keeps growing.
+    assert asyncio.run(scenario())[:4] == [1.0, 2.0, 4.0, 8.0]
+
+
+def test_a_client_joining_a_reconnecting_upstream_is_told_it_is_down() -> None:
+    async def scenario():
+        async def upstream(**_kwargs):
+            raise ConnectionError("gateway down")
+            yield  # pragma: no cover - makes this an async generator
+
+        async def recover(*_args):
+            return []
+
+        release = asyncio.Event()
+
+        async def wait(_seconds):
+            await release.wait()
+
+        hub = SharedBarStreamHub(SharedSubscriptionManager(), open_upstream=upstream, recover_gap=recover, sleep=wait)
+        listen = dict(provider_symbol="BTCUSDT", binding_id="binance:btc", instrument_id="crypto:BTCUSDT", interval="1m")
+        async with hub.listen(**listen) as first:
+            assert await first.get() == StreamingStatusUpdate(connected=False)
+            async with hub.listen(**listen) as second:
+                # A new tab or a reconnected socket must not show the frozen chart as live.
+                return second.get_nowait()
+
+    assert asyncio.run(scenario()) == StreamingStatusUpdate(connected=False)
