@@ -5,7 +5,12 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.apps.trading.streaming.manager import SharedBarStreamHub, SharedSubscriptionManager, StreamingBarUpdate
+from app.apps.trading.streaming.manager import (
+    SharedBarStreamHub,
+    SharedSubscriptionManager,
+    StreamingBarUpdate,
+    StreamingStatusUpdate,
+)
 
 T0 = datetime(2026, 10, 5, 14, 30, tzinfo=timezone.utc)
 
@@ -52,16 +57,22 @@ def test_clients_share_one_upstream_that_reconnects_and_recovers_the_gap() -> No
 
         hub = SharedBarStreamHub(SharedSubscriptionManager(), open_upstream=upstream, recover_gap=recover, sleep=no_wait)
         listen = dict(provider_symbol="BTCUSDT", binding_id="binance:btc", instrument_id="crypto:BTCUSDT", interval="1m")
+
+        def label(item):
+            return item.connected if isinstance(item, StreamingStatusUpdate) else item.start_time
+
         async with hub.listen(**listen) as first, hub.listen(**listen) as second:
-            seen_first = [(await first.get()).start_time for _ in range(6)]
-            seen_second = [(await second.get()).start_time for _ in range(6)]
+            seen_first = [label(await first.get()) for _ in range(8)]
+            seen_second = [label(await second.get()) for _ in range(8)]
             assert hub.upstream_count() == 1
             assert hub.subscriptions.status()[0]["reconnects"] == 1
         return upstream_calls, windows, seen_first, seen_second, hub
 
     upstream_calls, windows, seen_first, seen_second, hub = asyncio.run(scenario())
 
-    expected = [T0 + timedelta(minutes=minute) for minute in range(6)]
+    bars = [T0 + timedelta(minutes=minute) for minute in range(6)]
+    # Clients hear the drop and the recovery, so a chart can poll in between.
+    expected = [bars[0], bars[1], False, True, *bars[2:]]
     assert seen_first == seen_second == expected
     # One upstream for both clients, reopened once after the drop.
     assert len(upstream_calls) == 2
@@ -90,3 +101,75 @@ def test_a_slow_client_drops_its_oldest_updates_instead_of_blocking_others() -> 
             return [(await slow.get()).start_time for _ in range(2)]
 
     assert asyncio.run(scenario()) == [T0 + timedelta(minutes=3), T0 + timedelta(minutes=4)]
+
+
+def _equity_bar(minute: int, *, extended_hours: bool | None, final: bool = True) -> StreamingBarUpdate:
+    start = T0 + timedelta(minutes=minute)
+    return StreamingBarUpdate(
+        binding_id="ibkr:aapl",
+        instrument_id="equity:NASDAQ:AAPL",
+        interval="5m",
+        start_time=start,
+        end_time=start + timedelta(minutes=5),
+        open=Decimal("1"),
+        high=Decimal("1"),
+        low=Decimal("1"),
+        close=Decimal("1"),
+        volume=Decimal("1"),
+        is_final=final,
+        extended_hours=extended_hours,
+    )
+
+
+def test_extended_hours_streams_are_shared_separately_and_recover_with_their_scope() -> None:
+    async def scenario():
+        upstream_calls = []
+        recover_calls = []
+        hold = asyncio.Event()
+
+        async def upstream(**kwargs):
+            upstream_calls.append(kwargs)
+            scope = kwargs["extended_hours"]
+            if sum(1 for call in upstream_calls if call["extended_hours"] == scope) == 1:
+                yield _equity_bar(0, extended_hours=scope)
+                raise ConnectionError("gateway restarted")
+            yield _equity_bar(15, extended_hours=scope, final=False)
+            await hold.wait()
+
+        async def recover(binding_id, instrument_id, interval, start, end, *, extended_hours):
+            recover_calls.append((extended_hours, start, end))
+            # REST bars carry no scope; the hub stamps the stream's own.
+            return [_equity_bar(5, extended_hours=None), _equity_bar(10, extended_hours=None)]
+
+        async def no_wait(_seconds):
+            await asyncio.sleep(0)
+
+        hub = SharedBarStreamHub(SharedSubscriptionManager(), open_upstream=upstream, recover_gap=recover, sleep=no_wait)
+        listen = dict(provider_symbol="AAPL", binding_id="ibkr:aapl", instrument_id="equity:NASDAQ:AAPL", interval="5m")
+        async with hub.listen(**listen, extended_hours=True) as ext, hub.listen(**listen, extended_hours=False) as rth:
+            seen = {}
+            for name, queue in (("ext", ext), ("rth", rth)):
+                items = [await queue.get() for _ in range(6)]
+                seen[name] = [
+                    item.connected if isinstance(item, StreamingStatusUpdate) else (item.start_time, item.extended_hours)
+                    for item in items
+                ]
+            assert hub.upstream_count() == 2
+            keys = sorted(item["key"] for item in hub.subscriptions.status())
+        return upstream_calls, recover_calls, seen, keys
+
+    upstream_calls, recover_calls, seen, keys = asyncio.run(scenario())
+
+    assert keys == ["ibkr:aapl|equity:NASDAQ:AAPL|5m|ext", "ibkr:aapl|equity:NASDAQ:AAPL|5m|rth"]
+    assert sorted(call["extended_hours"] for call in upstream_calls) == [False, False, True, True]
+    gap = (T0 + timedelta(minutes=5), T0 + timedelta(minutes=15))
+    assert sorted(recover_calls) == [(False, *gap), (True, *gap)]
+    for name, scope in (("ext", True), ("rth", False)):
+        assert seen[name] == [
+            (T0, scope),
+            False,
+            True,
+            (T0 + timedelta(minutes=5), scope),
+            (T0 + timedelta(minutes=10), scope),
+            (T0 + timedelta(minutes=15), scope),
+        ]
