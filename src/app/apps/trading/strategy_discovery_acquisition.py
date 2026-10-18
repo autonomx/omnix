@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from threading import RLock
 from types import MappingProxyType
-from typing import Mapping, Protocol
+from typing import Any, Mapping, Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -28,8 +28,8 @@ class CausalMarketObservation(BaseModel):
     source: str
     source_locator: str | None = None
     market: MarketAnomalyFeatures | None = None
-    catalyst_payload: dict[str, object] | None = None
-    candidate_payload: dict[str, object] | None = None
+    catalyst_payload: dict[str, Any] | None = None
+    candidate_payload: dict[str, Any] | None = None
     catalyst_known: bool = False
 
     @field_validator("observed_at")
@@ -112,7 +112,7 @@ class PersistedCatalystIntelligenceSource:
             if item.strategy_id == INTERDAY_TRADING_STRATEGY_ID
             or item.parent_strategy_id == INTERDAY_TRADING_STRATEGY_ID
         }
-        latest = {}
+        latest: dict[str, Any] = {}
         session_date = observed_at.astimezone(self._exchange_timezone).date()
         for strategy_id in strategy_ids:
             try:

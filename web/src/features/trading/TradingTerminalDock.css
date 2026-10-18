@@ -1,4 +1,5 @@
 @layer features {
+  .trading-account-hint{display:block;margin:2px 0 6px;color:var(--c-slate-630);font-size:11px;line-height:1.4}
   .trading-terminal-dock{position:relative;display:block;min-height:280px;overflow:visible;border-top:1px solid color-mix(in srgb, var(--c-blue-660) 18%, transparent);background:var(--c-slate-170-2);color:var(--c-slate-910)}
   .trading-terminal-dock.is-fullscreen{position:absolute;z-index:8;inset:0;width:auto;height:auto;min-height:0;overflow:hidden;border:0;background:var(--c-slate-170-2);box-shadow:0 0 0 1px color-mix(in srgb, var(--c-blue-630) 35%, transparent),0 24px 80px color-mix(in srgb, var(--c-neutral-0) 55%, transparent)}
   .trading-terminal-dock.is-fullscreen .trading-dock-main{height:100%;min-height:0}

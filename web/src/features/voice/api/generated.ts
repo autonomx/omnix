@@ -55,6 +55,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tts/engines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Engines
+         * @description The local TTS engines, the selected one, and the progress of the last switch.
+         */
+        get: operations["engines_api_tts_engines_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tts/engines/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Select Engine
+         * @description Make an engine Omnix's default TTS: unloads the current one, then loads it.
+         */
+        post: operations["select_engine_api_tts_engines_select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tts/runtime/status": {
         parameters: {
             query?: never;
@@ -127,6 +167,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountResponse */
+        AccountResponse: core["schemas"]["AccountResponse"];
         /** AssetContentResponse */
         AssetContentResponse: core["schemas"]["AssetContentResponse"];
         /** AssetLegacyRootScan */
@@ -151,6 +193,11 @@ export interface components {
          * @description Backend-owned assistant tool metadata and actions.
          */
         AssistantToolSpec: core["schemas"]["AssistantToolSpec"];
+        /**
+         * AuthOptionsResponse
+         * @description How someone may sign in here; the sign-in page shows only these.
+         */
+        AuthOptionsResponse: core["schemas"]["AuthOptionsResponse"];
         /** AuthSessionListResponse */
         AuthSessionListResponse: core["schemas"]["AuthSessionListResponse"];
         /** AuthSessionResponse */
@@ -212,8 +259,21 @@ export interface components {
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
+        /** DesktopGoogleHandoffRequest */
+        DesktopGoogleHandoffRequest: core["schemas"]["DesktopGoogleHandoffRequest"];
+        /** DesktopGoogleHandoffResponse */
+        DesktopGoogleHandoffResponse: core["schemas"]["DesktopGoogleHandoffResponse"];
+        /** DesktopGoogleStartRequest */
+        DesktopGoogleStartRequest: core["schemas"]["DesktopGoogleStartRequest"];
+        /**
+         * DesktopGoogleStartResponse
+         * @description The window keeps ``nonce``; the desktop app opens ``begin_url`` in the system browser.
+         */
+        DesktopGoogleStartResponse: core["schemas"]["DesktopGoogleStartResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /** EmailChangeRequest */
+        EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
          * EventReaderDiagnostics
          * @description Live job events in this process (WP-5.4).
@@ -230,6 +290,8 @@ export interface components {
         GatewayReadinessPayload: core["schemas"]["GatewayReadinessPayload"];
         /** GpuResidencyPolicy */
         GpuResidencyPolicy: core["schemas"]["GpuResidencyPolicy"];
+        /** GuestUpgradeRequest */
+        GuestUpgradeRequest: core["schemas"]["GuestUpgradeRequest"];
         /** HTTPValidationError */
         HTTPValidationError: core["schemas"]["HTTPValidationError"];
         /** HermesDiagnosticsPaths */
@@ -245,6 +307,16 @@ export interface components {
         IbkrSettingsStatus: core["schemas"]["IbkrSettingsStatus"];
         /** IbkrSettingsUpdate */
         IbkrSettingsUpdate: core["schemas"]["IbkrSettingsUpdate"];
+        /** InviteCheckResponse */
+        InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
+        /** InviteListResponse */
+        InviteListResponse: core["schemas"]["InviteListResponse"];
+        /** InviteRequest */
+        InviteRequest: core["schemas"]["InviteRequest"];
+        /** InviteResponse */
+        InviteResponse: core["schemas"]["InviteResponse"];
+        /** InviteSummaryResponse */
+        InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
         /** JobError */
         JobError: core["schemas"]["JobError"];
         /** JobError */
@@ -302,6 +374,12 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
+        /** PasswordChangeResponse */
+        PasswordChangeResponse: core["schemas"]["PasswordChangeResponse"];
+        /** PasswordLoginRequest */
+        PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
         /** PromptRenderRequest */
@@ -315,6 +393,11 @@ export interface components {
         ProviderCapability: core["schemas"]["ProviderCapability"];
         /** ProviderFacadePayload */
         ProviderFacadePayload: core["schemas"]["ProviderFacadePayload"];
+        /**
+         * ProviderKeyStatus
+         * @description An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself.
+         */
+        ProviderKeyStatus: core["schemas"]["ProviderKeyStatus"];
         /** ProviderModelCacheEntry */
         ProviderModelCacheEntry: core["schemas"]["ProviderModelCacheEntry"];
         /** ProviderModelCachePayload */
@@ -340,6 +423,10 @@ export interface components {
          *     become file names.
          */
         PublicAssetRecord: core["schemas"]["PublicAssetRecord"];
+        /** RedirectUrlResponse */
+        RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
+        /** RegisterRequest */
+        RegisterRequest: core["schemas"]["RegisterRequest"];
         /** RenderedPrompt */
         RenderedPrompt: core["schemas"]["RenderedPrompt"];
         /** ReplayPrimitive */
@@ -423,6 +510,11 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** SelectTtsEngine */
+        SelectTtsEngine: {
+            /** Provider Id */
+            provider_id: string;
+        };
         /** SendChatMessageRequest */
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
@@ -447,10 +539,66 @@ export interface components {
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
         StateHashResponse: core["schemas"]["StateHashResponse"];
+        /** TtsEngine */
+        TtsEngine: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Label */
+            label: string;
+            /** Needs Transcripts */
+            needs_transcripts: boolean;
+            /** Selected */
+            selected: boolean;
+            /** Unavailable Reason */
+            unavailable_reason: string;
+            /** Voice Controls */
+            voice_controls: string[];
+        };
+        /** TtsEngineSwitch */
+        TtsEngineSwitch: {
+            /** Error */
+            error: string | null;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "idle" | "unloading" | "preparing_voices" | "loading" | "ready" | "failed";
+            /** Provider */
+            provider: string | null;
+            voices: components["schemas"]["VoiceTranscriptPreparation"];
+        };
+        /** TtsEnginesResponse */
+        TtsEnginesResponse: {
+            /** Engines */
+            engines: components["schemas"]["TtsEngine"][];
+            /** Selected */
+            selected: string;
+            switch: components["schemas"]["TtsEngineSwitch"];
+        };
         /** ValidationError */
         ValidationError: core["schemas"]["ValidationError"];
         /** VersionDiagnostics */
         VersionDiagnostics: core["schemas"]["VersionDiagnostics"];
+        /** VoiceTranscriptFailure */
+        VoiceTranscriptFailure: {
+            /** Error */
+            error: string;
+            /** Voice Id */
+            voice_id: string;
+        };
+        /** VoiceTranscriptPreparation */
+        VoiceTranscriptPreparation: {
+            /** Already Ready */
+            already_ready: number;
+            /** Failed */
+            failed: components["schemas"]["VoiceTranscriptFailure"][];
+            /** Prepared */
+            prepared: string[];
+        };
         /** WorkerHealth */
         WorkerHealth: core["schemas"]["WorkerHealth"];
         /** WorkerHealthPayload */
@@ -535,6 +683,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["STTProxyResponse"];
+                };
+            };
+        };
+    };
+    engines_api_tts_engines_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtsEnginesResponse"];
+                };
+            };
+        };
+    };
+    select_engine_api_tts_engines_select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectTtsEngine"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TtsEnginesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

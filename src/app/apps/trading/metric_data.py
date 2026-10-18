@@ -12,7 +12,6 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -555,13 +554,13 @@ class BinanceLiquidationBuffer:
         self.connect_factory = connect_factory
         self._events: dict[str, deque[LiquidationEvent]] = {}
         self._threads: dict[str, threading.Thread] = {}
-        self._runs = {}
+        self._runs: dict[str, Any] = {}
         self._stopping = threading.Event()
         self._lock = threading.RLock()
 
     @staticmethod
     def parse(payload: dict[str, Any]) -> LiquidationEvent:
-        event = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        event = raw_data if isinstance(raw_data := payload.get("data"), dict) else payload
         order = event.get("o") if isinstance(event, dict) else None
         if not isinstance(order, dict):
             raise ProviderContractError("Binance force-order payload is malformed")
@@ -836,7 +835,7 @@ class YahooFundamentalMetricAdapter:
             result = (((payload or {}).get("chart") or {}).get("result") or [None])[0]
             if not isinstance(result, dict):
                 raise ProviderDataUnavailableError("Yahoo returned no dividend chart")
-            meta = result.get("meta") if isinstance(result.get("meta"), dict) else {}
+            meta = raw_meta if isinstance(raw_meta := result.get("meta"), dict) else {}
             price = meta.get("regularMarketPrice")
             if price is None:
                 quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
@@ -1012,10 +1011,7 @@ class TradingMetricDataService:
         yahoo: YahooFundamentalMetricAdapter | None = None,
         blockchain: BlockchainMetricAdapter | None = None,
     ) -> None:
-        self.cache = cache or TradingMarketDataCache(
-            max_entries=256,
-            cache_dir=Path("resources/cache/trading/metrics"),
-        )
+        self.cache = cache or TradingMarketDataCache(max_entries=256)
         self.binance = binance or BinanceDerivativesMetricAdapter(cache=self.cache)
         self.yahoo = yahoo or YahooFundamentalMetricAdapter(cache=self.cache)
         self.blockchain = blockchain or BlockchainMetricAdapter(cache=self.cache)

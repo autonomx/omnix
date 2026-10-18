@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -26,17 +26,17 @@ def _grant_from_row(row: Any) -> MemoryGrant:
         grant_id=str(row[0]),
         source_space=MemorySpaceKey(
             principal_id=str(row[1]),
-            owner_type=str(row[2]),
+            owner_type=cast(Any, str(row[2])),
             owner_id=str(row[3]),
         ),
         target_space=MemorySpaceKey(
             principal_id=str(row[4]),
-            owner_type=str(row[5]),
+            owner_type=cast(Any, str(row[5])),
             owner_id=str(row[6]),
         ),
-        access=str(row[7]),
-        allowed_domains=tuple(str(item) for item in row[8]),
-        max_sensitivity=str(row[9]),
+        access=cast(Any, str(row[7])),
+        allowed_domains=cast(Any, tuple(str(item) for item in row[8])),
+        max_sensitivity=cast(Any, str(row[9])),
         scope_constraints=tuple(VisibilityScope.model_validate(item) for item in row[10]),
         created_by=str(row[11]),
         created_at=row[12],

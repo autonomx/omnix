@@ -117,3 +117,22 @@ def test_voice_library_audition_uses_pinned_override_without_saved_casting():
     assert units[0].voice_profile_id == "voice-cloning:audition"
     assert units[0].voice_revision_hash == "b" * 64
     assert units[0].casting_id is None
+
+
+@pytest.mark.parametrize("source", ["—", "“…”", " … "])
+def test_passages_with_nothing_to_pronounce_are_not_rendered(source):
+    class Unassigned(_Connection):
+        def fetchall(self):
+            rows = super().fetchall()
+            if "AS a ON TRUE" in self.query:
+                return [tuple(None if index in (4, 6, 8) else value for index, value in enumerate(rows[0]))]
+            return rows
+
+    for span_id in (None, "span-one"):
+        assert load_chapter_units(
+            Unassigned(source, "dialogue"), local_tenant_context(),
+            project_id="project", chapter_id="chapter", span_id=span_id,
+        ) == []
+    # A short line with a word in it is still spoken.
+    assert len(load_chapter_units(_Connection("“Phew…”", "dialogue"), local_tenant_context(),
+                                  project_id="project", chapter_id="chapter")) == 1

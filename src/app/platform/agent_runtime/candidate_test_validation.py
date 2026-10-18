@@ -23,6 +23,7 @@ import re
 from typing import Iterable
 
 from .contracts import AgentEvent, ValidationResult, ValidationSpec
+from .event_queries import json_object
 
 
 _EXECUTABLE_EXTENSIONS = {
@@ -304,7 +305,7 @@ def _command_coverage(command: str, required_paths: list[str]) -> set[str]:
 
 
 def _event_command(started: AgentEvent | None, completed: AgentEvent) -> str:
-    args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
+    args = json_object(started.payload.get("args")) if started else {}
     return str(args.get("command") or completed.payload.get("command") or "").strip()
 
 

@@ -6,7 +6,7 @@ therefore recover the run lifecycle and the exact quality stage independently.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.tenant import TenantContext
 
@@ -18,6 +18,7 @@ from .contracts import (
     ValidationResult,
     WorkspaceState,
 )
+from collections.abc import Sequence
 
 
 def _json_default(value: Any) -> Any:
@@ -67,7 +68,7 @@ class PostgresCodingQualityRepository:
         attempt: int,
         task_revision_id: str | None,
         workspace_state_id: str | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         stage = self._effective_stage(
             run_id,
             stage=stage,
@@ -112,7 +113,7 @@ class PostgresCodingQualityRepository:
             "updated_at": row[5],
         }
 
-    def get_stage(self, run_id: str) -> dict[str, object] | None:
+    def get_stage(self, run_id: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             """
             SELECT stage, attempt, task_revision_id, workspace_state_id,
@@ -276,13 +277,13 @@ class PostgresCodingQualityRepository:
                 result_id=str(row[0]),
                 run_id=run_id,
                 validation_id=str(row[1]),
-                kind=str(row[2]),
+                kind=cast(Any, str(row[2])),
                 task_revision_id=str(row[3]) if row[3] else None,
                 workspace_state_id=str(row[4]),
                 command=str(row[5]),
                 exit_code=int(row[6]) if row[6] is not None else None,
                 success=bool(row[7]),
-                outcome=str(row[8]),
+                outcome=cast(Any, str(row[8])),
                 output_digest=str(row[9]),
                 covers_requirement_ids=list(row[10] or []),
                 started_at=row[11],
@@ -343,7 +344,7 @@ class PostgresCodingQualityRepository:
                 run_id=run_id,
                 task_revision_id=str(row[1]) if row[1] else None,
                 workspace_state_id=str(row[2]),
-                verdict=str(row[3]),
+                verdict=cast(Any, str(row[3])),
                 requirements=list(row[4] or []),
                 findings=list(row[5] or []),
                 missing_tests=list(row[6] or []),
@@ -527,7 +528,7 @@ class PostgresCodingQualityRepository:
         return [self._review_attempt_from_row(row) for row in rows]
 
     @staticmethod
-    def _review_attempt_from_row(row: object) -> ReviewAttempt:
+    def _review_attempt_from_row(row: Sequence[Any]) -> ReviewAttempt:
         values = list(row)
         return ReviewAttempt(
             run_id=str(values[0]),
@@ -542,8 +543,8 @@ class PostgresCodingQualityRepository:
             model_provider_id=str(values[9]),
             model_id=str(values[10]),
             reasoning_effort=str(values[11]) if values[11] else None,
-            status=str(values[12]),
-            failure_class=str(values[13]) if values[13] else None,
+            status=cast(Any, str(values[12])),
+            failure_class=cast(Any, str(values[13]) if values[13] else None),
             failure_reason=str(values[14]) if values[14] else None,
             retryable=bool(values[15]),
             started_at=values[16],
@@ -620,7 +621,7 @@ class PostgresCodingQualityRepository:
                 review_snapshot_id=str(row[2]),
                 task_revision_id=str(row[3]) if row[3] else None,
                 workspace_state_id=str(row[4]),
-                verdict=str(row[5]),
+                verdict=cast(Any, str(row[5])),
                 requirements=list(row[6] or []),
                 findings=list(row[7] or []),
                 missing_tests=list(row[8] or []),

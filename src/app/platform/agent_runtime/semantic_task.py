@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 import hashlib
 import re
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -18,6 +18,7 @@ from .contracts import (
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
+    RetrievalPolicy,
     SubjectRef,
 )
 from .evidence import (
@@ -506,15 +507,15 @@ def _evidence_requirement(
         subject=subject,
         coverage=coverage,
         freshness=freshness,
-        trust_floor=trust_floor,
+        trust_floor=cast(Any, trust_floor),
         acceptable_sources=[
             EvidenceSourceOption(
                 source_class=source_class,
-                trust_floor=trust_floor,
+                trust_floor=cast(Any, trust_floor),
                 preference=0,
             )
         ],
-        fallback_policy=fallback_policy,
+        fallback_policy=cast(Any, fallback_policy),
         as_of_date=dependency.as_of_date,
         max_age_seconds=(
             freshness_max_age_seconds(source_class)
@@ -830,8 +831,8 @@ def _add_implicit_dependencies(task, actions, dependencies):
         if not any(dep.target == target for dep in dependencies):
             dependencies.append(
                 SemanticDataDependency(
-                    target=target,
-                    freshness=freshness,
+                    target=cast(Any, target),
+                    freshness=cast(Any, freshness),
                     subject_reference=_reference_for_target(task, target),
                     required=True,
                 )
@@ -921,8 +922,8 @@ def _compiled_evidence_decision(latest_user_message, requirements, task):
             requirement="required" if requirements else "none",
             external_access="forbidden" if external_forbidden else "allowed",
             requirements=requirements,
-            user_visible_attribution=attribution,
-            retrieval={"strategy": "adaptive"},
+            user_visible_attribution=cast(Any, attribution),
+            retrieval=RetrievalPolicy(strategy="adaptive"),
         ),
         confidence=1.0,
         reason=f"semantic_task_compiler:{task.reason_code}"[:240],
@@ -1002,7 +1003,7 @@ def semantic_task_from_legacy(decision: object) -> SemanticTask:
         mapped = action_map.get(str(raw))
         if mapped is None:
             continue
-        operations.append(SemanticOperation(kind=mapped[0], target=mapped[1]))
+        operations.append(SemanticOperation(kind=cast(Any, mapped[0]), target=cast(Any, mapped[1])))
 
     source_to_target = {
         "general_current_web": "public_web",
@@ -1027,8 +1028,8 @@ def semantic_task_from_legacy(decision: object) -> SemanticTask:
             continue
         dependencies.append(
             SemanticDataDependency(
-                target=target,
-                freshness=str(getattr(row, "freshness", "current") or "current"),
+                target=cast(Any, target),
+                freshness=cast(Any, str(getattr(row, "freshness", "current") or "current")),
                 required=True,
             )
         )

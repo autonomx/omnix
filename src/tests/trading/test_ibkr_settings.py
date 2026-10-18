@@ -124,3 +124,21 @@ def test_ibkr_settings_endpoint_returns_status_and_persists_update(monkeypatch) 
         else "client_unavailable"
     )
     assert payload["connection_status"] == expected_status
+
+
+def test_ibkr_settings_save_through_the_real_settings_contract(monkeypatch) -> None:
+    """The settings service rejects unregistered keys; the IBKR section must be registered."""
+
+    from app.settings import access
+    from tests.support.in_memory_settings import InMemorySettingsService
+
+    _clear_ibkr_environment(monkeypatch)
+    service = InMemorySettingsService()
+    monkeypatch.setattr(access, "_SERVICE", service)
+
+    saved = save_ibkr_settings({"enabled": True, "monitor_enabled": True, "port": 4002, "client_id": 71})
+
+    assert saved.enabled is True
+    assert service.values["trading_market_data"]["ibkr"]["client_id"] == 71
+    settings, source = load_ibkr_settings()
+    assert (settings.enabled, source) == (True, "omnix_settings")

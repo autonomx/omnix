@@ -1,11 +1,11 @@
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_fact_pipeline import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_fact_pipeline import (
     StructuredFactValidationError,
     compile_structured_entity_facts,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
 
 
 def _node() -> CampaignTopicNode:

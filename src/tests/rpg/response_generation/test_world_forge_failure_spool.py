@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.worlds.generation_failure_spool import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.worlds.generation_failure_spool import (
     FailureSpoolingWorldForgeGenerator,
     ReplayedGenerationFailure,
     delete_failure_spool,
     read_failure_spool,
 )
-from app.apps.rpg.worlds.generation_worker import _topic_generator_for_job
+from app.apps.rpg.genesis.worlds.generation_worker import _topic_generator_for_job
 
 
 class _FailingGenerator:

@@ -32,6 +32,8 @@ beforeEach(() => {
 describe('adding a module', () => {
   it('routes, navigates to and scopes a module from one registration line', async () => {
     const { router } = await import('./router');
+    // Omnix's bootstrap installs the firewall with the registered modules.
+    await import('./viewApiFirewallBootstrap');
     const { moduleIdFromPathname, isApiAllowedForView } = await import('./viewApiScope');
     const { OmnixApp } = await import('./OmnixApp');
 

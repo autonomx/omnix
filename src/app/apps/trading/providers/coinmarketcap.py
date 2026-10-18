@@ -440,7 +440,7 @@ class CoinMarketCapProvider(ProviderAdapter):
         self,
         instrument_id: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         result = self.get_bars(instrument_id, "1d", 1, cancellation)
         bar = result.bars[-1]
         return {

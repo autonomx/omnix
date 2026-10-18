@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.apps.rpg.worlds import profile_aware_world_images as profile_images
-from app.apps.rpg.worlds import world_images
+from app.apps.rpg.genesis.worlds import profile_aware_world_images as profile_images
+from app.apps.rpg.genesis.worlds import world_images
 
 
 def test_profile_aware_import_does_not_replace_world_image_owner(monkeypatch):

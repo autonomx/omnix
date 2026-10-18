@@ -78,7 +78,13 @@ export function RpgLiveDataStatus({
   const className = isExpanded ? 'rpg-card rpg-live-data-status' : 'rpg-card rpg-live-data-status rpg-live-data-status-collapsed';
 
   if (hideWhenCollapsed && !isExpanded) {
-    return null;
+    // A source that failed is said even while the details are hidden (WP-9.10).
+    const failed = cards.filter((card) => card.state === 'error');
+    return failed.length ? (
+      <div className="rpg-live-data-errors" role="alert">
+        {failed.map((card) => <p className="platform-empty" key={card.id}>{card.label} could not be loaded: {renderDetail(card.detail)}</p>)}
+      </div>
+    ) : null;
   }
 
   return (

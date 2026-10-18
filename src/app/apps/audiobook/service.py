@@ -18,6 +18,7 @@ from app.assets.voice_clone_identity import voice_reference_revision
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
+from app.runtime.paths import resources_data_root
 
 from .extraction import (
     EXTRACTOR_VERSION,
@@ -33,9 +34,13 @@ from .repository import PostgresAudiobookRepository, cancel_render_run_jobs
 from .review_repository import PostgresAudiobookReviewRepository
 from .render_planner import load_chapter_units
 from .render_readiness import check_book_render_readiness
+from .speech_exclusions import load_removed_chapters
 from .export_service import start_export as create_export_job
 from .report import audit_export
-from .model_identity import assert_model_revision
+from .hashing import canonical_json
+from .model_identity import assert_model_revision, current_model_identity
+from .performance import normalize_performance, render_generation_parameters
+from .performance_direction import AUTO_DIRECT_POLICIES, AUTO_DIRECT_SETTING, auto_direct_policy
 from .document_structure import (
     ANALYSIS_POLICY_VERSION, DOCUMENT_STRUCTURE_VERSION, RENDER_POLICY_VERSION,
     READ_ONCE, analysis_policy, effective_render_action, effective_role,
@@ -46,6 +51,38 @@ from .document_structure_repository import PostgresAudiobookDocumentStructureRep
 
 
 WORDS_PER_MINUTE = 150.0
+# Chapter render order is job priority: the first chapter gets the base, each
+# later one a step lower. A step above the claim's age bonus (at most 100) keeps
+# a later-created retry from overtaking the chapters queued ahead of it.
+RENDER_BASE_PRIORITY = -100
+RENDER_PRIORITY_STEP = 101
+WAITING_RENDER_STATUSES = ("queued", "waiting", "retrying", "paused")
+
+
+def _render_priority(position: int) -> int:
+    return RENDER_BASE_PRIORITY - RENDER_PRIORITY_STEP * position
+
+
+def _render_queue(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Waiting render jobs in the order the worker claims them."""
+    waiting = [job for job in jobs if str(job["status"]) in WAITING_RENDER_STATUSES]
+    return sorted(waiting, key=lambda job: (-int(job["priority"]), str(job["created_at"]), str(job["id"])))
+
+
+def _completed_chapter_assemblies(work: Any, context: TenantContext, render_run_id: str) -> dict[str, str]:
+    """``chapter_id -> assembly_id`` for each chapter the render run has assembled (latest first)."""
+    rows = work.jobs.query_jobs(
+        context, module="audiobook", job_type="audiobook.assemble-chapter",
+        statuses=("completed",), input_fields=(("render_run_id", render_run_id),),
+        order_by="completed_desc", limit=1000,
+    )
+    assemblies: dict[str, str] = {}
+    for job in rows:
+        chapter_id = str((job["input_payload"] or {}).get("chapter_id") or "")
+        refs = [ref for ref in (job["output_refs"] or []) if isinstance(ref, dict) and ref.get("assembly_id")]
+        if chapter_id and refs and chapter_id not in assemblies:
+            assemblies[chapter_id] = str(refs[0]["assembly_id"])
+    return assemblies
 
 _MIME = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -200,6 +237,8 @@ class AudiobookService:
             project["audiobook_mode"] = str(
                 project_settings.get("audiobook_mode") or "standard"
             )
+            project["performance"] = normalize_performance(project_settings.get("performance"))
+            project["auto_direct_performance"] = auto_direct_policy(project_settings.get(AUTO_DIRECT_SETTING))
             project["document_structure_version"] = DOCUMENT_STRUCTURE_VERSION
             project["render_policy_version"] = RENDER_POLICY_VERSION
             project["analysis_policy_version"] = ANALYSIS_POLICY_VERSION
@@ -223,6 +262,9 @@ class AudiobookService:
                             for row in chapter_rows]
             else:
                 chapters = []
+            removed_chapters = load_removed_chapters(work.connection, context, project_id)
+            for chapter in chapters:
+                chapter["audio_removal_id"] = removed_chapters.get(chapter["id"])
             project["review_issues"] = (
                 PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(
                     context, project_id,
@@ -237,7 +279,8 @@ class AudiobookService:
             pipeline_rows = work.jobs.query_jobs(
                 context,
                 module="audiobook",
-                job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.assemble-chapter"),
+                job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.assemble-chapter",
+                           "audiobook.direct-performance"),
                 input_fields=(("project_id", project_id),),
                 order_by="created_desc",
                 limit=30,
@@ -267,15 +310,24 @@ class AudiobookService:
                     order_by="created_asc",
                     limit=500,
                 )
-                project["render_jobs"] = [
-                    {"id": str(job["id"]), "status": str(job["status"]),
-                     "progress": dict(job["progress"] or {}), "error": dict(job["error"]) if job["error"] else None,
-                     "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
-                     "chapter_id": str((job["input_payload"] or {}).get("chapter_id") or ""),
-                     "can_retry": bool((dict(job["error"] or {}).get("retryable", True))
-                                       and int(job["attempt_count"]) < int(job["max_attempts"]))}
-                    for job in job_rows
-                ]
+                queue_positions = {str(job["id"]): index + 1 for index, job in enumerate(_render_queue(job_rows))}
+                assembly_by_chapter = _completed_chapter_assemblies(work, context, render_run_id)
+                assemblies = projects.chapter_assemblies(context, list(assembly_by_chapter.values()))
+                project["render_jobs"] = []
+                for job in job_rows:
+                    chapter_id = str((job["input_payload"] or {}).get("chapter_id") or "")
+                    assembly = assemblies.get(assembly_by_chapter.get(chapter_id, ""))
+                    project["render_jobs"].append({
+                        "id": str(job["id"]), "status": str(job["status"]),
+                        "progress": dict(job["progress"] or {}),
+                        "error": dict(job["error"]) if job["error"] else None,
+                        "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
+                        "chapter_id": chapter_id,
+                        "can_retry": bool((dict(job["error"] or {}).get("retryable", True))
+                                          and int(job["attempt_count"]) < int(job["max_attempts"])),
+                        "queue_position": queue_positions.get(str(job["id"])),
+                        "audio": {"duration_seconds": assembly[2]} if assembly else None,
+                    })
                 total, completed = projects.render_key_counts(
                     context, [str(job["id"]) for job in job_rows],
                 )
@@ -519,6 +571,46 @@ class AudiobookService:
             "render_policy_version": RENDER_POLICY_VERSION,
         }
 
+    def set_performance(
+        self, context: TenantContext, *, project_id: str, performance: dict[str, Any],
+    ) -> dict[str, object]:
+        """Store the book's Stability/Style and per-character overrides; the render run restarts."""
+        normalized = normalize_performance(performance)
+        with unit_of_work(self.database) as work:
+            projects = _projects(work)
+            project = projects.lock_render_settings(context, project_id)
+            if project is None:
+                raise KeyError(project_id)
+            unknown = set(normalized["speakers"]) - projects.project_speaker_ids(context, project_id)
+            if unknown:
+                raise ValueError(f"unknown speaker: {sorted(unknown)[0]}")
+            if normalize_performance(projects.performance(context, project_id)) == normalized:
+                work.rollback()
+                return {"project_id": project_id, "performance": normalized, "changed": False}
+            if project[1]:
+                cancel_render_run_jobs(work.jobs, context, str(project[1]))
+            projects.set_performance(context, project_id, canonical_json(normalized))
+            work.commit()
+        return {"project_id": project_id, "performance": normalized, "changed": True}
+
+    def set_auto_direct(self, context: TenantContext, *, project_id: str, policy: str) -> dict[str, str]:
+        """Whether classification is followed by directing the dialogue: always, with Fish, or never."""
+        if policy not in AUTO_DIRECT_POLICIES:
+            raise ValueError(f"policy must be one of {', '.join(AUTO_DIRECT_POLICIES)}")
+        with unit_of_work(self.database) as work:
+            if not _projects(work).set_setting(context, project_id, AUTO_DIRECT_SETTING, policy):
+                raise KeyError(project_id)
+            work.commit()
+        return {"project_id": project_id, "auto_direct_performance": policy}
+
+    def direct_performance(
+        self, context: TenantContext, *, project_id: str, chapter_ids: list[str] | None = None,
+    ) -> dict[str, str]:
+        """Queue an LLM pass that writes a delivery direction for each dialogue line."""
+        from .performance_direction import start_direction
+
+        return start_direction(self.database, context, project_id=project_id, chapter_ids=chapter_ids)
+
     def set_document_override(
         self, context: TenantContext, *, project_id: str, scope: str,
         scope_key: str, action: str = "DEFAULT",
@@ -637,6 +729,12 @@ class AudiobookService:
             cancel_render_run_jobs(work.jobs, context, str(render_run_id))
         _projects(work).reset_render(context, project_id)
 
+    @classmethod
+    def _after_speech_removal(cls, work: Any, context: TenantContext, project_id: str, render_run_id: Any) -> None:
+        """Removed or restored text invalidates audio, and a removed chapter's issues stop blocking."""
+        cls._invalidate_speech_audio(work, context, project_id, render_run_id)
+        _projects(work).sync_review_state(context, project_id)
+
     def exclude_span_text(
         self, context: TenantContext, *, project_id: str, span_id: str,
         start_offset: int, end_offset: int, source_text: str,
@@ -654,7 +752,7 @@ class AudiobookService:
                 start_offset=int(row[1]) + start_offset,
                 end_offset=int(row[1]) + end_offset, source_text=source_text,
             )
-            self._invalidate_speech_audio(work, context, project_id, row[4])
+            self._after_speech_removal(work, context, project_id, row[4])
             work.commit()
         return {"id": exclusion_id}
 
@@ -666,9 +764,29 @@ class AudiobookService:
                 raise KeyError(project_id)
             if not projects.deactivate_speech_exclusion(context, project_id, exclusion_id):
                 raise KeyError(exclusion_id)
-            self._invalidate_speech_audio(work, context, project_id, project[0])
+            self._after_speech_removal(work, context, project_id, project[0])
             work.commit()
         return {"restored": True}
+
+    def remove_chapter_from_audio(self, context: TenantContext, *, project_id: str,
+                                  chapter_id: str) -> dict[str, str]:
+        """Leave a whole chapter out of the audiobook; restoring its exclusion brings it back."""
+        with unit_of_work(self.database) as work:
+            projects = _projects(work)
+            row = projects.lock_current_chapter(context, project_id, chapter_id)
+            if row is None:
+                raise KeyError(chapter_id)
+            text = str(row[0])
+            if not text:
+                raise ValueError("this chapter has no text to remove")
+            exclusion_id = projects.upsert_speech_exclusion(
+                context, project_id, exclusion_id=f"ab:exclude:{uuid4().hex}",
+                chapter_hash=row[1], chapter_ordinal=row[2],
+                start_offset=0, end_offset=len(text), source_text=text,
+            )
+            self._after_speech_removal(work, context, project_id, row[3])
+            work.commit()
+        return {"id": exclusion_id}
 
     def set_pronunciation(
         self, context: TenantContext, *, project_id: str,
@@ -810,6 +928,25 @@ class AudiobookService:
             self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).confirm_alias(
                 context, project_id=project_id, speaker_id=speaker_id, alias=alias,
+            )
+            work.commit()
+        return result
+
+    def unconfirm_alias(self, context: TenantContext, *, project_id: str,
+                        speaker_id: str, alias: str) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            result = PostgresAudiobookReviewRepository(work.connection).unconfirm_alias(
+                context, project_id=project_id, speaker_id=speaker_id, alias=alias,
+            )
+            work.commit()
+        return result
+
+    def confirm_suggested_aliases(self, context: TenantContext, *, project_id: str) -> dict[str, int]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            result = PostgresAudiobookReviewRepository(work.connection).confirm_suggested_aliases(
+                context, project_id=project_id,
             )
             work.commit()
         return result
@@ -1259,9 +1396,17 @@ class AudiobookService:
             "source_revision_id": str(source_revision_id),
         }
 
+    @staticmethod
+    def _render_engine(provider_id: str | None, model_id: str | None) -> tuple[str, str]:
+        """The engine a render names; by default Omnix's selected TTS engine."""
+        if provider_id and model_id:
+            return provider_id, model_id
+        identity = current_model_identity(provider_id or None)
+        return str(identity["provider_id"]), str(model_id or identity["model_id"])
+
     def start_render(
         self, context: TenantContext, *, project_id: str,
-        provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",
+        provider_id: str | None = None, model_id: str | None = None,
         model_revision: str, generation_parameters: dict[str, object] | None = None,
         seed: int | None = None,
     ) -> dict[str, object]:
@@ -1269,12 +1414,16 @@ class AudiobookService:
             raise ValueError("a pinned model revision is required for reproducible rendering")
         if seed is not None or "seed" in (generation_parameters or {}):
             raise ValueError("this TTS provider does not apply generation seeds")
+        provider_id, model_id = self._render_engine(provider_id, model_id)
         assert_model_revision(provider_id, model_id, model_revision)
         with unit_of_work(self.database) as work:
             projects = _projects(work)
             project = projects.lock_render_source(context, project_id)
             if project is None:
                 raise KeyError(project_id)
+            book_parameters, speaker_parameters = render_generation_parameters(
+                provider_id, projects.performance(context, project_id), generation_parameters,
+            )
             readiness = check_book_render_readiness(
                 work.connection, context, project_id=project_id,
                 source_revision_id=project[0],
@@ -1285,18 +1434,19 @@ class AudiobookService:
             skipped_chapter_ids = readiness.skipped_chapter_ids
             jobs = []
             render_run_id = f"ab:run:{uuid4().hex}"
-            for chapter in renderable_chapters:
+            for position, chapter in enumerate(renderable_chapters):
                 job_id = f"ab:job:{uuid4().hex}"
                 work.jobs.create_job(context, {
                     "id": job_id, "module": "audiobook", "job_type": "audiobook.render-chapter",
-                    "resource_class": "gpu:tts:offline", "priority": -100,
+                    "resource_class": "gpu:tts:offline", "priority": _render_priority(position),
                     "input_payload": {"project_id": project_id,
                                       "render_run_id": render_run_id,
                                       "source_revision_id": str(project[0]),
                                       "chapter_id": chapter["id"],
                                       "provider_id": provider_id, "model_id": model_id,
                                       "model_revision": model_revision,
-                                      "generation_parameters": generation_parameters or {},
+                                      "generation_parameters": book_parameters,
+                                      "speaker_generation_parameters": speaker_parameters,
                                       "seed": seed},
                     "max_attempts": 5,
                 })
@@ -1313,10 +1463,70 @@ class AudiobookService:
             "skipped_chapter_ids": skipped_chapter_ids,
         }
 
+    def reorder_render_queue(
+        self, context: TenantContext, *, project_id: str, chapter_ids: list[str],
+    ) -> dict[str, object]:
+        """Render the given waiting chapters first, in this order; the rest keep their order after them."""
+        if len(set(chapter_ids)) != len(chapter_ids):
+            raise ValueError("each chapter can appear only once in the render order")
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            row = _projects(work).lock_revision_and_run(context, project_id)
+            render_run_id = str(row[1] or "") if row else ""
+            if not render_run_id:
+                raise ValueError("no render run is active")
+            waiting = _render_queue(work.jobs.query_jobs(
+                context, module="audiobook", job_type="audiobook.render-chapter",
+                statuses=WAITING_RENDER_STATUSES, input_fields=(("render_run_id", render_run_id),),
+                order_by="created_asc", limit=1000, for_update=True,
+            ))
+            by_chapter = {str((job["input_payload"] or {}).get("chapter_id") or ""): job for job in waiting}
+            if any(chapter_id not in by_chapter for chapter_id in chapter_ids):
+                raise ValueError("only chapters still waiting to render can be reordered")
+            order = [*chapter_ids, *(chapter_id for chapter_id in by_chapter if chapter_id not in chapter_ids)]
+            for position, chapter_id in enumerate(order):
+                job = by_chapter[chapter_id]
+                if int(job["priority"]) != _render_priority(position):
+                    work.jobs.patch_job(
+                        context, job_id=str(job["id"]), expected_statuses=WAITING_RENDER_STATUSES,
+                        priority=_render_priority(position),
+                    )
+            work.commit()
+        return {"render_run_id": render_run_id, "chapter_ids": order}
+
+    def open_chapter_audio(
+        self, context: TenantContext, *, project_id: str, chapter_id: str,
+    ) -> Path:
+        """The current render run's assembled audio for one chapter, as a local file."""
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id)
+            projects = _projects(work)
+            row = projects.revision_and_run(context, project_id)
+            render_run_id = str(row[1] or "") if row else ""
+            assembly_id = (_completed_chapter_assemblies(work, context, render_run_id).get(chapter_id)
+                           if render_run_id else None)
+            assembly = projects.chapter_assemblies(context, [assembly_id]).get(assembly_id) if assembly_id else None
+            asset = work.assets.asset_fields(context, assembly[0], active_only=True) if assembly else None
+            work.rollback()
+        if asset is None:
+            raise KeyError(chapter_id)
+        storage_key, checksum = str(asset["storage_key"]), str(asset["checksum_sha256"])
+        local_path = getattr(self.blobs, "local_path", None)
+        if callable(local_path):
+            path = Path(local_path(storage_key))
+            if not path.is_file():
+                raise KeyError(chapter_id)
+            return path
+        # A remote blob store: stage one checksum-verified copy, shared by every request.
+        target = resources_data_root() / "cache" / "blobs" / checksum[:2] / f"{checksum}.wav"
+        if not target.is_file():
+            self.blobs.copy_verified_to(storage_key, target, expected_checksum=checksum)
+        return target
+
     def start_preview(
         self, context: TenantContext, *, project_id: str,
         chapter_id: str, span_id: str, model_revision: str,
-        provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",
+        provider_id: str | None = None, model_id: str | None = None,
         generation_parameters: dict[str, object] | None = None,
         seed: int | None = None,
         voice_profile_id: str | None = None,
@@ -1325,6 +1535,7 @@ class AudiobookService:
             raise ValueError("a pinned model revision is required")
         if seed is not None or "seed" in (generation_parameters or {}):
             raise ValueError("this TTS provider does not apply generation seeds")
+        provider_id, model_id = self._render_engine(provider_id, model_id)
         assert_model_revision(provider_id, model_id, model_revision)
         voice_revision_hash = None
         if voice_profile_id is not None:
@@ -1346,6 +1557,9 @@ class AudiobookService:
                                        voice_revision_hash=voice_revision_hash)
             if not any(unit.span_id == span_id for unit in units):
                 raise ValueError("span is not renderable in this chapter")
+            book_parameters, speaker_parameters = render_generation_parameters(
+                provider_id, projects.performance(context, project_id), generation_parameters,
+            )
             job_id = f"ab:preview:{uuid4().hex}"
             work.jobs.create_job(context, {
                 "id": job_id, "module": "audiobook", "job_type": "audiobook.preview-span",
@@ -1354,7 +1568,8 @@ class AudiobookService:
                                   "source_revision_id": str(project[0]), "span_id": span_id,
                                   "provider_id": provider_id, "model_id": model_id,
                                   "model_revision": model_revision,
-                                  "generation_parameters": generation_parameters or {},
+                                  "generation_parameters": book_parameters,
+                                  "speaker_generation_parameters": speaker_parameters,
                                   "voice_profile_id": voice_profile_id,
                                   "voice_revision_hash": voice_revision_hash,
                                   "seed": seed},

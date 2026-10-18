@@ -16,7 +16,7 @@ from app.observability.tracing import span
 from app.runtime.statement_class import statement_class
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.identity_service import list_active_workspace_contexts
+from app.persistence.identity_service import list_workspace_contexts_with_ready_jobs
 from app.runtime.tenant_context import TenantContext, current_tenant, pop_tenant, push_tenant
 from app.persistence.unit_of_work import unit_of_work
 
@@ -165,8 +165,6 @@ class DurableFeatureJobWorker:
         self.worker_id = worker_id or f"job-worker:{uuid.uuid4().hex}:{pool_name}"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._workspaces: list[TenantContext] | None = None
-        self._workspaces_loaded_at = 0.0
         self._next_workspace = 0
         self._ready = threading.Event()
         self._active_lock = threading.Lock()
@@ -282,17 +280,15 @@ class DurableFeatureJobWorker:
                 self._stop.wait(min(2.0, self.poll_seconds * 4))
 
     def _workspace_contexts(self) -> list[TenantContext]:
-        """Active workspaces, refreshed at most every 30 seconds."""
-        now = time.monotonic()
-        if self._workspaces is None or now - self._workspaces_loaded_at > 30.0:
-            database = getattr(self.store, "database", None)
-            # Stores without a database (in-memory test doubles) serve the
-            # current tenant only.
-            self._workspaces = (
-                list_active_workspace_contexts(database) if database is not None else [current_tenant()]
-            )
-            self._workspaces_loaded_at = now
-        return self._workspaces
+        """Active workspaces with a job this worker's pool could claim now.
+
+        One query per poll, with no cap on the number of workspaces. Stores
+        without a database (in-memory test doubles) serve the current tenant.
+        """
+        database = getattr(self.store, "database", None)
+        if database is None:
+            return [current_tenant()]
+        return list_workspace_contexts_with_ready_jobs(database, self.resource_classes)
 
     def _claim_any_workspace(self) -> tuple[JobRecord, contextvars.Context] | None:
         """Claim the next job in any active workspace, rotating for fairness.
@@ -380,7 +376,7 @@ class DurableFeatureJobWorker:
         renewal = threading.Thread(
             # Threads do not inherit context variables: keep the job's tenant.
             target=contextvars.copy_context().run,
-            args=(self._renew_loop, job.id, lease.worker_id, lease.token, renewal_stop),
+            args=(self._renew_loop, job.id, lease.worker_id, lease.token, renewal_stop, cancellation),
             name=f"omnix-job-lease-{job.id[-8:]}",
             daemon=True,
         )
@@ -423,11 +419,21 @@ class DurableFeatureJobWorker:
         worker_id: str,
         lease_token: str,
         stop: threading.Event,
+        cancellation: threading.Event | None = None,
     ) -> None:
+        """Keep the lease alive; tell the handler when it must stop.
+
+        The handler's cancellation is set when the job is asked to cancel
+        (``cancel_requested``), when the lease is lost (another worker may own
+        the job now), and when renewal keeps failing until the lease would
+        have expired. The fenced writes already refuse a late result; the
+        signal stops the work itself, so its side effects do not run twice.
+        """
+        last_renewed = time.monotonic()
         while not stop.wait(self.renewal_seconds):
             try:
                 with unit_of_work(self.store.database) as work:
-                    work.jobs.renew_lease(
+                    renewed = work.jobs.renew_lease(
                         self.store.context,
                         job_id=job_id,
                         worker_id=worker_id,
@@ -435,14 +441,28 @@ class DurableFeatureJobWorker:
                         lease_seconds=self.lease_seconds,
                     )
                     work.commit()
+            except JobClaimConflict:
+                self._signal_stop(cancellation, job_id, "lease_lost")
+                return
             except Exception:
                 self._ready.clear()
-                logger.warning(
-                    "Durable job lease renewal failed; stopping renewal job_id=%s",
-                    job_id,
-                    exc_info=True,
-                )
-                return
+                if time.monotonic() - last_renewed >= self.lease_seconds:
+                    logger.warning("Durable job lease renewal failed until the lease expired job_id=%s",
+                                   job_id, exc_info=True)
+                    self._signal_stop(cancellation, job_id, "lease_expired")
+                    return
+                logger.warning("Durable job lease renewal failed; retrying job_id=%s", job_id, exc_info=True)
+                continue
+            last_renewed = time.monotonic()
+            status = renewed.get("status") if isinstance(renewed, dict) else getattr(renewed, "status", None)
+            if str(getattr(status, "value", status)) == JobStatus.CANCEL_REQUESTED.value:
+                self._signal_stop(cancellation, job_id, "cancel_requested")
+
+    @staticmethod
+    def _signal_stop(cancellation: threading.Event | None, job_id: str, reason: str) -> None:
+        if cancellation is not None and not cancellation.is_set():
+            logger.warning("Durable job told to stop job_id=%s reason=%s", job_id, reason)
+            cancellation.set()
 
     def _release_lease(self, job: JobRecord, reason: str) -> None:
         lease = job.lease

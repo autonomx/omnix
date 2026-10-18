@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import sys  # noqa: F401  tests set sys.platform through this module
 import asyncio
-import sys
 from datetime import date
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.security.provider_secret_store import (
+    credential_store_label,
+    os_credential_store_available,
     load_trading_provider_secrets,
     save_trading_provider_secrets,
     trading_provider_credential_sources,
@@ -24,6 +26,19 @@ class CoinMarketCapCredentialStatus(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     provider: Literal["coinmarketcap"] = "coinmarketcap"
+    configured: bool
+    api_key_masked: str = ""
+    api_key_source: Literal["environment", "os_protected_store", "missing"]
+    api_key_editable: bool
+    storage: str
+
+
+class ProviderKeyStatus(BaseModel):
+    """An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: str
     configured: bool
     api_key_masked: str = ""
     api_key_source: Literal["environment", "os_protected_store", "missing"]
@@ -72,7 +87,7 @@ class IbkrSettingsStatus(BaseModel):
     official_ibapi_available: bool
     connected: bool
     last_error: str | None = None
-    diagnostics: dict[str, object] = Field(default_factory=dict)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 def _ibkr_status() -> IbkrSettingsStatus:
@@ -118,9 +133,23 @@ def _credential_status() -> CoinMarketCapCredentialStatus:
     return CoinMarketCapCredentialStatus(
         configured=bool(api_key),
         api_key_masked=_mask_key(api_key),
-        api_key_source=sources["api_key"],
-        api_key_editable=sys.platform == "win32" and sources["api_key"] != "environment",
-        storage="Windows DPAPI user store" if sys.platform == "win32" else "environment only",
+        api_key_source=cast(Any, sources["api_key"]),
+        api_key_editable=os_credential_store_available() and sources["api_key"] != "environment",
+        storage=credential_store_label(),
+    )
+
+
+def _key_status(provider: str) -> ProviderKeyStatus:
+    credentials = load_trading_provider_secrets().get(provider) or {}
+    sources = trading_provider_credential_sources(provider)
+    api_key = str(credentials.get("api_key") or "")
+    return ProviderKeyStatus(
+        provider=provider,
+        configured=bool(api_key),
+        api_key_masked=_mask_key(api_key),
+        api_key_source=cast(Any, sources["api_key"]),
+        api_key_editable=os_credential_store_available() and sources["api_key"] != "environment",
+        storage=credential_store_label(),
     )
 
 
@@ -128,7 +157,7 @@ def create_trading_market_data_router() -> APIRouter:
     router = APIRouter(prefix="/api/trading/market-data", tags=["trading-market-data"])
 
     @router.get("/yahoo-evidence/diagnostics")
-    async def yahoo_evidence_diagnostics() -> dict[str, object]:
+    async def yahoo_evidence_diagnostics() -> dict[str, Any]:
         """Operator diagnostics for durable Yahoo evidence and gap recovery."""
 
         diagnostics = await asyncio.to_thread(default_market_data_service().diagnostics)
@@ -138,7 +167,7 @@ def create_trading_market_data_router() -> APIRouter:
     @router.get("/yahoo-evidence/diagnostics/{session_date}")
     async def yahoo_evidence_session_diagnostics(
         session_date: date,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         """Durable Yahoo repair/block metrics for one U.S.-equity session."""
 
         service = default_market_data_service()
@@ -148,7 +177,7 @@ def create_trading_market_data_router() -> APIRouter:
         )
 
     @router.get("/providers/ibkr/diagnostics")
-    async def ibkr_diagnostics() -> dict[str, object]:
+    async def ibkr_diagnostics() -> dict[str, Any]:
         """Operator view of Gateway/client/rollout state without storing credentials."""
 
         service = default_market_data_service()
@@ -172,7 +201,7 @@ def create_trading_market_data_router() -> APIRouter:
         return await asyncio.to_thread(_ibkr_status)
 
     @router.get("/providers/ibkr/diagnostics/{session_date}")
-    async def ibkr_session_diagnostics(session_date: date) -> dict[str, object]:
+    async def ibkr_session_diagnostics(session_date: date) -> dict[str, Any]:
         """Durable zero-authority IBKR quote/recovery soak metrics for one session."""
 
         return await asyncio.to_thread(
@@ -181,7 +210,7 @@ def create_trading_market_data_router() -> APIRouter:
         )
 
     @router.get("/providers/ibkr/authority/{instrument_id:path}")
-    async def ibkr_authority(instrument_id: str) -> dict[str, object]:
+    async def ibkr_authority(instrument_id: str) -> dict[str, Any]:
         """Explain per-contract IBKR LIVE_DATA authority for an already observed symbol."""
 
         service = default_market_data_service()
@@ -216,5 +245,25 @@ def create_trading_market_data_router() -> APIRouter:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.get("/providers/fred/credentials", response_model=ProviderKeyStatus)
+    async def fred_credentials() -> ProviderKeyStatus:
+        return await asyncio.to_thread(_key_status, "fred")
+
+    @router.put("/providers/fred/credentials", response_model=ProviderKeyStatus)
+    async def update_fred_credentials(request: CoinMarketCapCredentialUpdate) -> ProviderKeyStatus:
+        updates: dict[str, str | None] = {}
+        if request.api_key is not None:
+            updates["api_key"] = request.api_key
+        if request.clear_api_key:
+            updates["api_key"] = ""
+        if updates:
+            try:
+                await asyncio.to_thread(save_trading_provider_secrets, "fred", updates)
+            except LegacyPersistenceRetired as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await asyncio.to_thread(_key_status, "fred")
 
     return router

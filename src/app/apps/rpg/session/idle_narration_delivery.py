@@ -17,7 +17,7 @@ from app.apps.rpg.session.idle_resume_runtime import (
     _apply_idle_tick_to_session as _apply_idle_tick_to_session, _build_resume_fallback_recap as _build_resume_fallback_recap,
     _recap_has_renderable_content as _recap_has_renderable_content,
 )
-from app.apps.rpg.ai.world_scene_narrator_ambient import (
+from app.apps.rpg.narration.ai.world_scene_narrator_ambient import (
     narrate_ambient_update as narrate_ambient_update,
 )
 from app.apps.rpg.session.ambient_policy import (
@@ -33,7 +33,7 @@ from app.runtime.clock import Clock as _Clock
 from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
 from app.runtime.clock import TurnContext as _TurnContext
 from app.runtime.clock import bind_turn_context as _bind_turn_context
-from app.apps.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
+from app.apps.rpg.foundation.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
 
 def _make_initiative_update_from_candidate(
     candidate: dict[str, Any],
@@ -128,7 +128,7 @@ def _apply_ambient_narration_and_delivery(
 
     llm_gateway = None
     try:
-        from app.apps.rpg.provider_access import get_provider
+        from app.apps.rpg.foundation.provider_access import get_provider
         llm_gateway = get_provider()
     except Exception:
         llm_gateway = None

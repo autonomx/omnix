@@ -48,6 +48,13 @@ def service_token(monkeypatch):
 
 
 def pytest_configure(config) -> None:
+    # Sign-in is on by default (WP-4.1). Tests that are not about sign-in run
+    # without it, including module-scoped gateways built before any per-test
+    # fixture; sign-in tests set OMNIX_AUTH_MODE (or pass settings) themselves.
+    os.environ.setdefault("OMNIX_AUTH_MODE", "disabled")
+    # The trading research call budget is process-wide and durable; tests that
+    # are about it construct their own budget.
+    os.environ.setdefault("OMNIX_TRADING_AI_DAILY_CALL_BUDGET", "0")
     # Before anything reads a database URL: each xdist worker gets its own database.
     from tests.conftest_databases import configure_worker_database
 
@@ -76,6 +83,9 @@ def isolated_operator_data_files(monkeypatch, tmp_path):
     monkeypatch.setenv("OMNIX_PROVIDER_SECRETS_PATH", str(tmp_path / "provider-api-keys.dpapi"))
     # A document kind written without a registered shape fails the test (WP-5.9).
     monkeypatch.setenv("OMNIX_DOCUMENT_SCHEMAS_STRICT", "1")
+    # The RPG narrative writer uses the app's provider unless told otherwise;
+    # tests never call a real one (a test that wants a writer installs it).
+    monkeypatch.setenv("OMNIX_RPG_NARRATIVE_WRITER_MODE", "deterministic")
     # Prompt budgets never ask a real provider for its model list (WP-5.7).
     monkeypatch.setattr("app.providers.model_catalog._default_provider", lambda _provider_id: None)
 
@@ -92,6 +102,20 @@ def isolated_secret_store():
         yield store
     finally:
         install_secret_store(None)
+
+
+@pytest.fixture(autouse=True)
+def isolated_device_permits():
+    # Composing the production app installs the process-wide device permit
+    # service (WP-6.2); a later test in the same worker would otherwise queue
+    # its local-model calls behind PostgreSQL permits it never configured.
+    from app.persistence import device_permits
+
+    installed = device_permits._DEFAULT_SERVICE
+    try:
+        yield
+    finally:
+        device_permits._DEFAULT_SERVICE = installed
 
 
 @pytest.fixture(autouse=True)

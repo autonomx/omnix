@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.assist_mode import hermes_assist_mode_policy
+from app.apps.rpg.edge.hermes.assist_mode import hermes_assist_mode_policy
 
 
 def test_assist_mode_defaults_to_review_each_step() -> None:

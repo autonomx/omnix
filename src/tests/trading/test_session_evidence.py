@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from app.apps.trading.session_evidence import (
     begin_reconciliation,
     build_session_evidence_manifest,
@@ -106,6 +108,7 @@ def test_reconciliation_transitions_never_mutate_frozen_scope():
     retrying = begin_reconciliation(
         manifest,
         observed_at=AT + timedelta(hours=8),
+        lease_until=AT + timedelta(hours=8, minutes=15),
     )
     assert retrying.attempt_count == 1
     deferred = defer_reconciliation(
@@ -119,6 +122,7 @@ def test_reconciliation_transitions_never_mutate_frozen_scope():
     retrying_again = begin_reconciliation(
         deferred,
         observed_at=AT + timedelta(hours=8, minutes=15),
+        lease_until=AT + timedelta(hours=8, minutes=30),
     )
     final = finalize_reconciliation(
         retrying_again,
@@ -127,3 +131,25 @@ def test_reconciliation_transitions_never_mutate_frozen_scope():
     )
     assert final.reconciliation_state == "FINAL"
     assert final.immutable_fingerprint == fingerprint
+
+
+def test_an_attempt_leases_the_manifest_so_an_interrupted_one_is_not_retried_at_once():
+    manifest = build_session_evidence_manifest(
+        strategy_id="strategy",
+        session_date=date(2026, 9, 17),
+        events=[_event("a", 0)],
+        universe=_Universe(),
+        aggregation_start=AT,
+        aggregation_end=AT + timedelta(hours=7),
+        frozen_at=AT + timedelta(hours=7),
+    )
+    observed = AT + timedelta(hours=8)
+    lease = observed + timedelta(minutes=15)
+
+    retrying = begin_reconciliation(manifest, observed_at=observed, lease_until=lease)
+
+    # ``pending`` skips a RETRYING manifest until next_retry_at; NULL would make it due again immediately.
+    assert retrying.reconciliation_state == "RETRYING"
+    assert retrying.next_retry_at == lease
+    with pytest.raises(ValueError, match="reconciliation_lease_must_follow_observation"):
+        begin_reconciliation(manifest, observed_at=observed, lease_until=observed)

@@ -11,7 +11,7 @@ from app.config.env import environment
 
 import asyncio
 from datetime import datetime, time, timedelta, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from app.runtime.features import FeatureContext
 
@@ -48,6 +48,9 @@ def _interval_seconds() -> float:
 
 
 class TradingYahooAcquisitionMonitor(ScheduledTradingMonitor):
+    capture_error_count: int
+    last_run_at: datetime | None
+
     def record_cycle_error(self, exc: Exception) -> None:
         self.capture_error_count += 1
         self.last_run_at = self.now_factory()
@@ -66,7 +69,7 @@ class TradingYahooAcquisitionMonitor(ScheduledTradingMonitor):
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
         self._last_capture_end: dict[str, datetime] = {}
-        self.last_run_at: datetime | None = None
+        self.last_run_at = None
         self.last_error: str | None = None
         self.capture_count = 0
         self.capture_error_count = 0
@@ -101,8 +104,8 @@ class TradingYahooAcquisitionMonitor(ScheduledTradingMonitor):
             )
         except Exception:
             dynamic = {}
-        for instrument_id, candidate in dynamic.items():
-            lifecycle = getattr(candidate, "lifecycle", None)
+        for instrument_id, dynamic_candidate in dynamic.items():
+            lifecycle = getattr(dynamic_candidate, "lifecycle", None)
             lifecycle_value = getattr(lifecycle, "value", lifecycle)
             if lifecycle_value == CandidateLifecycleState.EXPIRED.value:
                 continue
@@ -179,7 +182,7 @@ class TradingYahooAcquisitionMonitor(ScheduledTradingMonitor):
             self.last_error = None
         return succeeded
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": yahoo_acquisition_monitor_enabled(),
             "running": self.scheduled,

@@ -18,7 +18,7 @@ Scientific boundary:
 
 from datetime import datetime, time, timezone
 from decimal import Decimal
-from typing import Literal, Sequence
+from typing import Any, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -34,8 +34,8 @@ from .prospective_prediction_v42 import V42Forecast
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
-V42_ACTION_VERSION = "prospective-gap-v4.2-action-v1"
-PORTFOLIO_F_VERSION = "prospective-gap-portfolio-f-v1"
+V42_ACTION_VERSION: Final = "prospective-gap-v4.2-action-v1"
+PORTFOLIO_F_VERSION: Final = "prospective-gap-portfolio-f-v1"
 
 V42WatchClass = Literal["REJECT", "WATCH", "HIGH_PRIORITY_WATCH"]
 V42ActionState = Literal[
@@ -514,7 +514,7 @@ def evaluate_v42_post_open_action(
         * timing_quality
     )
 
-    common = dict(
+    common: dict[str, Any] = dict(
         instrument_id=forecast.instrument_id,
         forecast_fingerprint=forecast.immutable_fingerprint,
         evaluated_at=evaluated_at,
@@ -625,7 +625,7 @@ def authorize_v42_action(
     shared_confirmation_state: ConfirmationState,
     policy: V42ActionPolicy = DEFAULT_V42_ACTION_POLICY,
 ) -> V42AuthorizationReceipt:
-    base = dict(
+    base: dict[str, Any] = dict(
         instrument_id=forecast.instrument_id,
         forecast_fingerprint=forecast.immutable_fingerprint,
         decision_at=snapshot.evaluated_at,
@@ -775,8 +775,8 @@ def build_portfolio_f(
                 trade_quality=row.trade_quality,
                 net_expected_return=row.net_expected_return or Decimal("0"),
                 authorization_decision_at=row.decision_at,
-                reference_price=row.reference_price,
-                total_cost_bps=row.total_cost_bps,
+                reference_price=cast(Decimal, row.reference_price),
+                total_cost_bps=cast(Decimal, row.total_cost_bps),
             )
         )
         remaining -= allocation

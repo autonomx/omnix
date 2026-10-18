@@ -4,11 +4,12 @@ import hashlib
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .market_evidence import PremarketLiquidityEvidence, SourceMemberDisposition
+from collections.abc import Sequence
 
 
 class GapperCandidate(BaseModel):
@@ -158,7 +159,7 @@ class GapperUniverseSnapshot(BaseModel):
 
 def time_of_day_relative_volume(
     current_cumulative_volume: Decimal | int | str,
-    historical_cumulative_volumes: list[Decimal | int | str] | tuple[Decimal | int | str, ...],
+    historical_cumulative_volumes: Sequence[Decimal | int | str],
     *,
     minimum_baseline_sessions: int = 1,
 ) -> Decimal | None:
@@ -205,7 +206,7 @@ def _validate_point_in_time_candidate(
         )
 
 
-def _candidate_fingerprint_payload(candidate: GapperCandidate) -> dict[str, object]:
+def _candidate_fingerprint_payload(candidate: GapperCandidate) -> dict[str, Any]:
     """Preserve legacy fingerprints while binding newly observed integrity evidence."""
 
     payload = candidate.model_dump(
@@ -248,7 +249,7 @@ def gapper_universe_fingerprint(
     source_member_dispositions: tuple[SourceMemberDisposition, ...] | list[SourceMemberDisposition] = (),
 ) -> str:
     ordered = sorted(candidates, key=lambda item: (item.discovery_rank or 10**9, item.instrument_id))
-    payload = {
+    payload: dict[str, Any] = {
         "universe_id": universe_id,
         "session_date": session_date.isoformat(),
         "evaluation_time": evaluation_time.astimezone(timezone.utc).isoformat(),

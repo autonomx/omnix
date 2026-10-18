@@ -5,7 +5,7 @@ import json
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from app.persistence.database import PostgresDatabase, default_database
@@ -78,16 +78,16 @@ def _observation_from_row(row: Any) -> Observation:
         idempotency_key=str(row[5]),
         space=MemorySpaceKey(
             principal_id=str(row[1]),
-            owner_type=str(row[2]),
+            owner_type=cast(Any, str(row[2])),
             owner_id=str(row[3]),
         ),
-        visibility_scope=VisibilityScope(kind=str(row[6]), scope_id=str(row[7])),
-        event_type=str(row[8]),
+        visibility_scope=VisibilityScope(kind=cast(Any, str(row[6])), scope_id=str(row[7])),
+        event_type=cast(Any, str(row[8])),
         occurred_at=row[9],
         recorded_at=row[11],
         payload=dict(row[12]),
         provenance=ObservationProvenance(**provenance),
-        sensitivity=str(row[13]),
+        sensitivity=cast(Any, str(row[13])),
         correlation_id=str(row[14]) if row[14] is not None else None,
         schema_version=str(row[15]),
         content_digest=str(row[16]),
@@ -494,7 +494,7 @@ class PostgresMemoryV2ObservationStore:
         revision = int(disposition_row[0]) if disposition_row is not None else 1
         return ObservationDisposition(
             observation_id=observation_id,
-            state=state,
+            state=cast(Any, state),
             authority_sequence=sequence,
             changed_at=timestamp,
             reason=reason,
@@ -522,7 +522,7 @@ class PostgresMemoryV2ObservationStore:
         return {
             str(row[0]): ObservationDisposition(
                 observation_id=str(row[0]),
-                state=str(row[1]),
+                state=cast(Any, str(row[1])),
                 authority_sequence=int(row[2]),
                 changed_at=row[3],
                 reason=str(row[4]) if row[4] is not None else None,

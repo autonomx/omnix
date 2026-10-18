@@ -9,6 +9,7 @@ from app.providers.base import ChatMessage
 from app.apps.trading.research import _call_provider, _json_payload, default_research_provider
 
 from .contracts import NoveltyShadowAnnotation, TradingEvidence
+from decimal import Decimal
 
 
 def generate_novelty_shadow(
@@ -23,7 +24,7 @@ def generate_novelty_shadow(
     if not visible:
         return NoveltyShadowAnnotation(annotation_id=f"novelty-{hashlib.sha256((instrument_id+'|empty|'+observed_at.isoformat()).encode()).hexdigest()[:24]}",
             instrument_id=instrument_id, observed_at=observed_at, novelty="uncertain", relevance="uncertain", catalyst_class="unknown",
-            conflict_summary="No causally visible evidence was available.", confidence=0, evidence_ids=(), rationale="Evidence unavailable.")
+            conflict_summary="No causally visible evidence was available.", confidence=Decimal("0"), evidence_ids=(), rationale="Evidence unavailable.")
     supplied=[{"evidence_id":x.evidence_id,"source_type":x.source_type,"authority_tier":x.source_authority_tier,
                "source_published_at":x.source_published_at.isoformat() if x.source_published_at else None,"title":x.title,
                "content":x.content[:8000]} for x in visible]

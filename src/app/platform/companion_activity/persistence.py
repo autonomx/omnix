@@ -10,7 +10,7 @@ import hashlib
 import json
 import threading
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from pydantic import Field
 
@@ -312,8 +312,9 @@ def _checkpoint_from_row(row) -> CompanionActivityCheckpoint:
         character_id=str(row[3]) if row[3] is not None else None,
         revision=int(row[4]),
         generation=str(row[5]) if row[5] is not None else None,
-        reason=str(row[6]),
-        sensitivity=str(row[7]),
+        # Stored values; the model validates them on construction.
+        reason=cast(ActivityCheckpointReason, str(row[6])),
+        sensitivity=cast(CheckpointSensitivity, str(row[7])),
         source_proposition_ids=tuple(str(item) for item in (row[8] or [])),
         state=CompanionActivityState.model_validate(row[9]),
         created_at=row[10],

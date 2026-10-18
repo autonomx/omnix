@@ -364,7 +364,7 @@ class ChatSessionStore:
 
             messages = self._provider_messages(session, user_message, context_items or [])
             model_name = _model_key(model_id)
-            completion_kwargs = (
+            completion_kwargs: dict[str, Any] = (
                 {"conversation_id": session.id}
                 if provider_supports(provider_name, CONVERSATION_SESSIONS)
                 else {}
@@ -687,7 +687,7 @@ class ChatSessionStore:
             messages = self._provider_messages(session, user_message, context_items)
 
             model_name = _model_key(model_id)
-            completion_kwargs = (
+            completion_kwargs: dict[str, Any] = (
                 {"conversation_id": session.id}
                 if provider_supports(provider_name, CONVERSATION_SESSIONS)
                 else {}

@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from ..contracts import SupplyFact, SupplyMetrics
+from typing import Any, cast
 
 _ACTIVE = {"active", "exercisable"}
 
@@ -43,5 +44,5 @@ def derive_supply_metrics(
         in_the_money_warrant_pct_float=_pct(itm_warrant_shares, float_shares),
         registered_resale_pct_float=_pct(resale_shares, float_shares),
         immediate_supply_risk=immediate,
-        supply_resolution_status=status,
+        supply_resolution_status=cast(Any, status),
     )

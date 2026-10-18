@@ -17,7 +17,7 @@ from .contracts import (
 )
 from app.observability.agent_logging import log_agent_activity
 from .repository import AgentLeaseConflict
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 from .service_core import (
     _progress_idle_timeout_seconds,
     _stalled_recovery_limit,
@@ -128,7 +128,7 @@ def recover_orphaned_runs(service: AgentRunService) -> list[str]:
             if current.status in {"completed", "failed", "cancelled"} or current.desired_state != "running":
                 recovered.append(run_id)
                 continue
-            recovery_payload = {
+            recovery_payload: dict[str, Any] = {
                 "message": "This run was recovered after a worker restart. Reinspect the current workspace before continuing.",
             }
             if latest_revision is not None:

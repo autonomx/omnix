@@ -22,6 +22,7 @@ from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 from .base import BaseProvider, ChatMessage, ProviderConfig
 from .registry import get_registry
 from .audio_registry import get_audio_registry
+from .catalog import LOCAL_DEVICE, provider_supports
 
 _PROVIDER_CACHE_TTL_SECONDS = 3600.0
 _PROVIDER_CACHE_MAX_ENTRIES = 16
@@ -209,9 +210,16 @@ def _provider_config(
     return name, config
 
 
-def _cached_provider(provider_name: Optional[str], *, lease: bool) -> _CachedProvider:
+def _cached_provider(
+    provider_name: Optional[str],
+    *,
+    lease: bool,
+    model: Optional[str] = None,
+) -> _CachedProvider:
     _subscribe_provider_cache_invalidation()
     name, config = _provider_config(provider_name, load_settings(), load_secrets())
+    if model:
+        config.model = model
     key = _cache_key(name, config)
     closable: list[Any] = []
     try:
@@ -254,6 +262,20 @@ def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
 
 
 _CACHED_GET_PROVIDER = get_provider
+
+
+def get_routed_provider(provider_name: Optional[str], model: Optional[str]) -> Optional[BaseProvider]:
+    """The cached provider of a feature's settings route: ``provider_name`` with ``model``.
+
+    ``get_provider`` builds a provider with the provider's own configured
+    model; a feature whose route names another model (the settings' model
+    roles, ``effective_llm_route``) asks here. When ``get_provider`` has been
+    replaced (a test double), the replacement serves, as ``provider_lease`` does.
+    """
+    lookup = globals()["get_provider"]
+    if lookup is not _CACHED_GET_PROVIDER:
+        return lookup()
+    return _cached_provider(provider_name, lease=False, model=model).instance
 
 
 @contextmanager
@@ -351,15 +373,26 @@ def invalidate_audio_provider_cache(kind: str | None = None) -> None:
                 _LOG.warning("Audio provider stop failed during cache invalidation")
 
 
+DEFAULT_TTS_PROVIDER_ID = "faster-qwen3-tts"
+
+
+def selected_tts_provider_id(settings: dict[str, Any] | None = None) -> str:
+    """The TTS engine Omnix uses when a caller does not name one."""
+    values = load_settings() if settings is None else settings
+    return str(values.get("audio_provider_tts") or DEFAULT_TTS_PROVIDER_ID)
+
+
 def get_tts_provider(provider_name: str | None = None) -> Any:
     global _tts_provider_instance, _tts_provider_name, _tts_model_owner_guard
     settings = load_settings()
-    name = provider_name or str(settings.get("audio_provider_tts") or "faster-qwen3-tts")
+    name = provider_name or selected_tts_provider_id(settings)
     runtime = get_runtime_config()
     endpoint = runtime.tts.url if runtime.tts else ""
     api_replica = runtime.gateway_role is GatewayRole.API
-    use_http = name == "faster-qwen3-tts" and runtime.use_remote_tts
-    if name == "faster-qwen3-tts" and api_replica and not use_http:
+    # Local GPU engines (Qwen, Fish) run in whichever process owns TTS.
+    local_gpu = provider_supports(name, LOCAL_DEVICE, "tts")
+    use_http = local_gpu and runtime.use_remote_tts
+    if local_gpu and api_replica and not use_http:
         raise RuntimeError(
             "API replicas cannot construct the local GPU TTS provider; configure OMNIX_TTS_URL"
         )
@@ -369,7 +402,7 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
             raise ValueError("Gateway HTTP TTS requires OMNIX_TTS_URL")
         key = f"{name}:http:{endpoint}"
         if _tts_provider_instance is None or _tts_provider_name != key:
-            _tts_provider_instance = QwenHttpGatewayProvider(endpoint)
+            _tts_provider_instance = QwenHttpGatewayProvider(endpoint, provider_name=name)
             _tts_provider_name = key
         return _tts_provider_instance
 
@@ -390,7 +423,7 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
             except Exception:
                 _LOG.warning("TTS model-owner lease release failed during replacement")
     provider_settings = dict(settings.get(name) or {})
-    if name == "faster-qwen3-tts":
+    if local_gpu:
         config = provider_settings
     else:
         config = {
@@ -402,7 +435,7 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
     claimed_guard = None
     instance = None
     try:
-        if name == "faster-qwen3-tts":
+        if local_gpu:
             from app.persistence.device_permits import default_device_permit_service
 
             permit_service = default_device_permit_service()

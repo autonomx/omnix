@@ -13,7 +13,7 @@ import hashlib
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Literal, Sequence
+from typing import Final, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -27,10 +27,10 @@ from .prospective_prediction_v4 import (
 )
 
 
-V42_PREDICTOR_VERSION = "prospective-gap-v4.2-shadow"
-V42_FEATURE_SCHEMA_VERSION = "prospective-gap-features-v4.2"
-V42_SPEC_VERSION = "prospective-gap-v4.2-preregistered-spec-v1"
-V42_ACTIVATION_STATE = "FORWARD_SHADOW_ACTIVE"
+V42_PREDICTOR_VERSION: Final = "prospective-gap-v4.2-shadow"
+V42_FEATURE_SCHEMA_VERSION: Final = "prospective-gap-features-v4.2"
+V42_SPEC_VERSION: Final = "prospective-gap-v4.2-preregistered-spec-v1"
+V42_ACTIVATION_STATE: Final = "FORWARD_SHADOW_ACTIVE"
 V42_FIRST_ELIGIBLE_FORWARD_SESSION = date(2026, 9, 23)
 V42_DESIGN_EVIDENCE_SESSIONS = (
     date(2026, 9, 15),

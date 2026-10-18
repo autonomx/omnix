@@ -77,3 +77,22 @@ def test_long_book_input_uses_verified_chapter_files(tmp_path) -> None:
     )
     assert command[command.index("-f") + 1] == "concat"
     assert command[command.index("-rf64") + 1] == "auto"
+
+
+def test_progress_reporting_does_not_change_the_encoding_arguments():
+    plain = ffmpeg_command("ffmpeg", input_wav="in.txt", metadata_path="meta", output_path="book.m4b",
+                           format="m4b", concat_input=True)
+    reported = ffmpeg_command("ffmpeg", input_wav="in.txt", metadata_path="meta", output_path="book.m4b",
+                              format="m4b", concat_input=True, progress_path="progress.txt")
+    assert reported[reported.index("-progress"):reported.index("-progress") + 3] == ["-progress", "progress.txt", "-nostats"]
+    assert [part for part in reported if part not in {"-progress", "progress.txt", "-nostats"}] == plain
+
+
+def test_encoded_seconds_reads_the_latest_progress_block():
+    from app.apps.audiobook.export import encoded_seconds
+
+    assert encoded_seconds("") is None
+    assert encoded_seconds("out_time_us=N/A\nprogress=continue\n") is None
+    report = ("out_time_us=1500000\nout_time_ms=1500000\nprogress=continue\n"
+              "out_time_ms=93250000\nout_time_us=93250000\nprogress=continue\n")
+    assert encoded_seconds(report) == 93.25

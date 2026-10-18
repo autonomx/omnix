@@ -13,13 +13,13 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from app.apps.rpg.session.migrations import migrate_session_payload
 from app.apps.rpg.session.session_store import _normalize_session
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.runtime.paths import repo_root, rpg_sessions_root
-from app.apps.rpg.performance_trace import rpg_pipeline_span_if_active
+from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span_if_active
 
 logger = logging.getLogger(__name__)
 _SESSION_DIR = rpg_sessions_root()
@@ -86,7 +86,7 @@ def _session_path(session_id: str, *, session_dir: Path | None = None) -> Path:
 
 def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_delay_s: float = 0.02) -> None:
     """Best-effort Windows-safe atomic replace with short retry/backoff."""
-    last_exc = None
+    last_exc: OSError | None = None
     for attempt in range(attempts):
         try:
             os.replace(tmp_name, path)
@@ -109,7 +109,7 @@ def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_de
         return
     except Exception:
         logger.debug("suppressed error in %s", "_replace_with_retry", exc_info=True)
-    raise last_exc
+    raise cast(OSError, last_exc)
 
 
 def _write_text_atomic(path: Path, text: str) -> None:
@@ -245,7 +245,7 @@ def _save_session_to_disk(
     """Normalize, migrate, and persist session to disk-backed JSON."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime() and session_dir is None:
-        from app.apps.rpg.persistence.rpg_compat import save_session_to_postgres
+        from app.apps.rpg.session.persistence.session_records import save_session_to_postgres
         return save_session_to_postgres(session, compact=compact)
     session = _normalize_session(session)
     session = migrate_session_payload(session)
@@ -264,6 +264,18 @@ def _save_session_to_disk(
         text = json.dumps(payload, indent=2, ensure_ascii=False)
     _write_text_atomic(path, text)
     return session
+
+
+def load_persisted_rng_seed(session_id: str, *, session_dir: Path | None = None) -> tuple[bool, Any]:
+    """Whether the session is saved, and the ``rng_seed`` its saved simulation state holds."""
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime() and session_dir is None:
+        from app.apps.rpg.session.persistence.session_records import load_rng_seed_from_postgres
+        return load_rng_seed_from_postgres(session_id)
+    previous = load_session_from_disk(session_id, session_dir=session_dir)
+    if previous is None:
+        return (False, None)
+    return (True, _safe_dict(previous.get("simulation_state")).get("rng_seed"))
 
 
 def load_session_from_disk(
@@ -292,7 +304,7 @@ def _load_session_from_disk(
     """Load and normalize a session from disk with migration. Returns None if not found."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime() and session_dir is None:
-        from app.apps.rpg.persistence.rpg_compat import load_session_from_postgres
+        from app.apps.rpg.session.persistence.session_records import load_session_from_postgres
         return load_session_from_postgres(session_id)
     path = _session_path(session_id, session_dir=session_dir)
     if not path.exists():
@@ -306,7 +318,7 @@ def list_sessions_from_disk() -> list[dict[str, Any]]:
     """List all persisted sessions from disk with migration, normalized and sorted."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import list_sessions_from_postgres
+        from app.apps.rpg.session.persistence.session_records import list_sessions_from_postgres
         return list_sessions_from_postgres()
     ensure_session_dir()
     sessions: list[dict[str, Any]] = []
@@ -330,7 +342,7 @@ def archive_session_on_disk(session_id: str) -> dict[str, Any]:
     """Archive a session on disk by setting archived=True in manifest and persisting."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import archive_session_in_postgres
+        from app.apps.rpg.session.persistence.session_records import archive_session_in_postgres
         return archive_session_in_postgres(session_id)
     session = load_session_from_disk(session_id)
     if session is None:

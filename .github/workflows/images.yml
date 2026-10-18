@@ -89,7 +89,9 @@ jobs:
           docker run -d --name pg --network omnix-smoke -e POSTGRES_USER=omnix -e POSTGRES_PASSWORD=smoke-only \
             -e POSTGRES_DB=omnix postgres:17-alpine
           for i in $(seq 1 30); do docker exec pg pg_isready -U omnix -d omnix && break; sleep 2; done
+          # Read-only root as deployed: runtime data in /app/resources (a volume in Compose), home and /tmp writable.
           common="--network omnix-smoke --read-only --tmpfs /tmp --tmpfs /var/lib/omnix:uid=10001,gid=10001
+            --tmpfs /app/resources:uid=10001,gid=10001
             -e OMNIX_DATABASE_URL=postgresql://omnix:smoke-only@pg:5432/omnix -e OMNIX_SECRET_STORE=env
             -e OMNIX_SERVICE_TOKEN=ci-smoke-service-token-not-a-secret-0123456789"
           docker run --rm $common omnix-gateway:ci python -m app.persistence migrate

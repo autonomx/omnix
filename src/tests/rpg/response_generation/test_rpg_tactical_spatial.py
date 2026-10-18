@@ -4,15 +4,15 @@ from tests.support.routers import include_router_registrar
 import pytest
 from fastapi import FastAPI
 
-from app.apps.rpg.api.feature_routes.rpg_tactical_spatial_routes import register_rpg_tactical_spatial_routes
-from app.apps.rpg.map_grid_contracts import (
+from app.apps.rpg.edge.api.feature_routes.rpg_tactical_spatial_routes import register_rpg_tactical_spatial_routes
+from app.apps.rpg.world.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.apps.rpg.map_instance_runtime import create_map_instance_snapshot
-from app.apps.rpg.tactical_spatial import (
+from app.apps.rpg.world.map_instance_runtime import create_map_instance_snapshot
+from app.apps.rpg.world.tactical_spatial import (
     TacticalAttackCommand,
     TacticalMoveCommand,
     TacticalSpatialError,

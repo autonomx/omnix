@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from tests.support.routers import include_router_registrar
 
 
@@ -59,6 +59,11 @@ def test_turn_stages_run_off_the_event_loop(monkeypatch) -> None:
         return None
 
     monkeypatch.setattr(service, "load_session", load_session)
+    # On PostgreSQL the launch gate reads its projection instead (WP-5.6); either read is off the loop.
+    monkeypatch.setattr(
+        "app.apps.rpg.session.persistence.session_records.load_launch_gate_source_from_postgres",
+        load_session,
+    )
     app = FastAPI(title="rpg-turn-routes")
     include_router_registrar(app, register_rpg_session_routes)
 
@@ -91,7 +96,7 @@ def test_gateway_composition_uses_the_explicit_turn_pipeline_without_installers(
     script = """
 from app.composition.gateway.main import create_gateway_app
 create_gateway_app()
-from app.apps.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
+from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
 from app.apps.rpg.session import interactive_first_call_runtime as runtime
 from app.apps.rpg.session.pipeline import TURN_PIPELINE
 assert callable(execute_turn_with_job_mirror)

@@ -8,6 +8,7 @@ from app.persistence.tenant import TenantContext
 
 from .annotation import display_speaker_name, normalize_speaker_name
 from .hashing import canonical_json
+from .speech_exclusions import chapter_removed_sql
 
 
 class PostgresAudiobookReviewRepository:
@@ -134,7 +135,7 @@ class PostgresAudiobookReviewRepository:
                 ON p.workspace_id = ch.workspace_id
                AND p.current_source_revision_id = ch.source_revision_id
              WHERE i.workspace_id = %s AND p.id = %s AND i.status = 'open'
-            """, (context.workspace_id, project_id),
+               AND NOT """ + chapter_removed_sql("ch", "p.id"), (context.workspace_id, project_id),
         ).fetchone()[0])
         if reconciled:
             self.connection.execute(
@@ -376,8 +377,13 @@ class PostgresAudiobookReviewRepository:
 
     def confirm_alias(
         self, context: TenantContext, *, project_id: str,
-        speaker_id: str, alias: str,
+        speaker_id: str, alias: str, mode: str = "user_confirmed",
     ) -> dict[str, object]:
+        """Make an alias authoritative for a speaker (``mode`` records whether the user or auto-confirmation did).
+
+        The alias's provenance records the suggestions and detected speakers it displaced, so
+        ``unconfirm_alias`` can restore them.
+        """
         UUID(speaker_id)
         name = display_speaker_name(alias)
         normalized_name = normalize_speaker_name(name)
@@ -439,7 +445,7 @@ class PostgresAudiobookReviewRepository:
                           confirmed_by_user_id = %s
                     WHERE workspace_id = %s AND project_id = %s AND id = %s""",
                 (
-                    name, canonical_json({"mode": "user_confirmed"}),
+                    name, canonical_json({"mode": mode}),
                     context.user_id, context.workspace_id, project_id, alias_id,
                 ),
             )
@@ -452,30 +458,46 @@ class PostgresAudiobookReviewRepository:
                    VALUES (%s, %s, %s, %s::uuid, %s, %s::jsonb, 'confirmed', %s)""",
                 (
                     alias_id, context.workspace_id, project_id, speaker_id, name,
-                    canonical_json({"mode": "user_confirmed"}), context.user_id,
+                    canonical_json({"mode": mode}), context.user_id,
                 ),
             )
 
         # Once one identity is authoritative, competing classifier suggestions
         # for the same normalized alias must no longer remain actionable.
-        self.connection.execute(
+        superseded_aliases = [str(row[0]) for row in self.connection.execute(
             """UPDATE omnix_audiobook_speaker_aliases
                   SET status = 'rejected'
                 WHERE workspace_id = %s AND project_id = %s
                   AND id <> %s AND status = 'proposed'
-                  AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s""",
+                  AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
+            RETURNING id""",
             (context.workspace_id, project_id, alias_id, normalized_name),
-        )
+        ).fetchall()]
         # A candidate that is confirmed as an alias is no longer a separate
         # cast member; hide it from the proposed-candidate list.
-        self.connection.execute(
+        superseded_speakers = [str(row[0]) for row in self.connection.execute(
             """UPDATE omnix_audiobook_speakers
                   SET status = 'rejected'
                 WHERE workspace_id = %s AND project_id = %s
                   AND id <> %s::uuid AND status = 'proposed'
-                  AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s""",
+                  AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
+            RETURNING id""",
             (context.workspace_id, project_id, speaker_id, normalized_name),
-        )
+        ).fetchall()]
+        if superseded_aliases or superseded_speakers:
+            provenance = dict(self.connection.execute(
+                """SELECT provenance FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s AND id = %s""",
+                (context.workspace_id, project_id, alias_id),
+            ).fetchone()[0] or {})
+            for key, ids in (("superseded_alias_ids", superseded_aliases),
+                             ("superseded_speaker_ids", superseded_speakers)):
+                provenance[key] = sorted({*provenance.get(key, []), *ids})
+            self.connection.execute(
+                """UPDATE omnix_audiobook_speaker_aliases SET provenance = %s::jsonb
+                    WHERE workspace_id = %s AND project_id = %s AND id = %s""",
+                (canonical_json(provenance), context.workspace_id, project_id, alias_id),
+            )
 
         # A confirmed alias is an interpretation dependency, not merely display
         # metadata. Reconcile only the current source's latest unresolved
@@ -542,42 +564,198 @@ class PostgresAudiobookReviewRepository:
             reconciled += 1
 
         if reconciled:
-            active = self.connection.execute(
-                """SELECT settings->>'current_render_run_id'
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
-            if active and active[0]:
-                self._cancel_render_jobs(context, str(active[0]))
-            remaining = int(self.connection.execute(
-                """SELECT count(*)
-                     FROM omnix_audiobook_review_issues AS i
-                     JOIN omnix_audiobook_annotations AS a
-                       ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
-                     JOIN omnix_audiobook_spans AS s
-                       ON s.workspace_id = a.workspace_id AND s.id = a.span_id
-                     JOIN omnix_audiobook_chapters AS ch
-                       ON ch.workspace_id = s.workspace_id AND ch.id = s.chapter_id
-                     JOIN omnix_audiobook_projects AS p
-                       ON p.workspace_id = ch.workspace_id
-                      AND p.current_source_revision_id = ch.source_revision_id
-                    WHERE i.workspace_id = %s AND p.id = %s
-                      AND i.status = 'open'""",
-                (context.workspace_id, project_id),
-            ).fetchone()[0])
-            self.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET state = %s,
-                          settings = settings - 'current_render_run_id',
-                          settings_revision = settings_revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s""",
-                ("review_required" if remaining else "ready_to_render",
-                 context.workspace_id, project_id),
-            )
+            self._after_alias_attribution_change(context, project_id)
         return {"id": alias_id, "speaker_id": speaker_id, "alias": name,
                 "reconciled_spans": reconciled}
+
+    def _after_alias_attribution_change(self, context: TenantContext, project_id: str) -> None:
+        """Span speakers changed: the active render is stale, and the review state follows the open issues."""
+        active = self.connection.execute(
+            """SELECT settings->>'current_render_run_id'
+                 FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        if active and active[0]:
+            self._cancel_render_jobs(context, str(active[0]))
+        remaining = int(self.connection.execute(
+            """SELECT count(*)
+                 FROM omnix_audiobook_review_issues AS i
+                 JOIN omnix_audiobook_annotations AS a
+                   ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
+                 JOIN omnix_audiobook_spans AS s
+                   ON s.workspace_id = a.workspace_id AND s.id = a.span_id
+                 JOIN omnix_audiobook_chapters AS ch
+                   ON ch.workspace_id = s.workspace_id AND ch.id = s.chapter_id
+                 JOIN omnix_audiobook_projects AS p
+                   ON p.workspace_id = ch.workspace_id
+                  AND p.current_source_revision_id = ch.source_revision_id
+                WHERE i.workspace_id = %s AND p.id = %s
+                  AND i.status = 'open' AND NOT """ + chapter_removed_sql("ch", "p.id"),
+            (context.workspace_id, project_id),
+        ).fetchone()[0])
+        self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET state = %s,
+                      settings = settings - 'current_render_run_id',
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s""",
+            ("review_required" if remaining else "ready_to_render",
+             context.workspace_id, project_id),
+        )
+
+    def confirm_suggested_aliases(self, context: TenantContext, *, project_id: str) -> dict[str, int]:
+        """Confirm every classifier-suggested alias (the user can unconfirm any of them).
+
+        A suggestion that conflicts with another speaker's name or alias stays suggested.
+        """
+        suggestions = self.connection.execute(
+            """SELECT a.id, a.speaker_id, a.alias
+                 FROM omnix_audiobook_speaker_aliases AS a
+                 JOIN omnix_audiobook_speakers AS s
+                   ON s.workspace_id = a.workspace_id AND s.project_id = a.project_id
+                  AND s.id = a.speaker_id
+                WHERE a.workspace_id = %s AND a.project_id = %s
+                  AND a.status = 'proposed' AND s.status IN ('active', 'proposed')
+                ORDER BY a.alias, a.id""",
+            (context.workspace_id, project_id),
+        ).fetchall()
+        confirmed = skipped = reconciled = 0
+        for alias_id, speaker_id, alias in suggestions:
+            # An earlier confirmation in this pass may have displaced this suggestion or its speaker.
+            still_suggested = self.connection.execute(
+                """SELECT 1
+                     FROM omnix_audiobook_speaker_aliases AS a
+                     JOIN omnix_audiobook_speakers AS s
+                       ON s.workspace_id = a.workspace_id AND s.project_id = a.project_id
+                      AND s.id = a.speaker_id
+                    WHERE a.workspace_id = %s AND a.project_id = %s AND a.id = %s
+                      AND a.status = 'proposed' AND s.status IN ('active', 'proposed')""",
+                (context.workspace_id, project_id, alias_id),
+            ).fetchone()
+            if still_suggested is None:
+                continue
+            try:
+                result = self.confirm_alias(
+                    context, project_id=project_id, speaker_id=str(speaker_id),
+                    alias=str(alias), mode="auto_confirmed",
+                )
+            except ValueError:
+                # confirm_alias validates before it writes, so a conflict leaves nothing half-done.
+                skipped += 1
+                continue
+            confirmed += 1
+            reconciled += int(result["reconciled_spans"])
+        return {"confirmed": confirmed, "skipped": skipped, "reconciled_spans": reconciled}
+
+    def unconfirm_alias(
+        self, context: TenantContext, *, project_id: str, speaker_id: str, alias: str,
+    ) -> dict[str, object]:
+        """Undo a confirmed alias: reject it (so it is not suggested again) and restore what confirming it changed.
+
+        The spans its confirmation reattributed get their previous interpretation back (and their review
+        issues reopen), and the suggestions and detected speakers it displaced return. Spans the user has
+        since resolved by hand keep the user's choice.
+        """
+        UUID(speaker_id)
+        normalized_name = normalize_speaker_name(display_speaker_name(alias))
+        row = self.connection.execute(
+            """SELECT id, alias, provenance
+                 FROM omnix_audiobook_speaker_aliases
+                WHERE workspace_id = %s AND project_id = %s AND speaker_id = %s::uuid
+                  AND status = 'confirmed'
+                  AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
+                FOR UPDATE""",
+            (context.workspace_id, project_id, speaker_id, normalized_name),
+        ).fetchone()
+        if row is None:
+            raise KeyError(alias)
+        alias_id, name, provenance = str(row[0]), str(row[1]), dict(row[2] or {})
+        provenance["unconfirmed_by_user_id"] = context.user_id
+        self.connection.execute(
+            """UPDATE omnix_audiobook_speaker_aliases
+                  SET status = 'rejected', provenance = %s::jsonb
+                WHERE workspace_id = %s AND project_id = %s AND id = %s""",
+            (canonical_json(provenance), context.workspace_id, project_id, alias_id),
+        )
+        restored_aliases = self.connection.execute(
+            """UPDATE omnix_audiobook_speaker_aliases SET status = 'proposed'
+                WHERE workspace_id = %s AND project_id = %s
+                  AND id = ANY(%s) AND status = 'rejected'""",
+            (context.workspace_id, project_id, list(provenance.get("superseded_alias_ids", []))),
+        ).rowcount
+        restored_speakers = self.connection.execute(
+            """UPDATE omnix_audiobook_speakers SET status = 'proposed'
+                WHERE workspace_id = %s AND project_id = %s
+                  AND id = ANY(%s::uuid[]) AND status = 'rejected'""",
+            (context.workspace_id, project_id, list(provenance.get("superseded_speaker_ids", []))),
+        ).rowcount
+        # The current source's spans whose latest interpretation is this alias's reconciliation.
+        reattributed = self.connection.execute(
+            """
+            SELECT a.span_id, a.evidence->>'previous_annotation_id'
+              FROM omnix_audiobook_spans AS s
+              JOIN omnix_audiobook_chapters AS ch
+                ON ch.workspace_id = s.workspace_id AND ch.id = s.chapter_id
+              JOIN omnix_audiobook_projects AS p
+                ON p.workspace_id = ch.workspace_id
+               AND p.current_source_revision_id = ch.source_revision_id
+              JOIN LATERAL (
+                  SELECT span_id, speaker_id, evidence, classifier
+                    FROM omnix_audiobook_annotations
+                   WHERE workspace_id = s.workspace_id AND span_id = s.id
+                   ORDER BY revision DESC LIMIT 1
+              ) AS a ON TRUE
+             WHERE s.workspace_id = %s AND p.id = %s
+               AND a.classifier->>'mode' = 'confirmed_alias'
+               AND a.speaker_id = %s::uuid
+               AND lower(regexp_replace(trim(COALESCE(a.classifier->>'alias', '')), '\\s+', ' ', 'g')) = %s
+            """,
+            (context.workspace_id, project_id, speaker_id, normalized_name),
+        ).fetchall()
+        restored_spans = 0
+        for span_id, previous_id in reattributed:
+            previous = self.connection.execute(
+                """SELECT role, speaker_id, speaker_candidate, delivery, evidence,
+                          classifier, review_status
+                     FROM omnix_audiobook_annotations
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, previous_id),
+            ).fetchone()
+            if previous is None:
+                continue
+            role, previous_speaker, candidate, delivery, evidence, classifier, review_status = previous
+            restored_evidence = dict(evidence or {})
+            restored_evidence.update({"restored_annotation_id": str(previous_id), "unconfirmed_alias": name})
+            next_revision = int(self.connection.execute(
+                """SELECT COALESCE(MAX(revision), 0) + 1 FROM omnix_audiobook_annotations
+                    WHERE workspace_id = %s AND span_id = %s""",
+                (context.workspace_id, span_id),
+            ).fetchone()[0])
+            self.connection.execute(
+                """INSERT INTO omnix_audiobook_annotations
+                    (id, workspace_id, span_id, revision, role, speaker_id,
+                     speaker_candidate, delivery, evidence, classifier, review_status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)""",
+                (f"ab:an:{uuid4().hex}", context.workspace_id, span_id, next_revision, role,
+                 previous_speaker, candidate, delivery, canonical_json(restored_evidence),
+                 canonical_json(dict(classifier or {})), review_status),
+            )
+            # The issue the confirmation resolved is open again (it belongs to the restored interpretation).
+            self.connection.execute(
+                """UPDATE omnix_audiobook_review_issues
+                      SET status = 'open', resolution = NULL, resolved_at = NULL
+                    WHERE workspace_id = %s AND annotation_id = %s AND status = 'resolved'
+                      AND resolution->>'mode' = 'confirmed_alias'""",
+                (context.workspace_id, previous_id),
+            )
+            restored_spans += 1
+        if restored_spans:
+            self._after_alias_attribution_change(context, project_id)
+        return {"id": alias_id, "speaker_id": speaker_id, "alias": name, "status": "rejected",
+                "restored_spans": restored_spans, "restored_suggestions": int(restored_aliases or 0),
+                "restored_speakers": int(restored_speakers or 0)}
 
     def assign_voice(
         self, context: TenantContext, *, project_id: str, speaker_id: str,
@@ -720,7 +898,7 @@ class PostgresAudiobookReviewRepository:
               JOIN omnix_audiobook_source_revisions AS r ON r.workspace_id = c.workspace_id AND r.id = c.source_revision_id
               JOIN omnix_audiobook_projects AS p ON p.workspace_id = r.workspace_id AND p.id = r.project_id AND p.current_source_revision_id = r.id
              WHERE i.workspace_id = %s AND i.status = 'open' AND r.project_id = %s
-            """, (context.workspace_id, project_id),
+               AND NOT """ + chapter_removed_sql("c", "r.project_id"), (context.workspace_id, project_id),
         ).fetchone()[0])
         if remaining == 0:
             self.connection.execute(
@@ -729,6 +907,88 @@ class PostgresAudiobookReviewRepository:
             )
         return {"annotation_id": annotation_id, "span_id": str(row[1]),
                 "revision": next_revision, "remaining_review_issues": remaining}
+
+    def apply_performance_directions(
+        self, context: TenantContext, *, project_id: str,
+        directions: dict[str, str], director: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write generated delivery directions as new annotation revisions.
+
+        Each revision copies its predecessor (role, speaker, review status,
+        classifier and evidence) and changes only the delivery, so user
+        decisions and confirmed aliases keep their meaning. A span is left
+        alone when it is not dialogue, has an open review issue, or carries a
+        delivery the user wrote (one not marked as directed).
+        """
+        project = self.connection.execute(
+            """SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        if project is None:
+            raise KeyError(project_id)
+        changed: list[str] = []
+        kept_user_delivery = 0
+        for span_id, delivery in directions.items():
+            row = self.connection.execute(
+                """SELECT a.revision, a.role, a.speaker_id, a.speaker_candidate, a.delivery,
+                          a.evidence, a.classifier, a.review_status,
+                          EXISTS (SELECT 1 FROM omnix_audiobook_review_issues i
+                                    JOIN omnix_audiobook_annotations ia
+                                      ON ia.workspace_id = i.workspace_id AND ia.id = i.annotation_id
+                                   WHERE i.workspace_id = a.workspace_id AND ia.span_id = a.span_id
+                                     AND i.status = 'open')
+                     FROM omnix_audiobook_spans s
+                     JOIN omnix_audiobook_chapters c
+                       ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                     JOIN omnix_audiobook_projects p
+                       ON p.workspace_id = c.workspace_id
+                      AND p.current_source_revision_id = c.source_revision_id
+                     JOIN LATERAL (
+                        SELECT * FROM omnix_audiobook_annotations
+                         WHERE workspace_id = s.workspace_id AND span_id = s.id
+                         ORDER BY revision DESC LIMIT 1
+                     ) a ON TRUE
+                    WHERE s.workspace_id = %s AND p.id = %s AND s.id = %s""",
+                (context.workspace_id, project_id, span_id),
+            ).fetchone()
+            if row is None:
+                continue
+            revision, role, speaker_id, candidate, current, evidence, classifier, review_status, open_issue = row
+            evidence = dict(evidence or {})
+            if role != "dialogue" or open_issue or str(current) == delivery:
+                continue
+            if str(current) and evidence.get("delivery_source") != "performance_director":
+                kept_user_delivery += 1
+                continue
+            self.connection.execute(
+                """INSERT INTO omnix_audiobook_annotations
+                    (id, workspace_id, span_id, revision, role, speaker_id,
+                     speaker_candidate, delivery, evidence, classifier, review_status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)""",
+                (f"ab:an:{uuid4().hex}", context.workspace_id, span_id, int(revision) + 1, role,
+                 speaker_id, candidate, delivery,
+                 canonical_json({**evidence, "previous_revision": int(revision),
+                                 "delivery_source": "performance_director"}),
+                 canonical_json({**dict(classifier or {}), "performance_direction": director}),
+                 review_status),
+            )
+            changed.append(span_id)
+        if changed:
+            if project[0]:
+                self._cancel_render_jobs(context, str(project[0]))
+            self.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered',
+                                                    'ready_to_export', 'exported')
+                                       THEN 'ready_to_render' ELSE state END,
+                          settings = settings - 'current_render_run_id',
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project_id),
+            )
+        return {"changed_span_ids": changed, "kept_user_delivery": kept_user_delivery}
 
     def revise_span(
         self, context: TenantContext, *, project_id: str, span_id: str,

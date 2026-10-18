@@ -29,6 +29,10 @@ class PaperProtectionUpsert(BaseModel):
     entry_order_id: str | None = Field(default=None, max_length=200)
     take_profit: Decimal | None = Field(default=None, gt=0)
     stop_loss: Decimal | None = Field(default=None, gt=0)
+    # A trailing stop-loss leg (TVP-7.1): stop_loss is the initial stop, and the
+    # server moves it behind the best price by exactly one of these.
+    trail_amount: Decimal | None = Field(default=None, gt=0)
+    trail_percent: Decimal | None = Field(default=None, gt=0, lt=100)
 
     @model_validator(mode="after")
     def require_level(self):
@@ -42,7 +46,15 @@ class PaperProtectionUpsert(BaseModel):
             and self.take_profit == self.stop_loss
         ):
             raise ValueError("take_profit and stop_loss must differ")
+        if self.trail_amount is not None and self.trail_percent is not None:
+            raise ValueError("a trailing stop uses trail_amount or trail_percent, not both")
+        if (self.trail_amount is not None or self.trail_percent is not None) and self.stop_loss is None:
+            raise ValueError("a trailing stop requires stop_loss as its initial stop")
         return self
+
+    @property
+    def trailing(self) -> bool:
+        return self.trail_amount is not None or self.trail_percent is not None
 
 
 class PaperPositionProtection(BaseModel):
@@ -61,6 +73,17 @@ class PaperPositionProtection(BaseModel):
     revision: int = Field(default=1, ge=1)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    trail_amount: Decimal | None = None
+    trail_percent: Decimal | None = None
+    # The best price since the leg became active; the monitor keeps stop_loss
+    # trailing behind it. Persisted, so a restart resumes the same trail.
+    trail_water_mark: Decimal | None = None
+    # When the trailed stop last moved; see ``paper_protection_trigger``.
+    trail_moved_at: datetime | None = None
+
+    @property
+    def trailing(self) -> bool:
+        return self.trail_amount is not None or self.trail_percent is not None
 
     @model_validator(mode="after")
     def binding_authority_consistent(self):

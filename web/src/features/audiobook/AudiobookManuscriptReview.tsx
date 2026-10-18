@@ -1,7 +1,23 @@
 import { audiobookApi } from './audiobookApi';
 import { audiobook, base, reclassifyAudiobook } from './audiobookWorkspaceModel';
+import type { ChapterSummary, Span } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
 import { api } from './api/gateway';
+
+/** Pronunciation changes worth showing; page-layout whitespace folded into a line break is not one. */
+function wordChanges(transformations: Span['speech_plan']['transformations']) {
+  return transformations.filter((item) => item.rule !== 'layout_whitespace');
+}
+
+/** Leaves the whole chapter out of the audiobook, or brings it back. */
+function ChapterAudioToggle({ ws, chapter }: { ws: AudiobookWorkspaceModel; chapter: ChapterSummary }) {
+  const { action, busy, project } = ws;
+  if (!project) return null;
+  const removalId = chapter.audio_removal_id;
+  return removalId
+    ? <button type="button" disabled={busy} onClick={() => void action(() => audiobookApi.restoreSpeech(project.id, removalId), `“${chapter.title}” is back in the audiobook. Regenerate audio to hear it.`)}>Restore chapter</button>
+    : <button type="button" disabled={busy} onClick={() => void action(() => audiobookApi.removeChapterFromAudio(project.id, chapter.id), `“${chapter.title}” removed from the audiobook. Its text stays in the source.`)}>Remove chapter from audio</button>;
+}
 
 /** The manuscript review: source text and characterization spans. */
 export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel }) {
@@ -14,12 +30,34 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
     spokenTerm, submitPronunciation, visibleSpans, workspaceMode,
   } = ws;
   if (!project) return null;
+  const activeChapter = project.chapters.find((chapter) => chapter.id === activeChapterId);
   return (
     <>
       {workspaceMode === 'review' && librarySection === 'projects' &&
       <div className="audiobook-manuscript" id="audiobook-manuscript">
+        {selectedChapter && <section className="audiobook-card audiobook-classify-section" aria-labelledby="audiobook-classify-title">
+          <div className="audiobook-section-title"><div><p className="eyebrow">Phase 3</p><h2 id="audiobook-classify-title">Text classification</h2><p className="audiobook-subtitle">Review the quote spans below first, then classify text to assign each span to a speaker.</p></div>
+            <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
+              onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
+              {reclassificationRunning ? 'Classifying…' : 'Classify text'}
+            </button>
+          </div>
+          <label className="audiobook-classification-rules">Custom classification rules (optional)
+            <textarea value={classificationRules[project.id] ?? project.classification_rules ?? ''} maxLength={4000} rows={3}
+              disabled={busy || reclassificationRunning}
+              onChange={(event) => setClassificationRules((current) => ({ ...current, [project.id]: event.target.value }))}
+              placeholder="Character quotes can also be in speaker: quote format, e.g. Ehsan: It’s working again."
+              aria-describedby="classification-rules-help" />
+            <small id="classification-rules-help">Review the extracted quote spans before clicking Classify text. Classification assigns speakers to these spans and does not re-extract quotes.</small>
+            {rulesNeedExtraction && <small>Rules changed. Open Book source, extract quotes again, and review the spans first.</small>}
+          </label>
+        </section>}
         <section className="audiobook-card audiobook-source-panel" aria-labelledby="audiobook-source-text-title">
-        <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2 id="audiobook-source-text-title">Source text</h2><p className="audiobook-subtitle">{selectedChapter?.title ?? project.chapters.find((chapter) => chapter.id === activeChapterId)?.title ?? 'Awaiting extraction'} · Select a passage to open its span below.</p></div><span>{project.chapters.length} chapters</span></div>
+        <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2 id="audiobook-source-text-title">Source text</h2><p className="audiobook-subtitle">{selectedChapter?.title ?? activeChapter?.title ?? 'Awaiting extraction'} · Select a passage to open its span below.</p></div>
+          <div className="audiobook-source-chapter-actions"><span>{project.chapters.length} chapters</span>
+            {activeChapter && <ChapterAudioToggle ws={ws} chapter={activeChapter} />}
+          </div></div>
+        {activeChapter?.audio_removal_id && <p className="audiobook-chapter-removed-notice" role="status">This chapter is left out of the audiobook: none of it is read, and its review issues no longer block rendering. Restore the chapter to read it again.</p>}
         {selectedChapter ?
           <div role="group" className="audiobook-text" aria-label="Canonical chapter text">
             {selectedChapter.spans.map((span) => <span key={span.id} role="button" tabIndex={0}
@@ -37,20 +75,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
         </section>
         {selectedChapter && <section className="audiobook-card audiobook-spans-section" aria-label="Characterization spans">
             <div className="audiobook-section-title"><div><p className="eyebrow">Speech review</p><h2>Span review</h2><p className="audiobook-subtitle">Review extracted quote spans before classifying text. Select text in a passage to remove it from audio or set a word’s pronunciation. Expand a span to edit its character and delivery.</p></div>
-              <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
-                onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
-                {reclassificationRunning ? 'Classifying…' : 'Classify text'}
-              </button>
             </div>
-            <label className="audiobook-classification-rules">Custom classification rules (optional)
-              <textarea value={classificationRules[project.id] ?? project.classification_rules ?? ''} maxLength={4000} rows={3}
-                disabled={busy || reclassificationRunning}
-                onChange={(event) => setClassificationRules((current) => ({ ...current, [project.id]: event.target.value }))}
-                placeholder="Character quotes can also be in speaker: quote format, e.g. Ehsan: It’s working again."
-                aria-describedby="classification-rules-help" />
-              <small id="classification-rules-help">Review the extracted quote spans before clicking Classify text. Classification assigns speakers to these spans and does not re-extract quotes.</small>
-              {rulesNeedExtraction && <small>Rules changed. Open Book source, extract quotes again, and review the spans first.</small>}
-            </label>
             <label className="audiobook-span-filter">Filter by character
               <select aria-label="Filter spans by character" value={speakerFilter} onChange={(event) => setSpeakerFilter(event.target.value)}>
                 <option value="all">All characters</option><option value="unassigned">Unassigned</option>
@@ -78,7 +103,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
                       : !speaker.casting
                         ? `Assign a voice to ${speaker.canonical_name} in Cast & Voice Tools to preview audio.`
                         : null;
-                const expanded = (expandedSpanId === undefined ? selectedChapter.spans[0]?.id : expandedSpanId) === span.id;
+                const expanded = expandedSpanId === span.id;
                 const issue = project.review_issues.find((item) => item.span_id === span.id);
                 return <article className="audiobook-preview-row" key={span.id}>
                   <div className="audiobook-span-summary"><div><small>{span.annotation?.role ?? span.structural_kind} · {speaker?.canonical_name ?? span.annotation?.speaker_candidate ?? 'Unassigned'}{span.annotation?.review_status === 'review_required' ? ' · Needs review' : ''}</small>
@@ -108,7 +133,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
                         setSelectedPronunciation(null);
                       }, 'Text removed from this passage’s audio. Regenerate audio to hear the change.')}>Remove from audio</button>
                     </div>}
-                    {span.speech_exclusions?.map((item) => <div className="audiobook-span-removal" key={item.id}>
+                    {span.speech_exclusions?.filter((item) => item.id !== activeChapter?.audio_removal_id).map((item) => <div className="audiobook-span-removal" key={item.id}>
                       <span>Removed from audio: “{item.source_text}”</span>
                       <button type="button" disabled={busy} onClick={() => void action(async () => {
                         await audiobook(api.DELETE('/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}', {
@@ -122,7 +147,7 @@ export function AudiobookManuscriptReview({ ws }: { ws: AudiobookWorkspaceModel 
                       <button disabled={busy || !spokenTerm.trim()}>Save for whole book</button>
                     </form>}
                     <p className="audiobook-span-spoken"><strong>Spoken text</strong> {span.speech_plan.tts_input_text}</p>
-                    {span.speech_plan.transformations.length > 0 && <small>Speech changes: {span.speech_plan.transformations.map((item) => `${item.source} → ${item.spoken}`).join(', ')}</small>}
+                    {wordChanges(span.speech_plan.transformations).length > 0 && <small>Speech changes: {wordChanges(span.speech_plan.transformations).map((item) => `${item.source} → ${item.spoken}`).join(', ')}</small>}
                     {issue && <p className="audiobook-review-reason"><strong>Review: {issue.reason}</strong> {JSON.stringify(issue.evidence ?? {})}</p>}
                     {edit && <div role="group" className="audiobook-annotation-controls" aria-label="Span interpretation controls">
                       <label>Speaker<select aria-label="Selected span speaker" value={edit.speaker_id} onChange={(event) => changeSpanEdit({ speaker_id: event.target.value })}>

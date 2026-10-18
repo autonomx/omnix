@@ -71,7 +71,7 @@ class PostgresPlanningRepository:
         ).fetchone()
         return int(row[0] or 0)
 
-    def get_state(self, run_id: str) -> dict[str, object] | None:
+    def get_state(self, run_id: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             """
             SELECT mode, task_revision_id, status, latest_plan_revision_id,
@@ -105,8 +105,8 @@ class PostgresPlanningRepository:
         latest_plan_revision_id: str | None,
         active_plan_revision_id: str | None,
         planning_baseline_id: str | None,
-        baseline_provenance: dict[str, object] | None = None,
-    ) -> dict[str, object]:
+        baseline_provenance: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         row = self.connection.execute(
             """
             INSERT INTO omnix_agent_planning_state (

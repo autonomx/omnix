@@ -7,6 +7,7 @@ from ..contracts import IssuerIdentity, TradingEvidence, fingerprint
 from ..runtime_policy import assert_external_web_search_allowed
 from ..source_authority import source_authority_tier
 from .base import AdapterExecutionResult
+from typing import Any, cast
 
 
 class GenericWebAdapter:
@@ -63,7 +64,7 @@ class GenericWebAdapter:
                 evidence_type="web_search_result",
                 source_type="web",
                 source_locator=locator or f"search:{q}",
-                source_authority_tier=tier,
+                source_authority_tier=cast(Any, tier),
                 captured_at=captured,
                 title=item.title,
                 content=content,
@@ -103,7 +104,7 @@ class GenericWebAdapter:
             evidence_type="web_extracted_page",
             source_type="web",
             source_locator=locator,
-            source_authority_tier=tier,
+            source_authority_tier=cast(Any, tier),
             captured_at=captured,
             title=page.title,
             content=content[:250_000],

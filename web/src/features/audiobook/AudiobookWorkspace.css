@@ -74,7 +74,11 @@
   .audiobook-manuscript { display: grid; gap: 1.5rem; min-width: 0; }
   .audiobook-render-blockers { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, var(--c-violet-660) 25%, transparent); font-size: 0.85rem; }
   .audiobook-render-blockers ul { margin-bottom: 0; padding-left: 1.2rem; }
+  .audiobook-render-request { margin: 0.8rem 0 0; font-size: 0.85rem; color: var(--ab-text-muted); }
+  .audiobook-render-request.error { color: var(--c-red-770); }
   .audiobook-source-panel { border-top: 3px solid color-mix(in srgb, var(--c-sky-760) 55%, transparent); }
+  .audiobook-source-chapter-actions { display: flex; flex-direction: column; align-items: end; gap: 0.5rem; flex: none; }
+  .audiobook-chapter-removed-notice { margin: 0 0 0.9rem; padding: 0.6rem 0.8rem; border: 1px solid color-mix(in srgb, var(--c-amber-830) 38%, transparent); border-radius: 0.5rem; background: color-mix(in srgb, var(--c-yellow-530) 14%, transparent); font-size: 0.82rem; line-height: 1.45; }
   .audiobook-text { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-family: Georgia, 'Times New Roman', serif; font-size: 1.08rem; line-height: 1.8; padding: 0.8rem 0.2rem; }
   .audiobook-source-span { cursor: pointer; border-radius: 0.15rem; }
   .audiobook-source-span:hover, .audiobook-source-span.selected { background: color-mix(in srgb, var(--c-violet-660) 19%, transparent); }
@@ -84,6 +88,8 @@
   .audiobook-annotation-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; align-items: end; margin: 0.8rem 0; }
   .audiobook-annotation-controls label { display: grid; gap: 0.3rem; font-size: 0.8rem; }
   .audiobook-annotation-controls label:nth-child(3) { grid-column: 1 / -1; }
+  .audiobook-classify-section .audiobook-section-title { align-items: start; gap: 1rem; }
+  .audiobook-classify-section .audiobook-classification-rules { margin-bottom: 0; }
   .audiobook-spans-section { border-top: 3px solid color-mix(in srgb, var(--c-violet-660) 65%, transparent); }
   .audiobook-spans-section .audiobook-section-title { align-items: start; gap: 1rem; }
   .audiobook-spans-section h3 { margin: 0; }
@@ -272,6 +278,17 @@
   .audiobook-card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .audiobook-card-actions button:first-child { background: linear-gradient(100deg, var(--c-indigo-480-2), var(--c-blue-650)); color: var(--c-neutral-1000); }
   .audiobook-cast-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .audiobook-performance { display: grid; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--audiobook-border, rgba(127, 127, 127, 0.25)); }
+  .audiobook-performance-levels, .audiobook-performance-character { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 12px; align-items: end; }
+  .audiobook-performance-characters { display: grid; gap: 8px; }
+  .audiobook-performance-own { display: flex; align-items: center; gap: 8px; }
+  .audiobook-performance-own small { opacity: 0.7; white-space: nowrap; }
+  /* The workspace input rule stretches every input to full width; a checkbox keeps its own size here. */
+  .audiobook-workspace .audiobook-performance-own input[type='checkbox'] { flex: none; width: auto; margin: 0; padding: 0; }
+  .audiobook-performance-slider { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; }
+  .audiobook-performance-slider input { grid-column: 1 / -1; width: 100%; }
+  .audiobook-performance-direction { display: grid; gap: 8px; }
+  .audiobook-performance-auto { display: grid; gap: 4px; max-width: 24rem; }
   .audiobook-voice-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .audiobook-cast-card { display: grid; grid-template-columns: minmax(12rem, 1.15fr) minmax(12rem, 1fr) auto; gap: 12px; align-items: end; padding: 12px; }
   .audiobook-cast-card > div:first-child { display: grid; grid-template-columns: 42px 1fr; column-gap: 10px; align-items: center; }
@@ -298,6 +315,8 @@
   .audiobook-outline { gap: 7px; }
   .audiobook-outline button { padding: 10px; border-color: color-mix(in srgb, var(--c-violet-650) 20%, transparent); background: color-mix(in srgb, var(--c-slate-150-2) 62%, transparent); }
   .audiobook-outline button.selected { border-color: var(--c-indigo-600); box-shadow: inset 3px 0 var(--c-sky-800); }
+  .audiobook-outline button.removed { opacity: 0.6; }
+  .audiobook-outline button.removed .audiobook-outline-title { text-decoration: line-through; }
   .audiobook-outline-add { width: 100%; margin-top: 8px; }
   .audiobook-get-started ol { display: grid; gap: 14px; margin: 0; padding: 0 0 0 28px; }
   .audiobook-get-started li { padding-left: 5px; color: var(--c-neutral-960); }
@@ -378,6 +397,12 @@
   .audiobook-status-meter span { color: var(--ab-text-muted); font-size: 0.75rem; }
   .audiobook-status-meter b { align-self: center; font-size: 1.25rem; }
   .audiobook-status-meter progress { grid-column: 1 / -1; width: 100%; height: 8px; accent-color: var(--c-violet-540); }
+  /* With open issues the whole card opens the review queue: the button's ::after covers the card. */
+  .audiobook-status-meter.has-issues { position: relative; }
+  .audiobook-status-meter.has-issues:hover { border-color: color-mix(in srgb, var(--c-blue-650) 60%, transparent); }
+  .audiobook-status-meter .audiobook-status-issues { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--ab-text-muted); font-size: 0.75rem; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
+  .audiobook-status-meter .audiobook-status-issues::after { content: ''; position: absolute; inset: 0; border-radius: 10px; }
+  .audiobook-status-meter.has-issues:hover .audiobook-status-issues { color: inherit; }
   .audiobook-production-flow { grid-column: 1 / -1; min-width: 0; padding-top: 16px; border-top: 1px solid color-mix(in srgb, var(--c-violet-650) 20%, transparent); }
   .audiobook-production-flow-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
   .audiobook-production-flow-heading .eyebrow { margin: 0 0 3px; }
@@ -543,7 +568,7 @@
   .audiobook-render-queue .audiobook-section-title > .audiobook-row-actions { margin-left: auto; flex-wrap: wrap; }
   .audiobook-render-queue .audiobook-section-title > .audiobook-row-actions button { padding: .3rem .5rem; font-size: .68rem; }
   .audiobook-render-table { overflow: auto; }
-  .audiobook-render-table-head, .audiobook-render-row { display: grid; grid-template-columns: 28px minmax(10rem, 1.5fr) 5.6rem minmax(7rem, 1fr) 3rem minmax(8rem, auto); gap: 7px; align-items: center; min-width: 610px; padding: 8px 7px; }
+  .audiobook-render-table-head, .audiobook-render-row { display: grid; grid-template-columns: 28px minmax(10rem, 1.5fr) 6.4rem minmax(7rem, 1fr) 6.6rem minmax(9rem, auto); gap: 7px; align-items: center; min-width: 720px; padding: 8px 7px; }
   .audiobook-render-table-head { color: var(--ab-text-muted); font-size: .61rem; letter-spacing: .06em; text-transform: uppercase; }
   .audiobook-render-row { border-top: 1px solid color-mix(in srgb, var(--c-violet-650) 13%, transparent); font-size: .72rem; }
   .audiobook-render-row .audiobook-row-actions { flex-wrap: wrap; }
@@ -559,6 +584,14 @@
   .render-status-cancelling, .render-status-canceled, .render-status-stale { color: var(--ab-text-muted); }
   .render-status-failed { color: var(--c-red-770); }
   .render-row-progress { display: flex; align-items: center; gap: 6px; }
+  .audiobook-export-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; font-size: .78rem; }
+  .audiobook-export-status progress { flex: 1 1 12rem; height: 8px; accent-color: var(--c-sky-750); }
+  .audiobook-export-status.error { color: var(--c-red-770); }
+  .audiobook-export-status button { padding: .28rem .6rem; font-size: .72rem; }
+  .render-row-time { color: var(--ab-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .audiobook-render-row em small { color: var(--ab-text-muted); }
+  .audiobook-render-order-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: 0 0 8px; color: var(--ab-text-muted); font-size: .72rem; }
+  .audiobook-render-order-bar button { padding: .28rem .55rem; font-size: .68rem; }
   .render-row-progress progress { width: 100%; height: 7px; accent-color: var(--c-sky-750); }
   .render-row-progress small { color: var(--ab-text-muted); }
   .audiobook-mastering { display: grid; align-content: start; gap: 9px; }
@@ -765,6 +798,12 @@
   .audiobook-settings-heading .eyebrow, .audiobook-danger-settings .eyebrow { margin: 0 0 3px; }
   .audiobook-settings-heading h2, .audiobook-danger-settings h2 { font-size: 1.12rem; }
   .audiobook-source-state { flex: none; padding: 4px 9px; border: 1px solid color-mix(in srgb, var(--c-amber-830) 38%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-yellow-530) 18%, transparent); color: var(--c-yellow-870); font-size: .69rem; font-weight: 700; white-space: nowrap; }
+  .audiobook-source-state.working { border-color: color-mix(in srgb, var(--c-sky-750) 40%, transparent); background: color-mix(in srgb, var(--c-sky-750) 14%, transparent); color: var(--c-sky-750); }
+  .audiobook-source-progress { display: grid; gap: 6px; margin: 0; font-size: .8rem; }
+  .audiobook-source-progress progress { width: 100%; height: 8px; accent-color: var(--c-sky-750); }
+  .audiobook-source-progress small { color: var(--ab-text-muted); }
+  .audiobook-source-progress.error { color: var(--c-red-770); }
+  .audiobook-source-file-button.disabled { opacity: .55; cursor: not-allowed; }
   .audiobook-source-state.attached { border-color: color-mix(in srgb, var(--c-teal-740) 38%, transparent); background: color-mix(in srgb, var(--c-teal-520) 16%, transparent); color: var(--c-teal-860); }
   .audiobook-source-filename { overflow: hidden; margin: 0; padding: 11px 12px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 22%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--c-blue-130) 54%, transparent); color: var(--c-slate-940); font-size: .89rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
   .audiobook-settings-description { margin: 0; color: var(--ab-text-muted); font-size: .8rem; line-height: 1.5; }
@@ -789,7 +828,14 @@
   .audiobook-classification-rules small { color: var(--ab-text-muted); line-height: 1.4; }
   .audiobook-span-removal { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin: .75rem 0; }
   .audiobook-source-reclassify p { margin: 3px 0 0; color: var(--ab-text-muted); font-size: .75rem; line-height: 1.4; }
-  .audiobook-source-reclassify button { flex: none; min-width: 124px; }
+  .audiobook-source-reclassify > button { flex: none; min-width: 124px; }
+  .audiobook-source-phases { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .audiobook-source-phases > .audiobook-source-reclassify { padding: 12px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 20%, transparent); border-radius: 9px; }
+  .audiobook-source-phases > .audiobook-source-reclassify.complete { border-color: color-mix(in srgb, var(--c-teal-740) 50%, transparent); background: color-mix(in srgb, var(--c-teal-520) 12%, transparent); }
+  .audiobook-source-phase-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .audiobook-source-phase-todos { display: grid; gap: 4px; margin: 8px 0 0; padding-left: 1.1rem; color: var(--ab-text-muted); font-size: .75rem; }
+  .audiobook-source-phase-todos button { min-height: 0; padding: 0; border: 0; background: none; color: var(--ab-cyan); font: inherit; text-align: left; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .audiobook-source-phase-todos button:hover { text-decoration-thickness: 2px; }
   .audiobook-settings-fields { display: grid; gap: 11px; }
   .audiobook-settings-fields label, .audiobook-reading-mode { display: grid; gap: 6px; min-width: 0; color: var(--c-slate-850); font-size: .8rem; }
   .audiobook-reading-mode small { color: var(--ab-text-muted); font-size: .73rem; line-height: 1.45; }
@@ -806,16 +852,49 @@
   :root[data-omnix-appearance='light'] .audiobook-settings-fields label, :root[data-omnix-appearance='light'] .audiobook-reading-mode, :root[data-omnix-appearance='light'] .audiobook-source-library summary, :root[data-omnix-appearance='light'] .audiobook-source-advanced summary { color: var(--c-indigo-340); }
   :root[data-omnix-appearance='light'] .audiobook-source-state.needed { background: var(--c-yellow-980); color: var(--c-amber-450); }
   :root[data-omnix-appearance='light'] .audiobook-source-state.attached { background: var(--c-teal-950); color: var(--c-teal-470); }
+  :root[data-omnix-appearance='light'] .audiobook-source-phases > .audiobook-source-reclassify { border-color: color-mix(in srgb, var(--c-violet-470) 20%, transparent); }
+  :root[data-omnix-appearance='light'] .audiobook-source-phases > .audiobook-source-reclassify.complete { background: color-mix(in srgb, var(--c-teal-950) 75%, transparent); border-color: color-mix(in srgb, var(--c-teal-520) 40%, transparent); }
   @media (max-width: 1450px) { .audiobook-project-actions { grid-template-columns: 1fr; } }
-  @media (max-width: 620px) { .audiobook-source-actions { grid-template-columns: 1fr; } .audiobook-source-reclassify, .audiobook-danger-settings { align-items: stretch; flex-direction: column; } .audiobook-source-reclassify button, .audiobook-danger-settings button { width: 100%; } }
+  @media (max-width: 620px) { .audiobook-source-actions { grid-template-columns: 1fr; } .audiobook-source-reclassify, .audiobook-danger-settings { align-items: stretch; flex-direction: column; } .audiobook-source-reclassify > button, .audiobook-danger-settings button { width: 100%; } }
   .audiobook-modal-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; padding: 1rem; background: color-mix(in srgb, var(--c-slate-100) 76%, transparent); backdrop-filter: blur(5px); }
   .audiobook-confirmation-dialog { width: min(30rem, 100%); padding: 1.25rem; border: 1px solid color-mix(in srgb, var(--c-red-720) 55%, transparent); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--c-violet-230) 98%, transparent), color-mix(in srgb, var(--c-indigo-170) 99%, transparent)); box-shadow: 0 22px 70px color-mix(in srgb, var(--c-neutral-0) 50%, transparent); }
   .audiobook-confirmation-dialog h2 { margin: .35rem 0 .65rem; font-size: 1.2rem; }
   .audiobook-confirmation-dialog > p:not(.eyebrow) { margin: 0; color: var(--ab-text-muted); font-size: .82rem; line-height: 1.5; }
   .audiobook-confirmation-actions { display: flex; justify-content: end; gap: 7px; margin-top: 1rem; }
 
+  /* The AI profile and suggested aliases: a row of their own across the card, under the name, voice and actions. */
+  .audiobook-characters-panel .audiobook-cast-card .audiobook-cast-details { display: flex; flex-wrap: wrap; align-items: start; gap: 10px 28px; grid-column: 1 / -1; }
+  .audiobook-cast-details:empty { display: none; }
+  .audiobook-cast-details > .audiobook-proposed-aliases { margin-top: 0; }
+  .audiobook-ai-profile { display: grid; justify-items: start; gap: 5px; min-width: 0; }
+  .audiobook-ai-profile > small { color: var(--ab-text-muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .audiobook-ai-profile ul { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
+  .audiobook-ai-profile li { padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 28%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-violet-540) 12%, transparent); color: inherit; font-size: .76rem; line-height: 1.35; }
+  /* Human review queue: every open issue in the main view, grouped by chapter. */
+  .audiobook-review-queue { display: grid; gap: 14px; scroll-margin-top: 90px; }
+  .audiobook-review-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
+  .audiobook-review-filters > label { display: grid; gap: 5px; color: var(--ab-text-muted); font-size: .78rem; }
+  .audiobook-review-filters > .audiobook-search-field { flex: 1 1 14rem; }
+  .audiobook-review-count { margin-left: auto; color: var(--ab-text-muted); font-size: .78rem; white-space: nowrap; }
+  .audiobook-review-group { display: grid; gap: 8px; }
+  .audiobook-review-group > h3 { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: .95rem; }
+  .audiobook-review-group > h3 > span, .audiobook-review-summary h2 > span { padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--c-violet-540) 22%, transparent); font-size: .74rem; font-weight: 600; }
+  .audiobook-review-item { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--c-violet-650) 20%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--c-indigo-170) 68%, transparent); }
+  .audiobook-review-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: .8rem; }
+  .audiobook-review-reason { padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--c-orange-580) 40%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-orange-580) 12%, transparent); font-size: .74rem; font-weight: 600; }
+  .audiobook-review-item blockquote { margin: 0; padding: 2px 0 2px 12px; border-left: 3px solid color-mix(in srgb, var(--c-violet-540) 55%, transparent); font-size: .9rem; line-height: 1.5; white-space: pre-wrap; }
+  .audiobook-review-item > p { margin: 0; font-size: .78rem; }
+  .audiobook-review-item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .audiobook-review-item-actions > select { flex: 0 1 16rem; width: auto; min-width: 12rem; }
+  .audiobook-review-summary > p { display: flex; justify-content: space-between; gap: 10px; margin: 4px 0; font-size: .8rem; }
+  .audiobook-review-summary > p > span { color: var(--ab-text-muted); }
   .audiobook-proposed-aliases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
   .audiobook-proposed-aliases > small { width: 100%; color: var(--ab-text-muted); font-size: .72rem; }
+  .audiobook-cast-details .audiobook-proposed-aliases > button { border-style: dashed; }
+  .audiobook-alias-chip { display: inline-flex; align-items: center; gap: 2px; min-height: 30px; padding: 0 2px 0 10px; border: 1px solid color-mix(in srgb, var(--c-blue-770) 35%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--c-blue-460-2) 18%, transparent); font-size: .76rem; }
+  .audiobook-proposed-aliases .audiobook-alias-chip > button { display: grid; place-items: center; width: 24px; min-height: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ab-text-muted); font-size: .7rem; }
+  .audiobook-proposed-aliases .audiobook-alias-chip > button:hover:not(:disabled) { background: color-mix(in srgb, var(--c-red-560) 22%, transparent); color: inherit; }
+  .audiobook-cast-details .audiobook-proposed-aliases > small { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   .audiobook-proposed-aliases > button { min-height: 30px; padding: 5px 9px; border-color: color-mix(in srgb, var(--c-blue-770) 35%, transparent); background: color-mix(in srgb, var(--c-blue-460-2) 18%, transparent); font-size: .72rem; }
 
   /* Audiobook library tiles follow the cover-first reference layout. */
@@ -914,4 +993,168 @@
   .audiobook-danger-action { border-color: color-mix(in srgb, var(--c-red-720) 60%, transparent); background: color-mix(in srgb, var(--c-red-440) 28%, transparent); color: var(--c-red-810); }
 
   .audiobook-danger-action:hover:not(:disabled) { border-color: var(--c-red-720); background: color-mix(in srgb, var(--c-red-480) 45%, transparent); color: var(--c-neutral-1000); }
+}
+
+/* Light appearance for every audiobook surface. The rules above are tuned for the
+   dark palette, which does not flip, so each dark surface and light text colour is
+   mapped here onto the app's light tokens. Covers, artwork, gradient buttons and
+   coloured badges keep their own colours on purpose. Each selector keeps its own
+   specificity, so the dark rules' precedence between them carries over. */
+@layer features {
+  :root[data-omnix-appearance='light'] .audiobook-workspace {
+    --ab-panel: var(--omnix-page-panel-flat);
+    --ab-panel-strong: var(--omnix-page-panel-flat);
+    --ab-line: var(--omnix-page-line);
+    --ab-text-muted: var(--omnix-muted-text);
+    color: var(--omnix-text);
+  }
+
+  /* Panels. */
+  :root[data-omnix-appearance='light'] .audiobook-production,
+  :root[data-omnix-appearance='light'] .audiobook-render-queue,
+  :root[data-omnix-appearance='light'] .audiobook-mastering,
+  :root[data-omnix-appearance='light'] .audiobook-render-banner,
+  :root[data-omnix-appearance='light'] .audiobook-status-meter,
+  :root[data-omnix-appearance='light'] .audiobook-project-tabs,
+  :root[data-omnix-appearance='light'] .audiobook-chapter-table,
+  :root[data-omnix-appearance='light'] .audiobook-document-list,
+  :root[data-omnix-appearance='light'] .audiobook-document-preview,
+  :root[data-omnix-appearance='light'] .audiobook-document-composer,
+  :root[data-omnix-appearance='light'] .audiobook-document-inline-details,
+  :root[data-omnix-appearance='light'] .audiobook-ebook-list,
+  :root[data-omnix-appearance='light'] .audiobook-create-hero,
+  :root[data-omnix-appearance='light'] .audiobook-create-details,
+  :root[data-omnix-appearance='light'] .audiobook-danger-settings,
+  :root[data-omnix-appearance='light'] .audiobook-voice-controls,
+  :root[data-omnix-appearance='light'] .audiobook-reclassification-progress,
+  :root[data-omnix-appearance='light'] .audiobook-confirmation-dialog,
+  :root[data-omnix-appearance='light'] .audiobook-asset-detail-preview,
+  :root[data-omnix-appearance='light'] .audiobook-library-selected-progress { background: var(--omnix-page-panel-flat); border-color: var(--omnix-page-line); color: var(--omnix-text); }
+
+  /* Items inside a panel: a step quieter than the panel itself. */
+  :root[data-omnix-appearance='light'] .audiobook-mastering-card,
+  :root[data-omnix-appearance='light'] .audiobook-render-metrics article,
+  :root[data-omnix-appearance='light'] .audiobook-production-metrics article,
+  :root[data-omnix-appearance='light'] .audiobook-review-item,
+  :root[data-omnix-appearance='light'] .audiobook-outline button,
+  :root[data-omnix-appearance='light'] .audiobook-project-list button,
+  :root[data-omnix-appearance='light'] .audiobook-voice-card,
+  :root[data-omnix-appearance='light'] .audiobook-cast-card,
+  :root[data-omnix-appearance='light'] .audiobook-asset-card,
+  :root[data-omnix-appearance='light'] .audiobook-book-card,
+  :root[data-omnix-appearance='light'] .audiobook-chapter-grid-card,
+  :root[data-omnix-appearance='light'] .audiobook-draft-card,
+  :root[data-omnix-appearance='light'] .audiobook-ebook-card,
+  :root[data-omnix-appearance='light'] .audiobook-library-stats article,
+  :root[data-omnix-appearance='light'] .audiobook-source-option,
+  :root[data-omnix-appearance='light'] .audiobook-filter-row button,
+  :root[data-omnix-appearance='light'] .audiobook-detail-tabs button,
+  :root[data-omnix-appearance='light'] .audiobook-tag-row span,
+  :root[data-omnix-appearance='light'] .audiobook-source-actions .audiobook-source-library-trigger,
+  :root[data-omnix-appearance='light'] .audiobook-library-selected-actions > button:nth-child(2),
+  :root[data-omnix-appearance='light'] .audiobook-chapter-table-head,
+  :root[data-omnix-appearance='light'] .audiobook-document-list-head,
+  :root[data-omnix-appearance='light'] .audiobook-pronunciation-table-head { background: var(--omnix-page-panel-muted); border-color: var(--omnix-page-line); color: var(--omnix-text); }
+
+  :root[data-omnix-appearance='light'] .audiobook-paste-source textarea,
+  :root[data-omnix-appearance='light'] .audiobook-document-composer textarea { background: color-mix(in srgb, var(--c-neutral-1000) 85%, transparent); color: var(--omnix-text); }
+
+  /* Selected and hovered items. */
+  :root[data-omnix-appearance='light'] .audiobook-project-list button.selected,
+  :root[data-omnix-appearance='light'] .audiobook-outline button.selected,
+  :root[data-omnix-appearance='light'] .audiobook-project-tabs button.selected,
+  :root[data-omnix-appearance='light'] .audiobook-source-option.selected,
+  :root[data-omnix-appearance='light'] .audiobook-source-option:hover { background: color-mix(in srgb, var(--c-indigo-600) 14%, var(--c-neutral-1000)); border-color: color-mix(in srgb, var(--c-indigo-600) 55%, transparent); color: var(--omnix-text); }
+
+  /* Text. */
+  :root[data-omnix-appearance='light'] .audiobook-value-points,
+  :root[data-omnix-appearance='light'] .audiobook-create-advanced summary,
+  :root[data-omnix-appearance='light'] .audiobook-get-started li,
+  :root[data-omnix-appearance='light'] .audiobook-voice-controls output,
+  :root[data-omnix-appearance='light'] .audiobook-production-metrics strong,
+  :root[data-omnix-appearance='light'] .audiobook-breadcrumb strong,
+  :root[data-omnix-appearance='light'] .audiobook-breadcrumb button,
+  :root[data-omnix-appearance='light'] .audiobook-document-row > button strong,
+  :root[data-omnix-appearance='light'] .audiobook-format-check,
+  :root[data-omnix-appearance='light'] .audiobook-mastering-checks b,
+  :root[data-omnix-appearance='light'] .audiobook-library-empty strong,
+  :root[data-omnix-appearance='light'] .audiobook-library-stats strong,
+  :root[data-omnix-appearance='light'] .audiobook-library-list-select,
+  :root[data-omnix-appearance='light'] .chapter-number,
+  :root[data-omnix-appearance='light'] .audiobook-project-stats,
+  :root[data-omnix-appearance='light'] .audiobook-render-queue .audiobook-section-title > span,
+  :root[data-omnix-appearance='light'] .asset-filter-icon,
+  :root[data-omnix-appearance='light'] .audiobook-filter-row button .asset-filter-count,
+  :root[data-omnix-appearance='light'] .audiobook-ebook-card-topline > button:hover { color: var(--omnix-text); }
+
+  :root[data-omnix-appearance='light'] .audiobook-header-copy p,
+  :root[data-omnix-appearance='light'] .audiobook-create-hero p:not(.eyebrow),
+  :root[data-omnix-appearance='light'] .audiobook-production-metrics span,
+  :root[data-omnix-appearance='light'] .audiobook-document-preview p,
+  :root[data-omnix-appearance='light'] .audiobook-source-library > label,
+  :root[data-omnix-appearance='light'] .audiobook-page-filter,
+  :root[data-omnix-appearance='light'] .audiobook-ebook-card-actions > .audiobook-library-more,
+  :root[data-omnix-appearance='light'] .audiobook-library-selected-metadata span,
+  :root[data-omnix-appearance='light'] .audiobook-library-nav button,
+  :root[data-omnix-appearance='light'] .status-draft,
+  :root[data-omnix-appearance='light'] .status-not-started { color: var(--omnix-muted-text); }
+
+  /* Status and accent colours, darkened to read on a light surface. The generic pill comes first so a status-specific class on the same pill wins, as in the dark rules. */
+  :root[data-omnix-appearance='light'] .audiobook-status-pill,
+  :root[data-omnix-appearance='light'] .audiobook-workspace a:not(.audiobook-button-link) { color: var(--c-blue-460-2); }
+
+  :root[data-omnix-appearance='light'] .audiobook-reclassification-progress > div span,
+  :root[data-omnix-appearance='light'] .audiobook-pipeline-progress span,
+  :root[data-omnix-appearance='light'] .audiobook-waveform,
+  :root[data-omnix-appearance='light'] .audiobook-get-started li::marker,
+  :root[data-omnix-appearance='light'] .status-in-progress,
+  :root[data-omnix-appearance='light'] .status-in-review,
+  :root[data-omnix-appearance='light'] .asset-name-button:hover,
+  :root[data-omnix-appearance='light'] .asset-reference,
+  :root[data-omnix-appearance='light'] .render-status-rendering,
+  :root[data-omnix-appearance='light'] .audiobook-mastering-card-head span,
+  :root[data-omnix-appearance='light'] .library-stat-icon,
+  :root[data-omnix-appearance='light'] .audiobook-library-stats article:nth-child(2) .library-stat-icon,
+  :root[data-omnix-appearance='light'] .audiobook-library-stats article:nth-child(5) .library-stat-icon,
+  :root[data-omnix-appearance='light'] .library-status-in-production,
+  :root[data-omnix-appearance='light'] .audiobook-library-select-title:hover:not(:disabled),
+  :root[data-omnix-appearance='light'] .audiobook-source-state.working { color: var(--c-blue-460-2); }
+
+  :root[data-omnix-appearance='light'] .audiobook-tag-row span,
+  :root[data-omnix-appearance='light'] .audiobook-project-stats small,
+  :root[data-omnix-appearance='light'] .audiobook-source-option strong:first-line,
+  :root[data-omnix-appearance='light'] .audiobook-detail-tags span,
+  :root[data-omnix-appearance='light'] .audiobook-library-card-tags span:not(.audiobook-status-pill),
+  :root[data-omnix-appearance='light'] .library-status-ready,
+  :root[data-omnix-appearance='light'] .render-status-queued,
+  :root[data-omnix-appearance='light'] .asset-unused,
+  :root[data-omnix-appearance='light'] .audiobook-library-stats article:nth-child(4) .library-stat-icon { color: var(--c-violet-470); }
+
+  :root[data-omnix-appearance='light'] .audiobook-selected-source,
+  :root[data-omnix-appearance='light'] .audiobook-pronunciation-table-row em,
+  :root[data-omnix-appearance='light'] .status-rendered,
+  :root[data-omnix-appearance='light'] .status-final,
+  :root[data-omnix-appearance='light'] .status-approved,
+  :root[data-omnix-appearance='light'] .asset-status,
+  :root[data-omnix-appearance='light'] .render-status-completed,
+  :root[data-omnix-appearance='light'] .audiobook-mastering-checks,
+  :root[data-omnix-appearance='light'] .library-status-completed,
+  :root[data-omnix-appearance='light'] .review-approved,
+  :root[data-omnix-appearance='light'] .audiobook-library-stats article:nth-child(3) .library-stat-icon { color: var(--c-teal-470); }
+
+  :root[data-omnix-appearance='light'] .library-status-draft { color: var(--omnix-muted-text); }
+
+  :root[data-omnix-appearance='light'] .render-status-paused,
+  :root[data-omnix-appearance='light'] .render-status-retrying,
+  :root[data-omnix-appearance='light'] .library-status-in-review,
+  :root[data-omnix-appearance='light'] .audiobook-source-state,
+  :root[data-omnix-appearance='light'] .review-pending { color: var(--c-amber-450); }
+
+  :root[data-omnix-appearance='light'] .audiobook-job-list em,
+  :root[data-omnix-appearance='light'] .render-status-failed,
+  :root[data-omnix-appearance='light'] .audiobook-export-status.error,
+  :root[data-omnix-appearance='light'] .audiobook-render-request.error,
+  :root[data-omnix-appearance='light'] .audiobook-source-progress.error,
+  :root[data-omnix-appearance='light'] .audiobook-row-error,
+  :root[data-omnix-appearance='light'] .audiobook-danger-action { color: var(--c-red-520); }
 }

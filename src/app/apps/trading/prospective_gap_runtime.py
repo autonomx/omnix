@@ -21,7 +21,7 @@ import os
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable, Literal, Sequence
+from typing import Any, Callable, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -129,8 +129,8 @@ from .strategies.models import GapPullbackConfig
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
-RUNTIME_VERSION = "prospective-gap-runtime-v1"
-PORTFOLIO_E_POLICY_VERSION = "prospective-gap-portfolio-e-v1"
+RUNTIME_VERSION: Final = "prospective-gap-runtime-v1"
+PORTFOLIO_E_POLICY_VERSION: Final = "prospective-gap-portfolio-e-v1"
 
 
 def _utc(value: datetime) -> datetime:
@@ -1391,7 +1391,7 @@ class ProspectiveGapRuntime:
                             run_id=request.run_id,
                             idempotency_suffix=v43.immutable_fingerprint,
                         )
-                        watch = classify_v43_watch(
+                        v43_watch = classify_v43_watch(
                             v43,
                             policy=DEFAULT_V43_ACTION_POLICY,
                         )
@@ -1401,11 +1401,11 @@ class ProspectiveGapRuntime:
                             instrument_id=instrument_id,
                             kind="v43_watch",
                             observed_at=request.frozen_at,
-                            payload=watch,
-                            state=watch.classification,
-                            reason_code=watch.reasons[0] if watch.reasons else None,
+                            payload=v43_watch,
+                            state=v43_watch.classification,
+                            reason_code=v43_watch.reasons[0] if v43_watch.reasons else None,
                             run_id=request.run_id,
-                            idempotency_suffix=watch.forecast_fingerprint,
+                            idempotency_suffix=v43_watch.forecast_fingerprint,
                         )
                         v43_attempt = V43ForecastAttempt(
                             instrument_id=instrument_id,
@@ -1670,7 +1670,7 @@ class ProspectiveGapRuntime:
                 terminal += 1
                 continue
 
-            bars: Sequence[object] = ()
+            bars: Sequence[Any] = ()
             data_quality_ok = False
             data_quality_reason: str | None = None
             recovered = getattr(self.market_service, "recovered_bars", None)
@@ -1706,25 +1706,25 @@ class ProspectiveGapRuntime:
 
             evaluation = evaluate_operational_confirmation(
                 candidate=candidate,
-                bars=bars,  # type: ignore[arg-type]
+                bars=bars,
                 observed_at=evaluated_at,
                 previous_state=previous,
                 config=manifest.confirmation_strategy_config,
                 data_quality_ok=data_quality_ok,
                 data_quality_reason=data_quality_reason,
             )
-            for receipt in evaluation.receipts:
+            for transition_receipt in evaluation.receipts:
                 inserted = self.repository.append(
                     session_date=session_date,
                     cohort_id=manifest.cohort.cohort_id,
                     instrument_id=candidate.instrument_id,
                     kind="confirmation",
-                    observed_at=receipt.transition_at,
-                    payload=receipt,
-                    state=receipt.new_state,
-                    reason_code=receipt.trigger,
+                    observed_at=transition_receipt.transition_at,
+                    payload=transition_receipt,
+                    state=transition_receipt.new_state,
+                    reason_code=transition_receipt.trigger,
                     run_id=manifest.run_id,
-                    idempotency_suffix=_hash(receipt.model_dump(mode="json")),
+                    idempotency_suffix=_hash(transition_receipt.model_dump(mode="json")),
                 )
                 new_receipts += int(inserted)
 
@@ -1846,7 +1846,7 @@ class ProspectiveGapRuntime:
                 if prior_action.state in {"INVALIDATED", "EXPIRED"}:
                         continue
 
-            v42_bars: Sequence[object] = ()
+            v42_bars: Sequence[Any] = ()
             v42_data_quality_ok = False
             v42_data_quality_reasons: list[str] = []
             recovered = getattr(self.market_service, "recovered_bars", None)
@@ -1890,7 +1890,7 @@ class ProspectiveGapRuntime:
             snapshot = evaluate_v42_post_open_action(
                 forecast=v42_record.forecast,
                 watch=watch,
-                bars=v42_bars,  # type: ignore[arg-type]
+                bars=v42_bars,
                 evaluated_at=evaluated_at,
                 data_quality_ok=v42_data_quality_ok,
                 execution_cost=v42_cost,
@@ -1915,7 +1915,7 @@ class ProspectiveGapRuntime:
             )
 
             if snapshot.state in {"STRUCTURE_CONFIRMED", "INVALIDATED", "EXPIRED"}:
-                authorization = authorize_v42_action(
+                v42_authorization = authorize_v42_action(
                     forecast=v42_record.forecast,
                     watch=watch,
                     snapshot=snapshot,
@@ -1931,15 +1931,15 @@ class ProspectiveGapRuntime:
                     cohort_id=manifest.cohort.cohort_id,
                     instrument_id=candidate.instrument_id,
                     kind="v42_authorization",
-                    observed_at=authorization.decision_at,
-                    payload=authorization,
-                    state=authorization.decision,
-                    reason_code=authorization.reasons[0] if authorization.reasons else None,
+                    observed_at=v42_authorization.decision_at,
+                    payload=v42_authorization,
+                    state=v42_authorization.decision,
+                    reason_code=v42_authorization.reasons[0] if v42_authorization.reasons else None,
                     run_id=manifest.run_id,
                     idempotency_suffix=_hash(
                         {
                             "snapshot": snapshot.model_dump(mode="json"),
-                            "authorization": authorization.model_dump(mode="json"),
+                            "authorization": v42_authorization.model_dump(mode="json"),
                         }
                     ),
                 )
@@ -2119,13 +2119,13 @@ class ProspectiveGapRuntime:
         rows: list[PortfolioEPositionOutcome] = []
         for position in portfolio.positions:
             outcome = outcomes.get(position.instrument_id)
-            receipt = authorizations.get(position.instrument_id)
-            if outcome is None or receipt is None or receipt.reference_price is None:
+            position_receipt = authorizations.get(position.instrument_id)
+            if outcome is None or position_receipt is None or position_receipt.reference_price is None:
                 continue
-            entry = receipt.reference_price
+            entry = position_receipt.reference_price
             close = outcome.prices.close_price
             raw_return = close / entry - Decimal("1")
-            cost_return = (receipt.total_cost_bps or Decimal("0")) / Decimal("10000")
+            cost_return = (position_receipt.total_cost_bps or Decimal("0")) / Decimal("10000")
             net_return = raw_return - cost_return
             value = position.allocation * (Decimal("1") + net_return)
             pnl = value - position.allocation
@@ -2401,10 +2401,10 @@ class ProspectiveGapRuntime:
                 for instrument_id, outcome in outcome_by_instrument.items()
             }
             legacy_score_bundle = LegacyPortfolioScoreBundle(
-                scores=tuple(
+                scores=cast(Any, tuple(
                     score_frozen_portfolio(portfolio, prices_by_instrument)
                     for portfolio in legacy.portfolios
-                )
+                ))
             )
             self.repository.append(
                 session_date=session_date,

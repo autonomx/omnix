@@ -14,7 +14,7 @@ Browser-facing JSON routes have typed request and response contracts in OpenAPI.
 | `src/app/platform/chat/live_chat_speculation.py` | POST | `/api/live/speculation/sessions/{session_id}/stream` | Server-Sent Events |
 | `src/app/platform/chat/live_chat_speculation_handshake.py` | POST | `/api/live/speculation/sessions/{session_id}/{generation_id}/stream` | Server-Sent Events |
 | `src/app/platform/chat/live_chat_speculation_inline_stream.py` | POST | `/api/live/speculation/sessions/{session_id}/start-stream` | Server-Sent Events |
-| `src/app/apps/rpg/api/feature_routes/rpg_narrative_delivery_routes.py` | GET | `/api/rpg/narrative-responses/{response_id}/stream` | Server-Sent Events |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_narrative_delivery_routes.py` | GET | `/api/rpg/narrative-responses/{response_id}/stream` | Server-Sent Events |
 
 WebSocket routes are absent from OpenAPI by protocol definition. The gateway and feature routes are:
 
@@ -35,6 +35,7 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/source/download` | Source file bytes; format-specific media type |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/cover` | JPEG or PNG bytes |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/previews/{job_id}/audio` | WAV audio bytes |
+| `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio` | A finished chapter's WAV audio bytes, with range requests |
 | `src/app/apps/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/exports/{export_id}/download` | Audio file bytes; format-specific media type |
 | `src/app/platform/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/google/callback` | 303 OAuth result redirect |
 | `src/app/platform/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/github/callback` | 303 OAuth result redirect |
@@ -44,15 +45,23 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/login` | 302 redirect to the identity provider |
 | `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/callback` | 303 sign-in result redirect that sets the session cookies |
 | `src/app/security/auth/routes.py` | POST | `/api/auth/logout` | 204 empty response that clears the session cookies |
+| `src/app/security/auth/routes.py` | POST | `/api/auth/email` | 204 empty response after the account's email changes |
+| `src/app/security/auth/routes.py` | POST | `/api/auth/invites/{invite_id}/revoke` | 204 empty response after an invite link is revoked |
+| `src/app/security/auth/routes.py` | GET | `/api/auth/google/login` | 302 redirect to Google |
+| `src/app/security/auth/routes.py` | GET | `/api/auth/google/callback` | 303 Google sign-in result redirect that sets the session cookies |
 | `src/app/platform/agent_runtime/preview_api.py` | GET | `/api/agent-runs/{run_id}/workspace-preview/{asset_path}` | Allowlisted preview file bytes or HTML source text |
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/runtime/{filename}` | Runtime script or binary bytes |
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/assets/{asset_id}/{asset_path}` | Live2D model asset bytes |
 | `src/app/platform/voice/live_voice_cue_asset_routes.py` | GET | `/api/voice/cues/{voice_id}/{cue_id}/{variant_id}.wav` | WAV audio bytes |
 | `src/app/platform/image/routes/assets.py` | GET | `/api/assets/{asset_id}/file` | Allowlisted image bytes |
-| `src/app/apps/rpg/api/feature_routes/rpg_map_editor_routes.py` | POST | `/api/rpg/map-editor/export` | Validated JSON document download |
-| `src/app/apps/rpg/api/feature_routes/rpg_world_bundle_routes.py` | GET | `/api/rpg/worlds/{world_id}/export` | ZIP archive bytes |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_map_editor_routes.py` | POST | `/api/rpg/map-editor/export` | Validated JSON document download |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_world_bundle_routes.py` | GET | `/api/rpg/worlds/{world_id}/export` | ZIP archive bytes |
 | `src/app/composition/gateway/kernel_routes/__init__.py` | GET | `/metrics` | Prometheus text exposition |
 | `src/app/apps/trading/strategy_api.py` | DELETE | `/api/trading/strategies/{strategy_id}` | 204 No Content |
+| `src/app/apps/trading/alerts_notify_api.py` | DELETE | `/api/trading/notifications/email` | 204 No Content |
+| `src/app/apps/trading/alerts_notify_api.py` | DELETE | `/api/trading/notifications/push/subscriptions/{subscription_id}` | 204 No Content |
+| `src/app/apps/trading/snapshots_api.py` | GET | `/api/trading/snapshots/{snapshot_id}.png` | PNG chart snapshot bytes |
+| `src/app/apps/trading/snapshots_api.py` | DELETE | `/api/trading/snapshots/{snapshot_id}` | 204 No Content |
 
 The only internal route excluded from OpenAPI is `POST /api/hermes/assistant/tools/execute`, the service-token assistant-tool executor. It is mounted through `FeatureModule.internal_routers` and retains its explicit `require_service_token` dependency. Internal routes are not a general-purpose exception category; new internal handlers must use the feature's internal router and service-token authorization.
 
@@ -80,8 +89,16 @@ Web code types gateway calls with the generated OpenAPI types (`web/src/api/gene
 | `web/src/features/trading/indicators/indicatorWorkerProtocol.ts` | `IndicatorWorker*` | Messages to and from the indicator Web Worker |
 | `web/src/features/trading/indicators/indicatorScheduler.ts` | `PendingRequest` | The scheduler's record of a worker request |
 | `web/src/features/trading/persistence/workspaceDocument.ts` | `*` | Trading workspace document content, stored in `TradingDocument.payload` and owned by the web client |
-| `web/src/features/trading/TradingWatchlist.tsx` | `WatchlistPayload` | Watchlist document content in `TradingDocument.payload` |
+| `web/src/features/trading/tradingWatchlistModel.ts` | `WatchlistPayload` | Watchlist document content in `TradingDocument.payload` |
 | `web/src/features/trading/tradingFormula.ts` | `TradingFormulaPayload` | Formula document content in `TradingDocument.payload` |
-| `web/src/features/rpg/*` | `*` | The RPG web surface, which is being retired and keeps its handwritten clients until then (DECISIONS 2026-10-03) |
+| `web/src/features/trading/tradingWatchlistModel.ts` | `WatchlistFlagsPayload` | Watchlist flag document content in `TradingDocument.payload` |
+| `web/src/features/trading/drawings/drawingDocument.ts` | `DrawingDocumentPayload` | Drawing document content in `TradingDocument.payload` |
+| `web/src/features/trading/scripts/scriptsApi.ts` | `ScriptPayload` | Script document content in `TradingDocument.payload` |
+| `web/src/features/trading/drawings/tools/types.ts` | `DrawingActionRequest` | What a drawing's context action asks of the chart (open the order ticket, say) |
+| `web/src/features/trading/intrabarData.ts` | `IntrabarRequest` | A request to the browser's intrabar loader and cache; the wire request is the query of `GET /api/trading/bars/intrabar` |
+| `web/src/features/rpg/api/rpgGenesis.ts` | `LooseRequest` | The new-game form's fields before `withRpgGenesisContract` folds them into the genesis contract (the wire body is `RpgNewGameRequestBody`) |
+| `web/src/features/rpg/RpgLoadoutTabs.tsx` | `RpgItemPanelRequest` | An item panel action before it becomes a loadout-action or item-command call |
+| `web/src/features/rpg/RpgWorldGenerationDashboard.tsx` | `RetryRequest` | Mutation variables; the wire body is the generation review retry request |
+| `web/src/features/rpg/rpgTurnUiStore.ts` | `CachedResponse` | A turn response the fetch middleware keeps per session to replay into the turn UI |
 
 Stream and WebSocket messages are checked at runtime where they enter the app: chat, job event and trading stream messages and job output references in `web/src/api/schemas/streams.ts`; the live STT, PCM control and speculation messages in `web/src/features/assistant/workspace/live-voice-messages.ts`; story audio control messages in `web/src/features/storyteller/storyAudioMessages.ts`.

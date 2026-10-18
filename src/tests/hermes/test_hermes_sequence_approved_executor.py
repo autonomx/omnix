@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.approved_config import FEATURE_FLAG
-from app.apps.rpg.hermes.execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_reset
-from app.apps.rpg.hermes.sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
+from app.apps.rpg.edge.hermes.approved_config import FEATURE_FLAG
+from app.apps.rpg.edge.hermes.execution_ledger import hermes_rpg_execution_ledger_recent, hermes_rpg_execution_ledger_reset
+from app.apps.rpg.edge.hermes.sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
 
 
 def sequence_state(*, status: str = "pending") -> dict:

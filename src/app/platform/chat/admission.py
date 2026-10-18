@@ -208,6 +208,8 @@ def stream_chat_turn(
             if completed is None:
                 yield {"type": "interrupted", "job_id": job.id}
                 return
+        # Both paths above return when the commit finds the job gone.
+        assert completed is not None
         yield {"type": "session", "session": completed.model_dump(mode="json")}
     except GeneratorExit:
         # The client went away mid-turn: the turn ends like an interruption.

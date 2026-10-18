@@ -1,19 +1,19 @@
-from app.apps.rpg.session.genesis.world_forge_anchor_registry import (
+from app.apps.rpg.genesis.forge.world_forge_anchor_registry import (
     allocate_global_anchor_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_historical_planning import (
+from app.apps.rpg.genesis.forge.world_forge_historical_planning import (
     build_historical_planning_topics,
 )
-from app.apps.rpg.session.genesis.world_forge_pressure_planning import (
+from app.apps.rpg.genesis.forge.world_forge_pressure_planning import (
     build_opening_scope_plan,
     build_pressure_plan,
     build_pressure_planning_topics,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.apps.rpg.session.genesis.world_forge_social_planning import (
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.genesis.forge.world_forge_social_planning import (
     build_social_planning_topics,
 )
 

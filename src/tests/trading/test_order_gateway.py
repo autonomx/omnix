@@ -13,7 +13,7 @@ from app.apps.trading.order_gateway import OrderGateway, StrategyEntryAuthorizer
 from app.apps.trading.paper import PaperOrderRequest
 
 APP = Path(__file__).parents[2] / "app"
-ORDER_METHODS = {"place_order", "cancel_order", "replace_order"}
+ORDER_METHODS = {"place_order", "cancel_order", "replace_order", "replace_entry"}
 INSTRUMENT = "equity:NASDAQ:TEST"
 
 

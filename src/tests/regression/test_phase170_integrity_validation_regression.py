@@ -4,7 +4,7 @@ This module ensures that future changes don't break the integrity
 validation guarantees established in Phase 17.0.
 """
 
-from app.apps.rpg.validation.integrity import (
+from app.apps.rpg.rules.validation.integrity import (
     validate_memory_state,
     validate_package_integrity,
     validate_session_integrity,

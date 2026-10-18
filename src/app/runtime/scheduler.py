@@ -60,6 +60,10 @@ class ScheduledTaskSpec:
     cron: str | None = None
     jitter_seconds: float = 0.0
     timeout_seconds: float = 60.0
+    # A timed-out run has already stopped (async work is cancelled; thread and
+    # process work is waited out). True fails the task closed until restart;
+    # False records the timeout as one failed run and keeps the schedule.
+    disable_on_timeout: bool = True
     executor: TaskExecutor | str = TaskExecutor.ASYNC
     max_overlap: int = 1
     requires: frozenset[RuntimeCapability] = frozenset(
@@ -968,8 +972,20 @@ class SchedulerRuntime:
                 controls.active_run.clear()
                 try:
                     await self._invoke(spec, run_context, owner)
-                except TaskExecutionTimeout:
-                    raise
+                except TaskExecutionTimeout as exc:
+                    if spec.disable_on_timeout:
+                        raise
+                    metric.timeout_count += 1
+                    self._record_failure(task_id, exc)
+                    runtime_transition(
+                        self.logger,
+                        component=task_id,
+                        role="scheduler",
+                        transition="run_timed_out",
+                        started_at=run_started,
+                        error=exc,
+                        level="warning",
+                    )
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:

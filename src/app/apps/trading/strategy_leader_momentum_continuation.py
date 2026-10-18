@@ -18,7 +18,7 @@ breakout, volume, and bounded-risk checks remain causal and deterministic.
 
 from datetime import datetime, time, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,7 +29,7 @@ from .strategy_timeframes import resample_final_bars
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
-POLICY_VERSION = "leader-momentum-continuation-v1.2"
+POLICY_VERSION: Final = "leader-momentum-continuation-v1.2"
 MIN_PRICE = Decimal("0.75")
 MAX_PRICE = Decimal("20")
 MIN_LEADER_SCORE = Decimal("70")
@@ -622,7 +622,7 @@ def evaluate_leader_momentum_continuation(
         bar for bar in regular if bar.start_time.astimezone(_ET).date() == session_date
     ]
     as_of = regular[-1].end_time
-    base = {"session_date": session_date.isoformat(), "as_of": as_of}
+    base: dict[str, Any] = {"session_date": session_date.isoformat(), "as_of": as_of}
     raw_gap = _first_internal_gap(regular)
 
     sampled = [
@@ -726,7 +726,7 @@ def evaluate_leader_momentum_continuation(
         leader_confirmed_until is not None and as_of <= leader_confirmed_until
     )
 
-    shared = {
+    shared: dict[str, Any] = {
         "leader_score": latest_score,
         "leader_confirmed_at": leader_confirmed_at,
         "leader_confirmed_until": leader_confirmed_until,

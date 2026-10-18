@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import sys
 import threading
@@ -230,7 +231,7 @@ class PostgresDocumentStore:
         module: str,
         record_type: str,
         limit: int = 500,
-    ) -> list[tuple[str, Any, int]]:
+    ) -> builtins.list[tuple[str, Any, int]]:
         with self.database.connection() as connection:
             rows = connection.execute(
                 """
@@ -264,7 +265,7 @@ class PostgresDocumentStore:
         record_type: str,
         session_id: str,
         limit: int = 1000,
-    ) -> list[tuple[str, Any, int]]:
+    ) -> builtins.list[tuple[str, Any, int]]:
         """Records whose payload ``session_id`` matches, newest first (WP-5.7).
 
         Chat conversation summaries have a partial index on this lookup

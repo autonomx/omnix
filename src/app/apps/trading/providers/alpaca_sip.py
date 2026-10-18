@@ -186,7 +186,7 @@ class AlpacaSipResearchProvider:
         output: list[SIPTradeEvent] = []
 
         for _ in range(max_pages):
-            params: dict[str, object] = {
+            params: dict[str, Any] = {
                 "start": start.isoformat().replace("+00:00", "Z"),
                 "end": end.isoformat().replace("+00:00", "Z"),
                 "feed": "sip",

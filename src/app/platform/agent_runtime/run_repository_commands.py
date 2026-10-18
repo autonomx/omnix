@@ -9,7 +9,7 @@ from .contracts import (
     AgentEvent,
     AgentRunCommand,
 )
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 from .repository import (
     _json,
 )
@@ -54,7 +54,7 @@ def enqueue_command_with_status(repo: PostgresAgentRunRepository, command: Agent
     stored = AgentRunCommand(
         command_id=str(row[0]),
         run_id=command.run_id,
-        command_type=str(row[1]),
+        command_type=cast(Any, str(row[1])),
         payload=dict(row[2] or {}),
         idempotency_key=str(row[3]),
         created_at=row[4],
@@ -145,7 +145,7 @@ def claim_commands(repo: PostgresAgentRunRepository, run_id: str, *, limit: int 
         AgentRunCommand(
             command_id=str(row[0]),
             run_id=run_id,
-            command_type=str(row[1]),
+            command_type=cast(Any, str(row[1])),
             payload=dict(row[2] or {}),
             idempotency_key=str(row[3]),
             created_at=row[4],
@@ -169,7 +169,7 @@ def list_pending_commands(repo: PostgresAgentRunRepository, run_id: str, *, limi
         AgentRunCommand(
             command_id=str(row[0]),
             run_id=run_id,
-            command_type=str(row[1]),
+            command_type=cast(Any, str(row[1])),
             payload=dict(row[2] or {}),
             idempotency_key=str(row[3]),
             created_at=row[4],

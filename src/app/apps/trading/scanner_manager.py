@@ -15,6 +15,7 @@ from .scanner_repository import (
     default_scanner_repository,
 )
 from .service import TradingMarketDataService, default_market_data_service
+from typing import Any
 
 
 class TradingScannerManager:
@@ -66,7 +67,7 @@ class TradingScannerManager:
         if task is not None:
             await task
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "active_run_count": len(self._tasks),
             "active_run_ids": sorted(self._tasks),

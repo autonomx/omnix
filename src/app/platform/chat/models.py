@@ -129,7 +129,7 @@ def _delivery_metadata(message: ChatMessage) -> dict[str, Any]:
     return metadata
 
 
-def _bounded_content_end(value: object, maximum: int) -> int:
+def _bounded_content_end(value: Any, maximum: int) -> int:
     if isinstance(value, bool):
         return 0
     try:

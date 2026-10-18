@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from .database import PostgresDatabase
-    from .unit_of_work import PostgresUnitOfWork
+    from .unit_of_work import PostgresUnitOfWork, _JoinedUnitOfWork
 
 
 @dataclass(frozen=True)
 class TransactionBinding:
-    work: PostgresUnitOfWork
+    # A joined unit of work delegates every attribute to its root.
+    work: PostgresUnitOfWork | _JoinedUnitOfWork
     thread_id: int
 
 
@@ -25,7 +26,7 @@ _BINDING: ContextVar[TransactionBinding | None] = ContextVar(
 )
 
 
-def shared_work(database: PostgresDatabase) -> PostgresUnitOfWork | None:
+def shared_work(database: PostgresDatabase) -> PostgresUnitOfWork | _JoinedUnitOfWork | None:
     binding = _BINDING.get()
     if binding is None:
         return None
@@ -40,7 +41,7 @@ def shared_work(database: PostgresDatabase) -> PostgresUnitOfWork | None:
 
 
 @contextmanager
-def share_transaction(work: PostgresUnitOfWork) -> Iterator[None]:
+def share_transaction(work: PostgresUnitOfWork | _JoinedUnitOfWork) -> Iterator[None]:
     work._require_connection()
     token = _BINDING.set(TransactionBinding(work, threading.get_ident()))
     try:

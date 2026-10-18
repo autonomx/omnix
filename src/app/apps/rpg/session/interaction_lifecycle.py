@@ -77,43 +77,25 @@ def queue_deferred_narration_for_interaction(
     if not narration_request or not interaction_id or not turn_id:
         return False
 
-    from app.apps.rpg.session.narration_worker import ensure_narration_worker_running, signal_narration_work
-    from app.apps.rpg.session.semantic_response_projection import (
-        _enqueue_narration_request as _enqueue_narration_request,
-    )
-    from app.apps.rpg.session.session_runtime_store import (
-        load_runtime_session as load_runtime_session,
-        save_runtime_session as save_runtime_session,
-    )
+    from app.apps.rpg.session.jobs.narration_job import enqueue_rpg_narration
 
-    session = load_runtime_session(session_id)
-    if not isinstance(session, dict):
-        return False
     narration_request = deepcopy(narration_request)
     narration_request["session_id"] = session_id
     narration_request["interaction_id"] = interaction_id
     performance = _dict(narration_request.get("performance"))
     performance["enable_live_narration_llm"] = True
     narration_request["performance"] = performance
-    tick = int(narration_request.get("tick") or result.get("tick") or 0)
-    runtime = _dict(session.get("runtime_state"))
-    runtime["session_id"] = session_id
-    runtime, narration_job, is_new = _enqueue_narration_request(
-        runtime,
+    # An rpg.narration job (WP-5.6): the interaction's lifecycle, committed with
+    # the turn, already records it as pending, so the session is not saved again.
+    narration_job = enqueue_rpg_narration(
+        session_id,
         turn_id,
-        tick,
         narration_request,
+        interaction_id=interaction_id,
+        tick=int(narration_request.get("tick") or result.get("tick") or 0),
     )
-    interaction_id_by_turn = _dict(runtime.get("interaction_id_by_turn"))
-    interaction_id_by_turn[turn_id] = interaction_id
-    runtime["interaction_id_by_turn"] = _bounded_mapping(interaction_id_by_turn)
-    session["runtime_state"] = runtime
-    save_runtime_session(session)
     result["narration_job"] = narration_job
-    result["narration_status"] = _text(narration_job.get("status")) or "queued"
-    if is_new:
-        ensure_narration_worker_running()
-        signal_narration_work(session_id)
+    result["narration_status"] = "queued"
     return True
 
 
@@ -191,12 +173,29 @@ def recover_pending_interaction_narration(session_id: str, session: dict[str, An
         for lifecycle in lifecycles.values()
         if isinstance(lifecycle, dict) and lifecycle.get("status") == "narration_pending"
     ]
-    if pending:
-        from app.apps.rpg.session.narration_worker import ensure_narration_worker_running, signal_narration_work
+    if not pending:
+        return 0
+    # Saves from before WP-5.6 kept the request in the session's narration
+    # queue; give each pending one its rpg.narration job (idempotent). Newer
+    # pending narration already has its job, and its session holds no queue.
+    legacy_queue = _dict(runtime.get("narration_jobs_by_turn"))
+    recovered = 0
+    for lifecycle in pending:
+        turn_id = _text(lifecycle.get("turn_id"))
+        request = _dict(_dict(legacy_queue.get(turn_id)).get("narration_request"))
+        if not turn_id or not request:
+            continue
+        from app.apps.rpg.session.jobs.narration_job import enqueue_rpg_narration
 
-        ensure_narration_worker_running()
-        signal_narration_work(session_id)
-    return len(pending)
+        enqueue_rpg_narration(
+            session_id,
+            turn_id,
+            {**request, "session_id": session_id},
+            interaction_id=_text(lifecycle.get("interaction_id")),
+            tick=int(request.get("tick") or 0),
+        )
+        recovered += 1
+    return recovered
 
 
 def _update_interaction_event(

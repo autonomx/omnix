@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     BeatKind,
     BeatPurpose,
     DeterministicBeatPlanner,

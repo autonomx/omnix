@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -421,8 +421,8 @@ class PostgresMemoryV2GraphStore:
                         subject=GraphEntityRef(entity_id=str(row[2]), entity_type=str(row[3])),
                         predicate=str(row[4]),
                         object=GraphValue(**object_data),
-                        domain=str(row[6]),
-                        assertion_type=str(row[7]),
+                        domain=cast(Any, str(row[6])),
+                        assertion_type=cast(Any, str(row[7])),
                         confidence=float(row[8]),
                         valid_from=row[9],
                         valid_until=row[10],
@@ -431,7 +431,7 @@ class PostgresMemoryV2GraphStore:
                         derivation_version=str(row[11]),
                         supersedes=supersedes,
                         contradicted_by=contradicted_by,
-                        status=str(row[12]),
+                        status=cast(Any, str(row[12])),
                         revision=int(row[13]),
                     )
                 )

@@ -223,7 +223,7 @@ class BinanceMarketDataProvider(ProviderAdapter):
         self,
         instrument_id: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         instrument = instrument_by_id(instrument_id)
         if instrument is None:
             raise ValueError(f"unknown instrument: {instrument_id}")

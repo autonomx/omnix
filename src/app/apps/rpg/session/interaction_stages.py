@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.apps.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID
-from app.apps.rpg.performance_trace import rpg_pipeline_span
+from app.apps.rpg.session.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID
+from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span
 
 
 def commit_interaction(ctx: Any) -> Any:
@@ -58,6 +58,18 @@ def commit_interaction(ctx: Any) -> Any:
         narrative_span["content_hash"] = (
             canonical.get("content_hash") if isinstance(canonical, dict) else None
         )
+        # The lifecycle record and the canonical projection are part of the
+        # committed state (WP-5.6): recording them after the commit made a
+        # second save, a revision with no turn behind it. The lifecycle goes
+        # first because it rebuilds recent_interactions from the timeline.
+        from app.apps.rpg.narration.narrative_engine.consumer_publish import (
+            patch_session_canonical_projection,
+        )
+
+        from .interaction_lifecycle import initialize_interaction_lifecycle
+
+        initialize_interaction_lifecycle(session, result)
+        narrative_span["session_projection_patched"] = patch_session_canonical_projection(result)
 
     if isinstance(session_override, dict):
         session_override.clear()
@@ -75,7 +87,7 @@ def commit_interaction(ctx: Any) -> Any:
 
     if uses_postgresql_runtime():
         from app.jobs.foreground_execution import current_foreground_execution
-        from app.apps.rpg.persistence.rpg_turn_service import persist_foreground_turn
+        from app.apps.rpg.session.persistence.rpg_turn_service import persist_foreground_turn
 
         execution = current_foreground_execution()
         result["session"] = session
@@ -169,7 +181,11 @@ def commit_interaction(ctx: Any) -> Any:
 
 
 def initialize_lifecycle(ctx: Any) -> Any:
-    """Initialize post-commit interaction state and enqueue deferred narration."""
+    """Enqueue deferred narration for the committed interaction.
+
+    The commit already recorded the interaction's lifecycle; it is recorded
+    here only for a result that did not pass through ``commit_interaction``.
+    """
 
     result = ctx.result
     if not isinstance(result, dict) or result.get("ok") is not True:
@@ -189,7 +205,9 @@ def initialize_lifecycle(ctx: Any) -> Any:
         queue_deferred_narration_for_interaction,
     )
 
-    lifecycle = initialize(session, result)
+    lifecycle = result.get("interaction_lifecycle")
+    if not isinstance(lifecycle, dict) or lifecycle.get("interaction_id") != result.get("interaction_id"):
+        lifecycle = initialize(session, result)
     result["session"] = session
     if isinstance(ctx.session_override, dict):
         ctx.session_override.clear()

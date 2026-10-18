@@ -5,16 +5,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.apps.rpg.response_generation.baseline import (
+from app.apps.rpg.narration.response_generation.baseline import (
     BaselineObservation,
     evaluate_baseline,
     load_baseline_scenarios,
 )
-from app.apps.rpg.response_generation.contracts import ResponseMode
-from app.apps.rpg.response_generation.legacy_bridge import narrate_scene_canonical
-from app.apps.rpg.response_generation.production_pipeline import ProfileBoundProvider
-from app.apps.rpg.response_generation.profiles import DeliveryMode, ResponseGenerationProfile
-from app.apps.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
+from app.apps.rpg.narration.response_generation.contracts import ResponseMode
+from app.apps.rpg.narration.response_generation.legacy_bridge import narrate_scene_canonical
+from app.apps.rpg.narration.response_generation.production_pipeline import ProfileBoundProvider
+from app.apps.rpg.narration.response_generation.profiles import DeliveryMode, ResponseGenerationProfile
+from app.apps.rpg.narration.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
 
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "response_generation_baseline_v1.json"
@@ -159,7 +159,7 @@ def test_profiles_are_bound_before_provider_generation():
 
 
 def test_shadow_mode_preserves_exact_legacy_text_and_emits_no_chunks(monkeypatch):
-    from app.apps.rpg.response_generation import legacy_bridge
+    from app.apps.rpg.narration.response_generation import legacy_bridge
 
     monkeypatch.setattr(
         legacy_bridge,

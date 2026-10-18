@@ -7,6 +7,7 @@ from app.persistence.contracts import BlobStore
 
 from .backtest import BacktestArtifactReference, BacktestRunResult
 from .replay_repository import TradingReplayRepository
+from typing import Any
 
 
 class TradingReplayRuntimeRepository(TradingReplayRepository):
@@ -65,7 +66,7 @@ class TradingReplayRuntimeRepository(TradingReplayRepository):
             raise
         return saved
 
-    def list_backtests(self, limit: int = 100) -> list[dict[str, object]]:
+    def list_backtests(self, limit: int = 100) -> list[dict[str, Any]]:
         rows = super().list_backtests(limit)
         if not rows:
             return rows
@@ -87,7 +88,7 @@ class TradingReplayRuntimeRepository(TradingReplayRepository):
         return rows
 
     @staticmethod
-    def _artifact_from_row(values) -> dict[str, object] | None:
+    def _artifact_from_row(values) -> dict[str, Any] | None:
         if not values or values[0] is None:
             return None
         return {

@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 from copy import deepcopy
 from typing import Any, Iterable
 
-from app.apps.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
-from app.apps.rpg.economy.service_resolver import resolve_service_turn
-from app.apps.rpg.economy.currency import format_currency
+from app.apps.rpg.narration.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
+from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
+from app.apps.rpg.rules.economy.currency import format_currency
 from app.apps.rpg.session.public_state_bridge import (
     hydrate_simulation_player,
     project_authoritative_player,
@@ -38,6 +38,7 @@ from .semantic_direct_response import (
     _patch_semantic_direct_response as _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE,
 )
 from .player_turn_execution import apply_turn as _PHASE8_PART39_BASE_APPLY_TURN
+from app.apps.rpg.foundation.safe_values import copy_state
 
 _PHASE8_PART39_SOURCE = "phase8_social_claim_travel_mismatch_guard_v1"
 _CANONICAL_PUBLICATION_PIPELINE = StrictRpgProductionResponsePipeline()
@@ -328,7 +329,7 @@ def _apply_turn_authoritative(
     guarded_action = _safe_dict(action)
     service_result: dict[str, Any] = {}
     session = hydrate_simulation_player(
-        deepcopy(_safe_dict(load_runtime_session(session_id)))
+        copy_state(_safe_dict(load_runtime_session(session_id)))
     )
     if session:
         service_result = resolve_service_turn(
@@ -356,7 +357,7 @@ def _apply_turn_authoritative(
         service_result=service_result,
     ):
         latest_session = hydrate_simulation_player(
-            deepcopy(_safe_dict(load_runtime_session(session_id)))
+            copy_state(_safe_dict(load_runtime_session(session_id)))
         )
         if latest_session:
             authoritative = service_authoritative_result(
@@ -512,7 +513,7 @@ def _grounded_service_visible_response(resolved: dict[str, Any]) -> dict[str, An
     else:
         return {}
 
-    response = {
+    response: dict[str, Any] = {
         "format_version": "rpg_visible_response_v1",
         "narration": narration,
         "messages": messages,

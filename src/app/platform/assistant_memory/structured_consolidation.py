@@ -70,19 +70,6 @@ def _mark_automatic_direct_assertion(
 ) -> MemoryRecord:
     payload = {**record.structured_payload, "automatic_direct_assertion": True}
     repository = service.repository
-    database = getattr(repository, "database", None)
-    workspace_id = getattr(repository, "workspace_id", None)
-    if database is not None and workspace_id:
-        with database.transaction() as connection:
-            connection.execute(
-                "UPDATE omnix_memory_records SET structured_payload = %s::jsonb "
-                "WHERE id = %s AND workspace_id = %s",
-                (json.dumps(payload, sort_keys=True), record.id, workspace_id),
-            )
-        stored = repository.get_record(record.id)
-        if stored is None:
-            raise RuntimeError("automatic memory disappeared after metadata persistence")
-        return stored
     changed = record.model_copy(update={"structured_payload": payload})
     return repository.update_record(changed, expected_revision=record.revision)
 
@@ -122,30 +109,7 @@ def approve_structured_candidate(
     record = service.approve_candidate(context, candidate_id)
     payload = candidate.proposed_payload
     repository = service.repository
-    database = getattr(repository, "database", None)
-    workspace_id = getattr(repository, "workspace_id", None)
     contradiction_key = candidate.extraction_metadata.get("contradiction_key")
-    if database is not None and workspace_id:
-        with database.transaction() as connection:
-            connection.execute(
-                """
-                UPDATE omnix_memory_records
-                   SET kind = %s, structured_payload = %s::jsonb,
-                       contradiction_group = %s
-                 WHERE id = %s AND workspace_id = %s
-                """,
-                (
-                    candidate.proposed_kind,
-                    json.dumps(payload, sort_keys=True),
-                    contradiction_key,
-                    record.id,
-                    workspace_id,
-                ),
-            )
-        stored = repository.get_record(record.id)
-        if stored is None:
-            raise RuntimeError("approved structured memory disappeared")
-        return stored
     changed = record.model_copy(
         update={
             "kind": candidate.proposed_kind,
@@ -198,29 +162,8 @@ def consolidate_structured_proposal(
             payload = dict(exact.structured_payload)
             payload["evidence_count"] = int(payload.get("evidence_count") or 1) + 1
             payload["last_observed_at"] = _utcnow()
-            repository = service.repository
-            database = getattr(repository, "database", None)
-            workspace_id = getattr(repository, "workspace_id", None)
-            if database is not None and workspace_id:
-                with database.transaction() as connection:
-                    connection.execute(
-                        "UPDATE omnix_memory_records SET structured_payload = %s::jsonb, "
-                        "updated_at = %s::timestamptz WHERE id = %s AND workspace_id = %s",
-                        (
-                            json.dumps(payload, sort_keys=True),
-                            _utcnow(),
-                            exact.id,
-                            workspace_id,
-                        ),
-                    )
-                refreshed = repository.get_record(exact.id)
-                if refreshed is not None:
-                    exact = refreshed
-            else:
-                changed = exact.model_copy(
-                    update={"structured_payload": payload, "updated_at": _utcnow()}
-                )
-                exact = repository.update_record(changed, expected_revision=exact.revision)
+            changed = exact.model_copy(update={"structured_payload": payload, "updated_at": _utcnow()})
+            exact = service.repository.update_record(changed, expected_revision=exact.revision)
         return "duplicate_merged", exact
 
     contradiction = next((item for item in matches if item.id != (exact.id if exact else "")), None)

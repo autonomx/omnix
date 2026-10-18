@@ -1,3 +1,4 @@
+import { isChartLinkGroup } from '../chartLinkGroups';
 import type { CoreIndicatorInstance, CoreIndicatorStyle } from '../indicators/coreIndicators';
 import { isAutoChartPatternId } from '../indicators/autoPatterns';
 import { isTradingViewBuiltInId } from '../indicators/tradingViewBuiltIns';
@@ -6,12 +7,14 @@ import { binanceInstrumentIdFor } from '../cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
   MAX_TRADING_TABS,
+  type TradingChartSettings,
   type TradingChartState,
   type TradingLayout,
   type TradingLinkState,
   type TradingPanelState,
 } from '../tradingStore';
 import type { TradingComparison, TradingComparisonPlacement } from '../tradingComparisons';
+import { normalizeFavoriteIntervals } from '../tradingIntervals';
 
 export type TradingWorkspacePayload = {
   schemaVersion: 3;
@@ -22,6 +25,8 @@ export type TradingWorkspacePayload = {
   links: TradingLinkState;
   panels: TradingPanelState;
   favoriteInstrumentIds: string[];
+  /** Interval favourites (TVP-2.5); absent in documents saved before them. */
+  favoriteIntervals?: string[];
   activeTabId?: string;
   tabs?: TradingTabPayload[];
 };
@@ -36,10 +41,11 @@ export type TradingTabPayload = {
   panels: TradingPanelState;
 };
 
-type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId' | 'comparisons'> & {
+type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId' | 'comparisons' | 'settings'> & {
   indicators?: CoreIndicatorInstance[];
   bindingId?: string | null;
   comparisons?: TradingComparison[];
+  settings?: TradingChartSettings;
 };
 
 type LegacyLayout = 'one' | 'two-horizontal' | 'two-vertical' | 'four';
@@ -59,6 +65,7 @@ export function serializeTradingWorkspace(input: {
   links: TradingLinkState;
   panels?: TradingPanelState;
   favoriteInstrumentIds?: string[];
+  favoriteIntervals?: string[];
   activeTabId?: string;
   tabs?: TradingTabPayload[];
 }): TradingWorkspacePayload {
@@ -67,26 +74,17 @@ export function serializeTradingWorkspace(input: {
     name: input.name?.trim() || 'Main Workspace',
     layout: input.layout,
     activeChartId: input.activeChartId,
-    charts: input.charts.map((chart) => ({
-      ...chart,
-      bindingId: chart.bindingId ?? null,
-      indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
-      comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
-    })),
+    charts: input.charts.map(serializeChart),
     links: { ...input.links },
     panels: { ...(input.panels ?? { right: true, bottom: true }) },
     favoriteInstrumentIds: [...new Set(input.favoriteInstrumentIds ?? [])],
   };
+  if (input.favoriteIntervals) payload.favoriteIntervals = [...input.favoriteIntervals];
   if (input.activeTabId && input.tabs?.length) {
     payload.activeTabId = input.activeTabId;
     payload.tabs = input.tabs.map((tab) => ({
       ...tab,
-      charts: tab.charts.map((chart) => ({
-        ...chart,
-        bindingId: chart.bindingId ?? null,
-        indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
-        comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
-      })),
+      charts: tab.charts.map(serializeChart),
       links: { ...tab.links },
       panels: { ...tab.panels },
     }));
@@ -94,11 +92,54 @@ export function serializeTradingWorkspace(input: {
   return payload;
 }
 
+function serializeChart(chart: PersistableChart): TradingChartState {
+  const { settings, ...rest } = chart;
+  return {
+    ...rest,
+    bindingId: chart.bindingId ?? null,
+    indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
+    comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
+    ...(settings && Object.keys(settings).length > 0 ? { settings: { ...settings } } : {}),
+  };
+}
+
+const CHART_SETTING_KEYS = ['barCountdown', 'extendedHours', 'extendedPriceLine', 'events'] as const;
+
+/**
+ * The chart settings a document may carry. A malformed setting falls back to its default
+ * (and is logged) rather than failing the whole workspace; unknown keys are dropped.
+ */
+export function parseChartSettings(value: unknown): TradingChartSettings {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    console.warn('Trading chart settings are malformed; using defaults.', value);
+    return {};
+  }
+  const raw = value as Record<string, unknown>;
+  const settings: TradingChartSettings = {};
+  for (const key of CHART_SETTING_KEYS) {
+    if (raw[key] === undefined) continue;
+    if (typeof raw[key] !== 'boolean') {
+      console.warn(`Trading chart setting ${key} is malformed; using its default.`, raw[key]);
+      continue;
+    }
+    settings[key] = raw[key] as boolean;
+  }
+  return settings;
+}
+
+/** Validated indicator instances, or null when any entry is malformed. */
+export function parseIndicatorInstances(value: unknown): CoreIndicatorInstance[] | null {
+  if (!Array.isArray(value)) return null;
+  const indicators = value.filter(indicator);
+  return indicators.length === value.length ? indicators.map((item) => ({ ...item })) : null;
+}
+
 function indicator(value: unknown): value is CoreIndicatorInstance {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<CoreIndicatorInstance>;
   const ids = ['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap', 'bull-market-band', 'death-cross', 'ema-stack', 'fair-value-gap', 'golden-cross', 'ideal-bb', 'log-macd', 'macd-dema', 'rsi-divergence', 'stochastic-rsi', 'swing-liquidity', 'volume-profile'];
-  if (!item.id || (!ids.includes(item.id) && !isAutoChartPatternId(item.id) && !isTradingViewBuiltInId(item.id))) return false;
+  if (!item.id || (!ids.includes(item.id) && !isAutoChartPatternId(item.id) && !isTradingViewBuiltInId(item.id) && !/^script-[A-Za-z0-9_-]{1,190}$/.test(item.id))) return false;
   if (typeof item.period !== 'number' || !Number.isInteger(item.period) || item.period < 1) return false;
   if (typeof item.enabled !== 'boolean') return false;
   if (item.visible !== undefined && typeof item.visible !== 'boolean') return false;
@@ -107,6 +148,17 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
   }
   if (item.standardDeviations !== undefined && (!Number.isFinite(item.standardDeviations) || item.standardDeviations <= 0)) return false;
   if (item.anchorTime !== undefined && item.anchorTime !== null && typeof item.anchorTime !== 'string') return false;
+  if (item.compareSymbol !== undefined && item.compareSymbol !== null && typeof item.compareSymbol !== 'string') return false;
+  if (item.source !== undefined && item.source !== null) {
+    const source = item.source as { indicatorId?: unknown; output?: unknown };
+    if (typeof source !== 'object' || typeof source.indicatorId !== 'string' || typeof source.output !== 'string') return false;
+  }
+  if (item.params !== undefined) {
+    if (!item.params || typeof item.params !== 'object' || Array.isArray(item.params)) return false;
+    for (const [key, value] of Object.entries(item.params)) {
+      if (!key || !(typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)))) return false;
+    }
+  }
   if (item.style !== undefined) {
     if (!item.style || typeof item.style !== 'object') return false;
     const style = item.style as CoreIndicatorStyle;
@@ -160,6 +212,7 @@ function parseCharts(value: unknown): TradingChartState[] | null {
     if (Array.isArray(chart.indicators) && indicators.length !== chart.indicators.length) return null;
     const comparisons = Array.isArray(chart.comparisons) ? chart.comparisons.filter(comparison) : [];
     if (Array.isArray(chart.comparisons) && comparisons.length !== chart.comparisons.length) return null;
+    const settings = parseChartSettings(chart.settings);
     charts.push({
       chartId: chart.chartId,
       instrumentId: chart.instrumentId,
@@ -168,6 +221,9 @@ function parseCharts(value: unknown): TradingChartState[] | null {
       chartType: chart.chartType,
       indicators,
       comparisons,
+      ...(Object.keys(settings).length > 0 ? { settings } : {}),
+      // An unknown group (a newer colour) is dropped rather than failing the document.
+      ...(isChartLinkGroup(chart.linkGroup) ? { linkGroup: chart.linkGroup } : {}),
     });
   }
   if (new Set(charts.map((chart) => chart.chartId)).size !== charts.length) return null;
@@ -178,6 +234,8 @@ function parseLinks(value: unknown): TradingLinkState | null {
   if (!value || typeof value !== 'object') return null;
   const links = value as Partial<TradingLinkState>;
   if (['instrument', 'interval', 'crosshair', 'visibleRange'].some((key) => typeof links[key as keyof TradingLinkState] !== 'boolean')) return null;
+  // Time sync (TVP-4.2) is optional: documents written before it have none (off).
+  if (links.time !== undefined && typeof links.time !== 'boolean') return null;
   return links as TradingLinkState;
 }
 
@@ -295,6 +353,8 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
     panels: parsePanels(payload.panels),
     favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
   };
+  const favoriteIntervals = normalizeFavoriteIntervals(payload.favoriteIntervals);
+  if (favoriteIntervals) result.favoriteIntervals = favoriteIntervals;
   if (parsedTabs) {
     const migratedTabs = parsedTabs.map((tab) => ({
       ...tab,

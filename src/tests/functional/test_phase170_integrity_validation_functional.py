@@ -1,7 +1,7 @@
 """Phase 17.0 — Integrity validation functional tests."""
 import pytest
 
-from app.apps.rpg.validation.integrity import (
+from app.apps.rpg.rules.validation.integrity import (
     assert_package_integrity,
     validate_memory_state,
     validate_package_integrity,

@@ -1,14 +1,14 @@
 """Phase 9.1 — Regression tests for Party System and save compatibility."""
 from __future__ import annotations
 
-from app.apps.rpg.party import (
+from app.apps.rpg.rules.party import (
     add_companion,
     ensure_party_state,
     get_active_companions,
     remove_companion,
 )
-from app.apps.rpg.party.companion_ai import run_companion_turns
-from app.apps.rpg.persistence.migrations.v4_to_v5 import migrate_v4_to_v5
+from app.apps.rpg.rules.party.companion_ai import run_companion_turns
+from app.apps.rpg.foundation.persistence.migrations.v4_to_v5 import migrate_v4_to_v5
 
 
 class TestPartySaveCompatibility:

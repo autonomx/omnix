@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.session.genesis.campaign_lore_store import (
+from app.apps.rpg.genesis.forge.campaign_lore_store import (
     LoreRegenerationUnavailable,
     _generated_lore_text,
     _merge_published_world_canon,
@@ -8,8 +8,9 @@ from app.apps.rpg.session.genesis.campaign_lore_store import (
     ensure_current_location_document,
     regenerate_campaign_lore_document,
 )
-from app.apps.rpg.session.genesis.campaign_lore_api import campaign_lore_payload
-from app.apps.rpg.worlds.published_canon_projection import project_published_canon
+from app.apps.rpg.genesis.forge.campaign_lore_api import campaign_lore_payload
+from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 class _Gateway:
@@ -309,20 +310,20 @@ def test_page_regeneration_uses_direction_and_commits_a_new_revision(monkeypatch
 
     gateway = Gateway()
     monkeypatch.setattr(
-        "app.apps.rpg.session.genesis.campaign_lore_store.load_campaign_lore",
+        "app.apps.rpg.genesis.forge.campaign_lore_store.load_campaign_lore",
         lambda *_args, **_kwargs: (session, {"persisted": True}),
     )
     monkeypatch.setattr(
-        "app.apps.rpg.session.genesis.campaign_lore_store.default_database",
+        "app.apps.rpg.genesis.forge.campaign_lore_store.default_database",
         lambda: object(),
     )
     monkeypatch.setattr(
-        "app.apps.rpg.session.genesis.campaign_lore_store.unit_of_work",
+        "app.apps.rpg.genesis.forge.campaign_lore_store.unit_of_work",
         lambda _database: Work(),
     )
     monkeypatch.setattr(
-        "app.apps.rpg.session.genesis.campaign_lore_store._save_portable_projection",
-        lambda value: value,
+        "app.apps.rpg.genesis.forge.campaign_lore_store._save_portable_projection",
+        lambda value, **_kwargs: value,
     )
 
     updated, storage = regenerate_campaign_lore_document(
@@ -331,6 +332,7 @@ def test_page_regeneration_uses_direction_and_commits_a_new_revision(monkeypatch
         document_id="lore:cosmology",
         direction="Focus on everyday rituals under both moons.",
         llm_gateway=gateway,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     regenerated = updated["campaign_bible_projection"]["documents"][0]

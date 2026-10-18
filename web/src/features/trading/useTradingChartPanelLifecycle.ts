@@ -1,13 +1,28 @@
 import { APPEARANCE_CHANGE_EVENT, onOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
-import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { defaultTradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { TradingChartAdapter } from './chart/chartAdapter';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS } from './tradingTime';
-import { TradingChartPanelProps, Y_AXIS_DRAG_ZOOM_SENSITIVITY } from './tradingChartPanelModel';
+import { TradingChartPanelProps, Y_AXIS_DRAG_ZOOM_SENSITIVITY, loadCompareSymbolBars } from './tradingChartPanelModel';
 import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
+
+/** How far a press may move and still be a click (time sync, TVP-4.2). */
+const CLICK_SLOP_PX = 4;
+
+type ChartPan = {
+  pointerId: number; startX: number; startY: number; lastX: number; lastY: number; paneY: number; paneId: string | null;
+  mode: 'chart-pan' | 'price-scale' | 'price-pan';
+};
+
+/** A chart press that ended without dragging: a click, which taking the press kept from the chart's own click event. */
+function isChartClick(pan: ChartPan, event: PointerEvent): boolean {
+  return event.type === 'pointerup' && pan.mode === 'chart-pan'
+    && Math.abs(event.clientX - pan.startX) < CLICK_SLOP_PX && Math.abs(event.clientY - pan.startY) < CLICK_SLOP_PX;
+}
 
 /** The chart adapter: creation, streaming, appearance and viewport. */
 export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData>) {
@@ -18,14 +33,22 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
     selectedRangeRef, setAdapter, setChartPanning, setContextMenu, setCustomRangeOpen, setFullscreenIndicator,
     setFullscreenMainPane, setIndicatorOutputs, setIndicatorPaneGeometry, setPanningIndicatorPane,
     setPriceScaleMenuOpen, setPriceScaleSettings, setSelectedIndicator, setSelectedRangeLabel, setTimezoneId,
-    setTimezoneMenuOpen, streamDataKeyRef, streamRevisionRef, synchronization, timezoneId, timezoneMenuOpen,
+    setTimezoneMenuOpen, showExtendedHours, streamDataKeyRef, streamRevisionRef, synchronization, timezoneId, timezoneMenuOpen,
     timezoneMenuRef,
   } = ws;
+  const queryClient = useQueryClient();
+  // Compare-symbol indicators read the compare symbol's bars with the chart's extended-hours setting.
+  const extendedHoursRef = useRef(showExtendedHours);
+  useEffect(() => {
+    extendedHoursRef.current = showExtendedHours;
+  }, [showExtendedHours]);
 
   useEffect(() => {
     if (!hostRef.current) return;
     const next = new TradingChartAdapter(hostRef.current, chartType);
-    const scheduler = new TradingIndicatorScheduler();
+    const scheduler = new TradingIndicatorScheduler(undefined, (id, barInterval, range) => (
+      loadCompareSymbolBars(queryClient, id, barInterval, range, Date.now(), extendedHoursRef.current)
+    ));
     adapterRef.current = next;
     indicatorSchedulerRef.current = scheduler;
     fittedBarsKeyRef.current = null;
@@ -57,12 +80,12 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
     };
     // Creates the chart once per chart and synchronization group; it reads later values through refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartId, synchronization, adapterRef, fittedBarsKeyRef, fullscreenIndicatorRef, fullscreenMainPaneRef, hostRef, indicatorSchedulerRef, indicatorTimerRef, pendingRangeIntervalRef, selectedRangeRef, setAdapter, setFullscreenIndicator, setFullscreenMainPane, setIndicatorOutputs, setIndicatorPaneGeometry, setPriceScaleMenuOpen, setPriceScaleSettings, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef]);
+  }, [chartId, synchronization, queryClient, adapterRef, fittedBarsKeyRef, fullscreenIndicatorRef, fullscreenMainPaneRef, hostRef, indicatorSchedulerRef, indicatorTimerRef, pendingRangeIntervalRef, selectedRangeRef, setAdapter, setFullscreenIndicator, setFullscreenMainPane, setIndicatorOutputs, setIndicatorPaneGeometry, setPriceScaleMenuOpen, setPriceScaleSettings, setSelectedRangeLabel, streamDataKeyRef, streamRevisionRef]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !adapter) return;
-    let pan: { pointerId: number; lastX: number; lastY: number; paneY: number; paneId: string | null; mode: 'chart-pan' | 'price-scale' | 'price-pan' } | null = null;
+    let pan: ChartPan | null = null;
     const insideHost = (event: PointerEvent) => event.target instanceof Node && host.contains(event.target);
     const pointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -84,6 +107,8 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
       if (replayMode && active && !onPriceScale) return;
       pan = {
         pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
         lastX: event.clientX,
         lastY: event.clientY,
         paneY,
@@ -120,6 +145,7 @@ export function useChartLifecycle(ws: TradingChartPanelProps & ReturnType<typeof
     };
     const pointerUp = (event: PointerEvent) => {
       if (!pan || pan.pointerId !== event.pointerId) return;
+      if (isChartClick(pan, event)) adapter.clickAt(pan.startX - host.getBoundingClientRect().left);
       pan = null;
       setChartPanning(false);
       setPanningIndicatorPane(null);

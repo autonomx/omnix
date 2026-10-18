@@ -9,7 +9,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
-from app.apps.rpg.persistence.rpg_turn_service import persist_foreground_turn
+from app.apps.rpg.session.persistence.rpg_turn_service import persist_foreground_turn
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -217,7 +217,8 @@ def test_foreground_turn_commits_every_authoritative_record_together() -> None:
                 (campaign_id, submission_id),
             ).fetchone()
         assert int(row[0]) == 1
-        assert tuple(int(value) for value in counts[:3]) == (1, 1, 1)
+        # Revision 1 writes no full snapshot: one is due every OMNIX_RPG_SNAPSHOT_EVERY revisions (WP-5.6).
+        assert tuple(int(value) for value in counts[:3]) == (1, 1, 0)
         assert int(counts[3]) == 0  # RPG events have no outbox consumer (WP-5.3)
         assert str(job[0]) == "completed"
         assert str(submission[0]) == "completed"
@@ -373,7 +374,7 @@ def test_foreground_transaction_cannot_borrow_a_workers_current_lease(supplied_l
 
 
 def test_foreground_mirror_carries_original_claim_through_atomic_turn_and_replay(monkeypatch) -> None:
-    from app.apps.rpg.jobs.turn_job_mirror import _apply_turn_with_job_mirror
+    from app.apps.rpg.session.jobs.turn_job_mirror import _apply_turn_with_job_mirror
     from app.jobs.foreground_execution import current_foreground_execution
     from app.jobs import store as stores
     from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter

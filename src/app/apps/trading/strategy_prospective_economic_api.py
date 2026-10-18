@@ -24,6 +24,7 @@ from .strategy_repository import (
     default_strategy_repository,
 )
 from .strategy_v2_qualification import v2_profile_fingerprint
+from typing import Any
 
 
 _DIAGNOSTIC_EVENT_TYPES = ("prospective_economic_candidate",)
@@ -95,7 +96,7 @@ def _append(
     event_type: str,
     state: str,
     reason_code: str,
-    payload: dict[str, object],
+    payload: dict[str, Any],
     identity: tuple[object, ...],
 ) -> StrategyEvent:
     observed_at = datetime.now(timezone.utc)

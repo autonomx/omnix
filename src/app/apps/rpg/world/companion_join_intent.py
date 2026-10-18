@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from app.apps.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
-from app.apps.rpg.safe_values import safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_str as _safe_str
 
 JOIN_REQUEST_MARKERS = {
     "join me",

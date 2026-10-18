@@ -13,7 +13,7 @@ from app.config.env import env_str as _env_str
 import asyncio
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable
 
 from app.runtime.features import FeatureContext
 
@@ -25,10 +25,12 @@ from .prospective_experiment_outcomes import evaluate_geometry_on_sip_tape
 from .prospective_prediction_evidence import select_analysis_session_prices
 from .prospective_prediction_scoring import build_formal_outcome_labels
 from .session_evidence import (
+    EvidenceInput,
     SessionEvidenceManifest,
     SessionEvidenceRepository,
     begin_reconciliation,
     build_session_evidence_manifest,
+    checkpoint_reconciliation,
     default_session_evidence_repository,
     defer_reconciliation,
     event_stream_input,
@@ -51,6 +53,7 @@ logger = logging.getLogger(__name__)
 
 _STATE_KEY = "_omnix_trading_session_reconciliation_monitor"
 _DEFAULT_CREATE_AFTER = time(16, 5)
+_ATTEMPT_TIMEOUT_SECONDS = 1800.0
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -205,8 +208,8 @@ def _decimal(value: object) -> Decimal | None:
 def _prospective_experiment_outcomes(
     events: list[StrategyEvent],
     trades,
-) -> list[dict[str, object]]:
-    records: list[dict[str, object]] = []
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     for event in events:
         payload = event.payload if isinstance(event.payload, dict) else {}
         if event.event_type == "ai_v3_geometry_challenger":
@@ -318,10 +321,10 @@ def _mean_decimal(values: list[Decimal]) -> str | None:
 
 
 def _summarize_experiment_outcomes(
-    records: list[dict[str, object]],
-) -> dict[str, object]:
-    agreement: dict[str, list[dict[str, object]]] = {}
-    geometry: dict[str, list[dict[str, object]]] = {}
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    agreement: dict[str, list[dict[str, Any]]] = {}
+    geometry: dict[str, list[dict[str, Any]]] = {}
     for record in records:
         if record.get("experiment") == "ai_v1_v2_agreement":
             agreement.setdefault(str(record.get("cohort")), []).append(record)
@@ -382,13 +385,101 @@ def _summarize_experiment_outcomes(
     }
 
 
+# Failures decided by the SIP tape itself. Once the session's data has settled
+# a retry refetches the same tape and fails the same way, so they are final.
+_DETERMINISTIC_SYMBOL_ERRORS = (
+    "formal_sip_5m_session_incomplete:",
+    "formal_outcome_unscorable:",
+    "insufficient_eligible_regular_session_sip_trades",
+    "sip_trade_events_required",
+)
+
+
+def _deterministic_symbol_error(exc: Exception) -> bool:
+    return isinstance(exc, ValueError) and str(exc).startswith(_DETERMINISTIC_SYMBOL_ERRORS)
+
+
+def _session_data_settled(session_date: date, now: datetime) -> bool:
+    """SIP corrections land on the session day; the next ET day the tape is final."""
+    return now.astimezone(_ET).date() > session_date
+
+
+def _sip_source_ids(instrument_id: str, session_date: date) -> tuple[str, str]:
+    return (
+        f"alpaca_sip:trades:{instrument_id}:{session_date}",
+        f"alpaca_sip:5m:{instrument_id}:{session_date}",
+    )
+
+
+def _prior_symbol_result(
+    payload: dict[str, Any],
+    *,
+    instrument_id: str,
+    session_date: date,
+) -> tuple[dict[str, Any], tuple[EvidenceInput, ...]] | None:
+    """A symbol scored by an earlier attempt of this manifest, with its SIP evidence.
+
+    The outcome depends only on the final SIP tape and the manifest's frozen
+    events, so a retry reuses it instead of refetching the whole tape.
+    """
+    outcomes = payload.get("outcomes")
+    outcome = outcomes.get(instrument_id) if isinstance(outcomes, dict) else None
+    if not isinstance(outcome, dict):
+        return None
+    source_ids = _sip_source_ids(instrument_id, session_date)
+    found: dict[str, EvidenceInput] = {}
+    for item in payload.get("reconciliation_evidence") or []:
+        if isinstance(item, dict) and item.get("source_id") in source_ids:
+            try:
+                found[item["source_id"]] = EvidenceInput.model_validate(item)
+            except Exception:
+                return None
+    if set(found) != set(source_ids):
+        return None
+    return outcome, tuple(found[source_id] for source_id in source_ids)
+
+
+def _reconciliation_payload(
+    manifest: SessionEvidenceManifest,
+    outcomes: dict[str, Any],
+    evidence: list[Any],
+    errors: dict[str, str],
+    deterministic_errors: set[str],
+    reused: list[str],
+) -> dict[str, Any]:
+    experiment_records = [
+        record
+        for outcome in outcomes.values()
+        if isinstance(outcome, dict)
+        for record in (outcome.get("prospective_experiment_outcomes") or [])
+        if isinstance(record, dict)
+    ]
+    return {
+        "authority": {
+            "prices": "consolidated_sip_trade_events",
+            "bars": "single_provider_raw_finalized_sip_5m",
+            "provider": "alpaca_sip",
+            "web_fallback_allowed": False,
+            "iex_fallback_allowed": False,
+        },
+        "expected_candidate_count": manifest.frozen_scope.expected_candidate_count,
+        "scored_candidate_count": len(outcomes),
+        "outcomes": dict(outcomes),
+        "reconciliation_evidence": [item.model_dump(mode="json") for item in evidence],
+        "errors": dict(errors),
+        "deterministic_error_candidates": sorted(deterministic_errors),
+        "reused_candidate_outcomes": sorted(reused),
+        "experiment_summary": _summarize_experiment_outcomes(experiment_records),
+    }
+
+
 def _serializable_outcome(
     *,
     prices,
     measurements,
     labels,
     coverage_certificate,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "analysis_prices": prices.model_dump(mode="json"),
         "measurements": measurements.model_dump(mode="json"),
@@ -412,6 +503,8 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
         self.sip_provider_factory = sip_provider_factory
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
+        # One symbol's full-day SIP tape can take minutes to page through.
+        self.timeout_seconds = _ATTEMPT_TIMEOUT_SECONDS
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.manifest_create_count = 0
@@ -512,7 +605,7 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
         instrument_id: str,
         session_date: date,
         events: list[StrategyEvent],
-    ) -> tuple[dict[str, object], tuple[object, ...]]:
+    ) -> tuple[dict[str, Any], tuple[object, ...]]:
         trades = await asyncio.to_thread(
             provider.regular_session_trade_events,
             instrument_id,
@@ -543,15 +636,16 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
             prices=prices,
             bars=bars,
         )
+        trade_source_id, bar_source_id = _sip_source_ids(instrument_id, session_date)
         trade_input = provider_evidence_input(
-            source_id=f"alpaca_sip:trades:{instrument_id}:{session_date}",
+            source_id=trade_source_id,
             payload=[item.model_dump(mode="json") for item in trades],
             record_count=len(trades),
             start_time=trades[0].event_timestamp if trades else None,
             end_time=trades[-1].event_timestamp if trades else None,
         )
         bar_input = provider_evidence_input(
-            source_id=f"alpaca_sip:5m:{instrument_id}:{session_date}",
+            source_id=bar_source_id,
             payload=[item.model_dump(mode="json") for item in bars],
             record_count=len(bars),
             start_time=bars[0].start_time if bars else None,
@@ -576,7 +670,15 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
         *,
         now: datetime,
     ) -> None:
-        started = begin_reconciliation(manifest, observed_at=now)
+        started = begin_reconciliation(
+            manifest,
+            observed_at=now,
+            # Outlasts the whole cycle, so a cut-off attempt is not re-picked mid-flight.
+            lease_until=now + max(
+                timedelta(minutes=_retry_minutes()),
+                timedelta(seconds=self.run_timeout_seconds()),
+            ),
+        )
         started = await asyncio.to_thread(
             manifests.save_transition,
             manifest,
@@ -647,10 +749,27 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
                 ).append(event)
 
             provider = self.sip_provider_factory()
-            outcomes: dict[str, object] = {}
-            evidence = []
+            session_date = started.frozen_scope.session_date
+            outcomes: dict[str, Any] = {}
+            evidence: list[Any] = []
             errors: dict[str, str] = {}
+            deterministic_errors: set[str] = set()
+            reused: list[str] = []
+            # Take every earlier result up front so each checkpoint carries them all.
+            pending_candidates = []
             for candidate in universe.candidates:
+                prior = _prior_symbol_result(
+                    started.reconciliation_payload,
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                )
+                if prior is None:
+                    pending_candidates.append(candidate)
+                    continue
+                outcomes[candidate.instrument_id] = prior[0]
+                evidence.extend(prior[1])
+                reused.append(candidate.instrument_id)
+            for candidate in pending_candidates:
                 try:
                     outcome, inputs = await self._reconcile_symbol(
                         provider,
@@ -667,35 +786,26 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
                     errors[candidate.instrument_id] = (
                         f"{type(exc).__name__}: {exc}"
                     )
-
-            all_experiment_records = [
-                record
-                for outcome in outcomes.values()
-                if isinstance(outcome, dict)
-                for record in (
-                    outcome.get("prospective_experiment_outcomes") or []
+                    if _deterministic_symbol_error(exc):
+                        deterministic_errors.add(candidate.instrument_id)
+                    continue
+                # A large SIP tape can outlast the cycle; keep what is scored.
+                checkpoint = checkpoint_reconciliation(
+                    started,
+                    observed_at=self.now_factory(),
+                    payload=_reconciliation_payload(
+                        started, outcomes, evidence, errors, deterministic_errors, reused
+                    ),
                 )
-                if isinstance(record, dict)
-            ]
-            payload: dict[str, object] = {
-                "authority": {
-                    "prices": "consolidated_sip_trade_events",
-                    "bars": "single_provider_raw_finalized_sip_5m",
-                    "provider": "alpaca_sip",
-                    "web_fallback_allowed": False,
-                    "iex_fallback_allowed": False,
-                },
-                "expected_candidate_count": started.frozen_scope.expected_candidate_count,
-                "scored_candidate_count": len(outcomes),
-                "outcomes": outcomes,
-                "reconciliation_evidence": [
-                    item.model_dump(mode="json") for item in evidence
-                ],
-                "errors": errors,
-                "experiment_summary": _summarize_experiment_outcomes(
-                    all_experiment_records
-                ),
-            }
+                started = await asyncio.to_thread(
+                    manifests.save_transition,
+                    started,
+                    checkpoint,
+                )
+
+            payload = _reconciliation_payload(
+                started, outcomes, evidence, errors, deterministic_errors, reused
+            )
             if not errors and len(outcomes) == len(universe.candidates):
                 final = finalize_reconciliation(
                     started,
@@ -719,8 +829,19 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
                 )
                 return
 
-            age = now.astimezone(_ET).date() - started.frozen_scope.session_date
-            if age.days >= _max_age_days():
+            age = now.astimezone(_ET).date() - session_date
+            # A session is scored whole or not at all; when every remaining
+            # failure is fixed by the settled tape, waiting out the max age only
+            # refetches the same data.
+            unrecoverable = (
+                bool(errors)
+                and set(errors) == deterministic_errors
+                and _session_data_settled(session_date, now)
+            )
+            if age.days >= _max_age_days() or unrecoverable:
+                payload["close_reason"] = (
+                    "deterministic_symbol_failures" if unrecoverable else "max_pending_age"
+                )
                 closed = permanently_unscorable(
                     started,
                     observed_at=now,
@@ -732,6 +853,17 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
                     closed,
                 )
                 self.permanently_unscorable_count += 1
+                trade_log(
+                    "auto_trading",
+                    "session_evidence_reconciliation_unscorable",
+                    strategy_id=started.strategy_id,
+                    session_date=session_date.isoformat(),
+                    manifest_id=started.manifest_id,
+                    close_reason=payload["close_reason"],
+                    scored_candidate_count=len(outcomes),
+                    unscorable_candidates=sorted(errors),
+                    execution_authority=False,
+                )
                 return
 
             deferred = defer_reconciliation(
@@ -816,7 +948,7 @@ class TradingSessionReconciliationMonitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return len(pending)
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": session_reconciliation_monitor_enabled(),
             "running": self.scheduled,

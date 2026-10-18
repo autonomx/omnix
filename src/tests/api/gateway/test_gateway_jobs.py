@@ -139,7 +139,7 @@ def test_gateway_job_list_uses_bounded_browser_safe_summaries(tmp_path: Path, se
 @pytest.mark.anyio
 async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkeypatch, tmp_path: Path) -> None:
     from app.composition.gateway import main as gateway_main
-    from app.apps.rpg.api import compat_router
+    from app.apps.rpg.edge.api import compat_router
 
     started = threading.Event()
     release = threading.Event()

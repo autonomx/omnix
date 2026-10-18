@@ -32,7 +32,7 @@ def _b(value: Any, default: bool = False) -> bool:
 def _optional_flavor_provider(enable_flavor: bool) -> Any:
     if not enable_flavor:
         return None
-    from app.apps.rpg.llm_app_gateway import build_app_llm_gateway
+    from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 
     return build_app_llm_gateway()
 

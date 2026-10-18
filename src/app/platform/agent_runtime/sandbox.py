@@ -26,6 +26,7 @@ from .isolation import (
     DockerStrongIsolation,
     unsandboxed_runs_allowed,
 )
+from typing import Any
 
 DOCKERFILE = Path(__file__).resolve().parents[4] / "deploy" / "docker" / "agent-sandbox.Dockerfile"
 # A TCP connect probe run inside the sandbox image; prints "open" or "closed".
@@ -52,9 +53,9 @@ def build(image: str) -> int:
     return completed.returncode
 
 
-def status() -> dict[str, object]:
+def status() -> dict[str, Any]:
     isolation = DockerStrongIsolation()
-    report: dict[str, object] = {
+    report: dict[str, Any] = {
         "image": isolation.image,
         "network": isolation.network,
         "operator_network": bool(isolation.operator_network),
@@ -81,14 +82,14 @@ def probe(docker: str, image: str, network: str, host: str, port: int) -> str:
     return completed.stdout.strip() or f"error: {completed.stderr.strip()[:200]}"
 
 
-def check_egress(gateway_url: str, outside: str) -> dict[str, object]:
+def check_egress(gateway_url: str, outside: str) -> dict[str, Any]:
     isolation = DockerStrongIsolation()
     isolation.validate()
     isolation.ensure_network([gateway_url])
     assert isolation.docker is not None
     outside_host, _, outside_port = outside.rpartition(":")
     relay_port = int(gateway_url.split("://", 1)[1].split("/", 1)[0].rpartition(":")[2] or 80)
-    result = {
+    result: dict[str, Any] = {
         "network": isolation.network,
         "relay": probe(isolation.docker, isolation.image, isolation.network, RELAY_CONTAINER, relay_port),
         "outside": probe(isolation.docker, isolation.image, isolation.network, outside_host, int(outside_port)),

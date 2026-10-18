@@ -37,9 +37,16 @@ def main() -> int:
         return 0
 
     import uvicorn
-    from app.security.service_credentials import initialize_service_token
+    from app.observability.logging import configure_logging
+    from app.security.service_credentials import initialize_run_token_key, initialize_service_token
 
+    # Structured logs (OMNIX_LOG_FORMAT, OMNIX_LOG_LEVEL) for this process and
+    # every replica, which runs this script too.
+    configure_logging()
     initialize_service_token()
+    # Run tokens get their own key, never one derived from the service token
+    # that model services also hold. Replicas and the job worker inherit it.
+    os.environ["OMNIX_RUN_TOKEN_KEY"] = initialize_run_token_key()
 
     from gateway_cluster import (
         replica_ports,

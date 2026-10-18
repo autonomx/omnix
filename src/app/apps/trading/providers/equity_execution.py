@@ -70,7 +70,7 @@ def yahoo_execution_observation(
         or result.get("preMarketTime")
     )
     now = datetime.now(timezone.utc)
-    quote: dict[str, object] = {
+    quote: dict[str, Any] = {
         "instrument_id": instrument_id,
         "binding_id": binding.binding_id,
         "provider": "yahoo",

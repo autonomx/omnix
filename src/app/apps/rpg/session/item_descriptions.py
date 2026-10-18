@@ -15,7 +15,7 @@ from app.apps.rpg.session.item_system import (
     normalize_item_instance,
     suggest_genre_item_name,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 ITEM_DESCRIPTION_CONTEXT_VERSION = "item_description_context_v1"
 DISPLAY_FIELDS = tuple(sorted(AI_FICTION_ITEM_FIELDS))

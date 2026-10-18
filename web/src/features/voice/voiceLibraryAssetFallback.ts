@@ -25,13 +25,25 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
-function isAssetListRequest(rawUrl: string): boolean {
+function parsedUrl(rawUrl: string): URL | null {
   try {
     const base = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
-    return new URL(rawUrl, base).pathname === '/api/assets';
+    return new URL(rawUrl, base);
   } catch {
-    return rawUrl.split('?', 1)[0].endsWith('/api/assets');
+    return null;
   }
+}
+
+function isAssetListRequest(rawUrl: string): boolean {
+  const url = parsedUrl(rawUrl);
+  return url ? url.pathname === '/api/assets' : rawUrl.split('?', 1)[0].endsWith('/api/assets');
+}
+
+/** Whether the requested filter can include voice profiles at all. */
+function filterAdmitsVoiceProfiles(query: URLSearchParams | undefined): boolean {
+  const type = query?.get('type');
+  const module = query?.get('module');
+  return (!type || type === 'voice_profile') && (!module || module === 'voice-cloning');
 }
 
 function isVoiceProfile(asset: AssetRecordLike): boolean {
@@ -42,6 +54,10 @@ function asAssets(value: unknown): AssetRecordLike[] {
   return Array.isArray(value) ? value.filter((item): item is AssetRecordLike => Boolean(item && typeof item === 'object')) : [];
 }
 
+/**
+ * The first page carries the complete direct voice set: aggregate rows are
+ * replaced in place by their direct version and missing voices are appended.
+ */
 function mergeAssets(baseAssets: AssetRecordLike[], voiceAssets: AssetRecordLike[]): AssetRecordLike[] {
   const directById = new Map(
     voiceAssets
@@ -61,6 +77,15 @@ function mergeAssets(baseAssets: AssetRecordLike[], voiceAssets: AssetRecordLike
     if (id) seen.add(id);
   }
   return merged;
+}
+
+/**
+ * Later pages drop the voices the first page already carried, so a paginated
+ * listing holds each direct voice exactly once.
+ */
+function withoutDirectVoices(baseAssets: AssetRecordLike[], voiceAssets: AssetRecordLike[]): AssetRecordLike[] {
+  const directIds = new Set(voiceAssets.map((asset) => String(asset.id ?? '')).filter(Boolean));
+  return baseAssets.filter((asset) => !directIds.has(String(asset.id ?? '')));
 }
 
 function fallbackUrl(rawUrl: string): string {
@@ -94,6 +119,11 @@ export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): () =
     if (requestMethod(input, init) !== 'GET' || !isAssetListRequest(rawUrl)) {
       return delegate(input, init);
     }
+    const query = parsedUrl(rawUrl)?.searchParams;
+    if (!filterAdmitsVoiceProfiles(query)) {
+      return delegate(input, init);
+    }
+    const isFirstPage = !query?.get('cursor');
 
     const response = await delegate(input, init);
     if (!response.ok) return response;
@@ -135,9 +165,10 @@ export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): () =
         return response;
       }
 
-      const mergedAssets = mergeAssets(baseAssets, voiceAssets);
+      const mergedAssets = isFirstPage ? mergeAssets(baseAssets, voiceAssets) : withoutDirectVoices(baseAssets, voiceAssets);
       console.info('[Voice Library][fallback] merged authoritative direct voice profiles', {
         requestUrl: directUrl,
+        isFirstPage,
         aggregateAssetCount: baseAssets.length,
         aggregateVoiceProfileCount: baseAssets.filter(isVoiceProfile).length,
         directVoiceProfileCount: voiceAssets.length,

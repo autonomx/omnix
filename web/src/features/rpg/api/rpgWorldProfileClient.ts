@@ -1,70 +1,16 @@
 import { pipelineFetch } from '../../../api/fetchPipeline';
-export interface RpgWorldProfilePresentation {
-  page_kind?: 'document' | 'collection' | string;
-  card_variant?: string;
-  image_role?: string;
-  group?: 'world' | 'lore' | 'game-master' | string;
-}
+import type { components } from './generated';
+export type RpgWorldProfilePresentation = components['schemas']['RpgWorldProfilePresentation'];
 
-export interface RpgWorldProfileTargetRange {
-  quick?: number[];
-  standard?: number[];
-  epic?: number[];
-}
+export type RpgWorldProfileTargetRange = components['schemas']['RpgWorldProfileTargetRange'];
 
-export interface RpgWorldProfileDomain {
-  domain_id: string;
-  title: string;
-  entity_kind: string;
-  dependencies?: string[];
-  required_before_launch?: boolean;
-  fields?: Array<Record<string, unknown>>;
-  target_range?: RpgWorldProfileTargetRange;
-  semantic_roles?: string[];
-  generation_guidance?: {
-    presentation?: RpgWorldProfilePresentation;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
+export type RpgWorldProfileDomain = components['schemas']['RpgWorldProfileDomain'];
 
-export interface RpgWorldGenreProfile {
-  profile_id: string;
-  version: number;
-  display_name: string;
-  domains: RpgWorldProfileDomain[];
-  aliases?: string[];
-  genre_tags?: string[];
-  launch_requirements?: Record<string, unknown>;
-  runtime_capability_defaults?: Record<string, boolean>;
-  provenance?: Record<string, unknown>;
-  scope?: string;
-  [key: string]: unknown;
-}
+export type RpgWorldGenreProfile = components['schemas']['RpgWorldGenreProfile'];
 
-export interface RpgWorldProfileReview {
-  world_id: string;
-  status: string;
-  profile_revision: number;
-  profile_hash: string;
-  approved_profile_hash: string;
-  approved_at?: string | null;
-  approved_by?: string | null;
-  profile: RpgWorldGenreProfile | Record<string, never>;
-  requested_genre: string;
-  normalized_genre: string;
-  source: string;
-  generated: boolean;
-  route: Record<string, unknown>;
-  review_findings: unknown[];
-  error: Record<string, unknown>;
-}
+export type RpgWorldProfileReview = components['schemas']['RpgWorldProfileReview'];
 
-interface RpgWorldProfileResponse {
-  ok: boolean;
-  review: RpgWorldProfileReview;
-  stale_topic_ids?: string[];
-}
+type RpgWorldProfileResponse = components['schemas']['RpgWorldProfileResponse'];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await pipelineFetch(path, init);

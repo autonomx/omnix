@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import builtins
+import importlib
 import io
 import pathlib
 from datetime import date, datetime, timedelta, timezone
@@ -18,7 +19,12 @@ from app.apps.trading.yahoo_evidence import YahooEvidenceStore
 
 @pytest.fixture()
 def read_only_filesystem(monkeypatch):
-    """Every file open, read or write fails; the attempts are recorded."""
+    """Every file open, read or write fails; the attempts are recorded.
+
+    The PostgreSQL driver loads first: importing psycopg reads its installed package metadata (its version), which is
+    no decision input, and a failed read would leave the module without a version for the rest of the process.
+    """
+    importlib.import_module("psycopg_pool")
     attempts: list[str] = []
 
     def refuse(target, *args, **kwargs):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -14,7 +15,7 @@ def test_mp3_clone_uses_its_sample_and_transcript(tmp_path, monkeypatch) -> None
     (tmp_path / "Ehsan.json").write_text(json.dumps({"ref_text": "Spoken reference words."}), encoding="utf-8")
     default_ref = tmp_path / "default_ref.wav"
     default_ref.write_bytes(b"other voice")
-    monkeypatch.setattr(tts, "VOICE_CLONES_DIR", tmp_path)
+    monkeypatch.setattr("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path))
     monkeypatch.setattr(
         "app.assets.canonical_voice_clones.discover_canonical_voice_clone_assets",
         lambda: [SimpleNamespace(id="voice-cloning:ehsan", storage_path=str(sample))],
@@ -32,7 +33,7 @@ def test_mp3_clone_uses_its_sample_and_transcript(tmp_path, monkeypatch) -> None
 
 def test_missing_clone_id_does_not_use_another_voice(tmp_path, monkeypatch) -> None:
     (tmp_path / "default_ref.wav").write_bytes(b"other voice")
-    monkeypatch.setattr(tts, "VOICE_CLONES_DIR", tmp_path)
+    monkeypatch.setattr("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path))
     monkeypatch.setattr(
         "app.assets.canonical_voice_clones.discover_canonical_voice_clone_assets",
         lambda: [],
@@ -84,3 +85,17 @@ def test_resolved_audiobook_defaults_preserve_transcript_conditioning() -> None:
     assert tts._clone_conditioning(explicit, provider._model_config, "Spoken words.") == (
         "Spoken words.", True,
     )
+
+
+def test_stopping_releases_the_vendored_model_cache(monkeypatch) -> None:
+    resets = []
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False)))
+    monkeypatch.setattr(tts, "reset_tts_model_cache", lambda: resets.append(True))
+    monkeypatch.setattr(tts._model_loader, "model", object())
+    monkeypatch.setattr(tts._model_loader, "initialized", True)
+
+    assert tts.FasterQwen3TTSProvider({}).stop() is True
+
+    # Switching engines unloads Qwen: its weights must leave the GPU too.
+    assert resets == [True]
+    assert tts._model_loader.model is None

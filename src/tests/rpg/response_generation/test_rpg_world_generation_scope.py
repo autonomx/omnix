@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.genesis.forge.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.apps.rpg.worlds.library_service import _world_generation_context
-from app.apps.rpg.worlds.generation_scope import resolve_generation_scope
+from app.apps.rpg.genesis.worlds.library_service import _world_generation_context
+from app.apps.rpg.genesis.worlds.generation_scope import resolve_generation_scope
 
 
 def _graph() -> CampaignTopicGraph:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from app.apps.rpg.response_generation.proposal_policy import (
+from app.apps.rpg.narration.response_generation.proposal_policy import (
     ProposalBudget,
     ProposalDecision,
     ProposalPolicy,
@@ -10,7 +10,7 @@ from app.apps.rpg.response_generation.proposal_policy import (
     ProposalStore,
     WorldProposal,
 )
-from app.apps.rpg.response_generation.truth_lifetime import (
+from app.apps.rpg.narration.response_generation.truth_lifetime import (
     SoftTruthRecord,
     TruthClass,
     TruthLifetime,

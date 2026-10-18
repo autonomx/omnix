@@ -15,7 +15,7 @@ from app.apps.rpg.session.item_market_session import apply_session_market_action
 from app.apps.rpg.session.item_pickup_session import apply_session_scene_item_pickup, available_scene_pickups_for_session
 from app.apps.rpg.session.item_report_session import build_item_report_for_session, record_item_report_for_session
 from app.apps.rpg.session.recipe_discovery_session import apply_recipe_discovery_for_session
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 ITEM_SESSION_ACTIONS_SOURCE = "engine_item_session_actions_v1"
 
@@ -98,7 +98,7 @@ def apply_item_session_action(state: dict[str, Any], action: dict[str, Any]) -> 
             source=source,
         )
     elif kind in {"combat", "attack", "item_combat"}:
-        source_item = request.get("source_item") if isinstance(request.get("source_item"), dict) else None
+        source_item = raw_source_item if isinstance(raw_source_item := request.get("source_item"), dict) else None
         result = apply_session_item_combat(
             state,
             attacker_id=request.get("attacker_id"),

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
+from app.apps.rpg.foundation.safe_values import copy_state
 
 
 def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
@@ -91,19 +92,19 @@ def merge_authoritative_session_state(
 ) -> Dict[str, Any]:
     """Carry mechanic-owned state through presentation wrappers without stale overwrite."""
 
-    base = deepcopy(_dict(base_session))
+    base = copy_state(_dict(base_session))
     payload = _dict(authoritative_payload)
     nested = _dict(payload.get("result"))
     authoritative_session = _dict(payload.get("session") or nested.get("session"))
     if authoritative_session:
-        base = deepcopy(authoritative_session)
+        base = copy_state(authoritative_session)
     authoritative_simulation = _dict(
         payload.get("simulation_state")
         or nested.get("simulation_state")
         or authoritative_session.get("simulation_state")
     )
     if authoritative_simulation:
-        base["simulation_state"] = deepcopy(authoritative_simulation)
+        base["simulation_state"] = copy_state(authoritative_simulation)
     return project_authoritative_player(hydrate_simulation_player(base))
 
 

@@ -1,6 +1,6 @@
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_profiles import (
+from app.apps.rpg.genesis.forge.world_forge_profiles import (
     DomainDefinition,
     DomainTargetRange,
     FieldDefinition,

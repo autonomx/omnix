@@ -10,7 +10,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.item_session_actions import apply_item_session_action, available_item_session_actions
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 ITEM_COMMAND_ADAPTER_SOURCE = "engine_item_command_adapter_v1"
 
@@ -119,7 +119,7 @@ def normalize_item_command(command: Any, state: dict[str, Any] | None = None) ->
         return {"ok": False, "error": "empty_item_command", "mechanics_source": ITEM_COMMAND_ADAPTER_SOURCE}
 
     if lowered in _DISCOVERY_COMMANDS:
-        action = {"action": "recipe_discovery", "source": "item_command_adapter"}
+        action: dict[str, Any] = {"action": "recipe_discovery", "source": "item_command_adapter"}
     elif lowered in _REPORT_COMMANDS:
         action = {"action": "report", "record": True, "source": "item_command_adapter"}
     else:

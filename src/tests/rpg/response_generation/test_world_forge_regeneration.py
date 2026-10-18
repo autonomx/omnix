@@ -1,13 +1,13 @@
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.apps.rpg.session.genesis.world_forge_fact_pipeline import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_default import ReferenceSafeWorldForgeGenerator
+from app.apps.rpg.genesis.forge.world_forge_fact_pipeline import (
     StructuredFactIssue,
     StructuredFactValidationError,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.session.genesis.world_forge_regeneration import (
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_regeneration import (
     enforce_targeted_regeneration,
     generate_with_targeted_regeneration,
     regeneration_request_from_error,

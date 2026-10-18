@@ -106,3 +106,20 @@ def test_alpaca_environment_credentials_are_authoritative_and_not_overwritten(tm
         "api_key_id": "environment",
         "secret_key": "environment",
     }
+
+
+def test_a_stored_or_environment_fred_key_is_read_back(tmp_path, monkeypatch) -> None:
+    """The economic calendar's FRED key reaches load_trading_provider_secrets (it was dropped before)."""
+    monkeypatch.setattr(store.sys, "platform", "win32")
+    monkeypatch.setenv("OMNIX_PROVIDER_SECRETS_PATH", str(tmp_path / "provider-keys.dpapi"))
+    monkeypatch.delenv("OMNIX_FRED_API_KEY", raising=False)
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.setattr(store, "_protect", lambda value: value[::-1])
+    monkeypatch.setattr(store, "_unprotect", lambda value: value[::-1])
+
+    store.save_trading_provider_secrets("fred", {"api_key": "fred-stored"})
+    assert store.load_trading_provider_secrets()["fred"] == {"api_key": "fred-stored"}
+    assert store.trading_provider_credential_sources("fred") == {"api_key": "os_protected_store"}
+
+    monkeypatch.setenv("FRED_API_KEY", "fred-environment")
+    assert store.load_trading_provider_secrets()["fred"] == {"api_key": "fred-environment"}

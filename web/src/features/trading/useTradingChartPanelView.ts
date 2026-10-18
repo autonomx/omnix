@@ -15,7 +15,7 @@ import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 /** What the panel shows: quote, change, legend and visible indicator outputs. */
 export function useChartView(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync>) {
   const {
-    active, adapterRef, allBarsRef, barsRef, chartFocusMode, chartId, chartQuery, comparisonRenderData, contextMenu,
+    adapterRef, allBarsRef, barsRef, chartFocusMode, chartId, chartQuery, comparisonRenderData, contextMenu,
     forceLiveRender, fullscreenIndicator, fullscreenIndicatorRef, fullscreenMainPane, fullscreenMainPaneRef,
     indicatorOutputs, indicators, instrumentId, interval, replayMode, scheduleIndicators, selectedIndicator,
     setFullscreenIndicator, setFullscreenMainPane, setStreamError, setStreamStatus, streamRevisionRef, timezoneId,
@@ -24,7 +24,8 @@ export function useChartView(ws: TradingChartPanelProps & ReturnType<typeof useC
   useEffect(() => {
     const resolved = chartQuery.data?.binding;
     if (!instrumentId || !resolved) return;
-    if (replayMode && active) {
+    // Every chart follows the shared replay clock, so none of them streams live bars during replay.
+    if (replayMode) {
       setStreamStatus('replay');
       return;
     }
@@ -71,7 +72,7 @@ export function useChartView(ws: TradingChartPanelProps & ReturnType<typeof useC
     );
     // Resubscribes the stream when its identity changes, not on every chart query result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, chartId, instrumentId, interval, replayMode, chartQuery.data?.binding.binding_id, scheduleIndicators, adapterRef, allBarsRef, barsRef, forceLiveRender, setStreamError, setStreamStatus, streamRevisionRef]);
+  }, [chartId, instrumentId, interval, replayMode, chartQuery.data?.binding.binding_id, scheduleIndicators, adapterRef, allBarsRef, barsRef, forceLiveRender, setStreamError, setStreamStatus, streamRevisionRef]);
 
   const provenance = chartQuery.data?.provenance;
 

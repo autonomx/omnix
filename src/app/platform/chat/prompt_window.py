@@ -82,7 +82,7 @@ def _eligible_prompt_messages(
     ]
 
 
-def _effective_recent_limit(existing_limit: object) -> int:
+def _effective_recent_limit(existing_limit: Any) -> int:
     configured = normal_chat_recent_message_limit()
     if isinstance(existing_limit, bool):
         return configured

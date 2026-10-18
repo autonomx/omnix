@@ -7,7 +7,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.inventory_items import display_item_name, item_type
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_signal_v1"
 SUPPORTED_SIGNAL_OPS = {"add_affordance", "add_scene_status", "set_world_flag", "restore_resource"}

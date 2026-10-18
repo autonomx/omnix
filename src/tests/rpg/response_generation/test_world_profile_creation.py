@@ -4,8 +4,8 @@ import pytest
 
 from app.providers.base import ChatResponse, ProviderConfig
 
-from app.apps.rpg.session.genesis.world_forge_profile_generation import STANDARD_DOMAIN_IDS
-from app.apps.rpg.session.genesis.world_forge_profile_provider import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import STANDARD_DOMAIN_IDS
+from app.apps.rpg.genesis.forge.world_forge_profile_provider import (
     GenreProfileProposalResponse,
     ProviderGenreProfileGenerator,
     ProfileDomainResponse,
@@ -13,10 +13,10 @@ from app.apps.rpg.session.genesis.world_forge_profile_provider import (
     ProfileTargetRangeResponse,
     profile_from_proposal,
 )
-from app.apps.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
-from app.apps.rpg.worlds.generation_routing import ResolvedWorldForgeRoute
-from app.apps.rpg.worlds.profile_authoring import profile_review_from_world
-from app.apps.rpg.worlds.profile_generation_jobs import (
+from app.apps.rpg.genesis.worlds.providers.world_forge import WorldForgeProviderConfig
+from app.apps.rpg.genesis.worlds.generation_routing import ResolvedWorldForgeRoute
+from app.apps.rpg.genesis.worlds.profile_authoring import profile_review_from_world
+from app.apps.rpg.genesis.worlds.profile_generation_jobs import (
     WORLD_PROFILE_JOB_TYPE,
     plan_world_profile_creation,
     profile_manifest_run,

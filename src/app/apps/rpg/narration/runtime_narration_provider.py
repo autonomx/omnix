@@ -7,7 +7,7 @@ import re
 from typing import Any, Dict, List
 
 from .runtime_narration_common import _safe_str
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +468,7 @@ def _call_provider_text_with_diagnostics(
     *,
     max_tokens: int = 320,
 ) -> Dict[str, Any]:
-    diagnostics = {
+    diagnostics: dict[str, Any] = {
         "provider_shape": _provider_shape(provider),
         "attempted_methods": [],
         "method_errors": {},

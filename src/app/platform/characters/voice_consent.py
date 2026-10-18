@@ -1,6 +1,7 @@
 """Automatic availability metadata for local cloned voice profiles."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Literal
@@ -8,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.assets.content import AssetContentUnavailable, asset_checksum, asset_location
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, default_asset_store
 
 VoiceConsentStatus = Literal["unverified", "granted", "revoked"]
 VoiceDeletionState = Literal["active", "pending_deletion", "deleted"]
@@ -80,7 +81,7 @@ class VoiceProfileGovernanceService:
     def __init__(
         self,
         *,
-        asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
+        asset_store_factory: Callable[[], AssetStore] = default_asset_store,
     ) -> None:
         self.asset_store_factory = asset_store_factory
 
@@ -121,7 +122,7 @@ class VoiceProfileGovernanceService:
         self,
         asset_id: str,
         *,
-        store: SharedAssetStore | None = None,
+        store: AssetStore | None = None,
     ) -> AssetRecord:
         resolved_store = store or self.asset_store_factory()
         asset = resolved_store.get_asset(asset_id)

@@ -55,7 +55,7 @@ def premarket_structure_snapshot(
     bars: list[MarketBar] | tuple[MarketBar, ...],
     *,
     decision_at: datetime,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Summarize only finalized 04:00-09:30 ET bars visible by ``decision_at``."""
 
     if decision_at.tzinfo is None:
@@ -129,7 +129,7 @@ def _research_snapshot(
     decision_at: datetime,
     research_repository: TradingResearchRepository | None,
     fact_repository: TradingFactRepository | None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     try:
         research_repo = research_repository or default_research_repository()
         fact_repo = fact_repository or default_fact_repository()
@@ -247,7 +247,7 @@ def _halt_snapshot(
     *,
     decision_at: datetime,
     status_cache: AlpacaIexStatusCache | None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     symbol = instrument_id.rsplit(":", 1)[-1].upper()
     cache = status_cache or default_alpaca_iex_status_cache()
     try:
@@ -265,7 +265,7 @@ def _momentum_snapshot(
     context: MultiTimeframeIndicatorContext | None,
     *,
     full_warmup: bool,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     if context is None:
         return {
             "available": False,
@@ -292,7 +292,7 @@ def build_prospective_signal_features(
     research_repository: TradingResearchRepository | None = None,
     fact_repository: TradingFactRepository | None = None,
     status_cache: AlpacaIexStatusCache | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Build one immutable, causal SHADOW feature row at the execution observation cutoff.
 
     The record is descriptive only. It cannot grant execution authority and it

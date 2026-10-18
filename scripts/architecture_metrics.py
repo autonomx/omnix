@@ -589,7 +589,8 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
     blob_owners = {"src/" + path for path in analysis.config.get("owners", {}).get("blob_store_construction", [])}
     # WP-4.3: composition attaches a permission guard to every feature router
     # and to the kernel router; their routes are authorized even without a
-    # per-route dependency. Sidecar apps outside the gateway still count.
+    # per-route dependency. Sidecar apps outside the gateway still count unless
+    # ModelServiceMiddleware guards them (below).
     composition_guarded = (
         "Depends(permission_guard)" in analysis.sources.get("src/app/composition/gateway/feature_registry.py", "")
         and "Depends(kernel_permission_guard)" in analysis.sources.get("src/app/composition/gateway/app_factory.py", "")
@@ -615,6 +616,9 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
         if production:
             values["compat_modules"] += PurePosixPath(path).name.endswith("_compat.py")
         router_prefixes, router_permissions = {}, set()
+        # A model service app behind ModelServiceMiddleware refuses every route
+        # but GET/HEAD /health without the service credential.
+        service_guarded = "add_middleware(ModelServiceMiddleware)" in analysis.sources.get(path, "")
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
                 if qualified_name(node.value.func, aliases).split(".")[-1] in {"APIRouter", "FastAPI"}:
@@ -681,12 +685,20 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                     full_path = router_prefixes.get(qualified_name(route.func.value), "") + route_path
                     if full_path not in PUBLIC_PATHS and not full_path.startswith(PUBLIC_PREFIXES) and not internal:
                         permitted = (
-                            (composition_guarded and path.startswith(feature_package_paths))
+                            service_guarded
+                            or (composition_guarded and path.startswith(feature_package_paths))
                             or qualified_name(route.func.value) in router_permissions
                             or _permission(keyword(route, "dependencies"))
                             or any(_permission(default) for default in node.args.defaults + node.args.kw_defaults)
                         )
                         values["routes_without_permission"] += not permitted
+                        if not permitted:
+                            evidence.setdefault("routes_without_permission", []).append({
+                                "path": path,
+                                "line": node.lineno,
+                                "method": method,
+                                "route_path": full_path,
+                            })
             if isinstance(node, ast.Call):
                 name = qualified_name(node.func, aliases)
                 if path.startswith("src/app/") and name.startswith("requests.") and name.split(".")[-1] in VERBS:

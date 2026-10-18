@@ -1,3 +1,4 @@
+import { INTRABAR_REQUIREMENT, isIntrabarIndicatorId } from './indicators/intrabarIndicators';
 import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
@@ -17,7 +18,9 @@ import {
   type IndicatorMarketFilter,
 } from './indicators/indicatorCatalogFilters';
 import { externalIndicatorRequirement, isExternalIndicatorId } from './indicators/externalIndicatorData';
+import { useTradingCommand } from './commands/useTradingCommands';
 import './TradingIndicatorManager.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 type PickerTab = 'indicators' | 'strategies' | 'profiles' | 'patterns';
 type PickerSection = 'favorites' | 'my-scripts' | 'technicals' | 'fundamentals' | 'top' | 'trending';
@@ -58,15 +61,17 @@ const omnixIndicatorDefinitions: IndicatorDefinition[] = [
 ];
 
 const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => {
-  const externalRequirement = externalIndicatorRequirement(definition.id);
-  const external = isExternalIndicatorId(definition.id);
+  const externalRequirement = externalIndicatorRequirement(definition.id) ?? (isIntrabarIndicatorId(definition.id) ? INTRABAR_REQUIREMENT : undefined);
+  const external = isExternalIndicatorId(definition.id) || isIntrabarIndicatorId(definition.id);
   return indicatorDefinition({
     id: definition.id as CoreIndicatorId,
     name: definition.name,
-    author: external ? 'External market data' : 'TradingView built-in',
+    // Our own implementations: the catalog follows TradingView's for parity, but the product never names TradingView.
+    author: isIntrabarIndicatorId(definition.id) ? 'Intrabar data' : external ? 'External market data' : 'Built-in',
     boosts: definition.available ? 'Built-in' : external ? 'Live data' : 'Needs data',
     section: 'technicals',
-    kind: 'indicator',
+    // Like TradingView, candlestick patterns are listed with the chart patterns.
+    kind: definition.name === 'All Candlestick Patterns' ? 'pattern' : 'indicator',
     available: definition.available || external,
     requirement: externalRequirement ?? definition.requirement,
   });
@@ -75,7 +80,7 @@ const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILT
 const patternDefinitions: IndicatorDefinition[] = AUTO_CHART_PATTERN_DEFINITIONS.map((definition) => indicatorDefinition({
   id: definition.id,
   name: definition.name,
-  author: 'Omnix',
+  author: PRODUCT_NAME,
   boosts: 'Built-in',
   section: 'technicals',
   kind: 'pattern',
@@ -197,6 +202,7 @@ export function TradingIndicatorManager({
   const [favoriteIds, setFavoriteIds] = useState<Set<CoreIndicatorId>>(
     () => new Set(indicatorDefinitions.map((definition) => definition.id)),
   );
+  useTradingCommand('chart.indicators', () => setOpen(true), () => !open);
 
   useEffect(() => {
     if (!open) return undefined;

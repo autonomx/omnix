@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from app.providers.tts_artifacts import LocalModelArtifacts
 
 
-_MODEL_SUFFIXES = {".safetensors", ".json", ".txt", ".model"}
+# ``.pth``: Fish S2 Pro's codec weights.
+_MODEL_SUFFIXES = {".safetensors", ".json", ".txt", ".model", ".pth"}
 
 
 class ModelIdentityError(ValueError):
@@ -46,7 +47,12 @@ def _fingerprint(filenames: tuple[tuple[str, int, int], ...], directory: str) ->
     return f"sha256:{digest.hexdigest()}"
 
 
-def current_model_identity(provider_id: str = "faster-qwen3-tts") -> dict[str, object]:
+def current_model_identity(provider_id: str | None = None) -> dict[str, object]:
+    """The installed model of ``provider_id``, by default Omnix's selected TTS engine."""
+    if provider_id is None:
+        from app.providers.service import selected_tts_provider_id
+
+        provider_id = selected_tts_provider_id()
     artifacts = _local_artifacts(provider_id)
     directory = artifacts.directory
     files = sorted(

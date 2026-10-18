@@ -54,7 +54,7 @@ class TestGenerateAudioVoiceClonesDir:
         """generate_audio(speaker=None) must not raise UnboundLocalError."""
         provider = _make_provider()
 
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             # No wav files exist → should return error dict, NOT raise
             result = provider.generate_audio("Hello world", speaker=None, language="en")
 
@@ -66,7 +66,7 @@ class TestGenerateAudioVoiceClonesDir:
         """generate_audio(speaker='') must not raise UnboundLocalError."""
         provider = _make_provider()
 
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             result = provider.generate_audio("Hello world", speaker="", language="en")
 
         assert isinstance(result, dict)
@@ -79,7 +79,7 @@ class TestGenerateAudioVoiceClonesDir:
         default_wav = tmp_path / "default_ref.wav"
         default_wav.write_bytes(b"RIFF" + b"\x00" * 40 + b"WAVE")
 
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             # Mock _get_model to avoid loading the real model
             with patch.object(provider, "_get_model") as mock_model:
                 mock_model.return_value = MagicMock()
@@ -97,7 +97,7 @@ class TestGenerateAudioVoiceClonesDir:
         provider = _make_provider()
         (tmp_path / "random_voice.wav").write_bytes(b"RIFF" + b"\x00" * 40 + b"WAVE")
 
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             with patch.object(provider, "_get_model") as mock_model:
                 mock_model.return_value = MagicMock()
                 result = provider.generate_audio("Hello", speaker=None, language="en")
@@ -110,7 +110,7 @@ class TestGenerateAudioVoiceClonesDir:
         provider = _make_provider()
         (tmp_path / "alice.wav").write_bytes(b"RIFF" + b"\x00" * 40 + b"WAVE")
 
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             with patch.object(provider, "_get_model") as mock_model:
                 mock_model.return_value = MagicMock()
                 result = provider.generate_audio("Hello", speaker="alice", language="en")
@@ -122,7 +122,7 @@ class TestGenerateAudioVoiceClonesDir:
         """When named speaker wav is missing, fallback logic must not crash."""
         provider = _make_provider()
         # No wav files at all
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             result = provider.generate_audio("Hello", speaker="nonexistent", language="en")
 
         assert isinstance(result, dict)
@@ -142,7 +142,7 @@ class TestGenerateAudioStreamVoiceClonesDir:
         """generate_audio_stream(speaker=None) must not raise UnboundLocalError."""
         provider = _make_provider()
 
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             # No wav files → should raise Exception (not UnboundLocalError)
             with pytest.raises(Exception, match="No reference audio"):
                 # Consume the generator
@@ -152,6 +152,6 @@ class TestGenerateAudioStreamVoiceClonesDir:
         """generate_audio_stream(speaker='') must not raise UnboundLocalError."""
         provider = _make_provider()
 
-        with patch("app.providers.faster_qwen3_tts_provider.VOICE_CLONES_DIR", str(tmp_path)):
+        with patch("app.providers.voice_references.VOICE_CLONES_DIR", str(tmp_path)):
             with pytest.raises(Exception, match="No reference audio"):
                 list(provider.generate_audio_stream("Hello", speaker="", language="en"))

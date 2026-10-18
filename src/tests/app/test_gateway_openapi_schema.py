@@ -17,10 +17,15 @@ from scripts.export_gateway_openapi import KERNEL_OWNER, ROUTE_OWNERS_FILE, norm
 _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
 _INTERNAL_JOB_LIST_PARAMETERS = {"limit", "full"}
 _DOCUMENTED_NON_JSON_RESPONSES = {
+    ("DELETE", "/api/trading/notifications/email"),
+    ("DELETE", "/api/trading/notifications/push/subscriptions/{subscription_id}"),
+    ("GET", "/api/trading/snapshots/{snapshot_id}.png"),
+    ("DELETE", "/api/trading/snapshots/{snapshot_id}"),
     ("DELETE", "/api/audiobook/projects/{project_id}"),
     ("GET", "/api/audiobook/projects/{project_id}/source/download"),
     ("GET", "/api/audiobook/projects/{project_id}/cover"),
     ("GET", "/api/audiobook/projects/{project_id}/previews/{job_id}/audio"),
+    ("GET", "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio"),
     ("GET", "/api/audiobook/projects/{project_id}/exports/{export_id}/download"),
     ("GET", "/api/assistant/tools/connect/google/callback"),
     ("GET", "/api/assistant/tools/connect/github/callback"),
@@ -30,6 +35,10 @@ _DOCUMENTED_NON_JSON_RESPONSES = {
     ("GET", "/api/auth/oidc/login"),
     ("GET", "/api/auth/oidc/callback"),
     ("POST", "/api/auth/logout"),
+    ("POST", "/api/auth/email"),
+    ("POST", "/api/auth/invites/{invite_id}/revoke"),
+    ("GET", "/api/auth/google/login"),
+    ("GET", "/api/auth/google/callback"),
     ("GET", "/api/agent-runs/{run_id}/events/stream"),
     ("GET", "/api/agent-runs/{run_id}/workspace-preview/{asset_path}"),
     ("GET", "/api/task-graph-runs/{run_id}/events/stream"),
@@ -143,6 +152,31 @@ def test_browser_routes_have_typed_contracts_or_documented_transport_responses()
 
     assert checked > 100, "route walk must see the composed feature routes"
     assert model_less_routes <= _DOCUMENTED_NON_JSON_RESPONSES
+
+
+# A downloaded file: the map editor's own canonical document, opaque to the gateway.
+_OPAQUE_JSON_DOWNLOADS = {("POST", "/api/rpg/map-editor/export")}
+
+
+def test_rpg_and_hermes_routes_publish_their_200_response() -> None:
+    """Every RPG and Hermes JSON route names its response shape (WP-8.6), not a bare object."""
+    app = create_gateway_app()
+    schema = app.openapi()
+    unnamed: list[str] = []
+    checked = 0
+    for route_path, operations in schema["paths"].items():
+        if not route_path.startswith(("/api/rpg", "/api/hermes")):
+            continue
+        for method, operation in operations.items():
+            if (method.upper(), route_path) in _DOCUMENTED_NON_JSON_RESPONSES | _OPAQUE_JSON_DOWNLOADS:
+                continue
+            checked += 1
+            media = operation.get("responses", {}).get("200", {}).get("content", {}).get("application/json", {})
+            if "$ref" not in json.dumps(media.get("schema", {})):
+                unnamed.append(f"{method.upper()} {route_path}")
+
+    assert checked > 100, "route walk must see the RPG and Hermes routes"
+    assert unnamed == []
 
 
 def test_generated_route_owners_are_current() -> None:

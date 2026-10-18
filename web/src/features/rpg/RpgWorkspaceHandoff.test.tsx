@@ -228,31 +228,38 @@ describe('RpgWorkspace campaign handoff', () => {
         turnApplied = true;
         return Response.json({
           ok: true,
+          contract_version: 'rpg_turn_response_v2',
           session_id: 'rpg-created-1',
+          job_id: 'job:fg-1',
           command: 'I survey the broken gate.',
           response: 'Silver motes gather around the fractured arch.',
           content: 'Silver motes gather around the fractured arch.',
-          session: createdSessionState(),
         });
       }
+      // The record-only job the gateway completes in the turn's transaction.
+      const foregroundJob = {
+        id: 'job:fg-1',
+        module: 'rpg',
+        type: 'rpg.turn.foreground_record',
+        status: 'completed',
+        resource_class: 'gpu:llm',
+        priority: 0,
+        stages: [],
+        input_ref: { session_id: 'rpg-created-1' },
+        input_payload: { command: 'I survey the broken gate.', submission_id: 'submit:1' },
+        output_refs: [{
+          type: 'rpg_turn_response',
+          module: 'rpg',
+          session_id: 'rpg-created-1',
+          turn_response: { response: 'Silver motes gather around the fractured arch.' },
+        }],
+        created_at: '2026-07-17T00:00:01Z',
+        updated_at: '2026-07-17T00:00:04Z',
+        completed_at: '2026-07-17T00:00:04Z',
+      };
+      if (path === '/api/jobs/job%3Afg-1' || path === '/api/jobs/job:fg-1') return Response.json(foregroundJob);
       if (path === '/api/jobs') {
-        return Response.json({
-          jobs: turnApplied ? [{
-            id: 'foreground:rpg.turn:1',
-            module: 'rpg',
-            type: 'rpg.turn',
-            status: 'completed',
-            resource_class: 'gpu:llm',
-            priority: 0,
-            stages: [],
-            input_ref: { session_id: 'rpg-created-1' },
-            input_payload: { command: 'I survey the broken gate.' },
-            output_refs: [{ type: 'rpg_turn_response', content: 'Silver motes gather around the fractured arch.' }],
-            created_at: '2026-07-17T00:00:01Z',
-            updated_at: '2026-07-17T00:00:04Z',
-            completed_at: '2026-07-17T00:00:04Z',
-          }] : [],
-        });
+        return Response.json({ jobs: turnApplied ? [foregroundJob] : [] });
       }
       if (path === '/api/assets') return Response.json({ assets: [] });
       if (path === '/api/reports') return Response.json({ reports: [] });

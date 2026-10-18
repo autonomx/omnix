@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,6 +44,7 @@ from .strategy_interday_learning_monitor import (
     InterdayLearningMonitor,
     interday_learning_monitor_enabled,
 )
+from .strategies.runner import RUNTIME_STATE_KEY as RUNNER_STATE_KEY, StrategyRunner
 from .strategy_monitor import TradingStrategyMonitor, trading_strategy_monitor_enabled
 from .strategy_operations_health import (
     TradingOperationalHealth,
@@ -57,10 +58,6 @@ from .strategy_prospective_economic_monitor import (
     strategy_prospective_economic_monitor_enabled,
 )
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
-from .strategy_solana_ai_monitor import (
-    TradingSolanaAIMonitor,
-    solana_ai_monitor_enabled,
-)
 from .strategy_universe_archive_monitor import (
     TradingStrategyUniverseArchiveMonitor,
     strategy_universe_archive_monitor_enabled,
@@ -89,7 +86,7 @@ class StrategyRuntimeMonitorStatus(BaseModel):
     last_run_at: datetime | None = None
     last_error: str | None = None
     counters: dict[str, int] = Field(default_factory=dict)
-    details: dict[str, object] = Field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class StrategyOperationsStatus(BaseModel):
@@ -98,6 +95,12 @@ class StrategyOperationsStatus(BaseModel):
     observed_at: datetime
     paper_monitor: StrategyRuntimeMonitorStatus
     strategy_monitor: StrategyRuntimeMonitorStatus
+    # The gap pullback configurations it owns or shadows (strategy runner WP).
+    strategy_runner: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
+        configured_enabled=False,
+        registered=False,
+        running=False,
+    )
     execution_observation_monitor: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
         configured_enabled=False,
         registered=False,
@@ -120,7 +123,6 @@ class StrategyOperationsStatus(BaseModel):
     )
     deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
     prospective_economic_monitor: StrategyRuntimeMonitorStatus
-    solana_ai_monitor: StrategyRuntimeMonitorStatus
     universe_archive_monitor: StrategyRuntimeMonitorStatus
     v2_qualification_monitor: StrategyRuntimeMonitorStatus
     alpaca_status_monitor: StrategyRuntimeMonitorStatus
@@ -166,7 +168,7 @@ def _monitor_status(
         for name in counter_names
     }
     raw_interval = getattr(monitor, interval_attribute, None)
-    details: dict[str, object] = {}
+    details: dict[str, Any] = {}
     diagnostics = getattr(monitor, "diagnostics", None)
     if callable(diagnostics):
         try:
@@ -314,6 +316,12 @@ def create_trading_strategy_operations_router(
                     "auto_paper_qualification_blocked_strategy_count",
                 ),
             ),
+            strategy_runner=_monitor_status(
+                getattr(state, RUNNER_STATE_KEY, None),
+                expected_type=StrategyRunner,
+                configured_enabled=trading_strategy_monitor_enabled(),
+                counter_names=("paper_order_count", "owned_config_count", "shadowed_config_count"),
+            ),
             execution_observation_monitor=_monitor_status(
                 getattr(state, "_omnix_trading_execution_observation_monitor", None),
                 expected_type=TradingExecutionObservationMonitor,
@@ -382,19 +390,6 @@ def create_trading_strategy_operations_router(
                     "signal_capture_count",
                     "outcome_capture_count",
                     "incomplete_outcome_count",
-                ),
-            ),
-            solana_ai_monitor=_monitor_status(
-                getattr(state, "_omnix_trading_solana_ai_monitor", None),
-                expected_type=TradingSolanaAIMonitor,
-                configured_enabled=solana_ai_monitor_enabled(),
-                counter_names=(
-                    "bar_fetch_count",
-                    "completed_bar_count",
-                    "ai_call_count",
-                    "decision_count",
-                    "signal_count",
-                    "error_count",
                 ),
             ),
             universe_archive_monitor=_monitor_status(

@@ -4,12 +4,8 @@ import json
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-DISPOSITIONS = {
-    'rpg_compat': ('B', 'Legacy RPG session and interaction function contracts', 'Move callers to an explicit session repository; preserve payload normalization and atomic writes.'),
-    'rpg_feature_compat': ('B', 'Legacy NPC projection and narrative event contracts', 'Use typed NPC/narrative repositories and migrate default factories before deleting wrappers.'),
-    'image_asset_compat': ('B', 'Legacy image manifest function contracts', 'Move image callers to the shared asset service; retain artifact files outside structured authority.'),
-    'configuration_compat': ('B', 'Legacy assistant policy and tool configuration functions', 'Move consumers to typed configuration services; preserve secret-store boundaries.'),
-}
+# Reviewed dispositions by module stem; a module without one gets the default below.
+DISPOSITIONS: dict[str, tuple[str, str, str]] = {}
 
 
 def main():

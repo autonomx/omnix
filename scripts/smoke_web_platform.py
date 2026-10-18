@@ -54,7 +54,7 @@ def _gateway_smoke(root: Path) -> list[dict[str, Any]]:
     # Mirror production startup: persistence bootstrap installs the tenant context.
     bootstrap_status_payload()
     app = create_gateway_app()
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="http://127.0.0.1", raise_server_exceptions=False)
     checks: list[dict[str, Any]] = []
 
     for path in ["/api/health", "/api/runtime/status", "/api/workers/health", "/api/diagnostics"]:

@@ -345,6 +345,45 @@ HERMES_BASE_URL
 
 The exact worker startup command depends on the local environment and model installation. The important contract is that the configured service URL is reachable and reports the capability/readiness expected by the provider registry.
 
+### Fish Audio S2 Pro TTS engine (optional)
+
+Omnix has two local TTS engines: Qwen3-TTS (default) and Fish Audio S2 Pro. One
+is loaded at a time. Choose the engine with **TTS engine** at the top of Voice
+Studio: Omnix unloads the current engine, then loads the chosen one, and the
+choice becomes the default for every TTS caller (Voice Studio, chat voice, live
+calls and new audiobook renders). Loading S2 Pro takes about 45 seconds and
+16-18 GB of GPU memory, so it does not fit next to a local LLM on a 24 GB card.
+Omnix starts the Fish server through `src/services/tts/fish_api_server.py`, which
+loads the checkpoint without fish-speech's 20 GB float32 staging copy (that copy
+exhausted the Windows commit limit next to the other services) and sizes the
+context with the `fish-s2-pro` setting `max_seq_len` (default 12288 tokens, about
+5,000 characters per request; 32768 needs about 4 GB more GPU memory).
+
+S2 Pro needs its own Python 3.12 environment (torch 2.8, transformers 5). The
+engine runs the Fish API server from that environment on `127.0.0.1:5102`:
+
+```powershell
+git clone --depth 1 https://github.com/fishaudio/fish-speech.git resources/models/tts/fish-speech
+conda create -y -n fish-speech python=3.12
+uv pip install --python $HOME/miniconda3/envs/fish-speech/python.exe --index-strategy unsafe-best-match `
+  --extra-index-url https://download.pytorch.org/whl/cu128 -e "resources/models/tts/fish-speech[cu128]" "tensorboard==2.19.0"
+$HOME/miniconda3/envs/fish-speech/Scripts/hf.exe download fishaudio/s2-pro --local-dir resources/models/tts/fish-s2-pro
+```
+
+`tensorboard==2.19.0` keeps tensorboard compatible with the protobuf 5 that
+fish-speech pins; newer tensorboard fails at import. `OMNIX_FISH_PYTHON`, or
+`fish` under `[python.environments]` / `[python.paths]` in `launcher.toml`,
+selects another interpreter; the `fish-s2-pro` settings hold the port, checkpoint
+and sampling defaults. The server log is `resources/logs/tts/fish-s2-pro.log`.
+
+S2 Pro clones a voice from its sample **and** the exact words spoken in it.
+Selecting the engine transcribes, with the configured STT service, every Voice
+Library sample that has no transcript yet and saves it beside the sample
+(`<voice>.json`, `ref_text`); existing transcripts are kept. Qwen3-TTS uses the
+same transcript, so a voice that gains one changes its audiobook voice revision.
+The S2 Pro weights are under the Fish Audio Research License (non-commercial
+use).
+
 ### Image service and model residency
 
 The default Windows launcher starts the lightweight image service without preloading the heavyweight image model:
@@ -422,10 +461,11 @@ On Windows, `start_all.bat` first loads the protected PostgreSQL credential
 ### Interpreters and POSIX
 
 Neither launcher contains workstation paths. Each interpreter resolves from its
-environment variable (`RPG_FLUX_PYTHON`, `RPG_TTS_PYTHON`, `RPG_STT_PYTHON`),
-then `resources/config/launcher.toml` (copy `launcher.example.toml`; the local
-file is ignored by git), then the `rpg-flux`, `rpg-tts` and `rpg-stt` Conda
-environments under `CONDA_ROOT` (default `~/miniconda3`).
+environment variable (`RPG_FLUX_PYTHON`, `RPG_TTS_PYTHON`, `RPG_STT_PYTHON`,
+`OMNIX_FISH_PYTHON`), then `resources/config/launcher.toml` (copy
+`launcher.example.toml`; the local file is ignored by git), then the `rpg-flux`,
+`rpg-tts`, `rpg-stt` and `fish-speech` Conda environments under `CONDA_ROOT`
+(default `~/miniconda3`).
 
 On Linux and macOS, `./start_all.sh` runs the same `python -m app.composition.launcher start`
 (add `--postgres-container <name>` to have it start a Docker container). A

@@ -1,16 +1,16 @@
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import (
     STANDARD_DOMAIN_IDS,
     default_profile_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.apps.rpg.worlds.authoring_presentations import section_page_kind
-from app.apps.rpg.worlds.profile_authoring import (
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.genesis.worlds.authoring_presentations import section_page_kind
+from app.apps.rpg.genesis.worlds.profile_authoring import (
     profile_review_from_world,
     require_approved_profile,
 )
-from app.apps.rpg.worlds.profile_aware_world_images import _profile_targets
+from app.apps.rpg.genesis.worlds.profile_aware_world_images import _profile_targets
 
 
 def _world(profile, *, approved: bool) -> dict:

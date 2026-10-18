@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.apps.rpg.presentation.dialogue_quality import (
+from app.apps.rpg.narration.presentation.dialogue_quality import (
     enforce_dialogue_quality,
 )
 

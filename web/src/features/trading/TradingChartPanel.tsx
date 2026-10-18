@@ -12,13 +12,22 @@ import { ChartPanelIndicatorPanes, ChartPanelReplayMarkers, ChartPanelScaleContr
 import { ChartPanelLegend, ChartPanelPaneControls } from './TradingChartPanelLegend';
 import { ChartPanelOverlays, ChartPanelContextMenu } from './TradingChartPanelOverlays';
 import { ChartPanelFooter } from './TradingChartPanelFooter';
+import { useTradingChartPanelCommands } from './commands/useTradingChartPanelCommands';
+import { useTradingDrawingCommands } from './commands/useTradingDrawingCommands';
+import { useTradingOrderHotkeys } from './commands/useTradingOrderHotkeys';
+import { TradingBarCountdown } from './TradingChartWorkflowControls';
+import { TradingChartEventMarkers } from './TradingChartEventMarkers';
 
 export function TradingChartPanel(props: TradingChartPanelProps) {
   const ws = useTradingChartPanel(props);
+  useTradingChartPanelCommands(ws);
+  useTradingDrawingCommands(ws);
+  useTradingOrderHotkeys({ active: ws.active, adapter: ws.adapter, instrumentId: ws.instrumentId, lastPrice: () => { const close = Number(ws.latest?.close); return Number.isFinite(close) ? close : null; } });
   const {
     active, adapter, chartFocusMode, chartId, chartPanning, chartQuery, compareDialogOpen, comparisons,
-    drawingTool, handleReplayStageClick, handleStageContextMenu, handleStagePointerLeave, handleStagePointerMove,
-    hostRef, indicatorError, instrumentId, interval, onActivate, onOpenMarketDataSettings, onUpdateComparisons,
+    barCountdownVisible, drawingTool, eventMarkersOn, handleReplayStageClick, handleStageContextMenu, handleStageDoubleClick,
+    handleStagePointerLeave, handleStagePointerMove, hostRef, indicatorError, instrumentId, interval, latest,
+    onActivate, onOpenMarketDataSettings, onUpdateComparisons,
     panelRef, panningIndicatorPane, replayMode, setCompareDialogOpen, streamError, streamStatus,
     visibleIndicatorOutputs,
   } = ws;
@@ -36,12 +45,15 @@ export function TradingChartPanel(props: TradingChartPanelProps) {
         className={`trading-chart-stage${replayMode && active ? ' is-replay-mode' : ''}`}
         onClickCapture={handleReplayStageClick}
         onContextMenu={handleStageContextMenu}
+        onDoubleClick={handleStageDoubleClick}
         onPointerMove={handleStagePointerMove}
         onPointerLeave={handleStagePointerLeave}
       >
         <div role="group" ref={hostRef} className={`trading-chart-canvas${drawingTool === 'cursor' && !replayMode ? ' is-pan-ready' : ''}${chartPanning ? ' is-grabbing' : ''}`} data-panning-indicator={panningIndicatorPane ?? undefined} aria-label={`${instrumentId} ${interval} chart`} />
         {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {adapter ? <TradingVolumeProfileOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
+        {adapter && barCountdownVisible ? <TradingBarCountdown adapter={adapter} bar={latest} interval={interval} /> : null}
+        {adapter && eventMarkersOn ? <TradingChartEventMarkers adapter={adapter} instrumentId={instrumentId} interval={interval} replayMode={replayMode} barsRevision={chartQuery.data} /> : null}
         <ChartPanelIndicatorPanes ws={ws} />
         <ChartPanelReplayMarkers ws={ws} />
         <ChartPanelScaleControls ws={ws} />
@@ -66,7 +78,7 @@ export function TradingChartPanel(props: TradingChartPanelProps) {
       {chartQuery.error ? (
         <div className="trading-chart-state error">
           <span>{chartQuery.error.message}</span>
-          {chartQuery.error.message.includes('CoinMarketCap API key') && onOpenMarketDataSettings ? (
+          {/(CoinMarketCap|FRED) API key/.test(chartQuery.error.message) && onOpenMarketDataSettings ? (
             <button type="button" onClick={onOpenMarketDataSettings}>Open market-data settings</button>
           ) : null}
         </div>

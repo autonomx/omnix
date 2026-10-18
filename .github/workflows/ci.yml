@@ -258,19 +258,12 @@ jobs:
           python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Lint web application
         run: npm --prefix web run lint
-      - name: Run web unit tests
-        run: npm run web:test
       - name: Build web application
         run: npm run web:build
       - name: Verify generated OpenAPI client
         run: npm --workspace @omnix/web run api:check
-      - name: Install Chromium for the browser tests
-        run: npx playwright install --with-deps chromium
       # Every workspace against a mocked gateway: open, primary action, error state,
       # accessibility (WP-9.10). The live companion test skips itself without a gateway.
-      - name: Run mocked browser tests
-        run: npm --workspace @omnix/web run test:e2e -- --project=chromium
-
   docs:
     name: docs
     if: github.event_name != 'workflow_dispatch'

@@ -46,7 +46,7 @@ def test_live_conversation_profile_api_persists_defaults_and_overrides(
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", str(tmp_path / "profiles.json"))
-    client = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     session_id = _create_session(client)
 
     defaults = client.get("/api/live-chat/profile/defaults")
@@ -91,7 +91,7 @@ def test_live_conversation_profile_api_rejects_missing_session(
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", str(tmp_path / "profiles.json"))
-    client = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get(
         "/api/chat/sessions/chat:missing/live-conversation/profile"

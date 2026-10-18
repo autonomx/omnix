@@ -1,32 +1,12 @@
 import { pipelineFetch } from '../../../api/fetchPipeline';
-export interface RpgWorldDeletionBlocker {
-  code: string;
-  count: number;
-  message: string;
-}
+import type { components } from './generated';
+export type RpgWorldDeletionBlocker = components['schemas']['RpgWorldDeletionBlocker'];
 
-export interface RpgWorldDeletionEligibility {
-  can_delete: boolean;
-  world_id: string;
-  world_title: string;
-  world_status: string;
-  blockers: RpgWorldDeletionBlocker[];
-  deleted_counts: Record<string, number>;
-}
+export type RpgWorldDeletionEligibility = components['schemas']['RpgWorldDeletionEligibility'];
 
-interface RpgWorldDeletionEligibilityResponse {
-  ok: boolean;
-  eligibility: RpgWorldDeletionEligibility;
-}
+type RpgWorldDeletionEligibilityResponse = components['schemas']['RpgWorldDeletionEligibilityResponse'];
 
-export interface RpgWorldDeletionResponse {
-  ok: boolean;
-  deleted: boolean;
-  world_id: string;
-  world_title: string;
-  deleted_counts: Record<string, number>;
-  audit_event_id: number;
-}
+export type RpgWorldDeletionResponse = components['schemas']['RpgWorldDeletionResponse'];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await pipelineFetch(path, init);

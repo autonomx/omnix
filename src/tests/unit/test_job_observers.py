@@ -68,11 +68,11 @@ def test_rpg_feature_registers_debug_observer_only_when_enabled(monkeypatch) -> 
 
 
 def test_rpg_debug_observer_logs_safe_lifecycle_identity(monkeypatch) -> None:
-    from app.apps.rpg.jobs.debug_observer import RpgJobDebugObserver
+    from app.apps.rpg.session.jobs.debug_observer import RpgJobDebugObserver
 
     records: list[dict] = []
     monkeypatch.setattr(
-        "app.apps.rpg.debug_logging.log_rpg_event",
+        "app.apps.rpg.foundation.debug_logging.log_rpg_event",
         lambda event, **kwargs: records.append({"event": event, **kwargs}),
     )
 

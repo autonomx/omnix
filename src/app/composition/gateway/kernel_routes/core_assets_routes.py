@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
@@ -17,7 +18,6 @@ from app.assets import (
     PublicAssetListResponse,
     PublicAssetMigrationPreview,
     PublicAssetRecord,
-    SharedAssetStore,
 )
 from app.runtime.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, InvalidCursor
 from app.assets.content import AssetContentUnavailable, materialize_asset
@@ -25,7 +25,7 @@ from app.composition.gateway.schemas import AssetContentResponse
 from app.assets.models import AssetContentTooLarge
 
 
-def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | None:
+def _asset_by_id(asset_store: AssetStore, asset_id: str) -> AssetRecord | None:
     return asset_store.get_asset(asset_id)
 
 
@@ -41,7 +41,7 @@ def _text_asset_supported(asset: AssetRecord) -> bool:
     }
 
 
-def _read_text_asset(asset_store: SharedAssetStore, asset: AssetRecord) -> AssetContentResponse:
+def _read_text_asset(asset_store: AssetStore, asset: AssetRecord) -> AssetContentResponse:
     if not _text_asset_supported(asset):
         raise HTTPException(status_code=415, detail="asset_content_not_text")
     try:
@@ -55,7 +55,7 @@ def _read_text_asset(asset_store: SharedAssetStore, asset: AssetRecord) -> Asset
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=415, detail="asset_content_not_utf8") from exc
     size_bytes = len(content_bytes)
-    return AssetContentResponse(asset=asset, content=content, size_bytes=size_bytes)
+    return AssetContentResponse(asset=PublicAssetRecord.model_validate(asset), content=content, size_bytes=size_bytes)
 
 
 def register_core_assets_routes(router: APIRouter, *, get_asset_store):

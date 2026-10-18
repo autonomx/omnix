@@ -158,6 +158,16 @@ export function useAudiobookReviewActions(ws: { module: OmnixModuleDefinition } 
     );
   }
 
+  /** Confirms every detected speaker, one after another; any confirmed before a failure stay confirmed. */
+  function confirmAllProposedSpeakers(speakers: readonly Speaker[]): void {
+    if (!projectId || speakers.length === 0) return;
+    void action(async () => {
+      for (const speaker of speakers) {
+        await audiobookApi.createSpeaker(projectId, { canonical_name: speaker.canonical_name });
+      }
+    }, `${speakers.length} detected speaker${speakers.length === 1 ? '' : 's'} added to the cast. Review spans are now assigned to them.`);
+  }
+
   function rejectProposedSpeaker(speaker: Speaker): void {
     if (!projectId) return;
     void action(
@@ -178,7 +188,7 @@ export function useAudiobookReviewActions(ws: { module: OmnixModuleDefinition } 
   return {
     chapterStatus, workspaceAssetList, workspaceDocumentList, queueChapterPreview, pauseReclassification,
     resumeReclassification, cancelReclassification, pauseAllRenderJobs, resumeAllRenderJobs, stopAllRenderJobs,
-    startChapter, importProjectFile, openDocument, submitSpeaker, confirmProposedSpeaker, rejectProposedSpeaker,
+    startChapter, importProjectFile, openDocument, submitSpeaker, confirmProposedSpeaker, confirmAllProposedSpeakers, rejectProposedSpeaker,
     submitPronunciation,
   };
 }

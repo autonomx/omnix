@@ -25,17 +25,14 @@ from .policy import (
     move_scope_decision,
     source_requires_approval,
 )
-from .repository import InMemoryMemoryRepository, MemoryNotFoundError
+from .repository import InMemoryMemoryRepository, MemoryNotFoundError, MemoryRepository
 from .scope import scope_id_for
 from .selection import MemorySelection, select_memory_records
+from typing import Any, cast
 
 
 class MemoryPolicyError(ValueError):
     """Raised when a requested operation violates memory policy."""
-
-
-class LegacyMemoryReadOnlyError(MemoryPolicyError):
-    """Raised after Memory v2 becomes canonical and v1 is retired read-only."""
 
 
 def _utcnow() -> str:
@@ -63,18 +60,20 @@ def _candidate_fingerprint(
 class MemoryService:
     def __init__(
         self,
-        repository: InMemoryMemoryRepository | None = None,
+        repository: MemoryRepository | None = None,
         *,
         write_guard: Callable[[], None] | None = None,
     ) -> None:
         if repository is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.platform.assistant_memory.persistence.memory_store import production_memory_repository
-                repository = production_memory_repository()
+                from app.platform.assistant_memory.persistence.owner_memory_store import (
+                    production_owner_memory_repository,
+                )
+                repository = production_owner_memory_repository()
             else:
                 repository = InMemoryMemoryRepository()
-        self.repository = repository
+        self.repository: MemoryRepository = repository
         self._write_guard = write_guard
 
     def _assert_write_allowed(self) -> None:
@@ -185,7 +184,7 @@ class MemoryService:
             proposed_content=content.strip(),
             confidence=confidence,
             source=source,
-            trust_level=trust_level,
+            trust_level=cast(Any, trust_level),
             sensitivity=sensitivity,
             extraction_metadata=dict(extraction_metadata or {}),
             created_at=now,
@@ -382,21 +381,3 @@ class MemoryService:
         if not is_visible_in_scope(record, context):
             raise MemoryPolicyError("scope_mismatch")
         return record
-
-
-def _default_legacy_write_guard() -> None:
-    """Block direct default-service v1 writes after production v2 cutover."""
-
-    from app.persistence.runtime import uses_postgresql_runtime
-    if not uses_postgresql_runtime():
-        return
-    from app.platform.assistant_memory.v2.authority import PostgresMemoryV2AuthorityStore
-
-    if PostgresMemoryV2AuthorityStore().current().epoch.authority != "v1":
-        raise LegacyMemoryReadOnlyError(
-            "legacy assistant_memory is read-only while Memory v2 is authoritative"
-        )
-
-
-def default_memory_service() -> MemoryService:
-    return MemoryService(write_guard=_default_legacy_write_guard)

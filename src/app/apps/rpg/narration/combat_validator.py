@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, List
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 DEATH_WORD_RE = re.compile(
     r"\b(dies|dead|killed|slain|lifeless|corpse|finished\s+him|finished\s+her|finished\s+them|death)\b",

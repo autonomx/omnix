@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     BeatKind,
     BeatPurpose,
     CanonicalNarrativeResponse,
@@ -23,12 +23,13 @@ from app.apps.rpg.narrative_engine import (
     ValidationReport,
     legacy_response_projection,
 )
-from app.apps.rpg.narrative_engine.serialization import canonical_response_from_dict
-from app.apps.rpg.session.genesis.turn_grounding import (
+from app.apps.rpg.narration.narrative_engine.serialization import canonical_response_from_dict
+from app.apps.rpg.genesis.forge.turn_grounding import (
     TurnGroundingPacket,
     build_turn_grounding_packet,
     narrative_grounding_footer,
 )
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 _SCENE_MODES = {"observation", "investigation", "travel"}
 _DIALOGUE_MODES = {"dialogue", "conversation", "social"}
@@ -258,7 +259,7 @@ def _dialogue_quality_context(
     *,
     player_input: str,
 ) -> dict[str, Any]:
-    from app.apps.rpg.presentation.dialogue_quality import (
+    from app.apps.rpg.narration.presentation.dialogue_quality import (
         build_canonical_dialogue_quality_context,
     )
 
@@ -393,6 +394,7 @@ def canonicalize_direct_dialogue_result(
         speaker_id=speaker_id,
         actor_ids=(speaker_id,),
         runtime_only=quality_context.get("fast_path") is True,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
     request = _request(
         result,
@@ -571,6 +573,7 @@ def canonicalize_scene_turn_result(
         campaign_id=session_id,
         player_input=player_input,
         speaker_id=speaker_id if speaker_id != "npc:npc" else None,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
     changes = _scene_changes(result, mode, grounding.evidence)
     if mode not in _SCENE_MODES and not changes:
@@ -668,6 +671,7 @@ def canonicalize_resolved_turn_result(
         campaign_id=session_id,
         player_input=player_input,
         speaker_id=speaker_id if speaker_id != "npc:npc" else None,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
     request = _request(
         result,

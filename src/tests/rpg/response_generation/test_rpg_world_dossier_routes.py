@@ -4,7 +4,7 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes.rpg_world_dossier_routes import register_rpg_world_dossier_routes
+from app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes import register_rpg_world_dossier_routes
 
 
 def _install_fake_dossier_services(monkeypatch, calls: list[tuple[str, dict[str, object]]]) -> None:
@@ -91,15 +91,15 @@ def _install_fake_dossier_services(monkeypatch, calls: list[tuple[str, dict[str,
         }
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_dossier_routes.update_world_entity_dossier",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes.update_world_entity_dossier",
         fake_update,
     )
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_dossier_routes.preview_world_entity_dossier_regeneration",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes.preview_world_entity_dossier_regeneration",
         fake_preview,
     )
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_dossier_routes.regenerate_world_entity_dossier",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes.regenerate_world_entity_dossier",
         fake_regenerate,
     )
 
@@ -221,11 +221,11 @@ def test_quality_and_enrichment_routes_are_in_openapi_and_bounded(monkeypatch) -
         }
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_dossier_routes.world_dossier_quality",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes.world_dossier_quality",
         fake_quality,
     )
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
         fake_enrich,
     )
     app = FastAPI()
@@ -267,7 +267,7 @@ def test_enrichment_route_can_explicitly_process_all_candidates(monkeypatch) -> 
         return {"ok": True, "world_id": world_id, "dry_run": False}
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
         fake_enrich,
     )
     app = FastAPI()
@@ -297,7 +297,7 @@ def test_enrichment_route_accepts_specific_candidates_for_incremental_progress(m
         return {"ok": True, "world_id": world_id, "dry_run": False}
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
         fake_enrich,
     )
     app = FastAPI()

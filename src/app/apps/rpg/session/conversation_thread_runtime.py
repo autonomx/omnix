@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.apps.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
+from app.apps.rpg.rules.ambient_intent import is_ambient_wait_or_listen_intent
 from app.apps.rpg.session.ambient_tick_runtime import is_ambient_tick_command
 from app.apps.rpg.world.conversation_settings import conversation_settings_from_runtime
 from app.apps.rpg.world.conversation_threads import (
@@ -10,7 +10,7 @@ from app.apps.rpg.world.conversation_threads import (
     has_pending_player_conversation_response,
     maybe_advance_conversation_thread,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 def _conversation_blocking_reason(

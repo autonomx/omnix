@@ -35,6 +35,7 @@ const syncDescriptions: Record<keyof TradingLinkState, string> = {
   interval: 'Interval changes on all charts within the layout',
   crosshair: 'Crosshair movement is shared across all charts within the layout',
   visibleRange: 'Zooming and date-range changes are shared across all charts within the layout',
+  time: 'Clicking a bar scrolls the other charts to its time, whatever their interval',
 };
 
 function previewStyle(preview: string): CSSProperties {
@@ -159,6 +160,7 @@ export function TradingChartLayoutPicker({
               ['interval', 'Interval'],
               ['crosshair', 'Crosshair'],
               ['visibleRange', 'Date range'],
+              ['time', 'Time'],
             ] as Array<[keyof TradingLinkState, string]>).map(([key, label]) => (
               <div className="trading-chart-layout-sync-row" key={key}>
                 <span className="trading-chart-layout-sync-label">
@@ -176,7 +178,7 @@ export function TradingChartLayoutPicker({
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={links[key]}
+                  aria-checked={Boolean(links[key])}
                   aria-label={`Sync ${label}`}
                   className={links[key] ? 'active' : undefined}
                   onClick={() => onSetLink(key, !links[key])}

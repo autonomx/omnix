@@ -1,7 +1,6 @@
 """Trading monitor ownership is composed as per-task scheduler work."""
 
 import asyncio
-import inspect
 from datetime import datetime, timezone
 from logging import getLogger
 from types import SimpleNamespace
@@ -17,8 +16,10 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
     assert FEATURE.background_workers == ()
-    # 22 monitors, the generic strategy runner and the prospective-gap input import (WP-8.3).
-    assert len(FEATURE.scheduled_tasks) == 24
+    # 25 monitors (with the alert notification outbox, TVP-0.5a, market breadth, TVP-6.6, SEC fundamentals, TVP-9.1,
+    # and the overnight SHADOW group; the Solana AI experiment is retired), the generic strategy runner and the
+    # prospective-gap input import (WP-8.3).
+    assert len(FEATURE.scheduled_tasks) == 27
     config = RuntimeConfig()
     context = FeatureContext(
         feature_id="trading",
@@ -31,15 +32,16 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     )
 
     *monitor_factories, runner_factory, handoff_import_factory = FEATURE.scheduled_tasks
-    # No runner strategy is registered yet, so the runner has no task; the
-    # prospective-gap input import runs by default.
-    assert runner_factory(context) is None
+    # The runner always has a task: a gap pullback configuration can move to
+    # it at any time (strategy runner WP). The prospective-gap input import
+    # runs by default.
+    assert runner_factory(context).task_id == "trading.strategy_runner"
     assert handoff_import_factory(context).task_id == "trading.prospective_gap_handoff_import"
     tasks = [factory(context) for factory in monitor_factories]
 
     assert all(isinstance(task, ScheduledTaskSpec) for task in tasks)
     task_ids = [task.task_id for task in tasks]
-    assert len(task_ids) == len(set(task_ids)) == 22
+    assert len(task_ids) == len(set(task_ids)) == 25
     assert all(task.interval_seconds > 0 for task in tasks)
     assert any(task.executor.value == "async" for task in tasks)
     assert any(task.executor.value == "thread" for task in tasks)
@@ -55,21 +57,23 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     assert startup_tasks == {
         "metric_monitor",
         "strategy_monitor",
-        "strategy_solana_ai_monitor",
+        "strategy_overnight_monitor",  # provisions the overnight SHADOW group
         "strategy_universe_archive_monitor",
     }
 
 
 def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
+    """The stream task needs the scheduler's event loop, so the cycle must not run on a thread."""
     from app.apps.trading.providers import alpaca_iex_status
 
-    started = []
+    sessions = []
+
+    async def session(self):
+        sessions.append(self)
+        await asyncio.Event().wait()
+
     monkeypatch.setattr(alpaca_iex_status, "_enabled", lambda: True)
-    monkeypatch.setattr(
-        alpaca_iex_status.AlpacaIexStatusMonitor,
-        "start",
-        lambda self: started.append(self),
-    )
+    monkeypatch.setattr(alpaca_iex_status.AlpacaIexStatusMonitor, "_session", session)
     config = RuntimeConfig()
     context = FeatureContext(
         feature_id="trading",
@@ -87,17 +91,23 @@ def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
         if task is not None and task.task_id.endswith("alpaca_iex_status")
     )
 
-    result = task.run(
-        TaskContext(
-            task_id=task.task_id,
-            workspace_id="workspace-a",
-            scheduled_at=datetime.now(timezone.utc),
-        )
-    )
-    if inspect.isawaitable(result):
-        asyncio.run(result)
+    monitor = getattr(context.runtime_state, alpaca_iex_status._STATE_KEY)
+    assert task.executor == "async"
 
-    assert len(started) == 1
+    async def scheduled_cycle() -> None:
+        await task.run(
+            TaskContext(
+                task_id=task.task_id,
+                workspace_id="workspace-a",
+                scheduled_at=datetime.now(timezone.utc),
+            )
+        )
+        await asyncio.sleep(0)
+        await monitor.stop()
+
+    asyncio.run(scheduled_cycle())
+
+    assert sessions == [monitor]
 
 
 def test_monitors_share_the_scheduled_base_and_have_no_loops_of_their_own(monkeypatch):
@@ -120,7 +130,7 @@ def test_monitors_share_the_scheduled_base_and_have_no_loops_of_their_own(monkey
     for factory in FEATURE.scheduled_tasks[:-2]:
         factory(context)
     monitors = list(vars(state).values())
-    assert len(monitors) == 22
+    assert len(monitors) == 25
     # Stream owners keep a connection open under their task; they are not loops.
     streams = {"AlpacaIexStatusMonitor"}
     for monitor in monitors:
@@ -167,6 +177,36 @@ def test_a_failed_cycle_is_logged_with_the_monitor_event_and_reaches_the_schedul
     assert monitor.scheduled is False
 
 
+def test_monitor_cycles_get_a_trading_timeout_and_retry_after_one():
+    from app.apps.trading.monitor_task import (
+        TRADING_MONITOR_TIMEOUT_SECONDS,
+        ScheduledTradingMonitor,
+        TradingMonitorTask,
+        scheduled_task_spec,
+    )
+
+    class Quick(ScheduledTradingMonitor):
+        interval_seconds = 30.0
+
+        async def run_once(self):
+            return None
+
+    class Slow(Quick):
+        interval_seconds = 900.0
+
+    class Declared(Quick):
+        timeout_seconds = 42.0
+
+    def spec(monitor):
+        return scheduled_task_spec(TradingMonitorTask(name="tests.timeout", monitor=monitor, enabled=lambda: True))
+
+    # A busy open legitimately runs past a minute; one slow cycle must not stop the monitor.
+    assert spec(Quick()).timeout_seconds == TRADING_MONITOR_TIMEOUT_SECONDS == 300.0
+    assert spec(Slow()).timeout_seconds == 900.0
+    assert spec(Declared()).timeout_seconds == 42.0
+    assert all(spec(m()).disable_on_timeout is False for m in (Quick, Slow, Declared))
+
+
 def test_side_work_runs_once_per_key_beside_the_cycle_and_stops_with_the_task():
     from app.apps.trading.monitor_task import SingleFlightTasks
 
@@ -200,8 +240,8 @@ def test_side_work_runs_once_per_key_beside_the_cycle_and_stops_with_the_task():
 def test_proposals_never_wait_on_the_intraday_llm():
     import inspect as source_inspect
 
-    from app.apps.trading.strategy_monitor import TradingStrategyMonitor
+    from app.apps.trading.strategy_monitor_candidates import evaluate_candidates
 
-    evaluation = source_inspect.getsource(TradingStrategyMonitor._evaluate_candidates)
-    assert "await self._run_intraday_llm" not in evaluation
+    evaluation = source_inspect.getsource(evaluate_candidates)
+    assert "await monitor._run_intraday_llm" not in evaluation
     assert "intraday_llm_annotations.start" in evaluation

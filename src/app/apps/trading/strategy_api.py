@@ -5,7 +5,7 @@ import hashlib
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Header, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -94,7 +94,7 @@ class V2QualificationReviewRequest(BaseModel):
 
 class StrategyEvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    candidate: dict[str, object]
+    candidate: dict[str, Any]
     bars: list[MarketBar] = Field(default_factory=list, max_length=1000)
     config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
 
@@ -189,7 +189,7 @@ RepositoryFactory = Callable[[], TradingStrategyRepository]
 CatalystRepositoryFactory = Callable[[], TradingCatalystRepository]
 
 
-def _range_backtest_job_store(factory: Callable[[], object] | None):
+def _range_backtest_job_store(factory: Callable[[], Any] | None):
     if factory is None:
         from app.jobs.store import default_job_store
 
@@ -245,7 +245,7 @@ def _range_backtest_progress_response(job, strategy_id: str) -> StrategyRangeBac
     return StrategyRangeBacktestProgressResponse(
         run_id=job.id,
         strategy_id=strategy_id,
-        status=response_status,
+        status=cast(Any, response_status),
         completed_sessions=completed,
         total_sessions=total,
         percent=percent,
@@ -277,7 +277,7 @@ def _research_event(
     observed_at: datetime,
     state: str,
     reason_code: str,
-    payload: dict[str, object],
+    payload: dict[str, Any],
 ) -> StrategyEvent:
     raw = "|".join((strategy_id, instrument_id, universe_id, observed_at.astimezone(timezone.utc).isoformat(), state, reason_code))
     idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -351,8 +351,8 @@ def _require_v2_auto_paper_authorized(
         raise ValueError("v2_auto_paper_requires_reviewed_prospective_qualification")
 
 
-def _bar_coverage(bars_by_instrument: dict[str, list[MarketBar]]) -> dict[str, dict[str, object]]:
-    coverage: dict[str, dict[str, object]] = {}
+def _bar_coverage(bars_by_instrument: dict[str, list[MarketBar]]) -> dict[str, dict[str, Any]]:
+    coverage: dict[str, dict[str, Any]] = {}
     for instrument_id, bars in sorted(bars_by_instrument.items()):
         ordered = sorted(bars, key=lambda bar: bar.start_time)
         coverage[instrument_id] = {
@@ -478,6 +478,24 @@ async def _execute_range_backtest(
     )
     return result
 
+
+
+class RunnerParityReport(BaseModel):
+    """Proposals compared by trade attempt during a runner shadow period (strategy runner WP)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    strategy_id: str
+    start: datetime
+    end: datetime
+    monitor_proposals: int
+    runner_proposals: int
+    matched: int
+    signal_mismatch: list[str]
+    monitor_only: list[str]
+    runner_only: list[str]
+    parity: bool
+    execution_authority: Literal[False] = False
 
 def create_trading_strategy_router(
     repository_factory: RepositoryFactory = default_strategy_repository,
@@ -786,6 +804,19 @@ def create_trading_strategy_router(
         except ValueError as exc:
             status = 404 if str(exc) == "strategy_config_not_found" else 422
             raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @router.get("/{strategy_id}/runner-parity", response_model=RunnerParityReport)
+    async def strategy_runner_parity(
+        strategy_id: str,
+        hours: int = Query(default=24, ge=1, le=24 * 30),
+    ) -> RunnerParityReport:
+        """The monitor's and the strategy runner's proposals compared, while the runner shadows it."""
+        from .strategy_runner_parity import runner_parity_report
+
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        report = await runner_parity_report(repository_factory(), strategy_id, start=start, end=end)
+        return RunnerParityReport(start=start, end=end, **report)
 
     @router.get("/{strategy_id}", response_model=TradingStrategyConfigDocument)
     async def get_strategy(strategy_id: str):

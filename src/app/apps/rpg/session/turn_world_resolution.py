@@ -37,31 +37,32 @@ from app.apps.rpg.session.ambient_tick_runtime import (
 from app.apps.rpg.session.conversation_thread_runtime import (
     advance_conversation_threads_for_turn as advance_conversation_threads_for_turn,
 )
-from app.apps.rpg.memory.social_effects import (
+from app.apps.rpg.world.memory.social_effects import (
     apply_general_social_effects as apply_general_social_effects,
 )
-from app.apps.rpg.presentation.speaker_cards import (
+from app.apps.rpg.narration.presentation.speaker_cards import (
     build_nearby_npc_cards as build_nearby_npc_cards,
 )
 from app.apps.rpg.session.narration_runtime import (
     build_turn_narration_context as build_turn_narration_context,
 )
-from app.apps.rpg.world.location_registry import (
+from app.apps.rpg.rules.location_registry import (
     ensure_location_state as ensure_location_state,
 )
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     expire_conversation_threads as expire_conversation_threads, normalize_conversation_threads as normalize_conversation_threads,
 )
-from app.apps.rpg.creator.world_scene_generator import (
+from app.apps.rpg.genesis.creator.world_scene_generator import (
     generate_scenes_from_simulation as generate_scenes_from_simulation,
 )
-from app.apps.rpg.session.ambient_intent import (
+from app.apps.rpg.rules.ambient_intent import (
     is_ambient_wait_or_listen_intent as is_ambient_wait_or_listen_intent,
 )
-from app.apps.rpg.items.world_items import (
+from app.apps.rpg.rules.items.world_items import (
     list_scene_items as list_scene_items,
 )
-from app.apps.rpg.creator.world_simulation import (
+from app.apps.rpg.session.conversation_hooks import SESSION_CONVERSATION_HOOKS
+from app.apps.rpg.genesis.creator.world_simulation import (
     step_simulation_state as step_simulation_state,
 )
 
@@ -284,7 +285,7 @@ def _advance_turn_contract_and_simulation(ctx) -> bool:
     ctx.metadata = _safe_dict(ctx.setup.get("metadata"))
     ctx.metadata["simulation_state"] = ctx.after_progression_state
     ctx.setup["metadata"] = ctx.metadata
-    ctx.step_result = step_simulation_state(ctx.setup)
+    ctx.step_result = step_simulation_state(ctx.setup, conversation_hooks=SESSION_CONVERSATION_HOOKS)
     ctx.next_setup = _safe_dict(ctx.step_result.get("next_setup")) or ctx.setup
     # step_simulation_state rebuilds a world-sim slice from scratch. Merge it
     # back over the authoritative per-turn state so player/service/social roots

@@ -7,12 +7,13 @@ from .exception_logging import log_recovered_exception
 from pathlib import Path
 import re
 import shlex
-from typing import Iterable
+from typing import Any, Iterable, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .contracts import AcceptancePlan, AgentArtifact, AgentEvent, AgentRunSpec, EvidenceSet, TaskRevision
 from .workspace import WorkspaceAuthority
+from .event_queries import json_object
 
 
 class WorkspaceInspectionError(RuntimeError):
@@ -135,7 +136,7 @@ def evaluate_acceptance(
                 str(path)
                 for item in diff_artifacts
                 for path in (
-                    item.metadata.get("baseline_conflicts")
+                    cast(list[Any], item.metadata.get("baseline_conflicts"))
                     if isinstance(item.metadata.get("baseline_conflicts"), list)
                     else []
                 )
@@ -471,7 +472,7 @@ def _successful_exact_ui_validation(
             continue
         payload = event.payload
         command = str(payload.get("command") or "").casefold()
-        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        metadata = json_object(payload.get("metadata"))
         asserted = str(metadata.get("assertion_expected") or "")
         if (
             payload.get("validation_id") == "browser-validation"
@@ -506,7 +507,7 @@ def _completed_commands(events: list[AgentEvent]) -> list[tuple[str, bool]]:
             if tool not in {"bash", "powershell"}:
                 continue
             call_id = str(event.payload.get("tool_call_id") or "")
-            args = event.payload.get("args") if isinstance(event.payload.get("args"), dict) else {}
+            args = json_object(event.payload.get("args"))
             command = str(args.get("command") or "")
             if call_id and command:
                 starts[call_id] = command
@@ -516,7 +517,8 @@ def _completed_commands(events: list[AgentEvent]) -> list[tuple[str, bool]]:
                 success = not bool(event.payload.get("is_error"))
                 result = event.payload.get("result")
                 if isinstance(result, dict):
-                    details = result.get("details") if isinstance(result.get("details"), dict) else result
+                    nested_details = result.get("details")
+                    details = nested_details if isinstance(nested_details, dict) else result
                     exit_code = details.get("exitCode", details.get("exit_code"))
                     if exit_code is not None:
                         try:

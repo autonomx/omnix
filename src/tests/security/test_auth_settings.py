@@ -11,13 +11,39 @@ from app.security.auth import (
 )
 
 
-def test_unset_mode_keeps_legacy_behaviour_until_the_default_flip_is_approved() -> None:
-    # Human gate (WP-4.1): flipping this constant is the approved default change.
-    assert AUTH_ENFORCED_WHEN_UNSET is False
+def test_sign_in_is_on_by_default() -> None:
+    # WP-4.1: the owner approved the default flip (2026-10-06).
+    assert AUTH_ENFORCED_WHEN_UNSET is True
     settings = resolve_auth_settings({})
     assert settings.mode is AuthMode.LOCAL
     assert settings.explicit is False
-    assert settings.enforced is False
+    assert settings.enforced is True
+
+
+def test_account_policy_defaults_follow_the_deployment() -> None:
+    development = resolve_auth_settings({}).accounts
+    assert (development.registration, development.guests, development.google) == ("open", True, None)
+    production = resolve_auth_settings({"OMNIX_ENV": "production"}).accounts
+    assert (production.registration, production.guests) == ("invite", False)
+    opened = resolve_auth_settings({"OMNIX_ENV": "production", "OMNIX_AUTH_REGISTRATION": "open",
+                                    "OMNIX_AUTH_GUESTS": "false", "OMNIX_AUTH_REMEMBER_DAYS": "14"}).accounts
+    assert (opened.registration, opened.guests, opened.remember_ttl_seconds) == ("open", False, 14 * 86400)
+    with pytest.raises(AuthConfigurationError):
+        resolve_auth_settings({"OMNIX_AUTH_REGISTRATION": "everyone"})
+    # Accounts belong to local mode; an organization's IdP decides in OIDC mode.
+    assert resolve_auth_settings({"OMNIX_AUTH_MODE": "disabled"}).accounts.registration == "invite"
+
+
+def test_google_sign_in_needs_its_whole_configuration() -> None:
+    with pytest.raises(AuthConfigurationError, match="OMNIX_GOOGLE_CLIENT_SECRET"):
+        resolve_auth_settings({"OMNIX_GOOGLE_CLIENT_ID": "id.apps.googleusercontent.com"})
+    google = resolve_auth_settings({
+        "OMNIX_GOOGLE_CLIENT_ID": "id.apps.googleusercontent.com",
+        "OMNIX_GOOGLE_CLIENT_SECRET": "secret",
+        "OMNIX_GOOGLE_REDIRECT_URI": "http://127.0.0.1:8080/api/auth/google/callback",
+    }).accounts.google
+    assert google is not None and google.issuer == "https://accounts.google.com"
+    assert google.scopes == ("openid", "email", "profile")
 
 
 @pytest.mark.parametrize("value", ["local", "LOCAL", " local "])

@@ -115,6 +115,18 @@ def after_regular_close(moment: datetime) -> bool:
     return local.time() >= regular_close_time(local.date())
 
 
+# By then the session's final regular bars have arrived, including feeds that
+# lag up to 15 minutes; a live evaluation of the session cannot change after it.
+SESSION_SETTLE = timedelta(minutes=30)
+
+
+def regular_session_settled(moment: datetime) -> bool:
+    """Whether an aware timestamp is at least SESSION_SETTLE past its day's regular close (ET)."""
+    local = moment.astimezone(_ET)
+    close = datetime.combine(local.date(), regular_close_time(local.date()), tzinfo=_ET)
+    return local >= close + SESSION_SETTLE
+
+
 def us_equity_session(source_time: datetime) -> str:
     """Classify the standard U.S. listed-equity session from an aware timestamp.
 

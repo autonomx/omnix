@@ -6,7 +6,7 @@ import logging
 from app.apps.rpg.session.state_normalization import (
     _normalize_active_interactions as _normalize_active_interactions, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
-from app.apps.rpg.combat.state import (
+from app.apps.rpg.rules.combat.state import (
     normalize_combat_state as normalize_combat_state,
 )
 from app.apps.rpg.session.world_consequence_runtime import (
@@ -27,7 +27,7 @@ import json as json
 from app.apps.rpg.session.narration_queue_runtime import (
     _build_active_interaction_prompt_context as _build_active_interaction_prompt_context,
 )
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
 )
 from typing import (
@@ -309,7 +309,7 @@ def process_semantic_state_change_proposals(
 
     # Current policy: proposals are processed once per tick and never retried.
     # Invalid proposals are recorded in rejected_state_change_events.
-    remaining = []
+    remaining: list[Any] = []
     accepted_ids = _accepted_state_change_event_ids(runtime_state)
     applied_proposal_ids = _applied_semantic_proposal_ids(runtime_state)
 
@@ -413,7 +413,7 @@ def _build_semantic_state_change_prompt_contract(
         for x in _safe_list(simulation_state.get("locations"))
         if isinstance(x, dict)
     ]
-    interaction_rows = [
+    interaction_rows: list[dict[str, Any]] = [
         {
             "id": _safe_str(x.get("id")),
             "type": _safe_str(x.get("type")),
@@ -490,7 +490,7 @@ def _build_semantic_state_change_prompt_contract(
         runtime_state,
     )
 
-    prompt_payload = {
+    prompt_payload: dict[str, Any] = {
         "scene_title": _safe_str(simulation_state.get("scene_title")),
         "location_name": _safe_str(simulation_state.get("location_name")),
         "allowed_semantic_actions": sorted(list(_allowed_semantic_actions().keys())),
@@ -659,7 +659,7 @@ def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state
         return []
 
     # 🔥 HANDLE ALL VALID SHAPES
-    proposals = []
+    proposals: list[Any] = []
 
     # Case 1: wrapped
     if isinstance(data, dict) and "state_changes" in data:

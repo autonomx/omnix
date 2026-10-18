@@ -81,7 +81,7 @@ class AssistantContextService:
         research = self._research() if request.web_research_mode == "quick" else None
         if request.web_research_mode == "quick" and research is None:
             diagnostics["web_search_status"] = "research_unavailable"
-        elif request.web_research_mode == "quick":
+        elif request.web_research_mode == "quick" and research is not None:
             prepared, search_diagnostics = research.quick_context(
                 request,
                 web_search_factory=self.web_search_factory,

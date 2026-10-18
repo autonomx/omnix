@@ -112,7 +112,7 @@ def _env_stage(fallback: CompanionRolloutStage) -> tuple[CompanionRolloutStage, 
     raw = (environment().get("OMNIX_COMPANION_ROLLOUT_STAGE") or "").strip()
     if not raw:
         return fallback, False
-    return (raw if raw in _COMPANION_STAGES else fallback), True  # type: ignore[return-value]
+    return (raw if raw in _COMPANION_STAGES else fallback), True
 
 
 class AssistantMemorySettingsStore(Protocol):

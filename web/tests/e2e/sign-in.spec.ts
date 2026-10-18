@@ -113,12 +113,14 @@ test('a signed-out browser is sent to sign in and comes back after the credentia
   await page.goto('/settings');
   await expect(page).toHaveURL(/\/login\?next=%2Fsettings$/);
 
+  // The form starts on email and password (accounts); the install credential is one click away.
+  await page.getByRole('button', { name: 'Use the install credential' }).click();
   await page.getByLabel(/install credential/i).fill('wrong');
-  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.getByRole('button', { name: 'Sign in with the credential' }).click();
   await expect(page.getByRole('alert')).toContainText('not valid');
 
   await page.getByLabel(/install credential/i).fill(CREDENTIAL);
-  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.getByRole('button', { name: 'Sign in with the credential' }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole('button', { name: 'Sign out of Omnix' })).toBeVisible();
   // The session cookie is HttpOnly: the page never sees it.

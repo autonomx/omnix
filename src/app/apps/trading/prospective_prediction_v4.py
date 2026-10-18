@@ -19,7 +19,7 @@ import json
 import math
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Literal, Sequence
+from typing import Any, Final, Literal, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -29,14 +29,14 @@ from .prospective_prediction_evidence import FrozenForecast
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
-V4_PREDICTOR_VERSION = "prospective-gap-v4-shadow"
+V4_PREDICTOR_VERSION: Final = "prospective-gap-v4-shadow"
 V4_FEATURE_SCHEMA_VERSION = "prospective-gap-features-v4"
-V4_MARKET_STATE_VERSION = "premarket-market-state-v1"
-V4_CALIBRATION_VERSION = "prospective-gap-calibration-v1"
-V4_EXTENSION_RISK_VERSION = "extension-exhaustion-risk-v1"
-V4_CONFIRMATION_VERSION = "post-open-confirmation-v1"
+V4_MARKET_STATE_VERSION: Final = "premarket-market-state-v1"
+V4_CALIBRATION_VERSION: Final = "prospective-gap-calibration-v1"
+V4_EXTENSION_RISK_VERSION: Final = "extension-exhaustion-risk-v1"
+V4_CONFIRMATION_VERSION: Final = "post-open-confirmation-v1"
 V4_EXECUTION_COST_VERSION = "execution-cost-v2-round-trip"
-V4_PAIRED_EVALUATION_VERSION = "paired-v3-v4-v1"
+V4_PAIRED_EVALUATION_VERSION: Final = "paired-v3-v4-v1"
 
 EvidenceQuality = Literal["COMPLETE", "DEGRADED", "INSUFFICIENT"]
 FeatureQuality = Literal["GOOD", "STALE", "RECOVERED", "MISSING", "CONFLICT", "PROXY"]
@@ -718,13 +718,13 @@ def derive_extension_exhaustion_risk(components: ExtensionComponents) -> Extensi
             weighted.append((name, _clamp01(risk), Decimal(weight)))
 
     gap = components.gap_from_prior_close_pct
-    add("gap_from_prior_close_pct", gap, (gap - Decimal("20")) / Decimal("180") if gap is not None else 0, "0.24")
+    add("gap_from_prior_close_pct", gap, (gap - Decimal("20")) / Decimal("180") if gap is not None else Decimal(0), "0.24")
 
     move = components.premarket_move_since_first_catalyst_pct
     add(
         "premarket_move_since_first_catalyst_pct",
         move,
-        (move - Decimal("10")) / Decimal("190") if move is not None else 0,
+        (move - Decimal("10")) / Decimal("190") if move is not None else Decimal(0),
         "0.14",
     )
 
@@ -732,7 +732,7 @@ def derive_extension_exhaustion_risk(components: ExtensionComponents) -> Extensi
     add(
         "distance_from_premarket_vwap_pct",
         vwap,
-        max(Decimal("0"), vwap) / Decimal("30") if vwap is not None else 0,
+        max(Decimal("0"), vwap) / Decimal("30") if vwap is not None else Decimal(0),
         "0.14",
     )
 
@@ -740,18 +740,18 @@ def derive_extension_exhaustion_risk(components: ExtensionComponents) -> Extensi
     add(
         "distance_from_premarket_low_pct",
         low,
-        max(Decimal("0"), low) / Decimal("200") if low is not None else 0,
+        max(Decimal("0"), low) / Decimal("200") if low is not None else Decimal(0),
         "0.08",
     )
 
     pos = components.position_in_premarket_range
-    add("position_in_premarket_range", pos, pos if pos is not None else 0, "0.08")
+    add("position_in_premarket_range", pos, pos if pos is not None else Decimal(0), "0.08")
 
     prior1 = components.prior_1d_return_pct
     add(
         "prior_1d_return_pct",
         prior1,
-        max(Decimal("0"), prior1) / Decimal("200") if prior1 is not None else 0,
+        max(Decimal("0"), prior1) / Decimal("200") if prior1 is not None else Decimal(0),
         "0.10",
     )
 
@@ -759,18 +759,18 @@ def derive_extension_exhaustion_risk(components: ExtensionComponents) -> Extensi
     add(
         "prior_3d_return_pct",
         prior3,
-        max(Decimal("0"), prior3) / Decimal("400") if prior3 is not None else 0,
+        max(Decimal("0"), prior3) / Decimal("400") if prior3 is not None else Decimal(0),
         "0.06",
     )
 
     turnover = components.float_turnover
-    add("float_turnover", turnover, turnover / Decimal("3") if turnover is not None else 0, "0.08")
+    add("float_turnover", turnover, turnover / Decimal("3") if turnover is not None else Decimal(0), "0.08")
 
     accel = components.late_premarket_acceleration
     add(
         "late_premarket_acceleration",
         accel,
-        (Decimal("1") - _clamp01((accel + Decimal("1")) / Decimal("2"))) if accel is not None else 0,
+        (Decimal("1") - _clamp01((accel + Decimal("1")) / Decimal("2"))) if accel is not None else Decimal(0),
         "0.04",
     )
 
@@ -778,7 +778,7 @@ def derive_extension_exhaustion_risk(components: ExtensionComponents) -> Extensi
     add(
         "late_premarket_volume_share",
         volume_share,
-        Decimal("1") - volume_share if volume_share is not None else 0,
+        Decimal("1") - volume_share if volume_share is not None else Decimal(0),
         "0.04",
     )
 
@@ -1242,7 +1242,7 @@ def evaluate_post_open_confirmation(
         return transition_confirmation(
             instrument_id=instrument_id,
             previous_state=previous_state,
-            new_state=resume,
+            new_state=cast(Any, resume),
             transition_at=transition_at,
             trigger="current confirmation features requalified",
             bar_ids=(latest_id,),
@@ -1516,7 +1516,7 @@ def authorize_trade(
         raise ValueError("authorization_instrument_mismatch")
     confirmation_fingerprint = _hash(confirmation.model_dump(mode="json"))
 
-    base = {
+    base: dict[str, Any] = {
         "instrument_id": forecast.instrument_id,
         "forecast_fingerprint": forecast.immutable_fingerprint,
         "confirmation_receipt_fingerprint": confirmation_fingerprint,
@@ -1543,6 +1543,7 @@ def authorize_trade(
         )
 
     net = apply_execution_costs(gross, cost)
+    reasons: tuple[str, ...]
     if net.expected_return is None:
         decision = "NO_TRADE"
         reasons = ("EXPECTED_RETURN_UNAVAILABLE",)

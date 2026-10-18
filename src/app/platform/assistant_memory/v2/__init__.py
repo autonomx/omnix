@@ -1,16 +1,13 @@
 """VoiceMem-derived Omnix Memory v2 contract surface.
 
-Memory v2 is contract-first. Importing this package does not enable v2 authority or
-change the existing assistant_memory runtime.
+Memory v2 is contract-first and the only curated memory authority (Memory v1 was
+retired by migration 0156).
 """
 
 from .authority import (
     AuthorityEpochState,
-    CutoverNotReadyError,
     MemoryAuthorityError,
     PostgresMemoryV2AuthorityStore,
-    SpaceCutoverReadinessReceipt,
-    StaleCutoverReceiptError,
 )
 from .contracts import (
     SYSTEM_MEMORY_OWNER_ID,
@@ -47,7 +44,6 @@ __all__ = [
     "AuthorityEpochState",
     "ConsolidationDecisionSet",
     "ConsolidationReceipt",
-    "CutoverNotReadyError",
     "CutoverReadiness",
     "DerivedMemoryRevision",
     "DerivedPolicyEnvelope",
@@ -71,7 +67,5 @@ __all__ = [
     "RetrievalResult",
     "RetrievalScore",
     "RetrievalSourceRevision",
-    "SpaceCutoverReadinessReceipt",
-    "StaleCutoverReceiptError",
     "VisibilityScope",
 ]

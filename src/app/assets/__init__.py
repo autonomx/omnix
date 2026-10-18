@@ -1,6 +1,7 @@
 """Shared asset/artifact library."""
 from __future__ import annotations
 
+from .protocol import AssetStore
 import logging
 import os
 from collections.abc import Callable, Iterable
@@ -276,7 +277,7 @@ def _voice_clone_roots() -> list[AssetLegacyRootScan]:
     return roots
 
 
-def default_asset_store() -> SharedAssetStore:
+def default_asset_store() -> AssetStore:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
         from app.persistence.shared_asset_store import production_asset_store

@@ -50,6 +50,24 @@
   .trading-workspace .trading-symbol-search-categories button{border:0;background:var(--c-neutral-960);color:var(--c-neutral-270)}
   .trading-workspace .trading-symbol-search-categories button:hover{background:var(--c-slate-930)}
   .trading-workspace .trading-symbol-search-categories button.active{background:var(--c-neutral-320);color:var(--c-neutral-1000)}
+  /* Dark appearance: the dialog's base palette is light (TradingView's look); the trading terminal's dark surfaces here.
+     The sections go transparent so the dialog's own surface (or the liquid-glass panel) shows through. */
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-overlay{background:color-mix(in srgb, var(--c-slate-130) 76%, transparent)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-dialog{border-color:color-mix(in srgb, var(--c-blue-660) 22%, transparent);background:var(--c-slate-170-2);color:var(--c-slate-910)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) :is(.trading-symbol-search-header,.trading-symbol-search-categories,.trading-symbol-search-results-wrap,.trading-symbol-search-formula-result){background:transparent}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-form{border-color:color-mix(in srgb, var(--c-blue-660) 18%, transparent);background:var(--c-slate-190);box-shadow:none}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-form:focus-within{border-color:var(--c-blue-630);box-shadow:0 0 0 3px color-mix(in srgb, var(--c-blue-630) 16%, transparent)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-icon{border-color:var(--c-slate-680)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-icon:after{background:var(--c-slate-680)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-shortcut{border-left-color:color-mix(in srgb, var(--c-blue-660) 18%, transparent);color:var(--c-slate-600)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) :is(.trading-symbol-search-result-heading,.trading-symbol-search-results li,.trading-symbol-search-formula-result,.trading-symbol-search-footer,.trading-compare-heading,.trading-compare-selected,.trading-compare-placement){border-color:color-mix(in srgb, var(--c-blue-660) 14%, transparent)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) :is(.trading-symbol-search-result-heading,.trading-symbol-search-symbol small,.trading-symbol-search-description small,.trading-symbol-search-exchange small,.trading-symbol-search-empty,.trading-compare-heading,.trading-compare-selected span,.trading-compare-placement){color:var(--c-slate-600)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) :is(.trading-symbol-search-empty strong,.trading-compare-selected){color:var(--c-slate-910)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-empty-icon{border-color:color-mix(in srgb, var(--c-blue-660) 22%, transparent)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-symbol strong{color:var(--c-blue-770)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-results li[aria-selected=true]{background:color-mix(in srgb, var(--c-blue-630) 12%, transparent)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) :is(.trading-symbol-search-footer,.trading-compare-selected,.trading-compare-placement){background:color-mix(in srgb, var(--c-blue-630) 5%, transparent)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-compare-selected button{color:var(--c-blue-770)}
 }
 
 /* Declarations that must win over every other layer. */
@@ -58,7 +76,7 @@
 
   .trading-symbol-search-close:hover{color:var(--c-sky-510)}
 
-  .trading-symbol-search-form input{border:0;outline:0;background:transparent;color:var(--c-slate-240);font-size:17px;box-shadow:none}
+  .trading-symbol-search-form input{padding:7px 9px;border:0;outline:0;background:transparent;color:var(--c-slate-240);font-size:17px;box-shadow:none}
 
   .trading-symbol-search-clear{display:block;padding:0;border:0;border-radius:50%;background:var(--c-slate-550);color:var(--c-neutral-1000);font-size:0}
 
@@ -72,4 +90,18 @@
 
   @media(max-width:700px){
   .trading-symbol-search-results li>button,.trading-symbol-search-formula-result>button{padding:11px 16px}}
+
+  /* Dark appearance for the controls the themes also paint here (liquid-glass styles every input and trading-workspace button). */
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-close{color:var(--c-slate-680)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-close:hover{color:var(--c-blue-770)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-form input{border:0;background:transparent;color:var(--c-slate-910);box-shadow:none}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-form input::placeholder{color:var(--c-slate-600)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-clear{background:var(--c-slate-600);color:var(--c-slate-170-2)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) :is(.trading-symbol-search-results li>button,.trading-symbol-search-formula-result>button){color:var(--c-slate-910)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-results li>button:hover,:root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-formula-result>button:hover:not(:disabled){background:color-mix(in srgb, var(--c-blue-630) 8%, transparent)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-dialog .trading-symbol-search-categories button{border:0;background:var(--c-indigo-190);color:var(--c-slate-910)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-dialog .trading-symbol-search-categories button:hover{background:var(--c-blue-230)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-symbol-search-dialog .trading-symbol-search-categories button.active{background:var(--c-blue-630);color:var(--c-neutral-960)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-compare-placement button{border-color:color-mix(in srgb, var(--c-blue-660) 22%, transparent);background:var(--c-slate-190);color:var(--c-slate-910)}
+  :root:is([data-omnix-appearance='dark'],:not([data-omnix-appearance])) .trading-compare-placement button:hover:not(:disabled){border-color:var(--c-blue-630);background:var(--c-blue-230)}
 }

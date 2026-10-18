@@ -15,7 +15,7 @@ from typing import Any, Sequence
 from pydantic import BaseModel, Field
 
 from app.apps.rpg.session.ability_system import ALLOWED_DIMENSIONS
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 REQUIRED_ABILITY_COVERAGE_DIMENSIONS = (
     "resources",

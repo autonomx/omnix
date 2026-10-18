@@ -49,7 +49,7 @@ export function pipelineJobProgressPercent(job: AudiobookJobView | undefined): n
   return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
 }
 
-export type LibrarySection = 'library' | 'projects' | 'books' | 'chapters' | 'assets' | 'documents' | 'characters' | 'voices' | 'pronunciations' | 'exports';
+export type LibrarySection = 'library' | 'projects' | 'books' | 'chapters' | 'assets' | 'documents' | 'characters' | 'review' | 'voices' | 'pronunciations' | 'exports';
 
 export type WorkspaceAsset = {
   id: string;

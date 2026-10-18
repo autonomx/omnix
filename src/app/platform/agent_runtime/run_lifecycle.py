@@ -12,7 +12,7 @@ from .contracts import (
 )
 from app.observability.agent_logging import log_agent_activity
 from .repository import PostgresAgentRunRepository
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from .service_core import (
     _LeaseBoundRunRepository,
 )
@@ -389,7 +389,7 @@ def process_promote_job(service: AgentRunService, run_id: str) -> AgentRunSnapsh
             worker_id=lease.worker_id,
             lease_token=lease.lease_token,
         )
-        children_terminal, _ = service._children_terminal_state(repository, run_id)
+        children_terminal, _ = service._children_terminal_state(cast(PostgresAgentRunRepository, repository), run_id)
         if not children_terminal:
             work.rollback()
             raise RuntimeError("agent promotion is waiting for child runs to finish")
@@ -397,7 +397,7 @@ def process_promote_job(service: AgentRunService, run_id: str) -> AgentRunSnapsh
         if callable(advance_quality):
             action = advance_quality(repository, current)
         else:
-            service._finalize_acceptance(repository, current)
+            service._finalize_acceptance(cast(PostgresAgentRunRepository, repository), current)
         work.commit()
     execute_action = getattr(service, "_execute_quality_action", None)
     if action and callable(execute_action):

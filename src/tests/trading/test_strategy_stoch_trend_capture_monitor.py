@@ -16,7 +16,27 @@ from app.apps.trading.strategy_monitor import TradingStrategyMonitor
 from app.apps.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from app.apps.trading.strategy_stoch_execution_cost import simulate_stoch_execution
 from app.apps.trading.strategy_stoch_trend_capture import StochTrendCaptureSnapshot
-from app.apps.trading import strategy_monitor as monitor_module
+from app.apps.trading import strategy_monitor, strategy_monitor_candidates, strategy_monitor_config_run
+
+
+class _MonitorModules:
+    """The strategy monitor spans several modules; a patch reaches each one that uses the name."""
+
+    _modules = (strategy_monitor, strategy_monitor_candidates, strategy_monitor_config_run)
+
+    def __getattr__(self, name: str):
+        for module in self._modules:
+            if hasattr(module, name):
+                return getattr(module, name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        for module in self._modules:
+            if hasattr(module, name):
+                setattr(module, name, value)
+
+
+monitor_module = _MonitorModules()
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"

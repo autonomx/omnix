@@ -2,28 +2,28 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.session.genesis.world_forge_profile_deterministic import (
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_profile_deterministic import (
     generate_deterministic_profile_topic,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_graph import (
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import (
     build_profile_launch_topic_graph,
     build_profile_topic_graph,
 )
-from app.apps.rpg.session.genesis.world_forge_spatial_routes import (
+from app.apps.rpg.genesis.forge.world_forge_spatial_routes import (
     deterministic_spatial_route_signature,
     minimum_route_count,
     spatial_route_components,
 )
-from app.apps.rpg.worlds import generation_compilation
-from app.apps.rpg.worlds.generation_publication import WorldGenerationPublication
-from app.apps.rpg.worlds.generation_publication_transaction import (
+from app.apps.rpg.genesis.worlds import generation_compilation
+from app.apps.rpg.genesis.worlds.generation_publication import WorldGenerationPublication
+from app.apps.rpg.genesis.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
-from app.apps.rpg.worlds.generation_spatial_reachability import (
+from app.apps.rpg.genesis.worlds.generation_spatial_reachability import (
     spatial_reachability_issues,
     spatial_reachability_report,
 )

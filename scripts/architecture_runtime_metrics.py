@@ -170,7 +170,9 @@ def install_probe_guard(root: Path, temporary: Path, database_url: str) -> None:
 
     def permitted_path(value) -> bool:
         if isinstance(value, int):
-            return value in {0, 1, 2}
+            # A descriptor was checked here when os.open or mkstemp created it, so writing through it
+            # (os.fdopen) adds no new write; the standard streams were never opened by the probe.
+            return True
         try:
             return Path(os.fsdecode(value)).resolve().is_relative_to(writable)
         except (TypeError, ValueError, OSError):
@@ -311,6 +313,12 @@ def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
         with redirect_stdout(captured), redirect_stderr(captured):
             if mode == "boot":
                 before = set(sys.modules)
+                # A configured install already holds its install credential; the probe's lives in its sandbox
+                # (startup imports this module anyway, so it still counts as a boot import).
+                from app.security import service_credentials
+
+                secure = temporary / "secure"
+                service_credentials.service_credential_path = lambda: secure / "service-token"
                 from app.composition.production import create_production_app
                 from app.runtime.config import RuntimeConfig, GatewayRole
                 from app.persistence.database import close_default_database

@@ -16,6 +16,7 @@ from app.composition.gateway.feature_registry import FeatureLifecycle, register_
 from app.composition.gateway.lifecycle import gateway_lifespan
 from app.runtime.config import RuntimeConfig, GatewayRole
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 def application(config):
@@ -192,15 +193,15 @@ def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
 
 def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
     from app.runtime import config as runtime_config
-    from app.apps.rpg.session.genesis import async_coordinator as genesis
+    from app.apps.rpg.genesis.forge import async_coordinator as genesis
     runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(genesis, 'campaign_genesis_async_enabled', lambda: True)
     monkeypatch.setattr(genesis.threading, 'Thread', lambda *args, **kwargs: pytest.fail('API started genesis thread'))
-    assert genesis.kick_campaign_genesis_worker() is False
+    assert genesis.kick_campaign_genesis_worker(sessions=SESSION_CAMPAIGN_SESSIONS) is False
 
 
 def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monkeypatch):
-    from app.apps.rpg.session.genesis import async_coordinator as genesis
+    from app.apps.rpg.genesis.forge import async_coordinator as genesis
     from app.persistence.background_authority import require_background_owner
     from app.runtime import config as runtime_config
     # Campaign genesis runs on job-worker processes (WP-6.1).
@@ -223,7 +224,7 @@ def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monk
         return {'status': 'completed'}
     monkeypatch.setattr(genesis, 'run_campaign_genesis_worker_once', once)
     try:
-        assert genesis.kick_campaign_genesis_worker()
+        assert genesis.kick_campaign_genesis_worker(sessions=SESSION_CAMPAIGN_SESSIONS)
         genesis._worker_thread.join(5)
         assert not genesis._worker_thread.is_alive()
         assert work and not genesis._worker_active

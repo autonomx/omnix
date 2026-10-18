@@ -224,7 +224,7 @@ def test_initial_speech_start_byte_returns_none_for_silence() -> None:
 
 
 def test_pcm_helpers_fall_back_when_numpy_is_unavailable(monkeypatch) -> None:
-    monkeypatch.setattr(tts_stream_contract, "np", None)
+    monkeypatch.setattr(tts_stream_contract, "_numpy", lambda: None)
 
     assert _decode_pcm16(audio_chunk_to_pcm16_bytes([0.5, -0.5])) == [16383, -16383]
     samples = np.asarray([0, 20_000], dtype="<i2")

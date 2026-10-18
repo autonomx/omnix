@@ -1,6 +1,6 @@
 # Omnix launcher settings (WP-11.4). Copy to resources/config/launcher.toml
 # (ignored by git) and adjust. Environment variables still win:
-# RPG_FLUX_PYTHON, RPG_TTS_PYTHON, RPG_STT_PYTHON and CONDA_ROOT.
+# RPG_FLUX_PYTHON, RPG_TTS_PYTHON, RPG_STT_PYTHON, OMNIX_FISH_PYTHON and CONDA_ROOT.
 
 [python]
 # Conda installation holding the environments below (default: ~/miniconda3).
@@ -11,6 +11,8 @@
 app = "rpg-flux"
 tts = "rpg-tts"
 stt = "rpg-stt"
+# Fish Audio S2 Pro (fish-speech, Python 3.12): the fish-s2-pro TTS provider.
+fish = "fish-speech"
 
 [python.paths]
 # Explicit interpreters instead of Conda environments.

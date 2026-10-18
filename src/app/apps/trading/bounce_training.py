@@ -5,7 +5,7 @@ import json
 import math
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -87,7 +87,7 @@ def _decimal(value: float) -> Decimal:
     return Decimal(str(value))
 
 
-def _artifact_fingerprint(payload: dict[str, object]) -> str:
+def _artifact_fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     ).hexdigest()
@@ -175,7 +175,7 @@ def fit_bounce_logistic(
     feature_scales = {
         name: _decimal(scales[index]) for index, name in enumerate(FEATURE_NAMES)
     }
-    payload: dict[str, object] = {
+    payload: dict[str, Any] = {
         "model_id": "gap_pullback_logistic",
         "model_version": model_version,
         "label_definition": LABEL_DEFINITION,

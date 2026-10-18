@@ -62,6 +62,8 @@ export type GapPullbackConfig = {
   intraday_llm_enabled?: boolean;
   intraday_llm_top_n?: number;
   intraday_llm_interval_minutes?: number;
+  /** Which task runs the configuration; never what it may trade. */
+  execution_owner?: 'monitor' | 'runner_shadow' | 'runner';
 };
 
 export type StochRsi5mConfig = {
@@ -139,7 +141,19 @@ export type StochRsi5mTradingStrategyConfig = TradingStrategyDocumentBase & {
   config: StochRsi5mConfig;
 };
 
-export type TradingStrategyConfig = GapPullbackTradingStrategyConfig | StochRsi5mTradingStrategyConfig;
+export type OvernightShadowConfig = components['schemas']['OvernightShadowConfig-Output'];
+
+/** SHADOW-only overnight research group; the server provisions it and the UI shows it read-only. */
+export type OvernightShadowTradingStrategyConfig = TradingStrategyDocumentBase & {
+  strategy_kind: 'overnight_shadow_v1';
+  strategy_version: '1.0.0';
+  config: OvernightShadowConfig;
+};
+
+export type TradingStrategyConfig =
+  | GapPullbackTradingStrategyConfig
+  | StochRsi5mTradingStrategyConfig
+  | OvernightShadowTradingStrategyConfig;
 
 export type GapperCandidate = {
   instrument_id: string;

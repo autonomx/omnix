@@ -233,6 +233,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountResponse */
+        AccountResponse: core["schemas"]["AccountResponse"];
         /** AssetContentResponse */
         AssetContentResponse: core["schemas"]["AssetContentResponse"];
         /** AssetLegacyRootScan */
@@ -257,6 +259,11 @@ export interface components {
          * @description Backend-owned assistant tool metadata and actions.
          */
         AssistantToolSpec: core["schemas"]["AssistantToolSpec"];
+        /**
+         * AuthOptionsResponse
+         * @description How someone may sign in here; the sign-in page shows only these.
+         */
+        AuthOptionsResponse: core["schemas"]["AuthOptionsResponse"];
         /** AuthSessionListResponse */
         AuthSessionListResponse: core["schemas"]["AuthSessionListResponse"];
         /** AuthSessionResponse */
@@ -318,8 +325,21 @@ export interface components {
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
+        /** DesktopGoogleHandoffRequest */
+        DesktopGoogleHandoffRequest: core["schemas"]["DesktopGoogleHandoffRequest"];
+        /** DesktopGoogleHandoffResponse */
+        DesktopGoogleHandoffResponse: core["schemas"]["DesktopGoogleHandoffResponse"];
+        /** DesktopGoogleStartRequest */
+        DesktopGoogleStartRequest: core["schemas"]["DesktopGoogleStartRequest"];
+        /**
+         * DesktopGoogleStartResponse
+         * @description The window keeps ``nonce``; the desktop app opens ``begin_url`` in the system browser.
+         */
+        DesktopGoogleStartResponse: core["schemas"]["DesktopGoogleStartResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /** EmailChangeRequest */
+        EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
          * EventReaderDiagnostics
          * @description Live job events in this process (WP-5.4).
@@ -336,6 +356,8 @@ export interface components {
         GatewayReadinessPayload: core["schemas"]["GatewayReadinessPayload"];
         /** GpuResidencyPolicy */
         GpuResidencyPolicy: core["schemas"]["GpuResidencyPolicy"];
+        /** GuestUpgradeRequest */
+        GuestUpgradeRequest: core["schemas"]["GuestUpgradeRequest"];
         /** HTTPValidationError */
         HTTPValidationError: core["schemas"]["HTTPValidationError"];
         /** HermesDiagnosticsPaths */
@@ -504,6 +526,16 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** InviteCheckResponse */
+        InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
+        /** InviteListResponse */
+        InviteListResponse: core["schemas"]["InviteListResponse"];
+        /** InviteRequest */
+        InviteRequest: core["schemas"]["InviteRequest"];
+        /** InviteResponse */
+        InviteResponse: core["schemas"]["InviteResponse"];
+        /** InviteSummaryResponse */
+        InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
         /** JobError */
         JobError: core["schemas"]["JobError"];
         /** JobError */
@@ -561,6 +593,12 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
+        /** PasswordChangeResponse */
+        PasswordChangeResponse: core["schemas"]["PasswordChangeResponse"];
+        /** PasswordLoginRequest */
+        PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
         /** PromptRenderRequest */
@@ -574,6 +612,11 @@ export interface components {
         ProviderCapability: core["schemas"]["ProviderCapability"];
         /** ProviderFacadePayload */
         ProviderFacadePayload: core["schemas"]["ProviderFacadePayload"];
+        /**
+         * ProviderKeyStatus
+         * @description An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself.
+         */
+        ProviderKeyStatus: core["schemas"]["ProviderKeyStatus"];
         /** ProviderModelCacheEntry */
         ProviderModelCacheEntry: core["schemas"]["ProviderModelCacheEntry"];
         /** ProviderModelCachePayload */
@@ -599,6 +642,10 @@ export interface components {
          *     become file names.
          */
         PublicAssetRecord: core["schemas"]["PublicAssetRecord"];
+        /** RedirectUrlResponse */
+        RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
+        /** RegisterRequest */
+        RegisterRequest: core["schemas"]["RegisterRequest"];
         /** RenderedPrompt */
         RenderedPrompt: core["schemas"]["RenderedPrompt"];
         /** ReplayPrimitive */

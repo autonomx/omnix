@@ -80,6 +80,7 @@ class FeatureRequirement(BaseModel):
     baseline_ready_required: bool = False
     allow_approximate_reseed: bool = False
     reseed_after_clean_bars: int | None = Field(default=None, ge=2)
+    bridge_isolated_gaps: bool = False
 
     @field_validator("seed_at")
     @classmethod
@@ -96,6 +97,8 @@ class FeatureRequirement(BaseModel):
             raise ValueError("approximate reseed is only valid for recursive requirements")
         if self.allow_approximate_reseed and self.reseed_after_clean_bars is None:
             raise ValueError("approximate recursive reseed needs reseed_after_clean_bars")
+        if self.bridge_isolated_gaps and self.dependency_class != "RECURSIVE":
+            raise ValueError("isolated-gap bridging is only valid for recursive requirements")
         return self
 
 
@@ -415,14 +418,32 @@ def qualify_bar_feature(
     if requirement.baseline_ready_required and baseline_ready is not True:
         reasons.append("FEATURE_BASELINE_UNAVAILABLE")
 
+    bridged: set[datetime] = set()
+    if gaps and requirement.dependency_class == "RECURSIVE" and requirement.bridge_isolated_gaps:
+        # One missing bucket with bars on both sides (a short halt, a quiet
+        # bucket) is stepped over: the recursion continues on the bars that
+        # exist instead of reseeding. Approximate, so never exact.
+        missing = set(gaps)
+        bridged = {
+            value
+            for value in gaps
+            if value - step not in missing and value + step not in missing and value + step in starts
+        }
+        if bridged:
+            exact = False
+            reasons.append("RECURSIVE_ISOLATED_GAP_BRIDGED")
+            gaps = [value for value in gaps if value not in bridged]
+
     if gaps and requirement.dependency_class == "RECURSIVE":
         if requirement.allow_approximate_reseed and requirement.reseed_after_clean_bars:
             clean_needed = requirement.reseed_after_clean_bars
+            # Gaps are only found inside a started window.
+            assert required_latest is not None
             clean_start = required_latest - step * (clean_needed - 1)
             clean = True
             cursor = clean_start
             while cursor <= required_latest:
-                if cursor not in starts:
+                if cursor not in starts and cursor not in bridged:
                     clean = False
                     break
                 cursor += step
@@ -438,15 +459,16 @@ def qualify_bar_feature(
         reasons.append("FEATURE_WINDOW_HAS_GAPS")
 
     informational_reasons = {"FEATURE_WINDOW_CONFIRMED_NONTRADING"}
+    approximate_reasons = {"RECURSIVE_RESEEDED_APPROXIMATE", "RECURSIVE_ISOLATED_GAP_BRIDGED"}
     invalid_reasons = [
         reason
         for reason in reasons
         if reason not in informational_reasons
-        and reason != "RECURSIVE_RESEEDED_APPROXIMATE"
+        and reason not in approximate_reasons
     ]
     if invalid_reasons:
         status: QualificationStatus = "INVALID"
-    elif "RECURSIVE_RESEEDED_APPROXIMATE" in reasons:
+    elif approximate_reasons & set(reasons):
         status = "DEGRADED"
     else:
         status = "VALID"

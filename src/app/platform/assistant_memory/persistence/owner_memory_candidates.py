@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.conversation.memory_contracts import MemoryCandidate, MemoryRecord
+from app.conversation.memory_contracts import MemoryCandidate
 from app.platform.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
 from app.runtime.pagination import bounded_count
 
@@ -138,81 +138,8 @@ class OwnerMemoryCandidateMixin(OwnerMemoryRowSupport):
             )
         return True
 
-    def accept_candidate(
-        self,
-        candidate_id: str,
-        record: MemoryRecord,
-        *,
-        resolved_at: str,
-    ) -> MemoryRecord:
-        with self.database.transaction() as connection:
-            self.require_v1_authority(connection)
-            candidate_row = connection.execute(
-                self.candidate_select()
-                + " WHERE id = %s AND workspace_id = %s FOR UPDATE",
-                (candidate_id, self.workspace_id),
-            ).fetchone()
-            if candidate_row is None:
-                raise MemoryNotFoundError(candidate_id)
-            candidate = self.candidate_from_row(candidate_row)
-            if candidate.status != "pending":
-                raise MemoryConflictError(
-                    f"candidate {candidate_id} is not pending: {candidate.status}"
-                )
-            connection.execute(
-                """
-                INSERT INTO omnix_memory_records (
-                    id, workspace_id, owner_type, owner_id, scope, scope_id,
-                    category, content, normalized_content, confidence, pinned,
-                    trust_level, sensitivity, provenance_type, provenance_id,
-                    source, status, revision, created_at, updated_at, expires_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s::timestamptz,
-                    %s::timestamptz, %s::timestamptz
-                )
-                """,
-                (
-                    record.id,
-                    self.workspace_id,
-                    record.owner_type,
-                    record.owner_id,
-                    record.scope,
-                    record.scope_id,
-                    record.category,
-                    record.content,
-                    record.normalized_content,
-                    record.confidence,
-                    record.pinned,
-                    record.trust_level,
-                    record.sensitivity,
-                    record.provenance_type,
-                    record.provenance_id,
-                    record.source,
-                    record.status,
-                    record.revision,
-                    record.created_at,
-                    record.updated_at,
-                    record.expires_at,
-                ),
-            )
-            connection.execute(
-                "UPDATE omnix_memory_candidates "
-                "SET status = 'accepted', resolved_at = %s::timestamptz "
-                "WHERE id = %s AND workspace_id = %s",
-                (resolved_at, candidate_id, self.workspace_id),
-            )
-            self.append_event(
-                connection,
-                "candidate",
-                candidate_id,
-                "memory.candidate_approved",
-                {"memory_record_id": record.id},
-            )
-        return record
-
     def mark_candidate_accepted(self, candidate_id: str, *, resolved_at: str) -> MemoryCandidate:
-        """Accept a pending candidate whose record was stored elsewhere (Memory v2)."""
+        """Accept a pending candidate whose record Memory v2 stored."""
         return self._resolve_candidate(candidate_id, "accepted", resolved_at)
 
     def _resolve_candidate(

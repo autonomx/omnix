@@ -54,14 +54,6 @@ from app.providers.cache_status import (
 )
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
 from app.providers.facade import ProviderFacadePayload
-from app.apps.rpg.replay import (
-    CheckpointBundleRequest,
-    CheckpointEnvelope,
-    PersistenceInventory,
-    ReplayPrimitiveList,
-    StateHashRequest,
-    StateHashResponse,
-)
 from app.runtime.worker_health import (
     WorkerHealthPayload,
     WorkerPayloadPolicy,
@@ -94,9 +86,10 @@ def create_kernel_router(
     get_provider_facade,
     get_asset_store,
     get_chat_store,
-    get_replay_adapter,
+    get_replay_adapter=None,
     get_model_residency_store,
     allow_offline_model_residency_store: bool = False,
+    replay_enabled: bool = True,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -201,7 +194,7 @@ def create_kernel_router(
         tags=["providers"],
     )
     def chatgpt_codex_auth_status() -> CodexAuthStatus:
-        return ChatGPTCodexProvider.auth_status(_configured_codex_path())
+        return CodexAuthStatus.model_validate(ChatGPTCodexProvider.auth_status(_configured_codex_path()))
 
     @router.post(
         "/api/providers/chatgpt-codex/login",
@@ -209,7 +202,7 @@ def create_kernel_router(
         tags=["providers"],
     )
     def chatgpt_codex_login() -> CodexAuthStatus:
-        return ChatGPTCodexProvider.start_login(_configured_codex_path())
+        return CodexAuthStatus.model_validate(ChatGPTCodexProvider.start_login(_configured_codex_path()))
 
     @router.post(
         "/api/providers/refresh", response_model=JobRecord, tags=["providers"]
@@ -443,33 +436,11 @@ def create_kernel_router(
         except PromptRenderError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @router.get(
-        "/api/replay/primitives", response_model=ReplayPrimitiveList, tags=["replay"]
-    )
-    def replay_primitives() -> ReplayPrimitiveList:
-        return get_replay_adapter().list_primitives()
+    if replay_enabled:
+        # RPG's replay routes; without the rpg feature they are not mounted and RPG is not imported (Phase 12).
+        from .replay_routes import register_replay_routes
 
-    @router.post(
-        "/api/replay/state-hash", response_model=StateHashResponse, tags=["replay"]
-    )
-    def replay_state_hash(request: StateHashRequest) -> StateHashResponse:
-        return get_replay_adapter().state_hash(request.state)
-
-    @router.post(
-        "/api/replay/checkpoints", response_model=CheckpointEnvelope, tags=["replay"]
-    )
-    def replay_checkpoint(bundle: CheckpointBundleRequest) -> CheckpointEnvelope:
-        return get_replay_adapter().create_checkpoint(
-            bundle.model_dump(exclude_unset=True)
-        )
-
-    @router.get(
-        "/api/replay/persistence/inventory",
-        response_model=PersistenceInventory,
-        tags=["replay"],
-    )
-    def replay_persistence_inventory() -> PersistenceInventory:
-        return get_replay_adapter().list_sessions()
+        register_replay_routes(router, get_replay_adapter)
 
     from .core_jobs_routes import register_core_jobs_routes
 

@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 import time
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import Any, cast
 
+from app.runtime.contracts import ModelResidencyService
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import HTTPConnection
 
-from app.assets import SharedAssetStore, default_asset_store
+from app.assets import default_asset_store
 from app.platform.chat import ChatSessionStore, default_chat_store
 from app.platform.chat.generation_jobs import recover_abandoned_chat_generation_jobs
 from app.jobs import (
-    InMemoryModelResidencyStore,
     default_model_residency_store,
 )
 from app.providers.facade import ProviderFacade, default_provider_facade
-from app.apps.rpg.replay import RpgReplayPersistenceAdapter, default_rpg_replay_adapter
 
 _LOCAL_BROWSER_ORIGINS = (
     "http://localhost:5173",
@@ -152,10 +153,10 @@ def _install_api_docs(gateway: FastAPI) -> None:
 def create_gateway_app(
     job_store_factory: Callable[[], Any] | None = None,
     provider_facade_factory: Callable[[], ProviderFacade] | None = None,
-    asset_store_factory: Callable[[], SharedAssetStore] | None = None,
+    asset_store_factory: Callable[[], AssetStore] | None = None,
     chat_store_factory: Callable[[], ChatSessionStore] | None = None,
-    replay_adapter_factory: Callable[[], RpgReplayPersistenceAdapter] | None = None,
-    model_residency_store_factory: Callable[[], InMemoryModelResidencyStore]
+    replay_adapter_factory: Callable[[], Any] | None = None,
+    model_residency_store_factory: Callable[[], ModelResidencyService]
     | None = None,
     readiness_check: Callable[[], dict[str, Any]] | None = None,
     runtime_lifecycle: Callable[[], AbstractAsyncContextManager] | None = None,
@@ -177,7 +178,7 @@ def create_gateway_app(
     if job_store_factory is None:
         from app.composition.runtime_composition import production_job_store
 
-        get_job_store = production_job_store
+        get_job_store: Callable[[], Any] = production_job_store
     else:
         get_job_store = job_store_factory
     from app.jobs.store import install_default_job_store_factory
@@ -186,7 +187,6 @@ def create_gateway_app(
     get_provider_facade = provider_facade_factory or default_provider_facade
     get_asset_store = asset_store_factory or default_asset_store
     get_chat_store = chat_store_factory or default_chat_store
-    get_replay_adapter = replay_adapter_factory or default_rpg_replay_adapter
     model_residency_store_is_injected = model_residency_store_factory is not None
     get_model_residency_store = (
         model_residency_store_factory or default_model_residency_store
@@ -222,9 +222,10 @@ def create_gateway_app(
     _install_local_browser_cors(gateway)
     from app.runtime.feature_catalog import enabled_feature_ids
 
-    if "rpg" in enabled_feature_ids(runtime_config):
+    rpg_enabled = "rpg" in enabled_feature_ids(runtime_config)
+    if rpg_enabled:
         # Importing it loads the RPG route package; skip when RPG is off (WP-7.7).
-        from app.apps.rpg.api.feature_routes import add_rpg_debug_middleware
+        from app.apps.rpg.edge.api.feature_routes import add_rpg_debug_middleware
 
         add_rpg_debug_middleware(gateway)
     gateway.state.runtime_started = False
@@ -288,7 +289,8 @@ def create_gateway_app(
             get_provider_facade=get_provider_facade,
             get_asset_store=get_asset_store,
             get_chat_store=get_chat_store,
-            get_replay_adapter=get_replay_adapter,
+            get_replay_adapter=replay_adapter_factory,
+            replay_enabled=rpg_enabled,
             get_model_residency_store=get_model_residency_store,
             allow_offline_model_residency_store=model_residency_store_is_injected,
         ),

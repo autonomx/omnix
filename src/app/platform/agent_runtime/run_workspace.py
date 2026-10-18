@@ -35,7 +35,7 @@ from .workspace import WorkspaceAuthority
 from .run_change_set import baseline_identity, patch_structure, run_change_set_from_artifact
 from .workspace_promotion import WorkspacePromotionError, promote_change_set
 from .workspace_dependencies import prepare_project_dependencies
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 from .service_core import (
     _diff_file_stats,
 )
@@ -275,9 +275,9 @@ def _upload_untracked_files(service, spec, change_set_id, untracked_digests, aut
     workspace_key = hashlib.sha256(service.context.workspace_id.encode("utf-8")).hexdigest()[:16]
     run_key = hashlib.sha256(spec.run_id.encode("utf-8")).hexdigest()
     base_key = f"agent/runs/{workspace_key}/{run_key}/changesets/{change_set_id}"
-    untracked_manifest: dict[str, dict[str, object]] = {}
+    untracked_manifest: dict[str, dict[str, Any]] = {}
     for relative, digest in untracked_digests.items():
-        entry: dict[str, object] = {"sha256": digest, "content_storage_ref": None}
+        entry: dict[str, Any] = {"sha256": digest, "content_storage_ref": None}
         try:
             source = authority.resolve_path(relative)
             if source.is_file():
@@ -430,7 +430,7 @@ def _promote_accepted_workspace(
     *,
     task_revision_id: str | None,
     workspace_state_id: str | None,
-) -> dict[str, object] | None:
+) -> dict[str, Any] | None:
     """Adopt an accepted isolated coding candidate into its main checkout."""
 
     spec = current.spec

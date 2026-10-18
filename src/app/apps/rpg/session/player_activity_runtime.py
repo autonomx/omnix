@@ -13,10 +13,10 @@ from app.apps.rpg.session.companion_turn_runtime import (
 )
 import hashlib as hashlib
 import json as json
-from app.apps.rpg.economy.menu_catalog import (
+from app.apps.rpg.rules.economy.menu_catalog import (
     build_available_transaction_menus as build_available_transaction_menus, build_provider_transaction_menus as build_provider_transaction_menus,
 )
-from app.apps.rpg.economy.provider_catalog import (
+from app.apps.rpg.rules.economy.provider_catalog import (
     derive_npc_transaction_providers as derive_npc_transaction_providers, derive_world_transaction_providers as derive_world_transaction_providers,
 )
 from datetime import (
@@ -658,7 +658,7 @@ def _choose_activity_kind_for_actor(actor: dict[str, Any], tick: int, runtime_st
 
     if local_pressure >= 3:
         # High pressure: bias heavily toward security activities
-        options = ("patrol", "watch_crowd", "question_patron", "patrol", "watch_crowd", "serve", "clean")
+        options: tuple[str, ...] = ("patrol", "watch_crowd", "question_patron", "patrol", "watch_crowd", "serve", "clean")
     elif local_pressure >= 2:
         # Medium pressure: bias toward security but allow variety
         options = ("patrol", "watch_crowd", "trade", "serve", "clean", "gossip", "question_patron")

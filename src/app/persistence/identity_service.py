@@ -111,6 +111,104 @@ class PostgresIdentityRepository:
         )
         return self.load_context(user_id=user_id, workspace_id=workspace_id)
 
+    # Accounts (local sign-in, WP-4.1) -------------------------------------
+
+    def user_account(self, user_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT id, display_name, email, account_kind, status FROM omnix_users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"user_id": str(row[0]), "display_name": str(row[1]), "email": str(row[2]) if row[2] else None,
+                "account_kind": str(row[3]), "status": str(row[4])}
+
+    def user_by_email(self, email: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT id FROM omnix_users WHERE lower(email) = lower(%s) AND status = 'active'",
+            (email,),
+        ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def email_taken(self, email: str, *, except_user: str | None = None) -> bool:
+        row = self.connection.execute(
+            "SELECT 1 FROM omnix_users WHERE lower(email) = lower(%s) AND id IS DISTINCT FROM %s",
+            (email, except_user),
+        ).fetchone()
+        return row is not None
+
+    def update_account(self, user_id: str, *, display_name: str, email: str | None, account_kind: str) -> None:
+        self.connection.execute(
+            """UPDATE omnix_users
+                  SET display_name = %s, email = %s, account_kind = %s,
+                      revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s""",
+            (display_name, email, account_kind, user_id),
+        )
+
+    def primary_workspace(self, user_id: str) -> str | None:
+        """The workspace a sign-in opens: the user's oldest active membership."""
+        row = self.connection.execute(
+            """SELECT m.workspace_id
+                 FROM omnix_workspace_memberships m
+                 JOIN omnix_workspaces w ON w.id = m.workspace_id AND w.status = 'active'
+                WHERE m.user_id = %s AND m.status = 'active'
+                ORDER BY m.created_at, m.workspace_id
+                LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def create_account_with_workspace(
+        self,
+        *,
+        user_id: str,
+        display_name: str,
+        email: str | None,
+        account_kind: str,
+        roles: tuple[str, ...],
+        seed_settings_from: str | None = LOCAL_WORKSPACE_ID,
+    ) -> TenantContext:
+        """A new user with a workspace of their own.
+
+        The workspace starts with a copy of the installation workspace's
+        settings (providers, models, appearance), so the account works on its
+        first sign-in. Secrets are not settings: they stay in the secret store.
+        """
+        workspace_id = f"workspace:{uuid.uuid4().hex}"
+        self.connection.execute(
+            """INSERT INTO omnix_users (id, display_name, email, account_kind, metadata)
+                VALUES (%s, %s, %s, %s, %s::jsonb)""",
+            (user_id, display_name, email, account_kind, json.dumps({"provisioned_by": "sign_up"})),
+        )
+        name = "Guest workspace" if account_kind == "guest" else f"{display_name}'s workspace"
+        self.connection.execute(
+            """INSERT INTO omnix_workspaces (id, name, created_by, metadata)
+                VALUES (%s, %s, %s, %s::jsonb)""",
+            (workspace_id, name[:200], user_id, json.dumps({"personal": True, "account_kind": account_kind})),
+        )
+        self.connection.execute(
+            """INSERT INTO omnix_workspace_memberships (id, workspace_id, user_id, roles)
+                VALUES (%s, %s, %s, %s)""",
+            (f"membership:{uuid.uuid4().hex}", workspace_id, user_id, list(roles)),
+        )
+        if seed_settings_from:
+            self.connection.execute(
+                """INSERT INTO omnix_settings (workspace_id, setting_scope, setting_key, value, updated_by)
+                    SELECT %s, setting_scope, setting_key, value, %s
+                      FROM omnix_settings WHERE workspace_id = %s
+                    ON CONFLICT DO NOTHING""",
+                (workspace_id, user_id, seed_settings_from),
+            )
+        return self.load_context(user_id=user_id, workspace_id=workspace_id)
+
+    def set_membership_roles(self, *, user_id: str, workspace_id: str, roles: tuple[str, ...]) -> None:
+        self.connection.execute(
+            """UPDATE omnix_workspace_memberships SET roles = %s
+                WHERE user_id = %s AND workspace_id = %s""",
+            (list(roles), user_id, workspace_id),
+        )
+
     def get_workspace(self, context: TenantContext, workspace_id: str) -> dict[str, Any] | None:
         context.require_workspace(workspace_id)
         row = self.connection.execute(
@@ -201,7 +299,7 @@ SYSTEM_ROLE = "system"
 
 
 def list_active_workspace_contexts(
-    database: PostgresDatabase, *, limit: int = 1000, include_inactive: bool = False,
+    database: PostgresDatabase, *, limit: int | None = None, include_inactive: bool = False,
 ) -> list[TenantContext]:
     """System contexts for per-workspace background work (WP-4.2).
 
@@ -209,6 +307,7 @@ def list_active_workspace_contexts(
     local workspace. The context acts as the workspace's creator with only
     the ``system`` role; it is never a request principal. Retiring a module
     (PA-4.3) asks for inactive workspaces too: their jobs are in flight as well.
+    Every workspace is returned unless the caller sets ``limit``.
     """
     from .tenant_scope import system_scope
     from .unit_of_work import unit_of_work
@@ -222,15 +321,54 @@ def list_active_workspace_contexts(
             (include_inactive, limit),
         ).fetchall()
         work.rollback()
-    return [
-        TenantContext(
-            user_id=str(row[1]),
-            workspace_id=str(row[0]),
-            membership_id=f"system:{row[0]}",
-            roles=frozenset({SYSTEM_ROLE}),
-        )
-        for row in rows
-    ]
+    return [_system_context(row) for row in rows]
+
+
+def list_workspace_contexts_with_ready_jobs(
+    database: PostgresDatabase, resource_classes: list[str] | tuple[str, ...], *, limit: int = 256,
+) -> list[TenantContext]:
+    """System contexts of the active workspaces that have a job ready to claim.
+
+    One query per poll, whatever the number of workspaces: a job worker claims
+    only where there is work instead of trying every workspace in turn. The
+    predicate is a superset of ``claim_next``'s, so a listed workspace may
+    still yield nothing. Workspaces come oldest-waiting job first, so the
+    ``limit`` never starves one: a workspace left out this poll has waited
+    less than every listed one and moves up as they are served.
+    """
+    from .tenant_scope import system_scope
+    from .unit_of_work import unit_of_work
+
+    if not resource_classes:
+        return []
+    with system_scope("identity.workspaces"), unit_of_work(
+        database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ
+    ) as work:
+        rows = work.connection.execute(
+            """SELECT w.id, w.created_by, MIN(j.available_at) AS waiting_since
+                 FROM omnix_workspaces w
+                 JOIN omnix_jobs j ON j.workspace_id = w.id
+                WHERE w.status = 'active'
+                  AND j.status IN ('queued', 'retrying', 'waiting')
+                  AND j.available_at <= CURRENT_TIMESTAMP
+                  AND j.resource_class = ANY(%s)
+                  AND j.attempt_count < j.max_attempts
+                GROUP BY w.id, w.created_by
+                ORDER BY waiting_since, w.id
+                LIMIT %s""",
+            (list(resource_classes), max(1, int(limit))),
+        ).fetchall()
+        work.rollback()
+    return [_system_context(row) for row in rows]
+
+
+def _system_context(row: Any) -> TenantContext:
+    return TenantContext(
+        user_id=str(row[1]),
+        workspace_id=str(row[0]),
+        membership_id=f"system:{row[0]}",
+        roles=frozenset({SYSTEM_ROLE}),
+    )
 
 
 def get_workspace(database: PostgresDatabase, context: TenantContext) -> dict[str, Any]:

@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.session.genesis.world_forge_local_narrative import (
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_local_narrative import (
     deterministic_local_narrative_signature,
     local_narrative_components,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_deterministic import generate_deterministic_profile_topic
-from app.apps.rpg.session.genesis.world_forge_profile_generation import default_profile_registry
-from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.apps.rpg.worlds.generation_local_narrative import (
+from app.apps.rpg.genesis.forge.world_forge_profile_deterministic import generate_deterministic_profile_topic
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import default_profile_registry
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.genesis.worlds.generation_local_narrative import (
     local_narrative_issues,
     local_narrative_report,
 )
-from app.apps.rpg.worlds.generation_publication_transaction import publication_transaction_report
+from app.apps.rpg.genesis.worlds.generation_publication_transaction import publication_transaction_report
 
 
 def _graph() -> dict:

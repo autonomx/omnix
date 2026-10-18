@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from app.config.env import environment
+from app.config.product import product_name
 
 """Idempotent startup provisioning for the managed interday SHADOW profile."""
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,7 +28,7 @@ INTERDAY_TRADING_STRATEGY_ID = "interday-trading-strategy-shadow"
 # provisioner. The durable strategy identity is the interday group ID above.
 MANAGED_FINVIZ_SHADOW_STRATEGY_ID = INTERDAY_TRADING_STRATEGY_ID
 MANAGED_FINVIZ_SHADOW_ACCOUNT_ID = "omnix-finviz-shadow"
-_MANAGED_ACCOUNT_NAME = "Omnix Finviz SHADOW"
+_MANAGED_ACCOUNT_NAME_SUFFIX = "Finviz SHADOW"
 _MAX_UPDATE_ATTEMPTS = 3
 
 # The first five are embedded research arms of the parent configuration. The
@@ -120,7 +121,8 @@ def _resolve_account(paper_repository: TradingPaperRepository) -> str:
 
     request = PaperAccountCreate(
         account_id=MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
-        name=_MANAGED_ACCOUNT_NAME,
+        # Shown in the paper account list: the visible product name (S-3).
+        name=f"{product_name()} {_MANAGED_ACCOUNT_NAME_SUFFIX}",
         initial_cash=_managed_initial_cash(),
         commission_bps=Decimal("0"),
     )
@@ -139,7 +141,7 @@ def _resolve_account(paper_repository: TradingPaperRepository) -> str:
     return snapshot.account.account_id
 
 
-def _desired_for_current(
+def _desired_profile_for_current(
     current: TradingStrategyConfigDocument,
     desired_shadow: TradingStrategyConfigDocument,
 ) -> TradingStrategyConfigDocument:
@@ -164,6 +166,24 @@ def _desired_for_current(
             }
         )
     return desired_shadow
+
+
+def _desired_for_current(
+    current: TradingStrategyConfigDocument,
+    desired_shadow: TradingStrategyConfigDocument,
+) -> TradingStrategyConfigDocument:
+    """The restored profile, keeping which task runs it.
+
+    ``execution_owner`` is the operator's choice (strategy runner WP): startup
+    restores the research profile but must not move the strategy back to the
+    monitor, or end a runner shadow period, behind the operator's back.
+    """
+
+    desired = _desired_profile_for_current(current, desired_shadow)
+    owner = getattr(current.config, "execution_owner", "monitor")
+    return desired.model_copy(
+        update={"config": desired.config.model_copy(update={"execution_owner": owner})}
+    )
 
 
 def _managed_fields_match(
@@ -252,14 +272,14 @@ def provision_managed_finviz_shadow_strategy(
                     strategy_id=created.strategy_id,
                     account_id=created.account_id,
                     action="created",
-                    mode=created.mode,
+                    mode=cast(Any, created.mode),
                     enabled=created.enabled,
                 )
                 return ManagedFinvizShadowProvisionResult(
                     account_id=created.account_id,
                     action="created",
                     enabled=created.enabled,
-                    mode=created.mode,
+                    mode=cast(Any, created.mode),
                 )
 
         if current.archived_at is not None:
@@ -284,7 +304,7 @@ def provision_managed_finviz_shadow_strategy(
                 account_id=current.account_id,
                 action="unchanged",
                 enabled=True,
-                mode=current.mode,
+                mode=cast(Any, current.mode),
             )
 
         replacement = desired_for_current.model_copy(
@@ -311,7 +331,7 @@ def provision_managed_finviz_shadow_strategy(
             strategy_id=updated.strategy_id,
             account_id=updated.account_id,
             action="updated",
-            mode=updated.mode,
+            mode=cast(Any, updated.mode),
             enabled=updated.enabled,
             revision=updated.revision,
         )
@@ -319,7 +339,7 @@ def provision_managed_finviz_shadow_strategy(
             account_id=updated.account_id,
             action="updated",
             enabled=updated.enabled,
-            mode=updated.mode,
+            mode=cast(Any, updated.mode),
         )
 
     raise RuntimeError("managed_finviz_shadow_provision_retry_exhausted")

@@ -22,9 +22,13 @@ Shared by the gateway, workers and model services (TTS, STT, image); at least
 
 ## Run-token key (`OMNIX_RUN_TOKEN_KEY`)
 
-Signs agent run tokens. It comes from the launcher's service token unless set.
-Set the same new value (at least 32 characters) on every gateway and worker
-and restart them together. Tokens signed with the old key stop working, so
+Signs agent run tokens. It is never derived from the service token, because
+the model services hold that token. The gateway entrypoint uses
+`OMNIX_RUN_TOKEN_KEY` when set (Compose requires it) and otherwise a protected
+key of its own next to the service token (`run-token-key`, or
+`run-token-key.dpapi` on Windows); its replicas and job worker inherit it. To
+rotate, set the same new value (at least 32 characters) on every gateway and
+worker, or delete the protected key file, and restart them together. Tokens signed with the old key stop working, so
 rotate when no agent run is active, or restart the runs that were.
 
 ## Provider keys

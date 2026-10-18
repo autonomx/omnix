@@ -6,6 +6,7 @@ from collections.abc import Iterator, Mapping, MutableMapping
 import os
 from threading import Lock
 import time
+from typing import overload
 from urllib.parse import urlsplit
 
 _READ_LOCK = Lock()
@@ -40,7 +41,7 @@ class _EnvironmentAccess(MutableMapping[str, str]):
 _ENVIRONMENT = _EnvironmentAccess()
 
 
-def environment() -> MutableMapping[str, str]:
+def environment() -> _EnvironmentAccess:
     """Return a mapping view that records every variable value accessed."""
     return _ENVIRONMENT
 
@@ -91,6 +92,10 @@ def clear_read_names() -> None:
         _READ_NAMES.clear()
 
 
+@overload
+def env_str(name: str, default: str, *, env: Mapping[str, str] | None = None) -> str: ...
+@overload
+def env_str(name: str, default: None = None, *, env: Mapping[str, str] | None = None) -> str | None: ...
 def env_str(name: str, default: str | None = None, *, env: Mapping[str, str] | None = None) -> str | None:
     _record(name)
     source = environment() if env is None else env

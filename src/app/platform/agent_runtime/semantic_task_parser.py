@@ -17,7 +17,7 @@ import math
 import os
 import threading
 import time
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from app.providers.service import get_provider
 from app.providers.base import BaseProvider, ChatMessage
@@ -310,13 +310,13 @@ class ProviderSemanticTaskParser:
         if configured_timeout is None:
             configured_timeout = getattr(getattr(provider, "config", None), "timeout", None)
         try:
-            parsed_timeout = float(configured_timeout)
+            parsed_timeout = float(cast(Any, configured_timeout))
         except (TypeError, ValueError):
             parsed_timeout = StructuredRetryBudget().deadline_seconds
         if not math.isfinite(parsed_timeout) or parsed_timeout <= 0:
             parsed_timeout = StructuredRetryBudget().deadline_seconds
         self.timeout_seconds = max(0.25, parsed_timeout)
-        self.gateway = StructuredOutputGateway(provider)
+        self.gateway: StructuredOutputGateway[Any] = StructuredOutputGateway(provider)
         self.last_diagnostics: dict[str, Any] = {}
 
     def parse(self, content: str) -> SemanticTask:
@@ -630,7 +630,7 @@ def _parse_semantic_task_once(
                     previous_objective=previous_objective,
                     current_environment=current_environment,
                 )
-                value = classify(legacy_input) if callable(classify) else parser(legacy_input)
+                value = classify(legacy_input) if callable(classify) else cast(Any, parser)(legacy_input)
 
     if isinstance(value, SemanticTask):
         return value

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "measurement": "event-store reads of one strategy cycle (WP-7.5)",
+  "revision": "0774ccd2ca9458e7614b08072d2edc90f0045e56",
+  "python": "3.11.12",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "database": "omnix_bench",
+  "strategy_events_in_table": 1200000,
+  "strategy_history": {
+    "events": 200000,
+    "qualification": 20000,
+    "stoch_today": 2000,
+    "intraday_llm_today": 5000
+  },
+  "samples": 20,
+  "reads": {
+    "v2_qualification": {
+      "rows": 19300,
+      "p50_ms": 363.2,
+      "p95_ms": 401.3,
+      "max_ms": 401.3
+    },
+    "stoch_trend_session": {
+      "rows": 2000,
+      "p50_ms": 50.3,
+      "p95_ms": 79.0,
+      "max_ms": 79.0
+    },
+    "intraday_llm_session": {
+      "rows": 5000,
+      "p50_ms": 79.5,
+      "p95_ms": 95.5,
+      "max_ms": 95.5
+    }
+  },
+  "cycle_reads": {
+    "p50_ms": 496.4,
+    "p95_ms": 528.3,
+    "max_ms": 528.3
+  },
+  "monitor_interval_seconds": 30,
+  "findings": [
+    "One configuration's three event-store reads take 496 ms p50 and 528 ms p95 with 200,000 events of its own in a 1.2M-event table; the 19,300-row qualification read is 401 ms p95 of that.",
+    "Of the qualification read, PostgreSQL takes about 120 ms (a parallel scan); the rest is decoding the rows into StrategyEvent models. An (workspace_id, strategy_id, event_type, observed_at) index did not change the total (p95 580 ms), so none is added.",
+    "With the CPU half (strategy-cycle-2026-10-03.json: 1.46 s p95 at 200 symbols at the close) a cycle is about 2 s, within the 30 s monitor interval; projection tables (roadmap step 4) are not needed for the acceptance."
+  ]
+}

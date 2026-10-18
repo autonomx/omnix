@@ -10,7 +10,7 @@ separately versioned deep-recovery shape from finalized 1-minute bars.
 
 from datetime import datetime, time
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -21,8 +21,8 @@ from .strategies.gap_pullback import _ET, _regular_bars, session_vwap
 from .strategies.models import GapPullbackConfig
 
 
-DEEP_RECOVERY_SETUP_ID = "deep_recovery_continuation_v1"
-DEEP_RECOVERY_RULE_VERSION = "1.0.0-shadow"
+DEEP_RECOVERY_SETUP_ID: Final = "deep_recovery_continuation_v1"
+DEEP_RECOVERY_RULE_VERSION: Final = "1.0.0-shadow"
 DEEP_RECOVERY_OPENING_END_ET = time(9, 45)
 DEEP_RECOVERY_MINIMUM_SELLOFF_PCT = Decimal("5")
 DEEP_RECOVERY_TRIGGER_PCT = Decimal("30")
@@ -66,7 +66,7 @@ class DeepRecoveryShadowEvaluation(BaseModel):
     research_stop_reference: Decimal | None = None
     research_stop_price: Decimal | None = None
     research_risk_pct: Decimal | None = None
-    hard_gate_features: dict[str, object]
+    hard_gate_features: dict[str, Any]
     execution_authority: Literal[False] = False
 
     @property
@@ -78,8 +78,8 @@ def _evaluation(
     *,
     state: DeepRecoveryState,
     reason_code: str,
-    hard_gate_features: dict[str, object],
-    **values: object,
+    hard_gate_features: dict[str, Any],
+    **values: Any,
 ) -> DeepRecoveryShadowEvaluation:
     return DeepRecoveryShadowEvaluation(
         state=state,

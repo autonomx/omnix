@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.recipe_discovery import apply_recipe_discovery
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 
 def _turn(state: dict[str, Any]) -> int:

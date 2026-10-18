@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 function DiagnosticValue({ value }: { value: unknown }) {
   if (value === null || value === undefined) return <span>not reported</span>;
@@ -20,7 +21,7 @@ export function TradingDiagnosticsPanel() {
         <strong>Runtime diagnostics</strong>
         <span>{diagnostics.isLoading ? 'loading' : diagnostics.isError ? 'error' : diagnostics.data?.ok ? 'healthy' : 'degraded'}</span>
       </header>
-      <p>Provider, cache, stream, and gateway health reported by the shared Omnix Trading service.</p>
+      <p>Provider, cache, stream, and gateway health reported by the shared {PRODUCT_NAME} Trading service.</p>
       <dl>
         {entries.map(([key, value]) => (
           <div key={key}>

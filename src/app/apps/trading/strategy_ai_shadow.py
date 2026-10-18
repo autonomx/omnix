@@ -9,7 +9,7 @@ risk/execution vetoes, and paper-execution-v2 fill simulation.
 
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -131,7 +131,7 @@ def _usage_int(usage: Any, *keys: str) -> int | None:
         return None
     for key in keys:
         try:
-            value = int(usage.get(key))
+            value = int(cast(Any, usage.get(key)))
         except (TypeError, ValueError):
             continue
         if value >= 0:
@@ -198,10 +198,10 @@ def feature_snapshot(
     learning: IntradayLearningSnapshot,
     indicators: MultiTimeframeIndicatorContext,
     bars: list[MarketBar],
-    execution: dict[str, object],
+    execution: dict[str, Any],
     cohort_rank: int,
     position: AIShadowPositionState,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     regular = [bar for bar in bars if bar.is_final and bar.session == "regular"]
     recent = regular[-20:]
     current_volume = recent[-1].volume if recent else Decimal("0")
@@ -295,10 +295,10 @@ def feature_snapshot(
 
 
 def policy_feature_snapshot(
-    snapshot: dict[str, object],
+    snapshot: dict[str, Any],
     *,
     policy: AIShadowPolicy,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Project the shared causal snapshot onto one experimental arm.
 
     The every-minute arm is intentionally "pure AI": it may use generic market,
@@ -315,10 +315,10 @@ def policy_feature_snapshot(
 
 
 def event_trigger_reasons(
-    current: dict[str, object],
-    previous: dict[str, object] | None,
+    current: dict[str, Any],
+    previous: dict[str, Any] | None,
     *,
-    prior_decision: dict[str, object] | None = None,
+    prior_decision: dict[str, Any] | None = None,
 ) -> tuple[str, ...]:
     """Deterministic material-change triggers for the event-driven AI arm."""
 
@@ -338,7 +338,7 @@ def event_trigger_reasons(
         if current_learning.get("pattern") != previous_learning.get("pattern"):
             reasons.append("learning_pattern_changed")
 
-    def nested(snapshot: dict[str, object], *path: str):
+    def nested(snapshot: dict[str, Any], *path: str):
         value: object = snapshot
         for key in path:
             if not isinstance(value, dict):
@@ -452,10 +452,10 @@ def event_trigger_reasons(
 
 
 def _build_payload(
-    rows: list[dict[str, object]],
+    rows: list[dict[str, Any]],
     *,
     policy: AIShadowPolicy,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "policy": policy,
         "task": (
@@ -490,7 +490,7 @@ class AIShadowPolicyAnalyzer:
         self,
         *,
         policy: AIShadowPolicy,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
     ) -> AIShadowResult:
         from .strategy_ai_shadow_provider import _reliable_assess
 
@@ -540,7 +540,7 @@ def desired_fill(
 
 
 def simulate_ai_shadow_fill(
-    execution: dict[str, object],
+    execution: dict[str, Any],
     *,
     side: Literal["buy", "sell"],
     instrument_id: str,
@@ -597,7 +597,7 @@ def simulate_ai_shadow_fill(
             ),
             execution_eligible=eligible,
             halted=halted,
-            observation_quality=quality_value,
+            observation_quality=cast(Any, quality_value),
         )
 
     if degraded_price_only:
@@ -624,7 +624,7 @@ def simulate_ai_shadow_fill(
             fill_reason="degraded_price_only_hypothetical",
             execution_eligible=False,
             halted=False,
-            observation_quality=quality_value,
+            observation_quality=cast(Any, quality_value),
             hypothetical=True,
             assumed_friction_bps=total_friction_bps,
         )
@@ -678,7 +678,7 @@ def simulate_ai_shadow_fill(
         fill_reason=fill.reason,
         execution_eligible=eligible,
         halted=halted,
-        observation_quality=quality_value,
+        observation_quality=cast(Any, quality_value),
     )
 
 

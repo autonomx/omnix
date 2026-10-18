@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.apps.rpg.response_generation.forward_motion import ForwardMotionPolicy
-from app.apps.rpg.response_generation.recovery import LocalRecoveryCoordinator
-from app.apps.rpg.response_generation.retrieval import build_retrieval_sources
+from app.apps.rpg.narration.response_generation.forward_motion import ForwardMotionPolicy
+from app.apps.rpg.narration.response_generation.recovery import LocalRecoveryCoordinator
+from app.apps.rpg.narration.response_generation.retrieval import build_retrieval_sources
 
 
 def test_unknown_social_entity_requires_clarification():

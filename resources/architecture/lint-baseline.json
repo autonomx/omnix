@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "de77d4b6053397b3a212c7b8f0c23a9d76b8524c2b489aef3726a9e5014f44f1",
+  "policy_digest": "a80d7e2256052bb5f5e75d041198940b432d8c485187dcadbc2c67b2c1267894",
   "rules": [
     "AL001",
     "AL002",
@@ -17,7 +17,8 @@
     "AL013",
     "AL014",
     "AL015",
-    "AL016"
+    "AL016",
+    "AL017"
   ],
   "schema_version": 1,
   "scope": "tracked_nonvendor_production_python_and_migrations",

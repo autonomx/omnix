@@ -24,7 +24,7 @@ def parse_binance_kline(
     interval: str,
     ingestion_revision: int = 1,
 ) -> StreamingBarUpdate:
-    event = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    event = raw_data if isinstance(raw_data := payload.get("data"), dict) else payload
     kline = event.get("k") if isinstance(event, dict) else None
     if not isinstance(kline, dict):
         raise ValueError("Binance stream payload does not contain a kline")

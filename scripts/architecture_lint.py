@@ -18,7 +18,7 @@ from architecture_analysis import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-RULES = tuple(f"AL{number:03}" for number in range(1, 17))
+RULES = tuple(f"AL{number:03}" for number in range(1, 18))
 MIGRATIONS = "src/app/persistence/migrations/"
 RETIRED_MIGRATIONS = "src/app/persistence/retired/"
 REGISTRY = "resources/architecture/migration-checksums.json"
@@ -169,6 +169,60 @@ def reciprocal_violations(analysis: SourceAnalysis) -> list[Violation]:
             for first, second in analysis.reciprocal_dependencies()]
 
 
+RPG_PACKAGE = "app.apps.rpg"
+
+
+def rpg_context_violations(analysis: SourceAnalysis) -> list[Violation]:
+    """AL017 (Track R-2): RPG's bounded contexts import only the contexts below them.
+
+    ``[rpg_contexts]`` in layers.toml lists the contexts lowest first and the
+    top-level entries of app/apps/rpg that make up each one; an entry may name a
+    subpackage (``session.genesis``), and the longest match wins. An import at any
+    scope from one context into the same or a higher one is a violation, and so
+    is an entry that belongs to no context. Imports within a context are free.
+    """
+    contexts = analysis.config.get("rpg_contexts", {})
+    order = list(contexts.get("order", []))
+    if not order:
+        return []
+    rank = {name: index for index, name in enumerate(order)}
+    entry_context = {entry: name for name in order for entry in contexts.get(name, [])}
+    prefix = RPG_PACKAGE.split(".")
+
+    def entry_of(module: str) -> str | None:
+        parts = module.split(".")
+        if parts[: len(prefix)] != prefix or len(parts) <= len(prefix):
+            return None
+        relative = parts[len(prefix):]
+        for size in range(len(relative), 1, -1):
+            candidate = ".".join(relative[:size])
+            if candidate in entry_context:
+                return candidate
+        return relative[0]
+
+    violations: set[Violation] = set()
+    for source, targets in analysis.import_edges(module_level=False).items():
+        source_entry = entry_of(source)
+        if source_entry is None or not is_production(analysis.modules[source], analysis.config):
+            continue
+        source_context = entry_context.get(source_entry)
+        if source_context is None:
+            violations.add(Violation("AL017", analysis.modules[source], "rpg_entry_without_context:" + source_entry, 1))
+            continue
+        # A package counted only because a submodule of it was imported is not
+        # a target of its own here: the submodule decides the context.
+        named = {target for target in targets if not any(other.startswith(target + ".") for other in targets)}
+        for target in named:
+            target_entry = entry_of(target)
+            target_context = entry_context.get(target_entry or "")
+            if target_context is None or target_context == source_context:
+                continue
+            if rank[target_context] >= rank[source_context]:
+                violations.add(Violation("AL017", analysis.modules[source],
+                                         f"{source_context}->{target_context}:{target_entry}", 1))
+    return sorted(violations, key=lambda item: (item.path, item.fingerprint))
+
+
 def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
     # The metric counts reciprocal package pairs. Lint additionally rejects
     # longer module-level package cycles, whose edges may use different modules.
@@ -226,6 +280,7 @@ def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
 def measure(sources: dict[str, str], config: dict, protected: dict[str, str]) -> dict:
     analysis = SourceAnalysis(sources, config)
     violations = (analysis.violations() + cycle_violations(analysis) + reciprocal_violations(analysis)
+                  + rpg_context_violations(analysis)
                   + analysis.table_ownership_violations()
                   + migration_violations(sources, protected))
     counts = Counter((item.rule, item.path, item.fingerprint) for item in violations)

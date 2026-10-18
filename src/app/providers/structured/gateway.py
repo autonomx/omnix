@@ -12,6 +12,8 @@ from typing import Any, Generic, Mapping, Sequence, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from app.caching.bounded_cache import bounded_lru_cache
+
 from app.providers.base import (
     AuthenticationError,
     BaseProvider,
@@ -90,6 +92,21 @@ class _NegativeCapabilityCache:
 _NEGATIVE_CAPABILITIES = _NegativeCapabilityCache()
 
 
+@bounded_lru_cache(max_entries=256, ttl_seconds=3600.0)
+def output_schema_text(output_model: type[BaseModel]) -> str:
+    """An output model's JSON schema as canonical text, built once per model.
+
+    Pydantic builds the schema from scratch on every call; a structured call
+    needs it two or three times (WP-5.6: an RPG turn spent ~30 ms on it).
+    """
+    return json.dumps(output_model.model_json_schema(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _output_schema(output_model: type[BaseModel]) -> dict[str, Any]:
+    """A fresh copy of the output model's JSON schema (callers may change it)."""
+    return json.loads(output_schema_text(output_model))
+
+
 def _validation_issues(error: ValidationError) -> tuple[StructuredValidationIssue, ...]:
     issues: list[StructuredValidationIssue] = []
     for row in error.errors(include_url=False):
@@ -144,7 +161,7 @@ def _response_options(
     capabilities: StructuredCapabilities,
 ) -> dict[str, Any]:
     schema = project_provider_schema(
-        contract.output_model.model_json_schema(),
+        _output_schema(contract.output_model),
         mode=mode,
         provider_name=provider_name,
         schema_profile=contract.schema_profile,
@@ -364,12 +381,7 @@ class StructuredOutputGateway(Generic[T]):
         provider_name = str(
             getattr(self.provider, "provider_name", self.provider.__class__.__name__) or ""
         )
-        schema_text = json.dumps(
-            contract.output_model.model_json_schema(),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        schema_text = output_schema_text(contract.output_model)
         schema_hash = hashlib.sha256(schema_text.encode("utf-8")).hexdigest()
         provider_schema_hash = ""
         cache_scope = f"{contract.schema_profile}:{schema_hash}"
@@ -431,7 +443,7 @@ class StructuredOutputGateway(Generic[T]):
             if contract.max_tokens is not None:
                 options.setdefault("max_tokens", contract.max_tokens)
             projected_schema = project_provider_schema(
-                contract.output_model.model_json_schema(),
+                _output_schema(contract.output_model),
                 mode=mode,
                 provider_name=provider_name,
                 schema_profile=contract.schema_profile,

@@ -54,6 +54,7 @@ _KERNEL_CATALOG: dict[str, str] = {
     "tools:approve": "Approve assistant tool calls",
     "tools:execute": "Execute approved assistant tool calls",
     "tools:connections:admin": "OAuth connections and tool credentials",
+    "tools:policy:admin": "Assistant tool enablement and approval policy",
     "agent:read": "Agent runs (read)",
     "agent:run": "Start agent runs",
     "agent:steer": "Steer agent runs",
@@ -132,6 +133,10 @@ _MEMBER = frozenset({
     "voice:read", "voice:write", "voice:clone", "image:read", "image:generate",
     "settings:read", "client:report",
 })
+_GUEST_EXCLUDED = frozenset({
+    "tools:propose", "tools:execute", "agent:run", "agent:steer", "research:run",
+    "trading:paper:order", "voice:clone",
+})
 DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": frozenset(CATALOG) - _ADMIN_EXCLUDED,
     "member": _MEMBER | _MODULE_MEMBER,
@@ -143,6 +148,10 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     # An agent process proven by its run token (WP-4.6): it may act on its
     # own run through the broker and model gateway, never approve.
     "agent_run": frozenset({"agent:read", "agent:run"}),
+    # A guest account (WP-4.1): what a member does in their own workspace,
+    # minus tools and agents that act outside the conversation, trading
+    # orders, voice cloning and paid research. Signing up lifts the limits.
+    "guest": (_MEMBER | _MODULE_MEMBER) - _GUEST_EXCLUDED,
 }
 
 # Feature id -> (read permission, write permission).
@@ -218,6 +227,9 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/hermes/rpg/approved-flow"): "tools:approve",
     # Credentials and connections.
     ("POST", "/api/assistant/tools/connect/{tool_id}/oauth-client"): "tools:connections:admin",
+    # Enabling tools and loosening their approval policy is the workspace
+    # admin's decision; a member may only propose calls.
+    ("POST", "/api/assistant/tools/config"): "tools:policy:admin",
     ("POST", "/api/assistant/research/credentials"): "tools:connections:admin",
     ("PUT", "/api/trading/execution/providers/alpaca-iex/credentials"): "trading:control",
     ("PUT", "/api/trading/market-data/providers/coinmarketcap/credentials"): "trading:control",
@@ -232,6 +244,8 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/image-generation/model/load"): "image:models:admin",
     ("POST", "/api/image-generation/model/unload"): "image:models:admin",
     ("POST", "/api/tts/runtime/unload"): "settings:write",
+    # Choosing the TTS engine changes Omnix's default and swaps the loaded model.
+    ("POST", "/api/tts/engines/select"): "settings:write",
     ("POST", "/api/jobs/{job_id}/cancel"): "jobs:cancel",
     ("POST", "/api/image-generation/assets/{asset_id}/delete"): "assets:delete",
     # Trading: members place paper orders; strategy changes are admin.
@@ -239,6 +253,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/trading/paper/accounts/{account_id}/risk-orders"): "trading:paper:order",
     ("DELETE", "/api/trading/paper/accounts/{account_id}/orders/{order_id}"): "trading:paper:order",
     ("POST", "/api/trading/paper/accounts/{account_id}/orders/{order_id}/replace"): "trading:paper:order",
+    ("POST", "/api/trading/paper/accounts/{account_id}/risk-orders/{order_id}/move"): "trading:paper:order",
     ("POST", "/api/trading/replay/execution/orders"): "trading:paper:order",
     ("POST", "/api/trading/strategies"): "trading:strategies:admin",
     ("PUT", "/api/trading/strategies/{strategy_id}"): "trading:strategies:admin",

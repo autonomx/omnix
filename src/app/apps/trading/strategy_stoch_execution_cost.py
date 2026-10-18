@@ -14,7 +14,7 @@ idealized chart return with a spread/slippage-adjusted executable return.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -124,7 +124,7 @@ def _spread_from_book(
 
 
 def simulate_stoch_execution(
-    execution: dict[str, object],
+    execution: dict[str, Any],
     *,
     action: StochExecutionAction,
     instrument_id: str,
@@ -312,7 +312,7 @@ def action_for_snapshot(
 
 
 def _simulation_from_payload(
-    payload: dict[str, object] | None,
+    payload: dict[str, Any] | None,
 ) -> StochExecutionSimulation | None:
     if not isinstance(payload, dict):
         return None
@@ -329,8 +329,8 @@ def _simulation_from_payload(
 def build_execution_summary(
     snapshot: StochTrendCaptureSnapshot,
     *,
-    entry_payload: dict[str, object] | None,
-    action_payloads: dict[StochExecutionAction, dict[str, object]],
+    entry_payload: dict[str, Any] | None,
+    action_payloads: dict[StochExecutionAction, dict[str, Any]],
 ) -> StochExecutionSummary:
     """Combine captured entry/exit fills into the strategy's executable return."""
 
@@ -384,7 +384,7 @@ def build_execution_summary(
         exits.append((Decimal("1"), full))
 
     weighted_exit = sum(
-        (weight * simulation.fill_price for weight, simulation in exits),
+        (weight * cast(Decimal, simulation.fill_price) for weight, simulation in exits),
         Decimal("0"),
     )
     net = (weighted_exit / entry.fill_price - Decimal("1")) * Decimal("100")

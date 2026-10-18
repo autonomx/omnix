@@ -1,4 +1,6 @@
-import { omnixApiClient } from '../../../api/client';
+import { unwrap } from '../../../api/http';
+import { api } from './gateway';
+import type { components } from './generated';
 
 export type RpgMapAvailability = 'ready' | 'unavailable' | 'stale' | 'error';
 export type RpgMapLayer =
@@ -144,41 +146,28 @@ export interface RpgMapOverlay {
   visible_object_ids: string[];
 }
 
-export interface RpgMapDefinitionResponse {
-  definition: RpgMapDefinition | null;
-  definition_revision: string;
-  map_id: string;
-  ok: boolean;
-}
+// The route validates the envelope; the definition and overlay documents are read through the views above.
+export type RpgMapDefinitionResponse = components['schemas']['RpgMapDefinitionResponse'] & { definition: RpgMapDefinition | null };
 
-export interface RpgMapOverlayResponse {
-  definition_revision: string;
-  map_id: string;
-  ok: boolean;
-  overlay: RpgMapOverlay;
-  overlay_revision: number;
-  session_turn_index: number;
-}
+export type RpgMapOverlayResponse = components['schemas']['RpgMapOverlayResponse'] & { overlay: RpgMapOverlay };
 
 export async function getRpgMapDefinition(
   mapId: string,
   knownDefinitionRevision?: string,
   sessionId?: string,
 ): Promise<RpgMapDefinitionResponse> {
-  const query = new URLSearchParams();
-  if (knownDefinitionRevision) query.set('known_definition_revision', knownDefinitionRevision);
-  if (sessionId) query.set('session_id', sessionId);
-  const suffix = query.size ? `?${query.toString()}` : '';
-  return omnixApiClient.get<RpgMapDefinitionResponse>(
-    `/api/rpg/maps/${encodeURIComponent(mapId)}${suffix}`,
-  );
+  const query = {
+    ...(knownDefinitionRevision ? { known_definition_revision: knownDefinitionRevision } : {}),
+    ...(sessionId ? { session_id: sessionId } : {}),
+  };
+  return await unwrap(api.GET('/api/rpg/maps/{map_id}', { params: { path: { map_id: mapId }, query } })) as RpgMapDefinitionResponse;
 }
 
 export async function getRpgMapOverlay(
   sessionId: string,
   mapId: string,
 ): Promise<RpgMapOverlayResponse> {
-  return omnixApiClient.get<RpgMapOverlayResponse>(
-    `/api/rpg/sessions/${encodeURIComponent(sessionId)}/maps/${encodeURIComponent(mapId)}/overlay`,
-  );
+  return await unwrap(api.GET('/api/rpg/sessions/{session_id}/maps/{map_id}/overlay', {
+    params: { path: { session_id: sessionId, map_id: mapId } },
+  })) as RpgMapOverlayResponse;
 }

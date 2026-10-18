@@ -8,7 +8,7 @@ import uuid
 import pytest
 
 from app.apps.rpg.declarations import RETENTION
-from app.apps.rpg.persistence.narration_event_repository import (
+from app.apps.rpg.foundation.persistence.narration_event_repository import (
     MAX_RPG_NARRATION_EVENT_BYTES,
     MAX_RPG_NARRATION_EVENT_PAGE_SIZE,
     MAX_RPG_NARRATION_EVENTS_PER_SESSION,
@@ -81,7 +81,7 @@ def test_event_cursor_and_page_are_scoped_to_session_and_page_size_is_bounded():
 
 def test_retention_deletes_oldest_events_in_bounded_batches():
     connection = _Connection()
-    (declaration,) = RETENTION
+    declaration = next(item for item in RETENTION if item.record_type == "rpg_narration_events")
 
     assert declaration.record_type == "rpg_narration_events" and declaration.capacity_cleanup
     assert declaration.delete(connection, 1, 250) == 3

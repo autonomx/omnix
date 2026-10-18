@@ -47,7 +47,7 @@ def fetch_yahoo_chart_result(
 ) -> tuple[dict[str, Any], datetime]:
     """Shared Yahoo chart acquisition used by discovery and provider recovery."""
 
-    params: dict[str, object] = {
+    params: dict[str, Any] = {
         "interval": interval,
         "includePrePost": "true" if include_prepost else "false",
         "events": events,
@@ -427,7 +427,7 @@ class YahooEquityProvider(ProviderAdapter):
         self,
         instrument_id: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         response = self.get_bars(instrument_id, "1d", 2, cancellation)
         if not response.bars:
             raise ProviderDataUnavailableError("Yahoo returned no quote bars")
@@ -447,7 +447,7 @@ class YahooEquityProvider(ProviderAdapter):
         base_currency: str,
         quote_currency: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         base = base_currency.strip().upper()
         quote = quote_currency.strip().upper()
         if base in STABLE_CURRENCY_CODES:
@@ -647,7 +647,7 @@ class StooqEquityProvider(ProviderAdapter):
         self,
         instrument_id: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         response = self.get_bars(instrument_id, "1d", 1, cancellation)
         if not response.bars:
             raise ProviderDataUnavailableError("Stooq returned no quote bars")

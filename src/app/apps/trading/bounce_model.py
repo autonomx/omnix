@@ -9,9 +9,10 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import MarketBar
+from typing import Final
 
 
-LABEL_DEFINITION = "P(+2R before -1R within 90 minutes)"
+LABEL_DEFINITION: Final = "P(+2R before -1R within 90 minutes)"
 
 
 class BounceFeatureVector(BaseModel):

@@ -35,7 +35,7 @@ def register_workflow(definition: WorkflowDefinition) -> WorkflowDefinition:
 
 
 @router.post("/api/workflows/{workflow_id}/runs")
-def start_workflow(workflow_id: str, request: WorkflowStartRequest) -> dict[str, object]:
+def start_workflow(workflow_id: str, request: WorkflowStartRequest) -> dict[str, Any]:
     try:
         run_id = default_workflow_runtime().start(workflow_id, request.input)
     except KeyError as exc:
@@ -44,7 +44,7 @@ def start_workflow(workflow_id: str, request: WorkflowStartRequest) -> dict[str,
 
 
 @router.get("/api/workflow-runs/{run_id}")
-def get_workflow_run(run_id: str) -> dict[str, object]:
+def get_workflow_run(run_id: str) -> dict[str, Any]:
     state = default_workflow_runtime().get_status(run_id)
     if state is None:
         raise HTTPException(status_code=404, detail="workflow_run_not_found")
@@ -52,7 +52,7 @@ def get_workflow_run(run_id: str) -> dict[str, object]:
 
 
 @router.post("/api/workflow-runs/{run_id}/commands")
-def command_workflow_run(run_id: str, request: WorkflowCommandRequest) -> dict[str, object]:
+def command_workflow_run(run_id: str, request: WorkflowCommandRequest) -> dict[str, Any]:
     runtime = default_workflow_runtime()
     try:
         if request.command == "pause":

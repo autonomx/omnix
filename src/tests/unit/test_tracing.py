@@ -18,7 +18,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from app.platform.live_speech.metrics import LiveSpeechMetrics  # noqa: E402
 from app.observability import tracing  # noqa: E402
 from app.observability.logging import RequestContextMiddleware, configure_logging  # noqa: E402
-from app.apps.rpg.performance_trace import rpg_pipeline_span, rpg_pipeline_trace  # noqa: E402
+from app.apps.rpg.foundation.performance_trace import rpg_pipeline_span, rpg_pipeline_trace  # noqa: E402
 
 logger = logging.getLogger("omnix.tests.tracing")
 

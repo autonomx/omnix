@@ -158,10 +158,10 @@ def _resolve_v2_prompt_memory(
 ) -> tuple[list[PromptMemoryItem], dict[str, Any]]:
     """Memory v2 prompt memory.
 
-    Pinned memories always come first, as under v1 (pinning means "always
-    include"); ranked retrieval for the turn fills the rest of the budget;
-    a character session's shared System Assistant memory follows the v1
-    category rule, plus anything an explicit v2 grant federates.
+    Pinned memories always come first (pinning means "always include");
+    ranked retrieval for the turn fills the rest of the budget; a character
+    session's shared System Assistant memory follows the category rule, plus
+    anything an explicit v2 grant federates.
     """
     authority = runtime.assert_v2_authoritative()
     space, visible_scopes = _v2_space_and_scopes(session)
@@ -264,7 +264,7 @@ def _shared_system_items(
     *,
     token_budget: int,
 ) -> tuple[list[PromptMemoryItem], dict[str, int]]:
-    """The System Assistant memories a character session may read (v1 rule).
+    """The System Assistant memories a character session may read (the category rule).
 
     Allowed categories only, never session-scoped, normal sensitivity, then
     the usual selection within the remaining budget. Under Memory v2 the
@@ -342,7 +342,7 @@ def resolve_prompt_memory(
         return [], diagnostics
 
     runtime = _memory_v2_runtime(memory_v2_runtime_factory)
-    if runtime is not None and runtime.current().epoch.authority == "v2":
+    if runtime is not None:
         return _resolve_v2_prompt_memory(
             session,
             runtime=runtime,
@@ -354,6 +354,8 @@ def resolve_prompt_memory(
             diagnostics=diagnostics,
         )
 
+    # Without PostgreSQL (the provider-free mode) memory is read from the
+    # session's snapshot in the in-memory repository.
     if read_allowed and not session.memory_snapshot_id:
         diagnostics["status"] = "snapshot_missing"
         return [], diagnostics
@@ -406,7 +408,7 @@ def resolve_prompt_memory(
 
     diagnostics.update({
         "status": "resolved",
-        "authority": "v1",
+        "authority": "provider_free",
         "selected_memory_ids": [item.memory_id for item in selected],
         "selected_memory_count": len(selected),
         "invalidated_count": invalidated_count,

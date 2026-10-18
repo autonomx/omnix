@@ -4,8 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument, MarketBar } from './tradingTypes';
 import { intervalCompactLabel } from './tradingIntervals';
+import { useTradingStore } from './tradingStore';
+import { drawingScopeId } from './drawings/drawingToolSettings';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { TradingDrawing } from './drawings/drawingCommands';
+import { drawingToolDefinition } from './drawings/tools/registry';
+import { TradingObjectTreeDrawings } from './TradingObjectTreeDrawings';
 import { indicatorOutputs, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from './indicators/coreIndicators';
 import './TradingObjectPanel.css';
 import { chartPalette } from './chartPalette';
@@ -42,26 +46,6 @@ function displaySymbol(instrument: CanonicalInstrument | undefined, instrumentId
 
 function displayIndicatorName(indicator: CoreIndicatorInstance): string {
   return indicatorNames[indicator.id] ?? indicator.id.toUpperCase();
-}
-
-function displayDrawingName(drawing: TradingDrawing): string {
-  const names: Partial<Record<TradingDrawing['toolType'], string>> = {
-    'trend-line': 'Trendline',
-    'horizontal-line': 'Horizontal line',
-    'horizontal-ray': 'Horizontal ray',
-    'vertical-line': 'Vertical line',
-    'crossline': 'Cross line',
-    ray: 'Ray',
-    rectangle: 'Rectangle',
-    circle: 'Circle',
-    ellipse: 'Ellipse',
-    fibonacci: 'Fib Retracement',
-    text: drawing.text || 'Text note',
-    measurement: 'Measure',
-    arrow: 'Arrow',
-    dot: 'Dot',
-  };
-  return names[drawing.toolType] ?? drawing.toolType;
 }
 
 function formatNumber(value: unknown, maximumFractionDigits = 2): string {
@@ -108,12 +92,8 @@ function CandleIcon() {
 }
 
 function DrawingIcon({ drawing }: { drawing: TradingDrawing }) {
-  if (drawing.toolType === 'horizontal-line' || drawing.toolType === 'horizontal-ray') {
-    return <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18" /></svg>;
-  }
-  if (drawing.toolType === 'vertical-line') {
-    return <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18" /></svg>;
-  }
+  const icon = drawingToolDefinition(drawing.toolType)?.icon;
+  if (icon) return <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={icon} /></svg>;
   return (
     <svg className="trading-object-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 19 19 4" />
@@ -150,7 +130,10 @@ function TradingObjectTree({
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
   onOpenPineScript: (id: CoreIndicatorId) => void;
 }) {
-  const drawings = useTradingDrawings(instrumentId, sessionId);
+  const activeChartId = useTradingStore((state) => state.activeChartId);
+  const syncDrawings = useTradingStore((state) => state.drawingToolSettings.syncDrawings);
+  // The active chart's drawings: its own when drawings don't sync between charts (TVP-3.8).
+  const drawings = useTradingDrawings(instrumentId, drawingScopeId(sessionId, activeChartId, syncDrawings));
   const [chartExpanded, setChartExpanded] = useState(true);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState(true);
   const symbol = displaySymbol(instrument, instrumentId);
@@ -169,7 +152,7 @@ function TradingObjectTree({
       <div role="group" className="trading-object-toolbar" aria-label="Object tree actions">
         <button type="button" aria-label="Delete all drawings" title="Delete all drawings" onClick={() => drawings.removeAll()}><TrashIcon /></button>
         <span>{drawings.state.drawings.length + enabledIndicators.length} objects</span>
-        <span className="trading-object-status">{drawings.status === 'saving' ? 'Saving…' : drawings.status === 'conflict' ? 'Conflict' : ''}</span>
+        <span className="trading-object-status">{drawings.status === 'saving' ? 'Saving…' : drawings.status === 'conflict' ? 'Conflict' : drawings.status === 'read-only' ? 'Read-only (newer version)' : ''}</span>
       </div>
       <div className="trading-object-scroll">
         <section className="trading-object-group">
@@ -179,25 +162,17 @@ function TradingObjectTree({
             <strong>{symbol} · {venue}, {intervalCompactLabel(interval)}</strong>
           </button>
           {chartExpanded ? (
-            <ul className="trading-object-list">
-              {drawings.state.drawings.map((drawing) => {
-                const selected = drawings.state.selectedId === drawing.drawingId;
-                const name = displayDrawingName(drawing);
-                return (
-                  <li key={drawing.drawingId} className={`${selected ? 'is-selected ' : ''}${drawing.hidden ? 'is-hidden' : ''}`}>
-                    <button type="button" className="trading-object-row-main" onClick={() => drawings.select(drawing.drawingId)}>
-                      <DrawingIcon drawing={drawing} />
-                      <span>{name}<small>{drawing.locked ? 'Locked' : drawing.hidden ? 'Hidden' : 'Drawing'}</small></span>
-                    </button>
-                    <div className="trading-object-row-actions">
-                      <button type="button" aria-label={`${drawing.hidden ? 'Show' : 'Hide'} ${name}`} title={`${drawing.hidden ? 'Show' : 'Hide'} ${name}`} onClick={() => { drawings.select(drawing.drawingId); drawings.updateSelected({ hidden: !drawing.hidden }); }}><EyeIcon hidden={Boolean(drawing.hidden)} /></button>
-                      <button type="button" aria-label={`Delete ${name}`} title={`Delete ${name}`} onClick={() => drawings.remove(drawing.drawingId)}><TrashIcon /></button>
-                    </div>
-                  </li>
-                );
-              })}
-              {drawings.state.drawings.length === 0 ? <li className="trading-object-empty">No drawings on this chart</li> : null}
-            </ul>
+            <>
+              <TradingObjectTreeDrawings drawings={drawings} eyeIcon={(hidden) => <EyeIcon hidden={hidden} />} trashIcon={<TrashIcon />} drawingIcon={(drawing) => <DrawingIcon drawing={drawing} />} />
+              {drawings.state.drawings.length === 0 || drawings.preservedCount > 0 ? (
+                <ul className="trading-object-list">
+                  {drawings.state.drawings.length === 0 ? <li className="trading-object-empty">No drawings on this chart</li> : null}
+                  {drawings.preservedCount > 0 ? (
+                    <li className="trading-object-empty">{drawings.preservedCount} unsupported {drawings.preservedCount === 1 ? 'drawing is' : 'drawings are'} kept but not shown</li>
+                  ) : null}
+                </ul>
+              ) : null}
+            </>
           ) : null}
         </section>
 
@@ -256,8 +231,9 @@ function TradingDataWindow({
   indicators: CoreIndicatorInstance[];
 }) {
   const barsQuery = useQuery({
-    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, 1_000],
-    queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId),
+    // The same clock-aligned buckets as the chart, so data-window values match what is drawn.
+    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, 1_000, 'clock', true],
+    queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId, { alignment: 'clock', extendedHours: true }),
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });

@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "measurement": "list endpoint latency at benchmark volumes (WP-7.6)",
+  "revision": "b9477630283eac1c5f85a32bddcf031a05976bef",
+  "python": "3.11.12",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "database": "omnix_bench",
+  "samples": 30,
+  "budget_p95_ms": 100.0,
+  "routes": {
+    "/api/assets?limit=50": {
+      "p50_ms": 12.64,
+      "p95_ms": 14.49,
+      "max_ms": 14.78,
+      "within_budget": true,
+      "response_bytes": 20013
+    },
+    "/api/jobs?limit=100": {
+      "p50_ms": 8.41,
+      "p95_ms": 10.35,
+      "max_ms": 10.35,
+      "within_budget": true,
+      "response_bytes": 54655
+    },
+    "/api/jobs?limit=100&status=completed": {
+      "p50_ms": 8.53,
+      "p95_ms": 9.87,
+      "max_ms": 10.83,
+      "within_budget": true,
+      "response_bytes": 54287
+    },
+    "/api/chat/sessions?limit=100": {
+      "p50_ms": 5.12,
+      "p95_ms": 5.71,
+      "max_ms": 6.17,
+      "within_budget": true,
+      "response_bytes": 71786
+    },
+    "/api/chat/sessions/chat:bench-5333": {
+      "p50_ms": 5.75,
+      "p95_ms": 6.67,
+      "max_ms": 7.04,
+      "within_budget": true,
+      "response_bytes": 16053
+    },
+    "/api/agent-runs/agent-run:bench-10/events?limit=500": {
+      "p50_ms": 6.32,
+      "p95_ms": 7.99,
+      "max_ms": 8.1,
+      "within_budget": true,
+      "response_bytes": 112338
+    },
+    "/api/trading/strategies": {
+      "p50_ms": 4.16,
+      "p95_ms": 4.45,
+      "max_ms": 4.51,
+      "within_budget": true,
+      "response_bytes": 7711
+    },
+    "/api/trading/strategies/bench-strategy-1/events": {
+      "p50_ms": 7.5,
+      "p95_ms": 8.42,
+      "max_ms": 8.46,
+      "within_budget": true,
+      "response_bytes": 104001
+    },
+    "/api/rpg/sessions?limit=100": {
+      "p50_ms": 49.8,
+      "p95_ms": 53.8,
+      "max_ms": 166.15,
+      "within_budget": true,
+      "response_bytes": 443628
+    },
+    "/api/rpg/sessions/rpg:bench-1": {
+      "p50_ms": 9.66,
+      "p95_ms": 10.58,
+      "max_ms": 11.16,
+      "within_budget": true,
+      "response_bytes": 990047
+    }
+  }
+}

@@ -1,4 +1,4 @@
-from app.apps.rpg.spatial.audibility import (
+from app.apps.rpg.world.spatial.audibility import (
     audible_entities_from,
     can_hear_area,
     can_hear_entity,

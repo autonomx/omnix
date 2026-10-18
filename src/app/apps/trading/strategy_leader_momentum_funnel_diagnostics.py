@@ -12,7 +12,7 @@ strategy decisions or granting execution authority.
 from collections import defaultdict
 from datetime import datetime, time
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -127,12 +127,12 @@ def summarize_setup_funnel(
                 break
 
     result: list[SetupGateFunnelCount] = []
-    for key in sorted(
+    for funnel_key in sorted(
         reached,
         key=lambda item: (item[0], item[1] or "", item[2], item[3]),
     ):
-        stage, mode, order, gate = key
-        total = reached[key]
+        stage, mode, order, gate = cast(Any, funnel_key)
+        total = reached[funnel_key]
         result.append(
             SetupGateFunnelCount(
                 stage=stage,
@@ -140,11 +140,11 @@ def summarize_setup_funnel(
                 order=order,
                 gate=gate,
                 reached=total,
-                passed=passed[key],
-                failed=failed[key],
-                first_failure_count=first_failed[key],
+                passed=passed[funnel_key],
+                failed=failed[funnel_key],
+                first_failure_count=first_failed[funnel_key],
                 conditional_pass_rate=(
-                    Decimal(passed[key]) / Decimal(total) if total else None
+                    Decimal(passed[funnel_key]) / Decimal(total) if total else None
                 ),
             )
         )
@@ -171,8 +171,8 @@ def _common_attempt(
 
     volatility_ready = (
         ema9_3m[index] is not None
-        and atr14_3m[index] is not None
-        and atr14_3m[index] > 0
+        and (atr_value := atr14_3m[index]) is not None
+        and atr_value > 0
     )
     if not _append_step(
         steps,
@@ -232,7 +232,7 @@ def _window_attempt(
     window_length: int,
 ) -> SetupFunnelAttempt:
     if candidate.mode == "controlled_pullback":
-        ordered_names = (
+        ordered_names: tuple[str, ...] = (
             "continuity",
             "impulse_pct",
             "pullback_no_new_high",

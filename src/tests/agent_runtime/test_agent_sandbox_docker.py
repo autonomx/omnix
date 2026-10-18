@@ -52,6 +52,9 @@ def test_a_preview_runs_in_the_sandbox_and_answers_on_loopback(tmp_path, monkeyp
     from app.platform.agent_runtime.isolation import remove_containers, start_sandboxed_preview
 
     monkeypatch.delenv("OMNIX_AGENT_DOCKER_NETWORK", raising=False)
+    # pytest makes tmp_path private (0700) to the test's user; the sandbox runs as its own user without
+    # CAP_DAC_OVERRIDE, so give the workspace a project directory's usual permissions.
+    tmp_path.chmod(0o755)
     package = tmp_path / "web"
     package.mkdir()
     (package / "package.json").write_text(json.dumps({"name": "preview", "scripts": {"dev": "node server.js"}}))

@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.apps.rpg.session.inventory_items import consume_inventory_item, display_item_name, find_inventory_item, inventory_quantity
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MODIFICATION_DEFINITIONS: dict[str, dict[str, Any]] = {
     "edge_damage_minor": {

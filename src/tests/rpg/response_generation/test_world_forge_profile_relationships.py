@@ -1,7 +1,7 @@
-from app.apps.rpg.session.genesis.canon_relationships import (
+from app.apps.rpg.genesis.forge.canon_relationships import (
     compile_cross_domain_relationships,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
 
 
 def _typed_reference_topic(source: str) -> GeneratedTopic:

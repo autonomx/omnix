@@ -440,6 +440,12 @@ def _request_digest(value: str) -> str:
     return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
 
 
+def _targeted_items(
+    task: Any,
+) -> list[SemanticSubject | SemanticOperation | SemanticDataDependency]:
+    return [*task.subjects, *task.operations, *task.data_dependencies]
+
+
 def _profile_for_target(target: str) -> str | None:
     return _TARGET_PROFILE.get(target)
 
@@ -461,11 +467,7 @@ def _effective_profile_map(task: SemanticTask) -> dict[str, str]:
         "trading-research" in profiles
         and any(
             item.target == "public_web"
-            for item in [
-                *task.subjects,
-                *task.operations,
-                *task.data_dependencies,
-            ]
+            for item in _targeted_items(task)
         )
     )
     result: dict[str, str] = {}
@@ -513,7 +515,7 @@ def _node_objective(
 ) -> str:
     targets = sorted({
         item.target
-        for item in [*subtask.subjects, *subtask.operations, *subtask.data_dependencies]
+        for item in _targeted_items(subtask)
     })
     scope = ", ".join(targets) or profile_id
     return (
@@ -668,7 +670,7 @@ def _compile_profile_node(
         objective=_node_objective(latest_user_message, profile_id, subtask),
         semantic_targets=sorted({
             item.target
-            for item in [*subtask.subjects, *subtask.operations, *subtask.data_dependencies]
+            for item in _targeted_items(subtask)
         }),
         semantic_action_intents=list(compilation.action_intents),
         required_local_capabilities=list(authority.required_local),

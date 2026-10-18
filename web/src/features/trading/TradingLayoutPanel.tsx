@@ -23,6 +23,7 @@ export function TradingLayoutPanel({
   onRemoveChart,
   onSetLink,
   onSetSnapMode,
+  onDuplicateLayout,
 }: {
   layout: TradingLayout;
   chartCount: number;
@@ -36,6 +37,8 @@ export function TradingLayoutPanel({
   onRemoveChart: () => void;
   onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   onSetSnapMode: (mode: DrawingSnapMode) => void;
+  /** Copies the saved layout (workspace), its tabs and drawings into a new one (TVP-2.5). */
+  onDuplicateLayout?: () => void;
 }) {
   return (
     <section className="trading-layout-panel" aria-label="Trading layout settings">
@@ -58,6 +61,16 @@ export function TradingLayoutPanel({
           <button type="button" onClick={onAddChart} disabled={chartCount >= maximumChartCount} aria-label="Add chart">+</button>
         </div>
       </div>
+
+      {onDuplicateLayout ? (
+        <div className="trading-chart-count-control trading-layout-duplicate">
+          <div>
+            <strong>Layout</strong>
+            <small>Copy this layout, its sessions and drawings.</small>
+          </div>
+          <button type="button" onClick={onDuplicateLayout}>Duplicate layout</button>
+        </div>
+      ) : null}
 
       <div className="trading-layout-options" role="radiogroup" aria-label="Grid columns">
         {layouts.map((item) => (

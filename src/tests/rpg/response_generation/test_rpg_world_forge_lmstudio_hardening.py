@@ -8,10 +8,10 @@ import pytest
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig
 from app.providers.structured import UnsupportedStructuredMode
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.worlds.generation_first_pass_provider import _strict_registry_contract
-from app.apps.rpg.worlds.providers.world_forge import (
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.worlds.generation_first_pass_provider import _strict_registry_contract
+from app.apps.rpg.genesis.worlds.providers.world_forge import (
     ProviderWorldForgeTopicGenerator,
     WorldForgeEntityRegistryItem,
     WorldForgeProviderConfig,
@@ -126,7 +126,9 @@ class _ParallelBatchProvider(_Provider):
             self.peak = max(self.peak, self.active)
             if self.active == 2:
                 self._paired_call.set()
-        assert self._paired_call.wait(timeout=2)
+        # Both batch calls must be in flight together; generous for a loaded parallel runner, and a serialised
+        # generator still fails here because the second call never arrives.
+        assert self._paired_call.wait(timeout=30)
         try:
             return ChatResponse(
                 content=_payload(

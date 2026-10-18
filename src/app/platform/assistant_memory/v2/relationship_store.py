@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -228,7 +228,7 @@ class PostgresMemoryV2RelationshipStore:
             prompt_interpretation=str(row[5]),
             evidence_observation_ids=evidence_ids,
             derivation_version=str(row[6]),
-            status=str(row[7]),
+            status=cast(Any, str(row[7])),
             revision=int(row[8]),
         )
 

@@ -20,5 +20,6 @@
   "omnix_rpg_narrative_retirement_records.deletion_audit_jsonb": "keep; RPG is being retired",
   "omnix_rpg_world_revisions.document_jsonb": "keep; RPG is being retired",
   "omnix_runtime_nodes.metadata": "keep; workspace_id is read from the few live runtime nodes",
+  "omnix_trading_alerts.notification_settings": "keep; a write under the alert's lock reads its webhook_ref (its webhook's name in the protected store) by alert id; promote if alerts are filtered or listed by a notification setting",
   "omnix_trading_strategy_events.payload": "keep; entry_time orders one strategy's events in paper analytics; promote if the analytics read becomes a hot path"
 }

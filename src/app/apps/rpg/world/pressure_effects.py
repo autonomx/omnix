@@ -1,7 +1,7 @@
 """Deterministic runtime effects generated from World Forge pressure plans."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -179,12 +179,12 @@ def pressure_deltas_for_tick(
             trend=trend,
             projected=projected,
             escalation_threshold=float(
-                pressure.get("escalation_threshold")
+                cast(Any, pressure.get("escalation_threshold"))
                 if pressure.get("escalation_threshold") is not None
                 else 101
             ),
             resolution_threshold=float(
-                pressure.get("resolution_threshold")
+                cast(Any, pressure.get("resolution_threshold"))
                 if pressure.get("resolution_threshold") is not None
                 else -1
             ),

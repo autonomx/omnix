@@ -1,18 +1,18 @@
-from app.apps.rpg.session.genesis.world_forge_generation import (
+from app.apps.rpg.genesis.forge.world_forge_generation import (
     GeneratedTopic,
     WorldForgeGenerationResult,
 )
-from app.apps.rpg.worlds.canon_repair import normalize_generation_contracts
-from app.apps.rpg.worlds.contracts import WorldReleaseDocument, canonical_content_hash
-from app.apps.rpg.worlds.map_blueprint_publication import merge_authored_blueprints
-from app.apps.rpg.worlds.runtime_seed import (
+from app.apps.rpg.genesis.worlds.canon_repair import normalize_generation_contracts
+from app.apps.rpg.genesis.worlds.contracts import WorldReleaseDocument, canonical_content_hash
+from app.apps.rpg.genesis.worlds.map_blueprint_publication import merge_authored_blueprints
+from app.apps.rpg.genesis.worlds.runtime_seed import (
     VerticalSliceMaterializationDocument,
     compile_runtime_seed,
     run_player_absent_playtest,
 )
-from app.apps.rpg.worlds.semantic_validation import certify_world_release
-from app.apps.rpg.worlds.service import compile_world_release, compile_world_revision
-from app.apps.rpg.worlds.world_bundle import replace_identifiers
+from app.apps.rpg.genesis.worlds.semantic_validation import certify_world_release
+from app.apps.rpg.genesis.worlds.service import compile_world_release, compile_world_revision
+from app.apps.rpg.genesis.worlds.world_bundle import replace_identifiers
 
 
 def test_authored_map_merge_preserves_runtime_artifacts() -> None:

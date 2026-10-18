@@ -12,11 +12,13 @@ from .memory_port import chat_memory_service as default_memory_service
 from app.conversation.contracts import AcceptedChatActivityRecorder, LiveVoiceChatPort
 
 from .compaction import InMemoryConversationSummaryRepository
-from .history_search import InMemoryHistorySearchService, default_history_search_service
+from .history_search import default_history_search_service
 from .json_import import import_legacy_chat_json
 from .models import ChatSession
 from .prompt_store import ChatSessionStore as PromptAssemblyChatSessionStore
 from .repository import ChatImportState, InMemoryChatRepository
+from app.platform.chat.history_search import HistorySearchService
+from app.platform.chat.compaction import ConversationSummaryRepository
 
 
 class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
@@ -27,8 +29,8 @@ class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
         legacy_json_path: str | Path | None = None,
         import_legacy: bool = True,
         memory_service_factory: Callable[[], Any] = default_memory_service,
-        history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
-        summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
+        history_search_factory: Callable[[], HistorySearchService] = default_history_search_service,
+        summary_repository_factory: Callable[[], ConversationSummaryRepository] = InMemoryConversationSummaryRepository,
         live_voice_chat_port: LiveVoiceChatPort | None = None,
         live_agent_planner: object | None = None,
         accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,

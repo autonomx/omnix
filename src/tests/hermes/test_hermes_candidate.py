@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.hermes.candidate import HermesCandidate, hermes_candidate_payload, hermes_demo_candidate
+from app.apps.rpg.edge.hermes.candidate import HermesCandidate, hermes_candidate_payload, hermes_demo_candidate
 from app.composition.gateway.main import create_gateway_app
 
 
@@ -38,7 +38,7 @@ def test_hermes_demo_candidate_bounds_note_and_keeps_preview_shape() -> None:
 
 
 def test_hermes_candidate_demo_route_returns_preview_only_payload() -> None:
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     response = client.get("/api/hermes/candidate/demo", params={"note": "review"})
 
     assert response.status_code == 200

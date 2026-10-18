@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from enum import StrEnum
 
@@ -14,6 +14,8 @@ class AssetClass(StrEnum):
     EQUITY = "equity"
     FOREX = "forex"
     COMMODITY = "commodity"
+    # Economic series (TVP-10.5): research data to chart, never traded.
+    ECONOMIC = "economic"
 
 
 class InstrumentType(StrEnum):
@@ -61,6 +63,8 @@ class CanonicalInstrument(BaseModel):
     price_scale: int = Field(default=100, gt=0)
     minimum_tick: Decimal = Field(default=Decimal("0.01"), gt=0)
     status: Literal["active", "inactive", "delisted"] = "active"
+    # A descriptive name where the symbol alone says little (an economic series' title).
+    name: str | None = Field(default=None, max_length=200)
 
     @field_validator("venue", "venue_symbol", "display_symbol", "base_currency", "quote_currency")
     @classmethod
@@ -192,7 +196,7 @@ class ChartState(BaseModel):
     binding_id: str
     interval: str = "1m"
     chart_type: Literal["candlestick", "line", "volume"] = "candlestick"
-    indicators: list[dict[str, object]] = Field(default_factory=list)
+    indicators: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TradingWorkspaceDocument(BaseModel):
@@ -200,7 +204,7 @@ class TradingWorkspaceDocument(BaseModel):
     name: str
     layout: Literal["one", "four", "two-horizontal", "two-vertical"] = "one"
     charts: list[ChartState] = Field(default_factory=list)
-    link_groups: list[dict[str, object]] = Field(default_factory=list)
+    link_groups: list[dict[str, Any]] = Field(default_factory=list)
     panels: dict[str, bool] = Field(default_factory=dict)
     revision: int = Field(default=1, ge=1)
 
@@ -216,5 +220,5 @@ class TradingDocumentEnvelope(BaseModel):
     record_id: str
     record_type: str
     revision: int
-    payload: dict[str, object]
+    payload: dict[str, Any]
     updated_at: datetime | None = None

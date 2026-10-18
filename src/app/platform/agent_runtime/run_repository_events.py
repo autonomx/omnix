@@ -6,7 +6,7 @@ delegator per function, so callers and tests are unchanged.
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from typing import Any
+from typing import Any, cast
 from .contracts import (
     AgentEvent,
 )
@@ -205,7 +205,7 @@ def _events_from_rows(run_id: str, rows: list[Any]) -> list[AgentEvent]:
             event_id=str(row[0]),
             run_id=run_id,
             sequence=int(row[1]),
-            event_type=str(row[2]),
+            event_type=cast(Any, str(row[2])),
             payload=dict(row[3] or {}),
             correlation_id=str(row[4]) if row[4] else None,
             causation_id=str(row[5]) if row[5] else None,
@@ -253,7 +253,7 @@ def latest_progress_event(repo: PostgresAgentRunRepository, run_id: str) -> Agen
         event_id=str(row[0]),
         run_id=run_id,
         sequence=int(row[1]),
-        event_type=str(row[2]),
+        event_type=cast(Any, str(row[2])),
         payload=dict(row[3] or {}),
         correlation_id=str(row[4]) if row[4] else None,
         causation_id=str(row[5]) if row[5] else None,

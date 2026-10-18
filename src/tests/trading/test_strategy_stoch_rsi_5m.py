@@ -237,10 +237,28 @@ def test_waits_for_recovery_above_twenty_after_momentum_cross(
     assert snapshot.entry_time is None
 
 
-def test_missing_five_minute_bar_requires_post_gap_warmup(
+def test_a_single_missing_five_minute_bar_is_stepped_over(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     signal_bars = [_bar(0), _bar(2)]
+    bars = _with_ema_history(signal_bars)
+    monkeypatch.setattr(
+        strategy,
+        "_stochastic_rsi_aligned",
+        lambda values, **kwargs: ([], []),
+    )
+
+    snapshot = strategy.evaluate_stoch_rsi_5m(bars)
+
+    # A short halt or a quiet bucket does not reset the indicators.
+    assert snapshot.reason_code != "STOCH_RSI_5M_POST_GAP_STOCH_RSI_WARMUP"
+    assert snapshot.data_gap_start is None
+
+
+def test_a_longer_gap_still_requires_post_gap_warmup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signal_bars = [_bar(0), _bar(3)]
     bars = _with_ema_history(signal_bars)
     monkeypatch.setattr(
         strategy,

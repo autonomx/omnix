@@ -7,11 +7,14 @@ from fastapi import Depends, HTTPException
 
 from app.config.env import environment
 from app.config.load import load_feature_config
-from app.jobs.handlers import JobHandlerRegistry
+from app.jobs.handlers import JobHandlerRegistry, JobObserver
+from app.jobs.handlers import JobHandlerSpec as KernelJobHandlerSpec
 from app.jobs.probe import PLATFORM_PROBE_JOB
+from app.persistence.repository_registry import RepositorySpec as KernelRepositorySpec
 from app.persistence.repository_registry import install_repository_specs, reset_repository_specs
 from app.persistence.shared_repository_specs import shared_repository_specs
-from app.runtime.background import register_background_worker
+from app.runtime.background import BackgroundRegistry, register_background_worker
+from app.runtime.contracts import KernelServices
 from app.runtime.feature_catalog import enabled_feature_ids, load_feature
 from app.runtime.features import FeatureContext, FeatureLifecycle
 from app.runtime.ports import PortBinding, PortBindings, install_port_bindings
@@ -64,9 +67,9 @@ def _router_paths(router) -> list[str]:
     try:
         from fastapi.routing import iter_route_contexts
     except ImportError:  # FastAPI without lazy router inclusion
-        return [str(route.path) for route in router.routes if getattr(route, "path", None)]
+        return [str(getattr(route, "path")) for route in router.routes if getattr(route, "path", None)]
     return [
-        str(context.path or context.original_route.path)
+        str(context.path or getattr(context.original_route, "path", ""))
         for context in iter_route_contexts(router.routes)
     ]
 
@@ -81,13 +84,13 @@ def _router_operations(router) -> list[tuple[str, str]]:
         return [
             (method, str(route.path))
             for route in router.routes if isinstance(route, APIRoute)
-            for method in sorted(route.methods)
+            for method in sorted(route.methods or ())
         ]
     return [
         (method, str(context.path or context.original_route.path))
         for context in iter_route_contexts(router.routes)
         if isinstance(context.original_route, APIRoute)
-        for method in sorted(context.original_route.methods)
+        for method in sorted(context.original_route.methods or ())
     ]
 
 
@@ -134,19 +137,20 @@ def _register_feature_modules(gateway) -> None:
         if feature.settings and settings_service is not None:
             settings_service.register_specs(tuple(feature.settings))
         for handler in feature.job_handlers:
-            job_handlers.register(handler, owner=feature.id)
+            # Features declare the structural spec; the kernel registry holds the concrete one.
+            job_handlers.register(cast(KernelJobHandlerSpec, handler), owner=feature.id)
         for observer_factory in feature.job_observers:
             observer = observer_factory()
             if observer is not None:
-                job_handlers.register_observer(observer)
+                job_handlers.register_observer(cast(JobObserver, observer))
         if feature.repositories:
-            install_repository_specs(tuple(feature.repositories))
+            install_repository_specs(cast(tuple[KernelRepositorySpec, ...], tuple(feature.repositories)))
         context = FeatureContext(
             feature_id=feature.id,
             config=load_feature_config(feature.id, feature.config_model, env=environment()),
             runtime=config,
             capabilities=capabilities,
-            services=services,
+            services=cast(KernelServices, services),
             logger=logging.getLogger(f"app.feature.{feature.id}"),
             runtime_state=gateway.state,
         )
@@ -181,7 +185,7 @@ def _register_feature_modules(gateway) -> None:
         for worker_factory in feature.background_workers:
             worker = worker_factory(context)
             if worker is not None:
-                register_background_worker(registry, worker)
+                register_background_worker(cast(BackgroundRegistry, registry), worker)
         for task_factory in feature.scheduled_tasks:
             task = task_factory(context)
             if task is not None:

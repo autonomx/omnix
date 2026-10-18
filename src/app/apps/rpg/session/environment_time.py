@@ -77,8 +77,8 @@ def _next_weather_event(environment: dict[str, Any], *, started_at_minute: int) 
         region_id=str(environment.get("region_id") or "starting_region"),
         climate_profile_id=str(environment.get("climate_profile_id") or "temperate_hills"),
         absolute_minutes=started_at_minute,
-        calendar=environment.get("calendar") if isinstance(environment.get("calendar"), dict) else None,
-        recent_conditions=environment.get("recent_conditions") if isinstance(environment.get("recent_conditions"), dict) else None,
+        calendar=raw_calendar if isinstance(raw_calendar := environment.get("calendar"), dict) else None,
+        recent_conditions=raw_recent_conditions if isinstance(raw_recent_conditions := environment.get("recent_conditions"), dict) else None,
         sequence=len(environment.get("event_history", [])) if isinstance(environment.get("event_history"), list) else 0,
     )
 

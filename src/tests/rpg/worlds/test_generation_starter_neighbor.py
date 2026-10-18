@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.worlds import generation_compilation, generation_starter_neighbor
-from app.apps.rpg.worlds.generation_starter_neighbor import (
+from app.apps.rpg.genesis.worlds import generation_compilation, generation_starter_neighbor
+from app.apps.rpg.genesis.worlds.generation_starter_neighbor import (
     StarterNeighborCompilationError,
     require_valid_starter_neighbor,
     starter_neighbor_report,

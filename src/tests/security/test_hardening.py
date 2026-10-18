@@ -148,7 +148,8 @@ def test_outbound_urls_that_are_always_blocked(url, reason) -> None:
 
 
 def test_loopback_public_and_private_networks(monkeypatch) -> None:
-    monkeypatch.delenv("OMNIX_AUTH_MODE", raising=False)
+    # Without sign-in (one local user) every private network is allowed.
+    monkeypatch.setenv("OMNIX_AUTH_MODE", "disabled")
     monkeypatch.delenv("OMNIX_ALLOWED_PRIVATE_NETWORKS", raising=False)
     for url in ("http://127.0.0.1:1234", "http://localhost:1234", "https://api.example.com", "http://192.168.1.20:1234"):
         check_outbound_url(url)

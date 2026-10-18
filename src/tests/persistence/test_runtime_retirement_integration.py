@@ -10,6 +10,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
+from tests.support.database import truncate_memory_v2_data
 
 
 pytestmark = pytest.mark.skipif(
@@ -51,6 +52,7 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_audit_events, omnix_idempotency_keys, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
         )
+        truncate_memory_v2_data(connection)
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
@@ -276,9 +278,9 @@ assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
 from app.conversation.memory_contracts import MemoryRecord
-from app.platform.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
+from app.platform.assistant_memory.persistence.owner_memory_store import production_owner_memory_repository
 
-memories = PostgresMemoryRepositoryAdapter()
+memories = production_owner_memory_repository()
 record = MemoryRecord(
     id="memory:runtime",
     owner_type="system",
@@ -334,7 +336,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert stored_asset.id == "asset:runtime"
     assert any(item.id == "asset:runtime" for item in assets.list_assets().assets)
 
-from app.apps.rpg.persistence.rpg_compat import load_session_from_postgres, save_session_to_postgres
+from app.apps.rpg.session.persistence.session_records import load_session_from_postgres, save_session_to_postgres
 
 session = {
     "manifest": {"session_id": "campaign:runtime", "title": "Runtime campaign", "turn_count": 0},
@@ -342,7 +344,12 @@ session = {
     "runtime_state": {"state_revision": 0, "interaction_seq": 0},
 }
 save_session_to_postgres(session)
-assert load_session_from_postgres("campaign:runtime") == session
+loaded = load_session_from_postgres("campaign:runtime")
+# A document without a schema version loads upcast to the current one (WP-5.6).
+from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION
+assert loaded["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION
+assert {key: loaded["manifest"][key] for key in session["manifest"]} == session["manifest"]
+assert loaded["state"] == session["state"]
 
 from app import assets as assets_package
 from app.assets import store as asset_store_module

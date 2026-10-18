@@ -1,9 +1,16 @@
 import { fireEvent, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import type { UseFormRegisterReturn } from 'react-hook-form';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OmnixModuleDefinition } from '../../app/modules';
+import { RpgActionComposer } from './RpgActionComposer';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
-import { previewSessionSummary } from './rpgUiState';
+import { resetRpgLauncherSlotsForTests, setRpgLauncherDialog, setRpgLauncherHomeGrid } from './rpgLauncherSlots';
+import { previewSessionSummary, quickActions } from './rpgUiState';
 import { renderWithProviders } from '../../test/renderWithProviders';
+
+function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFormRegisterReturn<TName> {
+  return { name, onBlur: vi.fn(), onChange: vi.fn(), ref: vi.fn() };
+}
 
 
 const rpgModule: OmnixModuleDefinition = {
@@ -28,6 +35,7 @@ const headerProps = {
 describe('RpgWorkspaceHeader', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    resetRpgLauncherSlotsForTests();
   });
 
   it('replaces runtime status options with a full world lore view', () => {
@@ -54,9 +62,9 @@ describe('RpgWorkspaceHeader', () => {
   it('opens the world library and keeps bundle import available', async () => {
     const view = renderWithProviders(
       <>
-        <section className="rpg-launcher-dialog">
+        <section ref={setRpgLauncherDialog} className="rpg-launcher-dialog">
           <div className="rpg-launcher-panel-heading">Campaign Menu</div>
-          <div className="rpg-launcher-home-grid" />
+          <div ref={setRpgLauncherHomeGrid} className="rpg-launcher-home-grid" />
         </section>
         <RpgWorkspaceHeader {...headerProps} />
       </>
@@ -80,5 +88,36 @@ describe('RpgWorkspaceHeader', () => {
     fireEvent.click(within(worldView).getByRole('button', { name: 'Back to Play' }));
     expect(screen.queryByRole('region', { name: 'Worlds and Campaigns view' })).not.toBeInTheDocument();
     expect(launcherDialog).not.toHaveClass('rpg-launcher-dialog-world-library');
+  });
+
+  it('opens the launcher it does not own and shows the world library once the launcher mounts', async () => {
+    renderWithProviders(
+      <>
+        <RpgActionComposer
+          canSaveGame={false}
+          commandRegistration={registration('command')}
+          hasCommandError={false}
+          isPending={false}
+          onQuickAction={vi.fn()}
+          onSaveGame={async () => 'checkpoint:test'}
+          onSubmit={vi.fn()}
+          quickActions={quickActions}
+          renderNewCampaign={() => null}
+          selectedSessionId=""
+          sessionRegistration={registration('sessionId')}
+          sessionSummaries={[previewSessionSummary]}
+        />
+        <RpgWorkspaceHeader {...headerProps} />
+      </>
+    );
+    expect(screen.queryByRole('dialog', { name: 'Campaign Menu' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Worlds & Campaigns' }));
+
+    const launcher = await screen.findByRole('dialog', { name: 'Campaign Menu' });
+    expect(await within(launcher).findByRole('region', { name: 'Worlds and Campaigns view' })).toBeInTheDocument();
+
+    fireEvent.click(within(launcher).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('region', { name: 'Worlds and Campaigns view' })).not.toBeInTheDocument();
   });
 });

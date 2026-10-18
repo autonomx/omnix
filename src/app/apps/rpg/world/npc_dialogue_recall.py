@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 from app.apps.rpg.world.npc_history_state import recent_npc_history
 from app.apps.rpg.world.npc_knowledge_state import known_facts_for_npc
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 MAX_RECALLS_PER_RESPONSE = 2
 

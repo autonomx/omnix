@@ -72,7 +72,7 @@ class CancelReport:
 
 def _workspaces(database: Any) -> list[TenantContext]:
     """Every workspace, active or not: a suspended one's jobs are in flight too."""
-    return list_active_workspace_contexts(database, limit=100_000, include_inactive=True)
+    return list_active_workspace_contexts(database, include_inactive=True)
 
 
 def _undelivered(connection: Any, subscription: OutboxSubscription) -> Iterator[dict[str, Any]]:

@@ -13,11 +13,14 @@ from pydantic import BaseModel, Field, model_validator
 from app.conversation.performance_contract import SpeechPerformancePlan
 from app.conversation.text import remove_emojis
 
-np: ModuleType | None
-try:
-    np = importlib.import_module("numpy")
-except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
-    np = None
+
+def _numpy() -> ModuleType | None:
+    """NumPy, imported with the first audio chunk rather than with the gateway (it is about 80 modules)."""
+    try:
+        return importlib.import_module("numpy")
+    except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
+        return None
+
 
 DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
@@ -253,6 +256,7 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
     if torch_module is not None and torch_module.is_tensor(audio_chunk):
         return _torch_audio_chunk_to_pcm16_bytes(audio_chunk, torch_module)
 
+    np = _numpy()
     if np is None:
         return _audio_chunk_to_pcm16_bytes_fallback(audio_chunk)
 
@@ -289,7 +293,7 @@ def _torch_audio_chunk_to_pcm16_bytes(audio_chunk: Any, torch_module: Any) -> by
         pcm = pcm.to(device="cpu", non_blocking=False)
     pcm = pcm.contiguous()
     array = pcm.numpy()
-    if np is not None:
+    if _numpy() is not None:
         array = array.astype("<i2", copy=False)
     return array.tobytes()
 
@@ -336,6 +340,7 @@ def initial_speech_start_byte(
         return None
     threshold_int = int(max(0.0, min(1.0, threshold)) * 32767)
     preroll_samples = max(0, int(sample_rate * max(0.0, preroll_ms) / 1000.0))
+    np = _numpy()
     if np is not None:
         samples = np.frombuffer(even_bytes, dtype="<i2").astype(np.int32, copy=False)
         speech_indices = np.flatnonzero(np.abs(samples) > threshold_int)

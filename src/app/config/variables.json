@@ -29,6 +29,13 @@
   },
   {
     "default": null,
+    "description": "Controls fred api key for trading.",
+    "feature": "trading",
+    "name": "FRED_API_KEY",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls hermes api key for chat, providers, research, rpg, trading.",
     "feature": "chat, providers, research, rpg, trading",
     "name": "HERMES_API_KEY",
@@ -554,6 +561,13 @@
   },
   {
     "default": null,
+    "description": "Controls alpaca trading url for trading.",
+    "feature": "trading",
+    "name": "OMNIX_ALPACA_TRADING_URL",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls alpaca ws proxy for trading.",
     "feature": "trading",
     "name": "OMNIX_ALPACA_WS_PROXY",
@@ -644,11 +658,53 @@
     "type": "boolean"
   },
   {
+    "default": "false",
+    "description": "Controls auth desktop handoff for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_DESKTOP_HANDOFF",
+    "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls auth guests for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_GUESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "7",
+    "description": "Controls auth guest days for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_GUEST_DAYS",
+    "type": "integer"
+  },
+  {
+    "default": null,
+    "description": "Controls auth launcher first password for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_LAUNCHER_FIRST_PASSWORD",
+    "type": "boolean"
+  },
+  {
     "default": null,
     "description": "Controls auth mode for production.py, security.",
     "feature": "production.py, security",
     "name": "OMNIX_AUTH_MODE",
     "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls auth registration for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_REGISTRATION",
+    "type": "string"
+  },
+  {
+    "default": "30",
+    "description": "Controls auth remember days for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_REMEMBER_DAYS",
+    "type": "integer"
   },
   {
     "default": "12",
@@ -904,6 +960,13 @@
   },
   {
     "default": null,
+    "description": "Controls fred api key for trading.",
+    "feature": "trading",
+    "name": "OMNIX_FRED_API_KEY",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls gateway background role for kernel, observability.",
     "feature": "kernel, observability",
     "name": "OMNIX_GATEWAY_BACKGROUND_ROLE",
@@ -921,6 +984,34 @@
     "description": "Controls gateway startup timeout seconds for launcher.",
     "feature": "launcher",
     "name": "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls google allowed domains for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_ALLOWED_DOMAINS",
+    "type": "list"
+  },
+  {
+    "default": "",
+    "description": "Controls google client id for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_CLIENT_ID",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls google client secret for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_CLIENT_SECRET",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls google redirect uri for security.",
+    "feature": "security",
+    "name": "OMNIX_GOOGLE_REDIRECT_URI",
     "type": "string"
   },
   {
@@ -1111,6 +1202,13 @@
     "feature": "assistant-tools",
     "name": "OMNIX_KASA_ENABLED",
     "type": "boolean"
+  },
+  {
+    "default": "Omnix",
+    "description": "Controls keychain service for security.",
+    "feature": "security",
+    "name": "OMNIX_KEYCHAIN_SERVICE",
+    "type": "string"
   },
   {
     "default": "0",
@@ -1456,6 +1554,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls product name for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_PRODUCT_NAME",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls provider secrets path for security.",
     "feature": "security",
@@ -1481,6 +1586,13 @@
     "description": "Controls research legacy alias sunset for conversation.",
     "feature": "conversation",
     "name": "OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls resources dir for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_RESOURCES_DIR",
     "type": "string"
   },
   {
@@ -1524,6 +1636,13 @@
     "feature": "rpg",
     "name": "OMNIX_RPG_SLOW_SPAN_MS",
     "type": "string"
+  },
+  {
+    "default": "20",
+    "description": "Controls rpg snapshot every for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_SNAPSHOT_EVERY",
+    "type": "integer"
   },
   {
     "default": null,
@@ -1607,6 +1726,13 @@
     "description": "Controls secret store path for security.",
     "feature": "security",
     "name": "OMNIX_SECRET_STORE_PATH",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls sec user agent for trading.",
+    "feature": "trading",
+    "name": "OMNIX_SEC_USER_AGENT",
     "type": "string"
   },
   {
@@ -1694,6 +1820,13 @@
     "type": "string"
   },
   {
+    "default": "400",
+    "description": "Controls trading ai daily call budget for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_AI_DAILY_CALL_BUDGET",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading ai shadow circuit persistence for trading.",
     "feature": "trading",
@@ -1764,6 +1897,13 @@
     "type": "boolean"
   },
   {
+    "default": "sip",
+    "description": "Controls trading breadth feed for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_BREADTH_FEED",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls trading deep recovery shadow monitor for trading.",
     "feature": "trading",
@@ -1776,6 +1916,20 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR_IN_TESTS",
     "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls trading desktop notify secret for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_DESKTOP_NOTIFY_SECRET",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls trading desktop notify url for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_DESKTOP_NOTIFY_URL",
+    "type": "string"
   },
   {
     "default": "1",
@@ -1880,6 +2034,48 @@
     "description": "Controls trading liquidation collector in tests for trading.",
     "feature": "trading",
     "name": "OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "1",
+    "description": "Controls trading notification monitor for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_NOTIFICATION_MONITOR",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading notification monitor in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_NOTIFICATION_MONITOR_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "1",
+    "description": "Controls trading overnight shadow autoprovision for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading overnight shadow autoprovision in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION_IN_TESTS",
+    "type": "boolean"
+  },
+  {
+    "default": "1",
+    "description": "Controls trading overnight shadow monitor for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR",
+    "type": "boolean"
+  },
+  {
+    "default": "0",
+    "description": "Controls trading overnight shadow monitor in tests for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR_IN_TESTS",
     "type": "boolean"
   },
   {
@@ -2023,20 +2219,6 @@
     "type": "boolean"
   },
   {
-    "default": "0",
-    "description": "Controls trading solana ai monitor for trading.",
-    "feature": "trading",
-    "name": "OMNIX_TRADING_SOLANA_AI_MONITOR",
-    "type": "boolean"
-  },
-  {
-    "default": "0",
-    "description": "Controls trading solana ai monitor in tests for trading.",
-    "feature": "trading",
-    "name": "OMNIX_TRADING_SOLANA_AI_MONITOR_IN_TESTS",
-    "type": "boolean"
-  },
-  {
     "default": "1",
     "description": "Controls trading strategy monitor for trading.",
     "feature": "trading",
@@ -2146,6 +2328,13 @@
     "description": "Controls tts warmup speaker for voice.",
     "feature": "voice",
     "name": "OMNIX_TTS_WARMUP_SPEAKER",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls vapid subject for trading.",
+    "feature": "trading",
+    "name": "OMNIX_VAPID_SUBJECT",
     "type": "string"
   },
   {

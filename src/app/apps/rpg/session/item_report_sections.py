@@ -5,7 +5,7 @@ from typing import Any
 
 from app.apps.rpg.session.item_action_summary import build_item_action_summary
 from app.apps.rpg.session.item_metrics import build_item_metrics_snapshot
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_report_section_v1"
 COVERAGE_LABELS = {

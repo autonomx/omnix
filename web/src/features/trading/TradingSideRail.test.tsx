@@ -82,4 +82,11 @@ describe('TradingSideRail', () => {
     expect(onSelectTab).toHaveBeenLastCalledWith('journal');
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
+
+  it('names the scripts section Omnix Scripts', () => {
+    render(<TradingSideRail activeTab="watchlist" collapsed={false} onSelectTab={vi.fn()} onToggle={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Omnix Scripts' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Pine/ })).not.toBeInTheDocument();
+  });
 });

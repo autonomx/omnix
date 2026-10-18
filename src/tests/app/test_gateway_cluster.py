@@ -31,6 +31,12 @@ def test_api_children_have_explicit_narrow_role(monkeypatch):
     assert cluster['child_environment']('worker')['OMNIX_GATEWAY_BACKGROUND_ROLE'] == 'worker'
 
 
+def test_children_dump_a_native_crash_stack_to_the_log(monkeypatch):
+    monkeypatch.delenv('PYTHONFAULTHANDLER', raising=False)
+    for role in ('worker', 'api', 'job-worker'):
+        assert cluster['child_environment'](role)['PYTHONFAULTHANDLER'] == '1'
+
+
 def test_local_launcher_starts_one_job_worker_by_default_only_in_local_mode(monkeypatch):
     assert cluster['should_start_local_job_worker']({'OMNIX_ENV': 'development'})
     assert cluster['should_start_local_job_worker']({'OMNIX_ENV': 'local'})
@@ -136,6 +142,7 @@ def test_cluster_children_share_one_run_token_key() -> None:
     assert len(generated) >= 32
     ensure_shared_run_token_key(env)
     assert env["OMNIX_RUN_TOKEN_KEY"] == generated
+    # The service token never stands in for the key (model services hold it).
     launcher = {"OMNIX_SERVICE_TOKEN": "s" * 43}
     ensure_shared_run_token_key(launcher)
-    assert "OMNIX_RUN_TOKEN_KEY" not in launcher
+    assert launcher["OMNIX_RUN_TOKEN_KEY"] not in {"", "s" * 43}

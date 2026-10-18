@@ -6,7 +6,7 @@ from app.config.env import environment
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from app.runtime.model_executor import ModelExecutor
 from app.runtime.features import FeatureContext
@@ -26,6 +26,7 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .trade_logging import trade_log
+from .us_equity_calendar import regular_session_settled
 
 
 _STATE_KEY = "_omnix_trading_execution_observation_monitor"
@@ -133,6 +134,10 @@ class TradingExecutionObservationMonitor(ScheduledTradingMonitor):
         now = self.now_factory()
         if now.tzinfo is None:
             raise ValueError("execution observation monitor clock must be timezone-aware")
+        if regular_session_settled(now):
+            # No shadow entry can become actionable after the session settles.
+            self.last_run_at = now
+            return 0
         repository = self.strategy_repository_factory()
         market_service = self.market_service_factory()
         configs = await asyncio.to_thread(repository.list_configs, active_only=True)
@@ -180,7 +185,7 @@ class TradingExecutionObservationMonitor(ScheduledTradingMonitor):
             for instrument_id in [key for key in state if key not in instrument_ids]:
                 del state[instrument_id]
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": execution_observation_monitor_enabled(),
             "running": self.scheduled,

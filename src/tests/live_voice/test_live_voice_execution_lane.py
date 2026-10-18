@@ -288,10 +288,9 @@ def test_api_dedicated_qwen_uses_remote_runtime_endpoint(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_LIVE_TTS_PROVIDER_NAME", "faster-qwen3-tts")
 
     class Remote:
-        provider_name = "faster-qwen3-tts"
-
-        def __init__(self, base_url):
+        def __init__(self, base_url, provider_name):
             self.base_url = base_url
+            self.provider_name = provider_name
 
         def start(self):
             return {"running": True}
@@ -311,5 +310,6 @@ def test_api_dedicated_qwen_uses_remote_runtime_endpoint(monkeypatch) -> None:
         provider, lane = resolve_live_voice_tts_provider(object())
         assert lane == "dedicated"
         assert provider.base_url == "http://127.0.0.1:5101"
+        assert provider.provider_name == "faster-qwen3-tts"
     finally:
         reset_live_voice_execution_lane_for_tests()

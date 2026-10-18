@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from statistics import fmean
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -345,7 +345,7 @@ def evaluate_rollout_policy(
 def evaluation_report(
     comparison: CodingQualityComparison,
     decision: CodingQualityRolloutDecision,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "comparison": comparison.model_dump(mode="json"),

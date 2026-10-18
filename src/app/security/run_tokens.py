@@ -9,9 +9,11 @@ with payload ``{"v", "run_id", "workspace_id", "owner", "caps_digest",
 "exp", "nonce"}``. Tokens live 15 minutes; the holder renews them through
 the broker while the run is active. A run id header alone is never enough.
 
-Signing key: ``OMNIX_RUN_TOKEN_KEY`` when set, otherwise derived from the
-launcher-issued ``OMNIX_SERVICE_TOKEN`` so every Omnix process of one
-installation agrees. Without either (a single process started by hand), a
+Signing key: ``OMNIX_RUN_TOKEN_KEY``. The gateway entrypoint sets it from
+``initialize_run_token_key`` (a protected key of its own, or the operator's
+value), and its replicas and job worker inherit it. It is never derived from
+``OMNIX_SERVICE_TOKEN``: model services hold that token and must not be able
+to mint run tokens. Without the key (a single process started by hand), a
 random per-process key is used.
 """
 from __future__ import annotations
@@ -28,6 +30,22 @@ from dataclasses import dataclass
 
 from app.config.env import env_str
 
+# Gateway paths an agent process calls with its run token (broker and model
+# gateway). The middleware requires a run token on them, and the sandbox relay
+# forwards nothing else (WP-4.6, WP-4.7).
+AGENT_RUNTIME_PATTERNS = (
+    r"/api/agent-model/v1/.+",
+    r"/api/agent-runs/[^/]+/planning/[a-z_-]+",
+    r"/api/agent-runs/[^/]+/run-change-set",
+    r"/api/agent-runs/[^/]+/capabilities/[^/]+",
+    r"/api/agent-runs/[^/]+/command-authorization",
+    r"/api/agent-runs/[^/]+/workspace-authorization",
+    r"/api/agent-runs/[^/]+/budget/tool",
+    r"/api/agent-runs/[^/]+/run-token",
+)
+# Set by the sandbox relay on every request it forwards; the gateway refuses
+# relayed requests outside AGENT_RUNTIME_PATTERNS.
+SANDBOX_RELAY_HEADER = "x-omnix-sandbox-relay"
 TOKEN_SCHEME = "OmnixRun"
 TOKEN_ENVIRONMENT_KEY = "OMNIX_AGENT_RUN_TOKEN"
 DEFAULT_TTL_SECONDS = 900
@@ -64,9 +82,6 @@ def _key() -> bytes:
         if len(configured) < 32:
             raise RunTokenError("OMNIX_RUN_TOKEN_KEY must have at least 32 characters")
         return configured.encode("utf-8")
-    service_token = (env_str("OMNIX_SERVICE_TOKEN", "") or "").strip()
-    if service_token:
-        return hmac.new(service_token.encode("utf-8"), b"omnix-run-token-v1", hashlib.sha256).digest()
     global _PROCESS_KEY
     with _KEY_LOCK:
         if _PROCESS_KEY is None:
@@ -156,7 +171,9 @@ def token_from_authorization(values: list[str]) -> str | None:
 
 
 __all__ = [
+    "AGENT_RUNTIME_PATTERNS",
     "DEFAULT_TTL_SECONDS",
+    "SANDBOX_RELAY_HEADER",
     "TOKEN_ENVIRONMENT_KEY",
     "TOKEN_SCHEME",
     "RunTokenClaims",

@@ -1,12 +1,21 @@
 @layer features {
   :root[data-omnix-appearance='light'] .trading-workspace {
-    --trading-light-bg: var(--c-slate-970-2);
-    --trading-light-surface: var(--c-neutral-1000);
-    --trading-light-surface-muted: var(--c-slate-970-2);
-    --trading-light-line: color-mix(in srgb, var(--c-slate-550) 24%, transparent);
-    --trading-light-line-soft: color-mix(in srgb, var(--c-slate-550) 14%, transparent);
-    --trading-light-text: var(--c-blue-280-2);
-    --trading-light-muted: var(--c-blue-560);
+    /* A TradingView-like light terminal (W-3): white surfaces, grey lines, near-black text. */
+    --trading-light-bg: #ffffff;
+    --trading-light-surface: #ffffff;
+    --trading-light-surface-muted: #f0f3fa;
+    --trading-light-line: #e0e3eb;
+    --trading-light-line-soft: #f0f3fa;
+    --trading-light-text: #131722;
+    --trading-light-muted: #787b86;
+  }
+
+  /* The desktop title bar (W-4) sits outside .trading-workspace: without its own light colours it kept the dark
+     fallback, and so did the window controls drawn from it. */
+  :root[data-omnix-appearance='light'] .trading-title-bar {
+    --trading-title-bar-bg: #ffffff;
+    --trading-title-bar-fg: #131722;
+    border-bottom-color: #e0e3eb;
   }
 
   /* Watchlist rows and hover actions need an explicit light palette because
@@ -133,11 +142,17 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-watchlist li.active,
-  :root[data-omnix-appearance='light'] .trading-watchlist li > button:first-child:hover {
+  :root[data-omnix-appearance='light'] .trading-watchlist-symbol-cell > button:hover,
+  :root[data-omnix-appearance='light'] .trading-watchlist-section-cell > button:hover {
     background: var(--c-slate-970-2);
   }
 
-  :root[data-omnix-appearance='light'] .trading-watchlist li > button:first-child strong {
+  :root[data-omnix-appearance='light'] .trading-watchlist li.selected {
+    background: color-mix(in srgb, var(--c-blue-630) 14%, transparent);
+  }
+
+  :root[data-omnix-appearance='light'] .trading-watchlist-symbol-cell > button strong,
+  :root[data-omnix-appearance='light'] .trading-watchlist-section-cell > button strong {
     color: var(--trading-light-text);
   }
 
@@ -204,7 +219,6 @@
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-blue-630) 18%, transparent);
   }
 
-  :root[data-omnix-appearance='light'] .trading-chart-header,
   :root[data-omnix-appearance='light'] .trading-chart-panel > footer {
     border-color: var(--trading-light-line-soft);
     background: var(--trading-light-surface-muted);
@@ -445,7 +459,8 @@
     background: radial-gradient(circle at center, var(--c-slate-970-2) 0 2px, var(--c-blue-510) 2px 3px, var(--c-slate-970-2) 3px 5px, transparent 5px), var(--c-slate-970-2);
   }
 
-  :root[data-omnix-appearance='light'] .trading-drawing-overlay circle {
+  /* Edit handles only: a drawing's own markers (the dot tool) keep their colour, as in the dark theme. */
+  :root[data-omnix-appearance='light'] .trading-drawing-overlay circle[data-handle-id] {
     fill: var(--c-neutral-1000);
   }
 

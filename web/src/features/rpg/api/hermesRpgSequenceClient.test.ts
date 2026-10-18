@@ -1,20 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { omnixApiClient } from '../../../api/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkHermesRpgSequence } from './hermesRpgSequenceClient';
 
-vi.mock('../../../api/client', () => ({
-  omnixApiClient: {
-    post: vi.fn(),
-  },
-}));
-
 describe('hermesRpgSequenceClient', () => {
-  beforeEach(() => {
-    vi.mocked(omnixApiClient.post).mockReset();
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('posts sequence data to the sequence endpoint', async () => {
-    vi.mocked(omnixApiClient.post).mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
 
     const request = {
       sequence_id: 'seq-1',
@@ -26,6 +20,9 @@ describe('hermesRpgSequenceClient', () => {
     const result = await checkHermesRpgSequence(request);
 
     expect(result).toEqual({ ok: true });
-    expect(omnixApiClient.post).toHaveBeenCalledWith('/api/hermes/rpg/sequence/review', request);
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(new URL(String(input), 'http://localhost').pathname).toBe('/api/hermes/rpg/sequence/review');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual(request);
   });
 });

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.apps.rpg.ai import world_scene_narrator
-from app.apps.rpg.response_generation import legacy_bridge
+from app.apps.rpg.narration.ai import world_scene_narrator
+from app.apps.rpg.narration.response_generation import legacy_bridge
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -14,7 +14,7 @@ SESSION_RUNTIME = REPO_ROOT / "src" / "app" / "apps" / "rpg" / "session" / "narr
 def test_phase8_session_publication_resolves_through_canonical_facade():
     source = SESSION_RUNTIME.read_text(encoding="utf-8")
 
-    assert "from app.apps.rpg.ai.world_scene_narrator import narrate_scene" in source
+    assert "from app.apps.rpg.narration.ai.world_scene_narrator import narrate_scene" in source
     assert "world_scene_narrator_runtime import narrate_scene" not in source
     assert world_scene_narrator.narrate_scene is legacy_bridge.narrate_scene_canonical
 

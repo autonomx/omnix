@@ -201,3 +201,21 @@ def test_relay_routes_cover_each_gateway_port(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_AGENT_SANDBOX_GATEWAY_HOST", raising=False)
     routes = isolation._relay_routes(["http://127.0.0.1:8000/a", "http://127.0.0.1:8000/b", "http://127.0.0.1:8101/c"])
     assert routes == [(8000, "host.docker.internal:8000"), (8101, "host.docker.internal:8101")]
+
+
+def test_the_relay_forwards_only_agent_runtime_routes() -> None:
+    import re
+
+    from app.security.run_tokens import AGENT_RUNTIME_PATTERNS
+
+    arguments = isolation.relay_arguments([(8000, "host.docker.internal:8000")])
+    assert arguments[0] == "8000=host.docker.internal:8000"
+    allowed = re.compile(arguments[-1].removeprefix("--allow="))
+    assert arguments[-1].startswith("--allow=")
+    assert allowed.pattern == "^(?:" + "|".join(AGENT_RUNTIME_PATTERNS) + ")$"
+    assert allowed.match("/api/agent-runs/run-1/run-token")
+    assert allowed.match("/api/agent-model/v1/chat/completions")
+    for refused in ("/api/agent-runs/run-1/commands", "/api/assistant/tools/config", "/api/agent-runs", "/"):
+        assert not allowed.match(refused)
+    # A relay started before v2 (raw TCP to the whole gateway) is replaced.
+    assert isolation.relay_signature([(8000, "h:8000")]) == "v2;8000=h:8000"

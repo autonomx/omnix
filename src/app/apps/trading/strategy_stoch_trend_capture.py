@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -107,7 +107,7 @@ class StochTrendRiskDecision(BaseModel):
 
 
 def stoch_trend_capture_risk_decision(
-    execution: dict[str, object],
+    execution: dict[str, Any],
     *,
     max_spread_bps: Decimal,
 ) -> StochTrendRiskDecision:
@@ -560,7 +560,7 @@ def evaluate_stoch_trend_capture(
             data_gap_resume_time=gap_resume,
         )
 
-    recovery_fields = dict(
+    recovery_fields: dict[str, Any] = dict(
         recovered_data_gap_count=len(recovered_gaps),
         recovered_data_gap_start_time=(
             recovered_gaps[0][0] if recovered_gaps else None
@@ -694,7 +694,7 @@ def evaluate_stoch_trend_capture(
             if k is not None and d is not None and k >= OVERBOUGHT and d >= OVERBOUGHT:
                 overbought_index = index
 
-    base = dict(
+    base: dict[str, Any] = dict(
         three_minute_bar_count=len(sampled),
         as_of=as_of,
         setup_armed_time=setup_bar.end_time,

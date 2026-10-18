@@ -15,7 +15,7 @@ from app.apps.rpg.session.item_session_with_hooks import (
     apply_item_command_with_hooks,
     apply_item_session_action_with_hooks,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 ITEM_ACTION_RESOLUTION_SOURCE = "engine_item_action_resolution_v1"
 
@@ -194,7 +194,7 @@ def apply_item_action_input(
             "mechanics_source": ITEM_ACTION_RESOLUTION_SOURCE,
         }
 
-    common_options = {
+    common_options: dict[str, Any] = {
         "current_turn": current_turn,
         "station": station,
         "genre": genre,

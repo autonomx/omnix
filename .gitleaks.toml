@@ -29,6 +29,14 @@ regexTarget = "match"
 regexes = ['''Authorization: Bearer local-dev-only''']
 
 [[allowlists]]
+description = "The sample Sec-WebSocket-Key from RFC 6455 in the agent sandbox relay test"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/tests/agent_runtime/test_sandbox_relay\.py$''']
+regexTarget = "secret"
+regexes = ['''^dGhlIHNhbXBsZSBub25jZQ==$''']
+
+[[allowlists]]
 description = "Transformers import misidentified as an API key"
 targetRules = ["generic-api-key"]
 condition = "AND"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes import execution_ledger as ledger
+from app.apps.rpg.edge.hermes import execution_ledger as ledger
 
 
 def _record(command: str) -> dict:

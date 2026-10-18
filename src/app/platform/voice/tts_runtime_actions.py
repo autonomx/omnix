@@ -8,6 +8,7 @@ from typing import Any
 
 from app.providers.service import get_tts_provider
 
+from .tts_engines import TRANSCRIPT_ENGINES
 from .tts_runtime_state import (
     STATE,
     STATE_LOCK,
@@ -27,6 +28,14 @@ def _reset_cached_model() -> None:
     reset_tts_model_cache()
 
 
+def _has_transcript(speaker: str) -> bool:
+    from app.assets.voice_clone_identity import reference_transcript
+    from app.providers.voice_references import clone_reference
+
+    path, transcript = clone_reference(speaker)
+    return bool(path and (transcript or reference_transcript(path)))
+
+
 def _select_speaker(provider: Any) -> str | None:
     configured = configured_speaker()
     if configured:
@@ -36,11 +45,17 @@ def _select_speaker(provider: Any) -> str | None:
     except Exception:
         logger.debug("suppressed error in %s", "_select_speaker", exc_info=True)
         return None
-    for item in speakers if isinstance(speakers, list) else []:
-        value = str(item.get("id") or "").strip() if isinstance(item, dict) else ""
-        if value and value != "default":
-            return value
-    return None
+    candidates = [
+        value for value in (
+            str(item.get("id") or "").strip() if isinstance(item, dict) else ""
+            for item in (speakers if isinstance(speakers, list) else [])
+        )
+        if value and value != "default"
+    ]
+    if getattr(provider, "provider_name", None) in TRANSCRIPT_ENGINES:
+        # These engines cannot clone a sample without its words.
+        return next((value for value in candidates if _has_transcript(value)), candidates[0] if candidates else None)
+    return candidates[0] if candidates else None
 
 
 def warm_tts_runtime(trigger: str = "manual") -> dict[str, Any]:

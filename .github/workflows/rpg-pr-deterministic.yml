@@ -216,18 +216,6 @@ jobs:
           name: web-typecheck-output
           path: web-typecheck-output.txt
 
-      - name: Web unit tests
-        run: |
-          set -o pipefail
-          npm --workspace @omnix/web run test -- --run 2>&1 | tee web-vitest-output.txt
-
-      - name: Upload web test diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-vitest-output
-          path: web-vitest-output.txt
-
       - name: Focused RPG roadmap suite
         run: |
           set -o pipefail

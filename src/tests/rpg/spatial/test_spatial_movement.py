@@ -1,5 +1,5 @@
-from app.apps.rpg.spatial.graph import get_entity_area
-from app.apps.rpg.spatial.movement import can_move_between, move_entity
+from app.apps.rpg.world.spatial.graph import get_entity_area
+from app.apps.rpg.world.spatial.movement import can_move_between, move_entity
 from tests.rpg.spatial.fixtures import (
     tavern_spatial_fixture,
     tavern_spatial_fixture_with_private_door_open,

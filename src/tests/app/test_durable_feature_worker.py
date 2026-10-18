@@ -335,3 +335,63 @@ def test_a_job_execution_is_timed_by_type_and_outcome(monkeypatch):
 
     assert executions("completed") - completed == 1
     assert executions("error") - errors == 1
+
+
+def _renewal_worker(monkeypatch, outcomes):
+    """A worker whose lease renewals return or raise ``outcomes`` in turn."""
+    from contextlib import contextmanager
+
+    from app.composition.worker_runtime import durable_feature_worker as module
+
+    registry = JobHandlerRegistry((
+        JobHandlerSpec(type="feature.renewal", handler=lambda context, job: job, resource_class=ResourceClass.CPU),
+    ))
+    worker = DurableFeatureJobWorker(SimpleNamespace(database=object(), context=object()), registry)
+    worker.renewal_seconds = 0.01
+    worker.lease_seconds = 0.05
+    calls = iter(outcomes)
+
+    class Jobs:
+        def renew_lease(self, *_args, **_kwargs):
+            outcome = next(calls, {"status": "running"})
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+
+    @contextmanager
+    def unit_of_work(_database):
+        yield SimpleNamespace(jobs=Jobs(), commit=lambda: None)
+
+    monkeypatch.setattr(module, "unit_of_work", unit_of_work)
+    return worker
+
+
+def _renew(worker, *, stop_after: float = 2.0) -> threading.Event:
+    stop, cancellation = threading.Event(), threading.Event()
+    thread = threading.Thread(target=worker._renew_loop, args=("job:1", "w", "t", stop, cancellation))
+    thread.start()
+    cancellation.wait(stop_after)
+    stop.set()
+    thread.join(2)
+    return cancellation
+
+
+def test_a_lost_lease_tells_the_running_handler_to_stop(monkeypatch):
+    worker = _renewal_worker(monkeypatch, [{"status": "running"}, JobClaimConflict("taken")])
+    assert _renew(worker).is_set()
+
+
+def test_a_cancel_request_reaches_the_running_handler(monkeypatch):
+    worker = _renewal_worker(monkeypatch, [{"status": "running"}, {"status": "cancel_requested"}])
+    assert _renew(worker).is_set()
+
+
+def test_a_transient_renewal_error_is_retried_before_the_lease_expires(monkeypatch):
+    worker = _renewal_worker(monkeypatch, [RuntimeError("blip"), {"status": "running"}])
+    worker.lease_seconds = 30
+    assert not _renew(worker, stop_after=0.2).is_set()
+
+
+def test_renewal_failing_until_the_lease_expires_stops_the_handler(monkeypatch):
+    worker = _renewal_worker(monkeypatch, [RuntimeError("down")] * 1000)
+    assert _renew(worker).is_set()

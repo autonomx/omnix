@@ -7,7 +7,7 @@ import asyncio
 import hashlib
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable, cast
 
 from app.runtime.features import FeatureContext
 
@@ -270,19 +270,19 @@ def _research_selection_is_due(
     )
 
 
-def _historical_episodes(repository: TradingStrategyRepository, strategy_id: str) -> list[dict[str, object]]:
+def _historical_episodes(repository: TradingStrategyRepository, strategy_id: str) -> list[dict[str, Any]]:
     from .strategy_ai_shadow_v2_roadmap_policy import _historical_episodes_policy
 
     return _historical_episodes_policy(repository, strategy_id)
 
 
-def _persistence_calibration(episodes: list[dict[str, object]], persistence: str) -> tuple[Decimal | None, int]:
+def _persistence_calibration(episodes: list[dict[str, Any]], persistence: str) -> tuple[Decimal | None, int]:
     from .strategy_ai_shadow_v2_roadmap_policy import _persistence_calibration_policy
 
     return _persistence_calibration_policy(episodes, persistence)
 
 
-def _setup_calibration(episodes: list[dict[str, object]], persistence: str) -> dict[str, dict[str, object]]:
+def _setup_calibration(episodes: list[dict[str, Any]], persistence: str) -> dict[str, dict[str, Any]]:
     from .strategy_ai_shadow_v2_roadmap_policy import _setup_calibration_policy
 
     return _setup_calibration_policy(episodes, persistence)
@@ -340,7 +340,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
     async def _append(
         self, repository: TradingStrategyRepository, config: TradingStrategyConfigDocument,
         *, instrument_id: str, event_type: str, state: str, reason_code: str,
-        observed_at: datetime, payload: dict[str, object], identity: tuple[object, ...],
+        observed_at: datetime, payload: dict[str, Any], identity: tuple[object, ...],
     ) -> bool:
         idem = _key(config.strategy_id, AI_SHADOW_V2_VERSION, instrument_id, event_type, *identity)
         return await asyncio.to_thread(
@@ -378,7 +378,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         strategy_repository: TradingStrategyRepository,
         research_repository: TradingResearchRepository,
         events: list[StrategyEvent], now: datetime,
-        history: list[dict[str, object]],
+        history: list[dict[str, Any]],
     ) -> CatalystIntelligenceSnapshot:
         current = _latest_snapshot(events, candidate.instrument_id)
         last_refresh = _latest_refresh(events, candidate.instrument_id)
@@ -457,7 +457,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         research_repository: TradingResearchRepository,
         events: list[StrategyEvent],
         now: datetime,
-        history: list[dict[str, object]],
+        history: list[dict[str, Any]],
     ) -> CatalystIntelligenceSnapshot:
         from .strategy_ai_shadow_v2_roadmap_policy import _refresh_catalyst_policy
 
@@ -473,7 +473,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
             original=self._refresh_catalyst_core,
         )
 
-    async def _microstructure(self, market_service: TradingMarketDataService, candidate) -> dict[str, object] | None:
+    async def _microstructure(self, market_service: TradingMarketDataService, candidate) -> dict[str, Any] | None:
         try:
             obs = await asyncio.to_thread(
                 market_service.execution_observation, candidate.instrument_id, candidate.binding_id
@@ -489,7 +489,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
 
     async def _apply_decision(
         self, *, arm: AIShadowV2Arm, decision: AIShadowV2AlphaDecision,
-        row: dict[str, object], config: TradingStrategyConfigDocument,
+        row: dict[str, Any], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent],
         trigger_reasons: tuple[str, ...],
     ) -> None:
@@ -573,7 +573,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
             return
 
         simulation = simulate_ai_shadow_fill(
-            execution, side=side, instrument_id=decision.instrument_id,
+            cast(dict[str, Any], execution), side=cast(Any, side), instrument_id=decision.instrument_id,
             binding_id=row["candidate"].binding_id, decision_at=at, requested_units=units,
             reference_price=structure.current_price, allow_degraded_price_only=False,
         )
@@ -609,7 +609,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
             ))
 
     async def _run_arm_core(
-        self, *, arm: AIShadowV2Arm, rows: list[dict[str, object]],
+        self, *, arm: AIShadowV2Arm, rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         events: list[StrategyEvent],
     ) -> None:
@@ -631,6 +631,8 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
                 try:
                     trigger = StructuredAlphaTrigger.model_validate(previous_decision.get("trigger"))
                     prior = None
+                    # An armed previous decision came from a previous event.
+                    assert previous is not None
                     feature = previous.payload.get("feature_snapshot")
                     if isinstance(feature, dict) and isinstance(feature.get("market_structure"), dict):
                         prior = MarketStructureSnapshot.model_validate(feature["market_structure"])
@@ -676,7 +678,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         self,
         *,
         arm: AIShadowV2Arm,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
         events: list[StrategyEvent],
@@ -704,7 +706,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         )
 
     async def _force_flat(
-        self, *, rows: list[dict[str, object]], config: TradingStrategyConfigDocument,
+        self, *, rows: list[dict[str, Any]], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent], now: datetime,
     ) -> None:
         if now.astimezone(_ET).time() < config.risk.force_flat_et:
@@ -726,7 +728,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
                 )
 
     async def _label_episodes_core(
-        self, *, rows: list[dict[str, object]], config: TradingStrategyConfigDocument,
+        self, *, rows: list[dict[str, Any]], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent], now: datetime,
     ) -> None:
         if not after_regular_close(now):
@@ -771,7 +773,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
                     try:
                         outcome = evaluate_opportunity_episode(
                             arm=arm, instrument_id=instrument_id, episode_id=episode_id,
-                            setup_family=str(decision.get("setup_family") or "unresolved"),
+                            setup_family=cast(Any, str(decision.get("setup_family") or "unresolved")),
                             started_at=first.observed_at, ended_at=max(group[-1].observed_at, row["bars"][-1].end_time),
                             entry_price=structure.current_price,
                             invalidation_price=Decimal(str(decision["invalidation_price"])) if decision.get("invalidation_price") is not None else None,
@@ -796,7 +798,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
     async def _label_episodes(
         self,
         *,
-        rows: list[dict[str, object]],
+        rows: list[dict[str, Any]],
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
         events: list[StrategyEvent],
@@ -820,7 +822,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         if not after_regular_close(now):
             return
 
-        def arm_metrics(arm: AIShadowV2Arm) -> dict[str, object]:
+        def arm_metrics(arm: AIShadowV2Arm) -> dict[str, Any]:
             episodes = [
                 e.payload["outcome"] for e in events
                 if e.event_type == "ai_v2_opportunity_episode" and e.payload.get("arm") == arm
@@ -885,11 +887,11 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         research_repository: TradingResearchRepository, market_service: TradingMarketDataService,
         *, now: datetime,
     ) -> None:
-        market_service = _CurrentSessionMarketDataProxy(
+        market_service = cast(TradingMarketDataService, _CurrentSessionMarketDataProxy(
             market_service,
             session_date=now.astimezone(_ET).date(),
             observed_at=now,
-        )
+        ))
         universe = await asyncio.to_thread(resolve_v2_shadow_archive, config, repository, now=now)
         if universe is None:
             return
@@ -914,7 +916,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
                 self.last_error = f"{config.strategy_id}/{instrument_id}/catalyst: {type(error).__name__}: {error}"
 
         events = await self._events(repository, config, session_date=universe.session_date, now=now)
-        rows: list[dict[str, object]] = []
+        rows: list[dict[str, Any]] = []
         for candidate in universe.candidates:
             try:
                 response = await asyncio.to_thread(
@@ -940,7 +942,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
                     "discovery_rank": candidate.discovery_rank,
                 }
                 catalyst = catalyst_by_id.get(candidate.instrument_id) or _latest_snapshot(events, candidate.instrument_id)
-                feature_by_arm: dict[AIShadowV2Arm, dict[str, object]] = {}
+                feature_by_arm: dict[AIShadowV2Arm, dict[str, Any]] = {}
                 for arm in _ARMS:
                     feature = alpha_prompt_snapshot(
                         instrument_id=candidate.instrument_id, structure=structure, morning=morning,
@@ -995,7 +997,7 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return self.decision_count
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": ai_shadow_v2_monitor_enabled(), "running": self.scheduled,
             "version": AI_SHADOW_V2_VERSION, "arms": list(_ARMS),

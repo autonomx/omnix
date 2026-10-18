@@ -16,7 +16,7 @@ Provider roles are intentionally independent:
 - live fallback: Alpaca IEX only when the requesting feature explicitly permits partial-market evidence
 - factual gap repair: Yahoo exact-range, then IBKR exact-range when recovery authority is enabled, then IEX where feature semantics allow it
 - halt/no-trade status: independent Alpaca status evidence
-- paper-fill observation: existing execution-purpose Alpaca observation plane
+- paper-fill observation: existing execution-purpose Alpaca observation plane; when Alpaca IEX has no executable quote (thin stocks), an IBKR quote is used only while IBKR holds per-contract live-data authority, attributed to `ibkr` and with LIVE_DATA purpose (paper/shadow fills only, never broker authority)
 
 ## Omnix settings
 
@@ -78,6 +78,8 @@ budget; diagnostics expose both total demand and budget-denied demand.
 
 
 The runtime serializes connection attempts, applies reconnect backoff, tracks Gateway reconnects, request-specific errors, entitlement denials, and IBKR farm health, and paces historical requests. Historical recovery coalesces adjacent missing ranges rather than requesting one minute at a time.
+
+A historical range that ended at least three minutes ago is final, so the runtime remembers its answer for the life of the process (up to 50,000 ranges), including IBKR's "no data" answer for minutes without trades. A more recent range is remembered for 30 seconds, so strategies evaluating the same stock moments apart share one request. Gap repair asks IBKR for clock-aligned 15-minute blocks ending at the last completed minute (never the still-forming one), so a finished block is the same request all day; a block without trades no longer abandons the remaining blocks. Repair cycles that find the same Yahoo gaps again are answered from memory; diagnostics report `historical_cache_hit_count` and `historical_cache_entries`. A request error ends the request immediately instead of waiting for the timeout; only "no data" counts as an empty answer, and a socket reset is reported as a disconnect, never cached.
 
 ## Prospective acceptance
 

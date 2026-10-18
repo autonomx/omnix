@@ -12,9 +12,9 @@ This module tests complete workflows and scenarios:
 
 import pytest
 
-from app.apps.rpg.choice.choice_models import PlayerChoice
-from app.apps.rpg.quest.quest_engine import QuestEngine
-from app.apps.rpg.quest.quest_models import Quest, QuestStage
+from app.apps.rpg.rules.choice.choice_models import PlayerChoice
+from app.apps.rpg.rules.quest.quest_engine import QuestEngine
+from app.apps.rpg.rules.quest.quest_models import Quest, QuestStage
 
 
 def _create_test_quest(engine: QuestEngine, quest_type: str = "conflict") -> str:

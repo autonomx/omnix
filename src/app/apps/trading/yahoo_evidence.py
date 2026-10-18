@@ -463,7 +463,6 @@ class YahooEvidenceStore:
                     continue
                 try:
                     start = datetime.fromisoformat(str(row["start_time"])).astimezone(_ET)
-                    received = datetime.fromisoformat(str(row["received_at"])).astimezone(timezone.utc)
                     value = Decimal(str(row.get("volume") or "0"))
                     close = Decimal(str(row.get("close") or "0"))
                 except Exception:
@@ -516,7 +515,7 @@ class YahooEvidenceStore:
             and baseline_count >= minimum_baseline_sessions
             else None
         )
-        coverage = (
+        current_coverage = (
             Decimal(current_count) / Decimal(expected)
             if expected > 0
             else None
@@ -539,7 +538,7 @@ class YahooEvidenceStore:
             current_bar_count=current_count,
             current_nonzero_bar_count=current_nonzero,
             expected_bar_count=expected,
-            coverage_ratio=coverage,
+            coverage_ratio=current_coverage,
         )
 
     def record_repair(
@@ -591,10 +590,10 @@ class YahooEvidenceStore:
             reason=reason,
         )
 
-    def session_diagnostics(self, session_date: date) -> dict[str, object]:
+    def session_diagnostics(self, session_date: date) -> dict[str, Any]:
         return dict(self._read_session_metrics(session_date))
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         counters = self.backend.counters("yahoo")
         current_session_date = datetime.now(timezone.utc).astimezone(_ET).date()
         return {

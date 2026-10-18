@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.apps.rpg.performance_trace import current_rpg_pipeline_trace, rpg_pipeline_span
+from app.apps.rpg.foundation.performance_trace import current_rpg_pipeline_trace, rpg_pipeline_span
 
 from . import durable_store
 from .interaction_timeline import MAX_RECENT_INTERACTIONS
@@ -25,7 +25,7 @@ def interaction_event_log_path(session_id: str) -> Path:
 def append_interaction_event(session_id: str, event: dict[str, Any]) -> dict[str, Any]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import append_interaction_event_postgres
+        from app.apps.rpg.session.persistence.session_records import append_interaction_event_postgres
         return append_interaction_event_postgres(session_id, event)
     path = interaction_event_log_path(session_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ def load_interaction_events(
 ) -> list[dict[str, Any]]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import load_interaction_events_postgres
+        from app.apps.rpg.session.persistence.session_records import load_interaction_events_postgres
         return load_interaction_events_postgres(session_id, after_sequence=after_sequence, limit=limit)
     path = interaction_event_log_path(session_id)
     if not path.exists():
@@ -76,8 +76,8 @@ def replay_interaction_events(
 ) -> dict[str, Any]:
     if not isinstance(session, dict) or not events:
         return session
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), dict) else {}
-    timeline = runtime.get("interaction_timeline") if isinstance(runtime.get("interaction_timeline"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
+    timeline = raw_interaction_timeline if isinstance(raw_interaction_timeline := runtime.get("interaction_timeline"), dict) else {}
     existing = [item for item in timeline.get("events", []) if isinstance(item, dict)]
     by_id = {
         str(item.get("interaction_id") or f"sequence:{item.get('sequence')}"): dict(item)
@@ -110,8 +110,8 @@ def replay_interaction_events(
 
 
 def load_and_replay_interaction_events(session_id: str, session: dict[str, Any]) -> dict[str, Any]:
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), dict) else {}
-    timeline = runtime.get("interaction_timeline") if isinstance(runtime.get("interaction_timeline"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
+    timeline = raw_interaction_timeline if isinstance(raw_interaction_timeline := runtime.get("interaction_timeline"), dict) else {}
     snapshot_sequence = int(timeline.get("last_sequence") or runtime.get("interaction_seq") or 0)
     events = load_interaction_events(session_id, after_sequence=snapshot_sequence)
     return replay_interaction_events(session, events)
@@ -132,7 +132,7 @@ def interaction_log_requires_compaction(session_id: str) -> bool:
 def compact_interaction_event_log(session_id: str, *, through_sequence: int) -> int:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import compact_interaction_events_postgres
+        from app.apps.rpg.session.persistence.session_records import compact_interaction_events_postgres
         return compact_interaction_events_postgres(session_id, through_sequence=through_sequence)
     path = interaction_event_log_path(session_id)
     if not path.exists():
@@ -146,7 +146,7 @@ def compact_interaction_event_log(session_id: str, *, through_sequence: int) -> 
 def interaction_event_log_status(session_id: str) -> dict[str, Any]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import interaction_log_status_postgres
+        from app.apps.rpg.session.persistence.session_records import interaction_log_status_postgres
         return interaction_log_status_postgres(session_id)
     path = interaction_event_log_path(session_id)
     return {

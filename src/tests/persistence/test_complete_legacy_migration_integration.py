@@ -52,7 +52,7 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_dead_letters, omnix_job_events, omnix_job_attempts, omnix_jobs, "
             "omnix_chat_messages, omnix_chat_sessions, omnix_memory_snapshot_items, "
             "omnix_memory_snapshots, omnix_memory_candidates, omnix_memory_events, "
-            "omnix_memory_records, omnix_conversation_segments, "
+            "omnix_memory_records, omnix_memory_v2_observations, omnix_conversation_segments, "
             "omnix_character_versions, omnix_characters, omnix_asset_versions, "
             "omnix_assets, omnix_settings, omnix_secret_references, "
             "omnix_audit_events, omnix_idempotency_keys, "
@@ -288,7 +288,8 @@ def test_real_legacy_sources_export_import_and_restore_all_lifecycle_records(tmp
         with database.connection() as connection:
             counts = connection.execute(
                 "SELECT "
-                "(SELECT COUNT(*) FROM omnix_memory_records), "
+                "(SELECT COUNT(*) FROM omnix_memory_v2_observations "
+                "WHERE idempotency_key LIKE 'legacy-import:%%'), "
                 "(SELECT COUNT(*) FROM omnix_memory_candidates), "
                 "(SELECT COUNT(*) FROM omnix_memory_snapshots), "
                 "(SELECT COUNT(*) FROM omnix_memory_snapshot_items), "
@@ -304,7 +305,7 @@ def test_real_legacy_sources_export_import_and_restore_all_lifecycle_records(tmp
             ).fetchone()
         values = tuple(int(value) for value in counts)
         assert values[0:4] == (1, 1, 1, 1)
-        assert values[4] >= 2
+        assert values[4] >= 1  # the legacy event; the record's own audit is its v2 observation
         assert values[5:7] == (1, 1)
         assert values[7] >= 2
         assert values[8:] == (1, 1, 1, 1, 1)

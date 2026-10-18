@@ -189,6 +189,8 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
     # Runtime launch inherits an explicit ephemeral token; never access the
     # operator's protected credential store from this bootstrap unit test.
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
+    run_token_key = secrets.token_urlsafe(32)
+    monkeypatch.setenv("OMNIX_RUN_TOKEN_KEY", run_token_key)
     monkeypatch.setattr(
         uvicorn, "run", lambda *args, **kwargs: calls.append((args, kwargs))
     )
@@ -197,9 +199,25 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
     launcher = runpy.run_path(
         str(Path(__file__).resolve().parents[4] / "scripts/run_omnix_gateway.py")
     )
-    assert launcher["main"]() == 0
+    import logging
+
+    from app.observability import logging as omnix_logging
+
+    root = logging.getLogger()
+    before = list(root.handlers)
+    try:
+        assert launcher["main"]() == 0
+        # The container entrypoint installs the structured log handler.
+        assert any(getattr(h, omnix_logging._HANDLER_MARKER, False) for h in root.handlers)
+    finally:
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
     assert calls[0][0] == ("app.composition.production:app",)
     assert calls[0][1]["reload"] is True
+    import os
+
+    assert os.environ["OMNIX_RUN_TOKEN_KEY"] == run_token_key
 
 
 def test_production_application_composes_once_for_concurrent_requests(monkeypatch):
@@ -507,7 +525,7 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
     monkeypatch.setattr(identity_service, "ensure_local_identity", forbidden)
     monkeypatch.setattr("app.persistence.apply_migrations", forbidden)
 
-    from app.apps.rpg.api.feature_routes import rpg_world_library_routes
+    from app.apps.rpg.edge.api.feature_routes import rpg_world_library_routes
     from app.apps.rpg.session import service as rpg_session_service
 
     monkeypatch.setattr(
@@ -595,7 +613,7 @@ def test_disabled_features_are_not_imported():
         "create_gateway_app(runtime_config=RuntimeConfig(disabled_features=('rpg', 'trading', 'hermes')))\n"
         "declarations = {'app.apps.rpg', 'app.apps.rpg.declarations', 'app.apps.trading', 'app.apps.trading.declarations'}\n"
         # The kernel replay routes load RPG's replay adapter whatever is enabled (as app.replay did before PA-5.3).
-        "replay = ('app.apps.rpg.replay', 'app.apps.rpg.replay.models', 'app.apps.rpg.replay.rpg_adapter')\n"
+        "replay = ('app.apps.rpg.edge', 'app.apps.rpg.edge.replay', 'app.apps.rpg.edge.replay.models', 'app.apps.rpg.edge.replay.rpg_adapter')\n"
         "loaded = sorted(m for m in sys.modules if m.startswith(('app.apps.rpg', 'app.apps.trading'))\n"
         "                and m not in declarations and m not in replay)\n"
         "print(len(loaded), loaded[:5])\n"

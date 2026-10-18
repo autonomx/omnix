@@ -12,7 +12,7 @@ from app.apps.rpg.world.companion_dialogue import (
     build_companion_presence_summary,
 )
 from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
-from app.apps.rpg.world.location_registry import present_npcs_for_current_location
+from app.apps.rpg.rules.location_registry import present_npcs_for_current_location
 from app.apps.rpg.world.npc_dialogue_profile import build_npc_dialogue_profile
 from app.apps.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
@@ -20,7 +20,7 @@ from app.apps.rpg.world.npc_goal_state import (
     record_goal_influence,
     seed_default_npc_goals,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 MAX_CONVERSATION_THREADS = 32
 MAX_BEATS_PER_THREAD = 8

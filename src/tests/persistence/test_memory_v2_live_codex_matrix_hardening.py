@@ -6,7 +6,6 @@ from uuid import uuid4
 
 import pytest
 
-from app.conversation.memory_contracts import MemoryRecord
 from app.platform.assistant_memory.v2 import (
     AffectObservation,
     Episode,
@@ -18,10 +17,7 @@ from app.platform.assistant_memory.v2 import (
     ObservationProvenance,
     RelationshipMetric,
     RelationshipState,
-    RetrievalCandidate,
     RetrievalQuery,
-    RetrievalResult,
-    RetrievalScore,
     VisibilityScope,
 )
 from app.platform.assistant_memory.v2.convergence import (
@@ -34,11 +30,6 @@ from app.platform.assistant_memory.v2.episode_store import PostgresMemoryV2Episo
 from app.platform.assistant_memory.v2.federated_retrieval import FederatedMemoryV2Retriever
 from app.platform.assistant_memory.v2.grant_store import PostgresMemoryV2GrantStore
 from app.platform.assistant_memory.v2.graph_store import PostgresMemoryV2GraphStore
-from app.platform.assistant_memory.v2.legacy_shadow import (
-    LegacyMemoryV2Importer,
-    PostgresMemoryV2ShadowEvaluationStore,
-    compare_shadow_retrieval,
-)
 from app.platform.assistant_memory.v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
@@ -394,114 +385,6 @@ def test_M10_hardening_federation_enforces_sensitivity_domain_and_revocation() -
     finally:
         database.close()
 
-
-def test_M13_hardening_shadow_quality_checks_precision_and_staleness() -> None:
-    database = _database()
-    try:
-        apply_migrations(database)
-        observations = PostgresMemoryV2ObservationStore(database)
-        graph = PostgresMemoryV2GraphStore(database)
-        space_owner = f"sofia-{uuid4().hex}"
-        record = MemoryRecord(
-            id=f"v1:{uuid4().hex}",
-            owner_type="character",
-            owner_id=space_owner,
-            scope="global",
-            scope_id="profile:alice",
-            category="preference",
-            kind="preference",
-            source="user_saved",
-            content="Skyrim is my favorite game",
-            normalized_content="skyrim is my favorite game",
-            trust_level="user_approved",
-            provenance_type="user_message",
-            provenance_id="message:v1",
-            created_at="2026-09-14T03:00:00+00:00",
-            updated_at="2026-09-14T03:00:00+00:00",
-        )
-        importer = LegacyMemoryV2Importer(observations)
-        first = importer.import_record(principal_id="profile:alice", record=record)
-        second = importer.import_record(principal_id="profile:alice", record=record)
-        assert first is not None and second is not None
-        assert first.observation_id == second.observation_id
-        space = first.space
-
-        matching = RetrievalCandidate(
-            ref_id="candidate:matching",
-            item_type="assertion",
-            domain="preference",
-            content="Skyrim is my favorite game",
-            scores=RetrievalScore(semantic=1.0, composite=1.0),
-            evidence_observation_ids=(first.observation_id,),
-        )
-        result = RetrievalResult(
-            query_id="shadow:pass",
-            candidates=(matching,),
-            dynamic_context=(matching.content,),
-            observation_watermark=observations.watermark(space),
-            graph_revision=graph.state(space).graph_revision,
-            index_graph_revision=0,
-            elapsed_ms=1.0,
-            deadline_ms=50.0,
-        )
-        report = compare_shadow_retrieval(
-            space=space,
-            v1_contents=[record.content],
-            v2_result=result,
-            observation_watermark=observations.watermark(space),
-            graph_revision=graph.state(space).graph_revision,
-            required_recall=0.8,
-            required_precision=0.8,
-        )
-        assert report.passed is True
-        assert report.recall == 1.0
-        assert report.precision == 1.0
-
-        store = PostgresMemoryV2ShadowEvaluationStore(
-            database,
-            graph_store=graph,
-            observation_store=observations,
-        )
-        store.record(report)
-        observations.append(_request(space, "later", "new evidence after quality receipt"))
-        latest = store.latest(space)
-        assert latest is not None and latest.passed is True
-        assert latest.observation_watermark < observations.watermark(space)
-
-        noisy = result.model_copy(
-            update={
-                "query_id": "shadow:noisy",
-                "candidates": (
-                    matching,
-                    matching.model_copy(
-                        update={
-                            "ref_id": "candidate:false-1",
-                            "content": "unrelated false memory one",
-                        }
-                    ),
-                    matching.model_copy(
-                        update={
-                            "ref_id": "candidate:false-2",
-                            "content": "unrelated false memory two",
-                        }
-                    ),
-                ),
-            }
-        )
-        failed = compare_shadow_retrieval(
-            space=space,
-            v1_contents=[record.content],
-            v2_result=noisy,
-            observation_watermark=observations.watermark(space),
-            graph_revision=graph.state(space).graph_revision,
-            required_recall=0.8,
-            required_precision=0.8,
-        )
-        assert failed.recall == 1.0
-        assert failed.precision < 0.8
-        assert failed.passed is False
-    finally:
-        database.close()
 
 
 def test_M18_hardening_global_queue_does_not_starve_healthy_space_after_poison() -> None:

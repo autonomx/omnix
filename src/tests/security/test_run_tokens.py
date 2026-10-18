@@ -22,8 +22,8 @@ CLAIMS = {"run_id": "run-1", "workspace_id": "workspace:local", "owner": "agent-
 
 @pytest.fixture(autouse=True)
 def signing_key(monkeypatch):
+    monkeypatch.setenv("OMNIX_RUN_TOKEN_KEY", secrets.token_urlsafe(32))
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
-    monkeypatch.delenv("OMNIX_RUN_TOKEN_KEY", raising=False)
 
 
 def test_round_trip_binds_the_run() -> None:
@@ -49,13 +49,26 @@ def test_forged_expired_and_malformed_tokens_are_refused() -> None:
 
 def test_processes_of_one_installation_share_the_key(monkeypatch) -> None:
     token = issue_run_token(**CLAIMS)
-    # Another process with the same launcher-issued service token verifies it.
+    # Another gateway process with the same run-token key verifies it.
     monkeypatch.setattr(run_tokens, "_PROCESS_KEY", None)
     assert verify_run_token(token, run_id="run-1").run_id == "run-1"
     # A different installation does not.
-    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
+    monkeypatch.setenv("OMNIX_RUN_TOKEN_KEY", secrets.token_urlsafe(32))
     with pytest.raises(RunTokenError, match="run_token_invalid"):
         verify_run_token(token, run_id="run-1")
+
+
+def test_the_service_token_cannot_mint_run_tokens(monkeypatch) -> None:
+    """A model service holds the service token, never the run-token key."""
+    gateway_key = run_tokens.env_str("OMNIX_RUN_TOKEN_KEY")
+    # The model service's view: the shared service token and no run-token key.
+    monkeypatch.delenv("OMNIX_RUN_TOKEN_KEY")
+    monkeypatch.setattr(run_tokens, "_PROCESS_KEY", None)
+    forged = issue_run_token(**CLAIMS)
+    # The gateway refuses it.
+    monkeypatch.setenv("OMNIX_RUN_TOKEN_KEY", gateway_key)
+    with pytest.raises(RunTokenError, match="run_token_invalid"):
+        verify_run_token(forged, run_id="run-1")
 
 
 def test_explicit_key_must_be_long(monkeypatch) -> None:

@@ -126,10 +126,13 @@ def ffmetadata(manifest: dict[str, Any]) -> str:
 
 def ffmpeg_command(executable: str, *, input_wav: str, metadata_path: str,
                    output_path: str, format: str, cover_path: str | None = None,
-                   concat_input: bool = False) -> list[str]:
+                   concat_input: bool = False, progress_path: str | None = None) -> list[str]:
     if format not in FORMAT_MIME:
         raise ValueError("unsupported audiobook export format")
     command = [executable, "-hide_banner", "-nostdin", "-y"]
+    if progress_path:
+        # Reporting only: FFmpeg appends key=value progress blocks; the encoding is unchanged.
+        command.extend(("-progress", progress_path, "-nostats"))
     if concat_input:
         command.extend(("-f", "concat", "-safe", "1"))
     command.extend(("-i", input_wav, "-f", "ffmetadata", "-i", metadata_path))
@@ -147,3 +150,16 @@ def ffmpeg_command(executable: str, *, input_wav: str, metadata_path: str,
     else:
         command.extend(("-c:a", "pcm_s16le", "-rf64", "auto", "-f", "wav"))
     return [*command, output_path]
+
+
+def encoded_seconds(progress_report: str) -> float | None:
+    """How much audio FFmpeg has encoded, from its ``-progress`` output (latest block wins)."""
+    for line in reversed(progress_report.splitlines()):
+        key, _, value = line.strip().partition("=")
+        # ``out_time_ms`` is microseconds too (a long-standing FFmpeg misnomer).
+        if key in {"out_time_us", "out_time_ms"}:
+            try:
+                return max(0.0, int(value) / 1_000_000)
+            except ValueError:
+                continue  # "N/A" before the first frame
+    return None

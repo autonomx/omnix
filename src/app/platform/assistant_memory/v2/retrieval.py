@@ -5,7 +5,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from .contracts import (
     DerivedPolicyEnvelope,
@@ -258,7 +258,7 @@ class UnifiedMemoryV2Retriever:
         return RetrievalCandidate(
             ref_id=hit.ref_id,
             item_type="assertion",
-            domain=hit.domain,
+            domain=cast(Any, hit.domain),
             content=hit.content,
             scores=RetrievalScore(
                 semantic=semantic,
@@ -528,13 +528,13 @@ class UnifiedMemoryV2Retriever:
                     for observation_id in item.observation_ids
                 )
             )
-            for item in episodes:
+            for episode in episodes:
                 if self._deadline_exceeded(started, query.deadline_ms):
                     break
                 candidate = self._episode_candidate(
-                    item,
+                    episode,
                     query,
-                    policy=episode_policies.get(item.episode_id) or item.policy,
+                    policy=episode_policies.get(episode.episode_id) or episode.policy,
                     inactive=episode_inactive,
                 )
                 if candidate is not None:
@@ -564,14 +564,14 @@ class UnifiedMemoryV2Retriever:
                 )
             )
             relationship_inactive = self._inactive_evidence(relationship_evidence)
-            for item in relationships:
+            for relationship in relationships:
                 if self._deadline_exceeded(started, query.deadline_ms):
                     break
                 candidate = self._relationship_candidate(
-                    item,
+                    relationship,
                     query,
                     policy=(
-                        relationship_policies.get(item.relationship_id) or item.policy
+                        relationship_policies.get(relationship.relationship_id) or relationship.policy
                     ),
                     inactive=relationship_inactive,
                 )

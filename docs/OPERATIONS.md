@@ -497,6 +497,8 @@ The scheduler deletes old rows every hour, in small batches, following
 | Stopped runtime nodes | 7 days |
 | Audit events | 365 days, maintenance only |
 | Trading strategy events | 180 days, disabled by default |
+| RPG narration events | 1 day |
+| RPG snapshots | Each campaign's newest 20 and every 100th revision; others after 1 day |
 
 Change a policy by updating its row (`retention_days`, `enabled`). Audit
 retention runs only through `python -m app.persistence retention`, which
@@ -651,21 +653,23 @@ returns its key. A gateway on another host then never needs the image
 service's disk. Voice clones are still file-managed on the voice/TTS host;
 moving them into blob-backed asset records is a follow-up.
 
-## Memory v2 switch
+## Curated memory (Memory v2)
 
 Curated memory (what a person saves, approves, edits, pins, moves, archives or
-forgets) is served by Memory v1 until an operator switches it to Memory v2.
-After the switch every process reads and writes curated memory in the v2
-observation log: one `curated_memory` observation per record revision, where
-a new revision retires the previous one in the same transaction and
-forgetting purges every revision's text. The memory screens, chat memory
-commands, suggestion approvals, session snapshots and live voice keep working
-unchanged; v1's record table becomes read-only. Chat prompts put pinned
-memories first, then the memories v2 retrieval ranks highest for the turn;
-character sessions with shared memory access still get the System Assistant's
-allowed categories. Only active, non-secret, approved memories are
-retrievable, and each stops at its expiry, the same rule v1 applies. Every v2
-memory space belongs to a tenant workspace, so workspaces never share memory.
+forgets) lives in the Memory v2 observation log: one `curated_memory`
+observation per record revision, where a new revision retires the previous one
+in the same transaction and forgetting purges every revision's text. Memory v1,
+which kept records in `omnix_memory_records`, is retired: migration
+`0156_memory_v1_retired` moves an installation still under v1 to v2 when v1
+holds no records, and refuses to upgrade one whose v1 still holds records
+(switch it with an earlier release first, which still has the v1 import).
+Candidates awaiting approval and session snapshots keep their own tables.
+
+Chat prompts put pinned memories first, then the memories v2 retrieval ranks
+highest for the turn; character sessions with shared memory access still get
+the System Assistant's allowed categories. Only active, non-secret, approved
+memories are retrievable, and each stops at its expiry. Every v2 memory space
+belongs to a tenant workspace, so workspaces never share memory.
 
 Memory v2 retrieves by meaning as well as by words, as VoiceMem does, when its
 embedding model is installed. `setup.bat` / `setup.sh` download it; on a host
@@ -674,68 +678,11 @@ once on each host that runs the scheduler or serves retrieval (about
 490 MB, pinned `intfloat/multilingual-e5-small`, SHA-256 checked, stored under
 `resources/models/multilingual-e5-small` or `OMNIX_MEMORY_EMBEDDING_MODEL_DIR`).
 Without the model, retrieval uses words only. `OMNIX_MEMORY_EMBEDDINGS=0`
-turns it off. `python scripts/compare_memory_retrieval.py --database-url
-<disposable test database>` compares v1 and v2 retrieval on the same memories.
+turns it off.
 
 Each write derives and indexes its memory immediately; the scheduler's
-`memory-v2.convergence` task (every 10 s, only once v2 is authoritative)
-retries anything that did not converge, with the worker's backoff.
-
-### Switching
-
-The switch is a human decision. With the gateway running this code (migration
-`0119_memory_v2_curated_records` applied):
-
-```powershell
-$env:PYTHONPATH = "src"
-python scripts/backup_omnix.py --output-dir <backup folder>        # 1. back up
-python -m app.platform.assistant_memory.v2.shadow_runner                   # 2. import and compare
-python -m app.platform.assistant_memory.v2.shadow_report --require-ready   # 3. verdict
-python -m app.platform.assistant_memory.v2.cutover activate --by <name> --reason "<why>"   # 4. switch
-python -m app.platform.assistant_memory.v2.cutover status                  # 5. confirm
-```
-
-The shadow runner works only while v1 is authoritative, one run at a time,
-across every workspace. For each memory owner it imports every v1 record
-(archived, secret and unapproved ones too, so they stay manageable),
-revoking revisions v1 replaced and purging records v1 forgot, derives the
-retrievable memories without a model, rebuilds the search index and
-embeddings, then asks v2 for up to `--probes` (default 200) prompt-eligible
-records by their own words, under the record's scope, with Chat's limits
-(top 12, 50 ms; `--deadline-ms` to change). Recall is the share of records v2
-found (`--required-recall`, default 0.95); precision is the share of returned
-memories backed only by eligible v1 records visible to the question
-(`--required-precision`, default 1.0). It then validates replay and records a
-readiness receipt. Its output lists each space's counts, recall, precision,
-`embeddings` (`synced`, or `model_absent` when the probes measured word
-retrieval) and verdict; it exits 1 unless every space is ready. `--owner
-character:<id>` (repeatable) runs one owner. An owner with a v1 row the v1
-contract rejects is skipped and listed.
-
-The report is read-only and covers every workspace. It prints the current
-authority epoch and, for each v2 memory space, its watermarks, latest shadow
-retrieval evaluation (recall, precision, pass) and latest cutover readiness
-receipt, with a status: `not_evaluated`, `v1_changed` (the owner's v1 records
-changed since the last run: run the runner again), `evaluation_stale`
-(observations arrived after the evaluation), `shadow_failed`, `not_ready` (no
-current ready receipt) or `ready`. It also lists v1 owners with memories that
-have no v2 space yet. `--require-ready` exits 1 unless every space is `ready`
-and every v1 owner is imported.
-
-`activate` refuses unless the report is ready, or v1 holds no memory at all.
-Under the authority lock it re-checks every receipt and that v1 did not change
-since the shadow run (in-flight v1 saves finish first; later ones are
-refused), then switches. If a person saved a memory in between, it refuses
-with "v1 memory changed since the shadow run": run the shadow runner again.
-
-### Rolling back
-
-`python -m app.platform.assistant_memory.v2.cutover rollback --by <name> --reason
-"<why>"` returns curated memory to v1 only while nothing has been saved,
-edited or forgotten under v2 (v1 would lose or resurrect those memories);
-otherwise it refuses. Rollback is meant for the minutes right after a switch.
-Later, restore the step 1 backup instead, accepting the loss of memory saved
-since.
+`memory-v2.convergence` task (every 10 s) retries anything that did not
+converge, with the worker's backoff.
 
 ## Secrets and networked integrations
 
@@ -870,13 +817,15 @@ public hostnames to `OMNIX_ALLOWED_HOSTS` and browser origins to
 
 | Value | Behaviour |
 |---|---|
-| unset | No sign-in, as before. The gateway logs `authentication_not_enforced` at startup. |
-| `local` | Sign-in required. One local owner account (`user:local`) signs in with the install credential or a launcher link. |
+| unset or `local` | Sign-in required (the default since 2026-10-06). Accounts with email and password, guests, invite links and Google sign-in, as the account settings below allow. The owner (`user:local`) is signed in automatically from the launcher and can always use the install credential. |
 | `oidc` | Sign-in through your identity provider (Authorization Code + PKCE). API clients may send `Authorization: Bearer <access token>`. |
 | `disabled` | No sign-in. Startup fails unless `OMNIX_ENV=test`, or `OMNIX_ENV=development` with a loopback `OMNIX_BIND_HOST`. |
 
-Leaving the variable unset keeps existing installations working unchanged.
-Making `local` the default is a separate, approved change (roadmap WP-4.1).
+With sign-in on, outbound provider URLs (LM Studio, OpenAI-compatible servers)
+may use loopback, but a private-network address such as `192.168.1.20` needs
+`OMNIX_ALLOWED_PRIVATE_NETWORKS` (for example `192.168.1.0/24`). Every account
+can configure providers in its own workspace, so the LAN stays closed unless
+you open it.
 
 When sign-in is required, every route needs a session except `/health`,
 `/ready`, `/api/health` and `/api/auth/*`. Unauthenticated requests get 401;
@@ -899,7 +848,8 @@ get 403 `csrf_failed`.
 Settings → Overview lists the signed-in user's sessions
 (`GET /api/auth/sessions`). Signing out one other session or all others
 (`POST /api/auth/sessions/revoke`) needs proof of identity again: the install
-credential in local mode, a sign-in within the last 10 minutes in OIDC mode.
+account's password (or, for the owner, the install credential) in local mode;
+a sign-in within the last 10 minutes in OIDC mode or for a Google-only account.
 It shares the sign-in rate limit and is audited (`auth.sessions.revoked`).
 Sign-out answers `Clear-Site-Data: "cache", "storage"`, so the browser drops
 what the app stored locally.
@@ -913,9 +863,48 @@ revoke Omnix's access in the provider's account settings.
 
 ### Local mode
 
-On first start the gateway creates a random install credential. The plaintext
-is kept in the protected secret store (DPAPI on Windows, a 0600 file on POSIX);
-the database keeps only a scrypt hash.
+**Accounts.** The sign-in page offers what the account settings allow:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `OMNIX_AUTH_REGISTRATION` | `open` in development, `invite` otherwise | `open`: anyone who reaches Omnix may create an account. `invite`: only with an invite link. `closed`: nobody. |
+| `OMNIX_AUTH_GUESTS` | on when registration is `open` | One-click guest accounts. |
+| `OMNIX_AUTH_REMEMBER_DAYS` | 30 | Lifetime of a "stay signed in" session. |
+| `OMNIX_AUTH_GUEST_DAYS` | 7 | Lifetime of a guest account's session. |
+
+- **Email and password:** passwords have at least 12 characters and are stored
+  as scrypt hashes. A wrong password and an unknown email get the same answer.
+  Changing a password signs out the account's other sessions.
+- **Own workspace:** every new account gets a workspace of its own, which
+  starts with a copy of the installation workspace's settings (providers,
+  models, appearance). API keys stay in the secret store and are shared.
+- **Guests:** a guest account has its own workspace and the `guest` role: what
+  a member does, minus tools, agents, research runs, trading orders and voice
+  cloning. **Save your account** (top bar, or Settings → Your account) turns it
+  into a full account and keeps everything. A guest who signs out cannot come
+  back. Their workspace stays until an operator removes it.
+- **Invites:** an admin creates a single-use link that is valid for 7 days
+  (Settings → Your account, or `POST /api/auth/invites`). The link lets one
+  person create an account while registration is `invite`.
+- **Stay signed in:** checked by default on the sign-in page. Launcher sign-ins
+  always stay signed in on the owner's machine.
+- **The owner** (`user:local`) can add an email and a password in Settings →
+  Your account, to sign in from other devices. Setting the first password needs
+  the install credential.
+
+**Google.** Set `OMNIX_GOOGLE_CLIENT_ID`, `OMNIX_GOOGLE_CLIENT_SECRET` and
+`OMNIX_GOOGLE_REDIRECT_URI` (`<public origin>/api/auth/google/callback`,
+registered as an authorized redirect URI of a Google OAuth web client).
+`OMNIX_GOOGLE_ALLOWED_DOMAINS` limits sign-in to verified emails in the listed
+domains. A new Google account follows the registration setting, including
+invites. Accounts are never merged by email, because registration does not
+verify email. If a Google account's email already belongs to an Omnix account,
+its owner signs in with their password and chooses **Connect Google** in
+Settings.
+
+**Install credential.** On first start the gateway creates a random install
+credential. The plaintext is kept in the protected secret store (DPAPI on
+Windows, a 0600 file on POSIX); the database keeps only a scrypt hash.
 
 - **Launcher:** **Open app** signs the browser in through a single-use link
   that expires after 60 seconds.
@@ -1033,10 +1022,14 @@ or a signed-in browser session, is refused on these routes. Pi's extensions
 remove the token from their environment before any tool runs, so shell
 commands never see it.
 
-Every Omnix process of an installation must share the signing key. The
-launcher's service token provides it; otherwise set `OMNIX_RUN_TOKEN_KEY` (at
-least 32 characters) on every gateway and worker. `scripts/gateway_cluster.py`
-generates one shared key for its replicas when neither is set.
+Every gateway process of an installation must share the signing key, and no
+model service may hold it. The gateway entrypoint (`scripts/run_omnix_gateway.py`)
+uses `OMNIX_RUN_TOKEN_KEY` when set and otherwise a protected key of its own
+next to the service token; its replicas and job worker inherit it. The key is
+never derived from the service token, which the model services share. Compose
+requires `OMNIX_RUN_TOKEN_KEY` for the gateway processes only.
+`scripts/gateway_cluster.py` generates one shared key for its replicas when
+none is set.
 
 ## Agent request ceilings
 

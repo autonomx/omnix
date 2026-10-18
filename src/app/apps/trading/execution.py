@@ -124,7 +124,7 @@ def _decimal_optional(value: object) -> Decimal | None:
 
 
 def execution_observation_from_quote(
-    quote: dict[str, object],
+    quote: dict[str, Any],
     *,
     binding_id: str,
     provider: str,

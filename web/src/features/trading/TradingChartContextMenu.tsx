@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
+import { dispatchDrawingActionRequest, hasDrawingActionHandler } from './drawings/drawingActions';
 import type { ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
+import { WATCHLIST_FLAG_COLORS, WATCHLIST_FLAG_LABELS } from './tradingWatchlistModel';
+import { useTradingWatchlistFlags } from './useTradingWatchlistFlags';
 import './TradingChartContextMenu.css';
 
 function displayPrice(value: number): string {
@@ -10,6 +13,8 @@ function displayPrice(value: number): string {
 
 export function TradingChartContextMenu({
   point,
+  chartId = null,
+  instrumentId = null,
   symbol,
   indicatorContext,
   drawingCount,
@@ -30,6 +35,10 @@ export function TradingChartContextMenu({
   onSettings,
 }: {
   point: ChartAlertPlacement;
+  /** The chart the menu belongs to; drawing action requests carry it to the action bus. */
+  chartId?: string | null;
+  /** The chart's instrument, which the Flag submenu flags (TVP-5.1); none on a pane's own menu. */
+  instrumentId?: string | null;
   symbol: string;
   indicatorContext: boolean;
   drawingCount: number;
@@ -50,6 +59,9 @@ export function TradingChartContextMenu({
   onSettings: () => void;
 }) {
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [flagOpen, setFlagOpen] = useState(false);
+  const { flags, setFlag } = useTradingWatchlistFlags();
+  const flag = instrumentId ? flags.get(instrumentId) : undefined;
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -85,9 +97,42 @@ export function TradingChartContextMenu({
       <button type="button" role="menuitem" onClick={action(onReset)}>↻ <span>Reset {indicatorContext ? `${symbol} pane` : 'chart'} view</span><kbd>Alt + R</kbd></button>
       <button type="button" role="menuitem" onClick={action(onCopyPrice)}>⧉ <span>Copy {indicatorContext ? 'value' : 'price'} {displayPrice(point.price)}</span></button>
       <button type="button" role="menuitem" onClick={action(onPastePrice)}>▣ <span>Paste</span><kbd>Ctrl + V</kbd></button>
+      {point.drawingActions?.length ? (
+        <>
+          <div className="trading-context-menu-separator" />
+          {point.drawingActions.map((drawingAction) => (
+            <button
+              key={drawingAction.id}
+              type="button"
+              role="menuitem"
+              disabled={!hasDrawingActionHandler(drawingAction.request.type)}
+              onClick={action(() => dispatchDrawingActionRequest(drawingAction.request, { chartId, drawingId: point.drawingId ?? null }))}
+            >
+              ▸ <span>{drawingAction.label}</span>
+            </button>
+          ))}
+        </>
+      ) : null}
       <div className="trading-context-menu-separator" />
       <button type="button" role="menuitem" disabled={!onAddAlert} onClick={onAddAlert ? action(onAddAlert) : undefined}>◷ <span>{onAddAlert ? `Add alert on ${symbol} at ${displayPrice(point.price)}` : `Alerts unavailable for ${symbol}`}</span>{onAddAlert ? <kbd>Alt + A</kbd> : null}</button>
       <button type="button" role="menuitemcheckbox" aria-checked={cursorLocked} onClick={action(onToggleCursor)}>⌖ <span>Lock vertical cursor line by time</span></button>
+      {instrumentId ? (
+        <div className="trading-context-menu-submenu-wrap">
+          <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={flagOpen} onClick={() => setFlagOpen((value) => !value)}>
+            <span className={`trading-watchlist-flag-swatch ${flag ?? 'none'}`} aria-hidden="true" /> <span>Flag {symbol}</span><b>›</b>
+          </button>
+          {flagOpen ? (
+            <div className="trading-chart-context-submenu" role="menu" aria-label={`Flag ${symbol}`}>
+              {WATCHLIST_FLAG_COLORS.map((color) => (
+                <button key={color} type="button" role="menuitemradio" aria-checked={flag === color} onClick={action(() => void setFlag([instrumentId], color))}>
+                  <span className={`trading-watchlist-flag-swatch ${color}`} aria-hidden="true" /> {WATCHLIST_FLAG_LABELS[color]}
+                </button>
+              ))}
+              <button type="button" role="menuitem" disabled={!flag} onClick={action(() => void setFlag([instrumentId], null))}>Remove flag</button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="trading-context-menu-separator" />
       <button type="button" role="menuitemcheckbox" aria-checked={tableVisible} onClick={action(onToggleTable)}>▤ <span>Table view</span></button>
       <button type="button" role="menuitem" onClick={action(onObjectTree)}>◇ <span>Object tree</span></button>

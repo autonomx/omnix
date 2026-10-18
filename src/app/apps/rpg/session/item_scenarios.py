@@ -15,7 +15,7 @@ from typing import Any
 
 from app.apps.rpg.session.item_objectives import build_item_objectives
 from app.apps.rpg.session.item_session_actions import apply_item_session_action, available_item_session_actions
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 ITEM_SCENARIOS_SOURCE = "engine_item_scenarios_v1"
 DISPATCHER_ACTIONS = {"buy", "sell", "market", "pickup", "collect", "take", "effect", "use_effect", "activate", "combat", "attack", "item_combat", "recipe_discovery", "discover_recipes", "recipes", "report", "item_report"}

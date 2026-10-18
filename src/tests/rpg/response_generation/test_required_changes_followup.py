@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.response_generation.contracts import (
+from app.apps.rpg.narration.response_generation.contracts import (
     CandidateSource,
     ResponseCandidate,
     ResponseMode,
@@ -9,9 +9,9 @@ from app.apps.rpg.response_generation.contracts import (
     SemanticResponsePlan,
     SemanticSection,
 )
-from app.apps.rpg.response_generation.eligibility import EligibilityPolicy, eligibility_reasons
-from app.apps.rpg.response_generation.profiles import DeliveryMode, ResponseGenerationProfile
-from app.apps.rpg.response_generation.strict_pipeline import (
+from app.apps.rpg.narration.response_generation.eligibility import EligibilityPolicy, eligibility_reasons
+from app.apps.rpg.narration.response_generation.profiles import DeliveryMode, ResponseGenerationProfile
+from app.apps.rpg.narration.response_generation.strict_pipeline import (
     AuthoritativeProfileBoundProvider,
     StrictRpgProductionResponsePipeline,
 )
@@ -182,7 +182,7 @@ def test_authoritative_profile_binds_timeout_before_provider_call():
 
 
 def test_scene_provider_receives_precompiled_canonical_brief(monkeypatch):
-    from app.apps.rpg.response_generation import legacy_bridge
+    from app.apps.rpg.narration.response_generation import legacy_bridge
 
     captured: dict = {}
 

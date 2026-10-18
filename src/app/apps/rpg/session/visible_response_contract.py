@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.foundation.safe_values import copy_state
 
 _INVALID_VISIBLE_STRINGS = {
     "",
@@ -285,7 +286,7 @@ def build_visible_turn_record(result: Any, *, player_input: str = "") -> dict[st
 def attach_visible_turn_record(result: Any, *, player_input: str = "") -> Any:
     if not isinstance(result, dict):
         return result
-    data = deepcopy(result)
+    data = copy_state(result)
     record = build_visible_turn_record(data, player_input=player_input or _s(data.get("player_input")))
     data["visible_turn_record"] = record
     if record["visible_text"]:

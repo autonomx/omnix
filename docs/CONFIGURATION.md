@@ -8,6 +8,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `APCA_API_SECRET_KEY` | string | — | trading | Controls apca api secret key for trading. |
 | `CI` | boolean | `false` | kernel | Controls ci for kernel. |
 | `CONDA_ROOT` | string | — | launcher | Controls conda root for launcher. |
+| `FRED_API_KEY` | string | — | trading | Controls fred api key for trading. |
 | `HERMES_API_KEY` | string | — | chat, providers, research, rpg, trading | Controls hermes api key for chat, providers, research, rpg, trading. |
 | `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | launcher, providers | Controls hermes base url for launcher, providers. |
 | `HERMES_ENABLED` | string | — | chat, launcher, providers, research | Controls hermes enabled for chat, launcher, providers, research. |
@@ -83,6 +84,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_ALPACA_DATA_URL` | string | — | trading | Controls alpaca data url for trading. |
 | `OMNIX_ALPACA_STATUS_STREAM` | string | `1` | trading | Controls alpaca status stream for trading. |
 | `OMNIX_ALPACA_STREAM_URL` | string | `wss://stream.data.alpaca.markets/v2/iex` | trading | Controls alpaca stream url for trading. |
+| `OMNIX_ALPACA_TRADING_URL` | string | — | trading | Controls alpaca trading url for trading. |
 | `OMNIX_ALPACA_WS_PROXY` | string | — | trading | Controls alpaca ws proxy for trading. |
 | `OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK` | string | — | capabilities | Controls approval self allowed max risk for capabilities. |
 | `OMNIX_APP_OPEN_URL` | string | — | launcher | Controls app open url for launcher. |
@@ -96,7 +98,13 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AUDIOBOOK_CLASSIFICATION_LOG_PATH` | string | — | audiobook | Controls audiobook classification log path for audiobook. |
 | `OMNIX_AUDIOBOOK_LOG_DIR` | string | — | audiobook | Controls audiobook log dir for audiobook. |
 | `OMNIX_AUTH_COOKIE_SECURE` | boolean | `false` | security | Controls auth cookie secure for security. |
+| `OMNIX_AUTH_DESKTOP_HANDOFF` | boolean | `false` | security | Controls auth desktop handoff for security. |
+| `OMNIX_AUTH_GUESTS` | boolean | — | security | Controls auth guests for security. |
+| `OMNIX_AUTH_GUEST_DAYS` | integer | `7` | security | Controls auth guest days for security. |
+| `OMNIX_AUTH_LAUNCHER_FIRST_PASSWORD` | boolean | — | security | Controls auth launcher first password for security. |
 | `OMNIX_AUTH_MODE` | string | — | production.py, security | Controls auth mode for production.py, security. |
+| `OMNIX_AUTH_REGISTRATION` | string | — | security | Controls auth registration for security. |
+| `OMNIX_AUTH_REMEMBER_DAYS` | integer | `30` | security | Controls auth remember days for security. |
 | `OMNIX_AUTH_SESSION_IDLE_HOURS` | integer | `12` | security | Controls auth session idle hours for security. |
 | `OMNIX_AUTH_SESSION_MAX_DAYS` | integer | `7` | security | Controls auth session max days for security. |
 | `OMNIX_AVATAR_GENERATION_LOG_PATH` | string | — | characters | Controls avatar generation log path for characters. |
@@ -133,9 +141,14 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
 | `OMNIX_EVENT_LOOP_LAG_MONITOR` | boolean | `1` | gateway | Controls event loop lag monitor for gateway. |
 | `OMNIX_FFMPEG` | string | — | audiobook, tooling | Controls ffmpeg for audiobook, tooling. |
+| `OMNIX_FRED_API_KEY` | string | — | trading | Controls fred api key for trading. |
 | `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | — | kernel, observability | Controls gateway background role for kernel, observability. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
+| `OMNIX_GOOGLE_ALLOWED_DOMAINS` | list | — | security | Controls google allowed domains for security. |
+| `OMNIX_GOOGLE_CLIENT_ID` | string | — | security | Controls google client id for security. |
+| `OMNIX_GOOGLE_CLIENT_SECRET` | string | — | security | Controls google client secret for security. |
+| `OMNIX_GOOGLE_REDIRECT_URI` | string | — | security | Controls google redirect uri for security. |
 | `OMNIX_IBKR_CLIENT_ID` | string | — | trading | Controls ibkr client id for trading. |
 | `OMNIX_IBKR_ENABLED` | string | — | trading | Controls ibkr enabled for trading. |
 | `OMNIX_IBKR_HOST` | string | — | trading | Controls ibkr host for trading. |
@@ -163,6 +176,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_KASA_DEVICE_ALIAS` | string | — | assistant-tools | Controls kasa device alias for assistant-tools. |
 | `OMNIX_KASA_DEVICE_HOST` | string | — | assistant-tools | Controls kasa device host for assistant-tools. |
 | `OMNIX_KASA_ENABLED` | boolean | — | assistant-tools | Controls kasa enabled for assistant-tools. |
+| `OMNIX_KEYCHAIN_SERVICE` | string | `Omnix` | security | Controls keychain service for security. |
 | `OMNIX_LAUNCHER_AUTO_START` | string | `0` | launcher | Controls launcher auto start for launcher. |
 | `OMNIX_LAUNCHER_KILL_PORT` | boolean | `false` | tooling | Controls launcher kill port for tooling. |
 | `OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT` | string | `8` | tooling | Controls launcher port release timeout for tooling. |
@@ -212,16 +226,19 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |
+| `OMNIX_PRODUCT_NAME` | string | — | kernel | Controls product name for kernel. |
 | `OMNIX_PROVIDER_SECRETS_PATH` | string | — | security | Controls provider secrets path for security. |
 | `OMNIX_REQUIRE_ROLE_SEPARATION` | boolean | `false` | kernel | Controls require role separation for kernel. |
 | `OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED` | string | `1` | conversation | Controls research legacy aliases enabled for conversation. |
 | `OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET` | string | — | conversation | Controls research legacy alias sunset for conversation. |
+| `OMNIX_RESOURCES_DIR` | string | — | kernel | Controls resources dir for kernel. |
 | `OMNIX_ROLE_PERMISSIONS` | string | — | security | Controls role permissions for security. |
 | `OMNIX_RPG_DEBUG_LOGS` | string | `1` | rpg | Controls rpg debug logs for rpg. |
 | `OMNIX_RPG_LOG_DIR` | string | — | rpg | Controls rpg log dir for rpg. |
 | `OMNIX_RPG_LOG_MAX_FIELD_CHARS` | string | — | rpg | Controls rpg log max field chars for rpg. |
 | `OMNIX_RPG_LOG_RETENTION_DAYS` | string | — | rpg | Controls rpg log retention days for rpg. |
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
+| `OMNIX_RPG_SNAPSHOT_EVERY` | integer | `20` | rpg | Controls rpg snapshot every for rpg. |
 | `OMNIX_RUN_TOKEN_KEY` | string | — | security | Controls run token key for security. |
 | `OMNIX_S3_ACCESS_KEY_ID` | string | — | kernel | Controls s3 access key id for kernel. |
 | `OMNIX_S3_BUCKET` | string | — | kernel | Controls s3 bucket for kernel. |
@@ -234,6 +251,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_SCHEDULER_THREAD_WORKERS` | integer | `4` | kernel | Controls scheduler thread workers for kernel. |
 | `OMNIX_SECRET_STORE` | string | — | security | Controls secret store for security. |
 | `OMNIX_SECRET_STORE_PATH` | string | — | security | Controls secret store path for security. |
+| `OMNIX_SEC_USER_AGENT` | string | — | trading | Controls sec user agent for trading. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |
 | `OMNIX_SOFTWARE_REVISION` | string | — | kernel | Controls software revision for kernel. |
 | `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |
@@ -246,6 +264,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TIMEZONE` | string | `UTC` | assistant-tools | Controls timezone for assistant-tools. |
 | `OMNIX_TRADE_AUDIT_LOGGING` | string | `1` | trading | Controls trade audit logging for trading. |
 | `OMNIX_TRADE_LOG_DIR` | string | — | trading | Controls trade log dir for trading. |
+| `OMNIX_TRADING_AI_DAILY_CALL_BUDGET` | string | `400` | trading | Controls trading ai daily call budget for trading. |
 | `OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE` | string | `1` | trading | Controls trading ai shadow circuit persistence for trading. |
 | `OMNIX_TRADING_AI_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading ai shadow monitor for trading. |
 | `OMNIX_TRADING_AI_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading ai shadow monitor in tests for trading. |
@@ -256,8 +275,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_ALERT_INTERVAL_SECONDS` | string | `30` | trading | Controls trading alert interval seconds for trading. |
 | `OMNIX_TRADING_ALERT_MONITOR` | boolean | `1` | trading | Controls trading alert monitor for trading. |
 | `OMNIX_TRADING_ALERT_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading alert monitor in tests for trading. |
+| `OMNIX_TRADING_BREADTH_FEED` | string | `sip` | trading | Controls trading breadth feed for trading. |
 | `OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading deep recovery shadow monitor for trading. |
 | `OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading deep recovery shadow monitor in tests for trading. |
+| `OMNIX_TRADING_DESKTOP_NOTIFY_SECRET` | string | — | trading | Controls trading desktop notify secret for trading. |
+| `OMNIX_TRADING_DESKTOP_NOTIFY_URL` | string | — | trading | Controls trading desktop notify url for trading. |
 | `OMNIX_TRADING_DYNAMIC_DISCOVERY` | boolean | `1` | trading | Controls trading dynamic discovery for trading. |
 | `OMNIX_TRADING_DYNAMIC_DISCOVERY_IN_TESTS` | boolean | `0` | trading | Controls trading dynamic discovery in tests for trading. |
 | `OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS` | string | `3` | trading | Controls trading execution observation interval seconds for trading. |
@@ -273,6 +295,12 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_INTERDAY_LEARNING_IN_TESTS` | boolean | `0` | trading | Controls trading interday learning in tests for trading. |
 | `OMNIX_TRADING_LIQUIDATION_COLLECTOR` | boolean | `1` | trading | Controls trading liquidation collector for trading. |
 | `OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS` | boolean | `0` | trading | Controls trading liquidation collector in tests for trading. |
+| `OMNIX_TRADING_NOTIFICATION_MONITOR` | boolean | `1` | trading | Controls trading notification monitor for trading. |
+| `OMNIX_TRADING_NOTIFICATION_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading notification monitor in tests for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION` | boolean | `1` | trading | Controls trading overnight shadow autoprovision for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_AUTOPROVISION_IN_TESTS` | boolean | `0` | trading | Controls trading overnight shadow autoprovision in tests for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR` | boolean | `1` | trading | Controls trading overnight shadow monitor for trading. |
+| `OMNIX_TRADING_OVERNIGHT_SHADOW_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading overnight shadow monitor in tests for trading. |
 | `OMNIX_TRADING_PAPER_ACTIVE_INTERVAL_SECONDS` | string | `1` | trading | Controls trading paper active interval seconds for trading. |
 | `OMNIX_TRADING_PAPER_INTERVAL_SECONDS` | string | `15` | trading | Controls trading paper interval seconds for trading. |
 | `OMNIX_TRADING_PAPER_MONITOR` | boolean | `1` | trading | Controls trading paper monitor for trading. |
@@ -293,8 +321,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_RESEARCH_UNRESOLVED_RETRY_SECONDS` | integer | `300` | trading | Controls trading research unresolved retry seconds for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR` | boolean | `1` | trading | Controls trading session reconciliation monitor for trading. |
 | `OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading session reconciliation monitor in tests for trading. |
-| `OMNIX_TRADING_SOLANA_AI_MONITOR` | boolean | `0` | trading | Controls trading solana ai monitor for trading. |
-| `OMNIX_TRADING_SOLANA_AI_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading solana ai monitor in tests for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR` | boolean | `1` | trading | Controls trading strategy monitor for trading. |
 | `OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading strategy monitor in tests for trading. |
 | `OMNIX_TRADING_UNIVERSE_ARCHIVER` | boolean | `1` | trading | Controls trading universe archiver for trading. |
@@ -311,6 +337,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TTS_SYNTHESIS_WORKERS` | integer | `8` | tooling | Controls tts synthesis workers for tooling. |
 | `OMNIX_TTS_URL` | string | `http://127.0.0.1:5101` | launcher | Controls tts url for launcher. |
 | `OMNIX_TTS_WARMUP_SPEAKER` | string | — | voice | Controls tts warmup speaker for voice. |
+| `OMNIX_VAPID_SUBJECT` | string | — | trading | Controls vapid subject for trading. |
 | `OMNIX_VISION_API_KEY` | string | — | providers | Controls vision api key for providers. |
 | `OMNIX_VISION_BASE_URL` | string | — | providers | Controls vision base url for providers. |
 | `OMNIX_VISION_MODEL` | string | — | providers | Controls vision model for providers. |

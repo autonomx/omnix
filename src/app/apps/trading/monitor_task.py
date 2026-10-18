@@ -19,11 +19,18 @@ from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
 
 from .trade_logging import trade_log
 
+# A trading cycle fetches bars and may call a model for dozens of candidates;
+# at the open that legitimately takes longer than a minute.
+TRADING_MONITOR_TIMEOUT_SECONDS = 300.0
+
 
 class ScheduledTradingMonitor:
     """Cadence, error reporting and diagnostics shared by every trading monitor."""
 
     interval_seconds: float = 60.0
+    # Longest a single cycle may run before the scheduler cancels it; None
+    # means TRADING_MONITOR_TIMEOUT_SECONDS (or the interval, when longer).
+    timeout_seconds: float | None = None
     last_error: str | None = None
     # True once the scheduler runs this monitor in this process.
     scheduled: bool = False
@@ -44,6 +51,11 @@ class ScheduledTradingMonitor:
         """Run the next cycle at the next tick instead of waiting for the interval."""
         self._wake_requested = True
 
+    def run_timeout_seconds(self) -> float:
+        if self.timeout_seconds is not None:
+            return float(self.timeout_seconds)
+        return max(TRADING_MONITOR_TIMEOUT_SECONDS, self.tick_seconds())
+
     def cycle_due(self, now: float) -> bool:
         if self._wake_requested or self._last_cycle_at is None:
             return True
@@ -56,7 +68,7 @@ class ScheduledTradingMonitor:
         self._wake_requested = False
         self._last_cycle_at = now
 
-    def error_log_fields(self) -> dict[str, object]:
+    def error_log_fields(self) -> dict[str, Any]:
         return {"execution_authority": False}
 
     def record_cycle_error(self, exc: Exception) -> None:
@@ -88,8 +100,8 @@ class SingleFlightTasks:
         return True
 
     def _finished(self, task: asyncio.Task[Any]) -> None:
-        if not task.cancelled() and task.exception() is not None:
-            self.on_error(task.exception())
+        if not task.cancelled() and (error := task.exception()) is not None:
+            self.on_error(error)
 
     async def close(self) -> None:
         running = [task for task in self._tasks.values() if not task.done()]
@@ -124,8 +136,9 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
         monitor.begin_cycle(now)
         return True
 
+    run: Callable[[TaskContext], Any]
     if inspect.iscoroutinefunction(run_once):
-        async def run(_task_context: TaskContext) -> None:
+        async def run_async(_task_context: TaskContext) -> None:
             if not due():
                 return
             try:
@@ -134,9 +147,10 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
                 monitor.record_cycle_error(exc)
                 raise
 
+        run = run_async
         executor = "async"
     else:
-        def run(_task_context: TaskContext) -> None:
+        def run_sync(_task_context: TaskContext) -> None:
             if not due():
                 return
             try:
@@ -147,6 +161,7 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
             if inspect.isawaitable(result):
                 raise TypeError(f"Synchronous trading monitor {task.name} returned an awaitable")
 
+        run = run_sync
         executor = "thread"
 
     startup = task.startup
@@ -166,7 +181,10 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
         run=run,
         interval_seconds=max(0.25, interval_seconds),
         jitter_seconds=min(1.0, max(0.0, interval_seconds * 0.05)),
-        timeout_seconds=max(60.0, interval_seconds),
+        timeout_seconds=monitor.run_timeout_seconds(),
+        # One slow cycle (a provider stall at the open) must not stop the
+        # monitor for the rest of the process lifetime; the next cycle retries.
+        disable_on_timeout=False,
         executor=executor,
         enabled=task.enabled,
         on_startup=(*startup, started),
@@ -174,4 +192,10 @@ def scheduled_task_spec(task: TradingMonitorTask) -> ScheduledTaskSpec:
     )
 
 
-__all__ = ["ScheduledTradingMonitor", "SingleFlightTasks", "TradingMonitorTask", "scheduled_task_spec"]
+__all__ = [
+    "TRADING_MONITOR_TIMEOUT_SECONDS",
+    "ScheduledTradingMonitor",
+    "SingleFlightTasks",
+    "TradingMonitorTask",
+    "scheduled_task_spec",
+]

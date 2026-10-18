@@ -339,3 +339,30 @@ def test_general_recovery_compat_keeps_unresolved_gap_partial():
     )
     assert result.status == "PARTIAL"
     assert len(result.unresolved_starts) == 2
+
+
+def test_latest_clean_bars_can_step_over_a_single_missing_bar():
+    from datetime import date as _date, datetime as _datetime, timedelta as _timedelta, timezone as _timezone
+    from decimal import Decimal as _Decimal
+
+    from app.apps.trading.market_data_recovery import latest_clean_bars
+    from app.apps.trading.models import MarketBar as _MarketBar
+
+    session_open = _datetime(2026, 9, 17, 13, 30, tzinfo=_timezone.utc)
+
+    def bar(index):
+        start = session_open + _timedelta(minutes=5 * index)
+        return _MarketBar(
+            instrument_id="equity:NASDAQ:TEST", interval="5m", start_time=start, end_time=start + _timedelta(minutes=5),
+            open=_Decimal("10"), high=_Decimal("10"), low=_Decimal("10"), close=_Decimal("10"), volume=_Decimal("1"),
+            provider="test", session="regular",
+        )
+
+    # A two-bar hole after bar 2 and a one-bar hole after bar 6.
+    bars = [bar(index) for index in (0, 1, 2, 5, 6, 8, 9)]
+    as_of = session_open + _timedelta(minutes=50)
+    kwargs = dict(session_date=_date(2026, 9, 17), interval="5m", as_of=as_of)
+
+    assert [item.start_time for item in latest_clean_bars(bars, **kwargs)] == [bar(8).start_time, bar(9).start_time]
+    bridged = latest_clean_bars(bars, bridge_single_missing=True, **kwargs)
+    assert [item.start_time for item in bridged] == [bar(index).start_time for index in (5, 6, 8, 9)]

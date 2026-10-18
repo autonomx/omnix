@@ -2,7 +2,8 @@
 
 The file is local (ignored by git); ``launcher.example.toml`` beside it is the
 template. Each Python interpreter resolves, in order, from its environment
-variable (``RPG_FLUX_PYTHON``, ``RPG_TTS_PYTHON``, ``RPG_STT_PYTHON``), an
+variable (``RPG_FLUX_PYTHON``, ``RPG_TTS_PYTHON``, ``RPG_STT_PYTHON``,
+``OMNIX_FISH_PYTHON``), an
 explicit path in the file, or the named Conda environment under
 ``conda_root`` (``CONDA_ROOT``, else ``~/miniconda3``).
 """
@@ -23,6 +24,8 @@ _INTERPRETERS = {
     "app": ("RPG_FLUX_PYTHON", "rpg-flux"),
     "tts": ("RPG_TTS_PYTHON", "rpg-tts"),
     "stt": ("RPG_STT_PYTHON", "rpg-stt"),
+    # Fish Audio S2 Pro's API server, started by the fish-s2-pro TTS provider.
+    "fish": ("OMNIX_FISH_PYTHON", "fish-speech"),
 }
 
 

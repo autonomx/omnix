@@ -1,4 +1,5 @@
 import type { CoreIndicatorId, CoreIndicatorInstance } from './coreIndicators';
+import { PRODUCT_NAME } from '../../../shared/productIdentity';
 
 const indicatorPineTitles: Partial<Record<CoreIndicatorId, string>> = {
   sma: 'Simple Moving Average',
@@ -199,9 +200,9 @@ const indicatorPineTemplates: Partial<Record<CoreIndicatorId, string>> = {
     '//@version=6',
     'indicator("Stochastic RSI", shorttitle="Stoch RSI")',
     'rsiLength = input.int({{PERIOD}}, "RSI Length", minval=1)',
-    'stochLength = input.int(14, "Stochastic Length", minval=1)',
-    'smoothK = input.int(3, "Smooth K", minval=1)',
-    'smoothD = input.int(3, "Smooth D", minval=1)',
+    'stochLength = input.int({{PERIOD}}, "Stochastic Length", minval=1)',
+    'smoothK = input.int({{FAST}}, "Smooth K", minval=1)',
+    'smoothD = input.int({{SIGNAL}}, "Smooth D", minval=1)',
     'rsi = ta.rsi(close, rsiLength)',
     'k = ta.sma(ta.stoch(rsi, rsi, rsi, stochLength), smoothK)',
     'd = ta.sma(k, smoothD)',
@@ -253,7 +254,7 @@ export function indicatorPineSource(indicator: CoreIndicatorInstance): string {
   if (!template) {
     return script([
       '//@version=6',
-      `// ${indicatorPineTitle(indicator.id)} is implemented by the Omnix deterministic chart-pattern engine.`,
+      `// ${indicatorPineTitle(indicator.id)} is implemented by the ${PRODUCT_NAME} deterministic chart-pattern engine.`,
       '// It is a native study and does not currently have a Pine-equivalent source template.',
     ]);
   }

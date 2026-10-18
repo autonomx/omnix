@@ -1,12 +1,12 @@
-from app.apps.rpg.session.genesis.world_forge_causal_presentation import (
+from app.apps.rpg.genesis.forge.world_forge_causal_presentation import (
     project_causal_link_presentations,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
-from app.apps.rpg.worlds.providers.world_forge import _payload
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.genesis.worlds.providers.world_forge import _payload
 
 
 def _causal_node():

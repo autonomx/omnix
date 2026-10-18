@@ -668,6 +668,53 @@ def test_timeout_fails_closed_after_callback_finishes_without_rescheduling():
     assert database.keys == set()
 
 
+def test_timeout_without_disable_counts_one_failed_run_and_keeps_the_schedule():
+    database = _FakeDatabase()
+    calls = []
+
+    async def run(_context: TaskContext):
+        calls.append("started")
+        if calls.count("started") == 1:
+            try:
+                await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                calls.append("cancelled")
+                raise
+
+    scheduler = SchedulerRuntime(
+        database,
+        "workspace-a",
+        capabilities=_capabilities(),
+        execution_scope=_execution_scope,
+        startup_jitter_seconds=0,
+        poll_seconds=0.005,
+    )
+    scheduler.register_task(
+        ScheduledTaskSpec(
+            task_id="test.timeout_retry",
+            run=run,
+            interval_seconds=0.005,
+            timeout_seconds=0.02,
+            disable_on_timeout=False,
+        )
+    )
+    async def scenario():
+        await scheduler.startup()
+        deadline = time.monotonic() + 5
+        while calls.count("started") < 3 and time.monotonic() < deadline:
+            await asyncio.sleep(0.005)
+        assert scheduler.diagnostics()["owned_tasks"] == ["test.timeout_retry"]
+        await scheduler.shutdown()
+
+    asyncio.run(scenario())
+    metric = scheduler.diagnostics()["tasks"]["test.timeout_retry"]
+    assert calls[:3] == ["started", "cancelled", "started"]
+    assert calls.count("started") >= 3
+    assert metric["timeout_count"] == 1
+    assert metric["failure_count"] == 1
+    assert database.keys == set()
+
+
 def test_per_workspace_tasks_run_once_per_active_workspace_as_its_tenant():
     """Recovery tasks serve every workspace, not only the process's (WP-4.2)."""
     from app.runtime.tenant_context import TenantContext, current_tenant

@@ -12,6 +12,7 @@ from app.persistence.asset_repository import PostgresAssetRepository
 from app.persistence.tenant import TenantContext
 
 from .hashing import canonical_json
+from .speech_exclusions import chapter_removed_sql
 
 class PostgresAudiobookProjectRepository:
     def __init__(self, connection: Any) -> None:
@@ -91,6 +92,29 @@ class PostgresAudiobookProjectRepository:
                 WHERE workspace_id = %s AND id = %s FOR UPDATE""",
             (context.workspace_id, project_id),
         ).fetchone()
+
+    def revision_and_run(self, context: TenantContext, project_id: str) -> Any:
+        """``(current_source_revision_id, current_render_run_id)`` for a read."""
+        return self.connection.execute(
+            """SELECT current_source_revision_id,
+                      settings->>'current_render_run_id'
+                 FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+
+    def chapter_assemblies(self, context: TenantContext,
+                           assembly_ids: Sequence[str]) -> dict[str, tuple[str, str, float]]:
+        """``assembly_id -> (audio_asset_id, audio_checksum, duration_seconds)``."""
+        if not assembly_ids:
+            return {}
+        rows = self.connection.execute(
+            """SELECT id, audio_asset_id, audio_checksum, duration_seconds
+                 FROM omnix_audiobook_chapter_assemblies
+                WHERE workspace_id = %s AND id = ANY(%s)""",
+            (context.workspace_id, list(assembly_ids)),
+        ).fetchall()
+        return {str(row[0]): (str(row[1]), str(row[2]), float(row[3] or 0.0)) for row in rows}
 
     def lock_render_source(self, context: TenantContext, project_id: str) -> Any:
         """``(current_source_revision_id, state)``, locked."""
@@ -225,6 +249,53 @@ class PostgresAudiobookProjectRepository:
                       updated_at = CURRENT_TIMESTAMP
                 WHERE workspace_id = %s AND id = %s""",
             (mode, context.workspace_id, project_id),
+        )
+
+    def performance(self, context: TenantContext, project_id: str) -> Any:
+        """The stored ``settings.performance`` object, or None."""
+        row = self.connection.execute(
+            """SELECT settings->'performance' FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        return row[0] if row else None
+
+    def project_speaker_ids(self, context: TenantContext, project_id: str) -> set[str]:
+        rows = self.connection.execute(
+            """SELECT id FROM omnix_audiobook_speakers
+                WHERE workspace_id = %s AND project_id = %s""",
+            (context.workspace_id, project_id),
+        ).fetchall()
+        return {str(row[0]) for row in rows}
+
+    def set_setting(self, context: TenantContext, project_id: str, key: str, value: str) -> bool:
+        """Store one project setting that does not affect rendered audio."""
+        row = self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET settings = jsonb_set(settings, ARRAY[%s], to_jsonb(%s::text), true),
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                RETURNING id""",
+            (key, value, context.workspace_id, project_id),
+        ).fetchone()
+        return row is not None
+
+    def set_performance(self, context: TenantContext, project_id: str, performance: str) -> None:
+        """Store the book's performance (JSON) and drop the render run it invalidates."""
+        self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET settings = jsonb_set(
+                          settings - 'current_render_run_id',
+                          '{performance}', %s::jsonb, true
+                      ),
+                      state = CASE
+                          WHEN state IN ('rendering', 'mastering', 'rendered', 'ready_to_export', 'exported')
+                          THEN 'ready_to_render' ELSE state END,
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s""",
+            (performance, context.workspace_id, project_id),
         )
 
     def set_state_clearing_render(self, context: TenantContext, project_id: str,
@@ -441,6 +512,42 @@ class PostgresAudiobookProjectRepository:
                 FOR UPDATE OF p""",
             (context.workspace_id, project_id, span_id),
         ).fetchone()
+
+    def lock_current_chapter(self, context: TenantContext, project_id: str,
+                             chapter_id: str) -> Any:
+        """A chapter of the current source, with the project locked.
+
+        ``(canonical_text, canonical_hash, ordinal, current_render_run_id)``.
+        """
+        return self.connection.execute(
+            """SELECT c.canonical_text, c.canonical_hash, c.ordinal,
+                      p.settings->>'current_render_run_id'
+                 FROM omnix_audiobook_projects p
+                 JOIN omnix_audiobook_chapters c ON c.workspace_id = p.workspace_id
+                  AND c.source_revision_id = p.current_source_revision_id
+                WHERE p.workspace_id = %s AND p.id = %s AND c.id = %s AND p.deleted_at IS NULL
+                FOR UPDATE OF p""",
+            (context.workspace_id, project_id, chapter_id),
+        ).fetchone()
+
+    def sync_review_state(self, context: TenantContext, project_id: str) -> None:
+        """A classified project needs review while an issue is open outside removed chapters."""
+        self.connection.execute(
+            """UPDATE omnix_audiobook_projects p
+                  SET state = CASE WHEN EXISTS (
+                          SELECT 1 FROM omnix_audiobook_review_issues i
+                            JOIN omnix_audiobook_annotations a ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
+                            JOIN omnix_audiobook_spans s ON s.workspace_id = a.workspace_id AND s.id = a.span_id
+                            JOIN omnix_audiobook_chapters c ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                           WHERE i.workspace_id = p.workspace_id AND i.status = 'open'
+                             AND c.source_revision_id = p.current_source_revision_id
+                             AND NOT """ + chapter_removed_sql("c", "p.id") + """
+                      ) THEN 'review_required' ELSE 'ready_to_render' END,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE p.workspace_id = %s AND p.id = %s
+                  AND p.state IN ('review_required', 'ready_to_render')""",
+            (context.workspace_id, project_id),
+        )
 
     def has_stale_spans(self, context: TenantContext, source_revision_id: str,
                         detector_version: str) -> bool:

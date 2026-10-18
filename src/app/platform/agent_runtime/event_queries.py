@@ -19,6 +19,11 @@ from .contracts import AgentEvent
 _FALLBACK_LIMIT = 5000
 
 
+def json_object(value: object) -> dict[str, Any]:
+    """``value`` when it is a JSON object (an event payload field), else an empty one."""
+    return value if isinstance(value, dict) else {}
+
+
 def all_events(repository: Any, run_id: str) -> list[AgentEvent]:
     iterate = getattr(repository, "iter_events", None)
     if callable(iterate):

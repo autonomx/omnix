@@ -7,6 +7,9 @@ const mockedApi = vi.hoisted(() => ({
   saveCoinMarketCapCredentials: vi.fn(),
   ibkrSettings: vi.fn(),
   saveIbkrSettings: vi.fn(),
+  // The FRED section (TVP-10.5) loads its own status.
+  fredCredentials: vi.fn(async () => ({ provider: 'fred', configured: false, api_key_masked: '', api_key_source: 'missing', api_key_editable: true, storage: 'Windows DPAPI user store' })),
+  saveFredCredentials: vi.fn(),
 }));
 
 vi.mock('./tradingMarketDataApi', () => ({ tradingMarketDataApi: mockedApi }));

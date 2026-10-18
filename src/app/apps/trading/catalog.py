@@ -159,6 +159,20 @@ COINMARKETCAP_POLICY = ProviderPolicy(
     ),
 )
 
+FRED_POLICY = ProviderPolicy(
+    usage_scope=UsageScope.PERSONAL_LOCAL,
+    redistribution_allowed=False,
+    authentication_required=True,
+    is_official_api=True,
+    realtime_scope="published economic observations",
+    delay_seconds=86_400,
+    terms_reference="https://fred.stlouisfed.org/docs/api/terms_of_use.html",
+    supported_asset_classes=(AssetClass.ECONOMIC,),
+    supported_intervals=("1d",),
+    history_depth="full",
+    rate_limit_policy="FRED API request limits with Omnix bounded provider semaphore and cache",
+)
+
 POLICIES = {
     "binance": BINANCE_POLICY,
     "yahoo": YAHOO_POLICY,
@@ -169,6 +183,7 @@ POLICIES = {
     "kraken": KRAKEN_POLICY,
     "hyperliquid": HYPERLIQUID_POLICY,
     "coinmarketcap": COINMARKETCAP_POLICY,
+    "fred": FRED_POLICY,
 }
 
 
@@ -534,6 +549,72 @@ def _restore_dynamic_commodity(instrument_id: str) -> CanonicalInstrument | None
     return instrument
 
 
+# Economic series (TVP-10.5) offered by name before a FRED search: US prices, jobs, output, rates and money.
+ECONOMIC_SERIES: dict[str, str] = {
+    "CPIAUCSL": "Consumer Price Index (CPI), all items",
+    "CPILFESL": "Core CPI (less food and energy)",
+    "PCEPILFE": "Core PCE price index",
+    "UNRATE": "Unemployment rate",
+    "PAYEMS": "Nonfarm payrolls",
+    "ICSA": "Initial jobless claims",
+    "GDP": "Gross domestic product",
+    "GDPC1": "Real gross domestic product",
+    "INDPRO": "Industrial production",
+    "RSAFS": "Retail sales",
+    "HOUST": "Housing starts",
+    "UMCSENT": "Consumer sentiment (University of Michigan)",
+    "FEDFUNDS": "Federal funds effective rate",
+    "DGS1MO": "1-month Treasury yield",
+    "DGS3MO": "3-month Treasury yield",
+    "DGS6MO": "6-month Treasury yield",
+    "DGS1": "1-year Treasury yield",
+    "DGS2": "2-year Treasury yield",
+    "DGS5": "5-year Treasury yield",
+    "DGS10": "10-year Treasury yield",
+    "DGS30": "30-year Treasury yield",
+    "T10Y2Y": "10-year minus 2-year Treasury spread",
+    "T10Y3M": "10-year minus 3-month Treasury spread",
+    "MORTGAGE30US": "30-year mortgage rate",
+    "M2SL": "M2 money stock",
+    "WALCL": "Federal Reserve total assets",
+    "DTWEXBGS": "Broad US dollar index",
+    "BAMLH0A0HYM2": "High-yield bond spread",
+}
+_FRED_SERIES_TOKEN = re.compile(r"^[A-Z0-9_]{1,40}$")
+
+
+def economic_instrument(series_id: str, title: str | None = None) -> CanonicalInstrument:
+    """A FRED series as a chart symbol, ``economic:FRED:<series>``: research data, never traded."""
+    return CanonicalInstrument(
+        instrument_id=f"economic:FRED:{series_id}",
+        asset_class=AssetClass.ECONOMIC,
+        instrument_type=InstrumentType.INDEX,
+        venue="FRED",
+        venue_symbol=series_id,
+        display_symbol=series_id,
+        exchange_timezone="America/New_York",
+        session_calendar="24x7",
+        price_scale=10_000,
+        minimum_tick=Decimal("0.0001"),
+        name=(title or ECONOMIC_SERIES.get(series_id) or None),
+    )
+
+
+def register_economic_series(series_id: str, title: str | None = None) -> CanonicalInstrument | None:
+    clean = series_id.strip().upper()
+    if not _FRED_SERIES_TOKEN.fullmatch(clean):
+        return None
+    instrument = economic_instrument(clean, title)
+    return register_instrument(instrument, (_binding(instrument, "fred", clean, FeedType.HISTORICAL_DAILY),))
+
+
+def _restore_dynamic_economic(instrument_id: str) -> CanonicalInstrument | None:
+    parts = instrument_id.split(":")
+    if len(parts) != 3 or parts[:2] != ["economic", "FRED"]:
+        return None
+    return register_economic_series(parts[2])
+
+
 def register_instrument(
     instrument: CanonicalInstrument,
     bindings: tuple[ProviderBinding, ...] = (),
@@ -618,6 +699,7 @@ def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
         _restore_dynamic_equity(instrument_id)
         or _restore_dynamic_commodity(instrument_id)
         or _restore_dynamic_crypto(instrument_id)
+        or _restore_dynamic_economic(instrument_id)
     )
 
 
@@ -643,6 +725,8 @@ def binding_by_id(binding_id: str) -> ProviderBinding | None:
             _restore_dynamic_equity(parts[2])
     elif len(parts) == 3 and parts[0] == "binance":
         _restore_dynamic_crypto(parts[2])
+    elif len(parts) == 3 and parts[0] == "fred":
+        _restore_dynamic_economic(parts[2])
     with _catalog_lock:
         _prune_dynamic_catalog_locked(time.monotonic())
         dynamic = _dynamic_bindings.get(binding_id)
@@ -656,6 +740,7 @@ def bindings_for_instrument(instrument_id: str) -> list[ProviderBinding]:
     _restore_dynamic_equity(instrument_id)
     _restore_dynamic_commodity(instrument_id)
     _restore_dynamic_crypto(instrument_id)
+    _restore_dynamic_economic(instrument_id)
     return [item for item in all_bindings() if item.instrument_id == instrument_id]
 
 

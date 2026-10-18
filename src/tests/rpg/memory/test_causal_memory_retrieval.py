@@ -1,5 +1,5 @@
-from app.apps.rpg.memory.causal_memory import add_causal_memory, make_causal_memory
-from app.apps.rpg.memory.causal_retrieval import retrieve_causal_memories
+from app.apps.rpg.world.memory.causal_memory import add_causal_memory, make_causal_memory
+from app.apps.rpg.world.memory.causal_retrieval import retrieve_causal_memories
 
 
 def _add(simulation_state, *, event_id, subject_id="bran", actor_id="player", target_id="", location_id="tavern_common_room", tags=None, turn_index=1):

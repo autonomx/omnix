@@ -130,3 +130,34 @@ def test_error_code_keeps_only_the_leading_code(message, code) -> None:
     from app.errors import error_code
 
     assert error_code(RuntimeError(message), "fallback_code") == code
+
+
+def test_validation_errors_redact_secret_named_values() -> None:
+    from app.errors import redact_validation_error
+
+    body = {"alert_id": "a", "webhook_secret": "s3cret", "nested": {"api_key": "k", "password": "p", "keep": 1}}
+    model_error = redact_validation_error({"type": "value_error", "loc": ("body",), "msg": "bad", "input": body})
+    assert model_error["input"] == {"alert_id": "a", "webhook_secret": "[redacted]", "nested": {"api_key": "[redacted]", "password": "[redacted]", "keep": 1}}
+    assert body["webhook_secret"] == "s3cret"  # the original is untouched
+    field_error = redact_validation_error({"type": "string_too_long", "loc": ("body", "webhook_secret"), "msg": "long", "input": "s3cret"})
+    assert field_error["input"] == "[redacted]"
+    plain = {"type": "missing", "loc": ("body", "alert_id"), "msg": "missing", "input": {"alert_id": None}}
+    assert redact_validation_error(plain) == plain
+
+
+def test_validation_errors_redact_credential_headers_and_webhook_urls() -> None:
+    from app.errors import redact_validation_error
+
+    body = {
+        "headers": {"Authorization": "Bearer x", "X-API-Key": "k", "private_key": "p"},
+        "parameters": {"delivery": {"webhook": {"url": "https://hooks.example.com/T/B/token"}}},
+        "url": "https://example.com/not-a-webhook",
+    }
+    redacted = redact_validation_error({"type": "value_error", "loc": ("body",), "msg": "bad", "input": body})["input"]
+    assert redacted["headers"] == {"Authorization": "[redacted]", "X-API-Key": "[redacted]", "private_key": "[redacted]"}
+    assert redacted["parameters"]["delivery"]["webhook"]["url"] == "[redacted]"
+    assert redacted["url"] == "https://example.com/not-a-webhook"
+    field = {"type": "string_too_long", "loc": ("body", "parameters", "delivery", "webhook", "url"), "msg": "long", "input": "https://h/t"}
+    assert redact_validation_error(field)["input"] == "[redacted]"
+    webhook = {"type": "extra_forbidden", "loc": ("body", "parameters", "delivery", "webhook"), "msg": "x", "input": {"url": "https://h/t"}}
+    assert redact_validation_error(webhook)["input"] == {"url": "[redacted]"}

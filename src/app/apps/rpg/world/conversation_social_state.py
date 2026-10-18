@@ -8,7 +8,7 @@ from app.apps.rpg.world.npc_goal_state import (
     record_goal_influence,
     response_style_from_goal,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 MAX_RECENT_PLAYER_REPLIES_PER_NPC = 8   # Bundle I cap
 MAX_RECENT_CONVERSATION_TOPICS_PER_NPC = 12

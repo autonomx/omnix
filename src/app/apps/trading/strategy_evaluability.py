@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .market_evidence import (
@@ -154,7 +154,7 @@ def resolve_causal_equity_bars(
             )
         except Exception as exc:
             primary = []
-            primary_error = f"{type(exc).__name__}: {exc}"
+            primary_error: str | None = f"{type(exc).__name__}: {exc}"
         else:
             primary = list(recovered.bars)
             primary_error = recovered.report.primary_error
@@ -173,7 +173,7 @@ def resolve_causal_equity_bars(
             # IEX ladder. Never issue a second hidden fallback request here.
             return primary, assessment, primary_error
 
-    primary_error: str | None = None
+    primary_error = None
     try:
         response = market_service.bars(
             candidate.instrument_id,
@@ -349,7 +349,7 @@ def assess_session_evaluability(
             and all(candidate.market_data_complete for candidate in universe.candidates)
         )
     return SessionEvaluabilityAssessment(
-        status=status,
+        status=cast(Any, status),
         source_member_count=len(source_members),
         accounted_source_member_count=accounted,
         materialized_candidate_count=len(universe.candidates),

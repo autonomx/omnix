@@ -166,3 +166,27 @@ def test_optimizer_never_caches_current_evidence_without_freshness_validation() 
     plan = optimize_task_graph(graph)
 
     assert plan.cache_keys == {}
+
+
+def _timeless_read(node_id: str, package: str) -> TaskNode:
+    return _release_node(
+        node_id,
+        _release_requirement(f"{node_id}-release", package).model_copy(
+            update={"freshness": "timeless", "max_age_seconds": None}
+        ),
+    )
+
+
+def test_a_cacheable_node_with_two_inputs_gets_one_cache_key_whatever_the_edge_order() -> None:
+    react, vue, summary = _timeless_read("react", "react"), _timeless_read("vue", "vue"), _timeless_read("summary", "svelte")
+    edges = [
+        TaskEdge(source="react", target="summary", kind="data"),
+        TaskEdge(source="vue", target="summary", kind="data"),
+    ]
+    forward = TaskGraph(user_request_digest="request", nodes=[react, vue, summary], edges=edges)
+    backward = TaskGraph(user_request_digest="request", nodes=[react, vue, summary], edges=edges[::-1])
+
+    keys = optimize_task_graph(forward).cache_keys
+
+    assert "summary" in keys
+    assert keys == optimize_task_graph(backward).cache_keys

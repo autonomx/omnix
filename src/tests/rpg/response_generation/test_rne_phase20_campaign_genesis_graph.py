@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.apps.rpg.session.genesis.compiler import compile_campaign_genesis
-from app.apps.rpg.session.genesis.contract import CampaignGenesisContract
-from app.apps.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.genesis.forge.compiler import compile_campaign_genesis
+from app.apps.rpg.genesis.forge.contract import CampaignGenesisContract
+from app.apps.rpg.genesis.forge.world_forge_contract import (
     build_campaign_topic_graph,
     world_forge_depth_profile,
 )

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.tenant import TenantContext
 
@@ -110,7 +110,7 @@ class PostgresResourceGrantRepository:
                 max_cost=float(row[5]) if row[5] is not None else None,
                 max_wall_time_seconds=int(row[6]),
             ),
-            state=str(row[7]),
+            state=cast(Any, str(row[7])),
             created_at=row[8],
             released_at=row[9],
         )
@@ -238,7 +238,7 @@ class PostgresResourceGrantRepository:
         self,
         parent: AgentRunSnapshot,
         *,
-        parent_usage: dict[str, object],
+        parent_usage: dict[str, Any],
         protected_fraction: float = 0.0,
     ) -> dict[str, int | float | None]:
         child = self.reserved_child_resources(parent.run_id)
@@ -294,7 +294,7 @@ class PostgresResourceGrantRepository:
         parent: AgentRunSnapshot,
         child_limits: RunLimits,
         *,
-        parent_usage: dict[str, object],
+        parent_usage: dict[str, Any],
         protected_fraction: float = 0.0,
     ) -> None:
         available = self.available_capacity(

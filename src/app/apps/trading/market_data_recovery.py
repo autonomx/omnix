@@ -492,7 +492,9 @@ def latest_clean_bars(
     as_of: datetime | None = None,
     knowledge_mode: KnowledgeMode = "live",
     knowledge_cutoff: datetime | None = None,
+    bridge_single_missing: bool = False,
 ) -> list[MarketBar]:
+    """The latest unbroken run of bars; ``bridge_single_missing`` steps over one-bar holes."""
     rows = deduplicate_bars(
         finalized_session_bars(
             bars,
@@ -506,8 +508,9 @@ def latest_clean_bars(
     if not rows:
         return []
     duration = interval_duration(interval)
+    steps = {duration, duration * 2} if bridge_single_missing else {duration}
     start = len(rows) - 1
-    while start > 0 and rows[start].start_time == rows[start - 1].start_time + duration:
+    while start > 0 and rows[start].start_time - rows[start - 1].start_time in steps:
         start -= 1
     return rows[start:]
 

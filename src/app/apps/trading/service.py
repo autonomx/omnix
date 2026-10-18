@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import AsyncIterator
+from collections import OrderedDict
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from threading import Lock
-from typing import Any
+from time import perf_counter
+from typing import Any, Literal
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
@@ -31,12 +34,109 @@ from .market_data_window import (
 from .providers.binance import BinanceMarketDataProvider
 from .providers.alpaca_iex_status import default_alpaca_iex_status_cache
 from .providers.bar_semantics import interval_duration
+from .providers.errors import ProviderDataUnavailableError
 from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
 from .streaming.manager import SharedBarStreamHub, SharedSubscriptionManager, StreamingBarUpdate
 from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
 from app.apps.trading.us_equity_calendar import EASTERN
 from app.apps.trading.us_equity_calendar import regular_close_time
+
+
+RECOVERY_STAGES = ("total", "reused", "primary", "yahoo_evidence", "yahoo_exact", "ibkr", "iex")
+
+
+class RecoveryStageMetrics:
+    """Process-wide call counts and seconds per bar-recovery stage (diagnostics only)."""
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._calls = dict.fromkeys(RECOVERY_STAGES, 0)
+        self._seconds = dict.fromkeys(RECOVERY_STAGES, 0.0)
+
+    def add(self, stage: str, seconds: float) -> None:
+        with self._lock:
+            self._calls[stage] += 1
+            self._seconds[stage] += max(0.0, seconds)
+
+    @contextmanager
+    def timed(self, stage: str) -> Iterator[None]:
+        started = perf_counter()
+        try:
+            yield
+        finally:
+            self.add(stage, perf_counter() - started)
+
+    def snapshot(self) -> dict[str, dict[str, float]]:
+        with self._lock:
+            return {
+                stage: {"calls": self._calls[stage], "seconds": round(self._seconds[stage], 3)}
+                for stage in RECOVERY_STAGES
+            }
+
+
+# Strategies evaluate the same stocks moments apart. Within one clock minute a
+# live repaired tape can only gain bars, so a copy that already holds the
+# latest expected bar (no unresolved gap reaching it) is shared instead of
+# running the provider chain again. Replays and explicit knowledge cutoffs are
+# never shared.
+TAPE_REUSE_INTERVALS = frozenset({"1m", "5m"})
+TAPE_REUSE_MAX_ENTRIES = 512
+# A copy fetched this far into the minute that still lacks the latest bar
+# reflects a minute without trades rather than a bar still in flight.
+TAPE_TAIL_GRACE = timedelta(seconds=20)
+
+
+def _minute_floor(moment: datetime) -> datetime:
+    return moment.replace(second=0, microsecond=0)
+
+
+def _tape_reusable(recovered: RecoveredBars, observed: datetime) -> bool:
+    if not recovered.bars or recovered.report.primary_error:
+        return False
+    step = interval_duration(recovered.report.interval)
+    epoch = observed.timestamp()
+    latest_end = datetime.fromtimestamp(epoch - epoch % step.total_seconds(), tz=timezone.utc)
+    tail_gap = any(gap.end >= latest_end for gap in recovered.report.unresolved_gaps)
+    return not tail_gap or observed - _minute_floor(observed) >= TAPE_TAIL_GRACE
+
+
+IBKR_REPAIR_BLOCK = timedelta(minutes=15)
+# Yahoo publishes a minute's bar within moments; one still missing this long
+# after its bucket closed, after a successful exact repair, is not coming.
+YAHOO_REPAIR_SETTLE = timedelta(minutes=5)
+YAHOO_UNREPAIRABLE_MAX_KEYS = 4_096
+
+
+def _gap_bucket_starts(gap, step: timedelta) -> list[datetime]:
+    starts = []
+    cursor = gap.start.astimezone(timezone.utc)
+    end = gap.end.astimezone(timezone.utc)
+    while cursor < end:
+        starts.append(cursor)
+        cursor += step
+    return starts
+
+
+def _aligned_repair_blocks(starts: set[datetime], *, through: datetime) -> list[tuple[datetime, datetime]]:
+    """Clock-aligned blocks covering every missing bucket, never past ``through``.
+
+    Merged gap ranges shift whenever a neighbouring minute goes missing, which
+    defeats the IBKR history cache; fixed 15-minute blocks keep the same request
+    for a finished block all day. ``through`` is the last completed minute, so
+    no request can return the still-forming bar of the current minute.
+    """
+
+    block_seconds = IBKR_REPAIR_BLOCK.total_seconds()
+    block_starts = sorted({
+        datetime.fromtimestamp(start.timestamp() - start.timestamp() % block_seconds, tz=timezone.utc)
+        for start in starts
+    })
+    return [
+        (block_start, min(block_start + IBKR_REPAIR_BLOCK, through))
+        for block_start in block_starts
+        if min(block_start + IBKR_REPAIR_BLOCK, through) > block_start
+    ]
 
 
 def _coalesced_gap_ranges(starts: set[datetime], step):
@@ -81,6 +181,10 @@ class TradingMarketDataService:
         )
         self.yahoo_evidence_store = yahoo_evidence_store or default_yahoo_evidence_store()
         self.ibkr_evidence_store = ibkr_evidence_store or default_ibkr_evidence_store()
+        self.recovery_metrics = RecoveryStageMetrics()
+        self._tape_lock = Lock()
+        self._tapes: OrderedDict[tuple[Any, ...], tuple[datetime, RecoveredBars]] = OrderedDict()
+        self._yahoo_unrepairable: OrderedDict[tuple[str, str, date], set[datetime]] = OrderedDict()
 
     def bars(
         self,
@@ -89,16 +193,105 @@ class TradingMarketDataService:
         limit: int = 500,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
+        *,
+        alignment: Literal["count", "clock"] = "count",
+        include_extended_hours: bool = True,
     ):
+        # Only the chart's /bars request asks for clock alignment (TVP-2.5);
+        # strategy and evidence callers keep count-mode aggregation.
         return self.registry.bars(
             instrument_id,
             interval,
             limit,
             binding_id,
             cancellation,
+            alignment=alignment,
+            include_extended_hours=include_extended_hours,
         )
 
     def recovered_bars(
+        self,
+        instrument_id: str,
+        interval: str,
+        limit: int = 500,
+        binding_id: str | None = None,
+        *,
+        session_date: date,
+        as_of: datetime,
+        max_primary_attempts: int = 2,
+        cancellation: threading.Event | None = None,
+        knowledge_mode: KnowledgeMode = "live",
+        knowledge_cutoff: datetime | None = None,
+    ) -> RecoveredBars:
+        """The shared causal tape; a same-minute live copy holding the latest bar is reused."""
+
+        if as_of.tzinfo is None:
+            raise ValueError("recovered_bars as_of must be timezone-aware")
+        observed = as_of.astimezone(timezone.utc)
+        shareable = knowledge_mode == "live" and knowledge_cutoff is None and interval in TAPE_REUSE_INTERVALS
+        key = (instrument_id, interval, int(limit), binding_id, session_date, int(max_primary_attempts))
+        if shareable:
+            with self._tape_lock:
+                cached = self._tapes.get(key)
+            if cached is not None:
+                cached_at, tape = cached
+                if cached_at <= observed and _minute_floor(cached_at) == _minute_floor(observed):
+                    self.recovery_metrics.add("reused", 0.0)
+                    return tape
+        with self.recovery_metrics.timed("total"):
+            recovered = self._recover_bars(
+                instrument_id,
+                interval,
+                limit,
+                binding_id,
+                session_date=session_date,
+                as_of=as_of,
+                max_primary_attempts=max_primary_attempts,
+                cancellation=cancellation,
+                knowledge_mode=knowledge_mode,
+                knowledge_cutoff=knowledge_cutoff,
+            )
+        if shareable and _tape_reusable(recovered, observed):
+            with self._tape_lock:
+                self._tapes[key] = (observed, recovered)
+                self._tapes.move_to_end(key)
+                while len(self._tapes) > TAPE_REUSE_MAX_ENTRIES:
+                    self._tapes.popitem(last=False)
+        return recovered
+
+    def prefetch_recovered_bars(
+        self,
+        requests: list[tuple[str, str, int, str | None]],
+        *,
+        session_date: date,
+        as_of: datetime,
+        workers: int = 4,
+    ) -> None:
+        """Warm the shared tape for (instrument, interval, limit, binding) requests, a few at a time.
+
+        Failures are ignored here: the consumer's own call repeats the request and
+        records the error exactly as before.
+        """
+
+        unique = list(dict.fromkeys(requests))
+        if not unique:
+            return
+
+        def warm(request: tuple[str, str, int, str | None]) -> None:
+            instrument_id, interval, limit, binding_id = request
+            try:
+                self.recovered_bars(
+                    instrument_id, interval, limit, binding_id, session_date=session_date, as_of=as_of
+                )
+            except Exception:
+                return
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(unique))), thread_name_prefix="omnix-tape") as pool:
+            list(pool.map(warm, unique))
+
+    def _recover_bars(
         self,
         instrument_id: str,
         interval: str,
@@ -152,13 +345,14 @@ class TradingMarketDataService:
         for _ in range(attempts):
             primary_attempt_count += 1
             try:
-                response = self.registry.bars(
-                    instrument_id,
-                    request_interval,
-                    request_limit,
-                    requested.binding_id,
-                    cancellation,
-                )
+                with self.recovery_metrics.timed("primary"):
+                    response = self.registry.bars(
+                        instrument_id,
+                        request_interval,
+                        request_limit,
+                        requested.binding_id,
+                        cancellation,
+                    )
             except Exception as exc:
                 primary_error = f"{type(exc).__name__}: {exc}"
                 continue
@@ -218,16 +412,17 @@ class TradingMarketDataService:
             ).astimezone(timezone.utc)
             bounded_end = min(observed, session_close)
             if bounded_end > session_open:
-                yahoo_1m.extend(
-                    self.yahoo_evidence_store.load_market_bars(
-                        instrument_id,
-                        start=session_open,
-                        end=bounded_end,
-                        session="regular",
-                        knowledge_mode=knowledge_mode,
-                        known_by=known_by,
+                with self.recovery_metrics.timed("yahoo_evidence"):
+                    yahoo_1m.extend(
+                        self.yahoo_evidence_store.load_market_bars(
+                            instrument_id,
+                            start=session_open,
+                            end=bounded_end,
+                            session="regular",
+                            knowledge_mode=knowledge_mode,
+                            known_by=known_by,
+                        )
                     )
-                )
 
             def project_yahoo() -> list[MarketBar]:
                 canonical_1m = deduplicate_bars(
@@ -267,23 +462,37 @@ class TradingMarketDataService:
 
             # A fresh request observed now cannot repair a historical causal
             # replay decision. Preserve that as explicit retroactive research.
-            if before_gaps and knowledge_mode != "causal_replay":
+            unrepairable_key = (instrument_id, interval, session_date)
+            repair_bucket = interval_duration(interval)
+            repair_window: tuple[datetime, datetime] | None = None
+            # Buckets an earlier repair proved Yahoo will not fill (a halt or a
+            # minute without trades) are not asked for again every cycle.
+            with self._tape_lock:
+                unrepairable = set(self._yahoo_unrepairable.get(unrepairable_key, ()))
+            open_gaps = [
+                gap
+                for gap in before_gaps
+                if not set(_gap_bucket_starts(gap, repair_bucket)) <= unrepairable
+            ]
+            if open_gaps and knowledge_mode != "causal_replay":
                 yahoo_provider = self.registry.provider("yahoo")
                 repair = getattr(yahoo_provider, "get_intraday_bars_range", None)
                 if callable(repair):
                     yahoo_repair_attempted = True
-                    repair_start = min(gap.start for gap in before_gaps)
-                    repair_end = max(gap.end for gap in before_gaps)
+                    repair_start = min(gap.start for gap in open_gaps)
+                    repair_end = max(gap.end for gap in open_gaps)
                     try:
-                        exact = repair(
-                            instrument_id,
-                            start=repair_start,
-                            end=repair_end,
-                            include_extended_hours=False,
-                            cancellation=cancellation,
-                        )
+                        with self.recovery_metrics.timed("yahoo_exact"):
+                            exact = repair(
+                                instrument_id,
+                                start=repair_start,
+                                end=repair_end,
+                                include_extended_hours=False,
+                                cancellation=cancellation,
+                            )
                         yahoo_1m.extend(list(exact.bars))
                         primary_bars = project_yahoo()
+                        repair_window = (repair_start, repair_end)
                     except Exception as exc:
                         detail = f"{type(exc).__name__}: {exc}"
                         primary_error = (
@@ -302,6 +511,22 @@ class TradingMarketDataService:
             )
             after_missing = sum(gap.missing_bar_count for gap in after_yahoo)
             yahoo_repaired_count = max(0, before_missing - after_missing)
+            if repair_window is not None:
+                # Only a successful answer for a bucket closed long enough ago is final.
+                settled_by = observed - YAHOO_REPAIR_SETTLE
+                proven = {
+                    start
+                    for gap in after_yahoo
+                    for start in _gap_bucket_starts(gap, repair_bucket)
+                    if repair_window[0] <= start < repair_window[1]
+                    and start + repair_bucket <= settled_by
+                }
+                if proven:
+                    with self._tape_lock:
+                        self._yahoo_unrepairable.setdefault(unrepairable_key, set()).update(proven)
+                        self._yahoo_unrepairable.move_to_end(unrepairable_key)
+                        while len(self._yahoo_unrepairable) > YAHOO_UNREPAIRABLE_MAX_KEYS:
+                            self._yahoo_unrepairable.popitem(last=False)
 
         primary_gaps = detect_session_gaps(
             primary_bars,
@@ -367,19 +592,23 @@ class TradingMarketDataService:
                 ibkr_runtime = getattr(ibkr_provider, "runtime", None)
                 if ibkr_runtime is not None and getattr(ibkr_runtime, "enabled", False):
                     ibkr_shadow_repair_attempted = True
-                    repair_ranges = _coalesced_gap_ranges(
+                    repair_blocks = _aligned_repair_blocks(
                         unconfirmed_gap_starts,
-                        interval_duration(interval),
+                        through=_minute_floor(observed),
                     )
                     ibkr_one_minute: list[MarketBar] = []
-                    for repair_start, repair_end in repair_ranges:
-                        exact = ibkr_provider.get_intraday_bars_range(
-                            instrument_id,
-                            start=repair_start,
-                            end=repair_end,
-                            include_extended_hours=False,
-                            cancellation=cancellation,
-                        )
+                    for repair_start, repair_end in repair_blocks:
+                        try:
+                            with self.recovery_metrics.timed("ibkr"):
+                                exact = ibkr_provider.get_intraday_bars_range(
+                                    instrument_id,
+                                    start=repair_start,
+                                    end=repair_end,
+                                    include_extended_hours=False,
+                                    cancellation=cancellation,
+                                )
+                        except ProviderDataUnavailableError:
+                            continue  # IBKR has no trades in this block either; try the next one
                         ibkr_one_minute.extend(list(exact.bars))
                     if interval == "1m":
                         ibkr_candidates = deduplicate_bars(
@@ -436,12 +665,13 @@ class TradingMarketDataService:
                     requested.binding_id,
                 )
                 if execution_binding.provider != primary_provider:
-                    one_minute = self.registry.execution_indicator_bars(
-                        instrument_id,
-                        requested.binding_id,
-                        as_of=observed,
-                        cancellation=cancellation,
-                    )
+                    with self.recovery_metrics.timed("iex"):
+                        one_minute = self.registry.execution_indicator_bars(
+                            instrument_id,
+                            requested.binding_id,
+                            as_of=observed,
+                            cancellation=cancellation,
+                        )
                     if interval == "1m":
                         iex_candidates = list(one_minute)
                     else:
@@ -727,7 +957,7 @@ class TradingMarketDataService:
         instrument_id: str,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         return self.registry.quote(instrument_id, binding_id, cancellation)
 
     def execution_observation(
@@ -765,7 +995,7 @@ class TradingMarketDataService:
         base_currency: str,
         quote_currency: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         return self.registry.currency_rate(base_currency, quote_currency, cancellation)
 
     async def stream_updates(
@@ -820,7 +1050,7 @@ class TradingMarketDataService:
             if bar.is_final and start <= bar.start_time < end
         ]
 
-    def provider_descriptors(self) -> list[dict[str, object]]:
+    def provider_descriptors(self) -> list[dict[str, Any]]:
         return self.registry.descriptors()
 
     def diagnostics(self) -> dict[str, Any]:
@@ -840,7 +1070,7 @@ class TradingMarketDataService:
             "cache": {
                 "authority": False,
                 "disposable": True,
-                "directory": str(self.cache.cache_dir) if self.cache.cache_dir else None,
+                "directory": None,
                 "max_entries": self.cache.max_entries,
                 "disk_bounded": True,
                 "atomic_writes": True,
@@ -851,6 +1081,10 @@ class TradingMarketDataService:
                 "synthetic_reference_prices_allowed": False,
             },
             "yahoo_hardening": self.yahoo_evidence_store.diagnostics(),
+            "bar_recovery": {
+                "stages": self.recovery_metrics.snapshot(),
+                "shared_tapes": len(self._tapes),
+            },
             "streams": self.subscriptions.status(),
             "upstream_subscription_count": self.subscriptions.upstream_subscription_count,
             "shared_upstream_streams": self.bar_streams.upstream_count(),

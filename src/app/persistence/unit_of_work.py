@@ -4,7 +4,7 @@ import sys
 import uuid
 import logging
 from types import TracebackType
-from typing import Any, Callable, Hashable, Literal
+from typing import Any, Callable, Hashable, Literal, cast
 
 from .background_authority import require_background_owner
 from .authority import (
@@ -54,7 +54,8 @@ class PostgresUnitOfWork:
             if job_priority_aging_seconds is None
             else max(1, int(job_priority_aging_seconds))
         )
-        self.connection: Any | None = None
+        # The open psycopg connection while the unit is active (None outside it).
+        self.connection: Any = None
         self.identities: PostgresIdentityRepository
         self.audit: PostgresAuditRepository
         self.idempotency: PostgresIdempotencyRepository
@@ -179,7 +180,7 @@ def unit_of_work(
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
     job_priority_aging_seconds: int | None = None,
-) -> PostgresUnitOfWork | _JoinedUnitOfWork:
+) -> PostgresUnitOfWork:
     from .transaction_binding import shared_work
 
     resolved = database or default_database()
@@ -187,7 +188,8 @@ def unit_of_work(
     if parent is not None:
         if parent.authority_operation != authority_operation:
             raise RuntimeError('A shared transaction cannot change its authority operation')
-        return _JoinedUnitOfWork(parent)
+        # The joined unit forwards everything but commit and rollback to its parent.
+        return cast(PostgresUnitOfWork, _JoinedUnitOfWork(parent))
     return PostgresUnitOfWork(
         resolved,
         authority_operation=authority_operation,
@@ -198,7 +200,7 @@ def unit_of_work(
 class _JoinedUnitOfWork:
     """Nested repository operation: commit releases a savepoint, never the root."""
 
-    def __init__(self, parent: PostgresUnitOfWork) -> None:
+    def __init__(self, parent: PostgresUnitOfWork | _JoinedUnitOfWork) -> None:
         self.parent = parent
         self.name = f'omnix_join_{uuid.uuid4().hex}'
         self.completed = False

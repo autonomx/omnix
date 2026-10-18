@@ -122,6 +122,41 @@ def test_pronunciation_preserves_case_for_all_caps_acronyms() -> None:
     assert [change.source for change in plan.transformations] == ["US"]
 
 
+# The page-break residue left in an extracted Jobless volume; voiced as "he, he, he" and static.
+_PAGE_BREAK = "\n       \n                            \n\n"
+
+
+@pytest.mark.parametrize(("source", "spoken"), [
+    ("she’d be off the hook." + _PAGE_BREAK + "I fell silent.",
+     "she’d be off the hook.\nI fell silent."),
+    ("Now that Lord Rudeus is with us, I" + _PAGE_BREAK + "would like to hear what happened.",
+     "Now that Lord Rudeus is with us, I\nwould like to hear what happened."),
+    ("Our discussion began.\n \n   \n \n", "Our discussion began.\n"),
+    ("One paragraph.\n\nAnother.", "One paragraph.\nAnother."),
+])
+def test_page_layout_whitespace_is_read_as_one_line_break(source: str, spoken: str) -> None:
+    plan = build_speech_plan(source)
+    assert plan.source_text == source
+    assert plan.tts_input_text == spoken
+    assert [change.rule for change in plan.transformations] == ["layout_whitespace"]
+    assert all(source[change.source_start:change.source_end] == change.source for change in plan.transformations)
+
+
+def test_ordinary_line_breaks_keep_their_speech_plan() -> None:
+    source = " He nodded.\nIt was\nalmost eerie.  Then  he left.\n"
+    plan = build_speech_plan(source)
+    assert plan.tts_input_text == source
+    assert plan.transformations == ()
+
+
+def test_segment_cut_never_splits_page_layout_whitespace() -> None:
+    source = ("A story continues. " * 6) + _PAGE_BREAK + ("It shines brightly. " * 6)
+    plan = build_speech_plan(source)
+    segments = split_speech_plan(plan, max_chars=75)
+    assert "".join(item.tts_input_text for _, _, item in segments) == plan.tts_input_text
+    assert sum(len(item.transformations) for _, _, item in segments) == 1
+
+
 def test_render_key_excludes_export_metadata_and_includes_material_settings() -> None:
     request = _identity("c" * 64)
     assert request.key() == _identity("c" * 64).key()

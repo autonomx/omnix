@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -48,7 +48,28 @@ def _profile_fields() -> dict[str, Any]:
 
 # Every module's section is present, enabled or not, so a disabled module's
 # stored values survive every save.
-SettingsProfile = create_model("SettingsProfile", __base__=_SettingsProfileBase, **_profile_fields())
+if TYPE_CHECKING:
+    class SettingsProfile(_SettingsProfileBase):
+        """What type checkers see: the platform's own sections, typed.
+
+        The real model is assembled below at runtime, in stored key order, with
+        the sections modules declare; those read as ``Any`` here.
+        """
+
+        schema_version: int
+        revision: str
+        global_settings: GlobalSettingsProfile
+        provider_configs: ProviderConfigs
+        appearance: AppearanceSettingsProfile
+        assistant: AssistantSettingsProfile
+        agent_runs: AgentRunSettingsProfile
+        image: ImageSettingsProfile
+        stt: SttSettingsProfile
+        storage: StorageSettingsProfile
+
+        def __getattr__(self, name: str) -> Any: ...
+else:
+    SettingsProfile = create_model("SettingsProfile", __base__=_SettingsProfileBase, **_profile_fields())
 
 
 class SettingsProfilePatch(BaseModel):

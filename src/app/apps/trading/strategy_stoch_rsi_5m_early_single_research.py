@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import time
 from decimal import Decimal
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, cast
 
 from .indicators.engine import average_true_range, exponential_moving_average
 from .models import MarketBar
@@ -641,7 +641,7 @@ def evaluate_stoch_rsi_5m_early_single_research_arm(
             )
         if arm in ONE_MINUTE_STOP_ARMS:
             stop_pct = ONE_MINUTE_STOP_ARMS[arm]
-            stop_price = trade.entry_price * (
+            stop_price: Decimal | None = trade.entry_price * (
                 Decimal("1") - stop_pct / Decimal("100")
             )
             reason = (
@@ -661,7 +661,7 @@ def evaluate_stoch_rsi_5m_early_single_research_arm(
             _one_minute_stop_trade(
                 one_minute,
                 trade,
-                stop_price=stop_price,
+                stop_price=cast(Decimal, stop_price),
                 reason_code=reason,
             ),
         )

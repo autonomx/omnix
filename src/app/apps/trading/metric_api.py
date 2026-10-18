@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query
 
+from .breadth import BreadthRepository, default_breadth_repository
 from .fundamental_metric_data import (
     YahooAnalystMetricAdapter,
     default_yahoo_analyst_metric_adapter,
@@ -20,30 +20,10 @@ from .metric_data import (
 logger = logging.getLogger(__name__)
 
 
-def _normalize_metric_units(response: MarketMetricResponse) -> MarketMetricResponse:
-    """Normalize provider-native units to the units exposed by the chart metric."""
-    if response.metric != "binance.premium":
-        return response
-    return response.model_copy(
-        update={
-            "series": [
-                series.model_copy(
-                    update={
-                        "points": [
-                            point.model_copy(update={"value": point.value * Decimal("100")})
-                            for point in series.points
-                        ]
-                    }
-                )
-                for series in response.series
-            ]
-        }
-    )
-
-
 def create_trading_metric_router(
     metric_service_factory: Callable[[], TradingMetricDataService] = default_metric_data_service,
     yahoo_analyst_factory: Callable[[], YahooAnalystMetricAdapter] = default_yahoo_analyst_metric_adapter,
+    breadth_repository_factory: Callable[[], BreadthRepository] = default_breadth_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
@@ -59,25 +39,19 @@ def create_trading_metric_router(
         limit: int = Query(default=500, ge=1, le=1_500),
         end_time: datetime | None = Query(default=None),
     ) -> MarketMetricResponse:
+        from .metric_sources import load_metric
+
         try:
-            if metric in {"yahoo.analyst_price_forecast", "yahoo.price_target"}:
-                response = yahoo_analyst_factory().analyst_targets(
-                    instrument_id,
-                    interval,
-                    limit,
-                    end_time=end_time,
-                )
-                if metric == "yahoo.price_target":
-                    response = response.model_copy(update={"metric": metric})
-            else:
-                response = metric_service_factory().metric(
-                    instrument_id,
-                    metric,
-                    interval,
-                    limit,
-                    end_time=end_time,
-                )
-            return _normalize_metric_units(response)
+            return load_metric(
+                metric,
+                instrument_id,
+                interval,
+                limit,
+                end_time,
+                metric_service_factory=metric_service_factory,
+                yahoo_analyst_factory=yahoo_analyst_factory,
+                breadth_repository_factory=breadth_repository_factory,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:

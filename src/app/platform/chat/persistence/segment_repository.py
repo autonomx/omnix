@@ -1,7 +1,7 @@
 """Conversation segments in PostgreSQL (``omnix_conversation_segments``, owned by chat)."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from app.platform.chat.segments import MAX_SESSION_SEGMENTS, ConversationSegment, check_segment_identity, new_segment_id
 from app.persistence.database import PostgresDatabase, default_database
@@ -66,13 +66,13 @@ def _segment(row: Any) -> ConversationSegment:
     return ConversationSegment(
         id=str(row[0]),
         session_id=str(row[1]),
-        interaction_mode=str(row[2]),
+        interaction_mode=cast(Any, str(row[2])),
         character_id=str(row[3]) if row[3] is not None else None,
         profile_version=int(row[4]) if row[4] is not None else None,
-        transcript_policy=str(row[5]),
+        transcript_policy=cast(Any, str(row[5])),
         read_memory=bool(row[6]),
         write_memory=bool(row[7]),
-        shared_memory_access=str(row[8]),
+        shared_memory_access=cast(Any, str(row[8])),
         carryover_summary=str(row[9]) if row[9] is not None else None,
         started_at=row[10].isoformat(),
         ended_at=row[11].isoformat() if row[11] is not None else None,

@@ -6,6 +6,7 @@ from app.persistence.job_repository import PostgresJobRepository
 
 from .render_planner import load_chapter_units
 from .repository import PostgresAudiobookRepository
+from .speech_exclusions import chapter_removed_sql
 
 
 @dataclass
@@ -26,7 +27,8 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
     active = PostgresJobRepository(connection).query_jobs(
         context,
         module="audiobook",
-        job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.render-chapter", "audiobook.assemble-chapter"),
+        job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.direct-performance",
+                   "audiobook.render-chapter", "audiobook.assemble-chapter"),
         input_fields=(("project_id", str(project_id)),),
         statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
         limit=500,
@@ -42,6 +44,8 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
             result.blockers.append('Wait for quote extraction to finish, then go to "Span review" to review the quotes before clicking "Classify text".')
         elif "audiobook.analyze" in job_types:
             result.blockers.append('Wait for text classification to finish, then go to "Span review" and resolve any review issues. If classification is paused, use "Resume" or "Cancel" in its progress controls.')
+        elif "audiobook.direct-performance" in job_types:
+            result.blockers.append('Wait for "Direct performance" to finish writing the dialogue delivery directions, or cancel it.')
         else:
             result.blockers.append('Rendering or chapter assembly is already in progress. Go to "Render & Export" to check progress, resume paused chapter jobs, or stop the current render before starting another.')
         return result
@@ -50,8 +54,9 @@ def check_book_render_readiness(connection, context, *, project_id, source_revis
             JOIN omnix_audiobook_annotations a ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
             JOIN omnix_audiobook_spans s ON s.workspace_id = a.workspace_id AND s.id = a.span_id
             JOIN omnix_audiobook_chapters c ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
-            WHERE c.workspace_id = %s AND c.source_revision_id = %s AND i.status = 'open'""",
-        (context.workspace_id, str(source_revision_id)),
+            WHERE c.workspace_id = %s AND c.source_revision_id = %s AND i.status = 'open'
+              AND NOT """ + chapter_removed_sql("c", "%s"),
+        (context.workspace_id, str(source_revision_id), str(project_id)),
     ).fetchone()[0]
     if issues:
         result.blockers.append(f'Go to "Span review" and resolve {issues} open review issue(s): confirm the speaker and role for each flagged passage and click "Save interpretation" before rendering.')

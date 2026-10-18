@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from app.apps.rpg.action_resolver import resolve_player_action
-from app.apps.rpg.core.determinism import (
+from app.apps.rpg.rules.action_resolver import resolve_player_action
+from app.apps.rpg.foundation.core.determinism import (
     deterministic_turn_uuid,
     rng_for,
     rng_for_current_turn,
@@ -12,8 +12,8 @@ from app.apps.rpg.core.determinism import (
     stable_json,
     turn_rng_identity,
 )
-from app.apps.rpg.core.clock import DeterministicClock
-from app.apps.rpg.core.event_bus import DeterminismConfig, Event, EventBus
+from app.apps.rpg.foundation.core.clock import DeterministicClock
+from app.apps.rpg.foundation.core.event_bus import DeterminismConfig, Event, EventBus
 from app.apps.rpg.session.idle_time import recorded_idle_tick_time
 from app.runtime.clock import Clock, TurnContext, bind_turn_context, utc_now
 from app.apps.rpg.session import service as session_service
@@ -88,7 +88,7 @@ def test_legacy_session_seed_is_persisted_on_the_next_save(monkeypatch) -> None:
     expected = rng_seed_from_session_id("old-session-8")
     captured: dict[str, object] = {}
     monkeypatch.setattr(session_service, "assert_session_integrity", lambda _session: None)
-    monkeypatch.setattr(session_service, "load_session_from_disk", lambda _session_id: None)
+    monkeypatch.setattr(session_service, "load_persisted_rng_seed", lambda _session_id: (False, None))
     monkeypatch.setattr(
         session_service,
         "save_session_to_disk",
@@ -110,15 +110,8 @@ def test_legacy_session_seed_is_persisted_on_the_next_save(monkeypatch) -> None:
 def test_session_seed_cannot_change_after_first_persist(monkeypatch) -> None:
     session_id = "immutable-seed-session"
     seed = rng_seed_from_session_id(session_id)
-    monkeypatch.setattr(
-        session_service,
-        "load_session_from_disk",
-        lambda _session_id: {
-            "session_id": session_id,
-            "simulation_state": {"rng_seed": seed},
-            "runtime_state": {},
-        },
-    )
+    # The saved game's seed, which save_session compares without loading the saved game.
+    monkeypatch.setattr(session_service, "load_persisted_rng_seed", lambda _session_id: (True, seed))
 
     try:
         session_service.save_session(

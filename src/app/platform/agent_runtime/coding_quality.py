@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 import re
 import shutil
-from typing import Iterable
+from typing import Any, Iterable, cast
 
 from .contracts import (
     AgentEvent,
@@ -39,6 +39,7 @@ from .contracts import (
 )
 from .workspace import WorkspaceAuthority, WorkspacePolicyError
 from app.prompts import prompt_template
+from .event_queries import json_object
 
 
 REVIEW_PROMPT_TEMPLATE = prompt_template(
@@ -524,10 +525,11 @@ def validation_result_from_tool_event(
 ) -> ValidationResult | None:
     if event.event_type != "tool.completed":
         return None
-    args = event.payload.get("args") if isinstance(event.payload.get("args"), dict) else {}
+    args = json_object(event.payload.get("args"))
     tool_name = str(event.payload.get("tool") or "").strip()
     capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
     command = str(args.get("command") or event.payload.get("command") or "").strip()
+    kind: str | None
     if tool_name == "omnix_change_set":
         kind = "diff_review"
         command = "omnix_change_set"
@@ -557,7 +559,7 @@ def validation_result_from_tool_event(
     failure_class: str | None = None
 
     if kind == "diff_review":
-        change_set = details.get("change_set") if isinstance(details.get("change_set"), dict) else {}
+        change_set = json_object(details.get("change_set"))
         candidate = str(change_set.get("candidate_workspace_state_id") or details.get("candidate_workspace_state_id") or "")
         if event.payload.get("is_error") or error_text:
             outcome = _validation_outcome_from_error_text(error_text)
@@ -568,7 +570,7 @@ def validation_result_from_tool_event(
     elif kind == "browser":
         broker = details if "executed" in details else details.get("result")
         broker = broker if isinstance(broker, dict) else {}
-        nested = broker.get("result") if isinstance(broker.get("result"), dict) else {}
+        nested = json_object(broker.get("result"))
         browser_error = str(broker.get("error") or nested.get("error") or error_text or "")
         if not browser_error and broker.get("executed") is not False and not event.payload.get("is_error"):
             outcome = "passed"
@@ -606,7 +608,7 @@ def validation_result_from_tool_event(
     validation_id = validation_id_for_kind(kind, revision)
     validation_spec = next((item for item in _validation_plan(revision) if item.id == validation_id), None)
     covers_requirement_ids = list(validation_spec.covers) if validation_spec is not None else []
-    metadata: dict[str, object] = {
+    metadata: dict[str, Any] = {
         "tool_call_id": call_id,
         "capability_id": capability_id or None,
         "outcome": outcome,
@@ -614,11 +616,11 @@ def validation_result_from_tool_event(
     if failure_class:
         metadata["failure_class"] = failure_class
     if kind == "diff_review":
-        change_set = details.get("change_set") if isinstance(details.get("change_set"), dict) else {}
+        change_set = json_object(details.get("change_set"))
         if change_set:
             metadata["run_change_set_id"] = change_set.get("change_set_id")
     if kind == "browser":
-        capability_input = args.get("input") if isinstance(args.get("input"), dict) else {}
+        capability_input = json_object(args.get("input"))
         expected = capability_input.get("expected")
         if expected is not None and expected != "":
             metadata["assertion_expected"] = str(expected)
@@ -626,13 +628,13 @@ def validation_result_from_tool_event(
         result_id=result_id,
         run_id=run_id,
         validation_id=validation_id,
-        kind=kind,
+        kind=cast(Any, kind),
         task_revision_id=task_revision_id,
         workspace_state_id=workspace_state_id,
         command=command,
         exit_code=exit_code,
         success=success,
-        outcome=outcome,
+        outcome=cast(Any, outcome),
         output_digest=output_digest,
         covers_requirement_ids=covers_requirement_ids,
         finished_at=event.created_at,
@@ -653,9 +655,9 @@ def candidate_validation_gate(
         if item.workspace_state_id == workspace_state_id
         and (revision is None or item.task_revision_id == revision.revision_id)
     ]
-    substantive: list[ValidationResult] = []
-    retryable: list[ValidationResult] = []
-    missing: list[ValidationSpec] = []
+    substantive: list[ValidationResult | ValidationSpec] = []
+    retryable: list[ValidationResult | ValidationSpec] = []
+    missing: list[ValidationResult | ValidationSpec] = []
     for expected in plan:
         matching = [item for item in rows if item.validation_id == expected.id]
         if not matching:
@@ -810,7 +812,7 @@ def materialize_review_workspace(
     return review_workspace
 
 
-def review_payload_from_text(text: str) -> dict[str, object]:
+def review_payload_from_text(text: str) -> dict[str, Any]:
     """Decode the first review object from plain or fenced model output.
 
     Providers do not all honor ``ONLY JSON`` consistently. Using the JSON
@@ -861,7 +863,7 @@ def parse_self_review_result(text: str, *, run_id: str, revision: TaskRevision, 
         findings.append(ReviewFinding(severity="high", category="self_review_protocol", problem="Implementer did not return the required structured self-review JSON.", recommended_fix="Repeat the mandatory self-review against the same final state."))
     return SelfReviewResult(
         run_id=run_id, task_revision_id=revision.revision_id, workspace_state_id=workspace_state_id,
-        verdict=verdict, requirements=requirements, findings=findings,
+        verdict=cast(Any, verdict), requirements=requirements, findings=findings,
         missing_tests=[str(item) for item in payload.get("missing_tests") or [] if str(item).strip()],
         residual_risks=[str(item) for item in payload.get("residual_risks") or [] if str(item).strip()],
     )
@@ -992,7 +994,7 @@ def parse_review_result(
         review_snapshot_id=snapshot.snapshot_id,
         task_revision_id=snapshot.task_revision_id,
         workspace_state_id=snapshot.workspace_state_id,
-        verdict=verdict,
+        verdict=cast(Any, verdict),
         requirements=requirements,
         findings=findings,
         missing_tests=[str(item) for item in payload.get("missing_tests") or [] if str(item).strip()],

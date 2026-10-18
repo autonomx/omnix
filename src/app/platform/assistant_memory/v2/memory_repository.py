@@ -1,17 +1,14 @@
-"""The curated memory repository, routed by memory authority (WP-8.5).
+"""The curated memory repository (WP-8.5).
 
-Memory v1's services, policy, routes, commands and snapshots work against one
-repository interface. This repository keeps that interface and decides, per
-call, where curated memory records live:
-
-- while v1 is authoritative, every call goes to the v1 repository;
-- once v2 is authoritative, records are read from and written to the v2
-  observation log (``PostgresMemoryV2CuratedRecords``), and each write
-  converges the space (derive and index) so the next prompt sees it.
+The memory services, policy, routes, commands and snapshots work against one
+repository interface. Curated memory records are read from and written to the
+Memory v2 observation log (``PostgresMemoryV2CuratedRecords``), and each write
+converges the space (derive and index) so the next prompt sees it. Memory v1,
+which kept records in ``omnix_memory_records``, is retired (migration 0156).
 
 Candidates (proposals awaiting approval) and session snapshots are not memory
-authority; they stay in the v1 repository either way. Approving a candidate
-under v2 writes the record to v2, then marks the candidate accepted.
+authority; they stay in the owner-aware repository's tables. Approving a
+candidate writes the record to v2, then marks the candidate accepted.
 """
 from __future__ import annotations
 
@@ -36,8 +33,8 @@ from .runtime import PostgresMemoryV2Runtime
 logger = logging.getLogger(__name__)
 
 
-class MemoryAuthorityRoutedRepository:
-    """v1 repository interface; records follow the current memory authority."""
+class CuratedMemoryRepository:
+    """The memory repository interface; records live in Memory v2."""
 
     def __init__(
         self,
@@ -55,11 +52,8 @@ class MemoryAuthorityRoutedRepository:
         self.convergence = convergence or MemoryV2CuratedConvergence(self.database)
 
     def __getattr__(self, name: str) -> Any:
-        # Candidates, snapshots, events and row helpers stay with v1.
+        # Candidates, snapshots, events and row helpers stay with the owner-aware repository.
         return getattr(self.legacy, name)
-
-    def v2_authoritative(self) -> bool:
-        return self.runtime.current().epoch.authority == "v2"
 
     def _converge(self, record: MemoryRecord) -> None:
         space = memory_space(tenant_principal(), record.owner_type, record.owner_id)
@@ -71,15 +65,11 @@ class MemoryAuthorityRoutedRepository:
     # -- records -------------------------------------------------------------
 
     def create_record(self, record: MemoryRecord) -> MemoryRecord:
-        if not self.v2_authoritative():
-            return self.legacy.create_record(record)
         stored = self.records.create(tenant_principal(), record)
         self._converge(stored)
         return stored
 
     def get_record(self, record_id: str) -> MemoryRecord | None:
-        if not self.v2_authoritative():
-            return self.legacy.get_record(record_id)
         return self.records.get(tenant_principal(), record_id)
 
     def list_records(
@@ -93,26 +83,17 @@ class MemoryAuthorityRoutedRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MemoryRecord]:
-        if not self.v2_authoritative():
-            return self.legacy.list_records(
-                owner_type=owner_type, owner_id=owner_id, scope=scope, scope_id=scope_id,
-                status=status, limit=limit, offset=offset,
-            )
         return self.records.list(
             tenant_principal(), owner_type=owner_type, owner_id=owner_id, scope=scope,
             scope_id=scope_id, status=status, limit=limit, offset=offset,
         )
 
     def update_record(self, record: MemoryRecord, *, expected_revision: int) -> MemoryRecord:
-        if not self.v2_authoritative():
-            return self.legacy.update_record(record, expected_revision=expected_revision)
         stored = self.records.update(tenant_principal(), record, expected_revision=expected_revision)
         self._converge(stored)
         return stored
 
     def forget_record(self, record_id: str, *, expected_revision: int) -> bool:
-        if not self.v2_authoritative():
-            return self.legacy.forget_record(record_id, expected_revision=expected_revision)
         principal = tenant_principal()
         record = self.records.get(principal, record_id)
         forgotten = self.records.forget(principal, record_id, expected_revision=expected_revision)
@@ -132,8 +113,6 @@ class MemoryAuthorityRoutedRepository:
         *,
         resolved_at: str,
     ) -> MemoryRecord:
-        if not self.v2_authoritative():
-            return self.legacy.accept_candidate(candidate_id, record, resolved_at=resolved_at)
         candidate = self.legacy.get_candidate(candidate_id)
         if candidate is None:
             raise MemoryNotFoundError(candidate_id)
@@ -163,12 +142,12 @@ class MemoryAuthorityRoutedRepository:
     # -- owner reset ---------------------------------------------------------
 
     def delete_owner(self, *, owner_type: str, owner_id: str) -> tuple[int, int, int]:
-        if not self.v2_authoritative():
-            return self.legacy.delete_owner(owner_type=owner_type, owner_id=owner_id)
         principal = tenant_principal()
         purged = self.records.purge_owner(principal, owner_type, owner_id)
-        # Candidates, snapshots and the frozen pre-cutover v1 rows go too.
-        _, candidates, snapshots = self.legacy.delete_owner(owner_type=owner_type, owner_id=owner_id)
+        # Its candidates and snapshots go too.
+        candidates, snapshots = self.legacy.delete_owner_candidates_and_snapshots(
+            owner_type=owner_type, owner_id=owner_id,
+        )
         try:
             self.convergence.run(space=memory_space(principal, owner_type, owner_id), max_steps=10)
         except Exception:  # noqa: BLE001 - the scheduled sweep retries
@@ -176,4 +155,4 @@ class MemoryAuthorityRoutedRepository:
         return purged, candidates, snapshots
 
 
-__all__ = ["MemoryAuthorityRoutedRepository"]
+__all__ = ["CuratedMemoryRepository"]

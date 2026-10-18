@@ -234,7 +234,7 @@ fi
 if [ $? -ne 0 ]; then
     error
 fi
-"$RPG_FLUX_PYTHON" -c "from app.apps.rpg.visual.runtime_status import validate_flux_klein_runtime; s=validate_flux_klein_runtime(); print('FLUX:', 'READY' if s.get('ready') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ready') else 1)"
+"$RPG_FLUX_PYTHON" -c "from app.apps.rpg.narration.visual.runtime_status import validate_flux_klein_runtime; s=validate_flux_klein_runtime(); print('FLUX:', 'READY' if s.get('ready') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ready') else 1)"
 if [ $? -ne 0 ]; then
     error
 fi

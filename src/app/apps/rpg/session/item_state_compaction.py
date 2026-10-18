@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MECHANICS_SOURCE = "engine_item_state_compaction_v1"
 DEFAULT_BUCKET_LIMIT = 50

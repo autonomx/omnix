@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.conversation.memory_contracts import (
     MAX_MEMORY_SNAPSHOT_ITEMS,
     MemoryCandidate,
-    MemoryRecord,
     MemorySnapshot,
     MemorySnapshotItem,
 )
@@ -20,17 +19,6 @@ class OwnerMemoryRowSupport:
     @property
     def workspace_id(self) -> str:
         return self.context.workspace_id
-
-    @staticmethod
-    def record_select() -> str:
-        return (
-            "SELECT id, workspace_id, owner_type, owner_id, scope, scope_id, "
-            "category, kind, structured_payload, supersedes_memory_id, "
-            "contradiction_group, content, normalized_content, confidence, pinned, "
-            "trust_level, sensitivity, provenance_type, provenance_id, source, "
-            "status, revision, created_at, updated_at, expires_at "
-            "FROM omnix_memory_records"
-        )
 
     @staticmethod
     def candidate_select() -> str:
@@ -60,56 +48,6 @@ class OwnerMemoryRowSupport:
         ).fetchall()
 
     @staticmethod
-    def record_from_row(row: Any) -> MemoryRecord:
-        typed = len(row) >= 25
-        if typed:
-            kind = str(row[7])
-            payload = dict(row[8] or {})
-            supersedes = str(row[9]) if row[9] is not None else None
-            contradiction = str(row[10]) if row[10] is not None else None
-            offset = 4
-        else:
-            kind = "semantic_fact"
-            payload = {}
-            supersedes = None
-            contradiction = None
-            offset = 0
-        return MemoryRecord(
-            id=str(row[0]),
-            owner_type=str(row[2]),
-            owner_id=str(row[3]),
-            scope=str(row[4]),
-            scope_id=str(row[5]),
-            category=str(row[6]),
-            kind=kind,
-            structured_payload=payload,
-            supersedes_memory_id=supersedes,
-            contradiction_group=contradiction,
-            content=str(row[7 + offset]),
-            normalized_content=str(row[8 + offset]),
-            confidence=float(row[9 + offset]),
-            pinned=bool(row[10 + offset]),
-            trust_level=str(row[11 + offset]),
-            sensitivity=str(row[12 + offset]),
-            provenance_type=(
-                str(row[13 + offset]) if row[13 + offset] is not None else None
-            ),
-            provenance_id=(
-                str(row[14 + offset]) if row[14 + offset] is not None else None
-            ),
-            source=str(row[15 + offset]),
-            status=str(row[16 + offset]),
-            revision=int(row[17 + offset]),
-            created_at=row[18 + offset].isoformat(),
-            updated_at=row[19 + offset].isoformat(),
-            expires_at=(
-                row[20 + offset].isoformat()
-                if row[20 + offset] is not None
-                else None
-            ),
-        )
-
-    @staticmethod
     def candidate_from_row(row: Any) -> MemoryCandidate:
         typed = len(row) >= 21
         if typed:
@@ -124,24 +62,24 @@ class OwnerMemoryRowSupport:
             offset = 0
         return MemoryCandidate(
             id=str(row[0]),
-            owner_type=str(row[4]),
+            owner_type=cast(Any, str(row[4])),
             owner_id=str(row[5]),
             source_session_id=str(row[1]) if row[1] is not None else "",
             source_message_id=str(row[2]),
             candidate_fingerprint=str(row[3]),
-            proposed_scope=str(row[6]),
+            proposed_scope=cast(Any, str(row[6])),
             proposed_scope_id=str(row[7]),
-            proposed_category=str(row[8]),
-            proposed_kind=kind,
+            proposed_category=cast(Any, str(row[8])),
+            proposed_kind=cast(Any, kind),
             proposed_payload=payload,
             proposed_supersedes_memory_id=supersedes,
             proposed_content=str(row[9 + offset]),
             confidence=float(row[10 + offset]),
-            source=str(row[11 + offset]),
-            trust_level=str(row[12 + offset]),
-            sensitivity=str(row[13 + offset]),
+            source=cast(Any, str(row[11 + offset])),
+            trust_level=cast(Any, str(row[12 + offset])),
+            sensitivity=cast(Any, str(row[13 + offset])),
             extraction_metadata=dict(row[14 + offset] or {}),
-            status=str(row[15 + offset]),
+            status=cast(Any, str(row[15 + offset])),
             created_at=row[16 + offset].isoformat(),
             resolved_at=(
                 row[17 + offset].isoformat()
@@ -154,7 +92,7 @@ class OwnerMemoryRowSupport:
     def snapshot_from_row(row: Any, item_rows: list[Any]) -> MemorySnapshot:
         return MemorySnapshot(
             id=str(row[0]),
-            owner_type=str(row[1]),
+            owner_type=cast(Any, str(row[1])),
             owner_id=str(row[2]),
             revision=int(row[3]),
             created_at=row[4].isoformat(),
@@ -194,28 +132,3 @@ class OwnerMemoryRowSupport:
                 json.dumps(payload, sort_keys=True),
             ),
         )
-
-    @staticmethod
-    def require_v1_authority(connection: Any) -> None:
-        """Refuse a v1 record write once Memory v2 is authoritative.
-
-        Runs inside the write's own transaction and share-locks the authority
-        row, so the v2 activation (which updates that row) waits for in-flight
-        v1 writes and any later v1 write sees v2 and stops.
-        """
-        row = connection.execute(
-            """
-            SELECT e.authority
-              FROM omnix_memory_v2_authority_current c
-              JOIN omnix_memory_v2_authority_epochs e ON e.epoch = c.current_epoch
-             WHERE c.singleton = TRUE
-               FOR SHARE OF c
-            """
-        ).fetchone()
-        if row is not None and str(row[0]) != "v1":
-            from app.platform.assistant_memory.service import LegacyMemoryReadOnlyError
-
-            raise LegacyMemoryReadOnlyError(
-                "legacy assistant_memory is read-only while Memory v2 is authoritative"
-            )
-

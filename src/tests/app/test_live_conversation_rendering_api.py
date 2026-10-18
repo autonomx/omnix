@@ -19,7 +19,7 @@ def test_live_conversation_rendering_routes(tmp_path: Path, monkeypatch) -> None
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_LIVE_PRONUNCIATION_PATH", str(tmp_path / "pronunciations.json"))
-    client = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     session_id = _session(client)
 
     plan = client.post(
@@ -50,7 +50,7 @@ def test_live_conversation_rendering_routes(tmp_path: Path, monkeypatch) -> None
 
 def test_rendering_routes_require_session(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app(), headers={"X-Omnix-Client": "test"})
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/chat/sessions/chat:missing/live-conversation/pronunciations")
 

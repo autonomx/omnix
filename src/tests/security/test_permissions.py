@@ -146,6 +146,17 @@ def test_member_cannot_approve_tool_proposals_but_approver_can_reach_them(gatewa
     assert approver.post(path, json={}).status_code != 403
 
 
+def test_only_an_admin_changes_tool_enablement_and_approval_policy(gateway) -> None:
+    app, authenticator = gateway
+    path = "/api/assistant/tools/config"
+    loosen = {"tools": [{"tool_id": "x", "enabled": True, "approval_policy": "allow_automatic"}]}
+    for roles in (("member",), ("member", "approver")):
+        client = _client(app, authenticator, roles)
+        assert client.get(path).status_code != 403
+        assert client.post(path, json=loosen).status_code == 403
+    assert "tools:policy:admin" in DEFAULT_ROLE_PERMISSIONS["admin"]
+
+
 def test_member_places_paper_orders_but_not_trading_controls(gateway) -> None:
     app, authenticator = gateway
     member = _client(app, authenticator, ("member",))
@@ -197,7 +208,7 @@ def test_gateway_without_installed_tenant_serves_the_local_owner(monkeypatch) ->
             return None
 
     monkeypatch.setattr(tenant_context, "_PROCESS_DEFAULT", None)
-    monkeypatch.delenv("OMNIX_AUTH_MODE", raising=False)
+    monkeypatch.setenv("OMNIX_AUTH_MODE", "disabled")
     app = create_gateway_app(job_store_factory=lambda: EmptyStore())
     client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     assert client.get("/api/jobs/missing").status_code == 404

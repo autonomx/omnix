@@ -17,7 +17,7 @@ function renderWorkspace(client = createTestQueryClient()) {
 }
 
 describe('AudiobookWorkspace', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
   it.each(['Voices', 'Characters'])('queues %s auditions before rendering without changing the saved cast', async (section) => {
     const posts: { url: string; body: Record<string, unknown> }[] = [];
@@ -209,6 +209,10 @@ describe('AudiobookWorkspace', () => {
     expect(sourcePanel).not.toContainElement(spanPanel);
     expect(sourcePanel.parentElement).toBe(spanPanel.parentElement);
     expect(within(spanPanel).getByRole('heading', { name: 'Span review' })).toBeInTheDocument();
+    const classifyPanel = screen.getByRole('region', { name: 'Text classification' });
+    expect(classifyPanel.parentElement?.firstElementChild).toBe(classifyPanel);
+    expect(within(classifyPanel).getByRole('button', { name: 'Classify text' })).toBeInTheDocument();
+    expect(within(spanPanel).queryByRole('button', { name: 'Classify text' })).not.toBeInTheDocument();
     expect(within(spanPanel).getByRole('button', { name: 'Preview' })).toBeDisabled();
     expect(within(spanPanel).getByText('Choose a speaker and save interpretation, or classify text, before previewing audio.')).toBeInTheDocument();
     expect(screen.queryByText(/ingest failed/)).not.toBeInTheDocument();
@@ -233,7 +237,11 @@ describe('AudiobookWorkspace', () => {
     expect(saveIndex).toBeGreaterThanOrEqual(0);
     expect(saveIndex).toBeLessThan(importIndex);
     expect(fetchMock.mock.calls[saveIndex][1]?.body).toBe(JSON.stringify({ custom_rules: 'Character quotes can also be in speaker: quote format.' }));
-    expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Human review queue' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /issues to resolve/ }));
+    expect(screen.getByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open review queue' }));
+    expect(within(screen.getByRole('region', { name: 'Human review queue' })).getByText('"Hello," she said.')).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /Books/ }).at(-1)!);
     expect(screen.getByRole('heading', { name: 'Books & chapters' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
@@ -406,6 +414,252 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByText(/Human review required/)).toBeInTheDocument();
   });
 
+
+  it('confirms every detected speaker at once', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/speakers') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'speaker', status: 'active', promoted: true }),
+          { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [],
+        speakers: [
+          { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'candidate-one', canonical_name: 'Time Traveller', kind: 'character', status: 'proposed', occurrence_count: 3, casting: null, aliases: [] },
+          { id: 'candidate-two', canonical_name: 'Weena', kind: 'character', status: 'proposed', occurrence_count: 2, casting: null, aliases: [] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm all 2' }));
+    await waitFor(() => expect(fetchMock.mock.calls
+      .filter(([url, init]) => String(url) === '/api/audiobook/projects/book-one/speakers' && init?.method === 'POST')
+      .map(([, init]) => init?.body)).toEqual([
+      JSON.stringify({ canonical_name: 'Time Traveller' }),
+      JSON.stringify({ canonical_name: 'Weena' }),
+    ]));
+  });
+
+  it('shows confirmed aliases with an unconfirm control and confirms earlier suggestions in one step', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST') {
+        return new Response(JSON.stringify({ status: 'rejected' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [],
+        speakers: [
+          { id: 'knights', canonical_name: 'Temple Knights', kind: 'character', status: 'active', casting: null,
+            aliases: ['Keepers of Anastasia'], proposed_aliases: ['The other knights'] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Unconfirm alias Keepers of Anastasia for Temple Knights' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/speakers/knights/aliases/unconfirm',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ alias: 'Keepers of Anastasia' }) }),
+    ));
+    expect(screen.getByText(/1 suggested alias not yet confirmed/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm all suggested aliases' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm all suggested aliases' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/aliases/confirm-suggested',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+  });
+
+  it('opens every open review issue in the main view, grouped by chapter and filterable', async () => {
+    const issue = (id: string, chapter: string, title: string, text: string, extra: Record<string, unknown> = {}) => ({
+      id, span_id: `span-${id}`, reason: 'LOW_CONFIDENCE_SPEAKER', evidence: {}, source_text: text, chapter_id: chapter,
+      chapter_title: title, speaker_id: null, speaker_candidate: null, structural_kind: 'dialogue', ...extra,
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }, { id: 'chapter-two', ordinal: 1, title: 'Closing', character_count: 6 }],
+        review_issues: [
+          issue('issue-one', 'chapter-one', 'Opening', '"Who goes there?"', { reason: 'UNSUPPORTED_SPEAKER', speaker_candidate: 'Gate Guard' }),
+          issue('issue-two', 'chapter-two', 'Closing', '"Farewell."'),
+        ],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'ada', canonical_name: 'Ada', kind: 'character', status: 'active', casting: null, aliases: [] }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open human review queue' }));
+    const queue = await screen.findByRole('region', { name: 'Human review queue' });
+    expect(within(queue).getByText(/2 open issues in 2 chapters/)).toBeInTheDocument();
+    expect(within(queue).getByRole('region', { name: 'Review issues in Opening' })).toBeInTheDocument();
+    expect(within(queue).getByRole('region', { name: 'Review issues in Closing' })).toBeInTheDocument();
+    expect(within(queue).getByText('Speaker not in the cast')).toBeInTheDocument();
+
+    fireEvent.change(within(queue).getByLabelText('Filter review issues by chapter'), { target: { value: 'chapter-two' } });
+    expect(within(queue).queryByRole('region', { name: 'Review issues in Opening' })).not.toBeInTheDocument();
+    expect(within(queue).getByText('1 of 2 issues')).toBeInTheDocument();
+    fireEvent.change(within(queue).getByLabelText('Filter review issues by chapter'), { target: { value: 'all' } });
+
+    fireEvent.click(within(queue).getByRole('button', { name: 'Add “Gate Guard” to the cast' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/speakers',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ canonical_name: 'Gate Guard' }) })));
+    fireEvent.change(within(queue).getByLabelText('Speaker for review issue-two'), { target: { value: 'ada' } });
+    await waitFor(() => expect(within(queue).getAllByRole('button', { name: 'Confirm speaker' })[1]).toBeEnabled());
+    fireEvent.click(within(queue).getAllByRole('button', { name: 'Confirm speaker' })[1]);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/review/issue-two',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ speaker_id: 'ada', role: 'dialogue' }) })));
+  });
+
+  it('confirms every shown review issue at once, adding detected speakers to the cast', async () => {
+    const issue = (id: string, text: string, extra: Record<string, unknown> = {}) => ({
+      id, span_id: `span-${id}`, reason: 'LOW_CONFIDENCE_SPEAKER', evidence: {}, source_text: text, chapter_id: 'chapter-one',
+      chapter_title: 'Opening', speaker_id: null, speaker_candidate: null, structural_kind: 'dialogue', ...extra,
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }],
+        review_issues: [
+          issue('issue-one', '"Okay."', { speaker_id: 'ada' }),
+          issue('issue-two', '"I understand."'),
+          issue('issue-three', '"Halt."', { speaker_id: 'guard' }),
+        ],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'ada', canonical_name: 'Ada', kind: 'character', status: 'active', casting: null, aliases: [] },
+          { id: 'guard', canonical_name: 'Guard', kind: 'character', status: 'proposed', casting: null, aliases: [] }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open human review queue' }));
+    const queue = await screen.findByRole('region', { name: 'Human review queue' });
+
+    // issue-two has no speaker yet; the detected Guard counts, and confirming adds it to the cast.
+    expect(within(queue).getByRole('button', { name: 'Confirm all 2' })).toBeInTheDocument();
+    expect(within(queue).getByText(/1 shown issue has no speaker yet/)).toBeInTheDocument();
+    expect(within(queue).getByText(/Confirming also adds 1 speaker to the cast: Guard\./)).toBeInTheDocument();
+    fireEvent.change(within(queue).getByLabelText('Speaker for review issue-two'), { target: { value: 'narrator' } });
+    fireEvent.click(await within(queue).findByRole('button', { name: 'Confirm all 3' }));
+
+    expect(await screen.findByText('3 review decisions saved and 1 speaker added to the cast.')).toBeInTheDocument();
+    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url, init]) => `${String(url).split('/book-one/')[1]} ${String(init?.body)}`);
+    // Decisions for cast speakers are saved before Guard is added, then Guard's issue is confirmed.
+    expect(posts).toEqual([
+      'review/issue-one {"speaker_id":"ada","role":"dialogue"}',
+      'review/issue-two {"speaker_id":"narrator","role":"dialogue"}',
+      'speakers {"canonical_name":"Guard"}',
+      'review/issue-three {"speaker_id":"guard","role":"dialogue"}',
+    ]);
+  });
+
+  it('confirms suggested speakers missing from the cast by adding them first', async () => {
+    const issue = (id: string, candidate: string, extra: Record<string, unknown> = {}) => ({
+      id, span_id: `span-${id}`, reason: 'LOW_CONFIDENCE_SPEAKER', evidence: {}, source_text: `"${id}"`, chapter_id: 'chapter-one',
+      chapter_title: 'Opening', speaker_id: null, speaker_candidate: candidate, structural_kind: 'dialogue', ...extra,
+    });
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    let guardAdded = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/speakers') && init?.method === 'POST') {
+        const name = JSON.parse(String(init.body)).canonical_name;
+        if (name === 'Roxy') return json({ detail: 'speaker name is already a confirmed alias of another speaker' }, 422);
+        if (name === 'Guard') guardAdded = true;
+        return json({ id: name === 'Guard' ? 'guard' : 'zanoba-new', canonical_name: name, status: 'active' });
+      }
+      if (init?.method === 'POST') return json({ ok: true });
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }],
+        review_issues: [
+          // Adding the detected Guard resolves both of its issues on the server.
+          ...(guardAdded ? [] : [issue('issue-one', 'Guard', { speaker_id: 'guard' }), issue('issue-two', ' guard ', { speaker_id: 'guard' })]),
+          issue('issue-three', 'Roxy'),
+          issue('issue-four', 'Zanoba'),
+          issue('issue-five', 'Ada', { speaker_id: 'ada' }),
+        ],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'ada', canonical_name: 'Ada', kind: 'character', status: 'active', casting: null, aliases: [] },
+          { id: 'guard', canonical_name: 'Guard', kind: 'character', status: guardAdded ? 'active' : 'proposed', casting: null, aliases: [] }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return json(body);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open human review queue' }));
+    const queue = await screen.findByRole('region', { name: 'Human review queue' });
+
+    expect(within(queue).getByText(/Confirming also adds 3 speakers to the cast: Guard, Roxy, Zanoba\./)).toBeInTheDocument();
+    fireEvent.click(within(queue).getByRole('button', { name: 'Confirm all 5' }));
+
+    expect(await screen.findByText(/Could not add Roxy to the cast, so its issues stay open/)).toBeInTheDocument();
+    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url, init]) => `${String(url).split('/book-one/')[1]} ${String(init?.body)}`);
+    expect(posts).toEqual([
+      'review/issue-five {"speaker_id":"ada","role":"dialogue"}',
+      'speakers {"canonical_name":"Guard"}',
+      'speakers {"canonical_name":"Roxy"}',
+      'speakers {"canonical_name":"Zanoba"}',
+      'review/issue-four {"speaker_id":"zanoba-new","role":"dialogue"}',
+    ]);
+  });
 
   it('dismisses an unused detected speaker', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -599,6 +853,9 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     const preview = await screen.findByRole('button', { name: 'Preview' });
     expect(preview).toBeDisabled();
+    // Spans start collapsed; expanding one opens its interpretation controls.
+    expect(screen.queryByLabelText('Selected span speaker')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Expand span / }));
     fireEvent.change(screen.getByLabelText('Selected span speaker'), { target: { value: 'narrator' } });
     expect(screen.getByText('Save interpretation to use your selected speaker and delivery in the preview.')).toBeInTheDocument();
     expect(preview).toBeDisabled();
@@ -736,6 +993,153 @@ describe('AudiobookWorkspace', () => {
     ));
   });
 
+  it('orders waiting chapters and plays finished ones from the render queue', async () => {
+    const played: string[] = [];
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+      played.push(this.src);
+      this.dispatchEvent(new Event('play'));
+      return Promise.resolve();
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) {
+      this.dispatchEvent(new Event('pause'));
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects/book-one/render/order') && init?.method === 'POST') body = { render_run_id: 'run', chapter_ids: [] };
+      else if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'rendering',
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 7 },
+          { id: 'chapter-two', ordinal: 1, title: 'Middle', character_count: 7 },
+          { id: 'chapter-three', ordinal: 2, title: 'Closing', character_count: 7 }],
+        review_issues: [], speakers: [], export_jobs: [], preview_jobs: [],
+        render_jobs: [
+          { id: 'render-one', chapter_id: 'chapter-one', status: 'completed', progress: {}, queue_position: null, audio: { duration_seconds: 125 } },
+          { id: 'render-two', chapter_id: 'chapter-two', status: 'queued', progress: {}, queue_position: 2, audio: null },
+          { id: 'render-three', chapter_id: 'chapter-three', status: 'queued', progress: {}, queue_position: 1, audio: null },
+        ],
+        render_progress: { completed: 1, total: 3 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
+
+    // Closing renders first; it cannot move further up.
+    expect(await screen.findByLabelText('Render order 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Closing up the render order' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Render Closing next' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Render Middle next' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/render/order',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ chapter_ids: ['chapter-two'] }) })));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Render in book order' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Render in book order' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/render/order',
+      expect.objectContaining({ body: JSON.stringify({ chapter_ids: ['chapter-two', 'chapter-three'] }) })));
+
+    // Only the finished chapter can be played.
+    expect(screen.queryByRole('button', { name: 'Play Middle' })).not.toBeInTheDocument();
+    expect(screen.getByText('2:05')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop playback of Opening' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Play Opening' }));
+    expect(played[0]).toMatch(/\/api\/audiobook\/projects\/book-one\/chapters\/chapter-one\/audio$/);
+    expect(await screen.findByText('0:00 / 2:05')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Pause playback of Opening' }));
+    expect(await screen.findByRole('button', { name: 'Play Opening' })).toHaveTextContent('Resume');
+    fireEvent.click(screen.getByRole('button', { name: 'Stop playback of Opening' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop playback of Opening' })).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Play Opening' })).toHaveTextContent('Play');
+    expect(screen.getByText('2:05')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['running', { status: 'running', progress: { current: 42, total: 100, message: 'Encoding M4B' } }],
+    ['completed', { status: 'completed', progress: { current: 1, total: 1, message: 'export encoded' } }],
+  ])('shows the latest export while it is %s', async (state, exportJob) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'ready_to_export',
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 7 }],
+        review_issues: [], speakers: [], preview_jobs: [],
+        render_jobs: [{ id: 'render-one', chapter_id: 'chapter-one', status: 'completed', progress: {} }],
+        export_jobs: [{ id: 'export-one', format: 'm4b', error: null, ...exportJob }],
+        render_progress: { completed: 1, total: 1 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
+
+    if (state === 'running') {
+      const bar = await screen.findByRole('progressbar', { name: 'M4B export progress' });
+      expect(bar).toHaveAttribute('value', '42');
+      expect(screen.getByText('M4B export · Encoding M4B')).toBeInTheDocument();
+      expect(screen.getByText('42%')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Exporting…' })).toBeDisabled();
+    } else {
+      expect(await screen.findByText('M4B export ready.')).toBeInTheDocument();
+      expect(screen.queryByRole('progressbar', { name: 'M4B export progress' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Export Now' })).toBeEnabled();
+      fireEvent.click(screen.getByRole('button', { name: 'View in Assets' }));
+      expect(await screen.findByRole('button', { name: 'Assets', current: 'page' })).toBeInTheDocument();
+    }
+  });
+
+  it('shows chapter extraction in the book source panel and blocks a second upload meanwhile', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'imported', current_source_revision_id: null, source_filename: null,
+        chapters: [], review_issues: [], speakers: [], render_jobs: [], export_jobs: [], preview_jobs: [],
+        // Newest first: a duplicate upload waits behind the extraction that is running.
+        pipeline_jobs: [
+          { id: 'ingest-duplicate', type: 'audiobook.ingest', status: 'queued', progress: {}, error: null },
+          { id: 'ingest-running', type: 'audiobook.ingest', status: 'running', progress: { current: 2, total: 3, message: 'preparing source structure' }, error: null },
+        ],
+        render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+
+    const panel = await screen.findByRole('region', { name: 'Book source' });
+    expect(within(panel).getByText('Extracting')).toBeInTheDocument();
+    expect(within(panel).getByText('Book received')).toBeInTheDocument();
+    expect(within(panel).getByText('Extracting chapters · preparing source structure')).toBeInTheDocument();
+    expect(within(panel).getByRole('progressbar', { name: 'Chapter extraction progress' })).toHaveAttribute('value', '67');
+    expect(within(panel).getByLabelText('Upload from computer')).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Choose from local library' })).toBeDisabled();
+  });
+
   it('saves a selected span interpretation without changing the displayed source', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -768,6 +1172,7 @@ describe('AudiobookWorkspace', () => {
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('A line.');
+    fireEvent.click(screen.getByRole('button', { name: /^Expand span / }));
     fireEvent.change(screen.getByLabelText('Selected span delivery'), { target: { value: 'softly' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save interpretation' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
@@ -803,6 +1208,77 @@ describe('AudiobookWorkspace', () => {
     expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Classify text' })).toBeEnabled();
     expect(screen.getByText('Review the quote spans first, then classify text to assign each passage to a speaker. Your voice selections remain saved.')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['extracted', [], ['Add book']],
+    ['review_required', [{ id: 'issue-one', reason: 'LOW_CONFIDENCE_SPEAKER', source_text: '"Hi."', chapter_id: 'chapter-one', chapter_title: 'Opening', speaker_id: null }], ['Add book', 'Extract quotes']],
+    ['ready_to_render', [], ['Add book', 'Extract quotes', 'Classify text']],
+  ])('marks the production steps finished for a %s book', async (state, reviewIssues, finished) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state, chapters: [], review_issues: reviewIssues, speakers: [], render_jobs: [],
+        preview_jobs: [], export_jobs: [], pronunciations: [], pipeline_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    const steps = await screen.findByRole('list', { name: 'Audiobook production steps' });
+    const complete = within(steps).getAllByRole('listitem')
+      .filter((item) => item.classList.contains('complete'))
+      .map((item) => item.querySelector('strong')?.textContent);
+    expect(complete).toEqual(finished);
+  });
+
+  it('lists every production phase in the book source editor with what is left and a way to it', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }],
+        review_issues: [{ id: 'issue-one', span_id: 'span-one', reason: 'LOW_CONFIDENCE_SPEAKER', source_text: '"Hi."', chapter_id: 'chapter-one', chapter_title: 'Opening', speaker_id: null }],
+        speakers: [{ id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: { voice_profile_id: 'voice-cloning:saved', revision: 1 }, aliases: [] },
+          { id: 'ada', canonical_name: 'Ada', kind: 'character', status: 'active', casting: null, aliases: [] }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], pronunciations: [], pipeline_jobs: [],
+        render_readiness: { ready: false, blockers: ['Resolve the open review issue.'] }, render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.includes('/chapters/')) body = { id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: '', spans: [] };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    const phases = screen.getByRole('list', { name: 'Production phases' });
+    const rows = within(phases).getAllByRole('listitem').filter((item) => item.parentElement === phases);
+    expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual([
+      'Phase 2: Extract quotes', 'Phase 3: Classify text', 'Phase 4: Cast and direct', 'Phase 5: Preview and render', 'Phase 6: Export',
+    ]);
+    expect(rows.filter((row) => row.classList.contains('complete')).map((row) => row.querySelector('strong')?.textContent)).toEqual(['Phase 2: Extract quotes']);
+    expect(within(rows[0]).getByText('Complete')).toBeInTheDocument();
+    expect(within(rows[0]).queryByRole('list')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Phase 5: Preview and render to do' })).getByRole('button', { name: 'Resolve 1 render requirement →' })).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Phase 6: Export to do' })).getByRole('button', { name: 'Render every chapter first →' })).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByRole('list', { name: 'Phase 4: Cast and direct to do' })).getByRole('button', { name: 'Assign voices to 1 speaker →' }));
+    expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    fireEvent.click(within(screen.getByRole('list', { name: 'Phase 3: Classify text to do' })).getByRole('button', { name: 'Resolve 1 speaker review issue →' }));
+    expect(await screen.findByRole('region', { name: 'Human review queue' })).toBeInTheDocument();
   });
 
   it('filters spans by character and saves a selected word for the whole book', async () => {
@@ -890,6 +1366,59 @@ describe('AudiobookWorkspace', () => {
     ));
   });
 
+  it('removes a whole chapter from the audiobook and restores it', async () => {
+    let removed = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/chapters/contents/speech-exclusion') && init?.method === 'POST') {
+        removed = true;
+        return new Response(JSON.stringify({ id: 'exclusion-contents' }), { status: 200 });
+      }
+      if (url.endsWith('/speech-exclusions/exclusion-contents') && init?.method === 'DELETE') {
+        removed = false;
+        return new Response(JSON.stringify({ restored: true }), { status: 200 });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'ready_to_render',
+        chapters: [{ id: 'contents', ordinal: 0, title: 'Table of Contents', character_count: 9, audio_removal_id: removed ? 'exclusion-contents' : null },
+          { id: 'chapter-one', ordinal: 1, title: 'Chapter 1', character_count: 6, audio_removal_id: null }],
+        review_issues: [], speakers: [], render_jobs: [], preview_jobs: [], export_jobs: [], pronunciations: [],
+        render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/contents')) body = {
+        id: 'contents', ordinal: 0, title: 'Table of Contents', canonical_text: 'Chapter 1',
+        spans: [{ id: 'contents-line', source_text: 'Chapter 1', structural_kind: 'narration',
+          speech_exclusions: removed ? [{ id: 'exclusion-contents', start_offset: 0, end_offset: 9, source_text: 'Chapter 1' }] : [],
+          annotation: { role: 'narration', speaker_id: null, delivery: '', review_status: 'accepted' },
+          speech_plan: { tts_input_text: removed ? '' : 'Chapter 1', hash: 'one', transformations: [] } }],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove chapter from audio' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/chapters/contents/speech-exclusion', expect.objectContaining({ method: 'POST' }),
+    ));
+    expect(await screen.findByRole('button', { name: 'Restore chapter' })).toBeEnabled();
+    expect(screen.getByText(/This chapter is left out of the audiobook/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /removed from audio\s*Table of Contents/ })).toHaveClass('removed');
+    expect(screen.getByRole('button', { name: /^02 · ready\s*Chapter 1$/ })).not.toHaveClass('removed');
+    // The chapter-wide removal is not repeated on each of its spans.
+    expect(screen.queryByRole('button', { name: 'Restore text' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore chapter' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/speech-exclusions/exclusion-contents', expect.objectContaining({ method: 'DELETE' }),
+    ));
+    expect(await screen.findByRole('button', { name: 'Remove chapter from audio' })).toBeEnabled();
+  });
+
   it.each([true, false])('uses current render readiness for a manually assigned book (ready=%s)', async (ready) => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -923,6 +1452,42 @@ describe('AudiobookWorkspace', () => {
       expect(renderButton).toBeDisabled();
       expect(screen.getByRole('status', { name: 'Render book requirements' })).toHaveTextContent('Assign a voice to Ehsan');
     }
+  });
+
+  it('shows at the render button that a render is starting, then why it was refused', async () => {
+    let refuse: () => void = () => undefined;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/render') && init?.method === 'POST') {
+        await new Promise<void>((resolve) => { refuse = resolve; });
+        return new Response(JSON.stringify({ detail: 'Rendering or chapter assembly is already in progress.' }),
+          { status: 409, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'fish-s2-pro', model_id: 'S2-Pro', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'ready_to_render', chapters: [], review_issues: [], speakers: [],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 1 },
+        render_readiness: { ready: true, blockers: [] },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render book' }));
+
+    expect(await screen.findByRole('button', { name: 'Starting render…' })).toBeDisabled();
+    expect(screen.getByText('Checking the installed model and queuing chapters…')).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one/render', expect.objectContaining({ method: 'POST' })));
+    refuse();
+    expect(await screen.findByText(/^Render not started: .*already in progress/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Render book' })).toBeEnabled();
   });
 
   it('offers a retry from persisted failed render state', async () => {

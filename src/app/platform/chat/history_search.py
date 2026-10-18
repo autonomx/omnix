@@ -15,6 +15,11 @@ from .memory_port import memory_runtime_settings as load_memory_runtime_settings
 from .models import ChatMessage, MessageContentPurpose, project_message_content
 from .prompt_assembly import PromptHistoryItem
 from .repository import InMemoryChatRepository
+from app.platform.chat.models import ChatSession
+from typing import Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
 
@@ -95,12 +100,31 @@ def history_recall_enabled() -> bool:
     return load_memory_runtime_settings().history_recall_enabled
 
 
+class HistorySearchService(Protocol):
+    """What a chat store needs from history search (in memory or PostgreSQL)."""
+
+    def ensure_index(self) -> HistorySearchStatus: ...
+
+    def sync_index(self) -> HistorySearchStatus: ...
+
+    def search(
+        self,
+        query: str,
+        *,
+        profile_id: str,
+        workspace_id: str,
+        project_id: str | None,
+        exclude_session_id: str | None = None,
+        limit: int = 6,
+    ) -> HistorySearchResult: ...
+
+
 class InMemoryHistorySearchService:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else None
 
     @staticmethod
-    def _status_for_sessions(sessions: list[object]) -> HistorySearchStatus:
+    def _status_for_sessions(sessions: list[ChatSession]) -> HistorySearchStatus:
         count = sum(
             1
             for session in sessions
@@ -124,7 +148,7 @@ class InMemoryHistorySearchService:
 
     def search_sessions(
         self,
-        sessions: list[object],
+        sessions: list[ChatSession],
         query: str,
         *,
         profile_id: str,
@@ -213,7 +237,7 @@ class InMemoryHistorySearchService:
         )
 
 
-def default_history_search_service() -> InMemoryHistorySearchService:
+def default_history_search_service() -> HistorySearchService:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
         from app.platform.chat.persistence.chat_runtime import default_history_search_service as factory

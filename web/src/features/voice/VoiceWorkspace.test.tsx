@@ -270,6 +270,34 @@ describe('VoiceWorkspace', () => {
     confirmSpy.mockRestore();
   });
 
+  it('disables the sliders the selected TTS engine has no setting for', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/tts/engines') {
+        return Response.json({
+          selected: 'fish-s2-pro',
+          engines: [{
+            id: 'fish-s2-pro', label: 'Fish Audio S2 Pro', description: '', selected: true, installed: true,
+            unavailable_reason: '', needs_transcripts: true, voice_controls: ['stability', 'style', 'speed', 'pitch', 'volume'],
+          }],
+          switch: { provider: null, phase: 'idle', error: null, voices: { prepared: [], failed: [], already_ready: 0 } },
+        });
+      }
+      if (path === '/api/providers') return Response.json({ providers: [], models: [] });
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderVoice();
+
+    await waitFor(() => expect(screen.getByLabelText('Output similarity')).toBeDisabled());
+    expect(screen.getByLabelText('Output similarity').closest('label')).toHaveTextContent('Not used');
+    expect(screen.getByLabelText('Output stability')).toBeEnabled();
+    expect(screen.getByLabelText('Output speed')).toHaveAttribute('min', '0.5');
+    expect(screen.getByLabelText('Output pitch')).toHaveAttribute('step', '1');
+  });
+
   it('transcribes a clone sample for review before creating the voice', async () => {
     let cloneRequest: Record<string, unknown> | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -4,14 +4,14 @@ import json
 import logging
 from typing import Any, Dict, List
 
-from app.apps.rpg.ai.grounding_validator import select_grounded_narration_candidate
+from app.apps.rpg.narration.ai.grounding_validator import select_grounded_narration_candidate
 
 from .runtime_narration_common import (
     NARRATION_FORMAT_VERSION as NARRATION_FORMAT_VERSION,
     _norm as _norm,
     _safe_str as _safe_str,
 )
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 from .runtime_narration_fallback import (
     _build_dialogue_state_update_payload as _build_dialogue_state_update_payload,
     _dialogue_aware_bran_line as _dialogue_aware_bran_line,
@@ -456,7 +456,7 @@ def validate_narration_payload(
             },
         }
 
-    errors: List[str] = []
+    errors = []
 
     if payload.get("format_version") != NARRATION_FORMAT_VERSION:
         errors.append("invalid_format_version")
@@ -733,7 +733,7 @@ def build_runtime_narration_payload(
     max_tokens: int = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS,
     max_provider_attempts: int = 2,
 ) -> Dict[str, Any]:
-    diagnostics = {
+    diagnostics: dict[str, Any] = {
         "provider_requested": bool(prefer_provider),
         "provider_present": provider is not None,
         "provider_shape": _provider_shape(provider),

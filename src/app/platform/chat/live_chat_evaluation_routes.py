@@ -59,7 +59,7 @@ def create_live_chat_evaluation_router(
             raise HTTPException(status_code=422, detail="unknown presence preset")
         return get_store().list(
             session_id=session_id,
-            presence_preset=presence_preset,  # type: ignore[arg-type]
+            presence_preset=presence_preset,
             limit=limit,
         )
 
@@ -96,7 +96,7 @@ def create_live_chat_evaluation_router(
     ) -> list[PresencePolicyVersion]:
         if preset not in {None, "quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
-        return get_store().list_policy_versions(preset)  # type: ignore[arg-type]
+        return get_store().list_policy_versions(preset)
 
     @router.post("/presence-presets/{preset}/versions", response_model=PresencePolicyVersion)
     def create_presence_policy_version(
@@ -106,7 +106,7 @@ def create_live_chat_evaluation_router(
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
-            return get_store().create_policy_version(preset, request)  # type: ignore[arg-type]
+            return get_store().create_policy_version(preset, request)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -115,7 +115,7 @@ def create_live_chat_evaluation_router(
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
-            return get_store().activate_policy(preset, version)  # type: ignore[arg-type]
+            return get_store().activate_policy(preset, version)
         except KeyError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except ValueError as error:
@@ -126,7 +126,7 @@ def create_live_chat_evaluation_router(
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
-            return get_store().rollback_policy(preset)  # type: ignore[arg-type]
+            return get_store().rollback_policy(preset)
         except KeyError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 

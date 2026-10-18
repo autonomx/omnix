@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, datetime, timezone
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -113,7 +113,7 @@ class SessionEvidenceManifest(BaseModel):
     attempt_count: int = Field(default=0, ge=0)
     next_retry_at: datetime | None = None
     finalized_at: datetime | None = None
-    reconciliation_payload: dict[str, object] = Field(default_factory=dict)
+    reconciliation_payload: dict[str, Any] = Field(default_factory=dict)
     revision: int = Field(default=1, ge=1)
     updated_at: datetime | None = None
 
@@ -131,7 +131,7 @@ class SessionEvidenceManifest(BaseModel):
         return self.frozen_scope.immutable_fingerprint
 
 
-def _event_payload(event: StrategyEvent) -> dict[str, object]:
+def _event_payload(event: StrategyEvent) -> dict[str, Any]:
     return {
         "event_id": event.event_id,
         "run_id": event.run_id,
@@ -304,16 +304,43 @@ def begin_reconciliation(
     manifest: SessionEvidenceManifest,
     *,
     observed_at: datetime,
+    lease_until: datetime,
 ) -> SessionEvidenceManifest:
+    """Claim the manifest for one attempt.
+
+    ``lease_until`` is stored as ``next_retry_at`` so an attempt that never
+    records its outcome (process exit, cycle timeout) is retried only after the
+    lease lapses, not on every restart.
+    """
     if manifest.reconciliation_state in {"FINAL", "PERMANENTLY_UNSCORABLE"}:
         raise ValueError(
             f"terminal_manifest_cannot_retry:{manifest.reconciliation_state}"
         )
+    if lease_until <= observed_at:
+        raise ValueError("reconciliation_lease_must_follow_observation")
     return manifest.model_copy(
         update={
             "reconciliation_state": "RETRYING",
             "attempt_count": manifest.attempt_count + 1,
-            "next_retry_at": None,
+            "next_retry_at": lease_until,
+            "revision": manifest.revision + 1,
+            "updated_at": observed_at,
+        }
+    )
+
+
+def checkpoint_reconciliation(
+    manifest: SessionEvidenceManifest,
+    *,
+    observed_at: datetime,
+    payload: dict[str, Any],
+) -> SessionEvidenceManifest:
+    """Record an in-flight attempt's progress; the state and lease are unchanged."""
+    if manifest.reconciliation_state != "RETRYING":
+        raise ValueError("manifest_must_be_retrying_to_checkpoint")
+    return manifest.model_copy(
+        update={
+            "reconciliation_payload": payload,
             "revision": manifest.revision + 1,
             "updated_at": observed_at,
         }
@@ -325,7 +352,7 @@ def defer_reconciliation(
     *,
     observed_at: datetime,
     next_retry_at: datetime,
-    payload: dict[str, object],
+    payload: dict[str, Any],
 ) -> SessionEvidenceManifest:
     if manifest.reconciliation_state != "RETRYING":
         raise ValueError("manifest_must_be_retrying_to_defer")
@@ -343,7 +370,7 @@ def finalize_reconciliation(
     manifest: SessionEvidenceManifest,
     *,
     observed_at: datetime,
-    payload: dict[str, object],
+    payload: dict[str, Any],
 ) -> SessionEvidenceManifest:
     if manifest.reconciliation_state != "RETRYING":
         raise ValueError("manifest_must_be_retrying_to_finalize")
@@ -363,7 +390,7 @@ def permanently_unscorable(
     manifest: SessionEvidenceManifest,
     *,
     observed_at: datetime,
-    payload: dict[str, object],
+    payload: dict[str, Any],
 ) -> SessionEvidenceManifest:
     if manifest.reconciliation_state != "RETRYING":
         raise ValueError("manifest_must_be_retrying_to_close")
@@ -393,7 +420,7 @@ def _row_to_manifest(row) -> SessionEvidenceManifest:
         frozen_scope=SessionEvidenceFrozenScope.model_validate(
             payload["frozen_scope"]
         ),
-        reconciliation_state=str(row[3]),
+        reconciliation_state=cast(Any, str(row[3])),
         attempt_count=int(row[5]),
         next_retry_at=row[6],
         finalized_at=row[8],
@@ -567,6 +594,7 @@ __all__ = [
     "SessionEvidenceRepository",
     "begin_reconciliation",
     "build_session_evidence_manifest",
+    "checkpoint_reconciliation",
     "default_session_evidence_repository",
     "defer_reconciliation",
     "event_stream_input",

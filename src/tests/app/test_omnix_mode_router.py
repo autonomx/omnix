@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.mode_routing import list_omnix_mode_routes, omnix_mode_route, omnix_mode_router_payload
+from app.apps.rpg.edge.hermes.mode_routing import list_omnix_mode_routes, omnix_mode_route, omnix_mode_router_payload
 
 
 def test_omnix_mode_router_lists_expected_modes() -> None:

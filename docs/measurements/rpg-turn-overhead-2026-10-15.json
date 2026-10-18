@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "measurement": "RPG turn overhead without model time (WP-5.6)",
+  "revision": "31ff66f8341e978c45e6d9f98e9a2f935fda5161",
+  "python": "3.11.12",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "database": "omnix_test",
+  "budget_p95_ms": 150,
+  "results": [
+    {
+      "state_kb_requested": 100,
+      "state_bytes": 102732,
+      "turns": 30,
+      "turn_request_ms": {
+        "p50": 224.1,
+        "p95": 296.4,
+        "max": 298.3
+      },
+      "persist_foreground_turn_ms": {
+        "p50": 63.8,
+        "p95": 96.5,
+        "max": 98.6
+      },
+      "statements_per_turn": {
+        "p50": 44.0,
+        "p95": 44.0,
+        "max": 45.0
+      },
+      "wal_bytes_per_turn": {
+        "p50": 230396.0,
+        "p95": 310376.0,
+        "max": 323904.0
+      },
+      "model_calls_per_turn": 3.4
+    },
+    {
+      "state_kb_requested": 1024,
+      "state_bytes": 1051672,
+      "turns": 30,
+      "turn_request_ms": {
+        "p50": 263.2,
+        "p95": 351.8,
+        "max": 369.5
+      },
+      "persist_foreground_turn_ms": {
+        "p50": 102.0,
+        "p95": 140.0,
+        "max": 140.1
+      },
+      "statements_per_turn": {
+        "p50": 44.0,
+        "p95": 44.0,
+        "max": 45.0
+      },
+      "wal_bytes_per_turn": {
+        "p50": 274636.0,
+        "p95": 357664.0,
+        "max": 1067328.0
+      },
+      "model_calls_per_turn": 3.4
+    }
+  ]
+}

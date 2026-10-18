@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from .workflows import WorkflowEvent
+from typing import Any
 
 
 class AgentRuntime(ABC):
@@ -40,7 +41,7 @@ class AgentRuntime(ABC):
 
 class WorkflowRuntime(ABC):
     @abstractmethod
-    def start(self, workflow_id: str, input_payload: dict[str, object]) -> str: ...
+    def start(self, workflow_id: str, input_payload: dict[str, Any]) -> str: ...
 
     @abstractmethod
     def pause(self, run_id: str) -> None: ...
@@ -52,7 +53,7 @@ class WorkflowRuntime(ABC):
     def cancel(self, run_id: str) -> None: ...
 
     @abstractmethod
-    def get_status(self, run_id: str) -> dict[str, object] | None: ...
+    def get_status(self, run_id: str) -> dict[str, Any] | None: ...
 
     @abstractmethod
     def stream_events(
@@ -68,13 +69,13 @@ class WorkflowRuntime(ABC):
         *,
         workflow_id: str | None = None,
         limit: int = 100,
-    ) -> list[dict[str, object]]: ...
+    ) -> list[dict[str, Any]]: ...
 
     @abstractmethod
     def schedule(
         self,
         workflow_id: str,
-        input_payload: dict[str, object],
+        input_payload: dict[str, Any],
         *,
         run_at: datetime,
         interval_seconds: int | None = None,

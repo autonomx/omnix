@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.runtime.clock import utc_now
 
 from typing import Any
-from app.apps.rpg.safe_values import safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_list as _safe_list
 
 
 def _utc_now() -> str:

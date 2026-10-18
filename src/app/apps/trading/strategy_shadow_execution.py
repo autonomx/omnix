@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from .indicator_signals import (
     indicator_entry_confirmation,
@@ -42,7 +42,7 @@ _EXECUTION_FIELDS = (
 @dataclass(frozen=True)
 class ShadowExecutionEvidence:
     reason_code: ShadowExecutionReason
-    execution: dict[str, object]
+    execution: dict[str, Any]
 
 
 def _full_indicator_warmup(context) -> bool:

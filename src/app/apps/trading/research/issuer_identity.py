@@ -1,9 +1,9 @@
 from __future__ import annotations
-from app.config.env import env_str as _env_str
+from app.apps.trading.sec_contact import sec_headers
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from httpx import HTTPError
 
@@ -33,14 +33,7 @@ class SecIssuerIdentityResolver:
 
     @staticmethod
     def _headers() -> dict[str, str]:
-        return {
-            "User-Agent": _env_str(
-                "OMNIX_SEC_USER_AGENT",
-                "OmnixTradingResearch/1.0 local-research contact=local@localhost",
-            ),
-            "Accept-Encoding": "gzip, deflate",
-            "Host": "www.sec.gov",
-        }
+        return sec_headers(Host="www.sec.gov")
 
     def _load(self) -> dict[str, dict[str, Any]]:
         if self._mapping is not None:
@@ -92,7 +85,7 @@ class SecIssuerIdentityResolver:
             source="sec_company_tickers",
             source_available_at=captured,
             captured_at=captured,
-            confidence=confidence,
+            confidence=cast(Any, confidence),
             immutable_fingerprint=fp,
         )
 
@@ -121,6 +114,6 @@ def fallback_issuer_identity(instrument_id: str) -> IssuerIdentity:
         source="instrument_id_fallback",
         source_available_at=None,
         captured_at=captured,
-        confidence="0",
+        confidence=cast(Any, "0"),
         immutable_fingerprint=fingerprint(payload),
     )

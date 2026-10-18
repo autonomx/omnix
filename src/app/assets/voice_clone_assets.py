@@ -42,12 +42,12 @@ def voice_clone_sources() -> list[tuple[Path, Path]]:
     if override_dir:
         clones_dir = Path(override_dir)
         manifest_path = Path(override_file) if override_file else clones_dir / "voice_clones.json"
-        sources = [(clones_dir, manifest_path)]
+        override: list[tuple[Path, Path]] = [(clones_dir, manifest_path)]
         LOGGER.info(
             "[Voice Library][scan] using environment override sources=%s",
-            _source_debug_rows(sources),
+            _source_debug_rows(override),
         )
-        return sources
+        return override
 
     canonical_dir = resources_root() / "voice_clones"
     canonical_manifest = Path(override_file) if override_file else canonical_dir / "voice_clones.json"

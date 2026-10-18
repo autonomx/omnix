@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 from app.persistence.errors import EntityNotFound
 from app.persistence.execution_repositories import JobClaimConflict
@@ -11,7 +12,17 @@ from app.persistence.unit_of_work import unit_of_work
 from app.runtime.pagination import MAX_PAGE_SIZE
 
 
-class ChatExecutionTransactions:
+if TYPE_CHECKING:
+    # Mixed into the kernel's PostgreSQL job store (chat's job_store adapter).
+    from app.persistence.job_store import PostgresJobStoreAdapter as _JobStore
+else:
+    _JobStore = object
+
+
+class ChatExecutionTransactions(_JobStore):
+    if TYPE_CHECKING:
+        def require_chat_execution_owner(self, job_id: str) -> None: ...
+
     def find_job_by_submission(self, *, job_type, session_id, submission_id):
         with unit_of_work(self.database) as work:
             records = work.jobs.find_by_input(
@@ -54,7 +65,7 @@ class ChatExecutionTransactions:
         job = self.get_job(job_id)
         if job is None or job.type != "chat.generate":
             raise JobClaimConflict("Chat job no longer exists")
-        session_id = (job.input_payload or {}).get("session_id")
+        session_id = str((job.input_payload or {}).get("session_id") or "")
         with self.chat_transaction(chat_store, session_id, job_id=job_id) as work:
             current = work.jobs.get_job(self.context, job_id)
             if current is None or current["status"] not in ("queued", "running"):

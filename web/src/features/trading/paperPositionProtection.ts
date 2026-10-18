@@ -8,7 +8,12 @@ export type PositionProtectionLevels = {
 };
 
 
+type TrailSettings = { trail_amount: string | null; trail_percent: string | null };
+
 const cache = new Map<string, PositionProtectionLevels>();
+// A trailing stop-loss leg's trail (TVP-7.1). The chart edits only levels, so
+// it sends the trail back unchanged; omitting it would turn trailing off.
+const trails = new Map<string, TrailSettings>();
 const inflight = new Set<string>();
 
 function entryKey(accountId: string, instrumentId: string): string {
@@ -45,6 +50,11 @@ async function hydrate(accountId: string, instrumentId: string): Promise<void> {
       : { takeProfit: null, stopLoss: null };
     const previous = cache.get(key) ?? { takeProfit: null, stopLoss: null };
     cache.set(key, next);
+    if (value && (value.trail_amount || value.trail_percent)) {
+      trails.set(key, { trail_amount: value.trail_amount ?? null, trail_percent: value.trail_percent ?? null });
+    } else {
+      trails.delete(key);
+    }
     if (!equal(previous, next)) notify(accountId, instrumentId);
   } catch {
     // Keep the last rendered cache value. The server remains authority and the
@@ -77,10 +87,13 @@ export function writePaperPositionProtection(
         // Clearing an already absent row is effectively idempotent for the UI.
       }
     } else {
+      // A trail needs a stop loss; without one the leg stops trailing.
+      const trail = next.stopLoss === null ? undefined : trails.get(entryKey(accountId, instrumentId));
       await tradingPaperApi.setProtection(accountId, {
         instrument_id: instrumentId,
         take_profit: next.takeProfit === null ? null : String(next.takeProfit),
         stop_loss: next.stopLoss === null ? null : String(next.stopLoss),
+        ...(trail ?? {}),
       });
     }
     await hydrate(accountId, instrumentId);

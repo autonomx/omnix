@@ -1,20 +1,32 @@
+import { DrawingAlertSync } from './DrawingAlertSync';
+import { useMemo } from 'react';
+import { alertIndicatorChoices } from './alertIndicatorSources';
+import { useAlertIndicatorIds } from './useTradingAlerts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingPositionOverlay } from './TradingPositionOverlay';
+import { TradingOrderLinesOverlay } from './TradingOrderLinesOverlay';
+import { TradingPriceScalePlus } from './TradingPriceScalePlus';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
+import { ScriptTablesOverlay } from './scripts/ScriptTablesOverlay';
 import { TRADING_CHART_TYPE_OPTIONS, type TradingChartType } from './chart/chartAdapter';
+import { drawingInstrumentOf } from './drawings/drawingInstrument';
 import { TradingDrawingOverlay } from './drawings/TradingDrawingOverlay';
 import { convertedPrice, indicatorContextLabel, isAlertIndicatorId, price, rightOffsetOptions } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
+import { ChartWorkflowSettings } from './TradingChartWorkflowControls';
 
 /** Drawings, alerts, positions, the data table, object tree and settings. */
 export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
   const {
     active, adapter, alertPlacement, bars, bindingId, changeRightOffset, chartQuery, chartType, clearAlertPlacement,
-    drawingSnapMode, drawingTool, drawings, indicators, instrumentId, interval, latestClose, objectTreeVisible,
+    drawingSnapMode, drawingTool, drawings, drawingsHidden, toggleDrawingsHidden, drawingToolSettings, indicatorOutputs, indicatorPaneGeometry, indicators, instrumentId, interval, latest, latestClose, objectTreeVisible,
     onActivate, onChangeChartType, onToggleIndicator, openContextMenu, paperAccountId, priceScaleMultiplier,
-    provenance, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
+    provenance, replayMode, resolvedBinding, rightOffset, setAlertPlacement, setDrawingTool, setObjectTreeVisible,
     setSettingsVisible, setTableVisible, settingsVisible, tableVisible,
   } = ws;
+  const tickSize = drawingInstrumentOf(chartQuery.data?.instrument).tickSize;
+  const alertIndicatorIds = useAlertIndicatorIds();
+  const indicatorChoices = useMemo(() => alertIndicatorChoices(indicators, indicatorOutputs, alertIndicatorIds), [alertIndicatorIds, indicatorOutputs, indicators]);
   return (
     <>
       <TradingDrawingOverlay
@@ -25,12 +37,18 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         snapMode={drawingSnapMode}
         drawings={drawings.state.drawings}
         selectedId={drawings.state.selectedId}
-        onAdd={drawings.add}
+        onAdd={(drawing) => { if (drawingsHidden) toggleDrawingsHidden(); drawings.add(drawing); }}
         onSelect={(id) => { onActivate(); drawings.select(id); }}
+        onToggleSelect={(id) => { onActivate(); drawings.toggleSelect(id); }}
+        onCloneDrawings={drawings.clone}
+        allHidden={drawingsHidden}
+        allLocked={drawingToolSettings.lockAll}
         onMovePoint={drawings.movePoint}
+        onEditDrawing={drawings.edit}
+        instrument={drawingInstrumentOf(chartQuery.data?.instrument)}
         onTranslateDrawing={drawings.translate}
         onRemove={drawings.remove}
-        onToolComplete={() => setDrawingTool('cursor')}
+        onToolComplete={() => { if (!drawingToolSettings.stayInDrawingMode) setDrawingTool('cursor'); }}
         onAlertAtPoint={active ? (placement, indicatorId) => {
           const indicator = indicatorId
             ? indicators.find((item) => item.id === indicatorId && item.enabled)
@@ -40,6 +58,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
             : undefined;
           setAlertPlacement({
             ...placement,
+            ...(indicatorId ? { chartIndicatorId: indicatorId } : {}),
             ...(supportedIndicatorId ? { indicatorId: supportedIndicatorId } : {}),
             ...(indicator?.period !== undefined ? { indicatorPeriod: indicator.period } : {}),
           });
@@ -55,8 +74,21 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
         symbol={chartQuery.data?.instrument.display_symbol ?? instrumentId}
         placement={alertPlacement}
         onPlacementConsumed={clearAlertPlacement}
+        indicatorChoices={indicatorChoices}
       />
+      <DrawingAlertSync adapter={adapter} instrumentId={instrumentId} instrument={drawingInstrumentOf(chartQuery.data?.instrument)} drawings={drawings.state.drawings} active={active} replayMode={replayMode} />
       <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
+      <ScriptTablesOverlay outputs={indicatorOutputs} adapter={adapter} panes={indicatorPaneGeometry} />
+      <TradingOrderLinesOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} tickSize={tickSize} disabled={replayMode} />
+      {active ? (
+        <TradingPriceScalePlus
+          adapter={adapter}
+          instrumentId={instrumentId}
+          lastPrice={latestClose > 0 ? latestClose : null}
+          tickSize={tickSize}
+          onAddAlert={(price, y) => { if (latest) setAlertPlacement({ time: latest.start_time, price, x: 0, y, source: 'context-menu' }); }}
+        />
+      ) : null}
       {tableVisible ? (
         <div className="trading-chart-table-view" role="dialog" aria-label="Chart table view" onPointerDown={(event) => event.stopPropagation()}>
           <header><strong>Table view · {chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong><button type="button" onClick={() => setTableVisible(false)} aria-label="Close table view">×</button></header>
@@ -82,6 +114,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
           <label>Chart type<select value={chartType} onChange={(event) => onChangeChartType(event.target.value as TradingChartType)}>{TRADING_CHART_TYPE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label>Right margin<select aria-label="Chart right margin" value={rightOffset} onChange={(event) => changeRightOffset(event.target.value)}>{rightOffsetOptions.map((offset) => <option key={offset} value={offset}>{offset === 0 ? 'None' : `${offset} bars`}</option>)}</select></label>
           <label>Snap mode<select value={drawingSnapMode} disabled><option>{drawingSnapMode}</option></select></label>
+          <ChartWorkflowSettings ws={ws} />
         </aside>
       ) : null}
     </>
@@ -91,7 +124,7 @@ export function ChartPanelOverlays({ ws }: { ws: TradingChartPanelModel }) {
 /** The chart's context menu. */
 export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
   const {
-    adapterRef, applyChartTemplate, chartQuery, contextIndicator, contextMenu, contextMenuAlert, copyContextPrice,
+    adapterRef, applyChartTemplate, chartId, chartQuery, contextIndicator, contextMenu, contextMenuAlert, copyContextPrice,
     cursorLocked, drawings, indicators, instrumentId, onClearIndicators, pasteContextPrice, resetIndicatorPaneView,
     selectedRangeRef, setContextMenu, setCursorLocked, setObjectTreeVisible, setPriceScaleSettings,
     setSelectedRangeLabel, setSettingsIndicator, setSettingsVisible, setTableVisible, tableVisible,
@@ -111,9 +144,11 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
           />
           <TradingChartContextMenu
             point={contextMenu}
+            chartId={chartId}
+            instrumentId={contextIndicator || contextMenu?.trendlinePoints?.length === 2 ? null : instrumentId}
             symbol={contextIndicator
               ? indicatorContextLabel(contextIndicator)
-              : contextMenu?.drawingTool === 'trend-line'
+              : contextMenu?.trendlinePoints?.length === 2
                 ? 'trendline'
                 : (chartQuery.data?.instrument.display_symbol ?? instrumentId)}
             indicatorContext={Boolean(contextIndicator)}
@@ -134,7 +169,7 @@ export function ChartPanelContextMenu({ ws }: { ws: TradingChartPanelModel }) {
             }}
             onCopyPrice={copyContextPrice}
             onPastePrice={pasteContextPrice}
-            onAddAlert={contextMenu?.indicatorId || !contextMenu?.contextIndicatorId ? contextMenuAlert : null}
+            onAddAlert={contextMenuAlert}
             onToggleCursor={() => setCursorLocked((value) => !value)}
             onToggleTable={() => setTableVisible((value) => !value)}
             onObjectTree={() => setObjectTreeVisible(true)}

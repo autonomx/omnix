@@ -6,7 +6,7 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -149,7 +149,7 @@ def build_trusted_capability_manifest(
         if item.strip()
     }
     available.update(
-        item for item in configured if item in {"traffic", "weather", "calendar", "messages"}
+        cast(CompanionTool, item) for item in configured if item in {"traffic", "weather", "calendar", "messages"}
     )
     return TrustedCapabilityManifest(available_tools=frozenset(available))
 

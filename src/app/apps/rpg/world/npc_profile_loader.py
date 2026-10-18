@@ -5,7 +5,7 @@ from copy import deepcopy
 from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 from typing import Any, Dict
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 NPC_PROFILE_DIR = REPO_ROOT / "resources" / "data" / "rpg" / "npcs"

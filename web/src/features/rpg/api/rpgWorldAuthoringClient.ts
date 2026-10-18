@@ -1,131 +1,35 @@
-import type { RpgWorldGenerationRun, RpgWorldSummary } from './rpgWorldLibraryClient';
+import type { RpgWorldSummary } from './rpgWorldLibraryClient';
 import { pipelineFetch } from '../../../api/fetchPipeline';
 
+import type { components } from './generated';
 export type RpgAuthoringGroup = 'workspace' | 'world' | 'lore' | 'game-master';
 export type RpgAuthoringPageKind = 'document' | 'collection';
 
-export interface RpgAuthoringSection {
-  id: string;
-  label: string;
-  group: RpgAuthoringGroup;
-  page_kind: RpgAuthoringPageKind;
-  topic_ids: string[];
-  entity_kind?: string;
-  dependencies: string[];
-  required_before_launch: boolean;
-  supports_generation: boolean;
-  supports_images: boolean;
-  supports_entity_editing: boolean;
-  operational_status: string;
-  editorial_status: string;
-  entity_count: number;
-}
+export type RpgAuthoringSection = components['schemas']['RpgAuthoringSection'];
 
-export interface RpgWorldTokenUsage {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  provider_reported_topics: number;
-  estimated_topics: number;
-  unavailable_topics: number;
-  topic_count: number;
-  in_flight_topics?: number;
-  generation_duration_ms?: number;
-  timed_topics?: number;
-  repair_count?: number;
-  repair_tokens?: number;
-  provider_reported_repairs?: number;
-  estimated_repairs?: number;
-}
+export type RpgWorldTokenUsage = components['schemas']['RpgWorldTokenUsage'];
 
-export interface RpgAuthoringManifestResponse {
-  ok: boolean;
-  world: RpgWorldSummary;
-  sections: RpgAuthoringSection[];
-  generation: RpgWorldGenerationRun | Record<string, never>;
-  token_usage?: RpgWorldTokenUsage;
-}
+export type RpgAuthoringManifestResponse = components['schemas']['RpgAuthoringManifestResponse'];
 
-export interface RpgAuthoringCardHighlight {
-  label: string;
-  value: unknown;
-}
+export type RpgAuthoringCardHighlight = components['schemas']['RpgAuthoringCardHighlight'];
 
-export interface RpgAuthoringCardGroup {
-  label: string;
-  items: unknown[];
-  style: 'chips' | 'list' | string;
-}
+export type RpgAuthoringCardGroup = components['schemas']['RpgAuthoringCardGroup'];
 
-export interface RpgAuthoringCardPresentation {
-  variant: string;
-  eyebrow: string;
-  badges: unknown[];
-  highlights: RpgAuthoringCardHighlight[];
-  groups: RpgAuthoringCardGroup[];
-}
+export type RpgAuthoringCardPresentation = components['schemas']['RpgAuthoringCardPresentation'];
 
-export interface RpgAuthoringDossierQuote {
-  text: string;
-  attribution?: string;
-}
+export type RpgAuthoringDossierQuote = components['schemas']['RpgAuthoringDossierQuote'];
 
-export interface RpgAuthoringDossierQuickFact {
-  label: string;
-  value: unknown;
-}
+export type RpgAuthoringDossierQuickFact = components['schemas']['RpgAuthoringDossierQuickFact'];
 
-export interface RpgAuthoringDossierSection {
-  id: string;
-  title: string;
-  paragraphs: string[];
-}
+export type RpgAuthoringDossierSection = components['schemas']['RpgAuthoringDossierSection'];
 
-export interface RpgAuthoringEntityDossier {
-  schema_version: 'rpg_world_entity_dossier_v1' | string;
-  subtitle?: string;
-  quote?: RpgAuthoringDossierQuote | null;
-  quick_facts: RpgAuthoringDossierQuickFact[];
-  sections: RpgAuthoringDossierSection[];
-  related_entity_ids: string[];
-  generated_from_legacy?: boolean;
-  quality_enriched?: boolean;
-}
+export type RpgAuthoringEntityDossier = components['schemas']['RpgAuthoringEntityDossier'];
 
-export interface RpgAuthoringEntityCard {
-  id: string;
-  title: string;
-  summary: string;
-  short_summary?: string;
-  dossier?: RpgAuthoringEntityDossier;
-  kind: string;
-  card_type: string;
-  image_target_id?: string;
-  presentation: RpgAuthoringCardPresentation;
-  metadata: Record<string, unknown>;
-}
+export type RpgAuthoringEntityCard = components['schemas']['RpgAuthoringEntityCard'];
 
-export interface RpgAuthoringDocumentBlock {
-  kind: 'section' | 'facts' | 'json' | string;
-  title?: string;
-  body?: string;
-  items?: Array<Record<string, unknown>>;
-  value?: unknown;
-}
+export type RpgAuthoringDocumentBlock = components['schemas']['RpgAuthoringDocumentBlock'];
 
-export interface RpgAuthoringTopic {
-  topic_id: string;
-  draft_revision: number;
-  source: string;
-  status: string;
-  content: Record<string, unknown>;
-  directives: Record<string, unknown>;
-  dependency_hashes: Record<string, string>;
-  input_hash: string;
-  content_hash: string;
-  provenance: Record<string, unknown>;
-  updated_at: string;
-}
+export type RpgAuthoringTopic = components['schemas']['RpgAuthoringTopic'];
 
 export interface RpgAuthoringTopicHistory extends RpgAuthoringTopic {
   history_sequence: number;
@@ -165,93 +69,26 @@ export interface RpgAuthoringCollectionPage {
   topic?: RpgAuthoringTopic;
 }
 
-export interface RpgAuthoringEntityMutationResponse {
-  ok: boolean;
-  topic: RpgAuthoringTopic;
-  entity: Record<string, unknown>;
-  stale_topic_ids: string[];
-  stale_entity_ids: string[];
-  canonical_fields_preserved?: boolean;
-  editorial_only?: boolean;
-}
+export type RpgAuthoringEntityMutationResponse = components['schemas']['RpgAuthoringEntityMutationResponse'];
 
-export interface RpgAuthoringDossierPreviewResponse {
-  ok: boolean;
-  preview_only: boolean;
-  world_id: string;
-  topic_id: string;
-  entity_id: string;
-  expected_draft_revision: number;
-  expected_content_hash: string;
-  short_summary: string;
-  dossier: RpgAuthoringEntityDossier;
-  generation: Record<string, unknown>;
-  canonical_fields_preserved: boolean;
-  stored: false;
-}
+export type RpgAuthoringDossierPreviewResponse = components['schemas']['RpgAuthoringDossierPreviewResponse'];
 
-export interface RpgDossierQualityMetrics {
-  entities: number;
-  rich_dossiers: number;
-  projected_legacy_dossiers: number;
-  invalid_or_thin_dossiers: number;
-  heading_repairs: number;
-  coverage_percent: number;
-  average_words: number;
-  unresolved_related_entity_ids: number;
-}
+export type RpgDossierQualityMetrics = components['schemas']['RpgDossierQualityMetrics'];
 
-export interface RpgDossierQualityTopicMetrics {
-  topic_id: string;
-  entities: number;
-  rich: number;
-  projected: number;
-  invalid: number;
-  words: number;
-  coverage_percent: number;
-  average_words: number;
-}
+export type RpgDossierQualityTopicMetrics = components['schemas']['RpgDossierQualityTopicMetrics'];
 
-export interface RpgDossierEnrichmentCandidate {
-  topic_id: string;
-  entity_id: string;
-  title: string;
-  word_count: number;
-  generated_from_legacy: boolean;
-  issues: string[];
-}
+export type RpgDossierEnrichmentCandidate = components['schemas']['RpgDossierEnrichmentCandidate'];
 
-export interface RpgDossierEnrichmentRequest {
-  all_candidates?: boolean;
+// The route checks these fields itself; the client sends them in this shape.
+export type RpgDossierEnrichmentRequest = components['schemas']['RpgEnrichWorldDossiersRequestBody'] & {
   candidates?: Array<Pick<RpgDossierEnrichmentCandidate, 'topic_id' | 'entity_id'>>;
   directives?: Record<string, unknown>;
-  dry_run?: boolean;
   limit?: number;
-}
+};
 
-export interface RpgWorldDossierQualityResponse {
-  ok: boolean;
-  world_id: string;
-  draft_revision: number;
-  schema_version: string;
-  metrics: RpgDossierQualityMetrics;
-  by_topic: RpgDossierQualityTopicMetrics[];
-  unresolved_related_entity_ids: string[];
-  enrichment_candidates: RpgDossierEnrichmentCandidate[];
-}
+export type RpgWorldDossierQualityResponse = components['schemas']['RpgWorldDossierQualityResponse'];
 
-export interface RpgWorldDossierEnrichmentResponse {
-  ok: boolean;
-  world_id: string;
-  dry_run: boolean;
-  candidate_count?: number;
-  candidates?: RpgDossierEnrichmentCandidate[];
-  attempted?: number;
-  completed?: Array<{ topic_id: string; entity_id: string; content_hash: string }>;
-  failed?: Array<{ topic_id: string; entity_id: string; error: string }>;
-  metrics?: RpgDossierQualityMetrics;
-  quality?: RpgWorldDossierQualityResponse;
-}
+export type RpgWorldDossierEnrichmentResponse = components['schemas']['RpgWorldDossierEnrichmentResponse'];
 
 export type RpgAuthoringPage = RpgAuthoringDocumentPage | RpgAuthoringCollectionPage;
 

@@ -1,185 +1,38 @@
 import { pipelineFetch } from '../../../api/fetchPipeline';
-export interface RpgWorldSummary {
-  id: string;
-  title: string;
-  description: string;
-  status: string;
-  source_mode: string;
-  genre: string;
-  tone: string;
-  seed: number;
-  draft_revision: number;
-  metadata: Record<string, unknown>;
-  scenario_count?: number;
-  generation?: RpgWorldGenerationRun | null;
-  created_at: string;
-  updated_at: string;
-}
+import type { components } from './generated';
+export type RpgWorldSummary = components['schemas']['RpgWorldSummary'];
 
-export interface RpgScenarioSummary {
-  id: string;
-  world_id: string;
-  title: string;
-  description: string;
-  status: string;
-  metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-}
+export type RpgScenarioSummary = components['schemas']['RpgScenarioSummary'];
 
-export interface RpgWorldCampaignSummary {
-  campaign_id: string;
-  title: string;
-  status: string;
-  revision: number;
-  updated_at: string;
-  world_id: string;
-  world_revision: number;
-  world_release: number;
-  scenario_id: string;
-  scenario_revision: number;
-  binding: Record<string, unknown>;
-}
+export type RpgWorldCampaignSummary = components['schemas']['RpgWorldCampaignSummary'];
 
-export interface RpgWorldGenerationRun {
-  run_id: string;
-  world_id: string;
-  draft_revision: number;
-  status: string;
-  graph: Record<string, unknown>;
-  context: Record<string, unknown>;
-  settings: Record<string, unknown>;
-  plan: Record<string, unknown>;
-  progress: Record<string, unknown>;
-  error: Record<string, unknown>;
-  parent_run_id?: string | null;
-  lineage?: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-  completed_at?: string | null;
-}
+export type RpgWorldGenerationRun = components['schemas']['RpgWorldGenerationRun'];
 
-export interface RpgWorldTopic {
-  topic_id: string;
-  draft_revision: number;
-  source: string;
-  status: string;
-  content: Record<string, unknown>;
-  directives: Record<string, unknown>;
-  dependency_hashes: Record<string, string>;
-  input_hash: string;
-  content_hash: string;
-  provenance: Record<string, unknown>;
-  updated_at: string;
-}
+export type RpgWorldTopic = components['schemas']['RpgWorldTopic'];
 
-export interface RpgMapBlueprintRevision {
-  world_id: string;
-  map_id: string;
-  blueprint_revision: number;
-  document: Record<string, unknown>;
-  content_hash: string;
-  semantic_interface_hash: string;
-  status: 'ready' | 'invalid';
-  findings: Record<string, unknown>[];
-  created_at: string;
-}
+export type RpgMapBlueprintRevision = components['schemas']['RpgMapBlueprintRevision'];
 
-export interface RpgWorldRevision {
-  revision: number;
-  document: Record<string, unknown>;
-  content_hash: string;
-  created_at: string;
-}
+export type RpgWorldRevision = components['schemas']['RpgWorldRevision'];
 
-export interface RpgWorldRelease {
-  world_revision: number;
-  release: number;
-  document: Record<string, unknown>;
-  release_hash: string;
-  created_at: string;
-}
+export type RpgWorldRelease = components['schemas']['RpgWorldRelease'];
 
-export interface RpgScenarioRevision {
-  revision: number;
-  world_id: string;
-  world_revision: number;
-  document: Record<string, unknown>;
-  content_hash: string;
-  created_at: string;
-}
+export type RpgScenarioRevision = components['schemas']['RpgScenarioRevision'];
 
-export interface RpgWorldLibraryResponse {
-  ok: boolean;
-  worlds: RpgWorldSummary[];
-  scenarios: RpgScenarioSummary[];
-  campaigns: RpgWorldCampaignSummary[];
-  generation_runs: RpgWorldGenerationRun[];
-}
+export type RpgWorldLibraryResponse = components['schemas']['RpgWorldLibraryResponse'];
 
-export interface RpgWorldDetailResponse {
-  ok: boolean;
-  world: RpgWorldSummary;
-  topics: RpgWorldTopic[];
-  map_blueprints: RpgMapBlueprintRevision[];
-  revisions: RpgWorldRevision[];
-  releases: RpgWorldRelease[];
-  scenarios: RpgScenarioSummary[];
-  scenario_revisions: Record<string, RpgScenarioRevision[]>;
-  generation_runs: RpgWorldGenerationRun[];
-}
+export type RpgWorldDetailResponse = components['schemas']['RpgWorldDetailResponse'];
 
-export interface RpgWorldLaunchRepairResponse {
-  ok: boolean;
-  status: string;
-  world: Record<string, unknown>;
-  promotion: Record<string, unknown>;
-  scenario_revision: RpgScenarioRevision;
-  certification: Record<string, unknown>;
-}
+export type RpgWorldLaunchRepairResponse = components['schemas']['RpgWorldLaunchRepairResponse'];
 
-export interface RpgPublishedLaunchResponse {
-  ok: boolean;
-  status?: string;
-  session_id?: string;
-  session?: Record<string, unknown>;
-  game?: Record<string, unknown>;
-  binding?: Record<string, unknown>;
-  launch_mode?: string;
-  world_forge_invoked?: boolean;
-  error?: string;
-}
+export type RpgPublishedLaunchResponse = components['schemas']['RpgPublishedLaunchResponse'];
 
-export interface RpgStarterBubbleResponse {
-  ok: boolean;
-  starter_bubble: Record<string, unknown>;
-  predictive_materialization: Record<string, unknown>[];
-}
+export type RpgStarterBubbleResponse = components['schemas']['RpgStarterBubbleResponse'];
 
-export interface RpgStarterBubblePromotionResponse {
-  ok: boolean;
-  status: string;
-  reused: boolean;
-  promotion: Record<string, unknown>;
-}
+export type RpgStarterBubblePromotionResponse = components['schemas']['RpgStarterBubblePromotionResponse'];
 
-export interface RpgDeferredMaterializationResponse {
-  ok: boolean;
-  status: string;
-  reused: boolean;
-  materialization: Record<string, unknown>;
-}
+export type RpgDeferredMaterializationResponse = components['schemas']['RpgDeferredMaterializationResponse'];
 
-export interface RpgWorldGenerationMutationResponse {
-  ok: boolean;
-  run: RpgWorldGenerationRun;
-  worker_started: boolean;
-  scope?: Record<string, unknown>;
-  retry_of_run_id?: string;
-  continue_of_run_id?: string;
-  diagnostic_id?: string;
-  diagnostic_log?: string;
-}
+export type RpgWorldGenerationMutationResponse = components['schemas']['RpgWorldGenerationMutationResponse'];
 
 export class RpgWorldGenerationRequestError extends Error {
   readonly status: number;

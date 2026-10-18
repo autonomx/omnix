@@ -13,7 +13,7 @@ from .workflows import (
     WorkflowEvent,
     WorkflowScheduleSnapshot,
 )
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 from .workflow_runtime import (
     WorkflowRuntimeError,
     _json,
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 def schedule(
     workflow: PostgresWorkflowRuntime,
     workflow_id: str,
-    input_payload: dict[str, object],
+    input_payload: dict[str, Any],
     *,
     run_at: datetime,
     interval_seconds: int | None = None,

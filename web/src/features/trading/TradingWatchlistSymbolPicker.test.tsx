@@ -17,6 +17,7 @@ const apple: CanonicalInstrument = {
   price_scale: 100,
   minimum_tick: '0.01',
   status: 'active',
+  name: null,
 };
 
 const nvidia: CanonicalInstrument = {

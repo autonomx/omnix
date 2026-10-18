@@ -1,19 +1,6 @@
 import { pipelineFetch } from '../../../api/fetchPipeline';
-export interface RpgWorldBundleImportResponse {
-  ok: boolean;
-  status: string;
-  world_id: string;
-  source_world_id: string;
-  bundle_sha256: string;
-  counts: Record<string, number>;
-  identifier_map: Record<string, string>;
-  warnings: string[];
-  launch_preparation?: {
-    status?: 'generating' | 'ready' | 'not_required' | 'recovery_required';
-    prepared?: Array<{ scenario_id: string; title: string }>;
-    error?: string;
-  };
-}
+import type { components } from './generated';
+export type RpgWorldBundleImportResponse = components['schemas']['RpgWorldBundleImportResponse'];
 
 export interface RpgWorldBundleDownload {
   blob: Blob;

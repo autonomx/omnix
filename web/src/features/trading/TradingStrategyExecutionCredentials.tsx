@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { tradingExecutionApi, type AlpacaIexCredentialStatus } from './tradingExecutionApi';
 import { tradingStrategyApi, type TradingStrategyOperationsStatus } from './tradingStrategyApi';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 function sourceLabel(source: AlpacaIexCredentialStatus['api_key_source']): string {
   if (source === 'environment') return 'Environment';
@@ -65,10 +66,10 @@ export function TradingStrategyExecutionCredentials() {
     const clearApi = status.api_key_editable && status.api_key_source === 'os_protected_store';
     const clearSecret = status.secret_key_editable && status.secret_key_source === 'os_protected_store';
     if (!clearApi && !clearSecret) {
-      setMessage('No UI-owned Alpaca credentials can be cleared. Environment-owned values must be changed outside Omnix.');
+      setMessage(`No UI-owned Alpaca credentials can be cleared. Environment-owned values must be changed outside ${PRODUCT_NAME}.`);
       return;
     }
-    if (!window.confirm('Clear the Alpaca credentials stored by Omnix? Environment-owned values are not changed.')) return;
+    if (!window.confirm(`Clear the Alpaca credentials stored by ${PRODUCT_NAME}? Environment-owned values are not changed.`)) return;
     setBusy(true);
     try {
       const next = await tradingExecutionApi.saveAlpacaCredentials({

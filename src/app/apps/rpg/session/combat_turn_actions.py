@@ -7,20 +7,20 @@ from app.apps.rpg.session.state_normalization import (
 from app.apps.rpg.session.semantic_state_changes import (
     _get_combat_state as _get_combat_state, _set_combat_state as _set_combat_state,
 )
-from app.apps.rpg.combat.state import (
+from app.apps.rpg.rules.combat.state import (
     get_current_actor_id as get_current_actor_id, normalize_combat_state as normalize_combat_state,
 )
 from app.apps.rpg.session.combat_intent import (
     _actor_is_player as _actor_is_player, _build_combat_gate_result as _build_combat_gate_result, _derive_grounded_scene_context as _derive_grounded_scene_context,
     _infer_inventory_item_id_from_text as _infer_inventory_item_id_from_text,
 )
-from app.apps.rpg.ai.conversation_threads import (
+from app.apps.rpg.narration.ai.conversation_threads import (
     build_conversation_thread_prompt_context as build_conversation_thread_prompt_context,
 )
-from app.apps.rpg.combat.resolver import (
+from app.apps.rpg.rules.combat.resolver import (
     resolve_defend as resolve_defend, resolve_flee as resolve_flee,
 )
-from app.apps.rpg.combat.apply import (
+from app.apps.rpg.rules.combat.apply import (
     apply_defense_resolution as apply_defense_resolution, apply_flee_resolution as apply_flee_resolution,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
@@ -28,34 +28,34 @@ from app.apps.rpg.session.companion_turn_runtime import (
     _player_input_requests_general_interaction as _player_input_requests_general_interaction, _player_input_requests_reposition as _player_input_requests_reposition,
     _requested_reposition_values as _requested_reposition_values,
 )
-from app.apps.rpg.items.item_effects import (
+from app.apps.rpg.rules.items.item_effects import (
     apply_item_effects as apply_item_effects,
 )
-from app.apps.rpg.combat.initiative import (
+from app.apps.rpg.rules.combat.initiative import (
     advance_turn as advance_turn,
 )
-from app.apps.rpg.combat.npc_turns import (
+from app.apps.rpg.rules.combat.npc_turns import (
     run_npc_turn as run_npc_turn,
 )
-from app.apps.rpg.combat.lifecycle import (
+from app.apps.rpg.rules.combat.lifecycle import (
     evaluate_combat_exit as evaluate_combat_exit,
 )
-from app.apps.rpg.combat.encounters import (
+from app.apps.rpg.rules.combat.encounters import (
     build_encounter_from_preset as build_encounter_from_preset,
 )
-from app.apps.rpg.combat.world_consequences import (
+from app.apps.rpg.rules.combat.world_consequences import (
     emit_combat_world_consequence as emit_combat_world_consequence,
 )
 from app.apps.rpg.session.session_runtime_store import (
     _find_active_combat_state_deep as _find_active_combat_state_deep, _safe_parse_mapping_payload as _safe_parse_mapping_payload,
 )
-from app.apps.rpg.combat.positioning import (
+from app.apps.rpg.rules.combat.positioning import (
     can_attack_target as can_attack_target, reposition_participant as reposition_participant,
 )
-from app.apps.rpg.interactions.resolver import (
+from app.apps.rpg.rules.interactions.resolver import (
     resolve_general_interaction as resolve_general_interaction_v2,
 )
-from app.apps.rpg.social.npc_backbone import (
+from app.apps.rpg.world.social.npc_backbone import (
     resolve_npc_backbone_decision as resolve_npc_backbone_decision,
 )
 from app.apps.rpg.narration.quality import (

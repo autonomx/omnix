@@ -15,13 +15,22 @@ TWS API installation.
 
 import threading
 import time as time_module
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Protocol
 
 from app.apps.trading.ibkr_settings import IbkrSettings, load_ibkr_settings
+
+# A range that ended this long ago is final: its answer, including "no trades",
+# is remembered instead of asking the Gateway again on every repair cycle. A
+# more recent range is remembered briefly, so strategies evaluating the same
+# stock moments apart share one request.
+HISTORICAL_CACHE_SETTLE = timedelta(minutes=3)
+HISTORICAL_CACHE_RECENT_TTL = timedelta(seconds=30)
+HISTORICAL_CACHE_MAX_ENTRIES = 50_000
 
 
 IBKR_MARKET_DATA_TYPES = {
@@ -122,13 +131,13 @@ class IbkrTransport(Protocol):
         use_rth: bool,
         timeout_seconds: float = 20.0,
     ) -> list[IbkrHistoricalBar]: ...
-    def request_health(self, token: int) -> dict[str, object]: ...
-    def diagnostics(self) -> dict[str, object]: ...
+    def request_health(self, token: int) -> dict[str, Any]: ...
+    def diagnostics(self) -> dict[str, Any]: ...
 
 
 def official_ibapi_available() -> bool:
     try:
-        import ibapi  # type: ignore[import-not-found]  # noqa: F401
+        import ibapi  # noqa: F401
     except Exception:
         return False
     return True
@@ -139,9 +148,9 @@ class OfficialIbapiTransport:
 
     def __init__(self) -> None:
         try:
-            from ibapi.client import EClient  # type: ignore[import-not-found]
-            from ibapi.contract import Contract  # type: ignore[import-not-found]
-            from ibapi.wrapper import EWrapper  # type: ignore[import-not-found]
+            from ibapi.client import EClient
+            from ibapi.contract import Contract
+            from ibapi.wrapper import EWrapper
         except Exception as exc:
             raise IbkrClientUnavailableError(
                 "official IBKR ibapi package is not installed"
@@ -158,9 +167,9 @@ class OfficialIbapiTransport:
         self._historical_events: dict[int, threading.Event] = {}
         self._quote_contracts: dict[int, IbkrContractIdentity] = {}
         self._quote_listeners: dict[int, Callable[[IbkrQuoteSnapshot], None]] = {}
-        self._quote_values: dict[int, dict[str, object]] = {}
+        self._quote_values: dict[int, dict[str, Any]] = {}
         self._market_data_types: dict[int, str] = {}
-        self._request_errors: dict[int, dict[str, object]] = {}
+        self._request_errors: dict[int, dict[str, Any]] = {}
         self._farm_status: dict[str, str] = {}
         self._sequence = 0
         self._last_error: str | None = None
@@ -188,34 +197,7 @@ class OfficialIbapiTransport:
                     error_code, error_string, *_rest = args
                 else:
                     return
-                code = int(error_code)
-                request_id = int(reqId)
-                message = str(error_string)
-                owner._error_count += 1
-                owner._last_error = f"{request_id}:{code}:{message}"
-
-                entitlement_denied = code in {354, 10089, 10167, 10168}
-                if entitlement_denied:
-                    owner._entitlement_error_count += 1
-                if request_id >= 0:
-                    owner._request_errors[request_id] = {
-                        "code": code,
-                        "message": message,
-                        "entitlement_denied": entitlement_denied,
-                        "observed_at": datetime.now(timezone.utc).isoformat(),
-                    }
-
-                farm_names = {
-                    2103: ("market_data", "DISCONNECTED"),
-                    2104: ("market_data", "READY"),
-                    2105: ("historical_data", "DISCONNECTED"),
-                    2106: ("historical_data", "READY"),
-                    2157: ("sec_def", "DISCONNECTED"),
-                    2158: ("sec_def", "READY"),
-                }
-                farm = farm_names.get(code)
-                if farm is not None:
-                    owner._farm_status[farm[0]] = farm[1]
+                owner._on_request_error(int(reqId), int(error_code), str(error_string))
 
             def contractDetails(self, reqId, details):  # noqa: N802
                 contract = details.contract
@@ -339,6 +321,39 @@ class OfficialIbapiTransport:
         with self._lock:
             self._next_request_id += 1
             return self._next_request_id
+
+    def _on_request_error(self, request_id: int, code: int, message: str) -> None:
+        self._error_count += 1
+        self._last_error = f"{request_id}:{code}:{message}"
+
+        entitlement_denied = code in {354, 10089, 10167, 10168}
+        if entitlement_denied:
+            self._entitlement_error_count += 1
+        if request_id >= 0:
+            self._request_errors[request_id] = {
+                "code": code,
+                "message": message,
+                "entitlement_denied": entitlement_denied,
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            # A request error (codes below 2000; 2000+ are notices) ends a
+            # historical request: wake its waiter now instead of letting it hold
+            # the historical lock until the timeout.
+            historical = self._historical_events.get(request_id)
+            if historical is not None and code < 2000:
+                historical.set()
+
+        farm_names = {
+            2103: ("market_data", "DISCONNECTED"),
+            2104: ("market_data", "READY"),
+            2105: ("historical_data", "DISCONNECTED"),
+            2106: ("historical_data", "READY"),
+            2157: ("sec_def", "DISCONNECTED"),
+            2158: ("sec_def", "READY"),
+        }
+        farm = farm_names.get(code)
+        if farm is not None:
+            self._farm_status[farm[0]] = farm[1]
 
     def _emit_quote(self, req_id: int) -> None:
         contract = self._quote_contracts.get(req_id)
@@ -531,13 +546,21 @@ class OfficialIbapiTransport:
                 except Exception:
                     logger.debug("suppressed error in %s", "OfficialIbapiTransport.historical_bars", exc_info=True)
                 raise IbkrRuntimeError("ibkr_historical_data_timeout")
+            if req_id not in self._historical_events:
+                # The socket reset cleared this request: no answer, not "no data".
+                raise IbkrRuntimeError("ibkr_gateway_disconnected")
+            error = self._request_errors.get(req_id)
+            if error is not None and error["code"] < 2000:
+                if error["code"] == 162 and "returned no data" in error["message"].lower():
+                    return []  # IBKR has no trades in the range: a factual empty answer
+                raise IbkrRuntimeError(f"ibkr_historical_error:{error['code']}")
             return list(self._historical_rows.get(req_id, []))
         finally:
             self._historical_rows.pop(req_id, None)
             self._historical_events.pop(req_id, None)
             self._request_errors.pop(req_id, None)
 
-    def request_health(self, token: int) -> dict[str, object]:
+    def request_health(self, token: int) -> dict[str, Any]:
         request_id = int(token)
         error = self._request_errors.get(request_id)
         return {
@@ -547,7 +570,7 @@ class OfficialIbapiTransport:
             "entitlement_denied": bool(error and error.get("entitlement_denied")),
         }
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         recent_errors = {
             str(key): dict(value)
             for key, value in sorted(self._request_errors.items())[-20:]
@@ -577,7 +600,7 @@ class FakeIbkrTransport:
         self.history = history or {}
         self.connected = False
         self.listeners: dict[int, tuple[IbkrContractIdentity, Callable[[IbkrQuoteSnapshot], None]]] = {}
-        self.request_health_by_token: dict[int, dict[str, object]] = {}
+        self.request_health_by_token: dict[int, dict[str, Any]] = {}
         self._next_token = 1
 
     def connect(self, host: str, port: int, client_id: int, timeout_seconds: float = 8.0) -> None:
@@ -628,7 +651,7 @@ class FakeIbkrTransport:
             if start <= row.start_time.astimezone(timezone.utc).timestamp() < end.astimezone(timezone.utc).timestamp()
         ]
 
-    def request_health(self, token: int) -> dict[str, object]:
+    def request_health(self, token: int) -> dict[str, Any]:
         return dict(
             self.request_health_by_token.get(
                 int(token),
@@ -641,7 +664,7 @@ class FakeIbkrTransport:
             )
         )
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "transport": "fake",
             "connected": self.connected,
@@ -668,7 +691,9 @@ class IbkrRuntime:
         port: int | None = None,
         client_id: int | None = None,
         enabled: bool | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._settings_managed = (
             transport is None
             and host is None
@@ -710,6 +735,12 @@ class IbkrRuntime:
         self.reconnect_count = 0
         self.contract_failure_count = 0
         self.historical_request_count = 0
+        self.historical_cache_hit_count = 0
+        # key -> (rows, expires_at); expires_at None for a final range.
+        self._historical_cache: OrderedDict[
+            tuple[Any, ...], tuple[tuple[IbkrHistoricalBar, ...], datetime | None]
+        ] = OrderedDict()
+        self._historical_cache_lock = threading.Lock()
         self._next_connect_attempt_monotonic = 0.0
         self._last_historical_request_monotonic = 0.0
         self.subscription_count = 0
@@ -924,7 +955,7 @@ class IbkrRuntime:
         with self._lock:
             return self._latest_quotes.get(instrument_id)
 
-    def subscription_health(self, instrument_id: str) -> dict[str, object]:
+    def subscription_health(self, instrument_id: str) -> dict[str, Any]:
         with self._lock:
             token = self._quote_tokens.get(instrument_id)
         if token is None or self.transport is None:
@@ -971,9 +1002,18 @@ class IbkrRuntime:
             raise ValueError("ibkr historical range must be timezone-aware")
         if end <= start:
             raise ValueError("ibkr historical end must follow start")
+        start_utc = start.astimezone(timezone.utc)
+        end_utc = end.astimezone(timezone.utc)
+        key = (contract.con_id, start_utc, end_utc, bar_size, what_to_show, bool(use_rth))
+        with self._historical_cache_lock:
+            cached = self._historical_cache.get(key)
+            if cached is not None and (cached[1] is None or self._clock() < cached[1]):
+                self._historical_cache.move_to_end(key)
+                self.historical_cache_hit_count += 1
+                return list(cached[0])
         self.connect()
         assert self.transport is not None
-        duration = int((end.astimezone(timezone.utc) - start.astimezone(timezone.utc)).total_seconds())
+        duration = int((end_utc - start_utc).total_seconds())
         min_interval = (
             0.0
             if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test"
@@ -983,6 +1023,14 @@ class IbkrRuntime:
             )
         )
         with self._historical_lock:
+            # Concurrent tape warmers miss the cache together; whichever waited
+            # on this lock reuses the answer the first one stored.
+            with self._historical_cache_lock:
+                cached = self._historical_cache.get(key)
+                if cached is not None and (cached[1] is None or self._clock() < cached[1]):
+                    self._historical_cache.move_to_end(key)
+                    self.historical_cache_hit_count += 1
+                    return list(cached[0])
             elapsed = time_module.monotonic() - self._last_historical_request_monotonic
             if elapsed < min_interval:
                 time_module.sleep(min_interval - elapsed)
@@ -996,11 +1044,17 @@ class IbkrRuntime:
             )
             self._last_historical_request_monotonic = time_module.monotonic()
             self.historical_request_count += 1
-        start_utc = start.astimezone(timezone.utc)
-        end_utc = end.astimezone(timezone.utc)
-        return [row for row in rows if start_utc <= row.start_time < end_utc]
+        result = [row for row in rows if start_utc <= row.start_time < end_utc]
+        now = self._clock()
+        expires_at = None if end_utc <= now - HISTORICAL_CACHE_SETTLE else now + HISTORICAL_CACHE_RECENT_TTL
+        with self._historical_cache_lock:
+            self._historical_cache[key] = (tuple(result), expires_at)
+            self._historical_cache.move_to_end(key)
+            while len(self._historical_cache) > HISTORICAL_CACHE_MAX_ENTRIES:
+                self._historical_cache.popitem(last=False)
+        return result
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         self.refresh_settings()
         transport_diagnostics = self.transport.diagnostics() if self.transport is not None else {}
         settings, settings_source = load_ibkr_settings() if self._settings_managed else (
@@ -1034,6 +1088,8 @@ class IbkrRuntime:
             "active_quote_subscriptions": len(self._quote_tokens),
             "contract_failure_count": self.contract_failure_count,
             "historical_request_count": self.historical_request_count,
+            "historical_cache_hit_count": self.historical_cache_hit_count,
+            "historical_cache_entries": len(self._historical_cache),
             "last_error": self.last_error,
             "last_connected_at": self.last_connected_at.isoformat() if self.last_connected_at else None,
             "transport": transport_diagnostics,

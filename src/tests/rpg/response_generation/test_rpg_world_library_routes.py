@@ -4,12 +4,12 @@ from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.apps.rpg.api.feature_routes.rpg_world_routes import register_rpg_world_routes
+from app.apps.rpg.edge.api.feature_routes.rpg_world_routes import register_rpg_world_routes
 
 
 def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_library_routes.read_world_library",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes.read_world_library",
         lambda **_kwargs: {
             "ok": True,
             "worlds": [{"id": "world:test", "title": "Test World"}],
@@ -19,7 +19,7 @@ def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -
         },
     )
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_library_routes.read_world_detail",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes.read_world_detail",
         lambda world_id, **_kwargs: {
             "ok": True,
             "world": {"id": world_id, "title": "Test World"},
@@ -61,8 +61,8 @@ def test_world_and_scenario_create_routes_allow_backend_generated_ids(monkeypatc
             "title": contract.title,
         }
 
-    monkeypatch.setattr("app.apps.rpg.api.feature_routes.rpg_world_routes.create_world_project", fake_world)
-    monkeypatch.setattr("app.apps.rpg.api.feature_routes.rpg_world_routes.create_scenario_project", fake_scenario)
+    monkeypatch.setattr("app.apps.rpg.edge.api.feature_routes.rpg_world_routes.create_world_project", fake_world)
+    monkeypatch.setattr("app.apps.rpg.edge.api.feature_routes.rpg_world_routes.create_scenario_project", fake_scenario)
     app = FastAPI()
     include_router_registrar(app, register_rpg_world_routes)
     client = TestClient(app)
@@ -97,7 +97,7 @@ def test_published_scenario_launch_route_preserves_fast_launch_contract(monkeypa
         }
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_library_routes.launch_published_scenario",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes.launch_published_scenario",
         fake_launch,
     )
     app = FastAPI()
@@ -129,7 +129,7 @@ def test_duplicate_scenario_create_returns_conflict_instead_of_500(monkeypatch) 
         raise ValueError("scenario_already_exists:scenario:opening")
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_routes.create_scenario_project",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_routes.create_scenario_project",
         duplicate_scenario,
     )
     app = FastAPI()
@@ -163,7 +163,7 @@ def test_repair_world_for_launch_route_passes_scenario_and_location(monkeypatch)
         }
 
     monkeypatch.setattr(
-        "app.apps.rpg.api.feature_routes.rpg_world_library_routes.repair_world_for_launch",
+        "app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes.repair_world_for_launch",
         fake_repair,
     )
     app = FastAPI()

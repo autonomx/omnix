@@ -12,6 +12,7 @@ from app.persistence.errors import RevisionConflict
 from .paper import (
     PaperAccount,
     PaperAccountCreate,
+    PaperAccountSettings,
     PaperAccountSnapshot,
     PaperFill,
     PaperMarketObservation,
@@ -19,6 +20,13 @@ from .paper import (
     PaperOrderRequest,
 )
 from .order_gateway import OrderGateway
+from .paper_entry_move import (
+    PaperRiskEntryMoveRequest,
+    PaperRiskEntryMoveResult,
+    movable_entry,
+    moved_entry_intent,
+    snapshot_without_order,
+)
 from .paper_lifecycle import TradingPaperLifecycle, default_paper_lifecycle
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .paper_protection_repository import (
@@ -37,6 +45,7 @@ from .paper_risk import (
 )
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
+from .strategy_risk import paper_account_equity
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 
 
@@ -99,13 +108,30 @@ def _raw_order_is_reducing_long_exposure(
 ) -> bool:
     """Raw HTTP orders are exit-only; new exposure must use server risk intent.
 
-    The currently supported manual workstation is long-entry only. A raw sell is
-    allowed only when the relational position and reservations prove it cannot
-    increase or reverse exposure. Replacement validation gives the cancelled
-    order's reservation back before checking the new quantity.
+    A raw sell is allowed only when the long position and its reservations
+    prove it cannot increase or reverse exposure; a raw buy only when it buys
+    back no more of a short (TVP-7.2a) than the buys already working leave.
+    A replacement gives the replaced order's quantity back before the check.
     """
-    if request.side != "sell":
-        return False
+    def open_orders(side: str):
+        return [
+            order
+            for order in snapshot.open_orders
+            if order.instrument_id == request.instrument_id
+            and order.side == side
+            and order.status == "open"
+            and order.order_id != replacing_order_id
+        ]
+
+    if request.side == "buy":
+        short = next(
+            (item for item in snapshot.positions if item.instrument_id == request.instrument_id and item.quantity < 0),
+            None,
+        )
+        if short is None:
+            return False
+        working = sum((order.quantity - order.filled_quantity for order in open_orders("buy")), Decimal("0"))
+        return request.quantity <= -short.quantity - working
     position = next(
         (
             item
@@ -196,6 +222,23 @@ def create_trading_paper_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.patch("/accounts/{account_id}", response_model=PaperAccountSnapshot)
+    async def update_account_settings(
+        account_id: str,
+        settings: PaperAccountSettings,
+        if_match: int = Header(alias="If-Match", ge=1),
+    ):
+        """Change the account's settings at the revision the person saw: shorting (TVP-7.2a), margin by asset class and
+        commission (TVP-7.2b). Fields left out keep their value; lowering margin can bring a margin call on the next pass."""
+        try:
+            return await asyncio.to_thread(
+                repository_factory().update_account_settings, account_id, settings, expected_revision=if_match
+            )
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @router.get("/accounts/{account_id}", response_model=PaperAccountSnapshot)
     async def account_snapshot(account_id: str):
         try:
@@ -217,7 +260,7 @@ def create_trading_paper_router(
         status_code=201,
     )
     async def place_risk_order(account_id: str, request: PaperRiskOrderRequest):
-        """Size and submit a new long entry entirely from server-owned risk rules."""
+        """Size and submit a new entry (long, or short where the account allows it) from server-owned risk rules."""
         probe_price = request.trigger_price or Decimal("1")
         probe = PaperRiskPreviewRequest(
             instrument_id=request.instrument_id,
@@ -225,12 +268,15 @@ def create_trading_paper_router(
             entry_price=probe_price,
             stop_price=request.stop_loss,
             desired_risk_pct=request.desired_risk_pct,
+            side=request.side,
         )
         snapshot, active_protections, execution, daily_realized = await risk_context(account_id, probe)
+        # A market buy pays the ask; a market short sells at the bid.
+        market_price = execution.bid if request.side == "sell" else execution.ask
         entry_price = (
-            (execution.ask or execution.last)
+            (market_price or execution.last)
             if request.order_type == "market"
-            else request.trigger_price
+            else request.worst_entry_price
         )
         if entry_price is None:
             raise HTTPException(status_code=422, detail="paper_risk_entry_price_unavailable")
@@ -240,6 +286,7 @@ def create_trading_paper_router(
             entry_price=entry_price,
             stop_price=request.stop_loss,
             desired_risk_pct=request.desired_risk_pct,
+            side=request.side,
         )
         preview = preview_paper_risk(
             snapshot=snapshot,
@@ -260,7 +307,10 @@ def create_trading_paper_router(
 
         repository = repository_factory()
         protection_repository = protection_repository_factory()
-        protection_request = risk_protection_request(request)
+        try:
+            protection_request = risk_protection_request(request, entry_price=entry_price)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         try:
             protection = await asyncio.to_thread(
                 protection_repository.arm_pending_entry,
@@ -299,6 +349,88 @@ def create_trading_paper_router(
             raise HTTPException(status_code=status, detail=detail) from exc
 
         return PaperRiskOrderResult(preview=preview, order=order, protection=protection)
+
+    @router.post(
+        "/accounts/{account_id}/risk-orders/{order_id}/move",
+        response_model=PaperRiskEntryMoveResult,
+    )
+    async def move_risk_entry(
+        account_id: str,
+        order_id: str,
+        request: PaperRiskEntryMoveRequest,
+        order_management: str | None = Header(default=None, alias=_ORDER_MANAGEMENT_HEADER),
+    ):
+        """Re-price a working risk entry (dragged on the chart): re-sized by the server, replaced atomically."""
+        _require_order_management(order_management)
+        try:
+            current = await asyncio.to_thread(repository_factory().snapshot, account_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        located = next((item for item in current.open_orders if item.order_id == order_id), None)
+        if located is None:
+            raise HTTPException(status_code=409, detail="paper_order_not_open")
+        probe = PaperRiskPreviewRequest(
+            instrument_id=located.instrument_id,
+            binding_id=located.binding_id,
+            entry_price=request.limit_price or request.trigger_price,
+            stop_price=Decimal("0.0001"),
+        )
+        snapshot, active_protections, execution, daily_realized = await risk_context(account_id, probe)
+        try:
+            order, protection = movable_entry(snapshot, active_protections, order_id)
+            intent = moved_entry_intent(order, protection, request, equity=paper_account_equity(snapshot))
+            if any(item.order_id == request.order_id for item in (*snapshot.open_orders, *snapshot.order_history)):
+                raise ValueError("paper_order_id_not_new")
+        except ValueError as exc:
+            detail = str(exc)
+            raise HTTPException(status_code=409 if "not_" in detail or "filled" in detail else 422, detail=detail) from exc
+        entry_price = intent.worst_entry_price
+        if entry_price is None:
+            raise HTTPException(status_code=422, detail="paper_risk_entry_price_unavailable")
+        # Sized as if the working entry were already cancelled: its cash and its pending stop don't count twice.
+        preview = preview_paper_risk(
+            snapshot=snapshot_without_order(snapshot, order),
+            protections=[item for item in active_protections if item is not protection],
+            observation=execution,
+            request=PaperRiskPreviewRequest(
+                instrument_id=order.instrument_id,
+                binding_id=order.binding_id,
+                entry_price=entry_price,
+                stop_price=intent.stop_loss,
+                desired_risk_pct=intent.desired_risk_pct,
+                side=intent.side,
+            ),
+            daily_realized_pnl=daily_realized,
+        )
+        if not preview.allowed or preview.recommended_quantity <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "paper_risk_rejected",
+                    "reason_codes": list(preview.reason_codes),
+                    "preview": preview.model_dump(mode="json"),
+                },
+            )
+        try:
+            cancelled, moved = await asyncio.to_thread(
+                OrderGateway(repository_factory()).replace_manual_entry,
+                account_id,
+                order_id,
+                risk_order_request(intent, entry_price=entry_price, quantity=preview.recommended_quantity),
+            )
+        except ValueError as exc:
+            # The transaction rolled back: the working entry and its stop are as they were.
+            detail = str(exc)
+            conflict = "not_open" in detail or "insufficient" in detail or "not_movable" in detail
+            raise HTTPException(status_code=409 if conflict else 422, detail=detail) from exc
+        # The protection as committed (the user may have edited its levels since the snapshot).
+        try:
+            moved_protection = await asyncio.to_thread(protection_repository_factory().get, account_id, order.instrument_id)
+        except ValueError:
+            moved_protection = None
+        if moved_protection is None:
+            moved_protection = protection.model_copy(update={"entry_order_id": moved.order_id, "revision": protection.revision + 1})
+        return PaperRiskEntryMoveResult(preview=preview, cancelled=cancelled, order=moved, protection=moved_protection)
 
     @router.get(
         "/accounts/{account_id}/protections",

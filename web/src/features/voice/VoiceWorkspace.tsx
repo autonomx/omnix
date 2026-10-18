@@ -19,6 +19,7 @@ import { jobProgressPercent } from '../../api/jobProgress';
 import { isFallbackOutputRef, jobOutputRefs, type JobOutputRef } from '../../api/schemas/streams';
 import { downloadUrl } from '../../shared/download';
 import { voiceApiClient } from './api/voiceClient';
+import { ENGINES_QUERY_KEY, TtsEnginePicker } from './TtsEnginePicker';
 
 interface VoiceFormValues {
   text: string;
@@ -64,6 +65,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const jobsQuery = useQuery({ queryKey: ['platform', 'jobs', 'voice-summaries'], queryFn: () => voiceApiClient.listVoiceJobSummaries() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
   const settingsQuery = useQuery({ queryKey: ['settings', 'profile'], queryFn: () => loadSettingsProfile() });
+  const enginesQuery = useQuery({ queryKey: ENGINES_QUERY_KEY, queryFn: () => voiceApiClient.listTtsEngines() });
+  const selectedEngine = enginesQuery.data?.engines.find((engine) => engine.selected);
   const moduleDefaults = useMemo(() => voiceStudioDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);
   const centralOutputSettings = useMemo(() => ({
     stability: moduleDefaults.stability,
@@ -516,6 +519,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
         <main className="voice-workspace-final">
           <header className="voice-final-header">
             <div><Title order={2}>Voice Studio</Title><Text size="sm">Clone voices, manage your voice library, and generate natural speech with advanced controls.</Text></div>
+            <TtsEnginePicker />
           </header>
 
           <div className="voice-top-grid">
@@ -573,7 +577,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           </section>
 
           <div className="voice-bottom-grid">
-            <section className="voice-panel-final enhancement-panel"><Group justify="space-between"><div><Title order={5}>Voice Enhancement</Title><Text size="xs">Fine-tune and enhance the output with advanced controls.</Text></div><Button size="xs" type="button" variant="subtle" onClick={resetTuningDefaults}>Reset tuning</Button></Group><div className="enhancement-controls">{(Object.entries(outputSettings) as [OutputSettingName, number][]).map(([name, value]) => <label key={name}><span>{settingLabel(name)}</span><b>{settingValueLabel(name, value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step="0.01" value={value} onChange={(event) => updateOutputSetting(name, Number(event.currentTarget.value))} /></label>)}</div></section>
+            <section className="voice-panel-final enhancement-panel"><Group justify="space-between"><div><Title order={5}>Voice Enhancement</Title><Text size="xs">Fine-tune and enhance the output with advanced controls.</Text></div><Button size="xs" type="button" variant="subtle" onClick={resetTuningDefaults}>Reset tuning</Button></Group><div className="enhancement-controls">{(Object.entries(outputSettings) as [OutputSettingName, number][]).map(([name, value]) => { const unused = Boolean(selectedEngine && !selectedEngine.voice_controls.includes(name)); return <label key={name} title={unused ? `${selectedEngine?.label} has no equivalent setting; this slider is ignored.` : settingDescription(name)} className={unused ? 'enhancement-unused' : undefined}><span>{settingLabel(name)}</span><b>{unused ? 'Not used' : settingValueLabel(name, value)}</b><input aria-label={`Output ${name}`} type="range" min={rangeMin(name)} max={rangeMax(name)} step={rangeStep(name)} value={value} disabled={unused} onChange={(event) => updateOutputSetting(name, Number(event.currentTarget.value))} /></label>; })}</div></section>
             <section className="voice-panel-final effects-panel"><Group justify="space-between"><div><Title order={5}>Audio Effects</Title><Text size="xs">Apply effects to polish and enhance the final audio.</Text></div><Button size="xs" type="button" variant="subtle" onClick={resetEffectDefaults}>Reset effects</Button></Group><div className="effect-buttons">{AUDIO_EFFECTS.map((effect) => <button className={enabledEffects.includes(effect) ? 'active' : ''} key={effect} type="button" onClick={() => { setEffectsDirty(true); toggleEffect(effect, setEnabledEffects); }}>{effect}</button>)}</div></section>
           </div>
 
@@ -830,7 +834,26 @@ function settingValueLabel(name: OutputSettingName, value: number): string {
 function rangeMin(name: OutputSettingName): number {
   if (name === 'pitch') return -12;
   if (name === 'volume') return -12;
+  if (name === 'speed') return 0.5;
   return 0;
+}
+
+function rangeStep(name: OutputSettingName): number {
+  if (name === 'pitch') return 1;
+  if (name === 'volume') return 0.5;
+  return 0.01;
+}
+
+/** What each slider changes; the backend maps them per TTS engine (platform/voice/output_settings). */
+function settingDescription(name: OutputSettingName): string {
+  return {
+    stability: 'Higher is steadier and more uniform; lower varies the delivery more (sampling temperature).',
+    similarity: 'How closely the clone copies the sample. Below 0.50 Qwen uses only the voice timbre, not the delivery in the sample.',
+    style: 'Higher allows more varied, expressive prosody.',
+    speed: 'Speaking rate, without changing the pitch.',
+    pitch: 'Voice pitch in semitones, without changing the speed.',
+    volume: 'Output gain in dB; it never pushes the audio past full scale.',
+  }[name];
 }
 
 function rangeMax(name: OutputSettingName): number {

@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "measurement": "RPG turn overhead without model time (WP-5.6)",
+  "method": "python -m tests.rehearsal.rpg.turn_overhead: a seeded new game padded to the state size, played through POST /api/rpg/sessions/{id}/turn with the rpg-production-turn scripted model and writer; disposable PostgreSQL 17 in Docker on the owner's workstation while the live services ran",
+  "budget_p95_ms": 150,
+  "before": {
+    "revision": "ac434dfe04",
+    "results": [
+      {
+        "state_kb_requested": 100,
+        "state_bytes": 102732,
+        "turns": 30,
+        "turn_request_ms": {
+          "p50": 814.1,
+          "p95": 1284.6,
+          "max": 1330.9
+        },
+        "persist_foreground_turn_ms": {
+          "p50": 152.1,
+          "p95": 257.9,
+          "max": 280.2
+        },
+        "statements_per_turn": {
+          "p50": 105.0,
+          "p95": 105.0,
+          "max": 105.0
+        },
+        "wal_bytes_per_turn": {
+          "p50": 991772.0,
+          "p95": 1890192.0,
+          "max": 1942552.0
+        },
+        "model_calls_per_turn": 3.4
+      },
+      {
+        "state_kb_requested": 1024,
+        "state_bytes": 1051672,
+        "turns": 30,
+        "turn_request_ms": {
+          "p50": 1210.6,
+          "p95": 1814.5,
+          "max": 1916.2
+        },
+        "persist_foreground_turn_ms": {
+          "p50": 251.5,
+          "p95": 364.2,
+          "max": 406.2
+        },
+        "statements_per_turn": {
+          "p50": 105.0,
+          "p95": 105.0,
+          "max": 105.0
+        },
+        "wal_bytes_per_turn": {
+          "p50": 1049844.0,
+          "p95": 2001880.0,
+          "max": 2119936.0
+        },
+        "model_calls_per_turn": 3.4
+      }
+    ]
+  },
+  "after": {
+    "revision": "ac434dfe049181af99b0bda00a5f5757eac3574e",
+    "results": [
+      {
+        "state_kb_requested": 100,
+        "state_bytes": 102732,
+        "turns": 30,
+        "turn_request_ms": {
+          "p50": 552.5,
+          "p95": 862.6,
+          "max": 885.2
+        },
+        "persist_foreground_turn_ms": {
+          "p50": 105.4,
+          "p95": 167.9,
+          "max": 211.8
+        },
+        "statements_per_turn": {
+          "p50": 105.0,
+          "p95": 106.0,
+          "max": 106.0
+        },
+        "wal_bytes_per_turn": {
+          "p50": 891932.0,
+          "p95": 1481928.0,
+          "max": 1911800.0
+        },
+        "model_calls_per_turn": 3.4
+      },
+      {
+        "state_kb_requested": 1024,
+        "state_bytes": 1051672,
+        "turns": 30,
+        "turn_request_ms": {
+          "p50": 682.7,
+          "p95": 955.7,
+          "max": 1059.8
+        },
+        "persist_foreground_turn_ms": {
+          "p50": 143.3,
+          "p95": 243.0,
+          "max": 280.5
+        },
+        "statements_per_turn": {
+          "p50": 105.0,
+          "p95": 106.0,
+          "max": 106.0
+        },
+        "wal_bytes_per_turn": {
+          "p50": 933884.0,
+          "p95": 1512160.0,
+          "max": 1947592.0
+        },
+        "model_calls_per_turn": 3.4
+      }
+    ]
+  },
+  "profile_after": {
+    "turns_profiled": 3,
+    "state_kb": 100,
+    "share_of_engine_time": {
+      "copy.deepcopy": 0.59,
+      "database_waits": 0.13,
+      "other_engine_work": 0.28
+    },
+    "note": "cProfile of interactive_first_call_runtime.apply_turn; deepcopy is spread over about 30 stage modules that copy the session or parts of it"
+  },
+  "findings": [
+    "30 turns each, same machine and load: at 1 MB a turn takes 683 ms p50 and 956 ms p95 (was 1,211 and 1,815); at 100 KB 553 and 863 (was 814 and 1,285). persist_foreground_turn at 1 MB: 143 ms p50 (was 252).",
+    "The budget (p95 < 150 ms at 1 MB) is not met. 59% of the remaining engine time is copy.deepcopy across about 30 turn-stage modules that copy the session or parts of it; database waits are 13%.",
+    "Statements per turn stay at 105 (a stage's shared load still checks the stored version); WAL per turn 0.93 MB p50 at 1 MB (was 1.05)."
+  ]
+}

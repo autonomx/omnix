@@ -1,6 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { codexReasoningOptions } from './ProviderDefaultsSection';
+import type { ProviderFacadePayload } from '../../api/client';
+import { codexReasoningOptions, providerModelOptions } from './ProviderDefaultsSection';
+import { modelOptions } from './providerOptions';
 import { fixture } from '../../test/fixture';
+
+describe('Claude CLI model options', () => {
+  const claudeModel = (modelId: string, label: string) => fixture<ProviderFacadePayload['models'][number]>({
+    id: `llm:claude_cli:${modelId}`,
+    label,
+    provider_id: 'llm:claude_cli',
+    capabilities: ['chat'],
+    location: 'remote',
+    metadata: { source: 'catalog', model_id: modelId },
+  });
+  const payload = {
+    providers: [],
+    models: [claudeModel('claude-opus-5-5', 'Opus 5.5'), claudeModel('claude-fable-5-1', 'Fable 5.1'), claudeModel('sonnet', 'Latest Sonnet (sonnet)')],
+  };
+
+  it('lists every catalog model for the default chat model, in the CLI order', () => {
+    expect(modelOptions(payload, 'llm:claude_cli').map((option) => option.label)).toEqual(['Opus 5.5', 'Fable 5.1', 'Latest Sonnet (sonnet)']);
+  });
+
+  it('offers the catalog in the provider settings by bare model id, keeping an unknown configured model', () => {
+    expect(providerModelOptions(payload, 'llm:claude_cli', 'sonnet').map((option) => option.id)).toEqual(['claude-opus-5-5', 'claude-fable-5-1', 'sonnet']);
+    expect(providerModelOptions(payload, 'llm:claude_cli', 'claude-custom')[0]).toEqual({ id: 'claude-custom', label: 'claude-custom (unavailable)' });
+  });
+});
 
 describe('Codex reasoning effort options', () => {
   it('offers extra high for GPT-5.6 Luna even when the catalog stops at high', () => {

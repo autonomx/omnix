@@ -18,7 +18,7 @@ from app.apps.rpg.session.inventory_items import (
 )
 from app.apps.rpg.session.item_market import copper_to_currency, find_offer, quote_merchant_transaction, value_to_copper
 from app.apps.rpg.session.item_system import normalize_item_instance
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 TRANSACTION_SOURCE = "engine_item_transaction_v1"
 

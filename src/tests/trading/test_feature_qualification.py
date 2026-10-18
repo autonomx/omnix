@@ -126,3 +126,51 @@ def test_point_in_time_only_requires_a_fresh_observation():
         observed_at=datetime(2026, 9, 17, 12, 0, 20, tzinfo=ET),
     )
     assert certificate.status == "VALID"
+
+
+def _stoch_requirement(*, bridge: bool) -> FeatureRequirement:
+    return FeatureRequirement(
+        requirement_id="stoch-test",
+        feature_name="stoch",
+        interval="5m",
+        dependency_class="RECURSIVE",
+        allow_approximate_reseed=True,
+        reseed_after_clean_bars=30,
+        bridge_isolated_gaps=bridge,
+    )
+
+
+def _qualify_5m(missing_buckets, *, bridge: bool, count: int = 20):
+    start = datetime(2026, 9, 17, 9, 30, tzinfo=ET)
+    holes = {(start + timedelta(minutes=5 * index)).astimezone(timezone.utc) for index in missing_buckets}
+    bars = [bar for bar in _series(start, count, interval="5m") if bar.start_time not in holes]
+    return qualify_bar_feature(
+        bars,
+        _stoch_requirement(bridge=bridge),
+        instrument_id=INSTRUMENT,
+        session_date=start.date(),
+        observed_at=start + timedelta(minutes=5 * count, seconds=5),
+    )
+
+
+def test_an_isolated_missing_bucket_is_bridged_only_when_the_requirement_opts_in():
+    bridged = _qualify_5m([6, 12], bridge=True)
+    assert bridged.status == "DEGRADED"
+    assert bridged.exact is False
+    assert bridged.reason_codes == ("RECURSIVE_ISOLATED_GAP_BRIDGED",)
+    assert bridged.unresolved_gaps == ()
+
+    # Without the opt-in, the same tape breaks the recursion as before.
+    assert _qualify_5m([6, 12], bridge=False).status == "INVALID"
+
+
+def test_two_consecutive_missing_buckets_still_break_the_recursion():
+    certificate = _qualify_5m([6, 7], bridge=True)
+    assert certificate.status == "INVALID"
+    assert "RECURSIVE_SEED_CONTINUITY_BROKEN" in certificate.reason_codes
+
+
+def test_a_missing_latest_bucket_is_not_bridged_before_the_next_bar_exists():
+    # Nothing after it yet: it may be a gap that keeps going.
+    certificate = _qualify_5m([19], bridge=True)
+    assert "RECURSIVE_ISOLATED_GAP_BRIDGED" not in certificate.reason_codes

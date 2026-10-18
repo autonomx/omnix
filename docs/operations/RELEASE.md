@@ -16,18 +16,18 @@ deploy.
 
 ## Checklist
 
-1. `CHANGELOG.md`: move `[Unreleased]` under the new version and date.
-2. Bump the version in the three files above.
-3. Migrations reviewed: each new one is `phase=expand` unless it is a planned
+1. Bump the version in the three files above. Release notes go in the tag's
+   annotation; there is no `CHANGELOG.md`.
+2. Migrations reviewed: each new one is `phase=expand` unless it is a planned
    contract step whose code change shipped in an earlier release; a
    non-transactional migration contains one statement.
-4. OpenAPI diff reviewed (`npm --prefix web run api:check` shows the
+3. OpenAPI diff reviewed (`npm --prefix web run api:check` shows the
    intended changes only); clients that read removed fields are updated.
-5. Security scan green (dependency audit and secret scan in CI).
-6. Restore rehearsal green: the nightly `restore-rehearsal` job, and a manual
+4. Security scan green (dependency audit and secret scan in CI).
+5. Restore rehearsal green: the nightly `restore-rehearsal` job, and a manual
    rehearsal of the previous release's backup ([BACKUP_RESTORE.md](BACKUP_RESTORE.md)).
-7. The architecture gates and the full test suite pass on the release commit.
-8. Tag the commit `v<version>` and push the tag.
+6. The architecture gates and the full test suite pass on the release commit.
+7. Tag the commit `v<version>` and push the tag.
 
 ## Deployment order
 

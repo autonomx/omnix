@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { audiobookApi } from './audiobookApi';
-import { CONTROLLABLE_RENDER_STATUSES, LibrarySection, renderJobLabel, renderJobProgress } from './audiobookWorkspaceModel';
+import { AudiobookRenderQueueTable } from './AudiobookRenderQueue';
+import { LibrarySection, renderJobLabel } from './audiobookWorkspaceModel';
+import type { AudiobookJobView } from './audiobookTypes';
 import type { AudiobookWorkspaceModel } from './useAudiobookWorkspace';
 
 /** Delete confirmations for the project and for an asset. */
@@ -42,7 +45,7 @@ export function AudiobookProjectTabs({ ws }: { ws: AudiobookWorkspaceModel }) {
   return (
     <>
        <nav className="audiobook-project-tabs" aria-label="Audiobook project sections">
-        {([['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents'], ['characters', 'Cast & Voice Tools'], ['exports', 'Render & Export']] as [LibrarySection, string][]).map(([section, label]) => (
+        {([['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents'], ['characters', 'Cast & Voice Tools'], ['review', project.review_issues.length ? `Human review (${project.review_issues.length})` : 'Human review'], ['exports', 'Render & Export']] as [LibrarySection, string][]).map(([section, label]) => (
           <button key={section} type="button" className={librarySection === section ? 'selected' : ''} aria-current={librarySection === section ? 'page' : undefined}
             onClick={() => navigateLibrary(section)}>{label}</button>
         ))}
@@ -86,24 +89,58 @@ export function AudiobookProjectTabs({ ws }: { ws: AudiobookWorkspaceModel }) {
   );
 }
 
+const ACTIVE_EXPORT_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
+
+/** The latest export's progress while it encodes, then its outcome. */
+function AudiobookExportStatus({ job, onViewAssets }: { job: AudiobookJobView; onViewAssets: () => void }) {
+  const format = (job.format ?? 'audiobook').toUpperCase();
+  if (job.status === 'completed') {
+    return <div className="audiobook-export-status" role="status"><span>{format} export ready.</span><button type="button" onClick={onViewAssets}>View in Assets</button></div>;
+  }
+  if (job.status === 'failed' || job.status === 'dead_letter') {
+    return <div className="audiobook-export-status error" role="alert"><span>{format} export failed{job.error?.message ? `: ${job.error.message}` : '.'}</span></div>;
+  }
+  if (!ACTIVE_EXPORT_STATUSES.has(job.status)) return null;
+  const started = job.status !== 'queued' && job.status !== 'waiting';
+  const total = Number(job.progress?.total);
+  const current = Number(job.progress?.current);
+  const percent = started && total > 0 && Number.isFinite(current) ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : null;
+  return (
+    <div className="audiobook-export-status" role="status" aria-live="polite">
+      <span>{format} export · {started ? job.progress?.message || 'Starting' : 'Waiting to start'}</span>
+      <progress aria-label={`${format} export progress`} max={100} {...(percent === null ? {} : { value: percent })} />
+      <span>{percent === null ? '' : `${percent}%`}</span>
+    </div>
+  );
+}
+
 /** The production dashboard: render queue and exports. */
 export function AudiobookProduction({ ws }: { ws: AudiobookWorkspaceModel }) {
+  // Starting a render checks the installed model and queues every chapter, which can take a while; say so
+  // at the button, and show its outcome there too rather than only at the top of the page.
+  const [renderStarting, setRenderStarting] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const {
     action, busy, cacheHits, canRender, completedRenderChapters, exportFormat, failedRenderJobs,
     getInstalledModelRevision, isPolicySkippedChapter, modelQuery, modelRevision, pauseAllRenderJobs,
     pausedRenderJobs, project, queuedRenderJobs, renderChapterCount, renderJobs, renderProgressPercent,
     renderStateLabel, resumeAllRenderJobs, retryableRenderJobs, runningRenderJobs, setExportFormat,
-    setProjectSettingsOpen, skippedRenderChapterCount, startChapter, stopAllRenderJobs, workspaceMode,
+    setProjectSettingsOpen, skippedRenderChapterCount, stopAllRenderJobs, workspaceMode, navigateLibrary,
   } = ws;
   if (!project) return null;
+  const latestExport = project.export_jobs[0];
+  const exportActive = Boolean(latestExport && ACTIVE_EXPORT_STATUSES.has(latestExport.status));
   return (
     <>
       {workspaceMode === 'production' && <>
       <section className="audiobook-card audiobook-render-dashboard">
         <div className="audiobook-render-banner"><div><p className="eyebrow">Production</p><h2>Render &amp; Export</h2><p>Batch rendering, chapter mastering, and multi-format export for your audiobook.</p></div><button type="button" onClick={() => setProjectSettingsOpen(true)}>⚙ Open advanced tools</button></div>
         <div className="audiobook-render-metrics"><article><span>▣</span><div><small>Render Queue</small><strong>{renderProgressPercent}%</strong><em>{completedRenderChapters} / {renderChapterCount} audiobook chapters · {renderStateLabel}{skippedRenderChapterCount ? ` · ${skippedRenderChapterCount} skipped by policy` : ''}</em></div></article><article><span>◉</span><div><small>Cache Hits</small><strong>{cacheHits}</strong><em>Completed render units</em></div></article><article><span>▱</span><div><small>Source Size</small><strong>{project.source_size_bytes ? `${(project.source_size_bytes / 1048576).toFixed(1)} MB` : '—'}</strong><em>Original source</em></div></article><article><span>△</span><div><small>Failed / Retryable</small><strong>{failedRenderJobs} failed · {retryableRenderJobs} retry</strong><em>View and retry →</em></div></article><article><span>◷</span><div><small>Estimated Remaining</small><strong>—</strong><em>{Math.max(0, renderChapterCount - completedRenderChapters)} audiobook chapters left · estimate unavailable</em></div></article></div>
-        <div className="audiobook-render-columns"><section className="audiobook-render-queue"><div className="audiobook-section-title"><h3>▤ &nbsp;Render Queue</h3><span>{runningRenderJobs} running · {queuedRenderJobs} queued · {pausedRenderJobs} paused</span><div className="audiobook-row-actions"><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs)} onClick={pauseAllRenderJobs}>Pause all chapters</button><button type="button" disabled={busy || !pausedRenderJobs} onClick={resumeAllRenderJobs}>Resume all chapters</button><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs + pausedRenderJobs)} onClick={stopAllRenderJobs}>Stop all chapters</button></div></div>{!renderJobs.length && project.state === 'ready_to_render' && <p className="audiobook-hint">No render run is active. Select Render book to queue all chapters.</p>}<div className="audiobook-render-table"><div className="audiobook-render-table-head"><span>#</span><span>Chapter</span><span>Status</span><span>Progress</span><span>Time</span><span>Actions</span></div>{project.chapters.map((chapter) => { const job = project.render_jobs.find((candidate) => candidate.chapter_id === chapter.id); const policySkipped = isPolicySkippedChapter(chapter.id); const status = policySkipped ? 'Skipped' : renderJobLabel(job, project.state); const progress = policySkipped ? 0 : renderJobProgress(job, project.state); return <div className="audiobook-render-row" key={chapter.id}><b>{chapter.ordinal + 1}</b><span>{chapter.title}</span><em className={`render-status-${status.toLowerCase()}`}>{status}{policySkipped && <small> by reading policy</small>}</em><div className="render-row-progress">{policySkipped ? <small>Not rendered</small> : <><progress max={100} value={progress} /><small>{progress}%</small></>}</div><span>{'—'}</span><div className="audiobook-row-actions">{job && CONTROLLABLE_RENDER_STATUSES.has(job.status) ? <>{job.status === 'paused' ? <button type="button" aria-label="Resume chapter" disabled={busy} onClick={() => void action(() => audiobookApi.job(project!.id, job.id, 'resume'), 'Chapter resumed.')}>Resume</button> : <button type="button" aria-label="Pause chapter" disabled={busy} onClick={() => void action(() => audiobookApi.job(project!.id, job.id, 'pause'), 'Chapter paused.')}>Pause</button>}<button type="button" aria-label="Stop chapter" disabled={busy} onClick={() => void action(() => audiobookApi.job(project!.id, job.id, 'cancel'), 'Chapter stopped.')}>Stop</button></> : job?.status === 'cancel_requested' ? <button type="button" aria-label="Stopping chapter" disabled>Stopping…</button> : <button type="button" aria-label="Open chapter" onClick={() => startChapter(chapter)}>▶</button>}</div></div>; })}</div></section><section className="audiobook-mastering"><div className="audiobook-section-title"><h3>Chapter Assembly</h3></div>{project.chapters.map((chapter) => { const policySkipped = isPolicySkippedChapter(chapter.id); const assemblyJob = project.pipeline_jobs?.find((candidate) => candidate.type === 'audiobook.assemble-chapter' && candidate.chapter_id === chapter.id); const assemblyStatus = policySkipped ? 'Skipped by policy' : assemblyJob ? renderJobLabel(assemblyJob, project.state) : project.state === 'ready_to_render' ? 'Waiting for render' : project.state === 'rendering' ? 'Waiting for audio' : project.state === 'mastering' ? 'Mastering' : 'Not started'; return <article className="audiobook-mastering-card" key={chapter.id}><div className="audiobook-mastering-card-head"><strong>Chapter {chapter.ordinal + 1} - {chapter.title}</strong><span>{assemblyStatus}</span></div><div className="audiobook-mastering-checks"><span>Chapter assembly <b>{assemblyStatus}</b></span><span>Audio artifact <b>{policySkipped ? 'Not applicable' : assemblyStatus === 'Completed' ? 'Ready' : 'Pending'}</b></span></div></article>; })}</section></div>
-        <div className="audiobook-render-footer"><label>Installed model revision<input value={modelRevision} readOnly placeholder={modelQuery.isFetching ? 'Checking installed model' : 'Computed when rendering'} /></label><button type="button" className="audiobook-primary-action" disabled={busy || !canRender} onClick={() => void action(async () => { const modelRevision = await getInstalledModelRevision(); return audiobookApi.startRender(project.id, { model_revision: modelRevision.trim() }); }, 'Chapter render jobs queued.')}>{project.state === 'rendering' ? 'Retry render' : 'Render book'}</button><label>Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}><option value="m4b">M4B</option><option value="flac">FLAC</option><option value="wav">WAV</option><option value="mp3">MP3</option></select></label><button type="button" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => audiobookApi.startExport(project.id, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>Export Now</button></div>
+        <div className="audiobook-render-columns"><section className="audiobook-render-queue"><div className="audiobook-section-title"><h3>▤ &nbsp;Render Queue</h3><span>{runningRenderJobs} running · {queuedRenderJobs} queued · {pausedRenderJobs} paused</span><div className="audiobook-row-actions"><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs)} onClick={pauseAllRenderJobs}>Pause all chapters</button><button type="button" disabled={busy || !pausedRenderJobs} onClick={resumeAllRenderJobs}>Resume all chapters</button><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs + pausedRenderJobs)} onClick={stopAllRenderJobs}>Stop all chapters</button></div></div>{!renderJobs.length && project.state === 'ready_to_render' && <p className="audiobook-hint">No render run is active. Select Render book to queue all chapters.</p>}<AudiobookRenderQueueTable ws={ws} /></section><section className="audiobook-mastering"><div className="audiobook-section-title"><h3>Chapter Assembly</h3></div>{project.chapters.map((chapter) => { const policySkipped = isPolicySkippedChapter(chapter.id); const assemblyJob = project.pipeline_jobs?.find((candidate) => candidate.type === 'audiobook.assemble-chapter' && candidate.chapter_id === chapter.id); const assemblyStatus = policySkipped ? 'Skipped by policy' : assemblyJob ? renderJobLabel(assemblyJob, project.state) : project.state === 'ready_to_render' ? 'Waiting for render' : project.state === 'rendering' ? 'Waiting for audio' : project.state === 'mastering' ? 'Mastering' : 'Not started'; return <article className="audiobook-mastering-card" key={chapter.id}><div className="audiobook-mastering-card-head"><strong>Chapter {chapter.ordinal + 1} - {chapter.title}</strong><span>{assemblyStatus}</span></div><div className="audiobook-mastering-checks"><span>Chapter assembly <b>{assemblyStatus}</b></span><span>Audio artifact <b>{policySkipped ? 'Not applicable' : assemblyStatus === 'Completed' ? 'Ready' : 'Pending'}</b></span></div></article>; })}</section></div>
+        <div className="audiobook-render-footer"><label>Installed model revision<input value={modelRevision} readOnly placeholder={modelQuery.isFetching ? 'Checking installed model' : 'Computed when rendering'} /></label><button type="button" className="audiobook-primary-action" disabled={busy || !canRender} onClick={() => { setRenderStarting(true); setRenderError(null); void action(async () => { try { const modelRevision = await getInstalledModelRevision(); return await audiobookApi.startRender(project.id, { model_revision: modelRevision.trim() }); } catch (cause) { setRenderError(cause instanceof Error ? cause.message : String(cause)); throw cause; } }, 'Chapter render jobs queued.').finally(() => setRenderStarting(false)); }}>{renderStarting ? 'Starting render…' : project.state === 'rendering' ? 'Retry render' : 'Render book'}</button><label>Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}><option value="m4b">M4B</option><option value="flac">FLAC</option><option value="wav">WAV</option><option value="mp3">MP3</option></select></label><button type="button" disabled={busy || exportActive || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => audiobookApi.startExport(project.id, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>{exportActive ? 'Exporting…' : 'Export Now'}</button></div>
+        {renderStarting && <p className="audiobook-render-request" role="status">Checking the installed model and queuing chapters…</p>}
+        {!renderStarting && renderError && <p className="audiobook-render-request error" role="alert">Render not started: {renderError}</p>}
+        {latestExport && <AudiobookExportStatus job={latestExport} onViewAssets={() => navigateLibrary('assets')} />}
         {!canRender && project.render_readiness?.blockers.length ? <div className="audiobook-render-blockers" role="status" aria-label="Render book requirements">
           <strong>Before rendering</strong>
           <ul>{project.render_readiness.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>

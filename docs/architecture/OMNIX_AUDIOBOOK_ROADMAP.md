@@ -236,7 +236,11 @@ Names are presentation metadata, not identity keys.
 - confirmed_by_user
 - created timestamp
 
-Fuzzy or semantic matching may create proposed aliases only.
+Fuzzy or semantic matching may create proposed aliases only. When an analysis
+finishes, Omnix confirms the classifier's proposed aliases automatically
+(provenance `auto_confirmed`); the user can unconfirm any alias, which rejects it
+(so rediscovery does not propose it again) and restores the span interpretations,
+review issues, suggestions, and detected speakers its confirmation changed.
 
 #### AudiobookCasting
 
@@ -1657,7 +1661,7 @@ This feature requires property/invariant tests, not only happy-path API tests.
 - titles/honorifics
 - age variants
 - alias cycles
-- proposed alias requires confirmation when non-exact
+- proposed alias is confirmed automatically at the end of analysis, and can be unconfirmed
 
 ### LLM failure
 

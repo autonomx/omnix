@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.tenant import TenantContext
@@ -199,7 +199,7 @@ class PostgresTaskGraphRepository:
         return TaskGraphRunSnapshot(
             run_id=run_id,
             graph=graph,
-            status=str(row[1]),
+            status=cast(Any, str(row[1])),
             revision=int(row[2]),
             node_states=node_states,
             result=result,
@@ -223,7 +223,7 @@ class PostgresTaskGraphRepository:
         return [
             TaskNodeRunState(
                 node_id=str(row[0]),
-                status=str(row[1]),
+                status=cast(Any, str(row[1])),
                 attempts=int(row[2]),
                 child_run_id=str(row[3]) if row[3] else None,
                 output=dict(row[4] or {}),
@@ -317,7 +317,7 @@ class PostgresTaskGraphRepository:
             return None
         stored = TaskNodeRunState(
             node_id=str(row[0]),
-            status=str(row[1]),
+            status=cast(Any, str(row[1])),
             attempts=int(row[2]),
             child_run_id=str(row[3]) if row[3] else None,
             output=dict(row[4] or {}),
@@ -448,7 +448,7 @@ class PostgresTaskGraphRepository:
             return None
         stored = TaskNodeRunState(
             node_id=str(row[0]),
-            status=str(row[1]),
+            status=cast(Any, str(row[1])),
             attempts=int(row[2]),
             child_run_id=str(row[3]) if row[3] else None,
             output=dict(row[4] or {}),

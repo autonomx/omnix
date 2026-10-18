@@ -3,14 +3,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 from app.apps.rpg.world.npc_presence_runtime import (
     present_npcs_at_location,
     update_present_npcs_for_location,
 )
 from app.apps.rpg.world.npc_schedule_state import active_schedule_for_npc
-from app.apps.rpg.safe_values import safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_str as _safe_str
 
 
 def build_scene_population_state(

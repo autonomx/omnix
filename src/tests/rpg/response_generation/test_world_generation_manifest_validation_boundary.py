@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Mapping
 
-from app.apps.rpg.session.genesis.world_forge_contract import CampaignTopicNode
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.worlds.generation_validation import PublicationValidatedWorldForgeGenerator
+from app.apps.rpg.genesis.forge.world_forge_contract import CampaignTopicNode
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.worlds.generation_validation import PublicationValidatedWorldForgeGenerator
 
 
 class _Provider:

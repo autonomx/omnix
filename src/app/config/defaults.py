@@ -1,7 +1,9 @@
 """Canonical browser/provider defaults formerly held in app.shared."""
 from __future__ import annotations
 
-DEFAULT_SETTINGS = {
+from typing import Any
+
+DEFAULT_SETTINGS: dict[str, Any] = {
     "provider": "lmstudio",
     "audio_provider_tts": "faster-qwen3-tts",
     "audio_provider_stt": "parakeet",
@@ -25,6 +27,23 @@ DEFAULT_SETTINGS = {
         "xvec_only": True,
         "non_streaming_mode": True,
         "append_silence": True
+    },
+    "fish-s2-pro": {
+        "port": 5102,
+        "checkpoint_dir": "",
+        "code_dir": "",
+        "python": "",
+        "half": False,
+        "compile": False,
+        "max_seq_len": 12288,
+        "startup_timeout_s": 600,
+        "request_timeout_s": 600,
+        "temperature": 0.7,
+        "top_p": 0.7,
+        "repetition_penalty": 1.2,
+        "max_new_tokens": 0,
+        "chunk_length": 200,
+        "normalize": True
     },
     "parakeet": {"base_url": "http://127.0.0.1:5201"},
     "image": {

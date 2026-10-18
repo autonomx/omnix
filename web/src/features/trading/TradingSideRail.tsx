@@ -1,8 +1,9 @@
 import type { TradingSideTab } from './TradingSidePanel';
 import './TradingSideRail.css';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 const railTabs: Array<{ id: TradingSideTab; label: string; glyph: string }> = [
-  { id: 'pine', label: 'Pine Editor', glyph: '{}' },
+  { id: 'pine', label: `${PRODUCT_NAME} Scripts`, glyph: '{}' },
   { id: 'objects', label: 'Object tree', glyph: '▱' },
   { id: 'paper', label: 'Trade', glyph: '⇄' },
   { id: 'intelligence', label: 'Symbol Intelligence', glyph: '◎' },

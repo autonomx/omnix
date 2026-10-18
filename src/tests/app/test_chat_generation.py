@@ -13,7 +13,7 @@ from app.providers import service as shared
 from app.platform.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.composition.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
-from app.apps.rpg.jobs.turn_executor import (
+from app.apps.rpg.session.jobs.turn_executor import (
     _queue_deferred_rpg_turn_narration,
     _rpg_turn_visible_text,
 )
@@ -205,31 +205,21 @@ def test_rpg_turn_visible_text_falls_back_for_direct_npc_business_question() -> 
     )
 
 
-def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
-    from app.apps.rpg.session import narration_worker
-    from app.apps.rpg.session import semantic_response_projection, session_runtime_store
+def test_rpg_turn_job_queues_deferred_narration_as_a_job(monkeypatch, tmp_path) -> None:
+    """A deferred narration is one rpg.narration job; the session is not saved to queue it (WP-5.6)."""
+    from app.apps.rpg.session import session_runtime_store
+    from app.jobs import store as job_store_module
 
-    saved_sessions: list[dict] = []
-    signaled: list[str] = []
-
-    def fake_enqueue(runtime_state, turn_id, tick, narration_request, job_kind="player_turn", priority=100):
-        assert turn_id == "turn:12"
-        assert tick == 12
-        assert narration_request["session_id"] == "session:live"
-        assert narration_request["performance"]["enable_live_narration_llm"] is True
-        runtime_state["narration_jobs_by_turn"] = {
-            turn_id: {"turn_id": turn_id, "status": "queued"}
-        }
-        return runtime_state, runtime_state["narration_jobs_by_turn"][turn_id], True
-
-    monkeypatch.setattr(session_runtime_store, "load_runtime_session", lambda _session_id: {"runtime_state": {}})
-    monkeypatch.setattr(session_runtime_store, "save_runtime_session", lambda session: saved_sessions.append(session) or session)
-    monkeypatch.setattr(semantic_response_projection, "_enqueue_narration_request", fake_enqueue)
-    monkeypatch.setattr(narration_worker, "ensure_narration_worker_running", lambda: None)
-    monkeypatch.setattr(narration_worker, "signal_narration_work", lambda session_id: signaled.append(session_id))
+    jobs = InMemoryJobStore(tmp_path / "jobs")
+    monkeypatch.setattr(job_store_module, "default_job_store", lambda: jobs)
+    monkeypatch.setattr(
+        session_runtime_store, "save_runtime_session",
+        lambda session: pytest.fail("queueing narration must not save the session"),
+    )
 
     result = {
         "ok": True,
+        "interaction_id": "interaction:12",
         "result": {"narration": "Bran checks the goods.", "narration_status": "queued"},
         "narration_request": {
             "turn_id": "turn:12",
@@ -242,8 +232,17 @@ def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
     assert _queue_deferred_rpg_turn_narration("session:live", result) is True
     assert result["narration_job"]["status"] == "queued"
     assert result["result"]["narration_status"] == "queued"
-    assert saved_sessions[-1]["runtime_state"]["session_id"] == "session:live"
-    assert signaled == ["session:live"]
+    job = jobs.get_job(result["narration_job"]["job_id"])
+    assert job is not None and job.type == "rpg.narration"
+    payload = job.input_payload
+    assert (payload["session_id"], payload["turn_id"], payload["tick"]) == ("session:live", "turn:12", 12)
+    assert payload["interaction_id"] == "interaction:12"
+    assert payload["narration_request"]["session_id"] == "session:live"
+    assert payload["narration_request"]["performance"]["enable_live_narration_llm"] is True
+    # Queueing the same turn again returns the same job.
+    again = dict(result)
+    assert _queue_deferred_rpg_turn_narration("session:live", again) is True
+    assert again["narration_job"]["job_id"] == job.id
 
 
 def _wait_for_job_status(

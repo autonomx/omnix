@@ -13,7 +13,7 @@ from pydantic import Field
 
 from app.conversation.memory_policy import Sensitivity, TrustLevel
 
-from .contracts import EvidenceProposition, FrozenContract
+from .contracts import EvidenceProposition, EvidenceSourceKind, FrozenContract
 
 IntegrationKind = Literal[
     "runtime_state",
@@ -192,7 +192,7 @@ def _proposition_id(input: IntegrationEvidenceInput) -> str:
     return f"integration:{source_prefix}:{digest}"
 
 
-def _source_policy(kind: IntegrationKind) -> tuple[str, TrustLevel, Sensitivity]:
+def _source_policy(kind: IntegrationKind) -> tuple[EvidenceSourceKind, TrustLevel, Sensitivity]:
     if kind == "runtime_state":
         return "runtime", "system_trusted", "normal"
     if kind == "process_integration":

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.hermes.mode_routing import list_omnix_mode_policies, omnix_mode_policy, omnix_mode_policy_payload
+from app.apps.rpg.edge.hermes.mode_routing import list_omnix_mode_policies, omnix_mode_policy, omnix_mode_policy_payload
 
 
 def test_omnix_mode_caps_lists_expected_rows() -> None:

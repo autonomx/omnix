@@ -58,6 +58,23 @@ export interface paths {
         patch: operations["update_project_api_audiobook_projects__project_id__patch"];
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/aliases/confirm-suggested": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Suggested Aliases */
+        post: operations["confirm_suggested_aliases_api_audiobook_projects__project_id__aliases_confirm_suggested_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/assets/{asset_id}": {
         parameters: {
             query?: never;
@@ -75,6 +92,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/auto-direct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Auto Direct */
+        put: operations["set_auto_direct_api_audiobook_projects__project_id__auto_direct_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/chapters/{chapter_id}": {
         parameters: {
             query?: never;
@@ -86,6 +120,43 @@ export interface paths {
         get: operations["get_chapter_api_audiobook_projects__project_id__chapters__chapter_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chapter Audio
+         * @description A finished chapter's assembled audio, with range support for seeking.
+         */
+        get: operations["chapter_audio_api_audiobook_projects__project_id__chapters__chapter_id__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/speech-exclusion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Chapter From Audio */
+        post: operations["remove_chapter_from_audio_api_audiobook_projects__project_id__chapters__chapter_id__speech_exclusion_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -121,6 +192,26 @@ export interface paths {
         put?: never;
         /** Upload Cover */
         post: operations["upload_cover_api_audiobook_projects__project_id__cover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/direct-performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Direct Performance
+         * @description Queue an LLM pass that writes a delivery direction (emotion) for each dialogue line.
+         */
+        post: operations["direct_performance_api_audiobook_projects__project_id__direct_performance_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -298,6 +389,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Performance
+         * @description Store the book's Stability/Style and per-character overrides; the render run restarts.
+         */
+        put: operations["set_performance_api_audiobook_projects__project_id__performance_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/preview": {
         parameters: {
             query?: never;
@@ -394,6 +505,23 @@ export interface paths {
         put?: never;
         /** Start Render */
         post: operations["start_render_api_audiobook_projects__project_id__render_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/render/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reorder Audiobook Render Queue */
+        post: operations["reorder_audiobook_render_queue_api_audiobook_projects__project_id__render_order_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -587,6 +715,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases/unconfirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unconfirm Alias */
+        post: operations["unconfirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_unconfirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting": {
         parameters: {
             query?: never;
@@ -676,6 +821,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountResponse */
+        AccountResponse: core["schemas"]["AccountResponse"];
         /** AssetContentResponse */
         AssetContentResponse: core["schemas"]["AssetContentResponse"];
         /** AssetLegacyRootScan */
@@ -705,16 +852,81 @@ export interface components {
          * @description Backend-owned assistant tool metadata and actions.
          */
         AssistantToolSpec: core["schemas"]["AssistantToolSpec"];
+        /**
+         * AuthOptionsResponse
+         * @description How someone may sign in here; the sign-in page shows only these.
+         */
+        AuthOptionsResponse: core["schemas"]["AuthOptionsResponse"];
         /** AuthSessionListResponse */
         AuthSessionListResponse: core["schemas"]["AuthSessionListResponse"];
         /** AuthSessionResponse */
         AuthSessionResponse: core["schemas"]["AuthSessionResponse"];
         /** AuthSessionSummary */
         AuthSessionSummary: core["schemas"]["AuthSessionSummary"];
+        /**
+         * BookPerformance
+         * @description Stability and Style Exaggeration for every render (Voice Studio's sliders).
+         */
+        BookPerformance: {
+            /** Speakers */
+            speakers: {
+                [key: string]: components["schemas"]["CharacterPerformance"];
+            };
+            /**
+             * Stability
+             * @default 0.75
+             */
+            stability: number;
+            /**
+             * Style
+             * @default 0.35
+             */
+            style: number;
+        };
+        /**
+         * BookPerformance
+         * @description Stability and Style Exaggeration for every render (Voice Studio's sliders).
+         */
+        "BookPerformance-Input": {
+            /** Speakers */
+            speakers?: {
+                [key: string]: components["schemas"]["CharacterPerformance-Input"];
+            };
+            /**
+             * Stability
+             * @default 0.75
+             */
+            stability?: number;
+            /**
+             * Style
+             * @default 0.35
+             */
+            style?: number;
+        };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
         CancelState: core["schemas"]["CancelState"];
+        /**
+         * CharacterPerformance
+         * @description A character's own levels; an omitted one follows the book.
+         */
+        CharacterPerformance: {
+            /** Stability */
+            stability: number | null;
+            /** Style */
+            style: number | null;
+        };
+        /**
+         * CharacterPerformance
+         * @description A character's own levels; an omitted one follows the book.
+         */
+        "CharacterPerformance-Input": {
+            /** Stability */
+            stability?: number | null;
+            /** Style */
+            style?: number | null;
+        };
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -804,8 +1016,29 @@ export interface components {
         };
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
+        /** DesktopGoogleHandoffRequest */
+        DesktopGoogleHandoffRequest: core["schemas"]["DesktopGoogleHandoffRequest"];
+        /** DesktopGoogleHandoffResponse */
+        DesktopGoogleHandoffResponse: core["schemas"]["DesktopGoogleHandoffResponse"];
+        /** DesktopGoogleStartRequest */
+        DesktopGoogleStartRequest: core["schemas"]["DesktopGoogleStartRequest"];
+        /**
+         * DesktopGoogleStartResponse
+         * @description The window keeps ``nonce``; the desktop app opens ``begin_url`` in the system browser.
+         */
+        DesktopGoogleStartResponse: core["schemas"]["DesktopGoogleStartResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /**
+         * DirectPerformance
+         * @description Chapters to direct; empty directs the whole book.
+         */
+        DirectPerformance: {
+            /** Chapter Ids */
+            chapter_ids?: string[];
+        };
+        /** EmailChangeRequest */
+        EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
          * EventReaderDiagnostics
          * @description Live job events in this process (WP-5.4).
@@ -831,6 +1064,8 @@ export interface components {
         GatewayReadinessPayload: core["schemas"]["GatewayReadinessPayload"];
         /** GpuResidencyPolicy */
         GpuResidencyPolicy: core["schemas"]["GpuResidencyPolicy"];
+        /** GuestUpgradeRequest */
+        GuestUpgradeRequest: core["schemas"]["GuestUpgradeRequest"];
         /** HTTPValidationError */
         HTTPValidationError: core["schemas"]["HTTPValidationError"];
         /** HermesDiagnosticsPaths */
@@ -846,6 +1081,16 @@ export interface components {
         IbkrSettingsStatus: core["schemas"]["IbkrSettingsStatus"];
         /** IbkrSettingsUpdate */
         IbkrSettingsUpdate: core["schemas"]["IbkrSettingsUpdate"];
+        /** InviteCheckResponse */
+        InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
+        /** InviteListResponse */
+        InviteListResponse: core["schemas"]["InviteListResponse"];
+        /** InviteRequest */
+        InviteRequest: core["schemas"]["InviteRequest"];
+        /** InviteResponse */
+        InviteResponse: core["schemas"]["InviteResponse"];
+        /** InviteSummaryResponse */
+        InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
         /** JobError */
         JobError: core["schemas"]["JobError"];
         /** JobError */
@@ -903,6 +1148,12 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
+        /** PasswordChangeResponse */
+        PasswordChangeResponse: core["schemas"]["PasswordChangeResponse"];
+        /** PasswordLoginRequest */
+        PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
         /** PromptRenderRequest */
@@ -916,6 +1167,11 @@ export interface components {
         ProviderCapability: core["schemas"]["ProviderCapability"];
         /** ProviderFacadePayload */
         ProviderFacadePayload: core["schemas"]["ProviderFacadePayload"];
+        /**
+         * ProviderKeyStatus
+         * @description An API key's status for providers configured by one key (FRED, TVP-10.5): never the key itself.
+         */
+        ProviderKeyStatus: core["schemas"]["ProviderKeyStatus"];
         /** ProviderModelCacheEntry */
         ProviderModelCacheEntry: core["schemas"]["ProviderModelCacheEntry"];
         /** ProviderModelCachePayload */
@@ -941,8 +1197,20 @@ export interface components {
          *     become file names.
          */
         PublicAssetRecord: core["schemas"]["PublicAssetRecord"];
+        /** RedirectUrlResponse */
+        RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
+        /** RegisterRequest */
+        RegisterRequest: core["schemas"]["RegisterRequest"];
         /** RenderedPrompt */
         RenderedPrompt: core["schemas"]["RenderedPrompt"];
+        /**
+         * ReorderRenderQueue
+         * @description Waiting chapters to render first, in this order; the rest follow in their current order.
+         */
+        ReorderRenderQueue: {
+            /** Chapter Ids */
+            chapter_ids: string[];
+        };
         /** ReplayPrimitive */
         ReplayPrimitive: core["schemas"]["ReplayPrimitive"];
         /** ReplayPrimitiveList */
@@ -1027,6 +1295,17 @@ export interface components {
             /** Mode */
             mode: string;
         };
+        /**
+         * SetAutoDirect
+         * @description After classifying: direct the dialogue always, only while Fish S2 Pro is the engine, or never.
+         */
+        SetAutoDirect: {
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "always" | "fish" | "never";
+        };
         /** SetDocumentOverride */
         SetDocumentOverride: {
             /**
@@ -1040,6 +1319,14 @@ export interface components {
             scope: string;
             /** Scope Key */
             scope_key: string;
+        };
+        /** SetPerformanceResult */
+        SetPerformanceResult: {
+            /** Changed */
+            changed: boolean;
+            performance: components["schemas"]["BookPerformance"];
+            /** Project Id */
+            project_id: string;
         };
         /** SetPronunciation */
         SetPronunciation: {
@@ -1080,18 +1367,12 @@ export interface components {
             generation_parameters?: {
                 [key: string]: unknown;
             };
-            /**
-             * Model Id
-             * @default Qwen3-TTS
-             */
-            model_id?: string;
+            /** Model Id */
+            model_id?: string | null;
             /** Model Revision */
             model_revision: string;
-            /**
-             * Provider Id
-             * @default faster-qwen3-tts
-             */
-            provider_id?: string;
+            /** Provider Id */
+            provider_id?: string | null;
             /** Seed */
             seed?: number | null;
             /** Span Id */
@@ -1105,18 +1386,12 @@ export interface components {
             generation_parameters?: {
                 [key: string]: unknown;
             };
-            /**
-             * Model Id
-             * @default Qwen3-TTS
-             */
-            model_id?: string;
+            /** Model Id */
+            model_id?: string | null;
             /** Model Revision */
             model_revision: string;
-            /**
-             * Provider Id
-             * @default faster-qwen3-tts
-             */
-            provider_id?: string;
+            /** Provider Id */
+            provider_id?: string | null;
             /** Seed */
             seed?: number | null;
         };
@@ -1344,6 +1619,39 @@ export interface operations {
             };
         };
     };
+    confirm_suggested_aliases_api_audiobook_projects__project_id__aliases_confirm_suggested_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_asset_api_audiobook_projects__project_id__assets__asset_id__delete: {
         parameters: {
             query?: never;
@@ -1378,6 +1686,43 @@ export interface operations {
             };
         };
     };
+    set_auto_direct_api_audiobook_projects__project_id__auto_direct_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAutoDirect"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_chapter_api_audiobook_projects__project_id__chapters__chapter_id__get: {
         parameters: {
             query?: never;
@@ -1398,6 +1743,72 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chapter_audio_api_audiobook_projects__project_id__chapters__chapter_id__audio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File content returned with its source media type. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_chapter_from_audio_api_audiobook_projects__project_id__chapters__chapter_id__speech_exclusion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                chapter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
                     };
                 };
             };
@@ -1500,6 +1911,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    direct_performance_api_audiobook_projects__project_id__direct_performance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectPerformance"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1904,6 +2352,41 @@ export interface operations {
             };
         };
     };
+    set_performance_api_audiobook_projects__project_id__performance_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookPerformance-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetPerformanceResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_preview_api_audiobook_projects__project_id__preview_post: {
         parameters: {
             query?: never;
@@ -2101,6 +2584,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_audiobook_render_queue_api_audiobook_projects__project_id__render_order_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRenderQueue"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2485,6 +3005,44 @@ export interface operations {
         };
     };
     confirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                speaker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmSpeakerAlias"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unconfirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_unconfirm_post: {
         parameters: {
             query?: never;
             header?: never;

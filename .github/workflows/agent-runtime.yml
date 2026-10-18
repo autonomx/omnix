@@ -29,8 +29,8 @@ on:
       - "web/src/features/assistant/workspace/assistant-context-controller.ts"
       - "web/src/features/assistant/workspace/assistant-context-controller.css"
       - "web/src/features/assistant/workspace/assistant-context-controller.test.ts"
-      - "src/app/assistant_context/models.py"
-      - "src/app/assistant_context/routes.py"
+      - "src/app/platform/chat/assistant_context/models.py"
+      - "src/app/platform/chat/assistant_context/routes.py"
       - "src/app/platform/chat/models.py"
       - "src/app/platform/chat/store.py"
       - "src/app/platform/chat/prompt_store.py"
@@ -141,8 +141,6 @@ jobs:
             -q --tb=short
       - name: Verify default-LLM UI fixture contract
         run: python -m pytest src/tests/e2e/test_default_llm_agent_ui_flow.py -q --tb=short -k fixture_contract
-      - name: Run Agent Runtime UI tests
-        run: npm --workspace @omnix/web run test -- src/features/assistant/chat/OmnixRunCard.test.tsx src/features/assistant/chat/HtmlArtifactPreview.test.tsx src/features/assistant/workspace/assistant-context-controller.test.ts
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract

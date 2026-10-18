@@ -11,7 +11,7 @@ from .contracts import (
     EvidenceReceipt,
     TaskRevision,
 )
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 from .repository import (
     AgentRunConcurrencyError,
     _json,
@@ -209,7 +209,7 @@ def list_evidence_receipts(repo: PostgresAgentRunRepository, run_id: str) -> lis
             executed_at=row[11],
             observed_at=row[12],
             freshest_source_at=row[13],
-            trust_level=str(row[14]),
+            trust_level=cast(Any, str(row[14])),
             result_digest=str(row[15]),
             metadata=dict(row[16] or {}),
         )

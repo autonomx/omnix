@@ -1,18 +1,7 @@
-import type { RpgAuthoringEntityCard } from './rpgWorldAuthoringClient';
 import { pipelineFetch } from '../../../api/fetchPipeline';
 
-export interface RpgCampaignLoreResponse {
-  ok: boolean;
-  session_id: string;
-  canon_revision: number;
-  content_hash: string;
-  dossier_cards?: {
-    characters?: RpgAuthoringEntityCard[];
-    locations?: RpgAuthoringEntityCard[];
-    factions?: RpgAuthoringEntityCard[];
-  };
-  topic_cards?: Record<string, RpgAuthoringEntityCard[]>;
-}
+import type { components } from './generated';
+export type RpgCampaignLoreResponse = components['schemas']['RpgCampaignLoreResponse'];
 
 async function request<T>(path: string): Promise<T> {
   const response = await pipelineFetch(path, {

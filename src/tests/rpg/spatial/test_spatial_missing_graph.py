@@ -1,6 +1,6 @@
-from app.apps.rpg.spatial.audibility import can_hear_entity
-from app.apps.rpg.spatial.movement import can_move_between
-from app.apps.rpg.spatial.visibility import can_see_entity
+from app.apps.rpg.world.spatial.audibility import can_hear_entity
+from app.apps.rpg.world.spatial.movement import can_move_between
+from app.apps.rpg.world.spatial.visibility import can_see_entity
 
 
 def test_can_see_entity_empty_graph_is_not_same_area():

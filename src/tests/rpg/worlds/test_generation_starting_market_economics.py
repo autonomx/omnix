@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.worlds.generation_starting_market import starting_market_report
+from app.apps.rpg.genesis.worlds.generation_starting_market import starting_market_report
 
 
 def _topic(topic_id: str, entities: list[dict]) -> dict:

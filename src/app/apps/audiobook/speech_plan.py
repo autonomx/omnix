@@ -154,6 +154,11 @@ _ABBREVIATIONS = {"dr": "Doctor", "mr": "Mister", "mrs": "Missus", "ms": "Miss",
 _NUMBER = re.compile(r"\b\d{1,4}\b")
 _ACRONYM = re.compile(r"\b[A-Z]{2,5}\b")
 _ROMAN = re.compile(r"(?<=Chapter )\b[IVXLCDM]+\b")
+# PDF page breaks leave runs of blank and space-only lines, even mid-sentence. Qwen3-TTS
+# voices such a run as stammered fragments and static, so it is read as one line break,
+# the way the extracted text marks every other line and paragraph.
+LAYOUT_WHITESPACE_RULE = "layout_whitespace"
+_LAYOUT_WHITESPACE = re.compile(r"[^\S\n]*\n(?:[^\S\n]*\n)+[^\S\n]*")
 
 
 def build_speech_plan(
@@ -180,6 +185,7 @@ def build_speech_plan(
         ("roman_numeral", _ROMAN, lambda m: _number(_roman_value(m.group()))),
         ("number", _NUMBER, lambda m: _number(int(m.group()))),
         ("acronym", _ACRONYM, lambda m: " ".join(m.group())),
+        (LAYOUT_WHITESPACE_RULE, _LAYOUT_WHITESPACE, "\n"),
     ])
     candidates: list[Transformation] = []
     for rule, pattern, replacement in rules:

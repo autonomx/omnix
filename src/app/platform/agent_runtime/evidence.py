@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import re
-from typing import Any, Callable
+from typing import Any, Callable, cast
 from urllib.parse import urlparse
 
 from .active_objective import normalize_objective_relation
@@ -28,6 +28,7 @@ from .contracts import (
     EvidenceSourceOption,
     RequestModeCandidate,
     RequestModeSelection,
+    RetrievalPolicy,
     SubjectRef,
 )
 from .profiles import AgentProfile, profile_external_ceiling
@@ -321,11 +322,11 @@ def _semantic_evidence_adviser(task: str, profile_id: str) -> EvidenceDecision |
         strategy = "adaptive"
     return EvidenceDecision(
         policy=EvidencePolicy(
-            requirement=requirement,
-            external_access=external_access,
+            requirement=cast(Any, requirement),
+            external_access=cast(Any, external_access),
             requirements=requirements,
-            user_visible_attribution=attribution,
-            retrieval={"strategy": strategy},
+            user_visible_attribution=cast(Any, attribution),
+            retrieval=RetrievalPolicy(strategy=cast(Any, strategy)),
         ),
         confidence=parsed_confidence,
         reason=str(payload.get("reason") or "hermes_semantic_evidence_adviser")[:240],
@@ -371,7 +372,7 @@ def resolve_request_mode(
     if explicit_research is not None:
         candidates.append(
             RequestModeCandidate(
-                mode=explicit_research,
+                mode=cast(Any, explicit_research),
                 source="explicit_command",
                 priority=500,
             )
@@ -414,7 +415,7 @@ def _extract_ticker(task: str) -> str | None:
 
 def _security_subject(ticker: str) -> SubjectRef:
     canonical_id = f"{ticker}:US"
-    qualifiers: dict[str, object] = {"ticker": ticker}
+    qualifiers: dict[str, Any] = {"ticker": ticker}
     try:
         from app.runtime.ports import optional
 
@@ -624,12 +625,12 @@ def _requirement(
         source_class=source_class,
         subject=subject,
         coverage=evidence_coverage_from_subject(subject),
-        freshness=freshness,
-        trust_floor=source_trust,
+        freshness=cast(Any, freshness),
+        trust_floor=cast(Any, source_trust),
         acceptable_sources=[
-            EvidenceSourceOption(source_class=source_class, trust_floor=source_trust, preference=0)
+            EvidenceSourceOption(source_class=source_class, trust_floor=cast(Any, source_trust), preference=0)
         ],
-        fallback_policy=fallback,
+        fallback_policy=cast(Any, fallback),
         max_age_seconds=freshness_max_age_seconds(source_class) if freshness == "current" else None,
     )
 
@@ -722,7 +723,7 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
             external_access="allowed",
             requirements=requirements,
             user_visible_attribution="when_used",
-            retrieval={"strategy": "adaptive"},
+            retrieval=RetrievalPolicy(strategy="adaptive"),
         ),
         confidence=confidence,
         reason=f"semantic_intent:{reason}",
@@ -1676,12 +1677,12 @@ def _requirement_status(matched_units, requirement, candidates, missing, statuse
     return reason, status
 
 
-def request_digest(payload: dict[str, object]) -> str:
+def request_digest(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
-def result_digest(payload: dict[str, object]) -> str:
+def result_digest(payload: dict[str, Any]) -> str:
     return request_digest(payload)
 
 
@@ -1699,7 +1700,7 @@ _REVERSE_SOURCE_CAPABILITIES: dict[str, str] = {
 }
 
 
-def _result_output(result_payload: dict[str, object]) -> dict[str, object]:
+def _result_output(result_payload: dict[str, Any]) -> dict[str, Any]:
     value = result_payload.get("output")
     return dict(value) if isinstance(value, dict) else {}
 
@@ -1733,7 +1734,7 @@ _SOFTWARE_RELEASE_PRIMARY_GITHUB_REPOSITORIES = frozenset({
 })
 
 
-def _web_item_trust(source_class: str, item: dict[str, object]) -> str:
+def _web_item_trust(source_class: str, item: dict[str, Any]) -> str:
     parsed = urlparse(str(item.get("url") or ""))
     domain = (parsed.hostname or "").casefold().removeprefix("www.")
     if not domain:
@@ -1756,7 +1757,7 @@ def _web_item_trust(source_class: str, item: dict[str, object]) -> str:
     return "reputable"
 
 
-def _actual_web_trust(output: dict[str, object], source_class: str) -> str:
+def _actual_web_trust(output: dict[str, Any], source_class: str) -> str:
     items = _web_source_items(output)
     if not items:
         return "general"
@@ -1768,8 +1769,8 @@ def _actual_web_trust(output: dict[str, object], source_class: str) -> str:
 def _observed_subject(
     capability_id: str,
     source_class: str,
-    request_input: dict[str, object],
-    output: dict[str, object],
+    request_input: dict[str, Any],
+    output: dict[str, Any],
 ) -> SubjectRef | None:
     if capability_id == "trading.market_quote":
         ticker = str(output.get("ticker") or request_input.get("ticker") or "").strip().upper()
@@ -1800,7 +1801,7 @@ def _observed_subject(
             or request_input.get("sha")
             or ""
         ).strip()
-        qualifiers: dict[str, object] = {}
+        qualifiers: dict[str, Any] = {}
         if requested_ref:
             qualifiers["requested_ref"] = requested_ref
         if resolved_commit:
@@ -1813,11 +1814,11 @@ def _observed_subject(
         )
     if capability_id == "research.web_search":
         query = str(request_input.get("query") or "")
-        subject = resolve_subject(query, source_class)
-        if subject is not None:
-            return subject
-        ticker = _extract_ticker(query)
-        return _security_subject(ticker) if ticker else None
+        web_subject = resolve_subject(query, source_class)
+        if web_subject is not None:
+            return web_subject
+        query_ticker = _extract_ticker(query)
+        return _security_subject(query_ticker) if query_ticker else None
     if source_class == "home_state":
         return SubjectRef(type="home", canonical_id="current_home", display_name="current home")
     if source_class == "home_energy":
@@ -1835,7 +1836,7 @@ def _observed_subject(
         return SubjectRef(type="location", canonical_id=location.casefold(), display_name=location)
     return None
 
-def _request_supports_subject(subject: SubjectRef | None, request_input: dict[str, object]) -> bool:
+def _request_supports_subject(subject: SubjectRef | None, request_input: dict[str, Any]) -> bool:
     if subject is None:
         return True
     serialized = json.dumps(request_input, sort_keys=True, default=str).casefold()
@@ -1870,7 +1871,7 @@ def _source_intent_score(source_class: str, text: str) -> int:
 def resolve_evidence_call(
     policy: EvidencePolicy,
     capability_id: str,
-    request_input: dict[str, object],
+    request_input: dict[str, Any],
 ) -> tuple[EvidenceRequirement | None, str | None]:
     """Bind one broker call to one requirement/source deterministically."""
     serialized = json.dumps(request_input, sort_keys=True, default=str)
@@ -1912,7 +1913,7 @@ def _normalized_coverage_text(value: object) -> str:
     ).strip("-")
 
 
-def _web_source_items(output: dict[str, object]) -> list[dict[str, object]]:
+def _web_source_items(output: dict[str, Any]) -> list[dict[str, Any]]:
     """Project web results down to provider-originated evidence fields only.
 
     Search adapters may synthesize display titles from the request query when a
@@ -1924,7 +1925,7 @@ def _web_source_items(output: dict[str, object]) -> list[dict[str, object]]:
     items = output.get("items")
     if not isinstance(items, list):
         return []
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -1938,7 +1939,7 @@ def _web_source_items(output: dict[str, object]) -> list[dict[str, object]]:
     return rows
 
 
-def _coverage_token_observed(token: str, output: dict[str, object]) -> bool:
+def _coverage_token_observed(token: str, output: dict[str, Any]) -> bool:
     normalized_token = _normalized_coverage_text(token)
     if not normalized_token:
         return False
@@ -1958,7 +1959,7 @@ def _coverage_token_observed(token: str, output: dict[str, object]) -> bool:
 
 def _subject_supported_by_web_output(
     subject: SubjectRef,
-    output: dict[str, object],
+    output: dict[str, Any],
 ) -> bool:
     """A web query names intent; only returned content proves the subject."""
 
@@ -1989,7 +1990,7 @@ def _coverage_supported_by_observation(
     coverage: EvidenceCoverage,
     *,
     subject: SubjectRef | None,
-    output: dict[str, object],
+    output: dict[str, Any],
 ) -> bool:
     """Require coverage identity to be evidenced by the actual tool result."""
 
@@ -2016,7 +2017,7 @@ def _compatible_observed_coverages(
     capability_id: str,
     source_class: str,
     subject: SubjectRef | None,
-    output: dict[str, object],
+    output: dict[str, Any],
 ) -> list[EvidenceCoverage]:
     rows: list[EvidenceCoverage] = []
     seen: set[str] = set()
@@ -2066,7 +2067,7 @@ def _compatible_observed_coverages(
 
 def _coverage_source_counts(
     coverages: list[EvidenceCoverage],
-    output: dict[str, object],
+    output: dict[str, Any],
 ) -> dict[str, int]:
     """Count returned web source records separately for every coverage key."""
 
@@ -2080,7 +2081,7 @@ def _coverage_source_counts(
             continue
         count = 0
         for item in items:
-            item_output: dict[str, object] = {"items": [item]}
+            item_output: dict[str, Any] = {"items": [item]}
             if coverage.subject is not None:
                 supported = _subject_supported_by_web_output(coverage.subject, item_output)
             else:
@@ -2101,8 +2102,8 @@ def build_evidence_receipt(
     task_revision_id: str | None,
     policy: EvidencePolicy,
     capability_id: str,
-    request_input: dict[str, object],
-    result_payload: dict[str, object],
+    request_input: dict[str, Any],
+    result_payload: dict[str, Any],
     error: str | None,
     requirement_id: str | None = None,
     source_class_hint: str | None = None,
@@ -2216,7 +2217,7 @@ def build_evidence_receipt(
         executed_at=now,
         observed_at=now,
         freshest_source_at=freshest_source_at,
-        trust_level=trust,
+        trust_level=cast(Any, trust),
         result_digest=result_digest(result_payload),
         metadata={
             "broker": True,

@@ -15,6 +15,7 @@ from .contracts import (
     SuccessCriterion,
     WorkspaceSpec,
 )
+from typing import Any
 
 
 class ChildRunRequest(BaseModel):
@@ -134,7 +135,7 @@ def reserve_child_budget(
     existing_children: list[AgentRunSnapshot],
     child: AgentRunSpec,
     *,
-    parent_usage: dict[str, object] | None = None,
+    parent_usage: dict[str, Any] | None = None,
 ) -> None:
     """Legacy aggregate reservation check.
 

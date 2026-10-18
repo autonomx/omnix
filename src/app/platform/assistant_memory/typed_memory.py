@@ -1,7 +1,6 @@
 """Validated typed-memory lifecycle layered on the canonical memory service."""
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any
 
@@ -127,30 +126,6 @@ def _apply_record_metadata(
         }
     )
     repository = service.repository
-    database = getattr(repository, "database", None)
-    workspace_id = getattr(repository, "workspace_id", None)
-    if database is not None and workspace_id:
-        with database.transaction() as connection:
-            connection.execute(
-                """
-                UPDATE omnix_memory_records
-                   SET kind = %s, structured_payload = %s::jsonb,
-                       supersedes_memory_id = %s, contradiction_group = %s
-                 WHERE id = %s AND workspace_id = %s
-                """,
-                (
-                    kind,
-                    json.dumps(payload, sort_keys=True),
-                    supersedes_memory_id,
-                    contradiction_group,
-                    record.id,
-                    workspace_id,
-                ),
-            )
-        stored = repository.get_record(record.id)
-        if stored is None:
-            raise RuntimeError("typed memory disappeared after metadata persistence")
-        return stored
     return repository.update_record(changed, expected_revision=record.revision)
 
 

@@ -15,7 +15,7 @@ this ledger, never execution authority.
 import hashlib
 import json
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Literal, Sequence
+from typing import Any, Final, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,7 +24,7 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 PROSPECTIVE_GAP_STRATEGY_ID = "prospective-gap-experiment"
-PROSPECTIVE_GAP_LEDGER_VERSION = "prospective-gap-ledger-v1"
+PROSPECTIVE_GAP_LEDGER_VERSION: Final = "prospective-gap-ledger-v1"
 
 ProspectiveRecordKind = Literal[
     "session_manifest",
@@ -88,7 +88,7 @@ class ProspectiveGapRecord(BaseModel):
     instrument_id: str
     kind: ProspectiveRecordKind
     observed_at: datetime
-    payload: dict[str, object]
+    payload: dict[str, Any]
     payload_fingerprint: str
 
 
@@ -128,7 +128,7 @@ class ProspectiveGapRepository:
         instrument_id: str,
         kind: ProspectiveRecordKind,
         observed_at: datetime,
-        payload: BaseModel | dict[str, object],
+        payload: BaseModel | dict[str, Any],
         state: str = "frozen",
         reason_code: str | None = None,
         run_id: str | None = None,

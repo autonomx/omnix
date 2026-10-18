@@ -15,7 +15,7 @@ from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
 
 
-INTERVALS = {
+INTERVALS: dict[str, dict[str, Any]] = {
     "coinbase": {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400},
     "kraken": {"1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240, "1d": 1440},
     "hyperliquid": {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"},
@@ -230,7 +230,7 @@ class AdditionalCryptoProvider(ProviderAdapter):
         self,
         instrument_id: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         response = self.get_bars(instrument_id, "1m", 1, cancellation)
         if not response.bars:
             raise ProviderDataUnavailableError(

@@ -51,6 +51,7 @@ from .task_revision_quality import (
     persist_task_revision_contract,
 )
 from app.prompts import prompt_template
+from typing import Any
 
 
 REQUEST_IMPLEMENTATION_CONTINUATION_TEMPLATE = prompt_template(
@@ -691,7 +692,7 @@ class AgentRunService(_CoreAgentRunService):
             work.rollback()
         return rows
 
-    def quality_state(self, run_id: str) -> dict[str, object] | None:
+    def quality_state(self, run_id: str) -> dict[str, Any] | None:
         with self.unit_of_work(self.database) as work:
             if self.repository_factory(work.connection, self.context).get_run(run_id) is None:
                 work.rollback()

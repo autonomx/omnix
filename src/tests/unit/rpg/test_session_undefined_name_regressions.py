@@ -3,7 +3,7 @@ from __future__ import annotations
 import builtins
 from datetime import datetime, timezone
 
-from app.apps.rpg.ai.npc_initiative import build_npc_initiative_candidates
+from app.apps.rpg.narration.ai.npc_initiative import build_npc_initiative_candidates
 from app.apps.rpg.session import action_execution, narration_jobs, player_activity_runtime
 
 

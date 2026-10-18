@@ -267,18 +267,33 @@ def live_call_audio(base: str) -> dict[str, Any]:
 def run_load(base: str, recorder: Recorder, *, duration: float, threads: int, job_ids: list[str]) -> float:
     stop = time.monotonic() + duration
     lock = threading.Lock()
+    # The ingress allows one client 50 API requests a second (deploy/multihost/nginx.conf); this one
+    # driver is one client, so the load stays under it rather than measuring the ingress's 429s.
+    interval = 1 / 40
+    next_slot = [time.monotonic()]
+
+    def pace() -> None:
+        with lock:
+            slot = max(time.monotonic(), next_slot[0])
+            next_slot[0] = slot + interval
+        delay = slot - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
 
     def worker(index: int) -> None:
         with httpx.Client(timeout=60, headers=HEADERS) as client:
             sequence = 0
             while time.monotonic() < stop:
                 sequence += 1
+                pace()
                 recorder.timed("jobs.list", lambda: _check(client.get(f"{base}/api/jobs?limit=20")))
                 label = f"load-{index}-{sequence}-{uuid.uuid4().hex[:6]}"
+                pace()
                 job_id = recorder.timed("jobs.submit", lambda: submit_probe(client, base, label))
                 if job_id:
                     with lock:
                         job_ids.append(job_id)
+                pace()
                 recorder.timed("ready", lambda: _check(client.get(f"{base}/ready")))
                 if sequence % 10 == 0:
                     recorder.timed("chat.round_trip", lambda: chat_round_trip(base, base))

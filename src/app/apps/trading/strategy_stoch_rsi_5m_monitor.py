@@ -92,12 +92,14 @@ async def record_stoch_rsi_5m_candidates(
             coverage_certificate = qualify_bar_feature(
                 response_bars,
                 FeatureRequirement(
-                    requirement_id="stoch-rsi-5m-recursive-v2",
+                    requirement_id="stoch-rsi-5m-recursive-v3",
                     feature_name="stoch_rsi_5m_recursive_state",
                     interval="5m",
                     dependency_class="RECURSIVE",
                     allow_approximate_reseed=True,
                     reseed_after_clean_bars=30,
+                    # One missing bucket is stepped over, as the evaluator does.
+                    bridge_isolated_gaps=True,
                 ),
                 instrument_id=candidate.instrument_id,
                 session_date=universe.session_date,
@@ -135,6 +137,7 @@ async def record_stoch_rsi_5m_candidates(
                     session_date=universe.session_date,
                     interval="5m",
                     as_of=candidate_observed_at,
+                    bridge_single_missing=True,
                 )
             snapshot = evaluate(evaluation_bars, stoch_config)
             event_observed_at = snapshot.as_of or candidate_observed_at

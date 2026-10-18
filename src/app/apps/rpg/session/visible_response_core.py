@@ -108,13 +108,36 @@ def _patch_visible_interaction_reason_into_payload_text(
     )
 
     for key in text_keys:
-        if key in payload:
-            payload[key] = _replace_stale_visible_result_text(
-                payload.get(key),
-                visible_reason=visible_reason,
-            )
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if isinstance(value, (dict, list)):
+            # A structured value (``result`` is the turn's result) keeps its
+            # structure: only its texts are patched. It used to be turned into
+            # its Python repr, which later stages parsed back (WP-5.6).
+            payload[key] = _replace_stale_result_in_texts(value, visible_reason=visible_reason)
+        else:
+            payload[key] = _replace_stale_visible_result_text(value, visible_reason=visible_reason)
 
     return payload
+
+
+_STALE_RESULT_LINE = re.compile(r"(?im)^(\s*Result:\s*)(unknown_item|item_not_found|unknown)\s*$")
+_STALE_RESULT_INLINE = re.compile(r"(?i)Result:\s*(unknown_item|item_not_found|unknown)")
+
+
+def _replace_stale_result_in_texts(value: Any, *, visible_reason: str) -> Any:
+    """``value`` with the stale result lines in its strings replaced (empty strings stay empty)."""
+    if isinstance(value, str):
+        if "result:" not in value.lower():
+            return value
+        value = _STALE_RESULT_LINE.sub(lambda match: f"{match.group(1)}{visible_reason}", value)
+        return _STALE_RESULT_INLINE.sub(f"Result: {visible_reason}", value)
+    if isinstance(value, dict):
+        return {key: _replace_stale_result_in_texts(item, visible_reason=visible_reason) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_replace_stale_result_in_texts(item, visible_reason=visible_reason) for item in value]
+    return value
 
 
 def _apply_visible_interaction_reason_to_resolved_result(
@@ -350,7 +373,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
 
     # Preferred: use the same central gateway normal RPG narration uses.
     try:
-        from app.apps.rpg.provider_access import chat_completion
+        from app.apps.rpg.foundation.provider_access import chat_completion
 
         raw = chat_completion(
             messages=[
@@ -366,7 +389,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
 
     # Fallback: use the process provider service directly.
     try:
-        from app.apps.rpg.provider_access import get_provider
+        from app.apps.rpg.foundation.provider_access import get_provider
 
         provider = get_provider()
     except Exception as exc:
@@ -390,7 +413,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
         )
 
     try:
-        from app.providers.base import ChatMessage  # type: ignore
+        from app.providers.base import ChatMessage
 
         messages = [
             ChatMessage(role="system", content=system_text),
@@ -399,9 +422,10 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
     except Exception:
         # Only use dict fallback if your active-provider gateway supports it.
         # Most app providers expect ChatMessage.
+        # Dict messages for gateways that accept them.
         messages = [
-            {"role": "system", "content": system_text},
-            {"role": "user", "content": prompt},
+            {"role": "system", "content": system_text},  # type: ignore[list-item]
+            {"role": "user", "content": prompt},  # type: ignore[list-item]
         ]
 
     try:
@@ -571,4 +595,4 @@ from app.apps.rpg.narration.combat_contract import (
 )
 from app.apps.rpg.narration.combat_service import generate_combat_narration_sync
 from app.apps.rpg.session.state_normalization import _safe_str
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list

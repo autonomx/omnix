@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.narrative_engine import CampaignBibleSnapshot, campaign_bible_evidence
-from app.apps.rpg.session.genesis import turn_grounding
-from app.apps.rpg.session.genesis.runtime_lore_materialization import (
+from app.apps.rpg.narration.narrative_engine import CampaignBibleSnapshot, campaign_bible_evidence
+from app.apps.rpg.genesis.forge import turn_grounding
+from app.apps.rpg.genesis.forge.runtime_lore_materialization import (
     materialize_scene_lore,
     scene_lore_entity_is_rich,
 )
-from app.apps.rpg.session.genesis.runtime_lore_store import ensure_turn_scene_lore
+from app.apps.rpg.genesis.forge.runtime_lore_store import ensure_turn_scene_lore
+from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
 def _new_town_session() -> dict:
@@ -239,6 +240,7 @@ def test_runtime_only_dialogue_still_includes_the_speakers_dossier(monkeypatch) 
             "session": session,
             "resolved_result": {"response_mode": "dialogue"},
         },
+        sessions=SESSION_CAMPAIGN_SESSIONS,
         campaign_id="campaign:new-town",
         player_input="What are you doing here?",
         speaker_id="npc:helix",
@@ -257,12 +259,12 @@ def test_portable_projection_is_authority_when_postgresql_is_unavailable(monkeyp
     result = {"scene": {"location_id": "location:grayhaven"}}
 
     monkeypatch.setattr(
-        "app.apps.rpg.session.genesis.runtime_lore_store.default_database",
+        "app.apps.rpg.genesis.forge.runtime_lore_store.default_database",
         lambda: (_ for _ in ()).throw(RuntimeError("database unavailable")),
     )
     monkeypatch.setattr(
-        "app.apps.rpg.session.genesis.runtime_lore_store._save_portable_projection",
-        lambda value: value,
+        "app.apps.rpg.genesis.forge.runtime_lore_store._save_portable_projection",
+        lambda value, **_kwargs: value,
     )
 
     hydrated, report = ensure_turn_scene_lore(
@@ -270,6 +272,7 @@ def test_portable_projection_is_authority_when_postgresql_is_unavailable(monkeyp
         session,
         result,
         llm_gateway=False,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     assert report["mode"] == "portable_projection_authority"
@@ -332,6 +335,7 @@ def test_turn_grounding_fails_closed_when_materialized_canon_cannot_be_loaded(mo
                 "session": {"state": {}},
                 "resolved_result": {"response_mode": "observation"},
             },
+            sessions=SESSION_CAMPAIGN_SESSIONS,
             campaign_id="campaign:lost-town",
             player_input="What is this place?",
         )
@@ -370,7 +374,7 @@ def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> No
     from contextlib import contextmanager
 
     from app.persistence.startup import bootstrap_postgresql_runtime
-    from app.apps.rpg.session.genesis import runtime_lore_store
+    from app.apps.rpg.genesis.forge import runtime_lore_store
 
     bootstrap_postgresql_runtime()
     real_unit_of_work = runtime_lore_store.unit_of_work
@@ -393,7 +397,7 @@ def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> No
             return "{}"
 
     monkeypatch.setattr(runtime_lore_store, "unit_of_work", counted_unit_of_work)
-    monkeypatch.setattr(runtime_lore_store, "_save_portable_projection", lambda value: value)
+    monkeypatch.setattr(runtime_lore_store, "_save_portable_projection", lambda value, **_kwargs: value)
     import uuid
 
     campaign_id = f"campaign:lock-{uuid.uuid4().hex[:12]}"
@@ -402,6 +406,7 @@ def test_scene_lore_is_generated_before_any_transaction_opens(monkeypatch) -> No
     gateway = Gateway()
     _, report = ensure_turn_scene_lore(
         campaign_id, session, {"scene": {"location_id": "location:grayhaven"}}, llm_gateway=gateway,
+        sessions=SESSION_CAMPAIGN_SESSIONS,
     )
 
     assert report["mode"] == "postgresql_authority"
@@ -431,7 +436,7 @@ def test_documents_named_with_entity_id_and_body_still_document_the_target() -> 
 
 
 def test_fallback_lore_names_the_place_not_its_id() -> None:
-    from app.apps.rpg.session.genesis.runtime_lore_materialization import (
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import (
         SceneLoreTarget,
         _fallback_entity_bundle,
         _name_from_id,

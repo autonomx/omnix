@@ -14,6 +14,23 @@ from .annotation import (
 from .dialogue_coverage import audit_dialogue_coverage
 from .hashing import canonical_json, text_hash
 from .models import SourceSpan
+from .speech_exclusions import chapter_removed_sql
+
+
+def _carried_direction(previous: Any, *, role: str, speaker_id: Any, delivery: str) -> str:
+    """A generated delivery direction that survives re-classification.
+
+    It carries over when the line is still dialogue spoken by the same speaker
+    and the classifier gives no delivery of its own; a re-assigned line loses it,
+    since the direction was written for the other speaker.
+    """
+    if previous is None or delivery or role != "dialogue":
+        return ""
+    _id, _revision, _status, previous_role, previous_speaker, previous_delivery, evidence = previous
+    if (previous_role != "dialogue" or str(previous_speaker or "") != str(speaker_id or "")
+            or dict(evidence or {}).get("delivery_source") != "performance_director"):
+        return ""
+    return str(previous_delivery or "")
 
 
 class PostgresAudiobookAnalysisRepository:
@@ -27,8 +44,9 @@ class PostgresAudiobookAnalysisRepository:
         """Persist classifier discoveries without making them castable.
 
         Existing active speakers keep their identity and castability; classifier
-        metadata and proposed aliases may be enriched, but no alias becomes
-        authoritative until the user confirms it.
+        metadata and proposed aliases may be enriched. Proposed aliases become
+        authoritative when the analysis finishes (``confirm_suggested_aliases``),
+        and the user can unconfirm any of them.
         """
         touched = 0
         for discovery in discoveries:
@@ -180,6 +198,22 @@ class PostgresAudiobookAnalysisRepository:
                 ).fetchone()
                 if alias_conflict is not None:
                     continue
+                # An alias the user unconfirmed (or rejected) for this speaker is not suggested again;
+                # suggestions are confirmed automatically, so it would otherwise come straight back.
+                declined = self.connection.execute(
+                    """SELECT 1
+                         FROM omnix_audiobook_speaker_aliases
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status = 'rejected' AND speaker_id = %s::uuid
+                          AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
+                        LIMIT 1""",
+                    (
+                        context.workspace_id, project_id, speaker_id,
+                        alias_normalized,
+                    ),
+                ).fetchone()
+                if declined is not None:
+                    continue
                 alias_id = f"ab:alias:{text_hash(f'{speaker_id}:{alias_normalized}')}"
                 self.connection.execute(
                     """
@@ -259,7 +293,7 @@ class PostgresAudiobookAnalysisRepository:
             previous = None
             if force_reclassify:
                 previous = self.connection.execute(
-                    """SELECT id, revision, review_status
+                    """SELECT id, revision, review_status, role, speaker_id, delivery, evidence
                          FROM omnix_audiobook_annotations
                         WHERE workspace_id = %s AND span_id = %s
                         ORDER BY revision DESC LIMIT 1""",
@@ -320,6 +354,10 @@ class PostgresAudiobookAnalysisRepository:
                     (canonical_json({"mode": "reclassified", "user_id": context.user_id}),
                      context.workspace_id, str(previous[0])),
                 )
+            role = interpreted.role if interpreted else kind
+            speaker_id = interpreted.speaker_id if interpreted else narrator
+            delivery = interpreted.delivery if interpreted else ""
+            carried = _carried_direction(previous, role=role, speaker_id=speaker_id, delivery=delivery)
             self.connection.execute(
                 """
                 INSERT INTO omnix_audiobook_annotations
@@ -328,14 +366,16 @@ class PostgresAudiobookAnalysisRepository:
                 VALUES (%s, %s, %s, %s, %s, %s::uuid, %s, %s, %s::jsonb, %s::jsonb, %s)
                 """ + ("" if force_reclassify else "ON CONFLICT (span_id, revision) DO NOTHING"),
                 (annotation_id, context.workspace_id, span_id, revision,
-                 interpreted.role if interpreted else kind,
-                 interpreted.speaker_id if interpreted else narrator,
+                 role, speaker_id,
                  candidate or None,
-                 interpreted.delivery if interpreted else "",
+                 carried or delivery,
                  canonical_json({"detector_role": kind, "source_text_untouched": True,
                                  **(interpreted.evidence if interpreted else {}),
                                  **({"dialogue_coverage": coverage_evidence}
-                                    if coverage_evidence else {})}),
+                                    if coverage_evidence else {}),
+                                 **({"delivery_source": "performance_director",
+                                     "delivery_carried_from_revision": int(previous[1])}
+                                    if carried else {})}),
                  canonical_json(classifier or {"mode": "deterministic_fallback", "version": "audiobook-analysis-v1"}),
                  status),
             )
@@ -395,8 +435,8 @@ class PostgresAudiobookAnalysisRepository:
                  JOIN omnix_audiobook_chapters c
                    ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
                 WHERE c.workspace_id = %s AND c.source_revision_id = %s
-                  AND i.status = 'open'""",
-            (context.workspace_id, source_revision_id),
+                  AND i.status = 'open' AND NOT """ + chapter_removed_sql("c", "%s"),
+            (context.workspace_id, source_revision_id, project_id),
         ).fetchone()[0]
         self.connection.execute(
             """
@@ -426,6 +466,7 @@ class PostgresAudiobookAnalysisRepository:
                 ON p.workspace_id = r.workspace_id AND p.id = r.project_id
                AND p.current_source_revision_id = r.id
              WHERE i.workspace_id = %s AND r.project_id = %s AND i.status = 'open'
+               AND NOT """ + chapter_removed_sql("c", "r.project_id") + """
              ORDER BY c.ordinal, s.ordinal
             """, (context.workspace_id, project_id),
         ).fetchall()

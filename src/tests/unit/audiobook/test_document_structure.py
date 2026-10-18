@@ -458,7 +458,7 @@ def test_recurrence_group_is_stable_for_repeated_short_text() -> None:
 
 
 def test_policy_versions_are_explicit_and_independent() -> None:
-    assert DOCUMENT_STRUCTURE_VERSION == "document-role-v1"
+    assert DOCUMENT_STRUCTURE_VERSION == "document-role-v2"
     assert RENDER_POLICY_VERSION == "audiobook-render-policy-v1"
     assert ANALYSIS_POLICY_VERSION == "audiobook-analysis-policy-v1"
     assert analysis_policy("page_number", "speaker_attribution") == EXCLUDE
@@ -554,3 +554,23 @@ def test_pdf_recurrence_does_not_hide_identical_body_occurrence() -> None:
     assert repeated[1].distance_from_top == 0.5
     assert render_policy(repeated[0].content_role, "standard") == SKIP
     assert render_policy(repeated[1].content_role, "standard") == READ
+
+
+def test_story_only_reads_nothing_from_a_table_of_contents_even_when_its_heading_repeats() -> None:
+    body = "The wind rose over the hills and the travellers walked on through the night. " * 12
+    # The heading appears twice, like a header on each contents page.
+    contents = (
+        "Table of Contents\nTable of Contents\nColor Inserts\nChapter 1: Plans for the Future\n"
+        "Chapter 2: The Zanoba Store\nInterlude: Coming-of-Age Ceremony\nNewsletter\n"
+        "Join our Discord and meet Thousands of LN readers to chat with\n\n"
+    )
+    chapters = "".join(f"Chapter {number}:\n{title}\n\n{body}\n\n" for number, title in ((1, "Plans for the Future"), (2, "The Zanoba Store")))
+    revision = extract_source(project_id="book:toc-structure", content=(contents + chapters).encode(), source_format="txt")
+    analysis = analyze_document_structure(revision)
+
+    opening = [block for block in analysis.blocks if block.chapter_id == revision.chapters[0].id and block.original_text.strip()]
+    assert opening and all(render_policy(block.content_role, "story_only") == SKIP for block in opening)
+    entry = next(block for block in opening if block.original_text.startswith("Chapter 2:"))
+    assert entry.content_role == "table_of_contents"
+    first_chapter = [block.content_role for block in analysis.blocks if block.chapter_id == revision.chapters[1].id]
+    assert first_chapter[0] == "chapter_heading" and "story_text" in first_chapter

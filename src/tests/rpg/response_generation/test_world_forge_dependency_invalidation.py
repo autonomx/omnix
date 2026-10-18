@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.apps.rpg.worlds.generation_dependency_invalidation import (
+from app.apps.rpg.genesis.worlds.generation_dependency_invalidation import (
     apply_stale_progress,
     build_retry_invalidation_records,
     dependent_topic_ids,

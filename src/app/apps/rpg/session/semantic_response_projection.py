@@ -22,7 +22,6 @@ from app.apps.rpg.session.narration_payload_validation import (
 )
 
 from .visible_response_sync import _mirror_completed_visible_fields as _PHASE8_PART35_BASE_APPLY_TURN_AUTHORITATIVE
-from .narration_queue_runtime import _enqueue_narration_request as _PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST
 from . import semantic_interaction_runtime as _part04
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,12 @@ _PHASE8_PART35_NON_NPC_SPEAKERS = {
 def _phase8_part35_iter_dicts(value: Any) -> Iterable[dict[str, Any]]:
     if isinstance(value, dict):
         yield value
-        for child in value.values():
+        for key, child in value.items():
+            # The embedded saved game is not this turn's response: its stored
+            # last-turn data holds an earlier turn's semantic advisory, and
+            # walking it cost a whole-state traversal per lookup (WP-5.6).
+            if key == "session":
+                continue
             yield from _phase8_part35_iter_dicts(child)
     elif isinstance(value, list):
         for child in value:
@@ -430,31 +434,6 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: dict[str,
         return
 
 
-def _phase8_part35_drop_incomplete_artifact_for_turn(
-    runtime_state: dict[str, Any],
-    turn_id: str,
-) -> dict[str, Any]:
-    from app.apps.rpg.session.state_normalization import (
-        _safe_list as _safe_list,
-    )
-
-    runtime_state = _copy_dict(runtime_state)
-    turn_id = _safe_str(turn_id).strip()
-    if not turn_id:
-        return runtime_state
-
-    by_turn = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
-    by_turn.pop(turn_id, None)
-    runtime_state["narration_artifacts_by_turn"] = by_turn
-    runtime_state["narration_artifacts"] = [
-        artifact
-        for artifact in _safe_list(runtime_state.get("narration_artifacts"))
-        if _safe_str(_safe_dict(artifact).get("turn_id")).strip() != turn_id
-    ]
-    return runtime_state
-
-
-
 def _phase8_part35_patch_semantic_visible_response(payload: Any, *, session_id: str = "") -> Any:
     if not isinstance(payload, dict):
         return payload
@@ -488,61 +467,6 @@ def _phase8_part35_patch_semantic_visible_response(payload: Any, *, session_id: 
 
 
 
-def _enqueue_narration_request(
-    runtime_state: dict[str, Any],
-    turn_id: str,
-    tick: int,
-    narration_request: dict[str, Any],
-    job_kind: str = "player_turn",
-    priority: int = 100,
-) -> tuple[dict[str, Any], dict[str, Any], bool]:
-    from app.apps.rpg.session.companion_turn_runtime import (
-        _narration_artifact_completes_turn as _narration_artifact_completes_turn,
-    )
-
-    from app.apps.rpg.session.combat_intent import (
-        _utc_now_iso as _utc_now_iso,
-    )
-
-    existing_artifact = _safe_dict(
-        _safe_dict(_safe_dict(runtime_state).get("narration_artifacts_by_turn")).get(_safe_str(turn_id).strip())
-    )
-    if existing_artifact:
-        if not _narration_artifact_completes_turn(existing_artifact):
-            runtime_state = _phase8_part35_drop_incomplete_artifact_for_turn(
-                runtime_state,
-                turn_id,
-            )
-            return _PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST(
-                runtime_state,
-                turn_id,
-                tick,
-                narration_request,
-                job_kind,
-                priority,
-            )
-        return _copy_dict(runtime_state), {
-            "job_id": f"narration:{_safe_str(turn_id).strip()}",
-            "turn_id": _safe_str(turn_id).strip(),
-            "tick": int(tick or 0),
-            "job_kind": _safe_str(job_kind).strip() or "player_turn",
-            "priority": priority,
-            "status": "completed",
-            "completed_at": _utc_now_iso(),
-            "error": "",
-            "deduped_by_existing_artifact": True,
-        }, False
-    return _PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST(
-        runtime_state,
-        turn_id,
-        tick,
-        narration_request,
-        job_kind,
-        priority,
-    )
-
-
-
 def _patch_semantic_visible_response(
     session_id: str,
     player_input: str,
@@ -562,17 +486,14 @@ def _patch_semantic_visible_response(
 
 __all__ = [
     '_PHASE8_PART35_BASE_APPLY_TURN_AUTHORITATIVE',
-    '_PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST',
     '_PHASE8_PART35_NON_NPC_SPEAKERS',
     '_PHASE8_PART35_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD',
     '_PHASE8_PART35_SOURCE',
-    '_enqueue_narration_request',
     '_patch_semantic_visible_response',
     '_phase8_part35_bool_false',
     '_phase8_part35_bool_true',
     '_phase8_part35_clean_text',
     '_phase8_part35_direct_response_safe',
-    '_phase8_part35_drop_incomplete_artifact_for_turn',
     '_phase8_part35_existing_completed_semantic_or_llm_narration',
     '_phase8_part35_iter_dicts',
     '_phase8_part35_line_is_player_restatement',

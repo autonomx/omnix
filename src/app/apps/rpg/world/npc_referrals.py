@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.apps.rpg.world.location_registry import current_location_id
+from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
 from app.apps.rpg.world.npc_knowledge_state import known_facts_for_npc
 from app.apps.rpg.world.npc_presence_runtime import present_npcs_at_location
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_str as _safe_str
 
 
 REFERRAL_REQUEST_MARKERS = {

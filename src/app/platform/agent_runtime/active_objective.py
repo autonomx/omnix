@@ -12,7 +12,7 @@ from app.config.env import env_str as _env_str
 import hashlib
 import json
 import re
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -266,7 +266,7 @@ def build_routing_environment(user_message: Any) -> RoutingEnvironment:
 
     return RoutingEnvironment(
         active_workspace=workspace,
-        workspace_source=source,
+        workspace_source=cast(Any, source),
         workspace_attached_this_turn=bool(selected),
         attachment_kinds=list(dict.fromkeys(kinds)),
         attachment_count=attachment_count,

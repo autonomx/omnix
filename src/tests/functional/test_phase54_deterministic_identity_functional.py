@@ -20,13 +20,13 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-from app.apps.rpg.core.clock import DeterministicClock
-from app.apps.rpg.core.determinism import (
+from app.apps.rpg.foundation.core.clock import DeterministicClock
+from app.apps.rpg.foundation.core.determinism import (
     IDENTITY_VERSION,
     DeterminismConfig,
     compute_deterministic_event_id,
 )
-from app.apps.rpg.core.event_bus import Event, EventBus, EventContext
+from app.apps.rpg.foundation.core.event_bus import Event, EventBus, EventContext
 
 
 class TestIdentityVersioning(unittest.TestCase):

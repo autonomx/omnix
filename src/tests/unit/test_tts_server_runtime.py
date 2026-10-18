@@ -20,17 +20,15 @@ def issued_service_token(monkeypatch):
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
-def test_initialize_tts_provider_passes_config(monkeypatch):
+def test_load_provider_passes_the_engine_settings(monkeypatch):
     from services.tts import tts_server
 
     captured: Dict[str, Any] = {}
 
-    class FakeProvider:
-        def __init__(self, config):
-            captured["config"] = dict(config)
-            self.provider_name = "qwen3_tts"
-            self.device = config.get("device", "cpu")
-            self._model_config = dict(config)
+    class FakeRegistry:
+        def create_tts_provider(self, name, config=None):
+            captured.update(name=name, config=dict(config or {}))
+            return object()
 
     fake_settings = {
         "faster-qwen3-tts": {
@@ -39,21 +37,22 @@ def test_initialize_tts_provider_passes_config(monkeypatch):
         }
     }
 
-    def fake_load_settings():
-        return fake_settings
+    monkeypatch.setattr("app.settings.access.load_settings", lambda: fake_settings)
+    monkeypatch.setattr("app.providers.audio_registry.get_audio_registry", lambda: FakeRegistry())
 
-    monkeypatch.setattr("app.settings.access.load_settings", fake_load_settings)
-    monkeypatch.setattr(
-        "app.providers.faster_qwen3_tts_provider.FasterQwen3TTSProvider",
-        FakeProvider,
-        raising=False,
-    )
-
-    provider = tts_server._load_qwen3_provider()
+    provider = tts_server._load_provider("faster-qwen3-tts")
 
     assert provider is not None
+    assert captured["name"] == "faster-qwen3-tts"
     assert captured["config"]["model_name"] == "Qwen/Qwen3-TTS-0.6B"
     assert captured["config"]["device"] == "cuda"
+
+
+def test_load_provider_rejects_an_engine_that_is_not_local():
+    from services.tts import tts_server
+
+    with pytest.raises(ValueError):
+        tts_server._load_provider("parakeet")
 
 
 def test_get_tts_service_status_returns_ready_details():
@@ -75,7 +74,8 @@ def test_get_tts_service_status_returns_ready_details():
         tts_server._TTS_PROVIDER_ERROR = old_error
 
     assert result["ok"] is True
-    assert result["provider"] == "qwen3_tts"
+    assert result["provider"] == tts_server._TTS_PROVIDER_NAME
+    assert result["details"]["provider_name"] == "qwen3_tts"
     assert result["details"]["provider_class"] == "FakeProvider"
     assert result["details"]["configured_model"] == "Qwen/Qwen3-TTS-0.6B"
     assert result["details"]["configured_device"] == "cuda"
@@ -466,3 +466,62 @@ def test_gateway_synthesis_receives_wav_bytes_not_base64_json():
     assert base64.b64decode(result["audio"]) == wav
     assert result["sample_rate"] == 24000
     assert result["duration"] == 1.5
+
+
+def test_gateway_audiobook_render_contract_reaches_the_tts_service():
+    """Audiobook renders on a dedicated TTS service: batch calls, settings and provenance cross the wire."""
+    import base64
+
+    import httpx
+    from services.tts import tts_server
+
+    from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
+    from app.runtime.http_client import HttpPolicy, PooledHttpClient
+
+    wav = b"RIFF\x24\x00\x00\x00WAVEfmt-render-bytes"
+    received: list[dict[str, Any]] = []
+
+    class RenderProvider:
+        def resolve_generation_parameters(self, parameters=None):
+            return {"temperature": 0.9, "top_k": 50, **dict(parameters or {}), "_generation_strategy_revision": "rev-4"}
+
+        def generate_audio(self, **kwargs: Any):
+            received.append(kwargs)
+            return {
+                "success": True, "audio": base64.b64encode(wav).decode(), "sample_rate": 24000, "duration": 2.0,
+                "generation_parameters_used": {"temperature": kwargs.get("temperature"), "ref_text": "Café"},
+                "generation_strategy_revision": "rev-4",
+            }
+
+    server = TestClient(tts_server.app, base_url="http://127.0.0.1")
+
+    def forward(request):
+        served = server.request(request.method, str(request.url), headers=request.headers, content=request.content)
+        return httpx.Response(served.status_code, headers=served.headers, content=served.content)
+
+    gateway = QwenHttpGatewayProvider("http://127.0.0.1")
+    gateway.http = PooledHttpClient("tts-test", HttpPolicy(max_retries=0), transport=httpx.MockTransport(forward))
+    old_provider = tts_server._TTS_PROVIDER
+    old_error = tts_server._TTS_PROVIDER_ERROR
+    try:
+        tts_server._TTS_PROVIDER = RenderProvider()
+        tts_server._TTS_PROVIDER_ERROR = ""
+        resolved = gateway.resolve_generation_parameters({"temperature": 0.7, "instruct": "softly"})
+        results = gateway.generate_audio_batch([{
+            "text": "Hello.", "speaker": "Maya", "language": "en",
+            "parameters": {**resolved, "instruct": "softly"},
+        }])
+    finally:
+        tts_server._TTS_PROVIDER = old_provider
+        tts_server._TTS_PROVIDER_ERROR = old_error
+
+    assert resolved == {"temperature": 0.7, "top_k": 50, "_generation_strategy_revision": "rev-4"}
+    # Known settings and the delivery (Fish speaks it as a tag) reach the model; private keys stay.
+    assert received[0]["temperature"] == 0.7 and received[0]["top_k"] == 50
+    assert received[0]["instruct"] == "softly"
+    assert "_generation_strategy_revision" not in received[0]
+    assert received[0]["speaker"] == "Maya"
+    assert len(results) == 1
+    assert base64.b64decode(results[0]["audio"]) == wav
+    assert results[0]["generation_parameters_used"] == {"temperature": 0.7, "ref_text": "Café"}
+    assert results[0]["generation_strategy_revision"] == "rev-4"

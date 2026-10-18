@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { VirtualList } from '../../design/VirtualList';
 import { RpgLorePanel } from './RpgLorePanel';
 import type { RpgJournalDetailPreview, RpgJournalEntryPreview } from './rpgUiState';
 
@@ -86,32 +87,40 @@ function JournalPanel({
   const selectedEntry = journalEntries[safeSelectedIndex];
   const detailTitle = selectedEntry?.title ?? journalDetail.title;
   const detailText = selectedEntry?.detail ?? journalDetail.detail;
+  // One entry per in-game day: a long campaign's journal renders only the rows in view (WP-9.9).
+  const listRef = useRef<HTMLDivElement>(null);
+  const indexedEntries = useMemo(() => journalEntries.map((entry, index) => ({ entry, index })), [journalEntries]);
 
   return (
     <div aria-labelledby="rpg-journal-tab" className="rpg-journal-grid" id="rpg-journal-panel" role="tabpanel">
-      <div className="rpg-journal-list">
-        {journalEntries.map((entry, index) => (
-          <article
-            aria-pressed={index === safeSelectedIndex}
-            className={index === safeSelectedIndex ? 'active' : undefined}
-            key={`${entry.time}:${entry.title}`}
-            onClick={() => onSelectedIndexChange(index)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                onSelectedIndexChange(index);
-              }
-            }}
-            role="button"
-            tabIndex={0}
-          >
-            <span aria-hidden="true" />
-            <div>
-              <strong>{entry.time}</strong>
-              <p>{entry.title}</p>
-            </div>
-          </article>
-        ))}
+      <div className="rpg-journal-list" ref={listRef}>
+        <VirtualList
+          items={indexedEntries}
+          getKey={({ entry, index }) => `${index}:${entry.time}:${entry.title}`}
+          scrollRef={listRef}
+          estimateSize={56}
+          renderItem={({ entry, index }) => (
+            <article
+              aria-pressed={index === safeSelectedIndex}
+              className={index === safeSelectedIndex ? 'active' : undefined}
+              onClick={() => onSelectedIndexChange(index)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelectedIndexChange(index);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <span aria-hidden="true" />
+              <div>
+                <strong>{entry.time}</strong>
+                <p>{entry.title}</p>
+              </div>
+            </article>
+          )}
+        />
       </div>
       <article className="rpg-journal-detail">
         <h3>{detailTitle}</h3>

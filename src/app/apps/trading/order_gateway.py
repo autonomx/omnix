@@ -92,6 +92,15 @@ class OrderGateway:
     def cancel(self, account_id: str, order_id: str) -> PaperOrder:
         return self._repository.cancel_order(account_id, order_id)
 
+    def replace_manual_entry(
+        self,
+        account_id: str,
+        order_id: str,
+        replacement: PaperOrderRequest,
+    ) -> tuple[PaperOrder, PaperOrder]:
+        """Cancel a manual entry, place its re-sized replacement and re-point its stop, atomically (TVP-7.3)."""
+        return self._repository.replace_entry(account_id, order_id, replacement, authority=MANUAL_RISK)
+
     def replace_reducing(
         self,
         account_id: str,
@@ -102,7 +111,7 @@ class OrderGateway:
         return self._repository.replace_order(account_id, order_id, replacement, authority=REDUCE_ONLY)
 
 
-_ORDER_METHODS = frozenset({"place_order", "cancel_order", "replace_order"})
+_ORDER_METHODS = frozenset({"place_order", "cancel_order", "replace_order", "replace_entry"})
 
 
 class StrategyPaperAccess:
@@ -141,16 +150,14 @@ class StrategyPaperAccess:
 
 def strategy_paper_access(repository, *, monitor, config, strategy_repository, market_service) -> StrategyPaperAccess:
     """The paper account a strategy monitor runs one configuration against."""
-    import sys
-
-    from . import strategy_v2_qualification
+    from . import strategy_monitor, strategy_v2_qualification
 
     authorizer = StrategyEntryAuthorizer(
         monitor=monitor,
         config=config,
         strategy_repository=strategy_repository,
         market_service=market_service,
-        monitor_module=sys.modules[type(monitor).__module__],
+        monitor_module=strategy_monitor,
         qualification_module=strategy_v2_qualification,
     )
     gateway = OrderGateway(repository, entry_authorizer=authorizer)
@@ -171,7 +178,7 @@ def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
 
-def _event_payload_readiness(readiness) -> dict[str, object]:
+def _event_payload_readiness(readiness) -> dict[str, Any]:
     return readiness.model_dump(mode="json")
 
 
@@ -207,7 +214,7 @@ class StrategyEntryAuthorizer:
             20_000,
         )
 
-    def _persist_authorization(self, assessment, *, observed_at: datetime, payload: dict[str, object]) -> None:
+    def _persist_authorization(self, assessment, *, observed_at: datetime, payload: dict[str, Any]) -> None:
         from .strategy_repository import StrategyEvent
 
         idem = _key(
@@ -288,7 +295,7 @@ class StrategyEntryAuthorizer:
         morning_eligible = False
         morning_reasons: tuple[str, ...] = ("CANDIDATE_MISSING",)
         session_complete = False
-        session_payload: dict[str, object] | None = None
+        session_payload: dict[str, Any] | None = None
         coverage = None
         if universe is not None and candidate is not None:
             source_valid = source_member_valid(universe, candidate)
@@ -392,7 +399,7 @@ class StrategyEntryAuthorizer:
         kill_switch_clear = not self._config.risk.kill_switch
 
         qualification_authorized = True
-        qualification_payload: dict[str, object] | None = None
+        qualification_payload: dict[str, Any] | None = None
         if self._config.config.strategy_version == "2.0.0":
             qualification_events = self._monitor_module._v2_qualification_events(
                 self._strategy_repository,

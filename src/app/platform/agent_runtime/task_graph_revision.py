@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .contracts import SuccessCriterion
 from .task_graph import TaskEdge, TaskGraph, TaskNode, TaskNodeRunState, task_node_fingerprint
+from typing import Any
 
 
 class TaskGraphRevisionPlan(BaseModel):
@@ -339,7 +340,7 @@ def _stable_json(value) -> str:
     )
 
 
-def _execution_contract(node: TaskNode) -> dict[str, object]:
+def _execution_contract(node: TaskNode) -> dict[str, Any]:
     policy_shell = node.evidence_policy.model_dump(
         mode="json",
         exclude={"requirements"},
@@ -372,7 +373,7 @@ def _execution_contract(node: TaskNode) -> dict[str, object]:
     }
 
 
-def _contract_covers(required: dict[str, object], available: dict[str, object]) -> bool:
+def _contract_covers(required: dict[str, Any], available: dict[str, Any]) -> bool:
     exact_keys = {
         "kind",
         "profile",

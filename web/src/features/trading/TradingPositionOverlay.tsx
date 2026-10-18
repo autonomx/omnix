@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import type { PaperOrder, PaperPosition, PaperSide } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
-import { placeReplayOrder } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
 import { readPaperPositionProtection, writePaperPositionProtection, type PositionProtectionLevels } from './paperPositionProtection';
@@ -61,7 +60,6 @@ export function TradingPositionOverlay({
   const replayMode = useTradingStore((state) => state.replayMode);
   const replayBar = useTradingReplayStore((state) => state.bar);
   const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
-  const setReplaySnapshot = useTradingReplayStore((state) => state.setSnapshot);
 
   useEffect(() => {
     setProtection(replayMode ? { takeProfit: null, stopLoss: null } : accountId ? readPaperPositionProtection(accountId, instrumentId) : { takeProfit: null, stopLoss: null });
@@ -172,7 +170,7 @@ export function TradingPositionOverlay({
   const openAction = (nextAction: PositionAction) => {
     if (!position || position.pending || quantity <= 0) return;
     if (nextAction === 'reverse' && !isShort) {
-      setActionError('Reverse is unavailable while the paper engine is long-only. Close the position first.');
+      setActionError('Reverse is not available yet: close the position, then place the opposite order.');
       return;
     }
     setActionQuantity(String(quantity));
@@ -192,7 +190,7 @@ export function TradingPositionOverlay({
     const orderId = `paper-overlay-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     if (replayMode) {
       if (!replaySnapshot || !replayBar) throw new Error('Select a replay bar before trading.');
-      const result = await placeReplayOrder(replaySnapshot, {
+      const result = await useTradingReplayStore.getState().placeOrder({
         order_id: orderId,
         instrument_id: instrumentId,
         binding_id: null,
@@ -203,8 +201,7 @@ export function TradingPositionOverlay({
         stop_price: null,
         reference_price: String(referencePrice),
         idempotency_key: orderId,
-      }, replayBar);
-      setReplaySnapshot(result.snapshot);
+      });
       if (result.order.status === 'rejected') throw new Error(result.order.rejection_reason ?? 'Replay order rejected.');
       return result.order;
     }
@@ -239,7 +236,7 @@ export function TradingPositionOverlay({
   const confirmAction = async () => {
     if (!action || !position || (!accountId && !replayMode)) return;
     if (action === 'reverse') {
-      setActionError('Reverse requires short-position support and is intentionally disabled in the current long-only paper engine.');
+      setActionError('Reverse is not available yet: close the position, then place the opposite order.');
       return;
     }
     const closeQuantity = partialClose ? Number(actionQuantity) : quantity;
@@ -351,9 +348,11 @@ export function TradingPositionOverlay({
       {draft ? zone(stopLossY, chartPalette.amberWash) : null}
       {levelVisual('takeProfit', currentProtection.takeProfit, takeProfitY, chartPalette.teal, 'TP')}
       {levelVisual('stopLoss', currentProtection.stopLoss, stopLossY, chartPalette.amber, 'SL')}
-      <div className="trading-position-entry-line" style={{ top: entryY }}>
-        <span className="trading-position-entry-price">{priceLabel(entryPrice)}</span>
-      </div>
+      {position.pending && !replayMode ? null /* a working order's own line marks its price (TVP-7.3) */ : (
+        <div className="trading-position-entry-line" style={{ top: entryY }}>
+          <span className="trading-position-entry-price">{priceLabel(entryPrice)}</span>
+        </div>
+      )}
       <div className="trading-position-controls" style={{ top: entryY }} onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" className="trading-position-direction" aria-label="Reverse paper position" title="Reverse requires short-position support" disabled={position.pending || actionStatus === 'saving' || !isShort} onClick={() => openAction('reverse')}>↕</button>
         {position.pending ? <span className="trading-position-working">Working</span> : null}
@@ -378,7 +377,7 @@ export function TradingPositionOverlay({
                 <label className="trading-position-partial"><input type="checkbox" checked={partialClose} onChange={(event) => setPartialClose(event.target.checked)} /> Partial close</label>
                 {partialClose ? <label className="trading-position-partial-quantity">Quantity<input aria-label="Partial close quantity" inputMode="decimal" value={actionQuantity} onChange={(event) => setActionQuantity(event.target.value)} /></label> : null}
               </>
-            ) : <p>Reverse is currently unavailable because the paper engine is long-only.</p>}
+            ) : <p>Reverse is not available yet: close the position, then place the opposite order.</p>}
             {actionError ? <div className="trading-position-action-error" role="alert">{actionError}</div> : null}
             <footer><button type="button" onClick={() => setAction(null)} disabled={actionStatus === 'saving'}>Cancel</button><button type="button" className="primary" onClick={() => void confirmAction()} disabled={actionStatus === 'saving' || action === 'reverse'}>{actionStatus === 'saving' ? 'Saving…' : action === 'close' ? 'Close position' : 'Reverse unavailable'}</button></footer>
           </section>

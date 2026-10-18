@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import logging
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
-from app.apps.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
-from app.apps.rpg.npc_dialogue.intelligence import (
+from app.apps.rpg.narration.dialogue_state import get_dialogue_context, update_dialogue_state
+from app.apps.rpg.narration.npc_dialogue.intelligence import (
     build_npc_intelligence_prompt,
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,
@@ -14,7 +14,7 @@ from app.apps.rpg.npc_dialogue.intelligence import (
 from app.providers.service import get_provider
 
 from .runtime_narration_common import NARRATION_FORMAT_VERSION, _norm, _safe_str
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +364,7 @@ def build_deterministic_narration_payload(
                 recent_lines=recent_lines,
                 active_objectives=_safe_list(_safe_dict(simulation_state).get("active_objectives")),
             )
-            raw = get_provider().chat(messages=npc_messages, temperature=0.35, max_tokens=260)
+            raw = cast(Any, get_provider()).chat(messages=npc_messages, temperature=0.35, max_tokens=260)
             npc_intel = normalize_npc_intelligence_payload(raw)
             if not npc_line_is_invalid(npc_intel.get("line", ""), recent_lines):
                 npc_line = npc_intel["line"]
@@ -401,7 +401,7 @@ def build_deterministic_narration_payload(
                 recent_lines=recent_lines,
                 active_objectives=_safe_list(_safe_dict(simulation_state).get("active_objectives")),
             )
-            raw = get_provider().chat(messages=npc_messages, temperature=0.35, max_tokens=260)
+            raw = cast(Any, get_provider()).chat(messages=npc_messages, temperature=0.35, max_tokens=260)
             npc_intel = normalize_npc_intelligence_payload(raw)
             if not npc_line_is_invalid(npc_intel.get("line", ""), recent_lines):
                 npc_line = npc_intel["line"]

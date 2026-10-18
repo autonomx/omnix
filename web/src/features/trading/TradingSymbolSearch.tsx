@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import type { CanonicalInstrument } from './tradingTypes';
 import type { TradingFormula } from './tradingFormula';
+import { returnKeyboardToChart } from './commands/chartKeyContext';
 import './TradingSymbolSearch.css';
 
 export type SymbolSearchCategory =
@@ -65,6 +66,7 @@ const commodityNames: Record<string, string> = {
 };
 
 function categoryForInstrument(instrument: CanonicalInstrument): SymbolSearchCategory {
+  if (instrument.asset_class === 'economic') return 'economy';
   if (instrument.asset_class === 'crypto') return 'crypto';
   if (instrument.instrument_type === 'index') return 'indices';
   if (instrument.instrument_type === 'perpetual' || instrument.asset_class === 'commodity') return 'futures';
@@ -87,10 +89,12 @@ function instrumentMatches(instrument: CanonicalInstrument, query: string): bool
     instrument.instrument_id,
     instrument.base_currency,
     instrument.quote_currency,
+    instrument.name,
   ].some((value) => value?.toUpperCase().includes(normalized));
 }
 
 function instrumentName(instrument: CanonicalInstrument): string {
+  if (instrument.asset_class === 'economic') return instrument.name ?? `${instrument.display_symbol} · FRED`;
   if (instrument.venue === 'CRYPTOCAP') {
     return instrument.display_symbol.endsWith('.D')
       ? `Market Cap ${instrument.display_symbol.slice(0, -2)} Dominance, %`
@@ -108,6 +112,7 @@ function instrumentName(instrument: CanonicalInstrument): string {
 }
 
 function instrumentTypeLabel(instrument: CanonicalInstrument): string {
+  if (instrument.asset_class === 'economic') return 'economic';
   if (instrument.venue === 'CRYPTOCAP') return 'index crypto';
   if (instrument.asset_class === 'crypto') {
     return instrument.instrument_type === 'perpetual' ? 'perpetual crypto' : 'spot crypto';
@@ -123,6 +128,7 @@ function venueLabel(venue: string): string {
 }
 
 function assetGlyph(instrument: CanonicalInstrument): string {
+  if (instrument.asset_class === 'economic') return '%';
   if (instrument.asset_class === 'crypto') return '₿';
   if (instrument.instrument_type === 'index') return '⌁';
   return instrument.display_symbol.slice(0, 1);
@@ -143,9 +149,12 @@ export function TradingSymbolSearch({
   onSelect,
   onSelectFormula,
   onClose,
+  selectQueryOnOpen = true,
 }: {
   open: boolean;
   query: string;
+  /** Select the query when the search opens, so typing replaces it. False keeps typed text and puts the caret after it. */
+  selectQueryOnOpen?: boolean;
   instruments: readonly CanonicalInstrument[];
   activeInstrumentId: string;
   loading?: boolean;
@@ -158,14 +167,26 @@ export function TradingSymbolSearch({
   const [category, setCategory] = useState<SymbolSearchCategory>('all');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Focuses the query when the search opens (not when the selection mode changes); returns whether it took focus at
+  // once: typed text keeps arriving, so it does unless the query is to be selected.
+  const focusInput = useEffectEvent((atOnce: boolean) => {
+    if (atOnce && selectQueryOnOpen) return false;
+    const input = inputRef.current;
+    input?.focus();
+    if (selectQueryOnOpen) input?.select();
+    else input?.setSelectionRange(input.value.length, input.value.length);
+    return true;
+  });
   useEffect(() => {
     if (!open) return;
     setCategory('all');
-    const frame = window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => window.cancelAnimationFrame(frame);
+    focusInput(true);
+    const frame = window.requestAnimationFrame(() => focusInput(false));
+    return () => {
+      window.cancelAnimationFrame(frame);
+      // Choosing a symbol (or closing the search) is a chart action: chart keys work again without a click.
+      returnKeyboardToChart();
+    };
   }, [open]);
 
   const results = useMemo(() => {

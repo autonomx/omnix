@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.genesis.forge.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.apps.rpg.worlds.generation_entity_manifest import (
+from app.apps.rpg.genesis.worlds.generation_entity_manifest import (
     EntityManifestContractError,
     build_entity_manifest,
     topic_manifest_slots,

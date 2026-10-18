@@ -234,12 +234,20 @@ class IbkrEvidenceStore:
         connected: bool,
         reconnect_count: int,
         active_subscriptions: int,
+        historical_request_count: int = 0,
+        historical_cache_hit_count: int = 0,
     ) -> None:
         def mutate(payload: dict[str, Any]) -> None:
             if not connected:
                 payload["gateway_disconnect_observation_count"] = (
                     int(payload["gateway_disconnect_observation_count"]) + 1
                 )
+            # Process counters: the largest value seen today (a restart starts again at 0).
+            for key, value in (
+                ("max_historical_request_count", historical_request_count),
+                ("max_historical_cache_hit_count", historical_cache_hit_count),
+            ):
+                payload[key] = max(int(payload.get(key, 0) or 0), max(0, int(value)))
             payload["max_reconnect_count"] = max(
                 int(payload["max_reconnect_count"]),
                 max(0, int(reconnect_count)),

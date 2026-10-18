@@ -1,17 +1,17 @@
-from app.apps.rpg.session.genesis.world_forge_anchor_registry import (
+from app.apps.rpg.genesis.forge.world_forge_anchor_registry import (
     allocate_global_anchor_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_historical_planning import (
+from app.apps.rpg.genesis.forge.world_forge_historical_planning import (
     apply_historical_deltas,
     build_geography_resource_plan,
     build_historical_epoch_plan,
     build_historical_planning_topics,
     build_present_day_state,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_generation import (
+from app.apps.rpg.genesis.forge.world_forge_profile_generation import (
     default_profile_registry,
 )
-from app.apps.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
+from app.apps.rpg.genesis.forge.world_forge_profile_graph import build_profile_topic_graph
 
 
 def _graph():

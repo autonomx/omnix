@@ -6,6 +6,7 @@ import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
+import { PRODUCT_NAME } from '../../shared/productIdentity';
 
 const TradingAlertsPanel = lazy(() => import('./TradingAlertsPanel').then((module) => ({ default: module.TradingAlertsPanel })));
 const TradingNewsPanel = lazy(() => import('./TradingNewsPanel').then((module) => ({ default: module.TradingNewsPanel })));
@@ -62,6 +63,7 @@ export function TradingSidePanel({
   onRemoveChart,
   onSetLink,
   onSetSnapMode,
+  onDuplicateLayout,
 }: {
   sessionId?: string;
   instruments: CanonicalInstrument[];
@@ -92,6 +94,7 @@ export function TradingSidePanel({
   onRemoveChart: () => void;
   onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   onSetSnapMode: (mode: DrawingSnapMode) => void;
+  onDuplicateLayout?: () => void;
 }) {
   const [internalTab, setInternalTab] = useState<TradingSideTab>('watchlist');
   const activeTab = selectedTab ?? internalTab;
@@ -119,12 +122,16 @@ export function TradingSidePanel({
   }
   if (activeTab === 'pine') {
     return (
-      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Pine Editor">
-        <Suspense fallback={<p role="status">Loading Pine Editor…</p>}>
+      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label={`${PRODUCT_NAME} Scripts editor`}>
+        <Suspense fallback={<p role="status">Loading {PRODUCT_NAME} Scripts editor…</p>}>
         <TradingPinePanel
           indicators={indicators}
           activeIndicatorId={pineIndicatorId}
           onActiveIndicatorChange={onPineIndicatorChange}
+          instrumentId={activeInstrumentId}
+          bindingId={bindingId}
+          interval={interval}
+          onSetIndicators={onSetIndicators}
         />
         </Suspense>
       </aside>
@@ -220,6 +227,7 @@ export function TradingSidePanel({
             onRemoveChart={onRemoveChart}
             onSetLink={onSetLink}
             onSetSnapMode={onSetSnapMode}
+            onDuplicateLayout={onDuplicateLayout}
           />
         ) : null}
         </Suspense>

@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app import create_fastapi_app
-from app.apps.rpg.hermes import approved_routes as hermes_rpg_approved_routes
-from app.apps.rpg.hermes.sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
+from app.apps.rpg.edge.hermes import approved_routes as hermes_rpg_approved_routes
+from app.apps.rpg.edge.hermes.sequence_state import latest_hermes_sequence_state, save_hermes_sequence_state
 
 
 def reviewed_payload(*, ok: bool = True, statement: str = "look around", allowed: bool = True) -> dict:
@@ -88,7 +88,7 @@ def test_sequence_latest_route_fetches_session_state(monkeypatch) -> None:
 
     monkeypatch.setattr(hermes_rpg_approved_routes, "latest_hermes_sequence_state", fake_latest)
 
-    response = TestClient(create_fastapi_app()).get("/api/hermes/rpg/sequence/state?session_id=session-1")
+    response = TestClient(create_fastapi_app(), base_url="http://127.0.0.1").get("/api/hermes/rpg/sequence/state?session_id=session-1")
 
     assert response.status_code == 200
     assert response.json()["state"] == {"session_id": "session-1", "sequence_id": "seq-1"}

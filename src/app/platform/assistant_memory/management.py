@@ -170,15 +170,17 @@ def candidates_for_session(
     if context is None:
         return None
     bounded_limit = bounded_count(limit)
+    # Owner-aware stores filter by owner; the others take no owner and raise TypeError.
+    list_candidates: Any = service.repository.list_candidates
     try:
-        candidates = service.repository.list_candidates(
+        candidates = list_candidates(
             owner_type=context.owner_type,
             owner_id=context.owner_id,
             status="pending",
             limit=bounded_limit,
         )
     except TypeError:
-        candidates = service.repository.list_candidates(
+        candidates = list_candidates(
             status="pending",
             limit=bounded_limit,
         )

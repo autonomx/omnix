@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from app.apps.rpg.map_grid_contracts import (
+from app.apps.rpg.world.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
     TerrainRule,
     with_grid_definition_hashes,
 )
-from app.apps.rpg.map_instance_runtime import create_map_instance_snapshot
-from app.apps.rpg.npc_spatial_simulation import (
+from app.apps.rpg.world.map_instance_runtime import create_map_instance_snapshot
+from app.apps.rpg.world.npc_spatial_simulation import (
     NpcSpatialGoal,
     NpcSpatialSimulationContext,
     NpcSpatialSimulationPolicy,

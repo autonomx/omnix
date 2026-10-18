@@ -4,8 +4,8 @@ Writes into the local owner workspace (the one the app uses with sign-in
 off), in bulk with ``generate_series``. Refuses a database whose name does not
 mark it disposable (it must contain ``test`` or ``bench``). Volumes default
 to the roadmap's: 100k assets, 100k jobs with events, 10k chat sessions with
-1M messages, 50k agent events and 1M trading strategy events. RPG campaigns
-are not seeded (RPG is being retired).
+1M messages, 1k RPG campaigns (about 100 KB of state each, a tenth archived),
+50k agent events and 1M trading strategy events.
 
 Usage:
     python scripts/seed_benchmark_data.py --database-url postgresql://omnix:omnix@127.0.0.1:55433/omnix_bench
@@ -33,6 +33,7 @@ VOLUMES = {
     "agent_events": 50_000,
     "trading_strategies": 5,
     "trading_events": 1_000_000,
+    "rpg_campaigns": 1_000,
 }
 
 
@@ -46,9 +47,11 @@ def _workspace(url: str) -> tuple[str, str]:
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.identity_service import ensure_local_identity
+    from app.persistence.startup import bootstrap_postgresql_runtime
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=1))
     try:
+        bootstrap_postgresql_runtime(database)  # a freshly migrated database gets its install authority
         context = ensure_local_identity(database)
         return context.workspace_id, context.user_id
     finally:
@@ -158,6 +161,35 @@ def seed(url: str, volumes: dict[str, int]) -> dict[str, float]:
                    'equity:NASDAQ:B' || (n %% 200), (ARRAY['signal', 'evaluation', 'risk_decision'])[1 + n %% 3], 'recorded',
                    now() - n * interval '1 second', %(prefix)s || '-' || n, '{}'::jsonb
               FROM generate_series(1, %(trading_events)s) AS n
+            ON CONFLICT DO NOTHING
+        """),
+        # A session document shaped like a saved game: manifest, world and scene
+        # environment, twenty regions and a transcript that brings it to ~100 KB.
+        ("rpg_campaigns", """
+            INSERT INTO omnix_rpg_campaigns (id, workspace_id, owner_user_id, title, revision, state_jsonb, state_hash,
+                                             engine_version, schema_version, seed, status, created_at, updated_at)
+            SELECT 'rpg:' || %(prefix)s || '-' || n, %(ws)s, %(user)s, 'Benchmark campaign ' || n, 40,
+                   jsonb_build_object(
+                       'manifest', jsonb_build_object('id', 'rpg:' || %(prefix)s || '-' || n,
+                                                      'session_id', 'rpg:' || %(prefix)s || '-' || n,
+                                                      'title', 'Benchmark campaign ' || n, 'schema_version', 2,
+                                                      'status', 'active', 'created_at', now()::text,
+                                                      'updated_at', now()::text),
+                       'state', jsonb_build_object(
+                           'world', jsonb_build_object(
+                               'environment', jsonb_build_object('weather', 'rain', 'time_of_day', 'dusk'),
+                               'regions', (SELECT jsonb_object_agg('region-' || r, jsonb_build_object(
+                                               'environment', jsonb_build_object('weather', 'fog'),
+                                               'description', repeat('Old roads and quiet farms. ', 20)))
+                                             FROM generate_series(1, 20) AS r)),
+                           'scene', jsonb_build_object('environment_context', jsonb_build_object('light', 'dim')),
+                           'current_location_name', 'Harbor ' || n,
+                           'transcript', (SELECT jsonb_agg(repeat('The lantern swings in the wind. ', 30))
+                                            FROM generate_series(1, 90)))),
+                   lpad(to_hex(n), 64, '0'), 'bench', 'bench', 'seed-' || n,
+                   CASE WHEN n %% 10 = 0 THEN 'archived' ELSE 'active' END,
+                   now() - n * interval '1 hour', now() - n * interval '1 minute'
+              FROM generate_series(1, %(rpg_campaigns)s) AS n
             ON CONFLICT DO NOTHING
         """),
     )

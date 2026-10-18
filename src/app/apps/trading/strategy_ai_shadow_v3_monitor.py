@@ -14,13 +14,15 @@ import hashlib
 import time as monotonic_time
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable, cast
 
 from app.runtime.features import FeatureContext
 
 
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
+from .execution import ExecutionObservation
 from .execution_observation_plane import (
+    CausalExecutionSelection,
     ExecutionObservationPlane,
     default_execution_observation_plane,
 )
@@ -75,6 +77,63 @@ _EVENT_TYPES = (
     "ai_v3_agreement_cohort",
 )
 _LAST_ENTRY_ET = time(15, 30)
+
+
+def _ibkr_live_quotes_authorized() -> bool:
+    """The IBKR live-data gate in Settings; off (or unreadable) keeps IEX alone."""
+    try:
+        from .ibkr_settings import load_ibkr_settings
+
+        settings = load_ibkr_settings()[0]
+    except Exception:
+        logger.debug("suppressed error in %s", "_ibkr_live_quotes_authorized", exc_info=True)
+        return False
+    return bool(settings.enabled and settings.live_authority_enabled)
+
+
+def _causal_selection(
+    plane: ExecutionObservationPlane,
+    instrument_id: str,
+    *,
+    decision_completed_at: datetime,
+    actionable_at: datetime,
+    market_snapshot_as_of: datetime,
+    binding_id: str | None,
+    ibkr_live: bool,
+) -> CausalExecutionSelection | None:
+    """The first quote after the decision, from IBKR's live NBBO when authorized.
+
+    IEX's own book is thin for small caps: it can sit unchanged for minutes and
+    is far wider than the market. The source is fixed by policy, never chosen by
+    price, and each source still contributes only its first post-decision quote.
+    """
+    timing = dict(
+        decision_completed_at=decision_completed_at,
+        actionable_at=actionable_at,
+        market_snapshot_as_of=market_snapshot_as_of,
+    )
+    if ibkr_live:
+        live = plane.first_causal_after(instrument_id, purpose="LIVE_DATA", **timing)
+        if live is not None and live.provider == "ibkr":
+            return live
+    return plane.first_causal_after(instrument_id, binding_id=binding_id, **timing)
+
+
+def _iex_book_spread_only(observation: ExecutionObservation, max_spread_bps: Decimal) -> bool:
+    """The quote fails only on the spread of IEX's own (non-NBBO) book.
+
+    Every other gate (stale or delayed data, halts, session) still rejects.
+    """
+    if observation.provider != "alpaca_iex" or observation.halted is True:
+        return False
+    if not observation.market_data_eligible:
+        return False
+    if set(observation.rejection_reasons) - {"SPREAD_TOO_WIDE"}:
+        return False
+    spread = observation.spread_bps
+    return spread is not None and (
+        "SPREAD_TOO_WIDE" in observation.rejection_reasons or spread > max_spread_bps
+    )
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -242,7 +301,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         state: str,
         reason_code: str,
         observed_at: datetime,
-        payload: dict[str, object],
+        payload: dict[str, Any],
         identity: tuple[object, ...],
     ) -> bool:
         idem = _key(
@@ -325,7 +384,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             knowledge_mode=recovered.report.knowledge_mode,
             knowledge_cutoff=recovered.report.knowledge_cutoff,
             bars=tuple(recovered.bars),
-            status=status,
+            status=cast(Any, status),
             unresolved_starts=tuple(unresolved),
             confirmed_nontrading_starts=recovered.report.confirmed_nontrading_starts,
             attempts=attempts,
@@ -414,12 +473,14 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             return
 
         actionable_at = current.updated_at or market.observed_at
-        selection = self.execution_plane.first_causal_after(
+        selection = _causal_selection(
+            self.execution_plane,
             current.instrument_id,
             decision_completed_at=current.created_at,
             actionable_at=actionable_at,
             market_snapshot_as_of=market.observed_at,
             binding_id=candidate.binding_id,
+            ibkr_live=await asyncio.to_thread(_ibkr_live_quotes_authorized),
         )
         if selection is None:
             if self.now_factory().astimezone(timezone.utc) >= current.expires_at:
@@ -439,7 +500,8 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
 
         observation = selection.observation
         spread = observation.spread_bps
-        if (
+        iex_book_only = _iex_book_spread_only(observation, current.max_spread_bps)
+        if not iex_book_only and (
             not observation.execution_eligible
             or observation.halted is True
             or spread is None
@@ -477,6 +539,10 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
 
         execution = observation.model_dump(mode="python")
         execution["spread_bps"] = observation.spread_bps
+        if iex_book_only:
+            # IEX's own book is not the NBBO; price the research fill from the
+            # last trade with the simulator's assumed spread instead.
+            execution.update(bid=None, ask=None, spread_bps=None)
         simulation = simulate_ai_shadow_fill(
             execution,
             side="buy",
@@ -486,12 +552,12 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             requested_units=Decimal("1"),
             reference_price=current.geometry.entry_reference,
             max_capture_lag_seconds=Decimal("10"),
-            allow_degraded_price_only=False,
+            allow_degraded_price_only=iex_book_only,
         )
         final_status = "FILLED" if simulation.should_fill else "REJECTED"
         final = transition_trigger_plan(
             current,
-            status=final_status,
+            status=cast(Any, final_status),
             reason=simulation.fill_reason,
             observed_at=selection.first_post_decision_quote_at,
         )
@@ -511,9 +577,11 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             event_type="ai_v3_fill",
             state=final.status.lower(),
             reason_code=(
-                "AI_V3_FILL_SIMULATED"
-                if simulation.should_fill
-                else "AI_V3_FILL_NOT_EXECUTABLE"
+                "AI_V3_FILL_NOT_EXECUTABLE"
+                if not simulation.should_fill
+                else "AI_V3_FILL_HYPOTHETICAL_IEX_BOOK"
+                if simulation.hypothetical
+                else "AI_V3_FILL_SIMULATED"
             ),
             observed_at=selection.first_post_decision_quote_at,
             payload={
@@ -532,7 +600,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         *,
         config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository,
-        rows_by_id: dict[str, dict[str, object]],
+        rows_by_id: dict[str, dict[str, Any]],
         events: list[StrategyEvent],
     ) -> None:
         existing_sources = {
@@ -728,8 +796,8 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             limit=50_000,
         )
 
-        rows: list[dict[str, object]] = []
-        rows_by_id: dict[str, dict[str, object]] = {}
+        rows: list[dict[str, Any]] = []
+        rows_by_id: dict[str, dict[str, Any]] = {}
         for candidate in universe.candidates:
             recovered = await asyncio.to_thread(
                 self._recover_candidate,
@@ -759,9 +827,10 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         for plan in active_plans:
             if plan.arm_id != AI_SHADOW_V3_POLICY_VERSION:
                 continue
-            row = rows_by_id.get(plan.instrument_id)
-            if row is None:
+            found_row = rows_by_id.get(plan.instrument_id)
+            if found_row is None:
                 continue
+            row = found_row
             await self._service_trigger(
                 plan=plan,
                 candidate=row["candidate"],
@@ -790,8 +859,8 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             if prior is None or event.observed_at > prior:
                 latest_decision_at[event.instrument_id] = event.observed_at
 
-        prepared: list[dict[str, object]] = []
-        prepared_rows: dict[str, dict[str, object]] = {}
+        prepared: list[dict[str, Any]] = []
+        prepared_rows: dict[str, dict[str, Any]] = {}
         for row in rows:
             candidate = row["candidate"]
             feature = row["feature"]
@@ -873,9 +942,10 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         emitted_events: list[StrategyEvent] = []
         decision_completed_at = self.now_factory()
         for decision in result.decisions:
-            row = prepared_rows.get(decision.instrument_id)
-            if row is None:
+            found_row = prepared_rows.get(decision.instrument_id)
+            if found_row is None:
                 continue
+            row = found_row
             feature = row["feature"]
             recovered = row["recovered"]
             candidate = row["candidate"]
@@ -1060,7 +1130,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         self.last_run_at = now
         return total
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self) -> dict[str, Any]:
         return {
             "enabled": ai_shadow_v3_monitor_enabled(),
             "running": self.scheduled,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.apps.rpg.session.genesis.campaign_lore_api import (
+from app.apps.rpg.genesis.forge.campaign_lore_api import (
     LoreDocumentForbidden,
     campaign_genesis_progress_payload,
     campaign_lore_document_payload,

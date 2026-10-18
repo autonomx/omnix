@@ -48,6 +48,21 @@ gateway) to the gateway host (`OMNIX_AGENT_SANDBOX_GATEWAY_HOST`, default
 another host port, is unreachable. The broker accepts the run's token only for
 that run's broker and model-gateway routes (WP-4.6).
 
+The relay forwards HTTP, not raw TCP, and only requests whose path is one of
+the agent-runtime routes (`AGENT_RUNTIME_PATTERNS` in
+`app/security/run_tokens.py`, passed to the relay as `--allow`). Every other
+path, encoded separators and dot segments, and every protocol upgrade get
+`403 sandbox_route_refused` at the relay. So agent code cannot call the rest
+of the gateway, such as approving its own run or changing tool policy, even
+when sign-in is off and the gateway would otherwise treat it as the local
+owner. Each forwarded request carries `x-omnix-sandbox-relay`, and the gateway
+refuses a request with that header outside the agent-runtime routes as well.
+The relay container is labelled with its version, so a relay started by an
+older Omnix is replaced on the next sandboxed run. The workspace preview uses
+the same script with `--tcp` as its ingress (host loopback into the preview's
+dev server, websocket reload included); that direction is not a way out of the
+sandbox, so it forwards raw bytes.
+
 `python -m app.platform.agent_runtime.sandbox check-egress` proves it on a host: from a
 container on the sandbox network it must connect to the relay and must fail to
 reach `1.1.1.1:443`; it exits 1 otherwise. On Linux the gateway must listen on

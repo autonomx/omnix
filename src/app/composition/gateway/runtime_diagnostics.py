@@ -6,7 +6,9 @@ import logging
 import os
 import time
 
-from app.composition.gateway.diagnostics import RuntimeDiagnostics
+from typing import Any
+
+from app.composition.gateway.diagnostics import RuntimeDiagnostics, VersionDiagnostics
 
 
 def _durable_snapshot(services):
@@ -79,7 +81,9 @@ def runtime_diagnostics(state) -> RuntimeDiagnostics:
     background = getattr(state, 'background_runtime', None)
     scheduler = getattr(state, 'scheduler_runtime', None)
     services = getattr(state, 'runtime_services', None)
-    postgres, jobs, sessions = {"connectivity": None}, {"available": False}, None
+    postgres: dict[str, Any] = {"connectivity": None}
+    jobs: dict[str, Any] = {"available": False}
+    sessions: Any = None
     if services is not None:
         try:
             postgres, jobs, sessions = _durable_snapshot(services)
@@ -103,7 +107,7 @@ def runtime_diagnostics(state) -> RuntimeDiagnostics:
     readers = getattr(state, "event_readers", None)
     retention = postgres.pop("retention", None)
     return RuntimeDiagnostics(
-        version={"build_revision": config.build_revision, "application_schema": SCHEMA_KNOWN},
+        version=VersionDiagnostics(build_revision=config.build_revision, application_schema=SCHEMA_KNOWN),
         features=sorted(enabled_feature_ids(config)),
         events=readers.diagnostics() if readers is not None else {},
         retention=retention,

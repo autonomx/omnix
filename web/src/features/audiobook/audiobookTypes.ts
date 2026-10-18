@@ -41,6 +41,8 @@ export interface ChapterSummary {
   span_count?: number;
   word_count?: number;
   estimated_runtime_seconds?: number;
+  /** The exclusion that leaves this whole chapter out of the audiobook, when it is removed. */
+  audio_removal_id?: string | null;
 }
 
 export interface DocumentBlockView {
@@ -103,6 +105,11 @@ export interface AudiobookJobView {
     message?: string;
     cache_hits?: number;
     generated?: number;
+    /** Direct performance: lines given a direction, lines changed, user notes kept. */
+    directed?: number;
+    changed?: number;
+    kept_user_delivery?: number;
+    failed_windows?: number;
   };
   error?: { message?: string; code?: string; retryable?: boolean } | null;
   attempts?: number;
@@ -115,9 +122,23 @@ export interface AudiobookJobView {
   type?: string;
   reason?: string;
   migration?: Record<string, unknown> | null;
+  /** A waiting render job's place in the render order, 1 first; absent once it starts. */
+  queue_position?: number | null;
+  /** A rendered chapter's assembled audio, once it can be played. */
+  audio?: { duration_seconds: number } | null;
+}
+
+/** Stability and Style Exaggeration (0–1) for the book, and characters' own levels. */
+export interface BookPerformance {
+  stability: number;
+  style: number;
+  speakers: Record<string, { stability?: number; style?: number }>;
 }
 
 export interface ProjectDetail extends ProjectSummary {
+  performance?: BookPerformance;
+  /** After classifying: direct the dialogue always, only while Fish S2 Pro is the TTS engine, or never. */
+  auto_direct_performance?: 'always' | 'fish' | 'never';
   render_readiness?: { ready: boolean; blockers: string[] };
   classification_rules?: string;
   quote_extraction_rules?: string | null;

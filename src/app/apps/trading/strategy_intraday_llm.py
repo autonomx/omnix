@@ -12,16 +12,15 @@ import json
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers import ChatMessage
-from app.providers.catalog import CLOSED_OBJECT_SCHEMA, provider_supports
 
 from .gapper_dataset import GapperCandidate
 from .strategy_intraday_learning import IntradayLearningSnapshot
-from .structured_llm import TradingModelOutputError, trading_model_call
+from .structured_llm import TradingModelOutputError, trading_model_call, sends_json_schema
 
 
 ThesisChange = Literal["initial", "strengthened", "weakened", "flipped", "unchanged"]
@@ -87,7 +86,7 @@ def _default_provider():
     from app.providers.service import get_provider
 
     provider = get_provider()
-    if provider is not None and provider_supports(provider, CLOSED_OBJECT_SCHEMA):
+    if provider is not None and sends_json_schema(provider):
         return _IntradaySchemaProviderProxy(provider)
     return provider
 
@@ -131,7 +130,7 @@ def _usage_int(usage: Any, *keys: str) -> int | None:
     for key in keys:
         raw = usage.get(key)
         try:
-            value = int(raw)
+            value = int(cast(Any, raw))
         except (TypeError, ValueError):
             continue
         if value >= 0:

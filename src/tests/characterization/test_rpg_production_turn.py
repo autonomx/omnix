@@ -124,6 +124,24 @@ def _turn_record(body: dict, model_calls: list[str]) -> dict:
     }
 
 
+def _assert_turn_committed_once(session_id: str, revision_before: int, body: dict) -> None:
+    """A turn advances the campaign one revision, and that revision already holds its projection (WP-5.6).
+
+    Recording the narrative projection and the interaction lifecycle after the
+    commit used to save the session again: a second revision with no turn.
+    """
+    from app.apps.rpg.session.persistence.session_records import (
+        load_session_from_postgres,
+        load_session_version_from_postgres,
+    )
+
+    assert load_session_version_from_postgres(session_id)[0] == revision_before + 1
+    runtime = load_session_from_postgres(session_id)["runtime_state"]
+    latest = runtime["recent_interactions"][-1]
+    assert latest["narrative_response_id"] == body["canonical_narrative_response"]["response_id"]
+    assert runtime["interaction_lifecycles"][latest["interaction_id"]]["status"] == "runtime_resolved"
+
+
 def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -132,11 +150,12 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from app.jobs import store as job_store
     from app.persistence.startup import bootstrap_postgresql_runtime
     from app.providers import service as provider_service
-    from app.apps.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
-    from app.apps.rpg.narrative_engine import service as narrative_service
-    from app.apps.rpg.narrative_engine.writer import StructuredNarrativeWriter
-    from app.apps.rpg.presentation.turn_response import RpgTurnResponse
+    from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+    from app.apps.rpg.narration.narrative_engine import service as narrative_service
+    from app.apps.rpg.narration.narrative_engine.writer import StructuredNarrativeWriter
+    from app.apps.rpg.narration.presentation.turn_response import RpgTurnResponse
     from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
+    from app.apps.rpg.session.persistence.session_records import load_session_version_from_postgres
     from tests.support.routers import include_router_registrar
 
     bootstrap_postgresql_runtime()
@@ -159,9 +178,11 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
             turns = []
             for command in COMMANDS:
                 before = len(model.calls)
+                revision_before = load_session_version_from_postgres(session_id)[0]
                 response = client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": command})
                 assert response.status_code == 200, response.text[:500]
                 RpgTurnResponse.model_validate(response.json())  # the published contract (WP-8.6)
+                _assert_turn_committed_once(session_id, revision_before, response.json())
                 turns.append({"command": command, **_turn_record(response.json(), model.calls[before:])})
             text = json.dumps({"status": created.get("status"), "turns": turns}, sort_keys=True)
             text = text.replace(session_id, "SESSION")

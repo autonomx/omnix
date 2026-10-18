@@ -4,27 +4,27 @@ from pathlib import Path
 
 import pytest
 
-from app.apps.rpg.session.genesis.world_forge_contract import (
+from app.apps.rpg.genesis.forge.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
-from app.apps.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.apps.rpg.worlds import generation_publication_guard as publication_guard
-from app.apps.rpg.worlds.generation_candidate_spool import (
+from app.apps.rpg.genesis.forge.world_forge_generation import GeneratedTopic
+from app.apps.rpg.genesis.worlds import generation_publication_guard as publication_guard
+from app.apps.rpg.genesis.worlds.generation_candidate_spool import (
     delete_provider_started_spool,
     delete_raw_candidate_spool,
     read_raw_candidate_spool,
     write_provider_started_spool,
 )
-from app.apps.rpg.worlds.generation_failure_spool import ReplayedGenerationFailure
-from app.apps.rpg.worlds.generation_jobs import (
+from app.apps.rpg.genesis.worlds.generation_failure_spool import ReplayedGenerationFailure
+from app.apps.rpg.genesis.worlds.generation_jobs import (
     WorldTopicGenerationSettings,
     topic_generation_fingerprint,
 )
-from app.apps.rpg.worlds.generation_review_analytics import (
+from app.apps.rpg.genesis.worlds.generation_review_analytics import (
     world_generation_review_analytics,
 )
-from app.apps.rpg.worlds.generation_worker import _topic_generator_for_job
+from app.apps.rpg.genesis.worlds.generation_worker import _topic_generator_for_job
 
 
 def _graph() -> CampaignTopicGraph:

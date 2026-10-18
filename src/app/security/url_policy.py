@@ -16,6 +16,14 @@ policy keeps them from reaching what a request should never reach:
 ``check_outbound_url`` runs when a setting is saved and, with
 ``resolve=True``, before each connection so a hostname that later resolves to
 a blocked address is refused.
+
+Destinations users type for the server to call on their behalf (alert
+webhooks, TVP-0.5a) use ``strict``: every address that is not globally
+routable (loopback, private, shared 100.64.0.0/10, ...) is refused unless
+``OMNIX_ALLOWED_PRIVATE_NETWORKS`` names it, whether sign-in is on or off. ``outbound_addresses`` resolves and checks a host once and returns the
+addresses, so the caller connects to one of them instead of resolving again (a
+hostname cannot rebind to a blocked address between the check and the
+connection).
 """
 from __future__ import annotations
 
@@ -43,34 +51,57 @@ class UrlPolicyError(ValueError):
     """The URL may not be used as an outbound endpoint."""
 
 
-def _resolve(hostname: str, port: int) -> list[str]:
+def resolve_hostname(hostname: str, port: int) -> list[str]:
+    """Every address ``hostname`` resolves to, in the system's preference order (the default ``Resolver``)."""
     try:
         rows = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
         raise UrlPolicyError("hostname_resolution_failed") from exc
-    return sorted({str(row[4][0]) for row in rows})
+    return list(dict.fromkeys(str(row[4][0]) for row in rows))
 
 
-def allowed_private_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network] | None:
-    """Configured private networks; ``None`` means every private network."""
+Network = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+def _configured_private_networks() -> list[Network] | None:
+    """``OMNIX_ALLOWED_PRIVATE_NETWORKS``; ``None`` when unset."""
     configured = (env_str("OMNIX_ALLOWED_PRIVATE_NETWORKS", "") or "").strip()
-    if configured:
-        try:
-            return [ipaddress.ip_network(item.strip(), strict=False) for item in configured.split(",") if item.strip()]
-        except ValueError as exc:
-            raise UrlPolicyError("OMNIX_ALLOWED_PRIVATE_NETWORKS must be comma-separated CIDRs") from exc
+    if not configured:
+        return None
+    try:
+        return [ipaddress.ip_network(item.strip(), strict=False) for item in configured.split(",") if item.strip()]
+    except ValueError as exc:
+        raise UrlPolicyError("OMNIX_ALLOWED_PRIVATE_NETWORKS must be comma-separated CIDRs") from exc
+
+
+def allowed_private_networks() -> list[Network] | None:
+    """Configured private networks; ``None`` means every private network."""
+    configured = _configured_private_networks()
+    if configured is not None:
+        return configured
     from app.security.auth.settings import resolve_auth_settings
 
     return [] if resolve_auth_settings().enforced else None
 
 
-def check_address(address: IPAddress) -> None:
+def check_address(address: IPAddress, *, strict: bool = False) -> None:
     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
         address = address.ipv4_mapped
-    if address.is_loopback:
-        return
     if address.is_link_local:
         raise UrlPolicyError("link_local_address_blocked")
+    if strict and not address.is_global:
+        # Only networks the operator named; never everything because sign-in is off. Not-global also covers
+        # shared address space (100.64.0.0/10: carrier NAT, Tailscale, some cloud metadata services).
+        configured = _configured_private_networks() or []
+        if any(address in network for network in configured):
+            return
+        if address.is_loopback:
+            raise UrlPolicyError("loopback_address_not_allowed")
+        if address.is_private:
+            raise UrlPolicyError("private_address_not_allowed")
+        raise UrlPolicyError("non_global_address_not_allowed")
+    if address.is_loopback:
+        return
     if address.is_unspecified or address.is_multicast or address.is_reserved:
         raise UrlPolicyError("reserved_address_blocked")
     if address.is_private:
@@ -80,10 +111,17 @@ def check_address(address: IPAddress) -> None:
         raise UrlPolicyError("private_address_not_allowed")
 
 
-def check_outbound_url(url: str, *, resolve: bool = False, resolver: Resolver = _resolve) -> str:
+def check_outbound_url(
+    url: str,
+    *,
+    resolve: bool = False,
+    resolver: Resolver = resolve_hostname,
+    strict: bool = False,
+    https_only: bool = False,
+) -> str:
     """Validate ``url``; with ``resolve``, also every address its host resolves to."""
     parsed = urlsplit(str(url or "").strip())
-    if parsed.scheme not in {"http", "https"}:
+    if parsed.scheme not in ({"https"} if https_only else {"http", "https"}):
         raise UrlPolicyError("url_scheme_not_allowed")
     if parsed.username or parsed.password:
         raise UrlPolicyError("url_credentials_not_allowed")
@@ -97,7 +135,7 @@ def check_outbound_url(url: str, *, resolve: bool = False, resolver: Resolver = 
     except ValueError:
         literal = None
     if literal is not None:
-        check_address(literal)
+        check_address(literal, strict=strict)
     elif resolve:
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         try:
@@ -107,8 +145,39 @@ def check_outbound_url(url: str, *, resolve: bool = False, resolver: Resolver = 
             # itself reports the failure.
             return url
         for value in addresses:
-            check_address(ipaddress.ip_address(value))
+            check_address(ipaddress.ip_address(value), strict=strict)
     return url
 
 
-__all__ = ["METADATA_HOSTNAMES", "UrlPolicyError", "allowed_private_networks", "check_address", "check_outbound_url"]
+def outbound_addresses(url: str, *, strict: bool = False, resolver: Resolver = resolve_hostname) -> list[IPAddress]:
+    """The checked addresses a connection to ``url`` may use; connect to one of them, never resolve again.
+
+    Raises ``UrlPolicyError("hostname_resolution_failed")`` when the host does not resolve, and the
+    policy's error when the URL or any resolved address is not allowed (one blocked address refuses
+    the host: a name that also points somewhere internal is not trusted).
+    """
+    check_outbound_url(url, strict=strict)
+    parsed = urlsplit(str(url or "").strip())
+    hostname = (parsed.hostname or "").rstrip(".").lower()
+    try:
+        return [ipaddress.ip_address(hostname)]
+    except ValueError:
+        pass
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    addresses = [ipaddress.ip_address(value) for value in resolver(hostname, port)]
+    if not addresses:
+        raise UrlPolicyError("hostname_resolution_failed")
+    for address in addresses:
+        check_address(address, strict=strict)
+    return addresses
+
+
+__all__ = [
+    "METADATA_HOSTNAMES",
+    "UrlPolicyError",
+    "allowed_private_networks",
+    "check_address",
+    "check_outbound_url",
+    "outbound_addresses",
+    "resolve_hostname",
+]

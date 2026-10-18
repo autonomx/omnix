@@ -64,3 +64,7 @@ class FakeAuthenticator:
         if self.settings.mode is not AuthMode.OIDC and not self.bearers:
             return None
         return self.bearers.get(token)
+
+    def account_view(self, principal: AuthenticatedPrincipal) -> None:
+        # The fake keeps no accounts; the session payload then carries none.
+        return None

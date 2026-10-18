@@ -5,6 +5,7 @@ import logging
 
 import math
 from time import monotonic
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def provider_turn_deadline(
         from app.providers import service as provider_service
 
         provider = provider_service.get_provider(resolved_id)
-        configured = getattr(getattr(provider, "config", None), "timeout", None)
+        configured: Any = getattr(getattr(provider, "config", None), "timeout", None)
         timeout = float(configured)
     except (TypeError, ValueError, AttributeError):
         return None

@@ -1,6 +1,7 @@
 """Feature-module contracts used by the composition root."""
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass
 import logging
 from typing import Any, Callable, Literal, Protocol, get_args
@@ -27,7 +28,7 @@ class JobHandlerSpec(Protocol):
     @property
     def handler(self) -> Callable[..., object]: ...
     @property
-    def input_model(self) -> type[BaseModel]: ...
+    def input_model(self) -> builtins.type[BaseModel]: ...  # ``type`` is the property above
     @property
     def resource_class(self) -> object: ...
     @property
@@ -66,15 +67,18 @@ class ScheduledTaskSpec(Protocol):
 class ScheduledTaskFactory(Protocol):
     """Feature factory that builds a task against the composed services."""
 
-    def __call__(self, context: "FeatureContext") -> ScheduledTaskSpec | None: ...
+    def __call__(self, context: "FeatureContext", /) -> ScheduledTaskSpec | None: ...
 
 
 class RepositorySpec(Protocol):
     """Structural repository factory contract without importing persistence."""
 
-    type: object
-    factory: Callable[..., object]
-    alias: str | None
+    @property
+    def type(self) -> object: ...
+    @property
+    def factory(self) -> Callable[..., object]: ...
+    @property
+    def alias(self) -> str | None: ...
 
 
 class OutboxConsumerSpec(Protocol):
@@ -93,11 +97,16 @@ class OutboxConsumerSpec(Protocol):
 class SettingSpec(Protocol):
     """Structural settings contract without importing the settings kernel."""
 
-    key: str
-    value_type: type
-    default: object
-    feature: str
-    writable: bool
+    @property
+    def key(self) -> str: ...
+    @property
+    def value_type(self) -> type: ...
+    @property
+    def default(self) -> object: ...
+    @property
+    def feature(self) -> str: ...
+    @property
+    def writable(self) -> bool: ...
 
 
 class PermissionSpec(Protocol):

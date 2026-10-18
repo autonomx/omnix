@@ -1,5 +1,6 @@
 """Durable, content-free Live Chat evaluation records and presence policies."""
 from __future__ import annotations
+import builtins
 
 from app.config.env import env_str
 
@@ -9,9 +10,10 @@ import math
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from contextlib import AbstractContextManager
 
 PresencePreset = Literal["quiet", "natural", "engaged", "listener"]
 GateStatus = Literal["pass", "fail", "insufficient"]
@@ -193,7 +195,7 @@ _DEFAULT_POLICIES: dict[PresencePreset, PresencePolicyValues] = {
 
 
 def default_live_chat_evaluation_path() -> Path:
-    configured = env_str("OMNIX_LIVE_CHAT_EVALUATION_PATH", "").strip()
+    configured = (env_str("OMNIX_LIVE_CHAT_EVALUATION_PATH", "") or "").strip()
     return Path(configured) if configured else Path("resources/data/live_chat_evaluations.json")
 
 
@@ -202,7 +204,8 @@ class LiveChatEvaluationStore:
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or default_live_chat_evaluation_path()
-        self._lock = threading.RLock()
+        # Any lock usable in ``with``; the PostgreSQL store uses a document lock.
+        self._lock: AbstractContextManager[Any] = threading.RLock()
 
     def upsert(self, create: VoiceSessionEvaluationCreate) -> VoiceSessionEvaluationRecord:
         with self._lock:
@@ -278,7 +281,7 @@ class LiveChatEvaluationStore:
             "presence_policies": active_policies,
         }
 
-    def list_policy_versions(self, preset: PresencePreset | None = None) -> list[PresencePolicyVersion]:
+    def list_policy_versions(self, preset: PresencePreset | None = None) -> builtins.list[PresencePolicyVersion]:
         with self._lock:
             payload = self._read()
             rows = payload.get("presence_policies", {})

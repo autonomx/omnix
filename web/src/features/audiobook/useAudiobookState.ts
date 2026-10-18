@@ -9,7 +9,7 @@ export function useAudiobookState() {
   const [ebookLibraryOpen, setEbookLibraryOpen] = useState(false);
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-  const [expandedSpanId, setExpandedSpanId] = useState<string | null | undefined>(undefined);
+  const [expandedSpanId, setExpandedSpanId] = useState<string | null>(null);
   const [speakerFilter, setSpeakerFilter] = useState('all');
   const [selectedPronunciation, setSelectedPronunciation] = useState<{ spanId: string } | null>(null);
   const [selectedRemoval, setSelectedRemoval] = useState<{ spanId: string; start_offset: number; end_offset: number; source_text: string } | null>(null);

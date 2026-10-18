@@ -5,7 +5,7 @@ function, so callers and tests that patch the service methods are unchanged.
 """
 from __future__ import annotations
 
-from .event_queries import all_events, events_of_types, latest_event
+from .event_queries import all_events, events_of_types, json_object, latest_event
 from .exception_logging import log_recovered_exception
 from .acceptance import evaluate_acceptance
 from .coding_quality import (
@@ -45,7 +45,7 @@ from .task_revision_quality import (
     hydrate_task_revision,
     persist_task_revision_contract,
 )
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 from .service import (
     _BLOCKED_SETTLE,
     _TERMINAL,
@@ -275,7 +275,7 @@ def _record_workspace_tool_result(service: AgentRunService, event: AgentEvent) -
             repository, event.run_id, "tool.started", payload_contains={"tool_call_id": call_id}
         )
         tool = str(event.payload.get("tool") or (started.payload.get("tool") if started else "") or "")
-        args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
+        args = json_object(started.payload.get("args")) if started else {}
         command = str(args.get("command") or "")
         capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
         quality = service.quality_repository_factory(work.connection, service.context)
@@ -410,7 +410,7 @@ def _reconcile_change_set_validation(
         if not call_id or call_id in recorded_call_ids:
             continue
         started = started_by_call_id.get(call_id)
-        args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
+        args = json_object(started.payload.get("args")) if started else {}
         augmented = event.model_copy(
             update={
                 "payload": {
@@ -716,7 +716,7 @@ def _acceptance_failures(current, repository, quality_failures, result, workspac
         failures.append("child_run_failed")
     failures = list(dict.fromkeys(failures))
     passed = result.passed and not failures
-    promotion: dict[str, object] | None = None
+    promotion: dict[str, Any] | None = None
     if passed:
         try:
             promotion = service._promote_accepted_workspace(

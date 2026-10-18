@@ -26,7 +26,7 @@ import threading
 import traceback
 from typing import Any
 
-from app.runtime.paths import resources_root
+from app.runtime.paths import resources_logs_root
 
 
 AGENT_DEBUG_ENABLED_ENV = "OMNIX_AGENT_DEBUG_LOGS"
@@ -78,7 +78,7 @@ def agent_debug_log_dir() -> Path:
     override = (env_str(AGENT_DEBUG_LOG_DIR_ENV, "") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return resources_root() / "logs" / "agent"
+    return resources_logs_root() / "agent"
 
 
 def agent_debug_log_status() -> dict[str, Any]:

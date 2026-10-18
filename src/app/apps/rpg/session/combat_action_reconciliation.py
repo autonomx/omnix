@@ -7,26 +7,26 @@ from app.apps.rpg.session.state_normalization import (
 from app.apps.rpg.narration.quality import (
     build_narration_quality_context as build_narration_quality_context,
 )
-from app.apps.rpg.social.npc_backbone import (
+from app.apps.rpg.world.social.npc_backbone import (
     resolve_npc_backbone_decision as resolve_npc_backbone_decision,
 )
 from app.apps.rpg.session.session_runtime_store import (
     _find_active_combat_state_deep as _find_active_combat_state_deep, _safe_parse_mapping_payload as _safe_parse_mapping_payload,
 )
-from app.apps.rpg.combat.companion_ai import (
+from app.apps.rpg.rules.combat.companion_ai import (
     apply_companion_intent as apply_companion_intent, choose_companion_intent as choose_companion_intent, parse_companion_command as parse_companion_command,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
     _is_companion_actor_id as _is_companion_actor_id,
 )
-from app.apps.rpg.combat.abilities import (
+from app.apps.rpg.rules.combat.abilities import (
     decrement_participant_cooldowns as decrement_participant_cooldowns,
 )
-from app.apps.rpg.combat.conditions import (
+from app.apps.rpg.rules.combat.conditions import (
     add_status_effect_to_participant as add_status_effect_to_participant, build_condition_effect as build_condition_effect, build_condition_result as build_condition_result,
     tick_start_of_turn_status_effects as tick_start_of_turn_status_effects,
 )
-from app.apps.rpg.combat.recovery import (
+from app.apps.rpg.rules.combat.recovery import (
     revive_participant_with_healing as revive_participant_with_healing, stabilize_participant as stabilize_participant,
 )
 from typing import (

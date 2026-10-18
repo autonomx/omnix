@@ -6,7 +6,7 @@ All decisions are deterministic and bounded.
 from __future__ import annotations
 
 from typing import Any, Dict
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 
 def _safe_str(v: Any) -> str:

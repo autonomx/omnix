@@ -5,7 +5,7 @@ import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from app.apps.trading.binding_authority import MarketDataAuthorityDecision, MarketDataCapability
 from app.apps.trading.cache import TradingMarketDataCache
@@ -24,6 +24,8 @@ from .aggregation import (
     aggregated_dataset_fingerprint,
     aggregation_plan,
 )
+from app.apps.trading.market_session_status import us_equity_rules_apply
+
 from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .base import MarketDataProvider
 from .binance import BinanceMarketDataProvider
@@ -31,7 +33,7 @@ from .ibkr import IbkrEquityProvider
 from .coinmarketcap import CoinMarketCapProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
-from .errors import ProviderFallbackEligibleError
+from .errors import ProviderContractError, ProviderFallbackEligibleError
 
 
 class ProviderRegistry:
@@ -41,6 +43,8 @@ class ProviderRegistry:
         cache: TradingMarketDataCache | None = None,
         factories: dict[str, Callable[[], Any]] | None = None,
     ) -> None:
+        from .fred import FredSeriesProvider
+
         self.cache = cache or TradingMarketDataCache()
         self._factories = factories or {
             "binance": lambda: BinanceMarketDataProvider(cache=self.cache),
@@ -52,6 +56,7 @@ class ProviderRegistry:
             "kraken": lambda: AdditionalCryptoProvider("kraken", cache=self.cache),
             "hyperliquid": lambda: AdditionalCryptoProvider("hyperliquid", cache=self.cache),
             "coinmarketcap": lambda: CoinMarketCapProvider(cache=self.cache),
+            "fred": lambda: FredSeriesProvider(cache=self.cache),
         }
         self._providers: dict[str, Any] = {}
 
@@ -83,6 +88,8 @@ class ProviderRegistry:
         silently falling back to Yahoo or a caller supplied price.
         """
         requested = self.resolve_binding(instrument_id, binding_id)
+        if requested.provider == "fred" or instrument_id.startswith("economic:"):
+            raise ValueError(f"{instrument_id} is an economic series: research data, never traded")
         if instrument_id.startswith("equity:") and requested.provider in {
             "yahoo",
             "stooq",
@@ -312,6 +319,9 @@ class ProviderRegistry:
         interval: str,
         limit: int,
         cancellation: threading.Event | None,
+        *,
+        alignment: Literal["count", "clock"] = "count",
+        include_extended_hours: bool = True,
     ) -> BarsResponse:
         plan = aggregation_plan(interval, binding.supported_intervals)
         if plan is None:
@@ -326,6 +336,8 @@ class ProviderRegistry:
             base_limit,
             cancellation,
         )
+        if alignment == "clock":
+            return self._clock_aggregated(base_response, interval, base_interval, include_extended_hours)
         bars = aggregate_market_bars(
             base_response.bars,
             target_interval=interval,
@@ -352,6 +364,44 @@ class ProviderRegistry:
             }
         )
 
+    @staticmethod
+    def _clock_aggregated(
+        base_response: BarsResponse,
+        interval: str,
+        base_interval: str,
+        include_extended_hours: bool,
+    ) -> BarsResponse:
+        """Chart-only clock-aligned aggregation (TVP-2.5); count mode is what strategies read."""
+        from .clock_aggregation import aggregate_market_bars_clock, clock_aggregated_dataset_fingerprint
+
+        instrument = base_response.instrument
+        calendar = (
+            instrument.session_calendar
+            if us_equity_rules_apply(instrument.session_calendar, instrument.venue)
+            else "24x7"
+        )
+        bars = aggregate_market_bars_clock(
+            list(base_response.bars),
+            target_interval=interval,
+            base_interval=base_interval,
+            calendar=calendar,
+            exchange_tz=instrument.exchange_timezone,
+            include_extended=include_extended_hours,
+            history_complete=base_response.provenance.history_complete,
+        )
+        provenance = base_response.provenance.model_copy(
+            update={
+                "as_of": bars[-1].end_time if bars else base_response.provenance.as_of,
+                "dataset_fingerprint": clock_aggregated_dataset_fingerprint(
+                    base_response.provenance.dataset_fingerprint,
+                    target_interval=interval,
+                    base_interval=base_interval,
+                    include_extended=include_extended_hours,
+                ),
+            }
+        )
+        return base_response.model_copy(update={"interval": interval, "bars": bars, "provenance": provenance})
+
     def bars(
         self,
         instrument_id: str,
@@ -359,6 +409,9 @@ class ProviderRegistry:
         limit: int,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
+        *,
+        alignment: Literal["count", "clock"] = "count",
+        include_extended_hours: bool = True,
     ) -> BarsResponse:
         requested = self.resolve_binding(instrument_id, binding_id)
         try:
@@ -369,6 +422,8 @@ class ProviderRegistry:
                 interval,
                 limit,
                 cancellation,
+                alignment=alignment,
+                include_extended_hours=include_extended_hours,
             )
         except ProviderFallbackEligibleError as primary_error:
             if requested.provider != "yahoo" or interval != "1d":
@@ -390,6 +445,8 @@ class ProviderRegistry:
                 interval,
                 limit,
                 cancellation,
+                alignment=alignment,
+                include_extended_hours=include_extended_hours,
             )
             result.provenance = result.provenance.model_copy(
                 update={
@@ -408,7 +465,7 @@ class ProviderRegistry:
         instrument_id: str,
         binding_id: str | None = None,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         binding = self.resolve_binding(instrument_id, binding_id)
         provider = self.provider(binding.provider)
         if self._supports_cancellation(provider.get_quote):
@@ -427,11 +484,20 @@ class ProviderRegistry:
         binding = self.resolve_execution_binding(instrument_id, requested.binding_id)
         provider = self.provider(binding.provider)
         if binding.provider == "alpaca_iex":
-            observation = provider.execution_observation(
-                instrument_id,
-                policy=policy,
-                cancellation=cancellation,
-            )
+            try:
+                observation = provider.execution_observation(
+                    instrument_id,
+                    policy=policy,
+                    cancellation=cancellation,
+                )
+            except (ProviderContractError, ProviderFallbackEligibleError):
+                # IEX sees part of the market; thin stocks often have no IEX
+                # quote. A quote from IBKR is used only while IBKR holds
+                # per-contract live-data authority, and stays attributed to it.
+                fallback = self._ibkr_execution_fallback(instrument_id, policy)
+                if fallback is None:
+                    raise
+                observation = fallback
             if requested.binding_id != binding.binding_id:
                 observation = observation.model_copy(update={"binding_id": requested.binding_id})
             return observation
@@ -449,6 +515,28 @@ class ProviderRegistry:
             provider=binding.provider,
         )
         return assess_execution_observation(observation, policy)
+
+    def _ibkr_execution_fallback(
+        self,
+        instrument_id: str,
+        policy: ExecutionEligibilityPolicy | None,
+    ) -> ExecutionObservation | None:
+        """An IBKR live observation, or None unless IBKR's live-data authority holds now.
+
+        Authority requires the rollout gate, a connected Gateway, a uniquely
+        qualified contract, LIVE market-data type, proven entitlement and a fresh
+        quote. The observation keeps its LIVE_DATA purpose, so it can support a
+        paper or shadow fill but never broker execution authority.
+        """
+        if not instrument_id.startswith("equity:"):
+            return None
+        try:
+            ibkr = self.provider("ibkr")
+            if not ibkr.authority_decision(instrument_id).authoritative:
+                return None
+            return ibkr.live_observation(instrument_id, policy=policy)
+        except Exception:
+            return None
 
     def execution_indicator_bars(
         self,
@@ -486,7 +574,7 @@ class ProviderRegistry:
         base_currency: str,
         quote_currency: str,
         cancellation: threading.Event | None = None,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         provider = self.provider("yahoo")
         method = getattr(provider, "get_currency_rate", None)
         if not callable(method):
@@ -495,8 +583,8 @@ class ProviderRegistry:
             return method(base_currency, quote_currency, cancellation=cancellation)
         return method(base_currency, quote_currency)
 
-    def descriptors(self) -> list[dict[str, object]]:
-        descriptors: list[dict[str, object]] = []
+    def descriptors(self) -> list[dict[str, Any]]:
+        descriptors: list[dict[str, Any]] = []
         for provider_id, policy in POLICIES.items():
             provider: MarketDataProvider = self.provider(provider_id)
             status, runtime_payload = provider.runtime_status()

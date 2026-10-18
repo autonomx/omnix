@@ -40,7 +40,7 @@ describe('signed-in sessions', () => {
     expect(await screen.findByText(/This browser/)).toBeInTheDocument();
     const all = screen.getByRole('button', { name: 'Sign out all other sessions' });
     expect(all).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/Install credential/), { target: { value: 'secret' } });
+    fireEvent.change(screen.getByLabelText(/install credential/), { target: { value: 'secret' } });
     fireEvent.click(all);
 
     await waitFor(() => expect(client.revokeAuthSessions).toHaveBeenCalledWith({ session_id: null, credential: 'secret' }));
@@ -52,10 +52,10 @@ describe('signed-in sessions', () => {
     client.revokeAuthSessions.mockRejectedValue(new AuthRequestError(401));
     render(<SignedInSessionsSection />);
 
-    fireEvent.change(await screen.findByLabelText(/Install credential/), { target: { value: 'wrong' } });
+    fireEvent.change(await screen.findByLabelText(/install credential/), { target: { value: 'wrong' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
     await waitFor(() => expect(client.revokeAuthSessions).toHaveBeenCalledWith({ session_id: 'bbbbbbbbbbbbbbbb', credential: 'wrong' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('The install credential is not correct.');
+    expect(await screen.findByRole('status')).toHaveTextContent('That password (or install credential) is not correct.');
   });
 });

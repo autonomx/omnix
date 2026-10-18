@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
 import { tradingHermesResearchApi } from './tradingHermesResearchApi';
+import { OvernightShadowSummary } from './OvernightShadowSummary';
 import { TradingStrategyBacktest } from './TradingStrategyBacktest';
 import { TradingStrategyExecutionCredentials } from './TradingStrategyExecutionCredentials';
 import { TRADING_STRATEGY_DEFINITIONS } from './tradingStrategyCatalog';
@@ -208,6 +209,11 @@ const defaultStochRsi5mStrategy = (accountId: string): StochRsi5mTradingStrategy
   },
 });
 
+/** A preset changes the strategy, not which task runs it: the preset with the current execution owner. */
+function keepingOwner<T extends GapPullbackConfig>(preset: T, current: GapPullbackConfig): T {
+  return { ...preset, execution_owner: current.execution_owner };
+}
+
 function eventTone(event: StrategyEvent): string {
   if (event.event_type === 'rejection' || event.state === 'rejected' || event.state === 'vetoed' || event.state === 'research_error') return 'rejected';
   if (event.event_type === 'stoch_trend_capture_entry' && eventStochEntryAllowed(event) === false) return 'rejected';
@@ -261,6 +267,16 @@ function compact(value: string | number | null | undefined): string {
 function percent(value: string | number | null | undefined): string {
   const parsed = numberValue(value);
   return parsed === null ? '—' : `${parsed.toFixed(parsed >= 10 ? 1 : 2)}%`;
+}
+
+/** Which editor a configuration opens in; the SHADOW overnight group is read-only (no draft). */
+function editorDrafts(config: TradingStrategyConfig | null): {
+  draft: GapPullbackTradingStrategyConfig | null;
+  stochDraft: StochRsi5mTradingStrategyConfig | null;
+} {
+  if (config?.strategy_kind === 'stoch_rsi_5m_v1') return { draft: null, stochDraft: structuredClone(config) };
+  if (config?.strategy_kind === 'overnight_shadow_v1') return { draft: null, stochDraft: null };
+  return { draft: config ? structuredClone(config) : null, stochDraft: null };
 }
 
 function latestByEventType(events: StrategyEvent[], eventType: string): Map<string, StrategyEvent> {
@@ -585,13 +601,9 @@ export function TradingStrategiesPanel() {
         : nextStrategies[0]?.strategy_id ?? '';
       setSelectedId(nextId);
       const current = nextStrategies.find((item) => item.strategy_id === nextId) ?? null;
-      if (current?.strategy_kind === 'stoch_rsi_5m_v1') {
-        setDraft(null);
-        setStochDraft(structuredClone(current));
-      } else {
-        setStochDraft(null);
-        setDraft(current ? structuredClone(current) : null);
-      }
+      const drafts = editorDrafts(current);
+      setDraft(drafts.draft);
+      setStochDraft(drafts.stochDraft);
       if (current) await refreshDetail(current.strategy_id, current.active_universe_id);
       else {
         setEvents([]);
@@ -635,13 +647,9 @@ export function TradingStrategiesPanel() {
 
   useEffect(() => {
     if (!selected) return;
-    if (selected.strategy_kind === 'stoch_rsi_5m_v1') {
-      setDraft(null);
-      setStochDraft(structuredClone(selected));
-    } else {
-      setStochDraft(null);
-      setDraft(structuredClone(selected));
-    }
+    const drafts = editorDrafts(selected);
+    setDraft(drafts.draft);
+    setStochDraft(drafts.stochDraft);
     setResearchReviews([]);
     void refreshDetail(selected.strategy_id, selected.active_universe_id).catch((error) => {
       setNotice(error instanceof Error ? error.message : String(error));
@@ -695,26 +703,25 @@ export function TradingStrategiesPanel() {
 
   const upgradeToStrictV11 = () => {
     if (!draft) return;
-    setDraft({ ...draft, strategy_version: '1.1.0', config: strictV11Config() });
+    setDraft({ ...draft, strategy_version: '1.1.0', config: keepingOwner(strictV11Config(), draft.config) });
     setNotice('Loaded the strict v1.1 failed-selloff baseline with 5-minute structure and 1-minute execution. Review every value, then save to persist it.');
   };
 
   const loadReviewedV12 = () => {
     if (!draft || !htrPromotionAllowed) return;
-    const config = { ...strictV11Config(), strategy_version: '1.2.0' as const };
+    const config = keepingOwner({ ...strictV11Config(), strategy_version: '1.2.0' as const }, draft.config);
     setDraft({ ...draft, strategy_version: '1.2.0', config });
     setNotice('Loaded gap_pullback_v1 1.2.0. Market-structure defaults remain the strict v1.1 baseline; only the reviewed trading-research-1 policy becomes authoritative. Review and save explicitly.');
   };
 
   const loadFrozenV2 = () => {
     if (!draft) return;
-    const config = frozenV2Config();
     setDraft({
       ...draft,
       strategy_version: '2.0.0',
       mode: 'shadow',
       active_universe_id: null,
-      config,
+      config: keepingOwner(frozenV2Config(), draft.config),
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
     setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode and cleared any selected universe so qualification uses the strategy-owned raw morning archive. Structure: 1m L1→B1→higher-L2, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');
@@ -722,7 +729,7 @@ export function TradingStrategiesPanel() {
 
   const loadFinvizLearningV2 = () => {
     if (!draft) return;
-    const config = finvizLearningV2Config();
+    const config = keepingOwner(finvizLearningV2Config(), draft.config);
     setDraft({
       ...draft,
       strategy_version: '2.0.0',
@@ -1145,7 +1152,9 @@ export function TradingStrategiesPanel() {
       </aside>
 
       <section>
-        {stochDraft ? (
+        {selected?.strategy_kind === 'overnight_shadow_v1' ? (
+          <OvernightShadowSummary strategy={selected} events={events} />
+        ) : stochDraft ? (
           <StochRsi5mEditor
             draft={stochDraft}
             events={events}
@@ -1258,6 +1267,7 @@ export function TradingStrategiesPanel() {
                         },
                       } : current);
                     }}><option value="finviz">Finviz Top Gainers</option><option value="yahoo">Yahoo Day Gainers</option></select></label>
+                    <label><span>Execution owner<small>which task runs it; the order gateway and its checks are the same</small></span><select value={draft.config.execution_owner ?? 'monitor'} onChange={(event) => setConfig('execution_owner', event.target.value as GapPullbackConfig['execution_owner'])}><option value="monitor">Strategy monitor</option><option value="runner_shadow">Monitor, runner shadows (parity)</option><option value="runner">Strategy runner</option></select></label>
                     <label className="toggle-field"><span>Intraday learning<small>research-only dynamic ranking; never order authority</small></span><input type="checkbox" checked={draft.config.intraday_learning_enabled ?? true} onChange={(event) => setDraft({ ...draft, config: { ...draft.config, intraday_learning_enabled: event.target.checked, stoch_trend_capture_enabled: event.target.checked ? draft.config.stoch_trend_capture_enabled : false, intraday_llm_enabled: event.target.checked ? draft.config.intraday_llm_enabled : false } })} /></label>
                     <label className="toggle-field"><span>3m Stoch trend capture<small>first oversold entry; range exit or 25% + trend runner; SHADOW only</small></span><input type="checkbox" checked={draft.config.stoch_trend_capture_enabled ?? false} disabled={!draft.config.intraday_learning_enabled} onChange={(event) => setConfig('stoch_trend_capture_enabled', event.target.checked)} /></label>
                     <label className="toggle-field"><span>Intraday LLM analyst<small>default LLM; interpretation only, never order authority</small></span><input type="checkbox" checked={draft.config.intraday_llm_enabled ?? false} onChange={(event) => setConfig('intraday_llm_enabled', event.target.checked)} /></label>

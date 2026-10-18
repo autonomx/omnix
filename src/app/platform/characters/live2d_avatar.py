@@ -1,6 +1,7 @@
 """Governed Live2D catalog, local installer, and Character avatar activation."""
 from __future__ import annotations
 
+from app.assets.protocol import AssetStore
 import hashlib
 import hmac
 import io
@@ -21,7 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.assets.content import asset_available, materialize_asset
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, default_asset_store
 from app.runtime.paths import resources_data_root
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
@@ -264,7 +265,7 @@ class CharacterLive2DAvatarService:
         self,
         *,
         avatar_service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
-        asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
+        asset_store_factory: Callable[[], AssetStore] = default_asset_store,
         data_root: str | Path | None = None,
         download_bytes: DownloadBytes | None = None,
     ) -> None:

@@ -17,7 +17,8 @@ from app.apps.rpg.session.durable_store import (
     ensure_session_dir,
 )
 from app.apps.rpg.session.migrations import migrate_session_payload
-from app.apps.rpg.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.persistence.rpg_repository import SESSION_SUMMARY_STATE_KEYS
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 
 logger = logging.getLogger(__name__)
 
@@ -86,14 +87,7 @@ def _state_environment_summary(state: Mapping[str, Any]) -> Dict[str, Any]:
     # response: the RPG shell is rendered from this bounded row before a full
     # session is requested.  Keeping these small fields prevents the generic
     # new-game template environment from leaking into a published world.
-    for key in (
-        "location",
-        "current_location",
-        "current_location_id",
-        "current_location_name",
-        "published_world",
-        "environment_snapshot",
-    ):
+    for key in SESSION_SUMMARY_STATE_KEYS:
         value = state.get(key)
         if isinstance(value, (str, int, float, bool, dict)):
             summary[key] = value
@@ -121,7 +115,7 @@ def _summary_from_path(path: Path) -> Dict[str, Any]:
 def list_session_summaries_from_disk(*, limit: int | None = None) -> List[Dict[str, Any]]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.apps.rpg.persistence.rpg_compat import list_session_summaries_from_postgres
+        from app.apps.rpg.session.persistence.session_records import list_session_summaries_from_postgres
         return list_session_summaries_from_postgres(limit=limit)
     """Return bounded session summaries without normalizing full session payloads."""
 

@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.apps.rpg.session.environment_time import advance_environment_time
-from app.apps.rpg.survival import apply_survival_effect
+from app.apps.rpg.rules.survival import apply_survival_effect
 
 DURATION_ACTION_VERSION = "rpg_duration_action_v1"
 MINUTES_PER_DAY = 24 * 60

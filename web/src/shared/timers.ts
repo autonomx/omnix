@@ -27,6 +27,8 @@ export const POLL_INTERVALS_MS = {
   strategyOperations: 30_000,
   /** Trading alerts and their triggers: alert evaluation publishes no events. */
   tradingAlerts: 10_000,
+  /** Watchlist indicator columns: computed from bars on request; nothing publishes them. */
+  watchlistIndicators: 60_000,
   /** Chart bars when the market stream is not delivering (closed or failed stream). */
   chartFallback: 30_000,
   /** A research job's progress (pages read, sources): job progress writes publish no events. */
@@ -37,6 +39,8 @@ export const POLL_INTERVALS_MS = {
   desktopCompanionStatus: 30_000,
   /** A job whose lifecycle events cannot arrive because the event stream is down. */
   jobWithoutEvents: 1_000,
+  /** A desktop Google sign-in finishing in the system browser: the gateway can't push to the window (MarketPulse S-5). */
+  desktopGoogleSignIn: 1_500,
 } as const;
 
 /** Runs `task` every `intervalMs` after the previous run finishes, skipping turns while the page is hidden. */

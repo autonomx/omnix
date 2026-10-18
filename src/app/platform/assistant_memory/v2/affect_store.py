@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.persistence.database import PostgresDatabase, default_database
 
@@ -26,7 +26,7 @@ def _from_row(space: MemorySpaceKey, row: Any) -> AffectObservation:
         affect_id=str(row[0]),
         space=space,
         source_observation_id=str(row[1]),
-        source=str(row[2]),
+        source=cast(Any, str(row[2])),
         observed_at=row[3],
         valence=float(row[4]) if row[4] is not None else None,
         arousal=float(row[5]) if row[5] is not None else None,

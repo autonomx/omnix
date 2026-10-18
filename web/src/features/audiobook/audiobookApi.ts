@@ -64,6 +64,14 @@ export const audiobookApi = {
     if (action === 'resume') return view<unknown>(api.POST('/api/audiobook/projects/{project_id}/render/resume', params));
     return view<unknown>(api.POST('/api/audiobook/projects/{project_id}/render/stop', params));
   },
+  /** Render these waiting chapters first, in this order; the others follow in their current order. */
+  reorderRender: (projectId: string, chapterIds: string[]) =>
+    view<{ render_run_id: string; chapter_ids: string[] }>(api.POST('/api/audiobook/projects/{project_id}/render/order', {
+      params: { path: project(projectId) }, body: { chapter_ids: chapterIds },
+    })),
+  /** Where a finished chapter's audio streams from (seekable). */
+  chapterAudioUrl: (projectId: string, chapterId: string) =>
+    `/api/audiobook/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/audio`,
   job: (projectId: string, jobId: string, action: AudiobookJobAction) => {
     const params = { params: { path: { project_id: projectId, job_id: jobId } } };
     if (action === 'pause') return view<unknown>(api.POST('/api/audiobook/projects/{project_id}/jobs/{job_id}/pause', params));
@@ -82,10 +90,31 @@ export const audiobookApi = {
       params: { path: { project_id: projectId, speaker_id: speakerId } },
       body: { alias },
     })),
+  unconfirmAlias: (projectId: string, speakerId: string, alias: string) =>
+    view<unknown>(api.POST('/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases/unconfirm', {
+      params: { path: { project_id: projectId, speaker_id: speakerId } },
+      body: { alias },
+    })),
+  confirmSuggestedAliases: (projectId: string) =>
+    view<unknown>(api.POST('/api/audiobook/projects/{project_id}/aliases/confirm-suggested', {
+      params: { path: project(projectId) },
+    })),
   assignVoice: (projectId: string, speakerId: string, voiceProfileId: string) =>
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting', {
       params: { path: { project_id: projectId, speaker_id: speakerId } },
       body: { voice_profile_id: voiceProfileId },
+    })),
+  setPerformance: (projectId: string, body: Schemas['BookPerformance-Input']) =>
+    view<{ performance: Schemas['BookPerformance']; changed: boolean }>(api.PUT('/api/audiobook/projects/{project_id}/performance', {
+      params: { path: project(projectId) }, body,
+    })),
+  setAutoDirect: (projectId: string, policy: Schemas['SetAutoDirect']['policy']) =>
+    view<unknown>(api.PUT('/api/audiobook/projects/{project_id}/auto-direct', {
+      params: { path: project(projectId) }, body: { policy },
+    })),
+  directPerformance: (projectId: string, chapterIds: string[] = []) =>
+    view<{ job_id: string }>(api.POST('/api/audiobook/projects/{project_id}/direct-performance', {
+      params: { path: project(projectId) }, body: { chapter_ids: chapterIds },
     })),
   setPronunciation: (projectId: string, body: Schemas['SetPronunciation']) =>
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/pronunciations', { params: { path: project(projectId) }, body })),
@@ -93,6 +122,14 @@ export const audiobookApi = {
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions', {
       params: { path: { project_id: projectId, span_id: spanId } },
       body,
+    })),
+  removeChapterFromAudio: (projectId: string, chapterId: string) =>
+    view<unknown>(api.POST('/api/audiobook/projects/{project_id}/chapters/{chapter_id}/speech-exclusion', {
+      params: { path: { project_id: projectId, chapter_id: chapterId } },
+    })),
+  restoreSpeech: (projectId: string, exclusionId: string) =>
+    view<unknown>(api.DELETE('/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}', {
+      params: { path: { project_id: projectId, exclusion_id: exclusionId } },
     })),
   reviseSpan: (projectId: string, spanId: string, body: Schemas['ReviseSpanAnnotation']) =>
     view<unknown>(api.POST('/api/audiobook/projects/{project_id}/spans/{span_id}/annotation', {

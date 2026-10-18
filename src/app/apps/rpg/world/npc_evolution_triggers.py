@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from app.apps.rpg.world.npc_evolution_state import apply_npc_evolution_event
 from app.apps.rpg.world.npc_reputation_state import get_npc_reputation
-from app.apps.rpg.safe_values import safe_str as _safe_str
+from app.apps.rpg.foundation.safe_values import safe_str as _safe_str
 
 
 def evolve_npc_from_reputation_thresholds(

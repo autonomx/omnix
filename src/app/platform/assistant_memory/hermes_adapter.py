@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.conversation.memory_contracts import MemoryRecord, MemoryScopeContext
 from .settings import load_memory_runtime_settings
 from .service import MemoryService
+from typing import Any, cast
 
 _BEGIN = "<!-- OMNIX MANAGED MEMORY BEGIN -->"
 _END = "<!-- OMNIX MANAGED MEMORY END -->"
@@ -118,8 +119,8 @@ def import_hermes_memory(
                 context,
                 source_session_id=context.session_id,
                 source_message_id=f"hermes:{filename}:{digest}",
-                scope=scope,
-                category=category,
+                scope=cast(Any, scope),
+                category=cast(Any, category),
                 content=content,
                 confidence=0.75,
                 source="hermes",

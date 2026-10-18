@@ -157,7 +157,8 @@ def archive_daily_universe_if_due(
     later provider failure cannot be mistaken for a legitimate source filter.
     """
 
-    if not config.enabled or not config.config.auto_archive_daily_universe:
+    # Kinds without a daily gapper universe (e.g. overnight_shadow_v1) never archive one.
+    if not config.enabled or not getattr(config.config, "auto_archive_daily_universe", False):
         return None
     observed = now or datetime.now(timezone.utc)
     if observed.tzinfo is None:

@@ -114,7 +114,7 @@ def test_approval_requires_the_permission(as_tenant) -> None:
 
 def test_self_approval_without_sign_in_allows_every_risk(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK", raising=False)
-    monkeypatch.delenv("OMNIX_AUTH_MODE", raising=False)
+    monkeypatch.setenv("OMNIX_AUTH_MODE", "disabled")
     require_self_approval_allowed(requested_by="user:local", approver="user:local", risk_level="high")
 
 

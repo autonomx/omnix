@@ -269,7 +269,8 @@ def test_gateway_diagnostics_endpoint_reports_worker_summary() -> None:
     from app.providers.cache_status import ProviderModelCachePayload
 
     with (
-        patch.dict("os.environ", {}, clear=True),
+        # Sign-in is on by default (WP-4.1); this test reads diagnostics.
+        patch.dict("os.environ", {"OMNIX_AUTH_MODE": "disabled"}, clear=True),
         patch(
             "app.composition.gateway.diagnostics.get_provider_model_cache_status",
             return_value=ProviderModelCachePayload(status="ready"),

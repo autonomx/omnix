@@ -1053,7 +1053,7 @@ function buildRpgTurnJobTimelineEvents(jobs: RpgJob[], sessionId: string, player
       const output = firstArray(job.output_refs)
         .map(recordValue)
         .find((candidate) => candidate && firstString(candidate.type, candidate.kind) === 'rpg_turn_response');
-      const response = cleanRpgTurnResponse(firstString(output?.content, output?.text));
+      const response = cleanRpgTurnResponse(rpgTurnOutputText(output));
       const events: TimelineEvent[] = [];
       if (command) {
         events.push({
@@ -1076,6 +1076,15 @@ function buildRpgTurnJobTimelineEvents(jobs: RpgJob[], sessionId: string, player
       }
       return events;
     });
+}
+
+/**
+ * The reply text of an `rpg_turn_response` job output: the gateway's foreground
+ * record carries the turn response (`turn_response`); older outputs carry the text.
+ */
+export function rpgTurnOutputText(output: Record<string, unknown> | undefined): string | undefined {
+  const turn = recordValue(output?.turn_response);
+  return firstString(output?.content, output?.text, turn?.response, turn?.content, recordValue(turn?.visible_response)?.plain_text);
 }
 
 function cleanRpgTurnResponse(response: string | undefined): string | undefined {

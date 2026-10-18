@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha1
 from typing import Any, Dict, List
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 MAX_SIGNAL_AGE_TICKS_DEFAULT = 10  # assume
 

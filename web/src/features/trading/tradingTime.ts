@@ -1,4 +1,11 @@
-import type { Time } from 'lightweight-charts';
+import type { TickMarkType, Time } from 'lightweight-charts';
+
+// lightweight-charts' TickMarkType values, kept here so tests that mock the library still format ticks.
+const YEAR_TICK = 0;
+const MONTH_TICK = 1;
+const DAY_TICK = 2;
+const TIME_TICK = 3;
+const SECONDS_TICK = 4;
 
 export type TradingTimezoneOption = {
   id: string;
@@ -113,19 +120,46 @@ function timeFromChartValue(value: Time): Date {
   return new Date(Date.UTC(value.year, value.month - 1, value.day));
 }
 
-export function formatTradingChartTime(value: Time, timeZone: string): string {
-  return formatTradingTime(timeFromChartValue(value), timeZone);
+/**
+ * The crosshair's time-axis label, as in TradingView: "Fri 09 Oct '26 10:00". Daily and longer bars show
+ * the date alone; bars shorter than a minute add seconds.
+ */
+export function formatTradingChartTime(value: Time, timeZone: string, barSeconds?: number | null): string {
+  const businessDay = typeof value !== 'number';
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: businessDay ? 'UTC' : validTimeZone(timeZone),
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(timeFromChartValue(value))
+    .filter((part) => part.type !== 'literal')
+    .map((part) => [part.type, part.value]));
+  const date = `${parts.weekday} ${parts.day} ${parts.month} '${parts.year}`;
+  if (businessDay || (barSeconds != null && barSeconds >= 86_400)) return date;
+  const seconds = barSeconds != null && barSeconds < 60 ? `:${parts.second}` : '';
+  return `${date} ${parts.hour}:${parts.minute}${seconds}`;
 }
 
-export function formatTradingChartTick(value: Time, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: validTimeZone(timeZone),
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(timeFromChartValue(value));
+/**
+ * A time-axis tick, labelled by its kind (lightweight-charts' TickMarkType): a year tick reads "2025", a month
+ * "Mar", a day "12", a time "2:30 PM". Without a kind, the full "Mar 12, 2:30 PM".
+ */
+export function formatTradingChartTick(value: Time, timeZone: string, tickMarkType?: TickMarkType): string {
+  const kind: number | undefined = tickMarkType;
+  const options: Intl.DateTimeFormatOptions = kind === YEAR_TICK ? { year: 'numeric' }
+    : kind === MONTH_TICK ? { month: 'short' }
+      : kind === DAY_TICK ? { day: 'numeric' }
+        : kind === TIME_TICK ? { hour: 'numeric', minute: '2-digit', hour12: true }
+          : kind === SECONDS_TICK ? { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }
+            : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true };
+  // A business day is a calendar date, not an instant: shifting it into a zone west of UTC would show the day before.
+  const timeZoneOption = typeof value === 'number' ? validTimeZone(timeZone) : 'UTC';
+  return new Intl.DateTimeFormat('en-US', { timeZone: timeZoneOption, ...options }).format(timeFromChartValue(value));
 }
 
 function timezoneParts(value: Date, timeZone: string): Record<string, number> {

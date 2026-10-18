@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
@@ -47,7 +47,7 @@ class BacktestRunRequest(BaseModel):
 
 
 class BacktestListResponse(BaseModel):
-    runs: list[dict[str, object]]
+    runs: list[dict[str, Any]]
 
 
 RepositoryFactory = Callable[[], TradingReplayRepository]
@@ -168,6 +168,6 @@ def create_trading_replay_router(
         response_model=ReplayOrderResult,
     )
     def place_execution_order(request: ReplayOrderRequest):
-        return place_replay_order(request.snapshot, request.order, request.bar)
+        return place_replay_order(request.snapshot, request.order, request.bar, advance_bar=request.advance_bar)
 
     return router

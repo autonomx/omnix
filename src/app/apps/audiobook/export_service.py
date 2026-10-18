@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import time
 import wave
+from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -17,7 +18,7 @@ from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .export import (FORMAT_MIME, ffmetadata,
-                     ffmpeg_binary, ffmpeg_command, ffmpeg_version,
+                     encoded_seconds, ffmpeg_binary, ffmpeg_command, ffmpeg_version,
                      freeze_manifest, manifest_hash)
 from .hashing import canonical_json
 from .leases import JOB_LEASE_SECONDS, lease_heartbeat
@@ -236,6 +237,36 @@ def run_export_once(database: PostgresDatabase, blobs: BlobStore,
         return _export_claimed(database, blobs, context, job, worker_id=worker_id)
 
 
+# How often a running export checks for cancellation and reports progress.
+_EXPORT_POLL_SECONDS = 2.0
+
+
+def _progress_tail(path: Path, size: int = 4096) -> str:
+    """The end of FFmpeg's progress file: it only grows, and the latest block is last."""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(max(0, path.stat().st_size - size))
+            return handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _report_export_progress(
+    database: PostgresDatabase, context: TenantContext, *, job_id: str,
+    worker_id: str, lease_token: str, percent: int, message: str,
+) -> None:
+    with unit_of_work(database) as work:
+        work.jobs.renew_lease(
+            context, job_id=job_id, worker_id=worker_id,
+            lease_token=lease_token, lease_seconds=JOB_LEASE_SECONDS,
+        )
+        work.jobs.update_progress(
+            context, job_id=job_id, worker_id=worker_id, lease_token=lease_token,
+            progress={"current": max(0, min(100, percent)), "total": 100, "message": message},
+        )
+        work.commit()
+
+
 def _export_claimed(
     database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     job: dict[str, Any], *, worker_id: str,
@@ -272,10 +303,15 @@ def _export_claimed(
         executable = ffmpeg_binary()
         if ffmpeg_version(executable) != manifest["encoder"]["version"]:
             raise ValueError("FFmpeg version differs from frozen manifest")
+        book_seconds = sum(float(chapter.get("duration_seconds") or 0) for chapter in manifest["chapters"])
+        report = partial(_report_export_progress, database, context, job_id=job_id,
+                         worker_id=worker_id, lease_token=token)
+        report(percent=0, message="Preparing chapter audio")
         with tempfile.TemporaryDirectory(prefix="omnix-audiobook-",
                                          dir=blobs.scratch_dir()) as temporary:
             root = Path(temporary)
             input_path = _stage_book_input(blobs, assets, root)
+            progress_path = root / "encoder-progress.txt"
             staged_audio_bytes = sum(path.stat().st_size for path in root.glob("chapter-*.wav"))
             metadata_path = root / "chapters.ffmeta"
             output_path = root / f"book.{manifest['format']}"
@@ -289,15 +325,16 @@ def _export_claimed(
                 executable, input_wav=str(input_path),
                 metadata_path=str(metadata_path), output_path=str(output_path),
                 format=manifest["format"], cover_path=cover_path,
-                concat_input=True,
+                concat_input=True, progress_path=str(progress_path),
             )
+            report(percent=0, message=f"Encoding {manifest['format'].upper()}")
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             deadline = time.monotonic() + 7200
             try:
                 while True:
                     try:
-                        return_code = process.wait(timeout=30)
+                        return_code = process.wait(timeout=_EXPORT_POLL_SECONDS)
                         break
                     except subprocess.TimeoutExpired:
                         if time.monotonic() >= deadline:
@@ -313,11 +350,10 @@ def _export_claimed(
                                 )
                                 work.commit()
                                 return True
-                            work.jobs.renew_lease(
-                                context, job_id=job_id, worker_id=worker_id,
-                                lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
-                            )
-                            work.commit()
+                            work.rollback()
+                        encoded = encoded_seconds(_progress_tail(progress_path))
+                        percent = int(99 * encoded / book_seconds) if encoded and book_seconds > 0 else 0
+                        report(percent=percent, message=f"Encoding {manifest['format'].upper()}")
                 if return_code != 0:
                     raise RuntimeError(f"FFmpeg encoder exited with code {return_code}")
             finally:
@@ -326,6 +362,7 @@ def _export_claimed(
                     process.wait()
             if output_path.stat().st_size <= 0:
                 raise ValueError("encoder produced an empty export")
+            report(percent=99, message="Saving export")
             asset_id = f"ab:export-audio:{uuid4().hex}"
             export_id = f"ab:export:{uuid4().hex}"
             storage_key = f"audiobook/export/{uuid4().hex}.{manifest['format']}"

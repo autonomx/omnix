@@ -17,7 +17,7 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v9"
+EXTRACTOR_VERSION = "audiobook-extractor-v10"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 10_000
@@ -42,6 +42,15 @@ _TOC_CHAPTER_ENTRY = re.compile(
     r"(?:\.{2,}|\s{2,})\s*\d{1,4}\s*$",
     re.IGNORECASE,
 )
+_CHAPTER_KEY = re.compile(r"^chapter\s+(\d+|[ivxlcdm]+|[a-z]+)\b", re.IGNORECASE)
+# "Chapter 1:" (or "Chapter One") with its title on the next line.
+_BARE_CHAPTER_HEADING = re.compile(
+    r"^chapter\s+(?:\d+|[ivxlcdm]+|[a-z]+)\s*[:.\-\u2013\u2014]?\s*$", re.IGNORECASE,
+)
+# A table of contents lists chapters by title only: an entry's section is a line
+# or two. Real chapters are far longer, so this bound separates the two.
+_TOC_ENTRY_MAX_CHARS = 600
+_SUBTITLE_MAX_CHARS = 90
 
 
 class UnsupportedSource(ValueError):
@@ -188,18 +197,67 @@ def _is_chapter_heading(line: str) -> bool:
     return bool(match and match.group(1).casefold() in _CHAPTER_NUMBER_WORDS)
 
 
+def _chapter_key(line: str) -> str | None:
+    match = _CHAPTER_KEY.match(line.strip())
+    return match.group(1).casefold() if match else None
+
+
+def _table_of_contents_headings(lines: list[str], headings: list[int]) -> set[int]:
+    """Chapter headings that are table-of-contents entries, not chapter starts.
+
+    An entry names a chapter that begins again later in the book, and the text
+    up to the next heading is only a line or two. Entries come in runs, so a
+    lone short chapter whose number recurs is still treated as a chapter.
+    """
+    candidates: list[bool] = []
+    for position, index in enumerate(headings):
+        key = _chapter_key(lines[index])
+        end = headings[position + 1] if position + 1 < len(headings) else len(lines)
+        section = "".join(lines[index + 1:end]).strip()
+        recurs = key is not None and any(_chapter_key(lines[later]) == key for later in headings[position + 1:])
+        candidates.append(recurs and len(section) <= _TOC_ENTRY_MAX_CHARS)
+    return {
+        index for position, index in enumerate(headings)
+        if candidates[position] and (
+            (position > 0 and candidates[position - 1])
+            or (position + 1 < len(candidates) and candidates[position + 1])
+        )
+    }
+
+
+def _heading_title(lines: list[str], index: int) -> str:
+    """The chapter's title, joining "Chapter 1:" with a subtitle on the next line."""
+    heading = " ".join(lines[index].strip().lstrip("# ").split())
+    if not _BARE_CHAPTER_HEADING.match(heading):
+        return heading
+    following = next((line for line in lines[index + 1:index + 4] if line.strip()), "")
+    subtitle = " ".join(following.split())
+    if not subtitle or len(subtitle) > _SUBTITLE_MAX_CHARS or _is_chapter_heading(subtitle):
+        return heading
+    # With a colon or dash the next line is the title; without one, a full
+    # sentence is more likely the chapter's first line of prose.
+    labelled = heading.endswith((":", "-", "\u2013", "\u2014"))
+    if not labelled and subtitle.endswith((".", "!", "?", '"', "\u201d")) and not subtitle.endswith("..."):
+        return heading
+    label = heading.rstrip(":.-\u2013\u2014 ")
+    return f"{label}: {subtitle}"
+
+
 def _text_chapters(content: str) -> list[tuple[str, str]]:
+    lines = content.splitlines(keepends=True)
+    headings = [index for index, line in enumerate(lines) if _is_chapter_heading(line.strip())]
+    # Table-of-contents entries stay inside the surrounding region, where the
+    # document-structure stage classifies and skips them.
+    starts = set(headings) - _table_of_contents_headings(lines, headings)
     chapters: list[tuple[str, str]] = []
     title = "Opening"
     current: list[str] = []
-    for line in content.splitlines(keepends=True):
-        stripped = line.strip()
-        is_heading = _is_chapter_heading(stripped)
-        if is_heading and current:
-            chapters.append((title, "".join(current)))
-            current = []
-        if is_heading:
-            title = stripped.lstrip("# ") or title
+    for index, line in enumerate(lines):
+        if index in starts:
+            if current:
+                chapters.append((title, "".join(current)))
+                current = []
+            title = _heading_title(lines, index) or title
         current.append(line)
     if current:
         chapters.append((title, "".join(current)))
@@ -329,11 +387,15 @@ def _pdf_outline_chapters(reader: object, pages: list[tuple[int, str]]) -> list[
             if isinstance(item, (list, tuple)):
                 walk(item)
                 continue
+            # One broken bookmark (no destination page) must not discard the rest.
             try:
                 title = str(item.title).strip()
-                number = reader.get_destination_page_number(item) + 1
-            except (AttributeError, KeyError, ValueError):
+                page_index = reader.get_destination_page_number(item)
+            except (AttributeError, KeyError, ValueError, TypeError):
                 continue
+            if page_index is None:
+                continue
+            number = page_index + 1
             text = included.get(number)
             if not title or text is None:
                 continue
@@ -443,11 +505,10 @@ def _pdf_chapters(
         chapters = _text_chapters("\n\n".join(text for _, text in pages))
         # A title page may share the first physical page with Chapter One. Keep
         # that text, but do not expose the short title-page fragment as a
-        # separate chapter when the first page already contains a real heading.
+        # separate chapter when the first real chapter starts on the first page
+        # (a table of contents listing chapters there does not count).
         if len(chapters) > 1 and chapters[0][0] == "Opening":
-            first_page_has_heading = any(
-                _is_chapter_heading(line.strip()) for line in pages[0][1].splitlines()
-            )
+            first_page_has_heading = len(chapters[0][1].strip()) <= len(pages[0][1])
             if first_page_has_heading:
                 first_title, first_text = chapters[1]
                 chapters = [(first_title, chapters[0][1] + first_text), *chapters[2:]]

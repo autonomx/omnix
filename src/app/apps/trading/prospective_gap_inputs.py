@@ -144,17 +144,68 @@ def fetch_handoff_from_github(session_date: date) -> tuple[str, str] | None:
     return fetch_from_github(HANDOFF_PATH.format(session=session_date.isoformat()))
 
 
-def fetch_from_github(path: str) -> tuple[str, str] | None:
-    """A file from the configured repository and ref, as (content, source); None if absent."""
-    gh = shutil.which("gh")
-    if not gh:
-        raise RuntimeError("prospective_gap_handoff_import_requires_github_cli")
+def github_repository() -> tuple[str, str]:
+    """The configured research repository and ref."""
     repository = env_str("OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY", "autonomx/omnix").strip()
     ref = env_str("OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF", "main").strip()
     if repository.count("/") != 1 or not all(repository.split("/", 1)):
         raise ValueError("invalid_prospective_gap_github_repository")
     if not ref:
         raise ValueError("invalid_prospective_gap_github_ref")
+    return repository, ref
+
+
+def github_token() -> str:
+    """The read-only repository token from the protected store or the environment; empty when none is set."""
+    from app.security.provider_secret_store import load_trading_provider_secrets
+
+    return str((load_trading_provider_secrets().get("prospective_gap_github") or {}).get("token") or "").strip()
+
+
+def fetch_from_github(path: str) -> tuple[str, str] | None:
+    """A file from the configured repository and ref, as (content, source); None if absent.
+
+    Uses the gh CLI when it is installed; otherwise GitHub's REST API, with the
+    stored read-only token when there is one (MarketPulse S-7). A private
+    repository read without a token answers 404, which is "not published".
+    """
+    repository, ref = github_repository()
+    gh = shutil.which("gh")
+    payload = _fetch_with_gh(gh, repository, ref, path) if gh else _fetch_with_http(repository, ref, path)
+    if payload is None:
+        return None
+    if payload.get("encoding") != "base64":
+        raise ValueError("prospective_gap_remote_inbox_requires_base64_content")
+    encoded = str(payload.get("content") or "").replace("\n", "")
+    try:
+        content = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except Exception as exc:
+        raise ValueError("prospective_gap_remote_inbox_invalid_base64") from exc
+    return content, f"github:{repository}@{ref}:{path}:{payload.get('sha', '')}"
+
+
+def _fetch_with_http(repository: str, ref: str, path: str) -> dict[str, Any] | None:
+    import httpx
+
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    token = github_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    response = httpx.get(
+        f"https://api.github.com/repos/{repository}/contents/{path}",
+        params={"ref": ref},
+        headers=headers,
+        timeout=15.0,
+        follow_redirects=False,
+    )
+    if response.status_code == 404:
+        return None
+    if response.status_code != 200:
+        raise RuntimeError(f"prospective_gap_remote_inbox_fetch_failed:http_{response.status_code}")
+    return response.json()
+
+
+def _fetch_with_gh(gh: str, repository: str, ref: str, path: str) -> dict[str, Any] | None:
     completed = subprocess.run(
         [gh, "api", f"repos/{repository}/contents/{path}?ref={ref}"],
         capture_output=True,
@@ -170,15 +221,7 @@ def fetch_from_github(path: str) -> tuple[str, str] | None:
         if "404" in detail or "Not Found" in detail:
             return None
         raise RuntimeError(f"prospective_gap_remote_inbox_fetch_failed:{detail}")
-    payload = json.loads(completed.stdout)
-    if payload.get("encoding") != "base64":
-        raise ValueError("prospective_gap_remote_inbox_requires_base64_content")
-    encoded = str(payload.get("content") or "").replace("\n", "")
-    try:
-        content = base64.b64decode(encoded, validate=True).decode("utf-8")
-    except Exception as exc:
-        raise ValueError("prospective_gap_remote_inbox_invalid_base64") from exc
-    return content, f"github:{repository}@{ref}:{path}:{payload.get('sha', '')}"
+    return json.loads(completed.stdout)
 
 
 def handoff_import_enabled() -> bool:

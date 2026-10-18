@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
-import { createRpgWorkspaceState, progressPercent, safeSessionId } from './rpgUiState';
+import { createRpgWorkspaceState, progressPercent, rpgTurnOutputText, safeSessionId } from './rpgUiState';
 import { fixture } from '../../test/fixture';
 
 describe('rpg UI state', () => {
@@ -738,5 +738,17 @@ describe('rpg UI state', () => {
     expect(progressPercent({ current: 3, total: 4 })).toBe(75);
     expect(progressPercent({ current: 9, total: 4 })).toBe(100);
     expect(progressPercent({ current: 1, total: 0 })).toBe(0);
+  });
+});
+
+describe('rpgTurnOutputText', () => {
+  it('reads the reply from the foreground record the gateway completes', () => {
+    expect(rpgTurnOutputText({ type: 'rpg_turn_response', turn_response: { response: 'The door creaks open.' } })).toBe('The door creaks open.');
+    expect(rpgTurnOutputText({ type: 'rpg_turn_response', turn_response: { visible_response: { plain_text: 'Rain falls.' } } })).toBe('Rain falls.');
+  });
+
+  it('still reads outputs that carry the text', () => {
+    expect(rpgTurnOutputText({ type: 'rpg_turn_response', content: 'You see a door.' })).toBe('You see a door.');
+    expect(rpgTurnOutputText(undefined)).toBeUndefined();
   });
 });

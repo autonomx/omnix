@@ -1,8 +1,8 @@
 import json
 
-from app.apps.rpg.social.leverage import add_social_leverage
-from app.apps.rpg.social.reputation import set_global_reputation, set_relationship_values
-from app.apps.rpg.social.state import normalize_social_state
+from app.apps.rpg.world.social.leverage import add_social_leverage
+from app.apps.rpg.world.social.reputation import set_global_reputation, set_relationship_values
+from app.apps.rpg.world.social.state import normalize_social_state
 
 
 def test_social_state_json_roundtrip():

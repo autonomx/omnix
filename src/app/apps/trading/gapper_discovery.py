@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -87,7 +87,7 @@ def _yahoo_chart_volume_evidence(
     evaluation_et = evaluation_time.astimezone(_ET)
     current_date = evaluation_et.date()
     same_clock = evaluation_et.timetz().replace(tzinfo=None)
-    cumulative_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
+    cumulative_by_date: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
     premarket_volume = Decimal("0")
     for index, raw_timestamp in enumerate(timestamps):
         if index >= len(volumes):

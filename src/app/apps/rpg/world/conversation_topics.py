@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.apps.rpg.world.location_registry import current_location_id, get_location
-from app.apps.rpg.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.rules.location_registry import current_location_id, get_location
+from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -313,16 +313,16 @@ def conversation_topics_for_state(
     exclude_event_ids: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
     settings = _safe_dict(settings)
-    exclude_event_ids = set(exclude_event_ids or [])
+    excluded_event_ids = set(exclude_event_ids or [])
     topics: List[Dict[str, Any]] = []
     topics.extend(_quest_topics(simulation_state, settings))
     topics.extend(_journal_topics(simulation_state, settings))
     event_topics = _world_event_topics(simulation_state, settings)
-    if exclude_event_ids:
+    if excluded_event_ids:
         event_topics = [
             topic
             for topic in event_topics
-            if _safe_str(topic.get("source_id")) not in exclude_event_ids
+            if _safe_str(topic.get("source_id")) not in excluded_event_ids
         ]
     topics.extend(event_topics)
     topics.extend(_memory_topics(simulation_state, settings))

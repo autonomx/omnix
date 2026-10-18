@@ -141,7 +141,8 @@ class Topology:
                 "OMNIX_JOB_WORKER_POOLS": "cpu=2",
             }
         )
-        env.pop("OMNIX_AUTH_MODE", None)
+        # The load measures drain and upgrade, not sign-in (on by default): its requests carry no session.
+        env["OMNIX_AUTH_MODE"] = "disabled"
         if role == "job-worker":
             env.pop("OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME", None)
         env.update(extra or {})
@@ -303,10 +304,15 @@ def _is_draining(response: httpx.Response) -> bool:
 def _apply_n1_migration(database_url: str, workdir: Path) -> list[str]:
     sys.path.insert(0, str(SRC))
     os.environ["OMNIX_DATABASE_URL"] = database_url
-    from app.persistence.migrations import apply_migrations, migration_root
+    from app.persistence.migrations import apply_migrations, migration_roots
 
+    # Release N+1: every migration folder (kernel and modules, PA-2.3) plus the probe, in one folder;
+    # versions are unique across folders.
     root = workdir / "migrations-n1"
-    shutil.copytree(migration_root(), root)
+    root.mkdir(parents=True, exist_ok=True)
+    for folder in migration_roots():
+        for path in folder.glob("*.sql"):
+            shutil.copy2(path, root / path.name)
     (root / PROBE_MIGRATION).write_text(PROBE_SQL, encoding="utf-8")
     status = apply_migrations(root=root)
     return list(status.get("applied_now") or [])

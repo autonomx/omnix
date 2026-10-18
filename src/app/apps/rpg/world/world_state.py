@@ -230,7 +230,8 @@ class WorldState:
         Returns:
             Tuple with entities in sorted order.
         """
-        return tuple(sorted([a, b]))
+        first, second = sorted([a, b])
+        return (first, second)
         
     # =========================================================
     # SERIALIZATION (FOR LLM PROMPTS)

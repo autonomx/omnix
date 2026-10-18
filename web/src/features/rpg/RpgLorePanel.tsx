@@ -2,85 +2,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api/gateway';
 
-interface LoreDocumentSummary {
-  document_id: string;
-  title: string;
-  topic_id: string;
-  category: string;
-  summary_120: string;
-  summary_500: string;
-  keywords: string[];
-  visibility: string;
-  status: string;
-  canon_revision: number;
-}
+import type { components } from './api/generated';
+type LoreDocumentSummary = components['schemas']['RpgLoreDocumentSummary'];
 
 interface LoreDocumentDetail extends LoreDocumentSummary {
   full_text: string;
 }
 
-interface GenerationJob {
-  topic_id?: string;
-  status?: string;
-  generator_role?: string;
-  output_counts?: Record<string, number>;
-  error?: string;
-}
+type LoreDossier = components['schemas']['RpgLoreDossier'];
 
-interface LoreDossier {
-  id: string;
-  kind: 'npc' | 'location' | 'faction';
-  name: string;
-  status: string;
-  appearance?: string;
-  personality?: string;
-  speech_style?: string;
-  role?: string;
-  location_id?: string;
-  faction_ids?: string[];
-  region_id?: string;
-  sensory_profile?: string;
-  description?: string;
-  services?: string[];
-  values?: string[];
-  public_goal?: string;
-  goals?: string[];
-}
-
-interface LoreStorage {
-  mode?: string;
-  persisted?: boolean;
-  revision?: number;
-  generated_current_location?: boolean;
-  generated_document_id?: string | null;
-  current_location?: { id?: string; name?: string } | null;
-  error?: string;
-}
-
-interface LoreResponse {
-  ok: boolean;
-  session_id: string;
-  canon_revision: number;
-  content_hash: string;
-  categories: Array<{ label: string; documents: LoreDocumentSummary[] }>;
-  visible_count: number;
-  hidden_count: number;
-  dossiers?: {
-    characters: LoreDossier[];
-    locations: LoreDossier[];
-    factions: LoreDossier[];
-  };
-  generation?: {
-    status?: string;
-    stage?: string;
-    launch_ready?: boolean;
-    percent?: number;
-    completed_jobs?: number;
-    total_jobs?: number;
-    jobs?: GenerationJob[];
-  };
-  storage?: LoreStorage;
-}
+type LoreResponse = components['schemas']['RpgCampaignLoreResponse'];
 
 interface RpgLorePanelProps {
   labelledById?: string;

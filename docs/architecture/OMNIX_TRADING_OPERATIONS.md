@@ -38,6 +38,9 @@ The paper monitor owns market observations and manual paper stop/target protecti
 - `OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS` controls the polling interval with a five-second minimum.
 - In `legacy_test` mode, enable only with `OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS=1`.
 - Strategy runtime modes are `off`, `shadow`, and `auto_paper`. There is no live-broker mode.
+- Live evaluation stops once the session settles, 30 minutes after the regular close (`regular_session_settled`; 13:30 ET on early-close days): the session's bars are final, so every later pass would repeat the last one, provider requests included. Protections are still reconciled every cycle, and skipped passes log `strategy_cycle_skipped` with reason `session_settled`. The deep-recovery and execution-observation monitors stop at the same point; post-close research (interday discovery, AI shadow labelling, overnight shadow) is unaffected.
+- Every pass logs `monitor_pass_timing`: seconds per strategy, configurations left unfinished, and the bar-recovery work done meanwhile (calls and seconds per stage: primary fetch, saved Yahoo evidence, Yahoo exact repair, IBKR, IEX, and tapes reused). A pass starts no new configuration after 80% of its timeout; configurations it did not finish, including any interrupted by the timeout, run first in the next pass.
+- Strategies share each stock's repaired bar tape within a clock minute (`TradingMarketDataService.recovered_bars`): a live copy that already holds the latest expected bar, or was taken at least 20 s into the minute, is reused instead of running the provider chain again. Before its candidate loop, each pass warms the tape four stocks at a time. Replays and explicit knowledge cutoffs never reuse a tape. The service's diagnostics report the per-stage totals under `bar_recovery`.
 
 ### Provider configuration
 
@@ -172,6 +175,8 @@ Catalyst context is an evidence pipeline, not an LLM opinion field.
 - No AI output can authorize an order. Two research paths do reach `strategy_monitor.py`, and both are bounded:
   - The intraday LLM (`intraday_llm_enabled`) runs as a research annotation beside the strategy cycle. Proposals never wait for it, and its assessments are recorded as `intraday_llm` events only.
   - For gap pullback `1.2.0`, the reviewed research policy (HTR) can block an entry through its hard gates. It changes the setup quality score only when the strategy sets `research_score_adjustment_enabled`. That setting is off by default. Changing it is a strategy update, which needs `trading:strategies:admin` and is audited. Every `research_policy` event records the proposed adjustment and whether it was applied.
+
+Every research model call (intraday LLM, AI shadow v2/v3) counts against a daily budget, `OMNIX_TRADING_AI_DAILY_CALL_BUDGET` (default 400 calls per Eastern-time day, shared by all processes through the evidence session counters; 0 turns it off). The intraday LLM, which live strategy passes read, may use the whole budget; the AI shadow arms (and any analyzer not listed) stop at 60%. A call over its tier's share fails with `trading_ai_budget_exhausted` before reaching the provider. The Claude CLI receives each analyzer's JSON schema (`--json-schema`), so its replies are validated against the contract instead of guessed from the prompt.
 
 Use only sources whose access, retention, and redistribution terms are appropriate for the configured environment. Source acquisition adapters may be added separately; the evidence boundary must remain immutable and timestamped.
 

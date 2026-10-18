@@ -509,8 +509,9 @@ class PostgresLegacyImporter:
                 )
             return "omnix_characters", stable_id, None
         if entity_type == "memory_records":
-            work.memories.create(context, {**item, "id": stable_id})
-            return "omnix_memory_records", stable_id, None
+            # Curated memory lives in Memory v2 (WP-8.5); the record is not part of this transaction.
+            legacy_import("assistant-memory.record")(work, context, stable_id, item)
+            return "omnix_memory_v2_observations", stable_id, None
         if entity_type == "chat_sessions":
             messages = list(item.get("messages") or [])
             payload = dict(item)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.apps.rpg.narrative_engine import (
+from app.apps.rpg.narration.narrative_engine import (
     AuthorityClass,
     BeatKind,
     BeatPurpose,
@@ -20,8 +20,8 @@ from app.apps.rpg.narrative_engine import (
     VisibilityClass,
     canonical_response_from_dict,
 )
-from app.apps.rpg.narrative_engine.validation import write_validate_repair
-from app.apps.rpg.narrative_engine.writer import WriterResult
+from app.apps.rpg.narration.narrative_engine.validation import write_validate_repair
+from app.apps.rpg.narration.narrative_engine.writer import WriterResult
 
 
 class _Writer:
@@ -293,7 +293,7 @@ def test_required_provider_prose_that_fails_validation_publishes_marked_fallback
 
 
 def test_prose_that_fails_the_checks_is_revised_once_with_the_failed_checks() -> None:
-    from app.apps.rpg.narrative_engine.writer import writer_payload
+    from app.apps.rpg.narration.narrative_engine.writer import writer_payload
 
     unsupported = ClaimAssertion(
         claim_id="claim:bridge",

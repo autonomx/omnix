@@ -16,6 +16,7 @@ from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import unit_of_work
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,8 @@ class MemoryJobExecution:
             self.lease_token = None
         self._stop = threading.Event()
         self._lost = threading.Event()
-        self._thread = None
-        self._work = None
+        self._thread: threading.Thread | None = None
+        self._work: Any = None
         self._completed = False
 
     def __enter__(self):

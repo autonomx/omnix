@@ -579,3 +579,189 @@ def test_global_metrics_merge_concurrent_process_deltas(tmp_path) -> None:
     assert diagnostics["acquisition_attempt_count"] == 2
     assert diagnostics["acquisition_success_count"] == 2
     assert diagnostics["acquisition_symbol_count"] == 2
+
+
+def test_live_tape_is_shared_within_the_minute_but_not_across_minutes_or_replays(tmp_path) -> None:
+    session_date = date(2026, 9, 17)
+    registry = _RecoveryRegistry(session_date)
+    service = TradingMarketDataService(registry=registry, yahoo_evidence_store=_store(tmp_path))
+
+    def recover(hh, mm, ss, **kwargs):
+        return service.recovered_bars(
+            INSTRUMENT, "1m", 500, "yahoo:test", session_date=session_date,
+            as_of=datetime(2026, 9, 17, hh, mm, ss, tzinfo=ET), **kwargs,
+        )
+
+    def chains() -> int:
+        return service.recovery_metrics.snapshot()["total"]["calls"]
+
+    first = recover(9, 33, 10)
+    assert recover(9, 33, 40) is first  # another strategy, same minute: no provider calls
+    assert chains() == 1
+    recover(9, 33, 50, knowledge_mode="causal_replay")  # a replay never reuses live tapes
+    assert chains() == 2
+    recover(9, 34, 5)  # a new minute can hold a new bar
+    assert chains() == 3
+    assert service.recovery_metrics.snapshot()["reused"]["calls"] == 1
+
+
+def test_a_tape_missing_the_latest_bar_is_shared_only_late_in_the_minute(tmp_path) -> None:
+    session_date = date(2026, 9, 17)
+    registry = _RecoveryRegistry(session_date)  # has 09:30-09:32 only, so 09:33 is missing at 09:34
+    service = TradingMarketDataService(registry=registry, yahoo_evidence_store=_store(tmp_path))
+
+    def recover(ss):
+        return service.recovered_bars(
+            INSTRUMENT, "1m", 500, "yahoo:test", session_date=session_date,
+            as_of=datetime(2026, 9, 17, 9, 34, ss, tzinfo=ET),
+        )
+
+    def chains() -> int:
+        return service.recovery_metrics.snapshot()["total"]["calls"]
+
+    recover(5)
+    recover(10)  # early in the minute the missing bar may still be in flight: fetch again
+    assert chains() == 2
+    late = recover(25)
+    assert recover(40) is late  # 25 s in, a missing bar means no trade: share it
+    assert chains() == 3
+
+
+def test_prefetch_warms_the_tape_the_strategy_loop_then_reads(tmp_path) -> None:
+    session_date = date(2026, 9, 17)
+    registry = _RecoveryRegistry(session_date)
+    service = TradingMarketDataService(registry=registry, yahoo_evidence_store=_store(tmp_path))
+    as_of = datetime(2026, 9, 17, 9, 33, 10, tzinfo=ET)
+
+    service.prefetch_recovered_bars(
+        [(INSTRUMENT, "1m", 500, "yahoo:test")] * 3, session_date=session_date, as_of=as_of,
+    )
+    assert service.recovery_metrics.snapshot()["total"]["calls"] == 1  # duplicates are fetched once
+    service.recovered_bars(
+        INSTRUMENT, "1m", 500, "yahoo:test", session_date=session_date, as_of=as_of + timedelta(seconds=5),
+    )
+    assert service.recovery_metrics.snapshot()["total"]["calls"] == 1
+    assert service.recovery_metrics.snapshot()["reused"]["calls"] == 1
+
+
+def test_ibkr_repair_uses_aligned_blocks_and_skips_blocks_without_trades(tmp_path) -> None:
+    from app.apps.trading.providers.errors import ProviderDataUnavailableError
+    from app.apps.trading.service import _aligned_repair_blocks
+
+    session_date = date(2026, 9, 17)
+    open_utc = datetime(2026, 9, 17, 9, 30, tzinfo=ET).astimezone(timezone.utc)
+    minute = timedelta(minutes=1)
+
+    # Blocks stay put as gaps grow, and never reach past the last completed minute.
+    through = open_utc + 21 * minute
+    assert _aligned_repair_blocks({open_utc + 3 * minute}, through=through) == [(open_utc, open_utc + 15 * minute)]
+    assert _aligned_repair_blocks({open_utc + 3 * minute, open_utc + 4 * minute, open_utc + 16 * minute}, through=through) == [
+        (open_utc, open_utc + 15 * minute), (open_utc + 15 * minute, through),
+    ]
+
+    def ibkr_bar(offset: int) -> MarketBar:
+        return _bar(session_date, offset).model_copy(update={"provider": "ibkr"})
+
+    class _Ibkr:
+        runtime = SimpleNamespace(enabled=True, recovery_authority_enabled=True)
+
+        def __init__(self) -> None:
+            self.calls = []
+
+        def get_intraday_bars_range(self, instrument_id, *, start, end, include_extended_hours=True, cancellation=None):
+            self.calls.append((start, end))
+            if start == open_utc:
+                raise ProviderDataUnavailableError("IBKR returned no 1m TRADES bars")
+            return SimpleNamespace(bars=[ibkr_bar(15), ibkr_bar(16)])
+
+        def get_binding(self, instrument_id):
+            return SimpleNamespace(binding_id="ibkr:test")
+
+    class _Registry(_RecoveryRegistry):
+        def __init__(self, session_date):
+            super().__init__(session_date)
+            self.ibkr = _Ibkr()
+
+        def provider(self, provider_id):
+            return self.ibkr if provider_id == "ibkr" else super().provider(provider_id)
+
+        def bars(self, instrument_id, interval, limit, binding_id=None, cancellation=None):
+            self.primary_calls += 1
+            return SimpleNamespace(bars=[_bar(self.session_date, offset) for offset in (0, 1, 2, 17, 18, 19, 20)])
+
+    registry = _Registry(session_date)
+    service = TradingMarketDataService(registry=registry, yahoo_evidence_store=_store(tmp_path))
+    recovered = service.recovered_bars(
+        INSTRUMENT, "1m", 500, "yahoo:test", session_date=session_date,
+        as_of=datetime(2026, 9, 17, 9, 51, 30, tzinfo=ET),
+    )
+
+    # The empty first block no longer abandons the second one.
+    assert registry.ibkr.calls == [
+        (open_utc, open_utc + 15 * minute), (open_utc + 15 * minute, open_utc + 21 * minute),
+    ]
+    assert recovered.report.ibkr_repair_applied_count == 2
+
+
+class _UnfillableMinuteRegistry(_RecoveryRegistry):
+    """09:31 never traded (a halt, or no prints): Yahoo has no bar for it, now or later."""
+
+    def __init__(self, session_date: date, *, repair_error: Exception | None = None) -> None:
+        super().__init__(session_date)
+        self.repair_error = repair_error
+        registry = self
+
+        class _EmptyRepair(_YahooRepairProvider):
+            def get_intraday_bars_range(self, instrument_id, *, start, end, include_extended_hours=True, cancellation=None):
+                self.calls += 1
+                if registry.repair_error is not None:
+                    raise registry.repair_error
+                return SimpleNamespace(bars=[])
+
+        self.yahoo = _EmptyRepair(session_date)
+
+    def bars(self, instrument_id, interval, limit, binding_id=None, cancellation=None):
+        self.primary_calls += 1
+        return SimpleNamespace(bars=[_bar(self.session_date, minute) for minute in range(30) if minute != 1])
+
+    def execution_indicator_bars(self, *args, **kwargs):
+        raise RuntimeError("no IEX in this test")
+
+
+def _recover_at(service, session_date, hh, mm, ss=10):
+    return service.recovered_bars(
+        INSTRUMENT, "1m", 500, "yahoo:test", session_date=session_date,
+        as_of=datetime(2026, 9, 17, hh, mm, ss, tzinfo=ET),
+    )
+
+
+def test_a_settled_minute_yahoo_could_not_fill_is_not_asked_for_every_cycle(tmp_path) -> None:
+    session_date = date(2026, 9, 17)
+    registry = _UnfillableMinuteRegistry(session_date)
+    service = TradingMarketDataService(registry=registry, yahoo_evidence_store=_store(tmp_path))
+
+    first = _recover_at(service, session_date, 9, 42)
+    assert [gap.start.astimezone(ET).minute for gap in first.report.unresolved_gaps] == [31]
+    assert registry.yahoo.calls == 1
+    for minute in (43, 44, 45):
+        later = _recover_at(service, session_date, 9, minute)
+        # Still reported as a gap; just not re-requested from Yahoo.
+        assert [gap.start.astimezone(ET).minute for gap in later.report.unresolved_gaps] == [31]
+    assert registry.yahoo.calls == 1
+
+
+def test_a_fresh_gap_or_a_failed_repair_is_asked_for_again(tmp_path) -> None:
+    session_date = date(2026, 9, 17)
+    # 09:31 closed at 09:32: within the settle window at 09:34, Yahoo may still publish it.
+    fresh = _UnfillableMinuteRegistry(session_date)
+    service = TradingMarketDataService(registry=fresh, yahoo_evidence_store=_store(tmp_path / "fresh"))
+    _recover_at(service, session_date, 9, 34)
+    _recover_at(service, session_date, 9, 35)
+    assert fresh.yahoo.calls == 2
+
+    # A request that failed proves nothing about the bucket.
+    failing = _UnfillableMinuteRegistry(session_date, repair_error=RuntimeError("yahoo 429"))
+    service = TradingMarketDataService(registry=failing, yahoo_evidence_store=_store(tmp_path / "failing"))
+    _recover_at(service, session_date, 9, 42)
+    _recover_at(service, session_date, 9, 43)
+    assert failing.yahoo.calls == 2

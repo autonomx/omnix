@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 _LOCK = threading.RLock()
 _COUNTERS: Counter[str] = Counter()
-_TOTALS: Counter[str] = Counter()
+_TOTALS: defaultdict[str, float] = defaultdict(float)
 _MAXIMA: dict[str, float] = {}
 _LATEST_USAGE: dict[str, "MemoryUsageResponse"] = {}
 _MAX_METRIC_KEYS = 2048
