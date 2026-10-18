@@ -160,6 +160,8 @@ role to permission list; `owner` cannot be changed).
 | POST | `/api/jobs/{job_id}/cancel` | `jobs:cancel` |
 | PUT | `/api/trading/execution/providers/alpaca-iex/credentials` | `trading:control` |
 | PUT | `/api/trading/market-data/providers/coinmarketcap/credentials` | `trading:control` |
+| PUT | `/api/trading/market-data/providers/ibkr/web-api/credentials` | `trading:control` |
+| POST | `/api/trading/market-data/providers/ibkr/web-api/keys` | `trading:control` |
 | POST | `/api/trading/paper/accounts/{account_id}/orders` | `trading:paper:order` |
 | DELETE | `/api/trading/paper/accounts/{account_id}/orders/{order_id}` | `trading:paper:order` |
 | POST | `/api/trading/paper/accounts/{account_id}/orders/{order_id}/replace` | `trading:paper:order` |

@@ -5,10 +5,12 @@ from app.config.env import env_str as _env_str
 
 logger = logging.getLogger(__name__)
 
-"""Process-wide IBKR Gateway transport and runtime.
+"""Process-wide IBKR transport and runtime.
 
-The official IBKR Python client is intentionally optional. Omnix never stores an
-IBKR username, password, or API key; authentication remains inside IB Gateway.
+IBKR is reached through IB Gateway with the official Python client, which is
+intentionally optional and keeps authentication inside Gateway, or through
+IBKR's Web API with OAuth keys (``ibkr_web_api.py``), held in the OS-protected
+provider secret store. Omnix never stores an IBKR username or password.
 Unit tests use FakeIbkrTransport so CI does not require Gateway or IBKR's local
 TWS API installation.
 """
@@ -869,6 +871,7 @@ class IbkrRuntime:
             "runtime_arguments",
         )
         self._settings_source = settings_source
+        self.connection = resolved_settings.connection
         self.host = resolved_settings.host
         self.port = resolved_settings.port
         self.client_id = resolved_settings.client_id
@@ -914,9 +917,15 @@ class IbkrRuntime:
             or self.port != settings.port
             or self.client_id != settings.client_id
             or self.enabled != settings.enabled
+            or self.connection != settings.connection
         )
         if changed and self.is_connected():
             self.disconnect()
+        if self.connection != settings.connection and self.transport is not None:
+            # The other connection needs its own transport.
+            self.disconnect()
+            self.transport = None
+        self.connection = settings.connection
         self.host = settings.host
         self.port = settings.port
         self.client_id = settings.client_id
@@ -940,10 +949,26 @@ class IbkrRuntime:
     def _ensure_transport(self) -> IbkrTransport:
         if self.transport is not None:
             return self.transport
-        self.transport = OfficialIbapiTransport()
+        if self.connection == "web_api":
+            from .ibkr_web_api import IbkrWebApiTransport
+
+            self.transport = IbkrWebApiTransport()
+        else:
+            self.transport = OfficialIbapiTransport()
         return self.transport
 
-    def connect(self) -> None:
+    def client_available(self) -> bool:
+        """Whether the chosen connection can be tried: the ibapi client, or saved Web API credentials."""
+        if self.transport is not None:
+            return True
+        if self.connection == "web_api":
+            from .ibkr_web_api import web_api_credentials_configured
+
+            return web_api_credentials_configured()
+        return official_ibapi_available()
+
+    def connect(self, *, force: bool = False) -> None:
+        """Connect if needed; ``force`` (a user's explicit attempt) skips the retry backoff."""
         self.refresh_settings()
         if not self.enabled:
             raise IbkrRuntimeError("ibkr_provider_disabled")
@@ -952,7 +977,7 @@ class IbkrRuntime:
             if transport.is_connected():
                 return
             now_mono = time_module.monotonic()
-            if now_mono < self._next_connect_attempt_monotonic:
+            if not force and now_mono < self._next_connect_attempt_monotonic:
                 raise IbkrRuntimeError("ibkr_reconnect_backoff")
             prior = self.connect_count > 0
             if prior:
@@ -969,7 +994,8 @@ class IbkrRuntime:
             except Exception as exc:
                 self.connect_failure_count += 1
                 backoff = max(
-                    0.25,
+                    # A Web API attempt is a signed request to IBKR's servers, not a local socket.
+                    60.0 if self.connection == "web_api" else 0.25,
                     float(_env_str("OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS", "1")),
                 )
                 self._next_connect_attempt_monotonic = time_module.monotonic() + backoff
@@ -1265,6 +1291,8 @@ class IbkrRuntime:
             "monitor_enabled": settings.monitor_enabled,
             "settings_source": settings_source,
             "settings_managed": self._settings_managed,
+            "connection": self.connection,
+            "client_available": self.client_available(),
             "host": self.host,
             "port": self.port,
             "client_id": self.client_id,

@@ -41,7 +41,6 @@ from .ibkr_runtime import (
     IbkrRuntime,
     IbkrRuntimeError,
     default_ibkr_runtime,
-    official_ibapi_available,
 )
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
@@ -52,7 +51,7 @@ _MAX_HISTORICAL_CHUNK = timedelta(days=1)
 
 def ibkr_configured(runtime: IbkrRuntime | None = None) -> bool:
     active = runtime or default_ibkr_runtime()
-    return bool(active.enabled and (active.transport is not None or official_ibapi_available()))
+    return bool(active.enabled and active.client_available())
 
 
 def _fingerprint(instrument_id: str, bars: list[MarketBar]) -> str:
@@ -79,7 +78,7 @@ def _quote_age(snapshot: IbkrQuoteSnapshot, now: datetime) -> Decimal:
 class IbkrEquityProvider(ProviderAdapter):
     provider_id = "ibkr"
     policy = POLICIES[provider_id]
-    display_name = "IBKR Gateway"
+    display_name = "IBKR"
 
     def configured(self) -> bool:
         return ibkr_configured(self.runtime)
@@ -204,7 +203,7 @@ class IbkrEquityProvider(ProviderAdapter):
                 authoritative=False,
                 reason_codes=("IBKR_DISABLED",),
             )
-        if self.runtime.transport is None and not official_ibapi_available():
+        if not self.runtime.client_available():
             return MarketDataAuthorityDecision(
                 provider=self.provider_id,
                 binding_id=binding.binding_id,
@@ -213,7 +212,11 @@ class IbkrEquityProvider(ProviderAdapter):
                 health="CLIENT_UNAVAILABLE",
                 observed_at=now,
                 authoritative=False,
-                reason_codes=("IBKR_OFFICIAL_CLIENT_UNAVAILABLE",),
+                reason_codes=(
+                    "IBKR_WEB_API_CREDENTIALS_MISSING"
+                    if self.runtime.connection == "web_api"
+                    else "IBKR_OFFICIAL_CLIENT_UNAVAILABLE",
+                ),
             )
         if not self.runtime.is_connected():
             return MarketDataAuthorityDecision(
