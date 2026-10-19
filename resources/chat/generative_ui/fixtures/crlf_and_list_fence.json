@@ -6,7 +6,7 @@
   "content": "- First point\r\n- Second point\r\n  ```omnix-ui\r\n  {\"type\": \"stats\", \"items\": [{\"label\": \"Count\", \"value\": \"3\"}]}\r\n  ```\r\nAfter the list.",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

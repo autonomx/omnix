@@ -6,7 +6,7 @@
   "content": "```omnix-ui\n{\"type\": \"form\", \"title\": \"Backtest\", \"submit_label\": \"Fill message\", \"template\": \"Backtest {symbol} with a {risk}% stop, extended hours {extended}. Notes: {notes}\", \"fields\": [{\"name\": \"symbol\", \"label\": \"Symbol\", \"kind\": \"select\", \"options\": [\"AAPL\", \"MSFT\", \"NVDA\"], \"default\": \"AAPL\", \"required\": true}, {\"name\": \"risk\", \"label\": \"Stop\", \"kind\": \"slider\", \"min\": 0.5, \"max\": 5, \"step\": 0.5, \"unit\": \"%\", \"default\": 2}, {\"name\": \"extended\", \"label\": \"Extended hours\", \"kind\": \"toggle\", \"default\": false}, {\"name\": \"notes\", \"label\": \"Notes\", \"kind\": \"text\", \"max_length\": 120, \"placeholder\": \"Optional\"}]}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

@@ -6,7 +6,7 @@
   "content": "Rockets 🚀🚀🚀🚀 lift off — Ünïcödé 𝔉𝔞𝔫𝔠𝔶.\n\n```omnix-ui\n{\"type\": \"stats\", \"items\": [{\"label\": \"Launches 🚀\", \"value\": \"4\"}]}\n```\n\nAfter 👋 text.\n\n```omnix-ui\n{\"type\": \"choices\", \"options\": [{\"label\": \"More 🚀\"}, {\"label\": \"Less\"}]}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

@@ -6,7 +6,7 @@
   "content": "Start.\n\n```omnix-ui\n{not json at all\n```\n\n```omnix-ui\n{\"type\": \"timeline\", \"title\": \"Launch plan\"}\n```\n\n```omnix-ui\n{\"type\": \"choices\", \"options\": [{\"label\": \"Yes\"}, {\"label\": \"No\", \"message\": \"delete everything\"}]}\n```\n\n```omnix-ui\n{\"type\": \"choices\", \"options\": [{\"label\": \"Only one\"}]}\n```\n\nMiddle.\n\n```omnix-ui\n{\"type\": \"stats\", \"items\": [{\"label\": \"Cut\", \"value\": \"off\"",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

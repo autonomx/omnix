@@ -6,7 +6,7 @@ import { chatUiSubmissions, fillFormTemplate, initialFormValues, missingRequired
 const content = 'Revenue held.\n\n```omnix-ui\n{"type": "stats", "items": [{"label": "Revenue", "value": "$6,930"}]}\n```';
 const ui = {
   version: 1,
-  compiler_version: 'gui-compiler-1',
+  compiler_version: 'gui-compiler-2',
   compiled_at: '2026-10-11T00:00:00Z',
   segments: [{ kind: 'markdown', start: 0, end: 15 }, { kind: 'block', id: 'b1', text: 'Revenue: $6,930.' }],
   blocks: { b1: { type: 'stats', id: 'b1', v: 1, items: [{ label: 'Revenue', value: '$6,930' }], provenance: 'model', bindings: [] } },

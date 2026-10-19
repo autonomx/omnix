@@ -6,7 +6,7 @@
   "content": "```omnix-ui\n{“type”: “stats”, 'items': [{'label': 'Margin', 'value': '41%', 'color': 'green',},],}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

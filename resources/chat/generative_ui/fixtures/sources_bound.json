@@ -27,7 +27,7 @@
   "content": "Rates were held [S1], and the dot plot moved [S2].\n\n```omnix-ui\n{\"type\": \"sources\", \"refs\": [{\"bind\": \"source:1\"}, {\"bind\": \"source:2\"}, {\"bind\": \"source:9\"}]}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

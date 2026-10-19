@@ -77,7 +77,7 @@ describe('Chat rendering', () => {
 const uiContent = 'Revenue held.\n\n```omnix-ui\n{"type": "stats", "items": [{"label": "Revenue", "value": "$6,930"}]}\n```';
 const uiPayload = {
   version: 1,
-  compiler_version: 'gui-compiler-1',
+  compiler_version: 'gui-compiler-2',
   compiled_at: '2026-10-11T00:00:00Z',
   segments: [{ kind: 'markdown', start: 0, end: 15 }, { kind: 'block', id: 'b1', text: 'Revenue: $6,930.' }],
   blocks: { b1: { type: 'stats', id: 'b1', v: 1, items: [{ label: 'Revenue', value: '$6,930' }], provenance: 'model', bindings: [] } },
@@ -183,7 +183,7 @@ describe('Chat generative UI widgets', () => {
   const widgetContent = 'Pick one.\n\n```omnix-ui\n{"type":"choices","options":[{"label":"Compare with MSFT"},{"label":"Show the trend"}]}\n```\n\n```omnix-ui\n{"type":"form","template":"Backtest {symbol}","fields":[{"name":"symbol","kind":"select","options":["AAPL","MSFT"]}]}\n```';
   const widgetUi = {
     version: 1,
-    compiler_version: 'gui-compiler-1',
+    compiler_version: 'gui-compiler-2',
     compiled_at: '2026-10-11T00:00:00Z',
     segments: [{ kind: 'markdown', start: 0, end: 11 }, { kind: 'block', id: 'b1', text: 'Options: Compare with MSFT; Show the trend' }, { kind: 'block', id: 'b2', text: 'Form: symbol (select: AAPL, MSFT)' }],
     blocks: {

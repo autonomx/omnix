@@ -203,7 +203,7 @@ Rules:
 
     {
       "version": 1,
-      "compiler_version": "gui-compiler-1",
+      "compiler_version": "gui-compiler-2",
       "compiled_at": "2026-10-11T14:03:22Z",   // pins market-data queries (as_of)
       "segments": [
         {"kind": "markdown", "start": 0, "end": 34},   // offsets into content
@@ -220,7 +220,7 @@ Rules:
 - A block segment carries its block's `to_text()`, which the client shows if it cannot render the block (DECISIONS GUI-2.1).
 - A dropped block becomes a `text` segment holding its fallback (from the valid part of the spec when possible, otherwise a short notice). A diagnostic records why.
 - `compiled_at` is set by the compile, which happens before the assistant message exists. It is the as-of time for `price_chart`.
-- The payload is capped at 128 KB. Over the cap, the largest blocks degrade to text first.
+- The payload's structure (segments, blocks, diagnostics) is capped at 128 KB; the `text` and `speech` projections are not counted, since `content` bounds them (DECISIONS GUI-1.4 review). Over the cap, the largest blocks degrade to text first.
 
 ### 6.4 Projections
 
@@ -297,7 +297,7 @@ Deferred until evaluation shows demand: `tabs`, `timeline`, `comparison`, `image
 |---|---|---|
 | Blocks per message | 8 | Extra blocks become text |
 | Serialized block | 32 KB | Block becomes text |
-| `metadata.ui` total | 128 KB | Largest blocks become text first |
+| `metadata.ui` structure (segments, blocks, diagnostics) | 128 KB | Largest blocks become text first |
 | Chart | 6 series × 2,000 points | Downsampled (LTTB) with diagnostic |
 | `choices` label | 160 chars | Option dropped |
 | `form` template | 500 chars; values substituted as plain text | Block becomes text |

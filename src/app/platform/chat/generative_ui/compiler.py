@@ -36,7 +36,8 @@ from .catalog import (
 )
 from .parser import UI_INFO_STRING, Fence, FenceJsonError, parse_fence_json, scan_fences
 
-COMPILER_VERSION = "gui-compiler-1"
+# 2: Markdown offsets are UTF-16 code units (1 counted code points).
+COMPILER_VERSION = "gui-compiler-2"
 
 
 def utc_now() -> datetime:

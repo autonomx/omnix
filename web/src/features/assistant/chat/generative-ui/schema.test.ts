@@ -77,3 +77,17 @@ describe('length limits', () => {
     expect(chatUiBlockSchema.safeParse({ ...block, items: [{ label: `${label}x`, value: '1' }] }).success).toBe(false);
   });
 });
+
+describe('compiler versions', () => {
+  it('slices gui-compiler-1 payloads by code points, as that compiler counted', () => {
+    const content = '🚀 Lift off.\n\n```omnix-ui\n{"type":"stats","items":[{"label":"A","value":"1"}]}\n```';
+    const ui = {
+      version: 1, compiler_version: 'gui-compiler-1', compiled_at: '2026-10-11T00:00:00Z',
+      segments: [{ kind: 'markdown', start: 0, end: 13 }],
+      blocks: {}, text: '🚀 Lift off.', speech: '🚀 Lift off.', diagnostics: [],
+    };
+
+    const parsed = parseChatUi({ ui }, content);
+    expect(parsed?.segments[0]).toEqual({ kind: 'markdown', key: '0', markdown: '🚀 Lift off.\n\n' });
+  });
+});

@@ -204,12 +204,16 @@ export function parseChatUi(metadata: Record<string, unknown> | undefined | null
   const payload = envelope.data;
   const blocks: Record<string, ChatUiBlock> = {};
   const segments: ChatUiRenderSegment[] = [];
+  // gui-compiler-1 counted offsets in code points; later compilers count UTF-16 units, as `slice` does.
+  const codePoints = payload.compiler_version === 'gui-compiler-1' ? Array.from(content) : null;
+  const length = codePoints ? codePoints.length : content.length;
   for (const [index, segment] of payload.segments.entries()) {
     const key = `${index}`;
     if (segment.kind === 'markdown') {
       const { start, end } = segment;
-      if (start === undefined || end === undefined || start >= end || end > content.length) return null;
-      segments.push({ kind: 'markdown', key, markdown: content.slice(start, end) });
+      if (start === undefined || end === undefined || start >= end || end > length) return null;
+      const markdown = codePoints ? codePoints.slice(start, end).join('') : content.slice(start, end);
+      segments.push({ kind: 'markdown', key, markdown });
     } else if (segment.kind === 'text') {
       segments.push({ kind: 'text', key, text: segment.text ?? BLOCK_NOTICE });
     } else {

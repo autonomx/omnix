@@ -14,7 +14,7 @@
   "content": "```omnix-ui\n{\"type\": \"stats\", \"title\": \"Latest\", \"items\": [{\"label\": \"Headline\", \"value\": {\"bind\": \"context:1.title\"}}]}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

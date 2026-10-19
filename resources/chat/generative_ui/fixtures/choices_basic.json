@@ -6,7 +6,7 @@
   "content": "Want to go further?\n\n```omnix-ui\n{\"type\": \"choices\", \"prompt\": \"Next step\", \"options\": [{\"label\": \"Compare with MSFT\"}, {\"label\": \"Show the 1-year trend\"}, \"Explain the dip\"]}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

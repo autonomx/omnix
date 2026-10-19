@@ -45,7 +45,17 @@ function TimeSeriesPlot({ block, summary, onFailed }: { block: ChartBlock; summa
   const hostRef = useRef<HTMLDivElement>(null);
   // Canvas colours are resolved from the theme, so a theme or appearance change redraws.
   const [appearance, setAppearance] = useState(0);
-  useEffect(() => onOmnixEvent(APPEARANCE_CHANGE_EVENT, () => setAppearance((value) => value + 1)), []);
+  useEffect(() => {
+    const redraw = () => setAppearance((value) => value + 1);
+    const stopListening = onOmnixEvent(APPEARANCE_CHANGE_EVENT, redraw);
+    // The "system" appearance follows the OS colour scheme without an appearance event.
+    const scheme = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    scheme?.addEventListener('change', redraw);
+    return () => {
+      stopListening();
+      scheme?.removeEventListener('change', redraw);
+    };
+  }, []);
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return undefined;

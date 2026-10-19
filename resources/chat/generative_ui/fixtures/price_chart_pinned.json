@@ -10,7 +10,7 @@
   "content": "Here is Apple over the last six months.\n\n```omnix-ui\n{\"type\": \"price_chart\", \"symbol\": \"aapl\", \"interval\": \"1d\", \"range\": \"6M\"}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

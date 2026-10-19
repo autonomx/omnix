@@ -47,7 +47,8 @@ export function PriceChartBlockView({ block, summary }: { block: PriceChartBlock
       .then((bars) => {
         // The bars endpoint serves the latest bars only: an old intraday window can age out of reach.
         const pinned = pinnedBars(bars, window);
-        if (!cancelled) setLoad({ status: 'ready', bars: pinned, aged: !pinned.length && bars.length > 0 && bars[0].time > window.to });
+        const earliest = Math.min(...bars.map((bar) => bar.time));
+        if (!cancelled) setLoad({ status: 'ready', bars: pinned, aged: !pinned.length && bars.length > 0 && earliest > window.to });
       })
       .catch(() => { if (!cancelled) setLoad({ status: 'error' }); });
     return () => { cancelled = true; };

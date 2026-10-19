@@ -6,7 +6,7 @@
   "content": "Revenue held steady this quarter.\n\n```omnix-ui\n{\"type\": \"stats\", \"items\": [\n  {\"label\": \"Revenue\", \"value\": \"$6,930\", \"delta\": \"+4.1%\", \"trend\": \"up\"},\n  {\"label\": \"Orders\", \"value\": \"212\"}\n]}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {

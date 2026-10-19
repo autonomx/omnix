@@ -6,7 +6,7 @@
   "content": "# Quarter review\n\nThe table has the detail:\n\n| Metric | Q2 | Q3 |\n|:--|--:|--:|\n| Revenue | 6,650 | 6,930 |\n| Orders | 201 | 212 |\n\n```omnix-ui\n{\"type\":\"stats\",\"id\":\"headline\",\"items\":[{\"label\":\"Revenue\",\"value\":\"$6,930\",\"delta\":\"+4.1%\",\"trend\":\"up\",\"tone\":\"positive\"},{\"label\":\"Orders\",\"value\":\"212\",\"delta\":\"+5.5%\"}]}\n```\n\n> [!NOTE]\n> Figures are unaudited.\n\n```omnix-ui\n{\"type\":\"choices\",\"options\":[{\"label\":\"Break down by region\"},{\"label\":\"Forecast Q4\"}]}\n```",
   "expected": {
     "version": 1,
-    "compiler_version": "gui-compiler-1",
+    "compiler_version": "gui-compiler-2",
     "compiled_at": "2026-10-11T14:03:22Z",
     "segments": [
       {
