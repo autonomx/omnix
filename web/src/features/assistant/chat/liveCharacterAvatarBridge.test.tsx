@@ -1,5 +1,6 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configureViewModules } from '../../../app/viewApiScope';
 import type { CharacterLiveCallRuntime } from './characterClient';
 import { installLiveCharacterVisemeBridge } from './liveCharacterVisemeBridge';
 import {
@@ -95,6 +96,8 @@ const live2dRuntime: CharacterLiveCallRuntime = {
 
 beforeEach(() => {
   // The bridges act only while Chat is the active workspace.
+  // The view firewall knows routes only once the app configures its modules (MarketPulse W-1).
+  configureViewModules([{ id: 'chatbot', route: '/chatbot', apiPrefixes: [] }]);
   window.history.replaceState(null, '', '/chatbot');
   installLiveCharacterAvatarBridge();
   installLiveCharacterVisemeBridge();

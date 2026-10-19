@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 // A stored block reply in the real Chat workspace (GUI-2.2): components render with room to
@@ -37,9 +38,14 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
-for (const [theme, mode] of [['aurora', 'dark'], ['graphite', 'light']] as const) {
-  test(`a block reply renders as components in the transcript (${theme} ${mode})`, async ({ page }) => {
+const combinations = (['aurora', 'graphite', 'liquid-glass', 'evergreen'] as const).flatMap((theme) => (
+  (['dark', 'light'] as const).flatMap((mode) => ([1280, 375] as const).map((width) => [theme, mode, width] as const))
+));
+
+for (const [theme, mode, width] of combinations) {
+  test(`a block reply renders as components in the transcript (${theme} ${mode} ${width}px)`, async ({ page }) => {
     test.setTimeout(90_000);
+    await page.setViewportSize({ width, height: 900 });
     await page.addInitScript(([themeId, appearance]) => {
       window.localStorage.setItem('omnix.appearance.theme', themeId);
       window.localStorage.setItem('omnix.appearance.mode', appearance);
@@ -52,12 +58,33 @@ for (const [theme, mode] of [['aurora', 'dark'], ['graphite', 'light']] as const
     await expect(transcript.getByRole('button', { name: 'Forecast Q4' })).toBeVisible();
     await expect(transcript).not.toContainText('omnix-ui');
 
-    const plot = transcript.locator('.gui-chart-svg').first();
-    const box = await plot.boundingBox();
-    expect(box?.width ?? 0).toBeGreaterThan(300);
+    // Blocks fill their message's width and never extend past it. (The workspace gives a message
+    // about 230 px at 375 px; the top bar's own overflow at 1280 px exists without blocks.)
+    const fit = await page.evaluate(() => [...document.querySelectorAll('.assistant-ui-reply')].map((reply) => {
+      const content = reply.getBoundingClientRect();
+      const inner = content.width - 40;
+      return [...reply.querySelectorAll('.gui-block, .assistant-markdown-table')].map((block) => {
+        const box = block.getBoundingClientRect();
+        return { fills: box.width >= inner * 0.9, inside: box.left >= content.left - 1 && box.right <= content.right + 1 };
+      });
+    }).flat());
+    expect(fit.length).toBeGreaterThan(3);
+    expect(fit.filter((item) => !item.fills || !item.inside)).toEqual([]);
+
+    // In situ (GUI-6.2): no blocking violations, contrast included, in the blocks and tables.
+    await page.waitForTimeout(600); // past the blocks' fade-in
+    const results = await new AxeBuilder({ page })
+      .include('.assistant-chat-messages .gui-block')
+      .include('.assistant-chat-messages .assistant-markdown-table')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    const blocking = results.violations
+      .filter((violation) => violation.impact === 'critical' || violation.impact === 'serious')
+      .map((violation) => ({ id: violation.id, nodes: violation.nodes.slice(0, 5).map((node) => node.target.join(' ')) }));
+    expect(blocking).toEqual([]);
+
     if (process.env.OMNIX_GUI_SCREENSHOTS) {
-      await page.waitForTimeout(800); // past the blocks' fade-in
-      await page.screenshot({ path: `${process.env.OMNIX_GUI_SCREENSHOTS}/transcript-${theme}-${mode}.png` });
+      await page.screenshot({ path: `${process.env.OMNIX_GUI_SCREENSHOTS}/transcript-${theme}-${mode}-${width}.png` });
     }
   });
 }

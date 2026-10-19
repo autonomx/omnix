@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configureViewModules } from '../../../app/viewApiScope';
 import {
   fitVisemesToDuration,
   installLiveCharacterVisemeBridge,
@@ -28,6 +29,8 @@ const phasedPack: RuntimeAvatarPack = {
 
 beforeEach(() => {
   // The bridges act only while Chat is the active workspace.
+  // The view firewall knows routes only once the app configures its modules (MarketPulse W-1).
+  configureViewModules([{ id: 'chatbot', route: '/chatbot', apiPrefixes: [] }]);
   window.history.replaceState(null, '', '/chatbot');
   installLiveCharacterVisemeBridge();
 });
