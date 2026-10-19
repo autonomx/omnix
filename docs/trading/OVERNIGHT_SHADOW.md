@@ -151,6 +151,11 @@ forward on `overnight_mid_population`. Document: `research/PREREG_OVERNIGHT5.md`
 
 `cdbd74082b350ae45ea8867fdbfdba8bd8649194d41014488d1e542274e5b0c2`
 
+Result (evaluated once, 2026-10-19): both failed. H1 beat its population but
+lost money (-0.26% net per trade); H2 earned +0.53% net per trade but no more,
+reliably, than shorting every mid-cap mover in the 2022 bear market. The live
+`overnight_mid_population` recording continues as data only.
+
 A pre-registered historical test of the same arms (point-in-time universe,
 March 2025 – October 2026) accompanies this strategy as research; its result
 decides whether any arm deserves further work.
