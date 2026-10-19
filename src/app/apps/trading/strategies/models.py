@@ -311,7 +311,7 @@ class OvernightShadowConfig(BaseModel):
 
     SHADOW only. At ``decision_et`` each enabled arm picks up to
     ``max_picks_per_arm`` common stocks from a full-market scan of regular-session
-    5-minute SIP bars that ended by ``data_cutoff_et`` (the free SIP feed is
+    30-minute SIP bars that ended by ``data_cutoff_et`` (the free SIP feed is
     15 minutes delayed). Picks are labelled after ``label_after_et`` on the next
     session: entry at the ``entry_et`` one-minute open, primary exit at the 09:30
     open, plus the last premarket trade before 08:00 and the 09:45 open.

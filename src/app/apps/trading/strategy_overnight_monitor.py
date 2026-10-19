@@ -24,16 +24,21 @@ from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .paper import PaperAccountCreate
 from .paper_repository import TradingPaperRepository
 from .strategies.models import OvernightShadowConfig, StrategyRiskProfile
-from .strategy_overnight_scan import OvernightMarketData
+from .strategy_overnight_filings import FILINGS_SOURCE, OvernightFilingsSource
+from .strategy_overnight_scan import NEWS_SOURCE, SOCIAL_SOURCE, OvernightMarketData
 from .strategy_overnight_shadow import (
+    OVERNIGHT_BENCHMARKS,
     OVERNIGHT_TRADING_STRATEGY_ID,
     OvernightCandidate,
     OvernightOutcome,
     OvernightPick,
+    label_benchmark,
     label_outcome,
+    news_context,
     population,
     score,
     select_arm_picks,
+    split_factors,
 )
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
@@ -50,7 +55,9 @@ EVENT_POPULATION = "overnight_population"
 EVENT_SCAN = "overnight_scan"
 EVENT_OUTCOME = "overnight_outcome"
 EVENT_SCORECARD = "overnight_scorecard"
+EVENT_FILINGS = "overnight_filings"
 _SCAN_INSTRUMENT = "__scan__"
+_FILINGS_INSTRUMENT = "__filings__"
 _POPULATION_INSTRUMENT = "__population__"
 _SCORECARD_INSTRUMENT = "__scorecard__"
 _LABEL_LOOKBACK_SESSIONS = 5
@@ -229,11 +236,13 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
         interval_seconds: float = 60.0,
         strategy_repository_factory: Callable[[], TradingStrategyRepository] = TradingStrategyRepository,
         market_data_factory: Callable[[], OvernightMarketData] = OvernightMarketData,
+        filings_factory: Callable[[], OvernightFilingsSource] = OvernightFilingsSource,
         now_factory: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.interval_seconds = max(15.0, float(interval_seconds))
         self.strategy_repository_factory = strategy_repository_factory
         self.market_data_factory = market_data_factory
+        self.filings_factory = filings_factory
         self.now_factory = now_factory
         self.last_run_at: datetime | None = None
         self.scan_count = 0
@@ -318,9 +327,13 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
             return 0
         if _events(repository, (EVENT_SCAN,), day):
             return 0
-        result = self.market_data_factory().scan(day, previous_session(day), settings)
+        data = self.market_data_factory()
+        result = data.scan(day, previous_session(day), settings)
+        market, market_error = self._market_context(data, day, settings)
         picks = select_arm_picks(result.candidates, settings)
         pop = population(result.candidates, settings)
+        social = self._social_context(data, pop)
+        news = self._news_context(data, day, pop, settings)
         late = local.time() >= settings.entry_et
         for arm_id, arm_picks in picks.items():
             for pick in arm_picks:
@@ -343,6 +356,7 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
                 "eligible": result.eligible, "scanned": result.scanned, "candidates": len(result.candidates),
                 "population": len(pop), "picks": {arm: len(p) for arm, p in picks.items()},
                 "decided_late": late, "data_cutoff_et": settings.data_cutoff_et.isoformat(),
+                "market": market, "market_error": market_error, "social": social, "news": news,
                 "execution_authority": False,
             },
         ))
@@ -350,7 +364,89 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
         trade_log("auto_trading", "overnight_shadow_scan", strategy_id=config.strategy_id, session_date=day,
                   picks={arm: [p.candidate.symbol for p in ps] for arm, ps in picks.items()},
                   population=len(pop), execution_authority=False)
+        # After the scan marker: the slow EDGAR reads can neither delay nor block the picks. Only
+        # filings accepted by ``now`` count, so the record stays point-in-time.
+        self._record_filings(repository, config, day, now, pop)
         return 1
+
+    def _record_filings(
+        self, repository: TradingStrategyRepository, config: TradingStrategyConfigDocument,
+        day: date, now: datetime, pop: list[OvernightCandidate],
+    ) -> None:
+        payload: dict[str, Any] = {"source": FILINGS_SOURCE, "decided_at": now.isoformat(), "contexts": [],
+                                   "truncated": False, "error": None, "execution_authority": False}
+        try:
+            contexts, truncated = self.filings_factory().contexts([c.symbol for c in pop], decided_at=now)
+            payload |= {"contexts": [c.model_dump(mode="json") for c in contexts], "truncated": truncated}
+        except Exception as exc:
+            logger.warning("overnight shadow filings context failed: %s: %s", type(exc).__name__, exc)
+            payload["error"] = f"{type(exc).__name__}: {exc}"
+        try:
+            repository.append_event(_event(
+                config, event_type=EVENT_FILINGS, instrument_id=_FILINGS_INSTRUMENT,
+                session_date=day, observed_at=now, payload=payload,
+            ))
+        except Exception as exc:
+            logger.warning("overnight shadow filings event failed: %s: %s", type(exc).__name__, exc)
+
+    @staticmethod
+    def _market_context(
+        data: OvernightMarketData, day: date, settings: OvernightShadowConfig,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Broad-market context for later research; a failure here never blocks the picks."""
+
+        try:
+            return [b.model_dump(mode="json") for b in data.benchmarks(day, previous_session(day), settings)], None
+        except Exception as exc:
+            logger.warning("overnight shadow market context failed: %s: %s", type(exc).__name__, exc)
+            return [], f"{type(exc).__name__}: {exc}"
+
+    @staticmethod
+    def _social_context(data: OvernightMarketData, pop: list[OvernightCandidate]) -> dict[str, Any]:
+        """Reddit mentions of population stocks (picks are a subset); never blocks the picks.
+
+        ``ranked`` is how many tickers the source listed: a population stock absent from a
+        successful fetch had no ranked mentions, which differs from a failed fetch (``error``).
+        """
+
+        try:
+            mentions = data.social_mentions()
+        except Exception as exc:
+            logger.warning("overnight shadow social context failed: %s: %s", type(exc).__name__, exc)
+            return {"source": SOCIAL_SOURCE, "ranked": None, "mentions": [], "error": f"{type(exc).__name__}: {exc}"}
+        symbols = {c.symbol for c in pop}
+        return {
+            "source": SOCIAL_SOURCE, "ranked": len(mentions),
+            "mentions": [m.model_dump(mode="json") for m in mentions if m.symbol in symbols],
+            "error": None,
+        }
+
+    @staticmethod
+    def _news_context(
+        data: OvernightMarketData, day: date, pop: list[OvernightCandidate], settings: OvernightShadowConfig,
+    ) -> dict[str, Any]:
+        """Headlines known at the decision: prior session 16:00 ET to the data cutoff today.
+
+        Every population stock gets a context, so ``articles: 0`` means no headline; a failed fetch
+        sets ``error`` and leaves ``contexts`` empty (news unknown, not absent).
+        """
+
+        start = datetime.combine(previous_session(day), REGULAR_CLOSE, tzinfo=_ET)
+        end = datetime.combine(day, settings.data_cutoff_et, tzinfo=_ET)
+        payload: dict[str, Any] = {"source": NEWS_SOURCE, "window_start": start.isoformat(),
+                                   "window_end": end.isoformat(), "contexts": [], "error": None}
+        if not pop:
+            return payload
+        try:
+            found = data.news([c.symbol for c in pop], start, end)
+        except Exception as exc:
+            logger.warning("overnight shadow news context failed: %s: %s", type(exc).__name__, exc)
+            return payload | {"error": f"{type(exc).__name__}: {exc}"}
+        payload["contexts"] = [
+            news_context(c.symbol, [h for h in found.get(c.symbol, []) if start <= h.created_at <= end]).model_dump(mode="json")
+            for c in pop
+        ]
+        return payload
 
     # -- next-morning labelling
     def _label_due(self, repository: TradingStrategyRepository, config: TradingStrategyConfigDocument, now: datetime) -> int:
@@ -380,18 +476,22 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
                  for r in rows if r.event_type == EVENT_PICK]
         pop = [OvernightCandidate.model_validate(c) for r in rows if r.event_type == EVENT_POPULATION
                for c in r.payload.get("candidates", [])]
-        symbols = sorted({p.candidate.symbol for p in picks} | {c.symbol for c in pop})
+        symbols = sorted({p.candidate.symbol for p in picks} | {c.symbol for c in pop} | set(OVERNIGHT_BENCHMARKS))
         data = self.market_data_factory()
         late = data.minute_bars(symbols, datetime.combine(entry_day, time(15, 25), tzinfo=_ET),
                                 datetime.combine(entry_day, _close(entry_day), tzinfo=_ET))
         morning = data.minute_bars(symbols, datetime.combine(exit_day, time(4, 0), tzinfo=_ET),
                                    datetime.combine(exit_day, time(9, 46), tzinfo=_ET))
+        # Bars are unadjusted: a split taking effect overnight must not read as a gap. A failed
+        # lookup fails the cycle, so the session is labelled on a later tick rather than wrongly.
+        factors = split_factors(data.splits(symbols, entry_day, exit_day), entry_day, exit_day)
 
         def outcome(arm_id: str, candidate: OvernightCandidate) -> OvernightOutcome:
             return label_outcome(
                 arm_id=arm_id, candidate=candidate, session_date=entry_day, next_session_date=exit_day,
                 session_bars=late.get(candidate.symbol, []), next_bars=morning.get(candidate.symbol, []),
                 config=settings, session_close=_close(entry_day), next_close=_close(exit_day),
+                split_factor=factors.get(candidate.symbol),
             )
 
         by_arm: dict[str, list[OvernightOutcome]] = {arm.arm_id: [] for arm in settings.arms if arm.enabled}
@@ -404,6 +504,15 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
                 payload=result.model_dump(mode="json"),
             ))
         pop_outcomes = [outcome("population-10pct", c) for c in pop]
+        market = [
+            label_benchmark(
+                symbol=symbol, session_date=entry_day, next_session_date=exit_day,
+                session_bars=late.get(symbol, []), next_bars=morning.get(symbol, []),
+                config=settings, session_close=_close(entry_day), next_close=_close(exit_day),
+                split_factor=factors.get(symbol),
+            ).model_dump(mode="json")
+            for symbol in OVERNIGHT_BENCHMARKS
+        ]
         repository.append_event(_event(
             config, event_type=EVENT_SCORECARD, instrument_id=_SCORECARD_INSTRUMENT,
             session_date=entry_day, observed_at=now, state="labelled",
@@ -411,6 +520,7 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
                 "entry_session": entry_day.isoformat(), "exit_session": exit_day.isoformat(),
                 "arms": [score(arm_id, outs).model_dump(mode="json") for arm_id, outs in sorted(by_arm.items())],
                 "population_10pct": score("population-10pct", pop_outcomes).model_dump(mode="json"),
+                "market": market,
                 "execution_authority": False,
             },
         ))
@@ -433,6 +543,7 @@ def create_overnight_shadow_monitor_task(context: FeatureContext) -> TradingMoni
 
 
 __all__ = [
+    "EVENT_FILINGS",
     "EVENT_OUTCOME",
     "EVENT_PICK",
     "EVENT_POPULATION",

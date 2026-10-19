@@ -136,6 +136,7 @@ def _alpaca_bars(
     end: datetime,
     chunk_size: int,
     feed: Literal["iex", "sip"] = "iex",
+    adjustment: Literal["raw", "split"] = "raw",
 ) -> dict[str, list[dict[str, Any]]]:
     data_url = (_env_str("OMNIX_ALPACA_DATA_URL") or ALPACA_DATA_URL).rstrip("/")
     output: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -148,7 +149,7 @@ def _alpaca_bars(
                 "timeframe": timeframe,
                 "start": start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "end": end.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "adjustment": "raw",
+                "adjustment": adjustment,
                 "feed": feed,
                 "sort": "asc",
                 "limit": 10000,
