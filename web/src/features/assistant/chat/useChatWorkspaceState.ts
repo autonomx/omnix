@@ -18,6 +18,7 @@ import { useStickToLatestMessage } from './useStickToLatestMessage';
 import { liveChatMessagesFor } from './chatMessageModel';
 import { useChatCatalog } from './useChatCatalog';
 import { useChatMessageActions } from './useChatMessageActions';
+import type { ChatUiAction } from './generative-ui/uiActions';
 
 /** Wires Chat's hooks together: layout, sessions, sending, the live call, audio and message actions. */
 export function useChatWorkspaceState() {
@@ -209,7 +210,29 @@ export function useChatWorkspaceState() {
     streamingMessageId: pcmStream.messageId,
     continueFrom: (message) => applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`),
     openTools: () => { showAssistantView('tools'); setActiveUtilityPanel('tools'); },
+    chooseUiOption,
+    fillComposerFromUi,
   });
+
+  // A widget's action rides on the message only while the composer holds exactly the
+  // text the widget produced; an edited or replaced draft is an ordinary message.
+  const pendingUiActionRef = useRef<{ text: string; action: ChatUiAction } | null>(null);
+
+  function chooseUiOption(text: string, action: ChatUiAction): void {
+    pendingUiActionRef.current = { text, action };
+    sendFromLiveChat(text);
+  }
+
+  function fillComposerFromUi(text: string, action: ChatUiAction): void {
+    pendingUiActionRef.current = { text, action };
+    applySuggestedPrompt(text);
+  }
+
+  function takeUiAction(content: string): ChatUiAction | undefined {
+    const pending = pendingUiActionRef.current;
+    pendingUiActionRef.current = null;
+    return pending && pending.text.trim() === content.trim() ? pending.action : undefined;
+  }
 
   function applySuggestedPrompt(prompt: string): void {
     setActiveView('chats');
@@ -245,11 +268,12 @@ export function useChatWorkspaceState() {
   }
 
   function submitComposerMessage(values: ChatbotFormValues): void {
+    const uiAction = takeUiAction(values.content);
     if (liveVoiceActiveRef.current) {
       void submitVoiceTranscriptContent(values.content, { manual: true });
       return;
     }
-    sendChatMessage(values);
+    sendChatMessage(uiAction ? { ...values, uiAction } : values);
   }
 
   return {

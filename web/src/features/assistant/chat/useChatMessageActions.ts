@@ -4,6 +4,8 @@ import { toggleAssistantPcmStream } from '../workspace';
 import { useStableMessageActions } from './ChatMessageItem';
 import type { useResponseAudio } from './useResponseAudio';
 import { ASSISTANT_VOICE_INTERRUPT_EVENT, emitOmnixEvent } from '../../../events/bus';
+import { chatMessageSpeech, chatMessageText } from './generative-ui/chatMessageProjection';
+import type { ChatUiAction } from './generative-ui/uiActions';
 
 type ChatMessageActionsOptions = Pick<ReturnType<typeof useResponseAudio>, 'playAssistantResponseAudio' | 'stopAssistantResponseAudio' | 'currentLiveCallVoiceId'> & {
   setAudioStatus: (status: string | null) => void;
@@ -11,6 +13,8 @@ type ChatMessageActionsOptions = Pick<ReturnType<typeof useResponseAudio>, 'play
   streamingMessageId: string | null;
   continueFrom: (message: ChatMessage) => void;
   openTools: () => void;
+  chooseUiOption: (text: string, action: ChatUiAction) => void;
+  fillComposerFromUi: (text: string, action: ChatUiAction) => void;
 };
 
 /** What a reply's buttons do: feedback, copy, play, stream, and the more-actions menu. */
@@ -22,6 +26,8 @@ export function useChatMessageActions({
   streamingMessageId,
   continueFrom,
   openTools,
+  chooseUiOption,
+  fillComposerFromUi,
 }: ChatMessageActionsOptions) {
   const [assistantMessageFeedback, setAssistantMessageFeedback] = useState<Record<string, AssistantMessageFeedback>>({});
   const [openMessageActionMenuId, setOpenMessageActionMenuId] = useState<string | null>(null);
@@ -34,6 +40,8 @@ export function useChatMessageActions({
     closeMenu: () => setOpenMessageActionMenuId(null),
     continueFrom,
     openTools,
+    chooseUiOption,
+    fillComposerFromUi,
   });
 
 
@@ -48,7 +56,8 @@ export function useChatMessageActions({
   }
 
   async function copyAssistantResponse(message: ChatMessage): Promise<void> {
-    const copied = await copyTextToClipboard(message.content);
+    // A reply with generative UI copies as its text projection, never block JSON.
+    const copied = await copyTextToClipboard(chatMessageText(message));
     setAudioStatus(copied ? 'Assistant response copied.' : 'Copy failed. Select the message text and copy it manually.');
     setOpenMessageActionMenuId(null);
   }
@@ -59,7 +68,7 @@ export function useChatMessageActions({
       emitOmnixEvent(ASSISTANT_VOICE_INTERRUPT_EVENT, { source: 'manual-stream-button', intent: 'audio-preempt', confidence: 1 });
       stopAssistantResponseAudio(undefined, { cancelPending: false });
     }
-    void toggleAssistantPcmStream(message.id, message.content, currentLiveCallVoiceId() || null);
+    void toggleAssistantPcmStream(message.id, chatMessageSpeech(message), currentLiveCallVoiceId() || null);
   }
 
   return { messageActions, assistantMessageFeedback, openMessageActionMenuId };

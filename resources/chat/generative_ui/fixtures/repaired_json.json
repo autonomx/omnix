@@ -11,7 +11,8 @@
     "segments": [
       {
         "kind": "block",
-        "id": "b1"
+        "id": "b1",
+        "text": "Margin: 41%."
       }
     ],
     "blocks": {

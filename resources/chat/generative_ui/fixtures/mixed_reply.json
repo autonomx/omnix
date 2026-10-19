@@ -16,7 +16,8 @@
       },
       {
         "kind": "block",
-        "id": "headline"
+        "id": "headline",
+        "text": "Revenue: $6,930 (+4.1%). Orders: 212 (+5.5%)."
       },
       {
         "kind": "markdown",
@@ -25,7 +26,8 @@
       },
       {
         "kind": "block",
-        "id": "b1"
+        "id": "b1",
+        "text": "Options: Break down by region; Forecast Q4"
       }
     ],
     "blocks": {

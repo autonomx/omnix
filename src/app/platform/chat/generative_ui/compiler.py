@@ -173,7 +173,8 @@ class _Compilation:
             return
         self.shown += 1
         self.blocks[block_id] = block
-        self.segments.append({"kind": "block", "id": block_id})
+        # The block's own text rides along so a client that cannot render it shows text.
+        self.segments.append({"kind": "block", "id": block_id, "text": to_text(block)})
 
     def degrade(
         self,

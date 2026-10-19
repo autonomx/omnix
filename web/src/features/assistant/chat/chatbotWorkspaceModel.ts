@@ -4,12 +4,15 @@ import { fetchBytes, statusError } from '../../../api/transport';
 import { createInMemoryAssistantWorkspaceEventStore, createStoredAssistantWorkspaceEventStore, type AssistantWorkspaceEvent, type AssistantWorkspaceEventStore, type AssistantWorkspaceEventStoreFilter, type AssistantWorkspaceEventStorage, type AssistantWorkspaceRuntimeConfig, type TtsSynthesisResponse, isLiveVoiceControllerInstalled, isLiveVoiceUnifiedAudioInstalled } from '../workspace';
 import type { components } from '../api/generated';
 import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../../api/schemas/streams';
+import type { ChatUiAction } from './generative-ui/uiActions';
 
 export interface ChatbotFormValues {
   content: string;
   providerId: string;
   modelId: string;
   userTurnId?: string;
+  /** The reply widget this message answers (chat generative UI, GUI-5.4). */
+  uiAction?: ChatUiAction;
 }
 
 export type PastedChatImage = {

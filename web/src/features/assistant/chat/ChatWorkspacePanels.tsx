@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { VirtualList } from '../../../design/VirtualList';
 import { ChatIdentityModeControl } from './ChatIdentityModeControl';
 import { ResearchProgressCard } from './ResearchProgressCard';
@@ -8,6 +9,8 @@ import { ChatLiveVoiceCard } from './ChatLiveVoiceCard';
 import { ChatComposer } from './ChatComposer';
 import { AssistantWorkspaceView } from './AssistantWorkspaceView';
 import type { ChatWorkspaceModel } from './useChatWorkspace';
+import { chatMessageSpeech } from './generative-ui/chatMessageProjection';
+import { chatUiSubmissions } from './generative-ui/uiActions';
 
 /** The Chats view: the header, the transcript, research progress and the composer. */
 export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
@@ -22,6 +25,11 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
     setPastedChatImages, setPastedChatTextFile, setSelectedSessionId, showAssistantView, submitComposerMessage,
     toggleLiveCallFromControls, ttsOutputLabel, updateAssistantSettings, voiceProfiles,
   } = ws;
+  // Widgets answer through user messages: the latest reply's widgets are active, and each
+  // widget shows the submission that answered it (GUI-5.1, GUI-5.3).
+  const uiSubmissions = useMemo(() => chatUiSubmissions(displayedMessages), [displayedMessages]);
+  const lastMessage = displayedMessages[displayedMessages.length - 1];
+  const activeUiMessageId = lastMessage?.role === 'assistant' && !sendMutation.isPending && !chatJobInProgress ? lastMessage.id : null;
   return (
     <>
       <ChatHeader fullscreen={isChatFullscreen} onToggleFullscreen={() => setIsChatFullscreen((current) => !current)}>
@@ -50,6 +58,8 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
             menuOpen={openMessageActionMenuId === message.id}
             streaming={pcmStream.messageId === message.id}
             actions={messageActions}
+            uiActive={activeUiMessageId === message.id}
+            uiSubmissions={uiSubmissions.get(message.id)}
           />
         )} /> : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
         {quickSearchProgress ? <div className="assistant-quick-search-progress" role="status" aria-live="polite"><span className="assistant-quick-search-icon" aria-hidden="true">◎</span><span>Searching {quickSearchProgress}</span></div> : null}
@@ -66,7 +76,7 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
         onApplyPrompt={applySuggestedPrompt}
         ttsOutputLabel={ttsOutputLabel}
         canPlayLatestReply={Boolean(latestAssistantMessage)}
-        onPlayLatestReply={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')}
+        onPlayLatestReply={() => void playAssistantResponseAudio(latestAssistantMessage ? chatMessageSpeech(latestAssistantMessage) : '')}
         personalityLabel={selectedPersonalityLabel}
         permissionsLabel={codingApprovalOptions.find((option) => option.value === assistantSettings.codingApprovalPolicy)?.label}
         toolsLabel={runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}

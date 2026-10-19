@@ -2,6 +2,10 @@ import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import type { components } from '../api/generated';
 import { ChatResponseMetricsRow } from './chat-response-metrics-controller';
 import { chatImageDataUrls, chatTextAttachment, formatMessageTime } from './chatMessageModel';
+import { chatMessageSpeech } from './generative-ui/chatMessageProjection';
+import { ChatUiRenderer } from './generative-ui/ChatUiRenderer';
+import { parseChatUi } from './generative-ui/schema';
+import type { ChatUiAction, ChatUiInteraction, ChatUiSubmission } from './generative-ui/uiActions';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
 import { isDeepResearchMessage, renderMarkdownHtml, renderResearchReportHtml } from './markdownRenderer';
 import { OmnixRunCard } from './OmnixRunCard';
@@ -21,6 +25,10 @@ export type ChatMessageActions = {
   closeMenu: () => void;
   continueFrom: (message: ChatMessage) => void;
   openTools: () => void;
+  /** A choices button: send its label as the user's message. */
+  chooseUiOption: (text: string, action: ChatUiAction) => void;
+  /** A form: put its filled template in the composer for the user to send. */
+  fillComposerFromUi: (text: string, action: ChatUiAction) => void;
 };
 
 type ChatMessageItemProps = {
@@ -30,15 +38,30 @@ type ChatMessageItemProps = {
   menuOpen: boolean;
   streaming: boolean;
   actions: ChatMessageActions;
+  /** Whether this reply's widgets are active (the latest reply, nothing pending). */
+  uiActive?: boolean;
+  /** Earlier submissions to this reply's widgets, by block id (GUI-5.3). */
+  uiSubmissions?: Record<string, ChatUiSubmission>;
 };
 
 /** One message of the transcript; it re-renders only when its own props change (WP-9.5). */
-export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionId, feedback, menuOpen, streaming, actions }: ChatMessageItemProps) {
+export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionId, feedback, menuOpen, streaming, actions, uiActive = false, uiSubmissions }: ChatMessageItemProps) {
   const research = isDeepResearchMessage(message.metadata);
-  const html = useMemo(
-    () => research ? renderResearchReportHtml(message.content, message.metadata) : renderMarkdownHtml(message.content, message.metadata),
-    [message.content, message.metadata, research],
+  // Validated generative UI renders as components; anything else renders exactly as before.
+  const ui = useMemo(
+    () => message.role === 'assistant' && !research ? parseChatUi(message.metadata, message.content) : null,
+    [message.content, message.metadata, message.role, research],
   );
+  const html = useMemo(
+    () => ui ? '' : research ? renderResearchReportHtml(message.content, message.metadata) : renderMarkdownHtml(message.content, message.metadata),
+    [message.content, message.metadata, research, ui],
+  );
+  const interaction = useMemo<ChatUiInteraction>(() => ({
+    active: uiActive,
+    submissions: uiSubmissions ?? {},
+    choose: actions.chooseUiOption,
+    fillComposer: actions.fillComposerFromUi,
+  }), [actions, uiActive, uiSubmissions]);
   const images = chatImageDataUrls(message.metadata);
   const attachment = chatTextAttachment(message.metadata);
   const assistant = message.role === 'assistant';
@@ -54,14 +77,26 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionI
           </div>
         ) : null}
         {attachment ? <div className="assistant-chat-file-attachment"><strong>Attached file: {attachment.filename}</strong><small>{attachment.mimeType}</small></div> : null}
-        <div
-          className={`assistant-message-content${research ? ' assistant-research-report-host' : ''}`}
-          data-omnix-message-content="true"
-          onClick={(event) => handleResearchReportAction(event.nativeEvent)}
-          data-raw-content={message.content}
-          data-message-id={message.id}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        {ui ? (
+          <div
+            className="assistant-message-content assistant-ui-reply"
+            data-omnix-message-content="true"
+            onClick={(event) => handleResearchReportAction(event.nativeEvent)}
+            data-raw-content={message.content}
+            data-message-id={message.id}
+          >
+            <ChatUiRenderer ui={ui} metadata={message.metadata} messageId={message.id} interaction={interaction} />
+          </div>
+        ) : (
+          <div
+            className={`assistant-message-content${research ? ' assistant-research-report-host' : ''}`}
+            data-omnix-message-content="true"
+            onClick={(event) => handleResearchReportAction(event.nativeEvent)}
+            data-raw-content={message.content}
+            data-message-id={message.id}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )}
         {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={sessionId} onOpenTools={actions.openTools} />)}
         <OmnixRunCard metadata={message.metadata} />
         {assistant ? <ChatResponseMetricsRow metadata={message.metadata} /> : null}
@@ -70,13 +105,13 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionI
             <button type="button" className={feedback === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={feedback === 'liked'} onClick={() => actions.toggleFeedback(message.id, 'liked')}>♡</button>
             <button type="button" className={feedback === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={feedback === 'disliked'} onClick={() => actions.toggleFeedback(message.id, 'disliked')}>↯</button>
             <button type="button" aria-label="Copy response" onClick={() => actions.copy(message)}>□</button>
-            <button type="button" aria-label="Play response audio" onClick={() => actions.play(message.content)}>▶</button>
+            <button type="button" aria-label="Play response audio" onClick={() => actions.play(chatMessageSpeech(message))}>▶</button>
             <button type="button" data-omnix-stream-audio="true" aria-label={streamLabel} title={streamLabel} aria-pressed={streaming} onClick={() => actions.stream(message)}>{streaming ? '■' : '≋'}</button>
             <button type="button" aria-label="More response actions" aria-expanded={menuOpen} onClick={() => actions.toggleMenu(message.id)}>⋮</button>
             {menuOpen ? (
               <div className="assistant-message-action-menu" role="menu">
                 <button type="button" role="menuitem" onClick={() => actions.copy(message)}>Copy text</button>
-                <button type="button" role="menuitem" onClick={() => { actions.closeMenu(); actions.play(message.content); }}>Play audio</button>
+                <button type="button" role="menuitem" onClick={() => { actions.closeMenu(); actions.play(chatMessageSpeech(message)); }}>Play audio</button>
                 <button type="button" role="menuitem" onClick={() => { actions.closeMenu(); actions.continueFrom(message); }}>Continue</button>
               </div>
             ) : null}
@@ -103,5 +138,7 @@ export function useStableMessageActions(actions: ChatMessageActions): ChatMessag
     closeMenu: () => latest.current.closeMenu(),
     continueFrom: (message) => latest.current.continueFrom(message),
     openTools: () => latest.current.openTools(),
+    chooseUiOption: (text, action) => latest.current.chooseUiOption(text, action),
+    fillComposerFromUi: (text, action) => latest.current.fillComposerFromUi(text, action),
   }), []);
 }

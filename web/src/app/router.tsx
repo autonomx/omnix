@@ -11,12 +11,13 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
 import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
 import { commitAppearanceSettings, DEFAULT_OMNIX_TEXT_SCALE, loadStoredAppearancePreferences, resolveAppearanceMode, type OmnixAppearanceChangeDetail, type OmnixAppearanceMode } from '../design/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { defaultModuleId, moduleManifests, omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
+import { devToolPages } from './devToolsManifest';
 import { NotFoundView } from './NotFoundView';
 import { LoginPage } from './LoginPage';
 import { RouteErrorFallback } from './RouteErrorBoundary';
@@ -155,8 +156,15 @@ function OmnixShell() {
 // otherwise start workspace API traffic before a session exists.
 function OmnixRoot() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  return pathname === LOGIN_PATH ? <Outlet /> : <OmnixShell />;
+  return pathname === LOGIN_PATH || devToolPages.some((page) => page.path === pathname) ? <Outlet /> : <OmnixShell />;
 }
+
+// Development-only pages (empty in production builds).
+const devRoutes = devToolPages.map((page) => createRoute({
+  getParentRoute: () => rootRoute,
+  path: page.path,
+  component: () => <Suspense fallback={null}><page.component /></Suspense>,
+}));
 
 const rootRoute = createRootRoute({
   component: OmnixRoot,
@@ -184,7 +192,7 @@ const moduleRoutes = moduleManifests.map((manifest) => createRoute({
 
 export const moduleRoutePaths = omnixModules.map((module) => module.route);
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, ...moduleRoutes]);
+const routeTree = rootRoute.addChildren([indexRoute, loginRoute, ...moduleRoutes, ...devRoutes]);
 
 export const router = createRouter({ routeTree });
 

@@ -11,7 +11,8 @@
     "segments": [
       {
         "kind": "block",
-        "id": "b1"
+        "id": "b1",
+        "text": "Form (Backtest): Symbol (select: AAPL, MSFT, NVDA), Stop (slider 0.5–5 %), Extended hours (yes/no), Notes (text)"
       }
     ],
     "blocks": {

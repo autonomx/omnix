@@ -9,6 +9,7 @@ import type { useResponseAudio } from './useResponseAudio';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
 import { sendChatWithAssistantContext } from '../workspace';
 import { LIVE_CALL_DIAGNOSTIC_EVENT } from '../../../events/bus';
+import { chatMessageSpeech } from './generative-ui/chatMessageProjection';
 
 type StreamedVoiceTurnsOptions = Pick<ReturnType<typeof useResponseAudio>, 'playAssistantResponseAudio'>
   & Pick<VoiceTurnDiagnostics, 'voiceTurnPerformanceRef' | 'markVoiceTurnPerformance' | 'recordVoiceTurnDiagnostic'>
@@ -82,7 +83,7 @@ export function useStreamedVoiceTurns({
     if (unifiedLiveVoiceAudioInstalled()) return;
     if (!autoSpeakResponses || !liveVoiceActive || !latestAssistantMessage || spokenMessageIds[latestAssistantMessage.id]) return;
     setSpokenMessageIds((current) => ({ ...current, [latestAssistantMessage.id]: true }));
-    void playAssistantResponseAudio(latestAssistantMessage.content);
+    void playAssistantResponseAudio(chatMessageSpeech(latestAssistantMessage));
     // Speaks each new reply once, keyed by its id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSpeakResponses, latestAssistantMessage?.id, liveVoiceActive, spokenMessageIds]);

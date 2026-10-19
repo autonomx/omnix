@@ -1,10 +1,12 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../../app/modules';
 import { omnixTheme } from '../../../design/theme';
 import { ChatbotWorkspace } from './ChatbotWorkspace';
+import { ChatMessageItem } from './ChatMessageItem';
 import { renderMarkdownHtml } from './markdownRenderer';
 import { createTestQueryClient } from '../../../test/renderWithProviders';
 
@@ -68,5 +70,111 @@ describe('Chat rendering', () => {
 
     expect(composer).toHaveValue('Hello');
     expect(vi.mocked(renderMarkdownHtml).mock.calls.length).toBe(rendersBeforeTyping);
+  });
+});
+
+// Generative UI in the transcript (GUI-2.2, GUI-2.4).
+const uiContent = 'Revenue held.\n\n```omnix-ui\n{"type": "stats", "items": [{"label": "Revenue", "value": "$6,930"}]}\n```';
+const uiPayload = {
+  version: 1,
+  compiler_version: 'gui-compiler-1',
+  compiled_at: '2026-10-11T00:00:00Z',
+  segments: [{ kind: 'markdown', start: 0, end: 15 }, { kind: 'block', id: 'b1', text: 'Revenue: $6,930.' }],
+  blocks: { b1: { type: 'stats', id: 'b1', v: 1, items: [{ label: 'Revenue', value: '$6,930' }], provenance: 'model', bindings: [] } },
+  text: 'Revenue held.\n\nRevenue: $6,930.',
+  speech: 'Revenue held.\n\nRevenue $6,930.',
+  diagnostics: [],
+};
+const uiSession = {
+  ...session,
+  id: 'chat:ui',
+  message_count: 4,
+  messages: [
+    { id: 'msg:q1', role: 'user', content: 'How was the quarter?', created_at: '2026-06-14T00:00:01Z' },
+    { id: 'msg:ui', role: 'assistant', content: uiContent, created_at: '2026-06-14T00:00:02Z', metadata: { ui: uiPayload } },
+    { id: 'msg:q2', role: 'user', content: 'Thanks', created_at: '2026-06-14T00:00:03Z' },
+    { id: 'msg:plain', role: 'assistant', content: 'A *few* things.', created_at: '2026-06-14T00:00:04Z' },
+  ],
+};
+
+function respondWithUi(input: RequestInfo | URL): Response {
+  const path = new URL(String(input), 'http://localhost').pathname;
+  if (path === '/api/chat/sessions') return Response.json({ sessions: [uiSession] });
+  if (path === '/api/chat/sessions/chat%3Aui') return Response.json(uiSession);
+  return respond(input);
+}
+
+function renderWorkspace() {
+  const module = omnixModules.find((entry) => entry.id === 'chatbot');
+  if (!module) throw new Error('Chatbot module is missing');
+  return render(
+    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+      <QueryClientProvider client={createTestQueryClient()}>
+        <ChatbotWorkspace module={module} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+}
+
+describe('Chat generative UI rendering', () => {
+  it('renders a stored block reply as components and a plain reply exactly as before', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => respondWithUi(input)));
+    const { container } = renderWorkspace();
+
+    const stats = await screen.findByRole('region', { name: 'Headline figures' });
+    expect(stats).toHaveTextContent('$6,930');
+    const uiWrapper = container.querySelector('[data-message-id="msg:ui"]');
+    expect(uiWrapper).toHaveClass('assistant-message-content', 'assistant-ui-reply');
+    expect(uiWrapper).toHaveAttribute('data-raw-content', uiContent);
+    expect(uiWrapper?.textContent).not.toContain('omnix-ui');
+
+    const plainWrapper = container.querySelector('[data-message-id="msg:plain"]');
+    expect(plainWrapper?.className).toBe('assistant-message-content');
+    expect(plainWrapper?.innerHTML).toBe(renderMarkdownHtml('A *few* things.', undefined));
+  });
+
+  it('copies the text projection of a block reply, never its JSON', async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => respondWithUi(input)));
+    renderWorkspace();
+
+    await screen.findByRole('region', { name: 'Headline figures' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Copy response' })[0]);
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('Revenue held.\n\nRevenue: $6,930.'));
+  });
+});
+
+describe('ChatMessageItem with generative UI', () => {
+  const actions = {
+    toggleFeedback: vi.fn(), copy: vi.fn(), play: vi.fn(), stream: vi.fn(), toggleMenu: vi.fn(), closeMenu: vi.fn(),
+    continueFrom: vi.fn(), openTools: vi.fn(), chooseUiOption: vi.fn(), fillComposerFromUi: vi.fn(),
+  };
+  const client = createTestQueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const uiMessage = uiSession.messages[1] as Parameters<typeof ChatMessageItem>[0]['message'];
+  const plainMessage = uiSession.messages[3] as Parameters<typeof ChatMessageItem>[0]['message'];
+
+  it('plays the speech projection of a block reply', () => {
+    render(<ChatMessageItem message={uiMessage} sessionId="chat:ui" feedback={undefined} menuOpen={false} streaming={false} actions={actions} />, { wrapper });
+    fireEvent.click(screen.getByRole('button', { name: 'Play response audio' }));
+
+    expect(actions.play).toHaveBeenCalledWith('Revenue held.\n\nRevenue $6,930.');
+  });
+
+  it('re-renders only the message whose props changed', () => {
+    const list = (plain: typeof plainMessage) => (
+      <>
+        <ChatMessageItem message={uiMessage} sessionId="chat:ui" feedback={undefined} menuOpen={false} streaming={false} actions={actions} />
+        <ChatMessageItem message={plain} sessionId="chat:ui" feedback={undefined} menuOpen={false} streaming={false} actions={actions} />
+      </>
+    );
+    const { rerender } = render(list(plainMessage), { wrapper });
+    vi.mocked(renderMarkdownHtml).mockClear();
+
+    rerender(list({ ...plainMessage, content: 'A *few* more things.' }));
+
+    expect(vi.mocked(renderMarkdownHtml).mock.calls.map(([markdown]) => markdown)).toEqual(['A *few* more things.']);
   });
 });

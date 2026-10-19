@@ -1,0 +1,564 @@
+/* Chat generative UI blocks. Every colour comes from theme variables (--omnix-*, the chat's
+   --assistant-tone-*), so each theme preset and light/dark mode applies without overrides. */
+@layer features {
+  .assistant-message-content.assistant-ui-reply {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .assistant-ui-reply > *,
+  .gui-block {
+    min-width: 0;
+  }
+
+  .gui-markdown > :first-child { margin-top: 0;
+  }
+
+  .gui-markdown > :last-child { margin-bottom: 0;
+  }
+
+  .gui-fallback-text {
+    color: var(--omnix-text);
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  .gui-block {
+    --gui-series-1: var(--omnix-cyan);
+    --gui-series-2: var(--omnix-purple);
+    --gui-series-3: var(--assistant-tone-positive, var(--omnix-success));
+    --gui-series-4: var(--assistant-tone-warning, var(--omnix-cyan));
+    --gui-series-5: var(--assistant-tone-negative, var(--omnix-purple));
+    --gui-series-6: var(--omnix-muted);
+    animation: gui-block-in 180ms ease-out both;
+    background: var(--omnix-soft-bg);
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.65rem;
+    color: var(--omnix-text);
+    padding: 0.7rem 0.8rem;
+  }
+
+  .gui-block-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.6rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .gui-block-header h4 {
+    color: var(--omnix-text);
+    flex: 1 1 auto;
+    font-size: 0.95rem;
+    line-height: 1.25;
+    margin: 0;
+  }
+
+  .gui-block-status {
+    color: var(--omnix-muted);
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  .gui-visually-hidden {
+    block-size: 1px;
+    clip-path: inset(50%);
+    inline-size: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+  }
+
+  .gui-link-button {
+    background: none;
+    border: 0;
+    color: var(--omnix-cyan);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.15rem 0.25rem;
+    text-decoration: underline;
+  }
+
+  .gui-link-button:disabled { cursor: default; opacity: 0.6;
+  }
+
+  /* Provenance (GUI-4.3) */
+  .gui-provenance {
+    align-items: center;
+    display: inline-flex;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    gap: 0.35rem;
+  }
+
+  .gui-provenance-model,
+  .gui-provenance-market,
+  .gui-provenance-sourced > summary {
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: var(--omnix-muted);
+    padding: 0.05rem 0.45rem;
+    white-space: nowrap;
+  }
+
+  .gui-provenance-sourced { position: relative;
+  }
+
+  .gui-provenance-sourced > summary {
+    border-color: color-mix(in srgb, var(--assistant-tone-positive, var(--omnix-success)) 45%, transparent);
+    color: var(--assistant-tone-positive, var(--omnix-success));
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .gui-provenance-sourced > summary::-webkit-details-marker { display: none;
+  }
+
+  .gui-provenance-sourced > ul {
+    background: var(--omnix-panel-solid);
+    border: 1px solid var(--omnix-strong-border);
+    border-radius: 0.5rem;
+    margin: 0.3rem 0 0;
+    max-width: min(22rem, 80vw);
+    padding: 0.4rem 0.6rem 0.4rem 1.2rem;
+    position: absolute;
+    z-index: 2;
+  }
+
+  .gui-provenance-sourced a { color: var(--omnix-cyan);
+  }
+
+  /* stats */
+  .gui-stats-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    margin: 0;
+  }
+
+  .gui-stat {
+    --stat-tone: var(--omnix-muted);
+    background: color-mix(in srgb, var(--stat-tone) 7%, transparent);
+    border: 1px solid color-mix(in srgb, var(--stat-tone) 24%, transparent);
+    border-radius: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .gui-stat[data-tone='positive'] { --stat-tone: var(--assistant-tone-positive, var(--omnix-success));
+  }
+
+  .gui-stat[data-tone='negative'] { --stat-tone: var(--assistant-tone-negative, var(--omnix-purple));
+  }
+
+  .gui-stat[data-tone='warning'] { --stat-tone: var(--assistant-tone-warning, var(--omnix-cyan));
+  }
+
+  .gui-stat[data-tone='info'] { --stat-tone: var(--assistant-tone-info, var(--omnix-cyan));
+  }
+
+  .gui-stat dt {
+    color: var(--omnix-muted);
+    font-size: 0.78rem;
+  }
+
+  .gui-stat dd { margin: 0;
+  }
+
+  .gui-stat-value {
+    color: var(--omnix-text);
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 750;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .gui-stat-delta {
+    color: var(--stat-tone);
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  .gui-stat-hint {
+    color: var(--omnix-muted);
+    font-size: 0.78rem;
+  }
+
+  /* chart */
+  .gui-chart-plot {
+    height: 13rem;
+    position: relative;
+  }
+
+  .gui-chart[data-size='sm'] .gui-chart-plot { height: 9rem;
+  }
+
+  .gui-chart[data-size='lg'] .gui-chart-plot { height: 18rem;
+  }
+
+  .gui-chart-svg { padding: 0.25rem 0 1.4rem 3.2rem;
+  }
+
+  .gui-chart-svg svg {
+    animation: gui-chart-reveal 520ms ease-out both;
+    display: block;
+    height: 100%;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .gui-chart-yaxis {
+    bottom: 1.4rem;
+    left: 0;
+    position: absolute;
+    top: 0.25rem;
+    width: 3rem;
+  }
+
+  .gui-chart-yaxis span,
+  .gui-chart-xaxis span {
+    color: var(--omnix-muted);
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .gui-chart-yaxis span {
+    position: absolute;
+    right: 0.3rem;
+    transform: translateY(50%);
+    white-space: nowrap;
+  }
+
+  .gui-chart-xaxis {
+    bottom: 0;
+    display: grid;
+    left: 3.2rem;
+    position: absolute;
+    right: 0;
+  }
+
+  .gui-chart-xaxis span {
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gui-chart-grid {
+    stroke: var(--omnix-border);
+    stroke-width: 1;
+  }
+
+  .gui-chart-bar { fill: var(--gui-series-1);
+  }
+
+  .gui-chart-line {
+    fill: none;
+    stroke: var(--gui-series-1);
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  [data-series='1'].gui-chart-bar { fill: var(--gui-series-2);
+  }
+
+  [data-series='2'].gui-chart-bar { fill: var(--gui-series-3);
+  }
+
+  [data-series='3'].gui-chart-bar { fill: var(--gui-series-4);
+  }
+
+  [data-series='4'].gui-chart-bar { fill: var(--gui-series-5);
+  }
+
+  [data-series='5'].gui-chart-bar { fill: var(--gui-series-6);
+  }
+
+  [data-series='1'].gui-chart-line { stroke: var(--gui-series-2);
+  }
+
+  [data-series='2'].gui-chart-line { stroke: var(--gui-series-3);
+  }
+
+  [data-series='3'].gui-chart-line { stroke: var(--gui-series-4);
+  }
+
+  [data-series='4'].gui-chart-line { stroke: var(--gui-series-5);
+  }
+
+  [data-series='5'].gui-chart-line { stroke: var(--gui-series-6);
+  }
+
+  .gui-chart-footer {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    justify-content: space-between;
+    margin-top: 0.45rem;
+  }
+
+  .gui-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    gap: 0.3rem 0.75rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .gui-chart-legend li > span {
+    background: var(--gui-series-1);
+    border-radius: 2px;
+    display: inline-block;
+    height: 0.65rem;
+    margin-right: 0.3rem;
+    width: 0.65rem;
+  }
+
+  .gui-chart-legend li[data-series='1'] > span { background: var(--gui-series-2);
+  }
+
+  .gui-chart-legend li[data-series='2'] > span { background: var(--gui-series-3);
+  }
+
+  .gui-chart-legend li[data-series='3'] > span { background: var(--gui-series-4);
+  }
+
+  .gui-chart-legend li[data-series='4'] > span { background: var(--gui-series-5);
+  }
+
+  .gui-chart-legend li[data-series='5'] > span { background: var(--gui-series-6);
+  }
+
+  .gui-chart-table {
+    margin-top: 0.5rem;
+    max-height: 16rem;
+    max-width: 100%;
+    overflow: auto;
+  }
+
+  .gui-chart-table table {
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    min-width: 100%;
+  }
+
+  .gui-chart-table th,
+  .gui-chart-table td {
+    border: 1px solid var(--omnix-border);
+    padding: 0.25rem 0.5rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .gui-chart-table th[scope='row'],
+  .gui-chart-table thead th:first-child { text-align: left;
+  }
+
+  .gui-price-chart .gui-chart {
+    animation: none;
+    background: none;
+    border: 0;
+    padding: 0;
+  }
+
+  /* sources */
+  .gui-source-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .gui-source-chip {
+    align-items: center;
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: var(--omnix-text);
+    display: inline-flex;
+    font-size: 0.8rem;
+    gap: 0.35rem;
+    max-width: 100%;
+    padding: 0.2rem 0.6rem;
+    text-decoration: none;
+  }
+
+  a.gui-source-chip:hover,
+  a.gui-source-chip:focus-visible { border-color: var(--omnix-cyan);
+  }
+
+  .gui-source-citation {
+    color: var(--omnix-cyan);
+    font-weight: 800;
+  }
+
+  .gui-source-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* choices */
+  .gui-choices-prompt {
+    color: var(--omnix-muted);
+    font-size: 0.85rem;
+    margin: 0 0 0.45rem;
+  }
+
+  .gui-choice-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .gui-choice {
+    background: var(--omnix-control-bg);
+    border: 1px solid var(--omnix-strong-border);
+    border-radius: 999px;
+    color: var(--omnix-control-text);
+    cursor: pointer;
+    font-size: 0.85rem;
+    max-width: 100%;
+    padding: 0.35rem 0.8rem;
+    text-align: left;
+  }
+
+  .gui-choice:hover:not(:disabled),
+  .gui-choice:focus-visible { border-color: var(--omnix-cyan);
+  }
+
+  .gui-choice:disabled { cursor: default; opacity: 0.55;
+  }
+
+  .gui-choice[data-chosen='true'] {
+    border-color: var(--omnix-cyan);
+    box-shadow: inset 0 0 0 1px var(--omnix-cyan);
+    opacity: 1;
+  }
+
+  /* form */
+  .gui-form fieldset {
+    border: 0;
+    display: grid;
+    gap: 0.6rem;
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .gui-form-field {
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+  }
+
+  .gui-form-field select,
+  .gui-form-field input[type='text'] {
+    background: var(--omnix-control-bg);
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.4rem;
+    color: var(--omnix-control-text);
+    min-width: 0;
+    padding: 0.35rem 0.5rem;
+  }
+
+  .gui-form-field [aria-invalid='true'] { border-color: var(--assistant-tone-negative, var(--omnix-purple));
+  }
+
+  .gui-form-toggle {
+    align-items: center;
+    display: flex;
+    gap: 0.45rem;
+  }
+
+  .gui-form-slider {
+    align-items: center;
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  .gui-form-slider input { accent-color: var(--omnix-cyan); flex: 1 1 auto; min-width: 0;
+  }
+
+  .gui-form-slider output {
+    font-variant-numeric: tabular-nums;
+    min-width: 3.5rem;
+    text-align: right;
+  }
+
+  .gui-form-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .gui-form-submit {
+    background: var(--omnix-theme-gradient, var(--omnix-control-bg));
+    border: 0;
+    border-radius: 0.45rem;
+    color: var(--omnix-theme-on-accent, var(--omnix-control-text));
+    cursor: pointer;
+    font-weight: 700;
+    padding: 0.4rem 0.9rem;
+  }
+
+  .gui-form fieldset:disabled .gui-form-submit { cursor: default; opacity: 0.6;
+  }
+
+  .gui-form-hint,
+  .gui-form-error {
+    font-size: 0.75rem;
+    margin: 0;
+  }
+
+  .gui-form-hint { color: var(--omnix-muted);
+  }
+
+  .gui-form-error { color: var(--assistant-tone-negative, var(--omnix-purple));
+  }
+
+  @keyframes gui-block-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes gui-chart-reveal {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0); }
+  }
+
+  @media (max-width: 480px) {
+    .gui-block { padding: 0.6rem;
+    }
+
+    .gui-stats-grid { grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    }
+
+    .gui-chart-plot { height: 11rem;
+    }
+
+    .gui-chart[data-size='lg'] .gui-chart-plot { height: 14rem;
+    }
+
+    .gui-choice { width: 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gui-block,
+    .gui-chart-svg svg { animation: none;
+    }
+  }
+}
