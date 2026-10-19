@@ -105,3 +105,18 @@ def test_the_report_states_the_verdict_and_the_gate():
     assert report.startswith("# Rich-reply evaluation: claude_cli:haiku (full) — 2026-10-18")
     assert "Gate: FAILED" in report
     assert "lower bound ≥ 0.93" in report
+
+
+def test_the_report_counts_whole_replies_and_names_resolved_models():
+    good = sample("block", GOOD)
+    mixed = sample("block", GOOD + "\n\n" + BAD)
+    metrics = score_samples([
+        EvalSample(good.prompt, good.content, good.ui, 1.0, resolved_model="claude-haiku-x"),
+        EvalSample(mixed.prompt, mixed.content, mixed.ui, 1.0, resolved_model="claude-haiku-x"),
+    ], instruction_tokens=1)
+
+    assert (metrics.replies_with_blocks, metrics.replies_all_valid) == (2, 1)
+    assert metrics.resolved_models == ["claude-haiku-x"]
+    report = report_markdown("m", "full", metrics, date="2026-10-19", samples_per_prompt=1, prompts=2)
+    assert "| Replies whose blocks all rendered | 1/2 |" in report
+    assert "`claude-haiku-x`" in report

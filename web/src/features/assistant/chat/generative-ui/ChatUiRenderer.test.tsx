@@ -230,3 +230,24 @@ describe('ChatUiRenderer', () => {
     expect(container.textContent).not.toMatch(/[{}]/);
   });
 });
+
+describe('ChatUiRenderer theme and market data edges', () => {
+  it('redraws a canvas chart when the appearance changes', async () => {
+    const { ui } = fixture('chart_time_line');
+    render(<ChatUiRenderer ui={ui} messageId="msg:1" />);
+    await waitFor(() => expect(mocks.mountTimeSeriesChart).toHaveBeenCalledTimes(1));
+
+    window.dispatchEvent(new CustomEvent('omnix:appearance-change', { detail: { mode: 'light', theme: 'aurora', textScale: 1 } }));
+
+    await waitFor(() => expect(mocks.mountTimeSeriesChart).toHaveBeenCalledTimes(2));
+  });
+
+  it('says when the bars from the answer time have aged out of the endpoint', async () => {
+    const { ui } = fixture('price_chart_pinned');
+    const asOf = Date.parse('2026-10-11T14:03:22Z') / 1000;
+    mocks.fetchChatPriceBars.mockResolvedValue([{ time: asOf + 400 * 86_400, close: 5 }]);
+    render(<ChatUiRenderer ui={ui} messageId="msg:1" />);
+
+    expect(await screen.findByText(/no longer available at this interval/)).toBeInTheDocument();
+  });
+});

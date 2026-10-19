@@ -9,7 +9,18 @@ import { z } from 'zod';
 const MAX_LABEL = 120;
 const MAX_STRING = 2_000;
 
-const label = z.string().min(1).max(MAX_LABEL);
+/**
+ * A string of `min`-`max` characters counted as the server counts them: code points, not the
+ * UTF-16 units `z.string().max()` counts, so an emoji-laden label the server kept is not refused.
+ */
+function text(max: number, min = 0) {
+  return z.string().refine((value) => {
+    const length = Array.from(value).length;
+    return length >= min && length <= max;
+  }, { message: `expected ${min}-${max} characters` });
+}
+
+const label = text(MAX_LABEL, 1);
 const optionalLabel = label.optional();
 const tone = z.enum(['neutral', 'positive', 'negative', 'warning', 'info']);
 const provenance = z.enum(['model', 'bound', 'market_data']);
@@ -34,10 +45,10 @@ export const statsBlockSchema = z.strictObject({
   items: z.array(z.strictObject({
     label,
     value: label,
-    delta: z.string().max(MAX_LABEL).optional(),
+    delta: text(MAX_LABEL).optional(),
     trend: z.enum(['up', 'down', 'flat']).optional(),
     tone: tone.optional(),
-    hint: z.string().max(MAX_STRING).optional(),
+    hint: text(MAX_STRING).optional(),
   })).min(1).max(6),
   provenance,
 });
@@ -76,7 +87,7 @@ export const sourcesBlockSchema = z.strictObject({
   refs: z.array(z.strictObject({
     ref: z.string(),
     citation: z.string().optional(),
-    title: z.string().min(1).max(MAX_STRING),
+    title: text(MAX_STRING, 1),
     url: z.string().optional(),
   })).min(1).max(12),
   provenance: z.literal('bound'),
@@ -85,8 +96,8 @@ export const sourcesBlockSchema = z.strictObject({
 export const choicesBlockSchema = z.strictObject({
   ...blockBase,
   type: z.literal('choices'),
-  prompt: z.string().max(MAX_STRING).optional(),
-  options: z.array(z.strictObject({ label: z.string().min(1).max(160) })).min(2).max(6),
+  prompt: text(MAX_STRING).optional(),
+  options: z.array(z.strictObject({ label: text(160, 1) })).min(2).max(6),
   provenance: z.literal('model'),
 });
 
@@ -99,7 +110,7 @@ const formFieldSchema = z.strictObject({
   min: z.number().optional(),
   max: z.number().optional(),
   step: z.number().optional(),
-  unit: z.string().max(16).optional(),
+  unit: text(16).optional(),
   max_length: z.number().int().min(1).max(200).optional(),
   placeholder: optionalLabel,
   default: z.union([z.string(), z.number(), z.boolean()]).nullable().optional(),
@@ -110,7 +121,7 @@ export const formBlockSchema = z.strictObject({
   type: z.literal('form'),
   title: optionalLabel,
   fields: z.array(formFieldSchema).min(1).max(8),
-  template: z.string().min(1).max(500),
+  template: text(500, 1),
   submit_label: optionalLabel,
   provenance: z.literal('model'),
 });

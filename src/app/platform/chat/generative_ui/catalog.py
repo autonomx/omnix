@@ -490,7 +490,8 @@ def _infer_axis(series: list[Any]) -> str:
                 continue
             x = pair[0]
             if isinstance(x, (int, float)) and not isinstance(x, bool):
-                return "time"
+                # Epoch seconds or milliseconds; a small number such as a year is a category.
+                return "time" if abs(x) >= 1e9 else "category"
             if isinstance(x, str) and _time_value(x) is not None and re.match(r"^\d{4}-\d{2}", x.strip()):
                 return "time"
             return "category"
@@ -652,7 +653,10 @@ def _category(value: Any) -> str | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return format_number(value) if math.isfinite(value) else None
+        if not math.isfinite(value):
+            return None
+        # A label keeps the number as written: a year is "2021", not "2,021".
+        return str(int(value)) if float(value).is_integer() else repr(float(value))
     if isinstance(value, str):
         text = " ".join(value.split())
         return text[:MAX_LABEL] if text else None

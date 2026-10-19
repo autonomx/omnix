@@ -203,3 +203,12 @@ def test_forms_validate_fields_and_template_placeholders():
 
     block, payload = compile_block({**spec, "template": "x" * 501})
     assert block is None and codes(payload) == ["template_too_long"]
+
+
+def test_small_numbers_are_categories_and_epoch_numbers_are_time():
+    years, _ = compile_block({"type": "chart", "kind": "bar", "series": [{"name": "Sales", "points": [[2021, 10], [2022, 12]]}]})
+    epochs, _ = compile_block({"type": "chart", "kind": "line", "series": [{"name": "A", "points": [[1_790_812_800, 1], [1_790_899_200, 2]]}]})
+
+    assert years["x"]["type"] == "category"
+    assert years["series"][0]["points"] == [["2021", 10.0], ["2022", 12.0]]
+    assert epochs["x"]["type"] == "time"

@@ -65,6 +65,7 @@ export function useSendChatMessage({
 
   const sendMutation = useMutation({
     mutationFn: async (values: ChatbotFormValues) => {
+      const composed = fromComposer(values);
       const providerId = values.providerId || undefined;
       const modelId = values.modelId || undefined;
       const content = values.content.trim() || attachmentDefaultMessage(pastedChatImages, pastedChatTextFile);
@@ -86,8 +87,8 @@ export function useSendChatMessage({
         provider_id: providerId,
         model_id: modelId,
         coding_approval_policy: assistantSettings.codingApprovalPolicy,
-        image_data_urls: pastedChatImages.map((image) => image.dataUrl),
-        text_attachment: pastedChatTextFile
+        image_data_urls: composed ? pastedChatImages.map((image) => image.dataUrl) : [],
+        text_attachment: composed && pastedChatTextFile
           ? { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text }
           : undefined,
         // The reply widget this message answers; the server checks it (GUI-5.4).
@@ -111,7 +112,7 @@ export function useSendChatMessage({
         role: 'user',
         content,
         created_at: new Date().toISOString(),
-        metadata: {
+        metadata: !fromComposer(values) ? { ui_action: values.uiAction } : {
           ...(pastedChatImages.length > 0 ? {
             image_data_urls: pastedChatImages.map((image) => image.dataUrl),
             image_data_url: pastedChatImages[0].dataUrl,
@@ -130,10 +131,12 @@ export function useSendChatMessage({
       setChatJobError(null);
       setQuickSearchProgress(null);
       setPendingUserMessage(null);
-      reset({ content: '', providerId: values.providerId, modelId: values.modelId });
-      setPastedChatImages([]);
-      setPastedChatTextFile(null);
-      setChatImageError(null);
+      if (fromComposer(values)) {
+        reset({ content: '', providerId: values.providerId, modelId: values.modelId });
+        setPastedChatImages([]);
+        setPastedChatTextFile(null);
+        setChatImageError(null);
+      }
       onSent();
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
       void queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
@@ -160,6 +163,11 @@ export function useSendChatMessage({
       recordActivityEvent(failureEvent, filter);
     },
   });
+
+  /** A choice button's message is sent on its own; everything else comes from the composer. */
+  function fromComposer(values: ChatbotFormValues): boolean {
+    return values.uiAction?.action !== 'choose';
+  }
 
   function chatSubmissionId(values: ChatbotFormValues): string {
     const fingerprint = JSON.stringify([

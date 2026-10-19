@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from .bindings import DEFAULT_SYMBOL_TIMEOUT_SECONDS, binding_sources, requested_market_symbols, resolve_market_symbols
-from .compiler import CompileScope, compile_chat_ui, has_ui_fence, utc_now
+from .compiler import CompileScope, compile_chat_ui, fallback_payload, has_ui_fence, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,14 @@ def finalize_reply_ui(
         payload = compile_chat_ui(content, scope)
     except Exception as exc:
         logger.warning("chat_ui_compile_failed", exc_info=True)
-        return {"ui_error": {"code": "compile_failed", "error_type": type(exc).__name__}}
+        error = {"ui_error": {"code": "compile_failed", "error_type": type(exc).__name__}}
+        # The reply still gets a block-free payload, so its fences never reach history or audio.
+        try:
+            fallback = fallback_payload(content, clock or utc_now)
+        except Exception:
+            logger.warning("chat_ui_fallback_failed", exc_info=True)
+            return error
+        return {**error, "ui": fallback} if fallback is not None else error
     return {"ui": payload} if payload is not None else {}
 
 

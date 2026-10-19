@@ -67,3 +67,13 @@ describe('generative UI schema', () => {
     expect(parseChatUi({ ui: { ...fixture.expected, version: 2 } }, fixture.content)).toBeNull();
   });
 });
+
+describe('length limits', () => {
+  it('counts characters as the server does, so emoji near a limit do not degrade a block', () => {
+    const label = '🚀'.repeat(120); // 120 code points, 240 UTF-16 units
+    const block = { type: 'stats', id: 'b1', v: 1, items: [{ label, value: '1' }], provenance: 'model', bindings: [] };
+
+    expect(chatUiBlockSchema.safeParse(block).success).toBe(true);
+    expect(chatUiBlockSchema.safeParse({ ...block, items: [{ label: `${label}x`, value: '1' }] }).success).toBe(false);
+  });
+});

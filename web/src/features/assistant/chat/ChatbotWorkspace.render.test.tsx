@@ -238,6 +238,22 @@ describe('Chat generative UI widgets', () => {
     expect(posts[0].body.ui_action).toEqual({ source_message_id: 'msg:w-reply', block_id: 'b1', action: 'choose', option_index: 1 });
   });
 
+  it('keeps the composer draft when a choice is sent', async () => {
+    posts.length = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => respondWithWidgets(input, init)));
+    renderWorkspace();
+
+    const choice = await screen.findByRole('button', { name: 'Compare with MSFT' });
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.input(composer, { target: { value: 'my half-written draft' } });
+    fireEvent.click(choice);
+
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].body.content).toBe('Compare with MSFT');
+    expect(posts[0].body.image_data_urls).toEqual([]);
+    await vi.waitFor(() => expect(composer).toHaveValue('my half-written draft'));
+  });
+
   it('fills the composer from a form and sends nothing until the user does', async () => {
     posts.length = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => respondWithWidgets(input, init)));

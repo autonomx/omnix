@@ -216,7 +216,7 @@ Rules:
       "diagnostics": [{"block": "b1", "code": "unknown_prop", "path": "items[0].color", "severity": "dropped"}]
     }
 
-- Markdown segments are `[start, end)` offsets into the stored `content`, so prose isn't duplicated. The fence text itself is never inside a Markdown span.
+- Markdown segments are `[start, end)` offsets into the stored `content`, in UTF-16 code units as JavaScript indexes strings (DECISIONS GUI-1.3 review), so prose isn't duplicated. The fence text itself is never inside a Markdown span.
 - A block segment carries its block's `to_text()`, which the client shows if it cannot render the block (DECISIONS GUI-2.1).
 - A dropped block becomes a `text` segment holding its fallback (from the valid part of the spec when possible, otherwise a short notice). A diagnostic records why.
 - `compiled_at` is set by the compile, which happens before the assistant message exists. It is the as-of time for `price_chart`.
@@ -607,6 +607,9 @@ Completed by GUI-0.2 (2026-10-18); no row is unknown.
 | Research release notice | `research_release.py` | Appends to `content` after commit; rebases `metadata.ui` |
 | Job output ref | `_commit_chat_reply` `output_refs[].content` | raw (audit) |
 | Copy | `useChatMessageActions.ts` | `chatMessageText` |
+| Continue (composer prefill) | `useChatWorkspaceState.ts` `continueFrom` | `chatMessageText` |
+| Live-voice transcript card | `ChatLiveVoiceCard.tsx` | `chatMessageText` |
+| Activity panel turn events | `workspace/chatbot-activity.ts` | `chatMessageText` |
 | PCM stream | `useChatMessageActions.ts` | `chatMessageSpeech` |
 | Play | `ChatMessageItem.tsx` | `chatMessageSpeech` |
 | Streamed voice | `useStreamedVoiceTurns.ts` | `chatMessageSpeech` |
@@ -621,6 +624,6 @@ Completed by GUI-0.2 (2026-10-18); no row is unknown.
 | Interrupted completions | `chat_runtime._persist_assistant_completion`, `character_store._persist_interrupted_reply` | No: `ui` is dropped (invariant 9) |
 | Character greetings/replies outside the two paths | `character_store.py` | Excluded: character mode is off in V1 |
 | Memory commands | `prompt_store.py`, `generation_jobs._generate_reply` | Excluded: deterministic text (`finalize_reply_ui` skips `memory_command`) |
-| Proactive live-voice turns | `live_conversation_proactive.py` → `append_assistant_message` | Excluded: live voice gets no rich UI |
+| Proactive live-voice turns and live-call greetings | `live_conversation_proactive.py` → `append_assistant_message`, `live_call_greeting.py` | Excluded: their synthetic prompts are `transient`, so the policy never enables rich replies for them |
 | Legacy synchronous turn | `store.append_user_message` | Excluded: no production caller |
 | Research reports | `research/jobs.py` | Excluded: own renderer ("Later") |

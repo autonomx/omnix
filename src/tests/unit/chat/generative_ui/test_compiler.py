@@ -16,7 +16,7 @@ import pytest
 
 from app.platform.chat.generative_ui import COMPILER_VERSION, ChatUiPayload, CompileScope, compile_chat_ui
 from app.platform.chat.generative_ui.bindings import binding_sources
-from app.platform.chat.generative_ui.compiler import rebase_reply_ui, rebase_ui_after_rewrite
+from app.platform.chat.generative_ui.compiler import rebase_reply_ui, rebase_ui_after_rewrite, utf16_length
 
 FIXTURES = Path(__file__).resolve().parents[5] / "resources" / "chat" / "generative_ui" / "fixtures"
 FENCE = "```"
@@ -31,6 +31,12 @@ def fixture_scope(fixture: dict) -> CompileScope:
         sources=binding_sources(scope.get("context_items")),
         market_symbols=scope.get("market_symbols"),
     )
+
+
+def js_slice(text: str, start: int, end: int) -> str:
+    """``text.slice(start, end)`` as JavaScript computes it (UTF-16 code units)."""
+    units = text.encode("utf-16-le")
+    return units[2 * start : 2 * end].decode("utf-16-le")
 
 
 def fixture_paths() -> list[Path]:
@@ -62,10 +68,20 @@ def test_markdown_offsets_reproduce_the_prose_and_never_include_a_fence(path: Pa
     for segment in payload["segments"]:
         if segment["kind"] != "markdown":
             continue
-        span = content[segment["start"]:segment["end"]]
+        span = js_slice(content, segment["start"], segment["end"])
         assert span.strip()
         assert "omnix-ui" not in span
         assert span.strip() in payload["text"]
+
+
+def test_offsets_are_utf16_code_units_so_the_browser_slices_exactly():
+    fixture = json.loads((FIXTURES / "unicode_offsets.json").read_text(encoding="utf-8"))
+    payload = compile_chat_ui(fixture["content"], fixture_scope(fixture))
+    spans = [js_slice(fixture["content"], s["start"], s["end"]) for s in payload["segments"] if s["kind"] == "markdown"]
+
+    assert spans[0].startswith("Rockets 🚀🚀🚀🚀") and spans[0].rstrip().endswith("𝔉𝔞𝔫𝔠𝔶.")
+    assert spans[1].strip() == "After 👋 text."
+    assert all("omnix-ui" not in span for span in spans)
 
 
 def test_identical_input_and_clock_give_byte_identical_output():
@@ -143,7 +159,7 @@ def test_rebase_appends_a_markdown_span_for_an_appended_tail():
     appended = content + "\n\n> Research mode notice: limited."
 
     rebased = rebase_ui_after_rewrite(ui, content, appended)
-    assert rebased["segments"][-1] == {"kind": "markdown", "start": len(content), "end": len(appended)}
+    assert rebased["segments"][-1] == {"kind": "markdown", "start": utf16_length(content), "end": utf16_length(appended)}
     assert rebased["text"].endswith("> Research mode notice: limited.")
     assert rebased["speech"].endswith("Research mode notice: limited.")
     assert rebase_ui_after_rewrite(ui, content, "Rewritten.") is None

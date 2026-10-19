@@ -84,7 +84,11 @@ def _sample(provider, model: str, prompt, level: str) -> EvalSample:
     usage = getattr(response, "usage", None) or {}
     tokens = usage.get("completion_tokens") or usage.get("output_tokens") if isinstance(usage, dict) else None
     ui = finalize_reply_ui(content, {}, context_items=[dict(item) for item in prompt.context_items], symbol_lookup=AnySymbol()).get("ui")
-    return EvalSample(prompt, content, ui, latency, tokens if isinstance(tokens, int) else None)
+    resolved = getattr(response, "model", None)
+    return EvalSample(
+        prompt, content, ui, latency, tokens if isinstance(tokens, int) else None,
+        resolved_model=str(resolved) if resolved else None,
+    )
 
 
 @pytest.mark.parametrize(("provider_id", "model", "level"), _models())

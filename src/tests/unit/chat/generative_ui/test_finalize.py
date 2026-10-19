@@ -45,8 +45,21 @@ def test_a_compiler_failure_becomes_ui_error_and_never_raises(monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(finalize_module, "compile_chat_ui", explode)
+    result = finalize_reply_ui(STATS, {}, clock=CLOCK)
 
-    assert finalize_reply_ui(STATS, {}) == {"ui_error": {"code": "compile_failed", "error_type": "RuntimeError"}}
+    assert result["ui_error"] == {"code": "compile_failed", "error_type": "RuntimeError"}
+    # A block-free payload keeps the fence out of history, copy and speech.
+    assert result["ui"]["blocks"] == {}
+    assert result["ui"]["text"] == "Prose.\n\n[A block could not be shown.]"
+    assert "{" not in result["ui"]["speech"]
+    assert result["ui"]["diagnostics"] == [{"code": "compile_failed", "severity": "degraded"}]
+
+
+def test_when_even_the_fallback_fails_only_the_error_is_recorded(monkeypatch):
+    monkeypatch.setattr(finalize_module, "compile_chat_ui", lambda *_args: 1 / 0)
+    monkeypatch.setattr(finalize_module, "fallback_payload", lambda *_args: 1 / 0)
+
+    assert finalize_reply_ui(STATS, {}) == {"ui_error": {"code": "compile_failed", "error_type": "ZeroDivisionError"}}
 
 
 def test_price_chart_symbols_are_validated_before_compiling():

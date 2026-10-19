@@ -1,5 +1,5 @@
 import { useRouter, type AnyRouter } from '@tanstack/react-router';
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { fetchChatPriceBars, tradingChartHref, type ChatPriceBar } from '../../../../trading';
 import { ChartBlockView } from './ChartBlockView';
 import type { ChartBlock, PriceChartBlock } from '../schema';
@@ -33,7 +33,7 @@ export function pinnedBars(bars: ChatPriceBar[], window: { from: number | null; 
   return bars.filter((bar) => bar.time <= window.to && (window.from === null || bar.time >= window.from));
 }
 
-type Load = { status: 'loading' } | { status: 'ready'; bars: ChatPriceBar[] } | { status: 'error' };
+type Load = { status: 'loading' } | { status: 'ready'; bars: ChatPriceBar[]; aged: boolean } | { status: 'error' };
 
 /** Pinned, read-only market data: the chart shows what was true when the answer was written. */
 export function PriceChartBlockView({ block, summary }: { block: PriceChartBlock; summary: string }) {
@@ -44,7 +44,11 @@ export function PriceChartBlockView({ block, summary }: { block: PriceChartBlock
     const window = priceChartWindow(block, Date.now() / 1000);
     setLoad({ status: 'loading' });
     fetchChatPriceBars(block.instrument_id, block.interval, window.limit)
-      .then((bars) => { if (!cancelled) setLoad({ status: 'ready', bars: pinnedBars(bars, window) }); })
+      .then((bars) => {
+        // The bars endpoint serves the latest bars only: an old intraday window can age out of reach.
+        const pinned = pinnedBars(bars, window);
+        if (!cancelled) setLoad({ status: 'ready', bars: pinned, aged: !pinned.length && bars.length > 0 && bars[0].time > window.to });
+      })
       .catch(() => { if (!cancelled) setLoad({ status: 'error' }); });
     return () => { cancelled = true; };
   }, [block]);
@@ -57,13 +61,14 @@ export function PriceChartBlockView({ block, summary }: { block: PriceChartBlock
   };
   const asOf = block.as_of.slice(0, 10);
   const title = block.title ?? `${block.symbol} · ${INTERVAL_LABEL[block.interval]} · ${block.range}`;
-  const chart: ChartBlock | null = load.status === 'ready' && load.bars.length
+  // Built once per load, so a re-render does not redraw the chart.
+  const chart = useMemo<ChartBlock | null>(() => (load.status === 'ready' && load.bars.length
     ? {
       type: 'chart', id: block.id, v: 1, kind: 'area', size: 'md', bindings: [], provenance: 'bound',
       x: { type: 'time' }, y: { format: 'number' },
       series: [{ name: `${block.symbol} close`, points: load.bars.map((bar) => [bar.time, bar.close] as [number, number]) }],
     }
-    : null;
+    : null), [load, block.id, block.symbol]);
   return (
     <section className="gui-block gui-price-chart" aria-label={title}>
       <header className="gui-block-header">
@@ -73,7 +78,11 @@ export function PriceChartBlockView({ block, summary }: { block: PriceChartBlock
       </header>
       {load.status === 'loading' ? <div className="gui-block-status" role="status">Loading market data…</div> : null}
       {load.status === 'error' ? <div className="gui-block-status" role="status">Market data is unavailable. {summary}</div> : null}
-      {load.status === 'ready' && !chart ? <div className="gui-block-status" role="status">No market data for this period.</div> : null}
+      {load.status === 'ready' && !chart ? (
+        <div className="gui-block-status" role="status">
+          {load.aged ? 'Bars from when this answer was written are no longer available at this interval.' : 'No market data for this period.'}
+        </div>
+      ) : null}
       {chart ? <ChartBlockView block={chart} summary={summary} /> : null}
     </section>
   );

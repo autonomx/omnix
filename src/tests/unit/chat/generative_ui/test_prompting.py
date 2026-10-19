@@ -190,3 +190,18 @@ def test_only_models_with_a_passing_report_are_enabled():
     for (provider, model), level in model_catalog.RICH_UI_CAPABILITIES.items():
         report = Path(__file__).resolve().parents[5] / "docs" / "roadmap" / "evaluations" / f"GUI_EVAL_2026-10-19_{provider}_{model}_{level}.md"
         assert "Gate: PASSED" in report.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"source": "live_call_greeting", "transient": True},
+        {"source": "proactive_reengagement", "purpose": "proactive_reengagement", "transient": True},
+        {"speculative": True},
+    ],
+)
+def test_synthetic_live_voice_prompts_never_get_rich_replies(metadata):
+    decision = ui_enabled_for_turn(session("on"), user("Say hello", **metadata), capability=lambda _p, _m: "full")
+
+    assert decision.enabled is False
+    assert decision.reason == "live_voice"

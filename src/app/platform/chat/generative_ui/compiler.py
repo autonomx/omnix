@@ -64,6 +64,11 @@ def _timestamp(value: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def utf16_length(text: str) -> int:
+    """The length of ``text`` in UTF-16 code units: what a JavaScript string index counts."""
+    return len(text.encode("utf-16-le")) // 2
+
+
 def _size(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
 
@@ -74,6 +79,9 @@ class _Compilation:
         self.scope = scope
         self.compiled_at = compiled_at
         self.segments: list[dict[str, Any]] = []
+        # Markdown spans as code-point slices of ``content``, by segment index; the stored
+        # offsets are UTF-16 code units, which is how the browser slices the content.
+        self.spans: dict[int, tuple[int, int]] = {}
         self.blocks: dict[str, dict[str, Any]] = {}
         self.diagnostics: list[ChatUiDiagnostic] = []
         self.used_ids: set[str] = set()
@@ -85,7 +93,12 @@ class _Compilation:
 
     def markdown(self, start: int, end: int) -> None:
         if end > start and self.content[start:end].strip():
-            self.segments.append({"kind": "markdown", "start": start, "end": end})
+            self.spans[len(self.segments)] = (start, end)
+            self.segments.append({
+                "kind": "markdown",
+                "start": utf16_length(self.content[:start]),
+                "end": utf16_length(self.content[:end]),
+            })
 
     def text(self, value: str) -> None:
         self.segments.append({"kind": "text", "text": value})
@@ -188,9 +201,14 @@ class _Compilation:
         self.note(block_id, code, "degraded", path, detail)
         self.text(best_effort_text(spec, block_type))
 
+    def structure_size(self) -> int:
+        """Bytes the cap counts: segments, blocks and diagnostics. The text and speech
+        projections repeat the prose, which ``content`` already bounds, so they are left out."""
+        return _size({"segments": self.segments, "blocks": self.blocks, "diagnostics": [item.model_dump(exclude_none=True) for item in self.diagnostics]})
+
     def shrink_to_cap(self) -> None:
         """Turn the largest blocks into text until the payload fits (roadmap §7.3)."""
-        while self.blocks and _size(self.payload()) > MAX_PAYLOAD_BYTES:
+        while self.blocks and self.structure_size() > MAX_PAYLOAD_BYTES:
             largest = max(self.blocks, key=lambda key: (_size(self.blocks[key]), key))
             block = self.blocks.pop(largest)
             index = next(i for i, segment in enumerate(self.segments) if segment.get("id") == largest)
@@ -200,9 +218,10 @@ class _Compilation:
     def projections(self) -> tuple[str, str]:
         texts: list[str] = []
         speeches: list[str] = []
-        for segment in self.segments:
+        for index, segment in enumerate(self.segments):
             if segment["kind"] == "markdown":
-                span = self.content[segment["start"] : segment["end"]]
+                start, end = self.spans[index]
+                span = self.content[start:end]
                 texts.append(span.strip())
                 speeches.append(markdown_to_speech(span))
             elif segment["kind"] == "block":
@@ -229,7 +248,7 @@ class _Compilation:
 
 
 class PayloadTooLarge(ValueError):
-    """The reply's prose alone exceeds the ``metadata.ui`` cap."""
+    """The payload's structure exceeds the ``metadata.ui`` cap even with every block as text."""
 
 
 def compile_chat_ui(content: str, scope: CompileScope | None = None) -> dict[str, Any] | None:
@@ -248,11 +267,35 @@ def compile_chat_ui(content: str, scope: CompileScope | None = None) -> dict[str
         cursor = fence.end
     compilation.markdown(cursor, len(content))
     compilation.shrink_to_cap()
-    payload = compilation.payload()
-    if _size(payload) > MAX_PAYLOAD_BYTES:
+    if compilation.structure_size() > MAX_PAYLOAD_BYTES:
         raise PayloadTooLarge(f"metadata.ui over {MAX_PAYLOAD_BYTES} bytes without blocks")
+    payload = compilation.payload()
     ChatUiPayload.model_validate(payload)
     return payload
+
+
+FALLBACK_NOTICE = "[A block could not be shown.]"
+
+
+def fallback_payload(content: str, clock: Callable[[], datetime] = utc_now) -> dict[str, Any] | None:
+    """A block-free payload for a reply whose compile failed: its prose, and a notice for each fence.
+
+    It keeps raw block markup out of history, copy and speech even when the compiler
+    itself fails, so invariants 5 and 6 hold for every fenced reply. None when the
+    reply has no fence.
+    """
+    fences = scan_fences(content)
+    if not fences:
+        return None
+    compilation = _Compilation(content, CompileScope(clock=clock), _timestamp(clock()))
+    cursor = 0
+    for fence in fences:
+        compilation.markdown(cursor, fence.start)
+        compilation.text(FALLBACK_NOTICE)
+        cursor = fence.end
+    compilation.markdown(cursor, len(content))
+    compilation.note(None, "compile_failed", "degraded")
+    return compilation.payload()
 
 
 def rebase_ui_after_rewrite(ui: Mapping[str, Any], old_content: str, new_content: str) -> dict[str, Any] | None:
@@ -270,7 +313,7 @@ def rebase_ui_after_rewrite(ui: Mapping[str, Any], old_content: str, new_content
     rebased = dict(ui)
     segments = list(rebased.get("segments") or [])
     if tail.strip():
-        segments.append({"kind": "markdown", "start": len(old_content), "end": len(new_content)})
+        segments.append({"kind": "markdown", "start": utf16_length(old_content), "end": utf16_length(new_content)})
         rebased["text"] = "\n\n".join(item for item in (str(ui.get("text") or ""), tail.strip()) if item)
         rebased["speech"] = "\n\n".join(item for item in (str(ui.get("speech") or ""), markdown_to_speech(tail)) if item.strip())
     rebased["segments"] = segments

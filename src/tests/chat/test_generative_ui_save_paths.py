@@ -97,7 +97,8 @@ def test_a_compiler_exception_still_commits_the_reply_as_plain_text(tmp_path, mo
     message = _reply(chat_store, admission)
 
     assert message.content == FENCED
-    assert "ui" not in message.metadata
+    assert message.metadata["ui"]["blocks"] == {}
+    assert "omnix-ui" not in message.metadata["ui"]["text"]
     assert message.metadata["ui_error"] == {"code": "compile_failed", "error_type": "RuntimeError"}
     assert job_store.get_job(admission.job.id).status == JobStatus.COMPLETED
 

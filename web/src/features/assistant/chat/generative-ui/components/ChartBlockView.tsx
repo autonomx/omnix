@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { APPEARANCE_CHANGE_EVENT, onOmnixEvent } from '../../../../../events/bus';
 import { mountTimeSeriesChart } from '../chatChartAdapter';
 import { SERIES_COLOR_VARIABLES, formatChartValue, formatChartX, isIntraday, resolveCssColors } from '../format';
 import type { ChartBlock } from '../schema';
@@ -27,7 +28,7 @@ export function ChartBlockView({ block, summary }: { block: ChartBlock; summary:
         {block.series.length > 1 ? (
           <ul className="gui-chart-legend" aria-label="Series">
             {block.series.map((series, index) => (
-              <li key={series.name} data-series={index % SERIES_COLOR_VARIABLES.length}><span aria-hidden="true" />{series.name}</li>
+              <li key={`${index}:${series.name}`} data-series={index % SERIES_COLOR_VARIABLES.length}><span aria-hidden="true" />{series.name}</li>
             ))}
           </ul>
         ) : <span />}
@@ -42,6 +43,9 @@ export function ChartBlockView({ block, summary }: { block: ChartBlock; summary:
 
 function TimeSeriesPlot({ block, summary, onFailed }: { block: ChartBlock; summary: string; onFailed: (failed: boolean) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // Canvas colours are resolved from the theme, so a theme or appearance change redraws.
+  const [appearance, setAppearance] = useState(0);
+  useEffect(() => onOmnixEvent(APPEARANCE_CHANGE_EVENT, () => setAppearance((value) => value + 1)), []);
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return undefined;
@@ -73,7 +77,7 @@ function TimeSeriesPlot({ block, summary, onFailed }: { block: ChartBlock; summa
       cancelled = true;
       dispose?.();
     };
-  }, [block, onFailed]);
+  }, [block, onFailed, appearance]);
   return <div ref={hostRef} className="gui-chart-plot gui-chart-canvas" role="img" aria-label={summary} />;
 }
 
@@ -102,14 +106,14 @@ function CategoryPlot({ block, summary }: { block: ChartBlock; summary: string }
               const value = values.get(category);
               if (value === undefined) return null;
               const top = Math.min(base, y(value));
-              return <rect key={`${series.name}:${category}`} className="gui-chart-bar" data-series={color} x={index * width + width * 0.14 + seriesIndex * barWidth} y={top} width={barWidth} height={Math.max(0.5, Math.abs(base - y(value)))} />;
+              return <rect key={`${seriesIndex}:${category}`} className="gui-chart-bar" data-series={color} x={index * width + width * 0.14 + seriesIndex * barWidth} y={top} width={barWidth} height={Math.max(0.5, Math.abs(base - y(value)))} />;
             });
           }
           const points = categories.flatMap((category, index) => {
             const value = values.get(category);
             return value === undefined ? [] : [`${index * width + width / 2},${y(value)}`];
           }).join(' ');
-          return <polyline key={series.name} className="gui-chart-line" data-series={color} data-area={block.kind === 'area' ? 'true' : undefined} points={points} vectorEffect="non-scaling-stroke" />;
+          return <polyline key={`${seriesIndex}:${series.name}`} className="gui-chart-line" data-series={color} data-area={block.kind === 'area' ? 'true' : undefined} points={points} vectorEffect="non-scaling-stroke" />;
         })}
       </svg>
       <div className="gui-chart-xaxis" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}>
@@ -164,14 +168,14 @@ export function ChartDataTable({ id, block }: { id: string; block: ChartBlock })
         <thead>
           <tr>
             <th scope="col">{block.x.label ?? (block.x.type === 'time' ? 'Date' : 'Category')}</th>
-            {block.series.map((series) => <th scope="col" key={series.name}>{series.name}</th>)}
+            {block.series.map((series, index) => <th scope="col" key={`${index}:${series.name}`}>{series.name}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={String(row.x)}>
               <th scope="row">{formatChartX(row.x, block.x.type, intraday)}</th>
-              {row.values.map((value, index) => <td key={block.series[index].name}>{value === undefined ? '' : formatChartValue(value, block.y.format)}</td>)}
+              {row.values.map((value, index) => <td key={index}>{value === undefined ? '' : formatChartValue(value, block.y.format)}</td>)}
             </tr>
           ))}
         </tbody>

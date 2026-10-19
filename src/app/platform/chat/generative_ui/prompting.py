@@ -68,6 +68,10 @@ def excluded_turn_mode(session: Any, user_message: Any) -> str | None:
     metadata = _metadata(user_message)
     if str(metadata.get("speech_segment_id") or "").strip() or str(metadata.get("user_turn_id") or "").startswith("voice-user-turn:"):
         return "live_voice"
+    # Live-call greetings, proactive turns and speculation prompt with a synthetic message;
+    # their replies are spoken or appended without a compile.
+    if metadata.get("transient") is True or metadata.get("speculative") is True:
+        return "live_voice"
     if getattr(session, "interaction_mode", "system") == "character":
         return "character_mode"
     route = metadata.get("omnix_route")

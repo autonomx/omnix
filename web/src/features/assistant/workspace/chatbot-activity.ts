@@ -1,5 +1,6 @@
 import type { AssistantWorkspaceEvent } from './events';
 import type { ConversationTurnRole } from './conversation';
+import { chatMessageText } from '../chat/generative-ui/chatMessageProjection';
 
 export type ChatbotActivityMessage = {
   id: string;
@@ -84,7 +85,8 @@ function createMessageEvent(
         id: message.id,
         sessionId,
         role: message.role as ConversationTurnRole,
-        content: [{ kind: 'text' as const, text: message.content }],
+        // A reply with generative UI is its text projection here, never block JSON.
+        content: [{ kind: 'text' as const, text: chatMessageText(message) }],
         metadata: normalizeMessageMetadata(message.metadata),
         createdAt: message.created_at,
       },

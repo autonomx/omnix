@@ -48,6 +48,8 @@ class EvalSample:
     latency_seconds: float
     output_tokens: int | None = None
     error: str | None = None
+    # The model the provider answered with; aliases such as "haiku" can move between versions.
+    resolved_model: str | None = None
 
 
 @dataclass
@@ -59,6 +61,10 @@ class EvalMetrics:
     valid_rate: float
     valid_lower_bound: float
     valid_upper_bound: float
+    # Replies with at least one fence, and those where every fence rendered: a per-reply view,
+    # since blocks in one reply are not independent trials.
+    replies_with_blocks: int
+    replies_all_valid: int
     precision: float
     recall: float
     leakage: float
@@ -68,6 +74,7 @@ class EvalMetrics:
     output_tokens_mean: float | None
     instruction_tokens: int
     passed: bool
+    resolved_models: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -101,12 +108,16 @@ def score_samples(samples: Iterable[EvalSample], *, instruction_tokens: int, lev
     valid = 0
     diagnostics: Counter[str] = Counter()
     used_block: list[bool] = []
+    replies_all_valid = 0
     for sample in answered:
         count = len(scan_fences(sample.content))
         fences += count
         used_block.append(count > 0)
+        rendered = len((sample.ui or {}).get("blocks") or {})
+        if count and rendered == count:
+            replies_all_valid += 1
         if sample.ui:
-            valid += len(sample.ui.get("blocks") or {})
+            valid += rendered
             diagnostics.update(str(item.get("code")) for item in sample.ui.get("diagnostics") or [] if isinstance(item, dict))
     labels = [sample.prompt.label for sample in answered]
     true_positive = sum(1 for used, label in zip(used_block, labels) if used and label == "block")
@@ -124,6 +135,8 @@ def score_samples(samples: Iterable[EvalSample], *, instruction_tokens: int, lev
         valid_rate=valid / fences if fences else 0.0,
         valid_lower_bound=lower,
         valid_upper_bound=upper,
+        replies_with_blocks=sum(used_block),
+        replies_all_valid=replies_all_valid,
         precision=true_positive / predicted if predicted else 0.0,
         recall=true_positive / actual if actual else 0.0,
         leakage=sum(plain) / len(plain) if plain else 0.0,
@@ -133,6 +146,7 @@ def score_samples(samples: Iterable[EvalSample], *, instruction_tokens: int, lev
         output_tokens_mean=sum(tokens) / len(tokens) if tokens else None,
         instruction_tokens=instruction_tokens,
         passed=False,
+        resolved_models=sorted({sample.resolved_model for sample in answered if sample.resolved_model}),
     )
     if metrics.valid_lower_bound < MIN_VALID_LOWER_BOUND:
         metrics.failures.append(f"valid-block lower bound {metrics.valid_lower_bound:.3f} < {MIN_VALID_LOWER_BOUND}")
@@ -170,6 +184,7 @@ def report_markdown(model: str, level: str, metrics: EvalMetrics, *, date: str, 
         "| Metric | Value | Gate |",
         "|---|---|---|",
         f"| Valid-block rate | {metrics.valid_rate:.3f} ({metrics.valid_blocks}/{metrics.fences}); 95% Wilson [{metrics.valid_lower_bound:.3f}, {metrics.valid_upper_bound:.3f}] | lower bound ≥ {MIN_VALID_LOWER_BOUND} |",
+        f"| Replies whose blocks all rendered | {metrics.replies_all_valid}/{metrics.replies_with_blocks} | — |",
         f"| Precision (block usage) | {metrics.precision:.3f} | ≥ {MIN_PRECISION} |",
         f"| Recall (block usage) | {metrics.recall:.3f} | — |",
         f"| Leakage (fences on plain prompts) | {metrics.leakage:.3f} | ≤ {MAX_LEAKAGE} |",
@@ -178,6 +193,8 @@ def report_markdown(model: str, level: str, metrics: EvalMetrics, *, date: str, 
         f"| Output tokens (mean) | {metrics.output_tokens_mean if metrics.output_tokens_mean is not None else 'n/a'} | — |",
         "",
         "Diagnostics by code: " + (", ".join(f"`{code}` {count}" for code, count in metrics.diagnostics.items()) or "none") + ".",
+        "",
+        "Resolved models: " + (", ".join(f"`{name}`" for name in metrics.resolved_models) or "not reported by the provider") + ".",
     ]
     if metrics.failures:
         lines.extend(["", "Gate failures:", *(f"- {failure}" for failure in metrics.failures)])

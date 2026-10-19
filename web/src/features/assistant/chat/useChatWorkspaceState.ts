@@ -19,6 +19,7 @@ import { liveChatMessagesFor } from './chatMessageModel';
 import { useChatCatalog } from './useChatCatalog';
 import { useChatMessageActions } from './useChatMessageActions';
 import type { ChatUiAction } from './generative-ui/uiActions';
+import { chatMessageText } from './generative-ui/chatMessageProjection';
 
 /** Wires Chat's hooks together: layout, sessions, sending, the live call, audio and message actions. */
 export function useChatWorkspaceState() {
@@ -208,7 +209,8 @@ export function useChatWorkspaceState() {
     setAudioStatus,
     ...audio,
     streamingMessageId: pcmStream.messageId,
-    continueFrom: (message) => applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`),
+    // A reply with generative UI is quoted as its text, never block JSON.
+    continueFrom: (message) => applySuggestedPrompt(`Continue from: ${chatMessageText(message).slice(0, 120)}`),
     openTools: () => { showAssistantView('tools'); setActiveUtilityPanel('tools'); },
     chooseUiOption,
     fillComposerFromUi,
@@ -218,9 +220,14 @@ export function useChatWorkspaceState() {
   // text the widget produced; an edited or replaced draft is an ordinary message.
   const pendingUiActionRef = useRef<{ text: string; action: ChatUiAction } | null>(null);
 
+  // A choice sends its label on its own: the composer's draft and staged attachments stay put.
   function chooseUiOption(text: string, action: ChatUiAction): void {
-    pendingUiActionRef.current = { text, action };
-    sendFromLiveChat(text);
+    if (liveVoiceActiveRef.current) {
+      void submitVoiceTranscriptContent(text, { manual: true });
+      return;
+    }
+    setActiveView('chats');
+    sendChatMessage({ content: text, providerId: getValues('providerId'), modelId: getValues('modelId'), uiAction: action });
   }
 
   function fillComposerFromUi(text: string, action: ChatUiAction): void {

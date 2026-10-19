@@ -1,0 +1,67 @@
+{
+  "name": "unicode_offsets",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "Characters outside the Basic Multilingual Plane before and between blocks: offsets are UTF-16 code units, as the browser slices.",
+  "content": "Rockets 🚀🚀🚀🚀 lift off — Ünïcödé 𝔉𝔞𝔫𝔠𝔶.\n\n```omnix-ui\n{\"type\": \"stats\", \"items\": [{\"label\": \"Launches 🚀\", \"value\": \"4\"}]}\n```\n\nAfter 👋 text.\n\n```omnix-ui\n{\"type\": \"choices\", \"options\": [{\"label\": \"More 🚀\"}, {\"label\": \"Less\"}]}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 49
+      },
+      {
+        "kind": "block",
+        "id": "b1",
+        "text": "Launches 🚀: 4."
+      },
+      {
+        "kind": "markdown",
+        "start": 134,
+        "end": 151
+      },
+      {
+        "kind": "block",
+        "id": "b2",
+        "text": "Options: More 🚀; Less"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "stats",
+        "id": "b1",
+        "v": 1,
+        "items": [
+          {
+            "label": "Launches 🚀",
+            "value": "4"
+          }
+        ],
+        "provenance": "model",
+        "bindings": []
+      },
+      "b2": {
+        "type": "choices",
+        "id": "b2",
+        "v": 1,
+        "options": [
+          {
+            "label": "More 🚀"
+          },
+          {
+            "label": "Less"
+          }
+        ],
+        "provenance": "model",
+        "bindings": []
+      }
+    },
+    "text": "Rockets 🚀🚀🚀🚀 lift off — Ünïcödé 𝔉𝔞𝔫𝔠𝔶.\n\nLaunches 🚀: 4.\n\nAfter 👋 text.\n\nOptions: More 🚀; Less",
+    "speech": "Rockets 🚀🚀🚀🚀 lift off — Ünïcödé 𝔉𝔞𝔫𝔠𝔶.\n\nLaunches 🚀 4.\n\nAfter 👋 text.\n\nOptions: More 🚀; Less",
+    "diagnostics": []
+  }
+}
