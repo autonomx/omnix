@@ -128,3 +128,22 @@ describe('chat response metrics', () => {
     ]));
   });
 });
+
+describe('rich reply block metrics', () => {
+  it('shows "n blocks · m dropped" when a reply had block diagnostics', () => {
+    render(<ChatResponseMetricsRow metadata={{ provider_metrics: { ui_blocks: 2, ui_dropped: 1, ui_diagnostics: { unknown_type: 1 } } }} />);
+
+    expect(screen.getByText('2 blocks · 1 dropped')).toBeInTheDocument();
+    expect(screen.getByTitle('Block diagnostics: unknown_type')).toBeInTheDocument();
+  });
+
+  it('stays quiet when every block rendered cleanly, and joins LM Studio metrics', () => {
+    const { container } = render(<ChatResponseMetricsRow metadata={{ provider_metrics: { ui_blocks: 2, ui_dropped: 0, ui_diagnostics: {} } }} />);
+    expect(container).toBeEmptyDOMElement();
+    cleanup();
+
+    render(<ChatResponseMetricsRow metadata={{ provider_metrics: { provider: 'lmstudio', tokens_per_second: 10, ui_blocks: 1, ui_dropped: 0, ui_diagnostics: { unknown_prop: 2 } } }} />);
+    expect(screen.getByText('10.00 tok/sec')).toBeInTheDocument();
+    expect(screen.getByText('1 block · 0 dropped')).toBeInTheDocument();
+  });
+});

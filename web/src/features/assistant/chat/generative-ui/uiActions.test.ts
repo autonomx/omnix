@@ -68,3 +68,15 @@ describe('ui actions', () => {
     expect(submissions.get('msg:a')?.b1).toEqual({ content: 'Second', action: { ...action(1), values: null } });
   });
 });
+
+describe('the fullscreen live-chat shell', () => {
+  it('shows a block reply as its text projection', async () => {
+    const { liveChatMessagesFor } = await import('../chatMessageModel');
+    const rows = liveChatMessagesFor(
+      [{ id: 'msg:ui', role: 'assistant', content, created_at: '2026-10-11T00:00:00Z', metadata: { ui } }],
+      { rows: [], delivery: null } as unknown as Parameters<typeof liveChatMessagesFor>[1],
+    );
+
+    expect(rows[0].text).toBe('Revenue held.\n\nRevenue: $6,930.');
+  });
+});

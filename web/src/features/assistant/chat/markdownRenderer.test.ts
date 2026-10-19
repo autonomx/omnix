@@ -66,7 +66,7 @@ describe('assistant Markdown rendering', () => {
     );
 
     expect(html).toContain('<p>Prices:</p>');
-    expect(html).toContain('<div class="assistant-markdown-table"><table><thead><tr><th data-align="left">Symbol</th><th data-align="right">Close</th><th data-align="center">Note</th></tr></thead>');
+    expect(html).toContain('<div class="assistant-markdown-table" role="region" aria-label="Table" tabindex="0"><table><thead><tr><th data-align="left">Symbol</th><th data-align="right">Close</th><th data-align="center">Note</th></tr></thead>');
     expect(html).toContain('<td data-align="left"><strong>AAPL</strong></td>');
     expect(html).toContain('<td data-align="center">a | b</td>');
     expect(html).toContain('<tr><td data-align="left">MSFT</td><td data-align="right">410</td><td data-align="center"></td></tr>');
@@ -77,7 +77,7 @@ describe('assistant Markdown rendering', () => {
 
   it('renders a table inside a quote and keeps non-table pipe lines as text', () => {
     expect(renderMarkdownHtml('> | a | b |\n> |---|---|\n> | 1 | 2 |')).toBe(
-      '<blockquote><div class="assistant-markdown-table"><table><thead><tr><th>a</th><th>b</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table></div></blockquote>',
+      '<blockquote><div class="assistant-markdown-table" role="region" aria-label="Table" tabindex="0"><table><thead><tr><th>a</th><th>b</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table></div></blockquote>',
     );
     expect(renderMarkdownHtml('Use a | b for either.\nNot a table.')).toBe('<p>Use a | b for either.<br>Not a table.</p>');
     expect(renderMarkdownHtml('| a | b |\n|---|')).not.toContain('<table>');

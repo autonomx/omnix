@@ -158,7 +158,7 @@ export function ChartDataTable({ id, block }: { id: string; block: ChartBlock })
     return ordered.map((x) => ({ x, values: lookup.map((values) => values.get(categoryKey(x))) }));
   }, [block]);
   return (
-    <div className="gui-chart-table" id={id}>
+    <div className="gui-chart-table" id={id} role="region" aria-label={`${block.title ?? 'Chart'} data`} tabIndex={0}>
       <table>
         <caption className="gui-visually-hidden">{block.title ?? 'Chart'} data</caption>
         <thead>

@@ -11,7 +11,7 @@ export function ChoicesBlockView({ block, messageId, interaction }: { block: Cho
   const active = Boolean(interaction?.active) && !submitted;
   return (
     <section className="gui-block gui-choices" aria-label={block.prompt ?? 'Suggested replies'}>
-      {block.prompt ? <p className="gui-choices-prompt">{block.prompt}</p> : null}
+      {block.prompt ? <div className="gui-choices-prompt">{block.prompt}</div> : null}
       <div className="gui-choice-list" role="group" aria-label={block.prompt ?? 'Suggested replies'}>
         {block.options.map((option, index) => (
           <button

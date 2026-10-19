@@ -1,6 +1,6 @@
 # Omnix Chat Generative UI — Implementation Roadmap
 
-**Status:** Proposed (revision 2, after code review)
+**Status:** Implemented on branch `generative-ui` (2026-10-18), except the GUI-3.3 model evaluation run, which needs a running gateway; until a model passes it, every model stays at `none`. Progress: [PROGRESS.md](../roadmap/PROGRESS.md) ("Chat generative UI roadmap"); deviations: [DECISIONS.md](../roadmap/DECISIONS.md); security review: [OMNIX_CHAT_GENERATIVE_UI_SECURITY_REVIEW.md](OMNIX_CHAT_GENERATIVE_UI_SECURITY_REVIEW.md)
 **Date:** 2026-10-11
 **Base:** `main` at `cbba27a9fea98e07c6601a3a1dc7cdfc3c5d291b`
 **Surfaces:** assistant chat (`web/src/features/assistant/chat`), chat generation and admission (`src/app/platform/chat`)
@@ -207,7 +207,7 @@ Rules:
       "compiled_at": "2026-10-11T14:03:22Z",   // pins market-data queries (as_of)
       "segments": [
         {"kind": "markdown", "start": 0, "end": 34},   // offsets into content
-        {"kind": "block", "id": "b1"},
+        {"kind": "block", "id": "b1", "text": "Revenue: $6,930 (+4.1%). Orders: 212."},
         {"kind": "text", "text": "…fallback for a dropped block…"}
       ],
       "blocks": {"b1": {"type": "stats", "items": [...], "provenance": "model"}},
@@ -217,6 +217,7 @@ Rules:
     }
 
 - Markdown segments are `[start, end)` offsets into the stored `content`, so prose isn't duplicated. The fence text itself is never inside a Markdown span.
+- A block segment carries its block's `to_text()`, which the client shows if it cannot render the block (DECISIONS GUI-2.1).
 - A dropped block becomes a `text` segment holding its fallback (from the valid part of the spec when possible, otherwise a short notice). A diagnostic records why.
 - `compiled_at` is set by the compile, which happens before the assistant message exists. It is the as-of time for `price_chart`.
 - The payload is capped at 128 KB. Over the cap, the largest blocks degrade to text first.

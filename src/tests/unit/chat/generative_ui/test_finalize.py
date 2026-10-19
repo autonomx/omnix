@@ -118,3 +118,29 @@ def test_requested_symbols_come_only_from_valid_price_chart_blocks():
     content = PRICE + "\n" + PRICE.replace("AAPL", "msft") + "\n" + STATS + "\n" + PRICE.replace("AAPL", "bad symbol!")
 
     assert requested_market_symbols(content) == ["AAPL", "MSFT"]
+
+
+def test_ui_metrics_count_rendered_and_dropped_blocks_and_diagnostic_codes():
+    from app.platform.chat.generative_ui import attach_reply_ui
+
+    content = STATS + "\n" + f'{FENCE}omnix-ui\n{{"type": "mystery"}}\n{FENCE}' + "\n" + f'{FENCE}omnix-ui\n{{"type": "stats", "x": 1, "items": [{{"label": "B", "value": "2"}}]}}\n{FENCE}'
+    metadata = {"provider_metrics": {"provider": "lmstudio", "tokens_per_second": 12.0}}
+    attach_reply_ui(content, metadata)
+
+    assert metadata["provider_metrics"] == {
+        "provider": "lmstudio", "tokens_per_second": 12.0,
+        "ui_blocks": 2, "ui_dropped": 1, "ui_diagnostics": {"unknown_type": 1, "unknown_prop": 1},
+    }
+
+
+def test_ui_metrics_record_a_failed_compile_and_ignore_plain_replies(monkeypatch):
+    from app.platform.chat.generative_ui import attach_reply_ui
+
+    plain: dict = {}
+    attach_reply_ui("Plain.", plain)
+    assert plain == {}
+
+    monkeypatch.setattr(finalize_module, "compile_chat_ui", lambda *_args: 1 / 0)
+    failed: dict = {}
+    attach_reply_ui(STATS, failed)
+    assert failed["provider_metrics"] == {"ui_error": "compile_failed"}

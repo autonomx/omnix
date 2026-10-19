@@ -572,6 +572,7 @@ class PostgresChatRepositoryAdapter:
     def _settings(session: ChatSession) -> dict[str, Any]:
         return {
             "research_mode_override": session.research_mode_override,
+            "rich_replies": session.rich_replies,
             "memory_snapshot_revision": session.memory_snapshot_revision,
             "memory_record_count": session.memory_record_count,
             "memory_last_refreshed_at": session.memory_last_refreshed_at,
@@ -591,6 +592,7 @@ class PostgresChatRepositoryAdapter:
             "provider_id": record.get("provider_id"),
             "model_id": record.get("model_id"),
             "research_mode_override": settings.get("research_mode_override"),
+            "rich_replies": settings.get("rich_replies") if settings.get("rich_replies") in {"off", "on"} else None,
             "profile_id": record.get("profile_id") or "profile:default",
             "workspace_id": record["workspace_id"],
             "project_id": record.get("project_id"),

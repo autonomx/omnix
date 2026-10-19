@@ -1,6 +1,7 @@
 import type { LiveVoiceTranscriptState } from '../workspace';
 import type { ChatMessage } from './chatbotWorkspaceModel';
 import type { LiveChatMessage } from './LiveChatFullscreenShell';
+import { chatMessageText } from './generative-ui/chatMessageProjection';
 
 /** Reading chat messages for display: attachments and times. */
 export const MAX_CHAT_IMAGE_ATTACHMENTS = 8;
@@ -50,7 +51,8 @@ export function liveChatMessagesFor(messages: ChatMessage[], transcript: LiveVoi
     return messages.map((message) => ({
       id: message.id,
       role: message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : 'system',
-      text: message.content,
+      // Replies with generative UI show their text projection, never block JSON (GUI-6.3).
+      text: chatMessageText(message),
       timestamp: message.created_at,
     }));
   }

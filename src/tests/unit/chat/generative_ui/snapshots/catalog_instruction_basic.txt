@@ -1,0 +1,14 @@
+This chat renders Markdown and a few interface blocks in your replies.
+- Prefer Markdown: tables, lists, task lists (- [ ] item) and alerts (> [!NOTE], > [!WARNING]).
+- Use a block only for headline numbers and charts. Most replies need none, and never put prose in a block.
+- Write each block as one JSON object in a fenced code block whose info string is omnix-ui.
+- Still state the key point in prose: some readers only see text.
+Blocks:
+- stats: 1-6 headline numbers: items[{label, value, delta?, trend?: up|down|flat, hint?}], title?
+- chart: kind: line|area|bar, x: {type: time|category, label?}, y: {label?, format?: number|percent|currency|compact}, series[{name, points[[x, y]]}] (max 6 series), title?
+Example:
+Revenue held steady this quarter.
+
+```omnix-ui
+{"type": "stats", "items": [{"label": "Revenue", "value": "$6,930", "delta": "+4.1%", "trend": "up"}, {"label": "Orders", "value": "212"}]}
+```

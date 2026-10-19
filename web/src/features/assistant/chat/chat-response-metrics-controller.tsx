@@ -100,7 +100,8 @@ function MetricChip({ icon, label, title }: { icon: string; label: string; title
 /** LM Studio's speed, token count, time and stop reason for one assistant reply (nothing for other providers). */
 export function ChatResponseMetricsRow({ metadata }: { metadata: unknown }) {
   const metrics = readChatResponseMetrics(metadata);
-  if (!metrics) return null;
+  const ui = readChatUiMetrics(metadata);
+  if (!metrics) return ui ? <div className="assistant-response-metrics" aria-label="Rich reply blocks"><UiMetricChip ui={ui} /></div> : null;
   const firstToken = metrics.timeToFirstTokenSeconds;
   return (
     <div
@@ -113,7 +114,33 @@ export function ChatResponseMetricsRow({ metadata }: { metadata: unknown }) {
       {metrics.outputTokens !== undefined ? <MetricChip icon="▤" label={`${metrics.outputTokens} tokens`} title="LM Studio output tokens" /> : null}
       {metrics.generationTimeSeconds !== undefined ? <MetricChip icon="◷" label={formatSeconds(metrics.generationTimeSeconds)} title="LM Studio generation time" /> : null}
       {metrics.stopReason ? <MetricChip icon="" label={`Stop reason: ${formatLmStudioStopReason(metrics.stopReason)}`} /> : null}
+      {ui ? <UiMetricChip ui={ui} /> : null}
     </div>
+  );
+}
+
+type ChatUiMetrics = { blocks: number; dropped: number; codes: string[] };
+
+/**
+ * A reply's generative UI outcome (GUI-3.4), shown only when something was dropped or
+ * reported: how many blocks render and how many were shown as text instead.
+ */
+export function readChatUiMetrics(metadataValue: unknown): ChatUiMetrics | null {
+  const metrics = record(record(metadataValue).provider_metrics);
+  const blocks = nonNegativeInteger(metrics.ui_blocks);
+  if (blocks === undefined) return null;
+  const codes = Object.keys(record(metrics.ui_diagnostics));
+  const dropped = nonNegativeInteger(metrics.ui_dropped) ?? 0;
+  return codes.length || dropped ? { blocks, dropped, codes } : null;
+}
+
+function UiMetricChip({ ui }: { ui: ChatUiMetrics }) {
+  return (
+    <MetricChip
+      icon="▦"
+      label={`${ui.blocks} block${ui.blocks === 1 ? '' : 's'} · ${ui.dropped} dropped`}
+      title={ui.codes.length ? `Block diagnostics: ${ui.codes.join(', ')}` : undefined}
+    />
   );
 }
 

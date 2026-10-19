@@ -543,6 +543,10 @@
   }
 
   .assistant-markdown-table {
+    /* Its own appearance-aware surface, as generative UI blocks have. */
+    background: linear-gradient(var(--omnix-panel-solid), var(--omnix-panel-solid)), var(--omnix-body-bg);
+    border-radius: 0.45rem;
+    color: var(--omnix-text);
     margin: 0 0 0.85rem;
     max-width: 100%;
     overflow-x: auto;
@@ -564,8 +568,10 @@
 
   .assistant-markdown-table th {
     background: var(--omnix-soft-bg);
-    color: var(--omnix-text);
     font-weight: 700;
+  }
+
+  .assistant-markdown-table :is(th, td) { color: inherit;
   }
 
   .assistant-markdown-table [data-align='center'] { text-align: center;

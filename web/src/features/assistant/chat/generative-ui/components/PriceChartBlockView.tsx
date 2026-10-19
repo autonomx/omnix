@@ -71,9 +71,9 @@ export function PriceChartBlockView({ block, summary }: { block: PriceChartBlock
         <span className="gui-provenance"><span className="gui-provenance-market">Market data as of <time dateTime={block.as_of}>{asOf}</time></span></span>
         <a className="gui-link-button" href={href} onClick={openChart}>Open in chart</a>
       </header>
-      {load.status === 'loading' ? <p className="gui-block-status" role="status">Loading market data…</p> : null}
-      {load.status === 'error' ? <p className="gui-block-status" role="status">Market data is unavailable. {summary}</p> : null}
-      {load.status === 'ready' && !chart ? <p className="gui-block-status" role="status">No market data for this period.</p> : null}
+      {load.status === 'loading' ? <div className="gui-block-status" role="status">Loading market data…</div> : null}
+      {load.status === 'error' ? <div className="gui-block-status" role="status">Market data is unavailable. {summary}</div> : null}
+      {load.status === 'ready' && !chart ? <div className="gui-block-status" role="status">No market data for this period.</div> : null}
       {chart ? <ChartBlockView block={chart} summary={summary} /> : null}
     </section>
   );

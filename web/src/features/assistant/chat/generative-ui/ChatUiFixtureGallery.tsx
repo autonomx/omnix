@@ -4,6 +4,7 @@ import { ChatUiRenderer } from './ChatUiRenderer';
 import { parseChatUi } from './schema';
 import type { ChatUiInteraction } from './uiActions';
 import '../ChatWorkspaceLayout.css';
+import '../ChatbotWorkspaceTools.css';
 
 type Fixture = { name: string; description?: string; content: string; expected: unknown };
 
@@ -59,6 +60,7 @@ export default function ChatUiFixtureGallery() {
             <h2 style={{ fontSize: '0.85rem', margin: '0 0 0.35rem' }}>{fixture.name}</h2>
             {fixture.description ? <p style={{ fontSize: '0.75rem', margin: '0 0 0.5rem', color: 'var(--omnix-muted)' }}>{fixture.description}</p> : null}
             <article className="assistant-chat-message assistant">
+              <span className="assistant-chat-avatar" aria-hidden="true" />
               <div className="assistant-chat-bubble">
                 {ui
                   ? <div className="assistant-message-content assistant-ui-reply"><ChatUiRenderer ui={ui} messageId={`fixture:${fixture.name}`} interaction={inertInteraction} /></div>

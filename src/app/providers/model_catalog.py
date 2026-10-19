@@ -12,7 +12,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +81,37 @@ def _refresh(provider_id: str, provider_lookup: ProviderLookup) -> None:
             _REFRESHING.discard(provider_id)
 
 
+RichUiLevel = Literal["none", "basic", "full"]
+
+# How well a model writes chat generative UI blocks (chat generative UI, GUI-3.3):
+# "full" may use every block, "basic" only stats and charts, "none" gets no block
+# instructions. Every model starts at "none"; an entry is added only from a dated
+# evaluation report in docs/roadmap/ that passed the gate for that level. Keys are
+# (provider, model) without the "llm:" prefixes.
+RICH_UI_CAPABILITIES: dict[tuple[str, str], RichUiLevel] = {}
+
+
+def rich_ui_capability(provider_id: str | None, model_id: str | None) -> RichUiLevel:
+    """The model's evaluated generative UI level; "none" for every model not in the table."""
+    provider = (provider_id or "").strip().removeprefix("llm:").casefold()
+    model = (model_id or "").strip()
+    parts = model.split(":", 2)
+    if len(parts) == 3 and parts[0] == "llm":
+        model = parts[2]
+    return RICH_UI_CAPABILITIES.get((provider, model.casefold()), "none")
+
+
 def clear_model_catalog() -> None:
     """Forget cached model facts (tests, provider reconfiguration)."""
     with _LOCK:
         _WINDOWS.clear()
 
 
-__all__ = ["CACHE_SECONDS", "advertised_context_window", "clear_model_catalog"]
+__all__ = [
+    "CACHE_SECONDS",
+    "RICH_UI_CAPABILITIES",
+    "RichUiLevel",
+    "advertised_context_window",
+    "clear_model_catalog",
+    "rich_ui_capability",
+]

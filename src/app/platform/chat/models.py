@@ -5,7 +5,7 @@ import base64
 import binascii
 import re
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -18,6 +18,7 @@ from app.conversation.contracts import (
     ChatSessionSummary,
     InteractionMode,
     ResearchMode,
+    RichRepliesMode,
     SharedMemoryAccess,
     TranscriptPolicy,
 )
@@ -215,6 +216,18 @@ class UpdateChatResearchModeRequest(BaseModel):
     research_mode_override: ResearchMode | None = None
 
 
+class UpdateChatRichRepliesRequest(BaseModel):
+    """Turn generative UI in replies on or off for one session; None returns to the default (off)."""
+
+    rich_replies: RichRepliesMode | None = None
+
+
+class ChatRichRepliesResponse(BaseModel):
+    ok: bool = True
+    session_id: str
+    rich_replies: RichRepliesMode | None = None
+
+
 class ChatTextAttachment(BaseModel):
     """A small, UTF-8 text file attached to a chat turn.
 
@@ -236,6 +249,25 @@ class ChatTextAttachment(BaseModel):
         return normalized
 
 
+class ChatUiAction(BaseModel):
+    """A reply widget the message answers (chat generative UI, GUI-5.4).
+
+    It carries no authority: the server checks it against the referenced
+    reply and strips it when it does not match, and the message is then an
+    ordinary chat turn either way.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_message_id: str = Field(min_length=1, max_length=200)
+    block_id: str = Field(min_length=1, max_length=64)
+    action: Literal["choose", "submit"]
+    option_index: int | None = Field(default=None, ge=0, le=5)
+    values: dict[Annotated[str, Field(max_length=32)], Annotated[str, Field(max_length=200)] | float | bool] | None = Field(
+        default=None, max_length=8,
+    )
+
+
 class SendChatMessageRequest(BaseModel):
     content: str = Field(min_length=1)
     image_data_url: str | None = Field(default=None, max_length=_MAX_CHAT_IMAGE_DATA_URL_CHARS)
@@ -254,6 +286,7 @@ class SendChatMessageRequest(BaseModel):
     research_mode: ResearchMode | None = None
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
+    ui_action: ChatUiAction | None = None
 
     @field_validator("image_data_url")
     @classmethod

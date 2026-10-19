@@ -90,6 +90,8 @@ export function useSendChatMessage({
         text_attachment: pastedChatTextFile
           ? { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text }
           : undefined,
+        // The reply widget this message answers; the server checks it (GUI-5.4).
+        ui_action: values.uiAction,
       };
       const chatSessionId = sessionId;
       return noteChatMessageSent(sessionId, await sendChatWithAssistantContext(chatSessionId, message, (route, body) => (
@@ -115,6 +117,7 @@ export function useSendChatMessage({
             image_data_url: pastedChatImages[0].dataUrl,
           } : {}),
           ...(pastedChatTextFile ? { text_attachment: { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text } } : {}),
+          ...(values.uiAction ? { ui_action: values.uiAction } : {}),
         },
       });
     },

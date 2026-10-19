@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from .catalog import CATALOG, ChatUiDiagnostic, ChatUiPayload, ChatUiSegment
 from .compiler import COMPILER_VERSION, CompileScope, compile_chat_ui, has_ui_fence, rebase_ui_after_rewrite
-from .finalize import finalize_reply_ui
+from .finalize import attach_reply_ui, finalize_reply_ui
 
 __all__ = [
     "CATALOG",
@@ -18,6 +18,7 @@ __all__ = [
     "ChatUiPayload",
     "ChatUiSegment",
     "CompileScope",
+    "attach_reply_ui",
     "compile_chat_ui",
     "finalize_reply_ui",
     "has_ui_fence",

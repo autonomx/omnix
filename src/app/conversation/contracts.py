@@ -21,6 +21,8 @@ InteractionMode = Literal["system", "character"]
 SharedMemoryAccess = Literal["none", "read_only"]
 TranscriptPolicy = Literal["persistent", "temporary", "none"]
 ResearchMode = Literal["disabled", "quick", "deep"]
+# Generative UI in replies for a session (chat generative UI, GUI-3.1); None is the default, off.
+RichRepliesMode = Literal["off", "on"]
 
 
 # Who a chat session speaks as (PA-1.3): the selection, its resolved identity and the system
@@ -171,6 +173,7 @@ class ChatSessionSummary(BaseModel):
     provider_id: str | None = None
     model_id: str | None = None
     research_mode_override: ResearchMode | None = None
+    rich_replies: RichRepliesMode | None = None
     profile_id: str = DEFAULT_PROFILE_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
     project_id: str | None = None

@@ -8,6 +8,18 @@
     min-width: 0;
   }
 
+  /* A transcript message shrinks to its content; a reply with blocks takes the full message
+     width so charts and tiles have room to lay out. */
+  .assistant-chat-message:has(.assistant-ui-reply) {
+    grid-template-columns: 2.8rem minmax(0, 1fr);
+    width: min(45rem, 82%);
+  }
+
+  @media (max-width: 900px) {
+    .assistant-chat-message:has(.assistant-ui-reply) { width: 100%;
+    }
+  }
+
   .assistant-ui-reply > *,
   .gui-block {
     min-width: 0;
@@ -20,7 +32,7 @@
   }
 
   .gui-fallback-text {
-    color: var(--omnix-text);
+    color: inherit;
     margin: 0;
     white-space: pre-wrap;
   }
@@ -33,7 +45,8 @@
     --gui-series-5: var(--assistant-tone-negative, var(--omnix-purple));
     --gui-series-6: var(--omnix-muted);
     animation: gui-block-in 180ms ease-out both;
-    background: var(--omnix-soft-bg);
+    /* Its own appearance-aware surface: the bubble behind it can be dark in light mode. */
+    background: linear-gradient(var(--omnix-panel-solid), var(--omnix-panel-solid)), var(--omnix-body-bg);
     border: 1px solid var(--omnix-border);
     border-radius: 0.65rem;
     color: var(--omnix-text);
@@ -527,6 +540,12 @@
   }
 
   .gui-form-error { color: var(--assistant-tone-negative, var(--omnix-purple));
+  }
+
+  /* Keyboard focus is always visible on block controls (GUI-6.2). */
+  .gui-block :is(button, a, summary, select, input):focus-visible {
+    outline: 2px solid var(--omnix-cyan);
+    outline-offset: 2px;
   }
 
   @keyframes gui-block-in {

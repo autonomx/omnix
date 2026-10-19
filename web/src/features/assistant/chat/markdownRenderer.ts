@@ -103,7 +103,8 @@ export function renderMarkdownHtml(markdown: string, metadata?: Metadata): strin
         index += 1;
       }
       const body = rows.length ? `<tbody>${rows.join('')}</tbody>` : '';
-      blocks.push(`<div class="assistant-markdown-table"><table><thead>${header}</thead>${body}</table></div>`);
+      // A focusable, named region: a wide table scrolls by keyboard too.
+      blocks.push(`<div class="assistant-markdown-table" role="region" aria-label="Table" tabindex="0"><table><thead>${header}</thead>${body}</table></div>`);
       continue;
     }
 

@@ -331,6 +331,7 @@ def _send_request(request: AssistantContextChatRequest) -> SendChatMessageReques
         dry_run=request.dry_run,
         workspace_root=request.workspace_root,
         research_mode=request.web_research_mode,
+        ui_action=request.ui_action,
     )
 
 

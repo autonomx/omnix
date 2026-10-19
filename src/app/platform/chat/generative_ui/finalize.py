@@ -54,3 +54,25 @@ def finalize_reply_ui(
         logger.warning("chat_ui_compile_failed", exc_info=True)
         return {"ui_error": {"code": "compile_failed", "error_type": type(exc).__name__}}
     return {"ui": payload} if payload is not None else {}
+
+
+def attach_reply_ui(
+    content: str,
+    metadata: dict[str, Any],
+    *,
+    context_items: Sequence[Mapping[str, Any]] | None = None,
+) -> None:
+    """Compile a finished reply into ``metadata`` (``ui`` or ``ui_error``) and record its block metrics.
+
+    The save paths call this before ``_commit_chat_reply``; it never raises.
+    """
+    additions = finalize_reply_ui(content, metadata, context_items=context_items)
+    if not additions:
+        return
+    metadata.update(additions)
+    try:
+        from ..provider_metrics import record_ui_metrics
+
+        record_ui_metrics(metadata)
+    except Exception:
+        logger.warning("chat_ui_metrics_failed", exc_info=True)

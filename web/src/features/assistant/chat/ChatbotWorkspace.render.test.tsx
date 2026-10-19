@@ -2,7 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../../app/modules';
 import { omnixTheme } from '../../../design/theme';
 import { ChatbotWorkspace } from './ChatbotWorkspace';
@@ -176,5 +176,77 @@ describe('ChatMessageItem with generative UI', () => {
     rerender(list({ ...plainMessage, content: 'A *few* more things.' }));
 
     expect(vi.mocked(renderMarkdownHtml).mock.calls.map(([markdown]) => markdown)).toEqual(['A *few* more things.']);
+  });
+});
+
+describe('Chat generative UI widgets', () => {
+  const widgetContent = 'Pick one.\n\n```omnix-ui\n{"type":"choices","options":[{"label":"Compare with MSFT"},{"label":"Show the trend"}]}\n```\n\n```omnix-ui\n{"type":"form","template":"Backtest {symbol}","fields":[{"name":"symbol","kind":"select","options":["AAPL","MSFT"]}]}\n```';
+  const widgetUi = {
+    version: 1,
+    compiler_version: 'gui-compiler-1',
+    compiled_at: '2026-10-11T00:00:00Z',
+    segments: [{ kind: 'markdown', start: 0, end: 11 }, { kind: 'block', id: 'b1', text: 'Options: Compare with MSFT; Show the trend' }, { kind: 'block', id: 'b2', text: 'Form: symbol (select: AAPL, MSFT)' }],
+    blocks: {
+      b1: { type: 'choices', id: 'b1', v: 1, options: [{ label: 'Compare with MSFT' }, { label: 'Show the trend' }], provenance: 'model', bindings: [] },
+      b2: { type: 'form', id: 'b2', v: 1, template: 'Backtest {symbol}', fields: [{ name: 'symbol', label: 'symbol', kind: 'select', required: false, options: ['AAPL', 'MSFT'] }], provenance: 'model', bindings: [] },
+    },
+    text: 'Pick one.\n\nOptions: Compare with MSFT; Show the trend\n\nForm: symbol (select: AAPL, MSFT)',
+    speech: 'Pick one.',
+    diagnostics: [],
+  };
+  const widgetSession = {
+    ...session,
+    id: 'chat:widgets',
+    message_count: 2,
+    messages: [
+      { id: 'msg:w-user', role: 'user', content: 'What next?', created_at: '2026-06-14T00:00:01Z' },
+      { id: 'msg:w-reply', role: 'assistant', content: widgetContent, created_at: '2026-06-14T00:00:02Z', metadata: { ui: widgetUi } },
+    ],
+  };
+  const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
+  // jsdom has no layout: the transcript's stick-to-latest scroll is a no-op here.
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  function respondWithWidgets(input: RequestInfo | URL, init?: RequestInit): Response {
+    const path = new URL(String(input), 'http://localhost').pathname;
+    if (init?.method === 'POST' && path.endsWith('/messages')) {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      posts.push({ path, body });
+      return Response.json({
+        session: widgetSession,
+        user_message: { id: 'msg:sent', role: 'user', content: body.content, created_at: '2026-06-14T00:00:03Z', metadata: {} },
+        job: { id: 'job:1', status: 'queued', module: 'chatbot', type: 'chat.generate', created_at: '2026-06-14T00:00:03Z', updated_at: '2026-06-14T00:00:03Z' },
+        generation_status: 'queued',
+      });
+    }
+    if (path === '/api/chat/sessions') return Response.json({ sessions: [widgetSession] });
+    if (path === '/api/chat/sessions/chat%3Awidgets') return Response.json(widgetSession);
+    return respond(input);
+  }
+
+  it('sends exactly the label of a clicked choice, with its action reference', async () => {
+    posts.length = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => respondWithWidgets(input, init)));
+    renderWorkspace();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the trend' }));
+
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].body.content).toBe('Show the trend');
+    expect(posts[0].body.ui_action).toEqual({ source_message_id: 'msg:w-reply', block_id: 'b1', action: 'choose', option_index: 1 });
+  });
+
+  it('fills the composer from a form and sends nothing until the user does', async () => {
+    posts.length = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => respondWithWidgets(input, init)));
+    renderWorkspace();
+
+    fireEvent.change(await screen.findByLabelText('symbol'), { target: { value: 'MSFT' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fill message' }));
+
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Backtest MSFT');
+    expect(posts).toHaveLength(0);
   });
 });

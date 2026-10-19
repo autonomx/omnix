@@ -1069,8 +1069,8 @@ CATALOG: dict[str, BlockSpec] = {
         ),
         BlockSpec(
             "form", FormBlock, _normalize_form, _form_text, _form_speech,
-            "fields[{name, label?, kind: select|slider|text|toggle, ...}], template with {name} placeholders"
-            " that fills the user's composer",
+            "fields[{name, label?, kind: select (options[]) | slider (min, max, step?, unit?) | text | toggle, required?}],"
+            " template with {name} placeholders that fills the user's composer",
             {
                 "type": "form",
                 "fields": [{"name": "symbol", "kind": "select", "options": ["AAPL", "MSFT"]}],

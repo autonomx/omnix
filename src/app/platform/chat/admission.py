@@ -29,7 +29,8 @@ from .generation_jobs import (
     interrupt_active_chat_generation_jobs,
     mark_chat_acceptance_failed,
 )
-from .generative_ui import finalize_reply_ui
+from .generative_ui import attach_reply_ui
+from .generative_ui.actions import admitted_request
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
 
 
@@ -85,6 +86,8 @@ def admit_chat_turn(
     (assistant context) adds its own ``job_payload`` fields and ``contract``.
     """
     begin = begin_user_message or chat_store.begin_user_message
+    # A widget action is kept only when it matches its source reply (GUI-5.4).
+    request = admitted_request(chat_store, session_id, request)
     with chat_submission_lock(
         session_id, request.user_turn_id, job_store=job_store, chat_store=chat_store
     ):
@@ -185,7 +188,7 @@ def stream_chat_turn(
                         metadata = event["metadata"]
                     if annotate_reply is not None:
                         annotate_reply(metadata)
-                    metadata.update(finalize_reply_ui(content, metadata, context_items=context_items))
+                    attach_reply_ui(content, metadata, context_items=context_items)
                     # Commit at the provider completion boundary: live voice
                     # playback can outlast generation and a later barge-in may
                     # close the HTTP body before the session event is sent.
@@ -203,7 +206,7 @@ def stream_chat_turn(
             if callable(close):
                 close()
         if not committed:
-            metadata.update(finalize_reply_ui(content, metadata, context_items=context_items))
+            attach_reply_ui(content, metadata, context_items=context_items)
             completed = _commit_chat_reply(
                 chat_store, job_store, job, session_id=session.id,
                 message_id=user_message.id, content=content, metadata=metadata,

@@ -1750,6 +1750,8 @@ export interface components {
             read_memory: boolean;
             /** Research Mode Override */
             research_mode_override: ("disabled" | "quick" | "deep") | null;
+            /** Rich Replies */
+            rich_replies: ("off" | "on") | null;
             /**
              * Shared Memory Access
              * @default none
@@ -1845,6 +1847,8 @@ export interface components {
             read_memory: boolean;
             /** Research Mode Override */
             research_mode_override: ("disabled" | "quick" | "deep") | null;
+            /** Rich Replies */
+            rich_replies: ("off" | "on") | null;
             /**
              * Shared Memory Access
              * @default none
@@ -1889,6 +1893,31 @@ export interface components {
             mime_type: string;
             /** Text */
             text: string;
+        };
+        /**
+         * ChatUiAction
+         * @description A reply widget the message answers (chat generative UI, GUI-5.4).
+         *
+         *     It carries no authority: the server checks it against the referenced
+         *     reply and strips it when it does not match, and the message is then an
+         *     ordinary chat turn either way.
+         */
+        ChatUiAction: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "choose" | "submit";
+            /** Block Id */
+            block_id: string;
+            /** Option Index */
+            option_index?: number | null;
+            /** Source Message Id */
+            source_message_id: string;
+            /** Values */
+            values?: {
+                [key: string]: string | number | boolean;
+            } | null;
         };
         /**
          * CheckpointBundleRequest
@@ -3690,6 +3719,7 @@ export interface components {
             /** Speech Segment Id */
             speech_segment_id?: string | null;
             text_attachment?: components["schemas"]["ChatTextAttachment"] | null;
+            ui_action?: components["schemas"]["ChatUiAction"] | null;
             /** User Turn Id */
             user_turn_id?: string | null;
             /** Workspace Root */

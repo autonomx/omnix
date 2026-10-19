@@ -169,3 +169,30 @@ def merge_provider_response_metrics(
         metrics["finish_reason"] = finish_reason
 
     return metrics
+
+
+def record_ui_metrics(metadata: dict[str, Any]) -> None:
+    """Record a reply's generative UI outcome in ``provider_metrics`` (chat generative UI, GUI-3.4).
+
+    ``ui_blocks`` counts the blocks that render, ``ui_dropped`` the blocks shown
+    as text instead, and ``ui_diagnostics`` counts diagnostic codes, so block
+    quality can be compared per provider and model. A failed compile counts as
+    ``ui_error``. Replies without blocks are left unchanged.
+    """
+    ui = _mapping(metadata.get("ui"))
+    error = _mapping(metadata.get("ui_error"))
+    if not ui and not error:
+        return
+    metrics = _mapping(metadata.get("provider_metrics"))
+    if error:
+        metrics["ui_error"] = str(error.get("code") or "compile_failed")
+    else:
+        diagnostics = [item for item in ui.get("diagnostics") or [] if isinstance(item, dict)]
+        codes: dict[str, int] = {}
+        for item in diagnostics:
+            code = str(item.get("code") or "unknown")
+            codes[code] = codes.get(code, 0) + 1
+        metrics["ui_blocks"] = len(_mapping(ui.get("blocks")))
+        metrics["ui_dropped"] = len({str(item.get("block")) for item in diagnostics if item.get("severity") == "degraded"})
+        metrics["ui_diagnostics"] = codes
+    metadata["provider_metrics"] = metrics

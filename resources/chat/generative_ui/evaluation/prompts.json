@@ -1,0 +1,410 @@
+{
+  "version": 1,
+  "description": "Rich-reply evaluation prompts (chat generative UI, GUI-3.3). Labels: block = should use a block; markdown = should use Markdown only; plain = plain prose.",
+  "prompts": [
+    {
+      "id": "data-quarter-stats",
+      "label": "block",
+      "style": "data",
+      "prompt": "Our Q3 numbers: revenue $6,930 (up 4.1%), 212 orders (up 5.5%), gross margin 41% (down 1 point). Summarize the headline figures.",
+      "expected_blocks": [
+        "stats"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "data-mau-trend",
+      "label": "block",
+      "style": "data",
+      "prompt": "Monthly active users were 1,200 in January, 1,350 in February, 1,500 in March, 1,420 in April, 1,610 in May and 1,800 in June. Show me the trend.",
+      "expected_blocks": [
+        "chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "data-segment-bars",
+      "label": "block",
+      "style": "data",
+      "prompt": "Revenue by segment last quarter: iPhone $46.2B, Services $24.2B, Mac $7.7B, iPad $6.9B. Visualize it.",
+      "expected_blocks": [
+        "chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "data-conversion",
+      "label": "block",
+      "style": "data",
+      "prompt": "Website conversion was 2.1% in week 1, 2.4% in week 2, 2.2% in week 3 and 2.9% in week 4. Chart it and give me the headline.",
+      "expected_blocks": [
+        "chart",
+        "stats"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "data-latency-stats",
+      "label": "block",
+      "style": "data",
+      "prompt": "Our API this week: p50 latency 120 ms, p95 340 ms, p99 910 ms, error rate 0.4%. Give me the key stats.",
+      "expected_blocks": [
+        "stats"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "data-temperature",
+      "label": "block",
+      "style": "data",
+      "prompt": "Temperature readings: 2026-10-01 18.2°C, 2026-10-02 19.1°C, 2026-10-03 17.5°C, 2026-10-04 16.9°C, 2026-10-05 20.3°C. Plot them.",
+      "expected_blocks": [
+        "chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "data-run-progress",
+      "label": "block",
+      "style": "data",
+      "prompt": "My 5 km times this week: Monday 31:20, Wednesday 30:45, Friday 29:58, Sunday 29:30. How am I progressing? Show the numbers.",
+      "expected_blocks": [
+        "stats",
+        "chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "data-budget",
+      "label": "block",
+      "style": "data",
+      "prompt": "This month I spent $1,450 on rent, $420 on groceries, $180 on transport and $260 on everything else. Show where the money went.",
+      "expected_blocks": [
+        "chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "trading-aapl-6m",
+      "label": "block",
+      "style": "trading-research",
+      "prompt": "Show me Apple's stock price over the last six months.",
+      "expected_blocks": [
+        "price_chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "trading-msft-1y",
+      "label": "block",
+      "style": "trading-research",
+      "prompt": "Pull up a one-year daily chart of MSFT.",
+      "expected_blocks": [
+        "price_chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "trading-nvda-1m",
+      "label": "block",
+      "style": "trading-research",
+      "prompt": "How has NVDA traded over the past month? Show me the chart.",
+      "expected_blocks": [
+        "price_chart"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "sources-fed",
+      "label": "block",
+      "style": "trading-research",
+      "prompt": "Using the sources provided, what did the Fed decide, and show me the sources.",
+      "expected_blocks": [
+        "sources"
+      ],
+      "context_items": [
+        {
+          "source_id": "web_search",
+          "title": "[S1] Fed holds rates steady in October",
+          "url": "https://example.com/fed-holds",
+          "content": "The Federal Reserve kept its policy rate at 4.25%-4.50% and signalled patience.",
+          "metadata": {
+            "citation_label": "S1"
+          }
+        },
+        {
+          "source_id": "web_search",
+          "title": "[S2] Dot plot shows two cuts next year",
+          "url": "https://example.com/dot-plot",
+          "content": "Officials' median projection now shows two quarter-point cuts in 2027.",
+          "metadata": {
+            "citation_label": "S2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sources-chips",
+      "label": "block",
+      "style": "trading-research",
+      "prompt": "From these sources, summarize the chipmaker's quarter and list the sources you used.",
+      "expected_blocks": [
+        "sources",
+        "stats"
+      ],
+      "context_items": [
+        {
+          "source_id": "web_search",
+          "title": "[S1] Chipmaker beats on data-centre sales",
+          "url": "https://example.com/chips-earnings",
+          "content": "Data-centre revenue rose 41% year on year to $30.8B.",
+          "metadata": {
+            "citation_label": "S1"
+          }
+        },
+        {
+          "source_id": "web_search",
+          "title": "[S2] Export rules weigh on guidance",
+          "url": "https://example.com/export-rules",
+          "content": "The company cut next-quarter guidance by $1.2B citing export restrictions.",
+          "metadata": {
+            "citation_label": "S2"
+          }
+        },
+        {
+          "source_id": "web_search",
+          "title": "[S3] Analysts raise targets",
+          "url": "https://example.com/targets",
+          "content": "Several analysts raised price targets after the call.",
+          "metadata": {
+            "citation_label": "S3"
+          }
+        }
+      ]
+    },
+    {
+      "id": "choices-investing",
+      "label": "block",
+      "style": "chit-chat",
+      "prompt": "I want to learn about investing but don't know where to start. Suggest a few directions I could pick from next.",
+      "expected_blocks": [
+        "choices"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "choices-weekend",
+      "label": "block",
+      "style": "chit-chat",
+      "prompt": "Help me plan a weekend in Lisbon. Give me a few options to choose from for what we look at next.",
+      "expected_blocks": [
+        "choices"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "form-backtest",
+      "label": "block",
+      "style": "trading-research",
+      "prompt": "I want to backtest a moving-average crossover. Let me pick the symbol, the lookback window and whether to include extended hours.",
+      "expected_blocks": [
+        "form"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "form-workout",
+      "label": "block",
+      "style": "how-to",
+      "prompt": "Help me build a workout plan. Let me choose days per week, intensity and the focus area.",
+      "expected_blocks": [
+        "form"
+      ],
+      "context_items": []
+    },
+    {
+      "id": "md-venv",
+      "label": "markdown",
+      "style": "how-to",
+      "prompt": "How do I set up a Python virtual environment on Windows? Step by step.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-postgres-sqlite",
+      "label": "markdown",
+      "style": "comparison",
+      "prompt": "Compare PostgreSQL and SQLite for a small desktop app in a table.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-tax-checklist",
+      "label": "markdown",
+      "style": "how-to",
+      "prompt": "Give me a checklist for preparing my tax return.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-rest-graphql",
+      "label": "markdown",
+      "style": "comparison",
+      "prompt": "What are the differences between REST and GraphQL? Use a table.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-packing",
+      "label": "markdown",
+      "style": "how-to",
+      "prompt": "Write a packing list for a three-day hiking trip.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-rotate-key",
+      "label": "markdown",
+      "style": "how-to",
+      "prompt": "Explain how to rotate an API key safely, with warnings where they matter.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-notes-apps",
+      "label": "markdown",
+      "style": "comparison",
+      "prompt": "Compare Obsidian, Notion and OneNote on price, offline support and sync.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-sourdough",
+      "label": "markdown",
+      "style": "how-to",
+      "prompt": "What are the steps to make sourdough bread?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-merge-conflict",
+      "label": "markdown",
+      "style": "how-to",
+      "prompt": "How do I resolve a git merge conflict?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-rent-buy",
+      "label": "markdown",
+      "style": "comparison",
+      "prompt": "What are the pros and cons of renting versus buying a home?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-order-types",
+      "label": "markdown",
+      "style": "trading-research",
+      "prompt": "Explain the difference between a limit order and a stop order.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "md-deploy-checklist",
+      "label": "markdown",
+      "style": "how-to",
+      "prompt": "What should I check before deploying a web app to production? A checklist, please.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-hello",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "Hi! How are you today?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-joke",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "Tell me a short joke.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-capital",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "What's the capital of Australia?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-thanks",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "Thanks, that's all for now.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-book",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "Can you recommend a good science-fiction book?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-word",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "What does 'ephemeral' mean?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-poem",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "Write a two-line poem about autumn.",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-morning",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "Good morning!",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-author",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "Who wrote Pride and Prejudice?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-translate",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "How do you say 'good night' in Spanish?",
+      "expected_blocks": [],
+      "context_items": []
+    },
+    {
+      "id": "plain-puppy",
+      "label": "plain",
+      "style": "chit-chat",
+      "prompt": "What's a good name for a golden retriever puppy?",
+      "expected_blocks": [],
+      "context_items": []
+    }
+  ]
+}

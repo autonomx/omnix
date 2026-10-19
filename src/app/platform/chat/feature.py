@@ -44,10 +44,16 @@ def _research_mode_router(context):
     return create_research_mode_router(chat_store_factory=lambda: context.services.chat)
 
 
+def _rich_replies_router(context):
+    from .rich_replies_routes import create_rich_replies_router
+
+    return create_rich_replies_router(chat_store_factory=lambda: context.services.chat)
+
+
 FEATURE = FeatureModule(
     id="chat",
     title="Chat and Realtime",
     tier="platform",
-    routers=(_chat_context_router, _research_mode_router),
+    routers=(_chat_context_router, _research_mode_router, _rich_replies_router),
     repositories=CHAT_REPOSITORY_SPECS,
 )

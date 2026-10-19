@@ -24,7 +24,7 @@ from app.providers.base import provider_turn_owner
 from app.providers.catalog import LOCAL_DEVICE, provider_supports
 from app.runtime.cancellation import CancellationToken
 
-from .generative_ui import finalize_reply_ui
+from .generative_ui import attach_reply_ui
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
 
 logger = logging.getLogger(__name__)
@@ -801,7 +801,7 @@ def _run_chat_generation_job(
         metadata = dict(answer.get("metadata") or {})
         metadata["reply_to_message_id"] = message_id
         # Compile any omnix-ui blocks before the commit lock: resolvers do I/O.
-        metadata.update(finalize_reply_ui(content, metadata, context_items=context_items))
+        attach_reply_ui(content, metadata, context_items=context_items)
 
         def before_commit() -> None:
             _persist_routing_metadata(chat_store, session, user_message)

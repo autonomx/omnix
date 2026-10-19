@@ -66,6 +66,7 @@ markers = [
   "e2e: end-to-end test",
   "functional: functional test",
   "live_codex: opt-in real ChatGPT-authenticated Codex test",
+  "gui_eval: opt-in rich-reply model evaluation (chat generative UI); calls live providers",
 ]
 
 [tool.mypy]

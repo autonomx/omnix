@@ -214,6 +214,9 @@ class ChatSessionStore:
             message_metadata["research_mode"] = request.research_mode
         if request.workspace_root:
             message_metadata["workspace_root"] = request.workspace_root
+        if request.ui_action is not None:
+            # Validated at admission; it rebuilds the widget's state after a reload.
+            message_metadata["ui_action"] = request.ui_action.model_dump(mode="json", exclude_none=True)
         if context_sources:
             message_metadata["context_sources"] = context_sources
         if context_diagnostics:
@@ -303,6 +306,9 @@ class ChatSessionStore:
             message_metadata["research_mode"] = request.research_mode
         if request.workspace_root:
             message_metadata["workspace_root"] = request.workspace_root
+        if request.ui_action is not None:
+            # Validated at admission; it rebuilds the widget's state after a reload.
+            message_metadata["ui_action"] = request.ui_action.model_dump(mode="json", exclude_none=True)
         if context_sources:
             message_metadata["context_sources"] = context_sources
         if context_diagnostics:

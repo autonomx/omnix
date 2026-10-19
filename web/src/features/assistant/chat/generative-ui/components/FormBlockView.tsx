@@ -45,7 +45,7 @@ export function FormBlockView({ block, messageId, interaction }: { block: FormBl
               onChange={(value) => setValues((current) => ({ ...current, [field.name]: value }))}
             />
           ))}
-          {missing.length ? <p className="gui-form-error" role="alert">Fill in the required fields.</p> : null}
+          {missing.length ? <div className="gui-form-error" role="alert">Fill in the required fields.</div> : null}
           <div className="gui-form-actions">
             <button type="submit" className="gui-form-submit">{submitted ? 'Sent' : block.submit_label ?? 'Fill message'}</button>
             {active ? <span className="gui-form-hint">Puts the message in the composer; you send it.</span> : null}

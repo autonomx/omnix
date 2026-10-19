@@ -949,6 +949,15 @@ export interface components {
          */
         ChatTextAttachment: core["schemas"]["ChatTextAttachment"];
         /**
+         * ChatUiAction
+         * @description A reply widget the message answers (chat generative UI, GUI-5.4).
+         *
+         *     It carries no authority: the server checks it against the referenced
+         *     reply and strips it when it does not match, and the message is then an
+         *     ordinary chat turn either way.
+         */
+        ChatUiAction: core["schemas"]["ChatUiAction"];
+        /**
          * CheckpointBundleRequest
          * @description Extensible state bundle with explicit checkpoint control fields.
          */

@@ -74,6 +74,7 @@ def test_a_fenced_reply_is_stored_with_compiled_ui(tmp_path, path):
     assert message.content == FENCED  # content is never rewritten
     assert message.metadata["ui"]["text"] == "Revenue held.\n\nRevenue: $6,930."
     assert list(message.metadata["ui"]["blocks"]) == ["b1"]
+    assert message.metadata["provider_metrics"] == {"ui_blocks": 1, "ui_dropped": 0, "ui_diagnostics": {}}
     assert job_store.get_job(admission.job.id).status == JobStatus.COMPLETED
 
 
@@ -106,7 +107,7 @@ def test_the_compile_runs_while_the_commit_lock_is_not_held(tmp_path, monkeypatc
     held: list[bool] = [False]
     observed: list[bool] = []
     original_lock = generation_jobs.chat_job_commit_lock
-    original_finalize = finalize_module.finalize_reply_ui
+    original_attach = finalize_module.attach_reply_ui
 
     @contextmanager
     def tracking_lock(job_id):
@@ -119,11 +120,11 @@ def test_the_compile_runs_while_the_commit_lock_is_not_held(tmp_path, monkeypatc
 
     def spy(*args, **kwargs):
         observed.append(held[0])
-        return original_finalize(*args, **kwargs)
+        return original_attach(*args, **kwargs)
 
     monkeypatch.setattr(generation_jobs, "chat_job_commit_lock", tracking_lock)
-    monkeypatch.setattr(generation_jobs, "finalize_reply_ui", spy)
-    monkeypatch.setattr(admission_module, "finalize_reply_ui", spy)
+    monkeypatch.setattr(generation_jobs, "attach_reply_ui", spy)
+    monkeypatch.setattr(admission_module, "attach_reply_ui", spy)
     chat_store, _, admission = PATHS[path](tmp_path, FENCED)
 
     assert observed == [False]

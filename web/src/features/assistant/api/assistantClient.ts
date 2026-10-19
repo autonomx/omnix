@@ -14,6 +14,8 @@ export type AgentEvidenceSet = components['schemas']['EvidenceSet'];
 export type TaskGraphRunSnapshot = components['schemas']['TaskGraphRunSnapshot'];
 export type TaskGraphEvent = components['schemas']['TaskGraphEvent'];
 export type DeepResearchPlanUpdateRequest = components['schemas']['DeepResearchPlanUpdateRequest'];
+export type ChatRichRepliesResponse = components['schemas']['ChatRichRepliesResponse'];
+export type ChatRichReplies = ChatRichRepliesResponse['rich_replies'];
 
 /** `/api/workflow-runs/{run_id}` returns an untyped object; the fields the UI reads. */
 export interface WorkflowRunSnapshot {
@@ -34,6 +36,14 @@ export const assistantApiClient = {
       (signal) => api.POST('/api/assistant/context/chat/sessions/{session_id}/messages', { params: { path: { session_id: sessionId } }, body: request, signal }),
       { timeoutMs: 15_000, timeoutMessage: 'Chat request was not accepted by the gateway within 15s.' },
     );
+  },
+
+  /** Turns generative UI in replies on or off for one chat session; null returns to the default (off). */
+  async setChatRichReplies(sessionId: string, richReplies: ChatRichReplies): Promise<ChatRichRepliesResponse> {
+    return sendGatewayCall(() => api.POST('/api/chat/sessions/{session_id}/rich-replies', {
+      params: { path: { session_id: sessionId } },
+      body: { rich_replies: richReplies },
+    }));
   },
 
   async getAgentRun(runId: string): Promise<AgentRunSnapshot> {

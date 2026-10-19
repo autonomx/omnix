@@ -1812,6 +1812,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/rich-replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Conversation Rich Replies */
+        post: operations["set_conversation_rich_replies_api_chat_sessions__session_id__rich_replies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desktop-companion/activity": {
         parameters: {
             query?: never;
@@ -3384,6 +3401,7 @@ export interface components {
             text_attachment?: {
                 [key: string]: unknown;
             } | null;
+            ui_action?: components["schemas"]["ChatUiAction"] | null;
             /** User Turn Id */
             user_turn_id?: string | null;
             /** Vision Model Id */
@@ -4505,6 +4523,18 @@ export interface components {
         };
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
+        /** ChatRichRepliesResponse */
+        ChatRichRepliesResponse: {
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+            /** Rich Replies */
+            rich_replies: ("off" | "on") | null;
+            /** Session Id */
+            session_id: string;
+        };
         /** ChatSession */
         ChatSession: core["schemas"]["ChatSession"];
         /** ChatSessionListResponse */
@@ -4520,6 +4550,15 @@ export interface components {
          *     stored transcript and every provider prompt self-contained.
          */
         ChatTextAttachment: core["schemas"]["ChatTextAttachment"];
+        /**
+         * ChatUiAction
+         * @description A reply widget the message answers (chat generative UI, GUI-5.4).
+         *
+         *     It carries no authority: the server checks it against the referenced
+         *     reply and strips it when it does not match, and the message is then an
+         *     ordinary chat turn either way.
+         */
+        ChatUiAction: core["schemas"]["ChatUiAction"];
         /**
          * CheckpointBundleRequest
          * @description Extensible state bundle with explicit checkpoint control fields.
@@ -9205,6 +9244,14 @@ export interface components {
             /** Research Mode Override */
             research_mode_override?: ("disabled" | "quick" | "deep") | null;
         };
+        /**
+         * UpdateChatRichRepliesRequest
+         * @description Turn generative UI in replies on or off for one session; None returns to the default (off).
+         */
+        UpdateChatRichRepliesRequest: {
+            /** Rich Replies */
+            rich_replies?: ("off" | "on") | null;
+        };
         /** UpdateManagedMemoryRequest */
         UpdateManagedMemoryRequest: {
             /** Content */
@@ -13868,6 +13915,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_conversation_rich_replies_api_chat_sessions__session_id__rich_replies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChatRichRepliesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatRichRepliesResponse"];
                 };
             };
             /** @description Validation Error */

@@ -109,7 +109,7 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
 export function ChatOtherViews({ ws }: { ws: ChatWorkspaceModel }) {
   const {
     activeView, assistantSettings, assistantToolReturn, chatProviders, enabledToolCount, modelLabel, providerLabel,
-    resetAssistantSettings, runtimeConfig, selectedSessionId, setActiveUtilityPanel, setSelectedSessionId,
+    activeSession, resetAssistantSettings, runtimeConfig, selectedSessionId, setActiveUtilityPanel, setSelectedSessionId,
     settingsStatus, speechInputLabel, startLiveCallFromControls, toolExecutionRows, ttsOutputLabel,
     updateAssistantSettings, voiceProfiles, voiceProfilesLoading,
   } = ws;
@@ -138,6 +138,7 @@ export function ChatOtherViews({ ws }: { ws: ChatWorkspaceModel }) {
         onUpdateAssistantSettings={updateAssistantSettings}
         onShowTools={() => setActiveUtilityPanel('tools')}
         selectedSessionId={selectedSessionId}
+        selectedSessionRichReplies={activeSession?.rich_replies}
       />
     </>
   );

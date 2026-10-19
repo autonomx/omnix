@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import PromptBudget, prompt_budget_for_model, prompt_budget_from_env
+from .generative_ui.prompting import RichReplyDecision, catalog_instruction, catalog_instruction_tokens
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
 from .session_identity import neutralize_legacy_system_prompt, resolve_system_session_identity
 
@@ -94,8 +95,14 @@ def build_prompt_assembly(
     budget: PromptBudget | None = None,
     recent_message_limit: int | None = None,
     identity_resolver: Callable[[ChatSession], Any] | None = None,
+    rich_replies: RichReplyDecision | None = None,
 ) -> PromptAssembly:
-    """Build one stable structure for streaming and non-streaming generation."""
+    """Build one stable structure for streaming and non-streaming generation.
+
+    ``rich_replies`` is the turn's generative UI decision: when enabled, history
+    keeps replies' raw block markup (``MODEL_RICH``) and the catalog instruction
+    is added; otherwise replies are history as their text projection.
+    """
 
     interaction = (identity_resolver or resolve_system_session_identity)(session)
     session_system_messages = [
@@ -115,6 +122,10 @@ def build_prompt_assembly(
             neutralize_legacy_system_prompt(global_system_prompt)
         ]
         resolved_identity = assistant_identity if assistant_identity is not None else []
+    rich = rich_replies is not None and rich_replies.enabled and interaction.interaction_mode != "character"
+    if rich and rich_replies is not None:
+        system_instructions = [*system_instructions, catalog_instruction(rich_replies.level)]
+    history_purpose = MessageContentPurpose.MODEL_RICH if rich else MessageContentPurpose.MODEL
     eligible_recent_messages = [
         message
         for message in session.messages
@@ -126,12 +137,19 @@ def build_prompt_assembly(
         eligible_recent_messages = eligible_recent_messages[-max(0, recent_message_limit):]
     recent_messages: list[PromptTurn] = []
     for message in eligible_recent_messages:
-        content = project_message_content(message, MessageContentPurpose.MODEL)
+        content = project_message_content(message, history_purpose)
         if content:
             recent_messages.append(PromptTurn(role=message.role, content=content, message_id=message.id))
     external_context = [_external_item(payload, index) for index, payload in enumerate(context_items or [], start=1)]
     resolved_summary = session_summary if session_summary is not None else _active_segment_summary(session)
     character_personality_only = interaction.interaction_mode == "character"
+    diagnostics: dict[str, Any] = {}
+    if rich_replies is not None:
+        diagnostics["rich_replies"] = {
+            **rich_replies.diagnostics(),
+            "enabled": rich,
+            "instruction_tokens": catalog_instruction_tokens(rich_replies.level) if rich else 0,
+        }
     return PromptAssembly(
         system_instructions=system_instructions,
         assistant_identity=resolved_identity,
@@ -161,5 +179,6 @@ def build_prompt_assembly(
                 character_personality_only and assistant_identity is not None
             ),
             "interaction": interaction.model_dump(mode="json"),
+            **diagnostics,
         },
     )

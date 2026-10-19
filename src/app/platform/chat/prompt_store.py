@@ -34,6 +34,7 @@ from .memory_port import (
     resolve_prompt_memory,
 )
 from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
+from .generative_ui.prompting import RichReplyDecision, ui_enabled_for_turn
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
 from .routing_context import ChatRoutingContext, build_chat_routing_context
@@ -227,6 +228,15 @@ def _memory_suggestions_allowed(session: ChatSession) -> bool:
     return session.interaction_mode != "character" or session.write_memory
 
 
+def _rich_reply_decision(session: ChatSession, user_message: ChatMessage) -> RichReplyDecision:
+    """The turn's generative UI decision; a failure to decide leaves rich replies off."""
+    try:
+        return ui_enabled_for_turn(session, user_message)
+    except Exception:
+        logger.warning("rich reply decision failed; rich replies stay off", exc_info=True)
+        return RichReplyDecision(False, "none", "decision_failed")
+
+
 def turn_completed_event(session: ChatSession, user_message_id: str, *, user_id: str) -> Any:
     """The ``ChatTurnCompleted`` event a completed turn publishes (PA-3.4)."""
     from .turn_events import ChatTurnCompleted
@@ -331,6 +341,7 @@ class ChatSessionStore(JsonChatSessionStore):
             build_prompt_assembly,
             session,
             user_message,
+            rich_replies=_rich_reply_decision(session, user_message),
             global_system_prompt=provider_service.get_global_system_prompt(),
             context_items=context_items or [],
             approved_memory=approved_memory,
@@ -959,6 +970,7 @@ class ChatSessionStore(JsonChatSessionStore):
             provider_id=session.provider_id,
             model_id=session.model_id,
             research_mode_override=session.research_mode_override,
+            rich_replies=session.rich_replies,
             profile_id=session.profile_id,
             workspace_id=session.workspace_id,
             project_id=session.project_id,

@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.conversation.contracts import AssistantContextItem
+from app.platform.chat.models import ChatUiAction
 from app.providers.desktop_vision import DesktopCaptureMode
 from app.conversation.contracts import ResearchMode, normalize_research_mode
 from app.conversation.research_compatibility import (
@@ -66,6 +67,8 @@ class AssistantContextChatRequest(BaseModel):
     desktop_question: str | None = None
     vision_model_id: str | None = None
     live_repair: LiveConversationRepairContext | None = None
+    # The reply widget this message answers; validated at admission (chat generative UI).
+    ui_action: ChatUiAction | None = None
 
     @model_validator(mode="before")
     @classmethod

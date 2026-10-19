@@ -2622,6 +2622,16 @@
             ],
             "title": "Text Attachment"
           },
+          "ui_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatUiAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "user_turn_id": {
             "anyOf": [
               {
@@ -8602,6 +8612,41 @@
         "title": "ChatMessage",
         "type": "object"
       },
+      "ChatRichRepliesResponse": {
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "rich_replies": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off",
+                  "on"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rich Replies"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "ok",
+          "rich_replies"
+        ],
+        "title": "ChatRichRepliesResponse",
+        "type": "object"
+      },
       "ChatSession": {
         "properties": {
           "active_segment_id": {
@@ -8786,6 +8831,21 @@
             ],
             "title": "Research Mode Override"
           },
+          "rich_replies": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off",
+                  "on"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rich Replies"
+          },
           "shared_memory_access": {
             "default": "none",
             "enum": [
@@ -8844,6 +8904,7 @@
           "provider_id",
           "model_id",
           "research_mode_override",
+          "rich_replies",
           "profile_id",
           "workspace_id",
           "project_id",
@@ -9073,6 +9134,21 @@
             ],
             "title": "Research Mode Override"
           },
+          "rich_replies": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off",
+                  "on"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rich Replies"
+          },
           "shared_memory_access": {
             "default": "none",
             "enum": [
@@ -9131,6 +9207,7 @@
           "provider_id",
           "model_id",
           "research_mode_override",
+          "rich_replies",
           "profile_id",
           "workspace_id",
           "project_id",
@@ -9182,6 +9259,81 @@
           "text"
         ],
         "title": "ChatTextAttachment",
+        "type": "object"
+      },
+      "ChatUiAction": {
+        "additionalProperties": false,
+        "description": "A reply widget the message answers (chat generative UI, GUI-5.4).\n\nIt carries no authority: the server checks it against the referenced\nreply and strips it when it does not match, and the message is then an\nordinary chat turn either way.",
+        "properties": {
+          "action": {
+            "enum": [
+              "choose",
+              "submit"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "block_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Block Id",
+            "type": "string"
+          },
+          "option_index": {
+            "anyOf": [
+              {
+                "maximum": 5,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Index"
+          },
+          "source_message_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source Message Id",
+            "type": "string"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "maxProperties": 8,
+                "propertyNames": {
+                  "maxLength": 32
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          }
+        },
+        "required": [
+          "source_message_id",
+          "block_id",
+          "action"
+        ],
+        "title": "ChatUiAction",
         "type": "object"
       },
       "CheckpointBundleRequest": {
@@ -53665,6 +53817,16 @@
               }
             ]
           },
+          "ui_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatUiAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "user_turn_id": {
             "anyOf": [
               {
@@ -63327,6 +63489,28 @@
           }
         },
         "title": "UpdateChatResearchModeRequest",
+        "type": "object"
+      },
+      "UpdateChatRichRepliesRequest": {
+        "description": "Turn generative UI in replies on or off for one session; None returns to the default (off).",
+        "properties": {
+          "rich_replies": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off",
+                  "on"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rich Replies"
+          }
+        },
+        "title": "UpdateChatRichRepliesRequest",
         "type": "object"
       },
       "UpdateManagedMemoryRequest": {
@@ -77235,6 +77419,55 @@
           }
         },
         "summary": "Set Conversation Research Mode"
+      }
+    },
+    "/api/chat/sessions/{session_id}/rich-replies": {
+      "post": {
+        "operationId": "set_conversation_rich_replies_api_chat_sessions__session_id__rich_replies_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateChatRichRepliesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRichRepliesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Conversation Rich Replies"
       }
     },
     "/api/client-errors": {
