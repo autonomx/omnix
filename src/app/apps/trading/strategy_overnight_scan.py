@@ -30,6 +30,10 @@ from .strategy_overnight_shadow import (
     OvernightCandidate,
     OvernightHeadline,
     OvernightSocialMention,
+    MID_MAX_ADV_DOLLARS,
+    MID_MAX_PRICE,
+    MID_MIN_ADV_DOLLARS,
+    MID_POPULATION_MIN_CHANGE,
     build_benchmark,
     build_candidate,
     off_52w_high,
@@ -114,6 +118,7 @@ class OvernightScanResult:
     eligible: int
     scanned: int
     candidates: tuple[OvernightCandidate, ...]
+    mid_eligible: int = 0
 
 
 class OvernightMarketData:
@@ -147,11 +152,28 @@ class OvernightMarketData:
             end=datetime.combine(prior_session + timedelta(days=1), time(0), tzinfo=_ET),
             chunk_size=_CHUNK, feed="sip", adjustment="split",
         )
+        # The mid-cap research population (PREREG_OVERNIGHT5) adds stocks a $5-$50 price band and the
+        # $5M-$50M dollar-ADV band can reach; the small-cap population and arms are unchanged by it.
+        max_mid_prior = MID_MAX_PRICE / (1 + MID_POPULATION_MIN_CHANGE)
         history: dict[str, list[OvernightBar]] = {}
+        adv_dollars: dict[str, Decimal] = {}
+        small = mid = 0
         for symbol, raw in daily.items():
             rows = [b for b in _bars(raw) if b.start.astimezone(_ET).date() <= prior_session]
-            if rows and rows[-1].start.astimezone(_ET).date() == prior_session and 0 < rows[-1].close <= max_prior:
+            if not rows or rows[-1].start.astimezone(_ET).date() != prior_session or rows[-1].close <= 0:
+                continue
+            recent = rows[-config.adv_sessions:]
+            dollars = (sum((b.close * b.volume for b in recent), Decimal("0")) / len(recent)
+                       if len(recent) >= config.min_adv_sessions else None)
+            is_small = rows[-1].close <= max_prior
+            is_mid = (rows[-1].close <= max_mid_prior and dollars is not None
+                      and MID_MIN_ADV_DOLLARS <= dollars <= MID_MAX_ADV_DOLLARS)
+            if is_small or is_mid:
                 history[symbol] = rows
+                small += is_small
+                mid += is_mid
+                if dollars is not None:
+                    adv_dollars[symbol] = dollars
         intraday = _alpaca_bars(
             self.runtime, headers, sorted(history), timeframe=f"{SCAN_BAR_MINUTES}Min",
             start=datetime.combine(session_date, time(9, 30), tzinfo=_ET),
@@ -173,13 +195,14 @@ class OvernightMarketData:
                 config=config,
                 bar_minutes=SCAN_BAR_MINUTES,
                 prior_closes=[b.close for b in rows[-21:]],
+                adv_dollars=adv_dollars.get(symbol),
             )
             if candidate is not None:
                 candidates.append(candidate)
         candidates = self._with_52w_high(candidates, headers, session_date, prior_session, config)
         return OvernightScanResult(
-            session_date=session_date, eligible=len(history), scanned=len(intraday),
-            candidates=tuple(sorted(candidates, key=lambda c: c.symbol)),
+            session_date=session_date, eligible=small, scanned=len(intraday),
+            candidates=tuple(sorted(candidates, key=lambda c: c.symbol)), mid_eligible=mid,
         )
 
     def _with_52w_high(

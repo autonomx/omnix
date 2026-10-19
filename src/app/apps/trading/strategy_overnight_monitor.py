@@ -34,6 +34,7 @@ from .strategy_overnight_shadow import (
     OvernightPick,
     label_benchmark,
     label_outcome,
+    mid_population,
     news_context,
     population,
     score,
@@ -56,7 +57,9 @@ EVENT_SCAN = "overnight_scan"
 EVENT_OUTCOME = "overnight_outcome"
 EVENT_SCORECARD = "overnight_scorecard"
 EVENT_FILINGS = "overnight_filings"
+EVENT_MID_POPULATION = "overnight_mid_population"
 _SCAN_INSTRUMENT = "__scan__"
+_MID_POPULATION_INSTRUMENT = "__mid_population__"
 _FILINGS_INSTRUMENT = "__filings__"
 _POPULATION_INSTRUMENT = "__population__"
 _SCORECARD_INSTRUMENT = "__scorecard__"
@@ -332,8 +335,10 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
         market, market_error = self._market_context(data, day, settings)
         picks = select_arm_picks(result.candidates, settings)
         pop = population(result.candidates, settings)
+        mid = mid_population(result.candidates)
         social = self._social_context(data, pop)
-        news = self._news_context(data, day, pop, settings)
+        # One headline request covers both populations; `news.contexts` holds every stock in either.
+        news = self._news_context(data, day, pop + [c for c in mid if c.symbol not in {p.symbol for p in pop}], settings)
         late = local.time() >= settings.entry_et
         for arm_id, arm_picks in picks.items():
             for pick in arm_picks:
@@ -347,6 +352,12 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
             session_date=day, observed_at=now,
             payload={"candidates": [c.model_dump(mode="json") for c in pop]},
         ))
+        repository.append_event(_event(
+            config, event_type=EVENT_MID_POPULATION, instrument_id=_MID_POPULATION_INSTRUMENT,
+            session_date=day, observed_at=now,
+            payload={"candidates": [c.model_dump(mode="json") for c in mid], "eligible": result.mid_eligible,
+                     "execution_authority": False},
+        ))
         # The scan marker is written last: a crash before it lets the next cycle retry;
         # picks and population are idempotent, so a retry cannot duplicate them.
         repository.append_event(_event(
@@ -354,7 +365,7 @@ class OvernightShadowMonitor(ScheduledTradingMonitor):
             session_date=day, observed_at=now,
             payload={
                 "eligible": result.eligible, "scanned": result.scanned, "candidates": len(result.candidates),
-                "population": len(pop), "picks": {arm: len(p) for arm, p in picks.items()},
+                "population": len(pop), "mid_population": len(mid), "picks": {arm: len(p) for arm, p in picks.items()},
                 "decided_late": late, "data_cutoff_et": settings.data_cutoff_et.isoformat(),
                 "market": market, "market_error": market_error, "social": social, "news": news,
                 "execution_authority": False,
@@ -544,6 +555,7 @@ def create_overnight_shadow_monitor_task(context: FeatureContext) -> TradingMoni
 
 __all__ = [
     "EVENT_FILINGS",
+    "EVENT_MID_POPULATION",
     "EVENT_OUTCOME",
     "EVENT_PICK",
     "EVENT_POPULATION",

@@ -296,6 +296,19 @@ def test_off_52w_high_uses_up_to_a_year_of_prior_daily_highs() -> None:
     assert off_52w_high(c, [*bars, today], SESSION) == D("-0.250000")
 
 
+def test_mid_population_uses_price_dollar_volume_and_change_bands() -> None:
+    from app.apps.trading.strategy_overnight_shadow import mid_population
+
+    def mid(symbol, price, change, dollars):
+        return _candidate(symbol, price=price, change=change).model_copy(
+            update={"adv_dollars": None if dollars is None else D(dollars)})
+
+    cands = [mid("IN", "30", "0.05", "10000000"), mid("SLOW", "30", "0.049", "10000000"),
+             mid("CHEAP", "4.99", "0.08", "10000000"), mid("DEAR", "50.01", "0.08", "10000000"),
+             mid("THIN", "30", "0.08", "4999999"), mid("BIG", "30", "0.08", "50000001"), mid("NOADV", "30", "0.08", None)]
+    assert [c.symbol for c in mid_population(cands)] == ["IN"]
+
+
 def test_news_context_counts_and_uses_the_frozen_categories() -> None:
     from app.apps.trading.strategy_overnight_shadow import NEWS_CATEGORIES, OvernightHeadline, news_context
     assert list(NEWS_CATEGORIES) == ["offering", "reverse_split", "fda_clinical", "deal", "earnings", "theme"]
@@ -384,8 +397,10 @@ class FakeMarketData:
 
     def scan(self, session_date, prior_session, config):
         self.scans += 1
-        return OvernightScanResult(session_date=session_date, eligible=10, scanned=9, candidates=(
-            _candidate("RUN1", price="4.00", change="0.40"), _candidate("MID1", change="0.15", close_location="0.95")))
+        midcap = _candidate("MIDC", price="30.00", change="0.07").model_copy(update={"adv_dollars": D("10000000")})
+        return OvernightScanResult(session_date=session_date, eligible=10, scanned=9, mid_eligible=4, candidates=(
+            _candidate("RUN1", price="4.00", change="0.40"), _candidate("MID1", change="0.15", close_location="0.95"),
+            midcap))
 
     def benchmarks(self, session_date, prior_session, config):
         return (OvernightBenchmark(symbol="IWM", prior_close=D("200"), prior_change=D("0.01"), price=D("198"),
@@ -456,7 +471,12 @@ def test_monitor_scans_once_in_window_then_labels_next_morning_once() -> None:
     assert data.news_window == (datetime(2026, 10, 12, 16, 0, tzinfo=ET), datetime(2026, 10, 13, 15, 30, tzinfo=ET))
     assert news["error"] is None and news["source"] == "alpaca:benzinga"
     by = {c["symbol"]: c for c in news["contexts"]}
+    assert set(by) == {"MID1", "RUN1", "MIDC"}                               # both populations, one request
     assert by["MID1"]["articles"] == 0 and by["MID1"]["categories"] == []    # explicit: no headline
+    from app.apps.trading.strategy_overnight_monitor import EVENT_MID_POPULATION
+    mid_event = repo.of(EVENT_MID_POPULATION)[0].payload
+    assert [c["symbol"] for c in mid_event["candidates"]] == ["MIDC"] and mid_event["eligible"] == 4
+    assert scan["population"] == 2 and scan["mid_population"] == 1
     assert by["RUN1"]["articles"] == 1 and by["RUN1"]["categories"] == ["offering"]   # 15:40 headline excluded
     clock[0] = datetime.combine(NEXT, time(10, 0), tzinfo=ET).astimezone(timezone.utc)
     assert asyncio.run(monitor.run_once()) == 0                               # before label_after_et

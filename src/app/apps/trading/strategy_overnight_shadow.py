@@ -24,6 +24,10 @@ from app.apps.trading.us_equity_calendar import regular_close_time
 
 OVERNIGHT_TRADING_STRATEGY_ID = "overnight-trading-strategy-shadow"
 OVERNIGHT_POPULATION_MIN_CHANGE = Decimal("0.10")
+# Mid-cap research population (PREREG_OVERNIGHT5), recorded beside the small-cap one; no arm reads it.
+MID_MIN_PRICE, MID_MAX_PRICE = Decimal("5"), Decimal("50")
+MID_MIN_ADV_DOLLARS, MID_MAX_ADV_DOLLARS = Decimal("5000000"), Decimal("50000000")
+MID_POPULATION_MIN_CHANGE = Decimal("0.05")
 # Broad-market context recorded with each scan and scorecard (research only; no arm reads it).
 OVERNIGHT_BENCHMARKS = ("SPY", "QQQ", "IWM", "DIA")
 _EXIT_MISSING_RETURN = Decimal("-0.50")
@@ -64,6 +68,8 @@ class OvernightCandidate(BaseModel):
     prior_return_20d: Decimal | None = None
     # Prior close vs the highest daily high of the last year (population stocks only).
     off_52w_high: Decimal | None = None
+    # 20-session average daily dollar volume (split-invariant), for the mid-cap population.
+    adv_dollars: Decimal | None = None
 
 
 class OvernightSocialMention(BaseModel):
@@ -267,6 +273,7 @@ def build_candidate(
     config: OvernightShadowConfig,
     bar_minutes: int = 30,
     prior_closes: Sequence[Decimal] = (),
+    adv_dollars: Decimal | None = None,
 ) -> OvernightCandidate | None:
     """Features from regular-session ``bar_minutes`` bars that ENDED by ``config.data_cutoff_et``.
 
@@ -307,6 +314,7 @@ def build_candidate(
         prior_return_5d=_q(trend[-1] / trend[0] - 1) if trend else None,
         prior_up_days_5d=sum(1 for a, b in zip(trend, trend[1:]) if b > a) if trend else None,
         prior_return_20d=_q(trend20[-1] / trend20[0] - 1) if trend20 else None,
+        adv_dollars=_q(adv_dollars) if adv_dollars is not None else None,
     )
 
 
@@ -368,6 +376,20 @@ def population(candidates: Iterable[OvernightCandidate], config: OvernightShadow
             c for c in candidates
             if c.change >= OVERNIGHT_POPULATION_MIN_CHANGE
             and config.minimum_price <= c.price <= config.maximum_price
+        ),
+        key=lambda c: c.symbol,
+    )
+
+
+def mid_population(candidates: Iterable[OvernightCandidate]) -> list[OvernightCandidate]:
+    """Mid-cap research population: price $5-$50, ADV $5M-$50M, up >= 5% at decision time."""
+
+    return sorted(
+        (
+            c for c in candidates
+            if c.change >= MID_POPULATION_MIN_CHANGE
+            and MID_MIN_PRICE <= c.price <= MID_MAX_PRICE
+            and c.adv_dollars is not None and MID_MIN_ADV_DOLLARS <= c.adv_dollars <= MID_MAX_ADV_DOLLARS
         ),
         key=lambda c: c.symbol,
     )
@@ -521,6 +543,7 @@ __all__ = [
     "half_spread",
     "label_benchmark",
     "label_outcome",
+    "mid_population",
     "news_context",
     "off_52w_high",
     "population",

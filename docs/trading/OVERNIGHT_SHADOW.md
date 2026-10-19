@@ -79,6 +79,14 @@ looked at.
   (`NEWS_CATEGORIES`: offering, reverse_split, fda_clinical, deal, earnings,
   theme) are frozen: the prospective test PREREG_OVERNIGHT4 (research cache)
   uses them by name, so changing them needs a new pre-registration.
+- `overnight_mid_population`: the mid-cap research population for
+  PREREG_OVERNIGHT5 (research cache): candidates priced $5-$50 with a
+  20-session average dollar volume of $5M-$50M (`adv_dollars`), up at least
+  5% at the data cutoff, with the same features as the small-cap population.
+  The scan adds these stocks to its intraday read; the small-cap population
+  and arms are unchanged by them. Their headlines are in
+  `overnight_scan.news` (one request covers both populations). No arm reads
+  them; outcomes are computed later from daily bars.
 - `overnight_filings` (one event per scan, written after the scan marker so
   EDGAR's slower reads never delay or block the picks): per population
   stock, from SEC EDGAR, only filings accepted by the decision time:
@@ -128,6 +136,20 @@ gitignored); its SHA-256, recorded here so the text cannot change unnoticed:
 `FREEZE_OVERNIGHT4.txt` beside it pins the source files that define the
 recorded fields. Changing the rule, costs, sessions or pass criteria needs a
 new pre-registration, and so does changing `NEWS_CATEGORIES`.
+
+## Mid-cap test (OVERNIGHT-5)
+
+Two small-cap findings carried over to mid caps (price $5-$50, dollar ADV
+$5M-$50M, up at least 5%): H1, a long overnight hold of moderate,
+strong-closing, uptrending stocks with no headline; H2, a five-session short of
+stocks that moved on headlines and closed weak. Pre-registered on 2026-10-19
+with costs taken from SIP quotes and auction prints (mid-cap half-spread
+about 0.06%, closing auctions of about $4M), then evaluated once on the
+untouched 2022-03 to 2023-02 period; a hypothesis that passes is confirmed
+forward on `overnight_mid_population`. Document: `research/PREREG_OVERNIGHT5.md`
+(research cache), SHA-256:
+
+`cdbd74082b350ae45ea8867fdbfdba8bd8649194d41014488d1e542274e5b0c2`
 
 A pre-registered historical test of the same arms (point-in-time universe,
 March 2025 – October 2026) accompanies this strategy as research; its result
