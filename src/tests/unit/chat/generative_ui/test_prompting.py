@@ -184,8 +184,9 @@ def test_the_route_sets_and_clears_the_setting_and_rejects_unknown_sessions(tmp_
 
 
 def test_only_models_with_a_passing_report_are_enabled():
-    assert model_catalog.RICH_UI_CAPABILITIES == {("claude_cli", "haiku"): "full"}
+    assert model_catalog.RICH_UI_CAPABILITIES == {("claude_cli", "haiku"): "full", ("claude_cli", "sonnet"): "full"}
     assert model_catalog.rich_ui_capability("llm:claude_cli", "llm:claude_cli:haiku") == "full"
-    assert model_catalog.rich_ui_capability("claude_cli", "sonnet") == "none"
-    report = Path(__file__).resolve().parents[5] / "docs" / "roadmap" / "evaluations" / "GUI_EVAL_2026-10-19_claude_cli_haiku_full.md"
-    assert "Gate: PASSED" in report.read_text(encoding="utf-8")
+    assert model_catalog.rich_ui_capability("claude_cli", "opus") == "none"
+    for (provider, model), level in model_catalog.RICH_UI_CAPABILITIES.items():
+        report = Path(__file__).resolve().parents[5] / "docs" / "roadmap" / "evaluations" / f"GUI_EVAL_2026-10-19_{provider}_{model}_{level}.md"
+        assert "Gate: PASSED" in report.read_text(encoding="utf-8")

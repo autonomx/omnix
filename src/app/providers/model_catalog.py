@@ -91,6 +91,8 @@ RichUiLevel = Literal["none", "basic", "full"]
 RICH_UI_CAPABILITIES: dict[tuple[str, str], RichUiLevel] = {
     # docs/roadmap/evaluations/GUI_EVAL_2026-10-19_claude_cli_haiku_full.md: passed.
     ("claude_cli", "haiku"): "full",
+    # docs/roadmap/evaluations/GUI_EVAL_2026-10-19_claude_cli_sonnet_full.md: passed.
+    ("claude_cli", "sonnet"): "full",
 }
 
 
