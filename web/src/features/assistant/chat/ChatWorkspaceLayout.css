@@ -532,6 +532,90 @@
   .assistant-message-content a { color: var(--c-sky-870); text-decoration: underline;
   }
 
+  /* Tones shared by Markdown alerts and generative UI blocks (ChatGenerativeUi.css). */
+  .assistant-chat-message,
+  .assistant-message-content {
+    --assistant-tone-info: var(--omnix-cyan);
+    --assistant-tone-positive: var(--omnix-success);
+    --assistant-tone-accent: var(--omnix-purple);
+    --assistant-tone-warning: var(--c-amber-700);
+    --assistant-tone-negative: var(--c-red-640);
+  }
+
+  .assistant-markdown-table {
+    margin: 0 0 0.85rem;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .assistant-markdown-table table {
+    border-collapse: collapse;
+    font-size: 0.92em;
+    min-width: 100%;
+  }
+
+  .assistant-markdown-table th,
+  .assistant-markdown-table td {
+    border: 1px solid var(--omnix-border);
+    padding: 0.35rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .assistant-markdown-table th {
+    background: var(--omnix-soft-bg);
+    color: var(--omnix-text);
+    font-weight: 700;
+  }
+
+  .assistant-markdown-table [data-align='center'] { text-align: center;
+  }
+
+  .assistant-markdown-table [data-align='right'] { font-variant-numeric: tabular-nums; text-align: right;
+  }
+
+  .assistant-message-content ul.contains-task-list { list-style: none; padding-left: 0.2rem;
+  }
+
+  .task-list-item-checkbox {
+    accent-color: var(--omnix-cyan);
+    margin: 0 0.4rem 0 0;
+    vertical-align: -0.1em;
+  }
+
+  .assistant-markdown-alert {
+    --alert-tone: var(--assistant-tone-info);
+    background: color-mix(in srgb, var(--alert-tone) 9%, transparent);
+    border-left: 3px solid var(--alert-tone);
+    border-radius: 0 0.45rem 0.45rem 0;
+    margin: 0 0 0.85rem;
+    padding: 0.5rem 0.85rem;
+  }
+
+  .assistant-markdown-alert > :last-child { margin-bottom: 0;
+  }
+
+  .assistant-markdown-alert-tip { --alert-tone: var(--assistant-tone-positive);
+  }
+
+  .assistant-markdown-alert-important { --alert-tone: var(--assistant-tone-accent);
+  }
+
+  .assistant-markdown-alert-warning { --alert-tone: var(--assistant-tone-warning);
+  }
+
+  .assistant-markdown-alert-caution { --alert-tone: var(--assistant-tone-negative);
+  }
+
+  .assistant-message-content .assistant-markdown-alert-title {
+    color: var(--alert-tone);
+    font-size: 0.82em;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.25rem;
+    text-transform: uppercase;
+  }
+
   .assistant-research-citation {
     color: var(--c-sky-830);
     font-size: 0.78em;

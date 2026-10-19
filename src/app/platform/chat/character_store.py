@@ -524,7 +524,8 @@ def _persist_interrupted_reply(store, *, session_id: str, user_message_id: str, 
             content=generated,
             created_at=_utcnow(),
             metadata={
-                **metadata,
+                # Interrupted replies render their delivered text only, with no UI.
+                **{key: value for key, value in metadata.items() if key != "ui"},
                 "generation_status": "interrupted",
                 "delivery_status": "interrupted",
                 "assistant_turn_id": assistant_turn_id,

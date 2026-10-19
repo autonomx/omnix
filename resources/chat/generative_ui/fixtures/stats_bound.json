@@ -1,0 +1,51 @@
+{
+  "name": "stats_bound",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {
+    "context_items": [
+      {
+        "source_id": "notes",
+        "title": "CPI 2.4% in September",
+        "content": "..."
+      }
+    ]
+  },
+  "description": "A stats value bound to a context item's title is frozen and marked as sourced.",
+  "content": "```omnix-ui\n{\"type\": \"stats\", \"title\": \"Latest\", \"items\": [{\"label\": \"Headline\", \"value\": {\"bind\": \"context:1.title\"}}]}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "stats",
+        "id": "b1",
+        "v": 1,
+        "items": [
+          {
+            "label": "Headline",
+            "value": "CPI 2.4% in September"
+          }
+        ],
+        "provenance": "bound",
+        "title": "Latest",
+        "bindings": [
+          {
+            "path": "items[0].value",
+            "ref": "context:1",
+            "title": "CPI 2.4% in September"
+          }
+        ]
+      }
+    },
+    "text": "Latest: Headline: CPI 2.4% in September.",
+    "speech": "Headline CPI 2.4% in September.",
+    "diagnostics": []
+  }
+}

@@ -131,6 +131,7 @@ module = [
   "app.platform.assistant_tools.contracts",
   "app.platform.characters.contracts",
   "app.platform.chat.contracts",
+  "app.platform.chat.generative_ui", "app.platform.chat.generative_ui.*",
   "app.platform.companion_activity.contracts",
   "app.platform.image.contracts",
   "app.platform.live_voice.contracts",

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .concurrency import serialized_chat_mutation
+from .generative_ui.compiler import rebase_reply_ui
 from .models import ChatSession
 from .store import ChatSessionStore
 
@@ -58,7 +59,9 @@ def validate_completed_research_reply(
     rendered = render(assistant.content, context_items)
     if rendered is None:
         return session
+    previous_content = assistant.content
     assistant.content, citation_metadata = rendered
+    rebase_reply_ui(assistant.metadata, previous_content, assistant.content)
     assistant.metadata.update(
         {
             "research_mode": "quick",

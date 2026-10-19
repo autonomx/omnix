@@ -29,6 +29,7 @@ from .generation_jobs import (
     interrupt_active_chat_generation_jobs,
     mark_chat_acceptance_failed,
 )
+from .generative_ui import finalize_reply_ui
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
 
 
@@ -184,6 +185,7 @@ def stream_chat_turn(
                         metadata = event["metadata"]
                     if annotate_reply is not None:
                         annotate_reply(metadata)
+                    metadata.update(finalize_reply_ui(content, metadata, context_items=context_items))
                     # Commit at the provider completion boundary: live voice
                     # playback can outlast generation and a later barge-in may
                     # close the HTTP body before the session event is sent.
@@ -201,6 +203,7 @@ def stream_chat_turn(
             if callable(close):
                 close()
         if not committed:
+            metadata.update(finalize_reply_ui(content, metadata, context_items=context_items))
             completed = _commit_chat_reply(
                 chat_store, job_store, job, session_id=session.id,
                 message_id=user_message.id, content=content, metadata=metadata,

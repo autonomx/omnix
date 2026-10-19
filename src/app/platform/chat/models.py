@@ -86,6 +86,8 @@ def parse_explicit_research_command(content: str) -> tuple[str, ResearchMode] | 
 
 
 class MessageContentPurpose(str, Enum):
+    # History for a turn with rich replies enabled: raw content, omnix-ui fences included.
+    MODEL_RICH = "model_rich"
     MODEL = "model"
     MEMORY = "memory"
     SUMMARY = "summary"
@@ -95,11 +97,27 @@ class MessageContentPurpose(str, Enum):
     EXPORT = "export"
 
 
+_RAW_PURPOSES = frozenset({MessageContentPurpose.AUDIT, MessageContentPurpose.EXPORT})
+
+
 def project_message_content(message: ChatMessage, purpose: MessageContentPurpose) -> str:
+    """The text of a message a consumer may see for ``purpose``.
+
+    An assistant reply with compiled generative UI (``metadata.ui``) projects to
+    its ``ui.text`` everywhere except audit, export and rich-enabled model
+    history, which see the raw content (roadmap §6.4). An interrupted voice
+    reply projects to its delivered text; interrupted replies carry no UI.
+    """
     content = message.content
-    if message.role != "assistant" or message.metadata.get("delivery_status") != "interrupted":
+    if message.role != "assistant":
         return content
-    if purpose in {MessageContentPurpose.AUDIT, MessageContentPurpose.EXPORT}:
+    if message.metadata.get("delivery_status") != "interrupted":
+        ui = message.metadata.get("ui")
+        ui_text = ui.get("text") if isinstance(ui, dict) else None
+        if not isinstance(ui_text, str) or purpose in _RAW_PURPOSES or purpose == MessageContentPurpose.MODEL_RICH:
+            return content
+        return ui_text
+    if purpose in _RAW_PURPOSES:
         return content
     metadata = _delivery_metadata(message)
     key = "visual_delivered_text_end" if purpose == MessageContentPurpose.TRANSCRIPT else "context_delivered_text_end"

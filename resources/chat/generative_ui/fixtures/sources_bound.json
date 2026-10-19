@@ -1,0 +1,78 @@
+{
+  "name": "sources_bound",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {
+    "context_items": [
+      {
+        "source_id": "web_search",
+        "title": "[S1] Fed holds rates",
+        "url": "https://example.com/fed",
+        "content": "...",
+        "metadata": {
+          "citation_label": "S1"
+        }
+      },
+      {
+        "source_id": "web_search",
+        "title": "[S2] Dot plot shifts",
+        "url": "https://example.com/dots",
+        "content": "...",
+        "metadata": {
+          "citation_label": "S2"
+        }
+      }
+    ]
+  },
+  "description": "Citation chips bound to this turn's research sources; a reference outside the turn is dropped.",
+  "content": "Rates were held [S1], and the dot plot moved [S2].\n\n```omnix-ui\n{\"type\": \"sources\", \"refs\": [{\"bind\": \"source:1\"}, {\"bind\": \"source:2\"}, {\"bind\": \"source:9\"}]}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 52
+      },
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "sources",
+        "id": "b1",
+        "v": 1,
+        "refs": [
+          {
+            "ref": "source:1",
+            "title": "Fed holds rates",
+            "citation": "S1",
+            "url": "https://example.com/fed"
+          },
+          {
+            "ref": "source:2",
+            "title": "Dot plot shifts",
+            "citation": "S2",
+            "url": "https://example.com/dots"
+          }
+        ],
+        "provenance": "bound",
+        "bindings": []
+      }
+    },
+    "text": "Rates were held [S1], and the dot plot moved [S2].\n\nSources:\n[S1] Fed holds rates — https://example.com/fed\n[S2] Dot plot shifts — https://example.com/dots",
+    "speech": "Rates were held, and the dot plot moved.\n\nTwo sources.",
+    "diagnostics": [
+      {
+        "block": "b1",
+        "code": "unresolved_binding",
+        "path": "refs[2]",
+        "severity": "dropped",
+        "detail": "source:9 is not part of this turn"
+      }
+    ]
+  }
+}

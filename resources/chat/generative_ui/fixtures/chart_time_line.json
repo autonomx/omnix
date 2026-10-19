@@ -1,0 +1,90 @@
+{
+  "name": "chart_time_line",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "A two-series time line chart with ISO dates and a percent axis.",
+  "content": "Both rose through the week.\n\n```omnix-ui\n{\"type\": \"chart\", \"kind\": \"line\", \"title\": \"Weekly change\", \"x\": {\"type\": \"time\", \"label\": \"Date\"}, \"y\": {\"label\": \"Change\", \"format\": \"percent\"}, \"series\": [{\"name\": \"AAPL\", \"points\": [[\"2026-10-05\", 0.4], [\"2026-10-06\", 1.2], [\"2026-10-07\", 0.9], [\"2026-10-08\", 1.8]]}, {\"name\": \"MSFT\", \"points\": [[\"2026-10-05\", -0.2], [\"2026-10-06\", 0.3], [\"2026-10-07\", 0.7], [\"2026-10-08\", 1.1]]}]}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 29
+      },
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "chart",
+        "id": "b1",
+        "v": 1,
+        "kind": "line",
+        "size": "md",
+        "x": {
+          "type": "time",
+          "label": "Date"
+        },
+        "y": {
+          "format": "percent",
+          "label": "Change"
+        },
+        "series": [
+          {
+            "name": "AAPL",
+            "points": [
+              [
+                1791158400,
+                0.4
+              ],
+              [
+                1791244800,
+                1.2
+              ],
+              [
+                1791331200,
+                0.9
+              ],
+              [
+                1791417600,
+                1.8
+              ]
+            ]
+          },
+          {
+            "name": "MSFT",
+            "points": [
+              [
+                1791158400,
+                -0.2
+              ],
+              [
+                1791244800,
+                0.3
+              ],
+              [
+                1791331200,
+                0.7
+              ],
+              [
+                1791417600,
+                1.1
+              ]
+            ]
+          }
+        ],
+        "provenance": "model",
+        "title": "Weekly change",
+        "bindings": []
+      }
+    },
+    "text": "Both rose through the week.\n\nWeekly change\nAAPL: min 0.4%, max 1.8%, last 1.8% (2026-10-08)\nMSFT: min -0.2%, max 1.1%, last 1.1% (2026-10-08)",
+    "speech": "Both rose through the week.\n\nA line chart of Weekly change, ending at 1.8%.",
+    "diagnostics": []
+  }
+}

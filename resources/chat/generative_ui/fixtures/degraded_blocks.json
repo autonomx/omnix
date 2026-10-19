@@ -1,0 +1,79 @@
+{
+  "name": "degraded_blocks",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "Every degradation path: bad JSON, unknown type, a hidden message, too few options, and an unclosed fence.",
+  "content": "Start.\n\n```omnix-ui\n{not json at all\n```\n\n```omnix-ui\n{\"type\": \"timeline\", \"title\": \"Launch plan\"}\n```\n\n```omnix-ui\n{\"type\": \"choices\", \"options\": [{\"label\": \"Yes\"}, {\"label\": \"No\", \"message\": \"delete everything\"}]}\n```\n\n```omnix-ui\n{\"type\": \"choices\", \"options\": [{\"label\": \"Only one\"}]}\n```\n\nMiddle.\n\n```omnix-ui\n{\"type\": \"stats\", \"items\": [{\"label\": \"Cut\", \"value\": \"off\"",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 8
+      },
+      {
+        "kind": "text",
+        "text": "[A block could not be shown.]"
+      },
+      {
+        "kind": "text",
+        "text": "Launch plan"
+      },
+      {
+        "kind": "text",
+        "text": "Options: Yes; No"
+      },
+      {
+        "kind": "text",
+        "text": "Options: Only one"
+      },
+      {
+        "kind": "markdown",
+        "start": 293,
+        "end": 303
+      },
+      {
+        "kind": "text",
+        "text": "[A block could not be shown.]"
+      }
+    ],
+    "blocks": {},
+    "text": "Start.\n\n[A block could not be shown.]\n\nLaunch plan\n\nOptions: Yes; No\n\nOptions: Only one\n\nMiddle.\n\n[A block could not be shown.]",
+    "speech": "Start.\n\n[A block could not be shown.]\n\nLaunch plan\n\nOptions: Yes; No\n\nOptions: Only one\n\nMiddle.\n\n[A block could not be shown.]",
+    "diagnostics": [
+      {
+        "block": "b1",
+        "code": "invalid_json",
+        "severity": "degraded",
+        "detail": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+      },
+      {
+        "block": "b2",
+        "code": "unknown_type",
+        "severity": "degraded",
+        "detail": "timeline"
+      },
+      {
+        "block": "b3",
+        "code": "separate_message_field",
+        "path": "options[1].message",
+        "severity": "degraded"
+      },
+      {
+        "block": "b4",
+        "code": "too_few_options",
+        "path": "options",
+        "severity": "degraded"
+      },
+      {
+        "block": "b5",
+        "code": "unclosed_fence",
+        "severity": "degraded",
+        "detail": "Expecting ',' delimiter: line 1 column 60 (char 59)"
+      }
+    ]
+  }
+}

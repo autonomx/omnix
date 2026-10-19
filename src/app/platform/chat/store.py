@@ -18,7 +18,9 @@ from .models import (
     ChatSessionListResponse,
     ChatSessionSummary,
     CreateChatSessionRequest,
+    MessageContentPurpose,
     SendChatMessageRequest,
+    project_message_content,
 )
 from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
 
@@ -745,7 +747,12 @@ class ChatSessionStore:
         for message in session.messages:
             if message.id == user_message.id:
                 continue
-            messages.append(_provider_message(message))
+            # A reply with generative UI is history as its text projection (invariant 5).
+            projected = (
+                project_message_content(message, MessageContentPurpose.MODEL)
+                if message.metadata.get("ui") else None
+            )
+            messages.append(_provider_message(message, content=projected))
         messages.append(
             _provider_message(
                 user_message,

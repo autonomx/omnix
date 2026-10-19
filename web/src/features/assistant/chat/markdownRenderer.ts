@@ -54,13 +54,22 @@ export function renderMarkdownHtml(markdown: string, metadata?: Metadata): strin
     if (unordered || ordered) {
       const orderedList = Boolean(ordered);
       const items: string[] = [];
+      let taskList = false;
       while (index < lines.length) {
         const item = lines[index].match(orderedList ? /^\s{0,3}\d+[.)]\s+(.+)$/ : /^\s{0,3}[-*+]\s+(.+)$/);
         if (!item) break;
-        items.push(`<li>${renderInline(item[1])}</li>`);
+        const task = orderedList ? null : item[1].match(TASK_ITEM);
+        if (task) {
+          taskList = true;
+          const checked = task[1] !== ' ' ? ' checked' : '';
+          items.push(`<li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled${checked}> ${renderInline(task[2])}</li>`);
+        } else {
+          items.push(`<li>${renderInline(item[1])}</li>`);
+        }
         index += 1;
       }
-      blocks.push(`<${orderedList ? 'ol' : 'ul'}>${items.join('')}</${orderedList ? 'ol' : 'ul'}>`);
+      const listTag = orderedList ? 'ol' : 'ul';
+      blocks.push(`<${listTag}${taskList ? ' class="contains-task-list"' : ''}>${items.join('')}</${listTag}>`);
       continue;
     }
 
@@ -73,13 +82,34 @@ export function renderMarkdownHtml(markdown: string, metadata?: Metadata): strin
         quoteLines.push(quoteLine[1]);
         index += 1;
       }
-      blocks.push(`<blockquote>${renderMarkdownHtml(quoteLines.join('\n'), metadata)}</blockquote>`);
+      const alert = quoteLines[0].match(ALERT_MARKER);
+      if (alert) {
+        const kind = alert[1].toLowerCase();
+        const title = `${kind[0].toUpperCase()}${kind.slice(1)}`;
+        blocks.push(`<div class="assistant-markdown-alert assistant-markdown-alert-${kind}" role="note"><p class="assistant-markdown-alert-title">${title}</p>${renderMarkdownHtml(quoteLines.slice(1).join('\n'), metadata)}</div>`);
+      } else {
+        blocks.push(`<blockquote>${renderMarkdownHtml(quoteLines.join('\n'), metadata)}</blockquote>`);
+      }
+      continue;
+    }
+
+    if (isTableStart(lines, index)) {
+      const alignments = splitTableRow(lines[index + 1]).map(tableAlignment);
+      const header = tableRowHtml(splitTableRow(lines[index]), alignments, 'th', citations);
+      const rows: string[] = [];
+      index += 2;
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim() && !isBlockStart(lines, index)) {
+        rows.push(tableRowHtml(splitTableRow(lines[index]), alignments, 'td', citations));
+        index += 1;
+      }
+      const body = rows.length ? `<tbody>${rows.join('')}</tbody>` : '';
+      blocks.push(`<div class="assistant-markdown-table"><table><thead>${header}</thead>${body}</table></div>`);
       continue;
     }
 
     const paragraphLines: string[] = [];
     while (index < lines.length && lines[index].trim()) {
-      if (paragraphLines.length > 0 && isBlockStart(lines[index])) break;
+      if (paragraphLines.length > 0 && isBlockStart(lines, index)) break;
       paragraphLines.push(lines[index].trim());
       index += 1;
     }
@@ -141,9 +171,64 @@ export function renderResearchReportHtml(content: string, metadata: Metadata): s
   </article>`;
 }
 
-function isBlockStart(line: string): boolean {
+function isBlockStart(lines: string[], index: number): boolean {
+  const line = lines[index];
   return /^\s{0,3}(?:#{1,6}\s|```|[-*+]\s+|\d+[.)]\s+|>\s?)/.test(line)
-    || /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line);
+    || /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)
+    || isTableStart(lines, index);
+}
+
+const TASK_ITEM = /^\[([ xX])\]\s+(.*)$/;
+const ALERT_MARKER = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/i;
+const TABLE_DELIMITER = /^\s{0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+
+type TableAlignment = 'left' | 'center' | 'right' | null;
+
+/** A GFM table is a row containing a pipe, then a delimiter row with the same number of cells. */
+function isTableStart(lines: string[], index: number): boolean {
+  const header = lines[index];
+  const delimiter = lines[index + 1];
+  if (delimiter === undefined || !header.includes('|') || !delimiter.includes('|') || !TABLE_DELIMITER.test(delimiter)) return false;
+  return splitTableRow(header).length === splitTableRow(delimiter).length;
+}
+
+/** Split a table row on unescaped pipes; `\|` stays a literal pipe inside its cell. */
+function splitTableRow(line: string): string[] {
+  let row = line.trim();
+  if (row.startsWith('|')) row = row.slice(1);
+  if (row.endsWith('|') && !row.endsWith('\\|')) row = row.slice(0, -1);
+  const cells: string[] = [];
+  let cell = '';
+  for (let index = 0; index < row.length; index += 1) {
+    if (row[index] === '\\' && row[index + 1] === '|') {
+      cell += '|';
+      index += 1;
+    } else if (row[index] === '|') {
+      cells.push(cell.trim());
+      cell = '';
+    } else {
+      cell += row[index];
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function tableAlignment(cell: string): TableAlignment {
+  const left = cell.startsWith(':');
+  const right = cell.endsWith(':');
+  if (left && right) return 'center';
+  if (right) return 'right';
+  return left ? 'left' : null;
+}
+
+/** Ragged rows are padded or truncated to the header's width, as in GFM. */
+function tableRowHtml(cells: string[], alignments: TableAlignment[], tag: 'th' | 'td', citations: Map<string, CitationSource>): string {
+  const html = alignments.map((alignment, column) => {
+    const align = alignment ? ` data-align="${alignment}"` : '';
+    return `<${tag}${align}>${renderInline(cells[column] ?? '', citations)}</${tag}>`;
+  });
+  return `<tr>${html.join('')}</tr>`;
 }
 
 function renderInline(value: string, citations: Map<string, CitationSource> = new Map()): string {

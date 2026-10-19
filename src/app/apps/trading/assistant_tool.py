@@ -125,3 +125,24 @@ class TradingSecurityInstruments:
             if item.asset_class is AssetClass.EQUITY and item.display_symbol.upper() == ticker
         ]
         return candidates[0].instrument_id if len(candidates) == 1 else None
+
+
+class TradingChatMarketSymbols:
+    """Trading's read-only symbol lookup for chat's pinned price charts (chat generative UI).
+
+    It names an instrument the chart's bars endpoint can read and nothing more:
+    no order, alert, watchlist or strategy path is reachable from here.
+    """
+
+    def instrument_id(self, symbol: str) -> str | None:
+        from app.apps.trading.catalog import search_instruments
+        from app.apps.trading.instrument_catalog_service import default_instrument_catalog
+
+        clean = symbol.strip().upper()
+        if not clean:
+            return None
+        for search in (search_instruments, default_instrument_catalog().search):
+            exact = [item for item in search(clean) if item.display_symbol.upper() == clean]
+            if exact:
+                return exact[0].instrument_id
+        return None

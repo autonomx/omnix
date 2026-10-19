@@ -1,0 +1,47 @@
+{
+  "name": "choices_basic",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "Suggested next messages; the label is the message.",
+  "content": "Want to go further?\n\n```omnix-ui\n{\"type\": \"choices\", \"prompt\": \"Next step\", \"options\": [{\"label\": \"Compare with MSFT\"}, {\"label\": \"Show the 1-year trend\"}, \"Explain the dip\"]}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 21
+      },
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "choices",
+        "id": "b1",
+        "v": 1,
+        "options": [
+          {
+            "label": "Compare with MSFT"
+          },
+          {
+            "label": "Show the 1-year trend"
+          },
+          {
+            "label": "Explain the dip"
+          }
+        ],
+        "provenance": "model",
+        "prompt": "Next step",
+        "bindings": []
+      }
+    },
+    "text": "Want to go further?\n\nNext step Options: Compare with MSFT; Show the 1-year trend; Explain the dip",
+    "speech": "Want to go further?\n\nNext step Options: Compare with MSFT; Show the 1-year trend; Explain the dip",
+    "diagnostics": []
+  }
+}

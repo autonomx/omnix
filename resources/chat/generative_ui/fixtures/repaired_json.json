@@ -1,0 +1,48 @@
+{
+  "name": "repaired_json",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "Smart quotes, single quotes and trailing commas are repaired with a diagnostic; unknown props are dropped.",
+  "content": "```omnix-ui\n{“type”: “stats”, 'items': [{'label': 'Margin', 'value': '41%', 'color': 'green',},],}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "stats",
+        "id": "b1",
+        "v": 1,
+        "items": [
+          {
+            "label": "Margin",
+            "value": "41%"
+          }
+        ],
+        "provenance": "model",
+        "bindings": []
+      }
+    },
+    "text": "Margin: 41%.",
+    "speech": "Margin 41%.",
+    "diagnostics": [
+      {
+        "block": "b1",
+        "code": "json_repaired",
+        "severity": "info"
+      },
+      {
+        "block": "b1",
+        "code": "unknown_prop",
+        "path": "items[0].color",
+        "severity": "dropped"
+      }
+    ]
+  }
+}

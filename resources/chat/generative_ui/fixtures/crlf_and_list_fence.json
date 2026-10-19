@@ -1,0 +1,46 @@
+{
+  "name": "crlf_and_list_fence",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "CRLF line endings and a fence indented under a list item; offsets index the original text.",
+  "content": "- First point\r\n- Second point\r\n  ```omnix-ui\r\n  {\"type\": \"stats\", \"items\": [{\"label\": \"Count\", \"value\": \"3\"}]}\r\n  ```\r\nAfter the list.",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 31
+      },
+      {
+        "kind": "block",
+        "id": "b1"
+      },
+      {
+        "kind": "markdown",
+        "start": 119,
+        "end": 134
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "stats",
+        "id": "b1",
+        "v": 1,
+        "items": [
+          {
+            "label": "Count",
+            "value": "3"
+          }
+        ],
+        "provenance": "model",
+        "bindings": []
+      }
+    },
+    "text": "- First point\r\n- Second point\n\nCount: 3.\n\nAfter the list.",
+    "speech": "First point\nSecond point\n\nCount 3.\n\nAfter the list.",
+    "diagnostics": []
+  }
+}

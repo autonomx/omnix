@@ -23,7 +23,14 @@ from app.platform.chat.compaction import ConversationSummary
 from app.persistence.document_schemas import register_document_schema
 from app.platform.chat.history_search import HistorySearchResult, HistorySearchStatus
 from app.platform.chat.memory_port import parse_memory_command
-from app.platform.chat.models import ChatMessage, ChatSession, ChatSessionListResponse, SendChatMessageRequest
+from app.platform.chat.models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionListResponse,
+    MessageContentPurpose,
+    SendChatMessageRequest,
+    project_message_content,
+)
 from app.platform.chat.prompt_assembly import PromptHistoryItem
 from app.platform.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
 from app.platform.chat.prompt_store import turn_completed_event
@@ -164,6 +171,8 @@ def _persist_assistant_completion(
         assistant_metadata["assistant_turn_id"] = assistant_turn_id
     if generation_status == "interrupted":
         assistant_metadata["delivery_status"] = "interrupted"
+        # Interrupted replies render their delivered text only, with no UI.
+        assistant_metadata.pop("ui", None)
 
     assistant_id = _assistant_message_id(session.id, user_message.id)
     generated = content.strip()
@@ -642,7 +651,7 @@ class PostgresHistorySearchService:
             rows = connection.execute(
                 """
                 SELECT message.id, message.session_id, message.role,
-                       message.content, message.created_at
+                       message.content, message.created_at, message.metadata
                   FROM omnix_chat_messages AS message
                   JOIN omnix_chat_sessions AS session ON session.id = message.session_id
                  WHERE """
@@ -656,7 +665,14 @@ class PostgresHistorySearchService:
                     session_id=str(row[1]),
                     message_id=str(row[0]),
                     role=cast(Any, str(row[2])),
-                    content=str(row[3]),
+                    # Replies with generative UI are recalled as their text projection.
+                    content=project_message_content(
+                        ChatMessage(
+                            id=str(row[0]), role=cast(Any, str(row[2])), content=str(row[3]),
+                            created_at=row[4].isoformat(), metadata=dict(row[5] or {}),
+                        ),
+                        MessageContentPurpose.SEARCH,
+                    ),
                     created_at=row[4].isoformat(),
                 )
                 for row in rows

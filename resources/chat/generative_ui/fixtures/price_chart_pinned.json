@@ -1,0 +1,44 @@
+{
+  "name": "price_chart_pinned",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {
+    "market_symbols": {
+      "AAPL": "equity:NASDAQ:AAPL"
+    }
+  },
+  "description": "A price chart query, validated against the market catalog and pinned to compiled_at.",
+  "content": "Here is Apple over the last six months.\n\n```omnix-ui\n{\"type\": \"price_chart\", \"symbol\": \"aapl\", \"interval\": \"1d\", \"range\": \"6M\"}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 41
+      },
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "price_chart",
+        "id": "b1",
+        "v": 1,
+        "symbol": "AAPL",
+        "instrument_id": "equity:NASDAQ:AAPL",
+        "interval": "1d",
+        "range": "6M",
+        "as_of": "2026-10-11T14:03:22Z",
+        "provenance": "market_data",
+        "bindings": []
+      }
+    },
+    "text": "Here is Apple over the last six months.\n\nAAPL daily, 6M to 2026-10-11",
+    "speech": "Here is Apple over the last six months.\n\nA daily price chart of AAPL over six months, as of 2026-10-11.",
+    "diagnostics": []
+  }
+}

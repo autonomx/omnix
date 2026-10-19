@@ -1,0 +1,47 @@
+{
+  "name": "stats_basic",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "The roadmap's wire-format example: prose then a stats block.",
+  "content": "Revenue held steady this quarter.\n\n```omnix-ui\n{\"type\": \"stats\", \"items\": [\n  {\"label\": \"Revenue\", \"value\": \"$6,930\", \"delta\": \"+4.1%\", \"trend\": \"up\"},\n  {\"label\": \"Orders\", \"value\": \"212\"}\n]}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "markdown",
+        "start": 0,
+        "end": 35
+      },
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "stats",
+        "id": "b1",
+        "v": 1,
+        "items": [
+          {
+            "label": "Revenue",
+            "value": "$6,930",
+            "delta": "+4.1%",
+            "trend": "up"
+          },
+          {
+            "label": "Orders",
+            "value": "212"
+          }
+        ],
+        "provenance": "model",
+        "bindings": []
+      }
+    },
+    "text": "Revenue held steady this quarter.\n\nRevenue: $6,930 (+4.1%). Orders: 212.",
+    "speech": "Revenue held steady this quarter.\n\nTwo headline figures: Revenue $6,930, up 4.1%; and Orders 212.",
+    "diagnostics": []
+  }
+}

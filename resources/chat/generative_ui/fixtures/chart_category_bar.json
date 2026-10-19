@@ -1,0 +1,67 @@
+{
+  "name": "chart_category_bar",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "A categorical bar chart with currency values.",
+  "content": "```omnix-ui\n{\"type\": \"chart\", \"kind\": \"bar\", \"title\": \"Revenue by segment\", \"x\": {\"type\": \"category\"}, \"y\": {\"format\": \"currency\"}, \"series\": [{\"name\": \"Q3\", \"points\": [[\"iPhone\", 46.2], [\"Services\", 24.2], [\"Mac\", 7.7], [\"iPad\", 6.9]]}]}\n```\n\nServices keeps growing fastest.",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "block",
+        "id": "b1"
+      },
+      {
+        "kind": "markdown",
+        "start": 243,
+        "end": 275
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "chart",
+        "id": "b1",
+        "v": 1,
+        "kind": "bar",
+        "size": "md",
+        "x": {
+          "type": "category"
+        },
+        "y": {
+          "format": "currency"
+        },
+        "series": [
+          {
+            "name": "Q3",
+            "points": [
+              [
+                "iPhone",
+                46.2
+              ],
+              [
+                "Services",
+                24.2
+              ],
+              [
+                "Mac",
+                7.7
+              ],
+              [
+                "iPad",
+                6.9
+              ]
+            ]
+          }
+        ],
+        "provenance": "model",
+        "title": "Revenue by segment",
+        "bindings": []
+      }
+    },
+    "text": "Revenue by segment\nQ3: min $6.9, max $46.2, last $6.9 (iPad)\n\nServices keeps growing fastest.",
+    "speech": "A bar chart of Revenue by segment, four bars.\n\nServices keeps growing fastest.",
+    "diagnostics": []
+  }
+}

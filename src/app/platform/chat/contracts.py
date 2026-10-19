@@ -94,6 +94,16 @@ class ChatResearch(Protocol):
 CHAT_RESEARCH: Port[ChatResearch] = Port("chat.research", ChatResearch, "at_most_one")
 
 
+class ChatMarketSymbols(Protocol):
+    """Read-only symbol lookup for chat's pinned price charts (generative UI, GUI-4.2)."""
+
+    def instrument_id(self, symbol: str) -> str | None: ...
+
+
+# Trading contributes this; without it price_chart blocks degrade to text.
+CHAT_MARKET_SYMBOLS: Port[ChatMarketSymbols] = Port("chat.market_symbols", ChatMarketSymbols, "at_most_one")
+
+
 class TypedTurnRouter(Protocol):
     """Routes a typed chat turn to the agent runtime; returns None to let chat answer."""
 
@@ -143,6 +153,8 @@ __all__ = [
     "CHAT_STORE_FACTORY",
     "CHAT_RESEARCH",
     "ChatResearch",
+    "CHAT_MARKET_SYMBOLS",
+    "ChatMarketSymbols",
     "ResearchTurn",
     "SendChatMessageResponse",
     "link_user_message_to_research_job",

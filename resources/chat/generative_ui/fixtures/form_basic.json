@@ -1,0 +1,73 @@
+{
+  "name": "form_basic",
+  "compiled_at": "2026-10-11T14:03:22Z",
+  "scope": {},
+  "description": "A parameter form whose template fills the composer.",
+  "content": "```omnix-ui\n{\"type\": \"form\", \"title\": \"Backtest\", \"submit_label\": \"Fill message\", \"template\": \"Backtest {symbol} with a {risk}% stop, extended hours {extended}. Notes: {notes}\", \"fields\": [{\"name\": \"symbol\", \"label\": \"Symbol\", \"kind\": \"select\", \"options\": [\"AAPL\", \"MSFT\", \"NVDA\"], \"default\": \"AAPL\", \"required\": true}, {\"name\": \"risk\", \"label\": \"Stop\", \"kind\": \"slider\", \"min\": 0.5, \"max\": 5, \"step\": 0.5, \"unit\": \"%\", \"default\": 2}, {\"name\": \"extended\", \"label\": \"Extended hours\", \"kind\": \"toggle\", \"default\": false}, {\"name\": \"notes\", \"label\": \"Notes\", \"kind\": \"text\", \"max_length\": 120, \"placeholder\": \"Optional\"}]}\n```",
+  "expected": {
+    "version": 1,
+    "compiler_version": "gui-compiler-1",
+    "compiled_at": "2026-10-11T14:03:22Z",
+    "segments": [
+      {
+        "kind": "block",
+        "id": "b1"
+      }
+    ],
+    "blocks": {
+      "b1": {
+        "type": "form",
+        "id": "b1",
+        "v": 1,
+        "fields": [
+          {
+            "name": "symbol",
+            "label": "Symbol",
+            "kind": "select",
+            "required": true,
+            "options": [
+              "AAPL",
+              "MSFT",
+              "NVDA"
+            ],
+            "default": "AAPL"
+          },
+          {
+            "name": "risk",
+            "label": "Stop",
+            "kind": "slider",
+            "required": false,
+            "min": 0.5,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "%",
+            "default": 2.0
+          },
+          {
+            "name": "extended",
+            "label": "Extended hours",
+            "kind": "toggle",
+            "required": false,
+            "default": false
+          },
+          {
+            "name": "notes",
+            "label": "Notes",
+            "kind": "text",
+            "required": false,
+            "max_length": 120,
+            "placeholder": "Optional"
+          }
+        ],
+        "template": "Backtest {symbol} with a {risk}% stop, extended hours {extended}. Notes: {notes}",
+        "provenance": "model",
+        "title": "Backtest",
+        "submit_label": "Fill message",
+        "bindings": []
+      }
+    },
+    "text": "Form (Backtest): Symbol (select: AAPL, MSFT, NVDA), Stop (slider 0.5–5 %), Extended hours (yes/no), Notes (text)",
+    "speech": "A form with four fields.",
+    "diagnostics": []
+  }
+}

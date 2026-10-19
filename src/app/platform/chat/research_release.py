@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .concurrency import serialized_chat_mutation
+from .generative_ui.compiler import rebase_reply_ui
 from .models import ChatSession
 from .store import ChatSessionStore
 
@@ -50,7 +51,9 @@ def apply_research_release_decision(
         return session
     notice = getattr(decision, "notice", None)
     if notice and notice not in assistant.content:
+        previous_content = assistant.content
         assistant.content = f"{assistant.content}\n\n> Research mode notice: {notice}".strip()
+        rebase_reply_ui(assistant.metadata, previous_content, assistant.content)
     assistant.metadata.update(
         {
             "research_requested_mode": decision.requested_mode,

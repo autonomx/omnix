@@ -588,24 +588,28 @@ GUI-0.3 ships immediately. Phases 1 and 2 must both land before Phase 3 enables 
 
 ## Appendix A — Content readers and reply writers
 
-Known on the base commit. GUI-0.2 completes and confirms the table.
+Completed by GUI-0.2 (2026-10-18); no row is unknown.
 
 ### Readers of assistant `content`
 
 | Reader | Location | Purpose / projection |
 |---|---|---|
-| Prompt history | `prompt_assembly.py` | `MODEL` / `MODEL_RICH` (turn-aware) |
+| Prompt history | `prompt_assembly.py` (also reached by live voice prompts, proactive turns, live-chat speculation and agent routing context) | `MODEL` / `MODEL_RICH` (turn-aware) |
+| Legacy JSON store provider messages | `store.py` `_provider_messages` | `MODEL` for replies with `metadata.ui` (no production caller; kept safe) |
 | Session summaries | `compaction.py` | `SUMMARY` |
-| History search | `history_search.py` | `SEARCH` |
-| Memory turn reaction | `assistant_memory/turn_reactions.py` | `MEMORY` (to confirm) |
-| Session export/import | `json_import.py` | `EXPORT` (raw + `metadata.ui`) |
-| Delivery sync | `delivery_sync.py` | to classify |
+| History search (in memory) | `history_search.py` | `SEARCH` |
+| History search (PostgreSQL) | `persistence/chat_runtime.py` `PostgresHistorySearchService` | `SEARCH` (rows projected after the full-text match) |
+| Memory turn reaction and extraction | `assistant_memory/turn_reactions.py`, `assistant_memory/jobs.py` | Reads the user message only; `MEMORY` for any assistant use |
+| Session export/import | `json_import.py` | `EXPORT` (raw `content` + `metadata.ui` round-trip) |
+| Delivery sync | `delivery_sync.py` | Writes delivery metadata only; never reads `content` |
+| Research citation validation | `research_citations.py` | Appends to `content` after commit; rebases `metadata.ui` (DECISIONS GUI-1.4) |
+| Research release notice | `research_release.py` | Appends to `content` after commit; rebases `metadata.ui` |
 | Job output ref | `_commit_chat_reply` `output_refs[].content` | raw (audit) |
-| Copy | `useChatMessageActions.ts:51` | `chatMessageText` |
-| PCM stream | `useChatMessageActions.ts:62` | `chatMessageSpeech` |
+| Copy | `useChatMessageActions.ts` | `chatMessageText` |
+| PCM stream | `useChatMessageActions.ts` | `chatMessageSpeech` |
 | Play | `ChatMessageItem.tsx` | `chatMessageSpeech` |
-| Streamed voice | `useStreamedVoiceTurns.ts:85` | `chatMessageSpeech` |
-| Research report download | `researchProgressController.ts:187` (`data-raw-content`) | raw, must stay raw |
+| Streamed voice | `useStreamedVoiceTurns.ts` | `chatMessageSpeech` |
+| Research report download | `researchProgressController.ts` (`data-raw-content`) | raw, must stay raw |
 
 ### Writers of assistant replies
 
@@ -613,6 +617,9 @@ Known on the base commit. GUI-0.2 completes and confirms the table.
 |---|---|---|
 | Job path | `generation_jobs._run_chat_generation_job` → `_commit_chat_reply` | Yes (GUI-1.4) |
 | Stream path (both `/messages/stream` routes) | `admission.stream_chat_turn` → `_commit_chat_reply` | Yes (GUI-1.4) |
-| Character greetings/replies | `character_store.py:266`, `:327` | Excluded: character mode is off in V1 |
-| Memory commands | `prompt_store.py:651` | Excluded: deterministic text |
-| Research reports | `research/jobs.py:258` | Excluded: own renderer ("Later") |
+| Interrupted completions | `chat_runtime._persist_assistant_completion`, `character_store._persist_interrupted_reply` | No: `ui` is dropped (invariant 9) |
+| Character greetings/replies outside the two paths | `character_store.py` | Excluded: character mode is off in V1 |
+| Memory commands | `prompt_store.py`, `generation_jobs._generate_reply` | Excluded: deterministic text (`finalize_reply_ui` skips `memory_command`) |
+| Proactive live-voice turns | `live_conversation_proactive.py` → `append_assistant_message` | Excluded: live voice gets no rich UI |
+| Legacy synchronous turn | `store.append_user_message` | Excluded: no production caller |
+| Research reports | `research/jobs.py` | Excluded: own renderer ("Later") |
