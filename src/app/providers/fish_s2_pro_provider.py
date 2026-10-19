@@ -89,7 +89,7 @@ def _models_dir() -> Path:
 def _fish_python(configured: str) -> str:
     if configured:
         return configured
-    from app.composition.launcher.config import load_launcher_config
+    from app.config.launcher import load_launcher_config
 
     return load_launcher_config(repo_root()).python("fish")
 

@@ -23,6 +23,8 @@ FEATURE = FeatureModule(
     id="audiobook",
     title="Audiobook",
     tier="app",
+    # Voice output tuning comes through voice's contract; audiobook runs without voice enabled.
+    uses=("voice",),
     routers=(_http_router, _streaming_router),
     background_workers=(_background_worker,),
 )

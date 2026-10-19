@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.platform.voice.output_settings import NEUTRAL, sampling_overrides
+from app.platform.voice.contracts import NEUTRAL, sampling_overrides
 
 CONTROLS = ("stability", "style")
 

@@ -64,7 +64,7 @@ def test_voice_job_summary_route_bounds_inline_browser_payloads(monkeypatch) -> 
         "default_job_store",
         lambda: FakeVoiceJobStore(jobs),
     )
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://localhost")
 
     response = client.get("/api/jobs/voice-summaries?limit=3")
 

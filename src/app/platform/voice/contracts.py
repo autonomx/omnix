@@ -15,7 +15,10 @@ from __future__ import annotations
 import base64
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from .output_settings import NEUTRAL, sampling_overrides
 
 
 @dataclass
@@ -85,7 +88,21 @@ class TTSLane(Protocol):
     ) -> Iterator[tuple[Any, int, Any]]: ...
 
 
+# Voice output tuning (``output_settings``) that apps apply to their own synthesis
+# requests. Loaded on first use, so importing this contract does not load numpy.
+_OUTPUT_SETTINGS = frozenset({"NEUTRAL", "sampling_overrides"})
+
+
+def __getattr__(name: str) -> Any:
+    if name in _OUTPUT_SETTINGS:
+        from . import output_settings
+
+        return getattr(output_settings, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
+    "NEUTRAL",
     "AudioDelta",
     "StreamingSpeechSynthesizer",
     "StreamingTranscriber",
@@ -93,4 +110,5 @@ __all__ = [
     "TTSProvider",
     "TTSProviderResolver",
     "TranscriptUpdate",
+    "sampling_overrides",
 ]

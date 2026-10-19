@@ -7,7 +7,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `APCA_API_KEY_ID` | string | — | trading | Controls apca api key id for trading. |
 | `APCA_API_SECRET_KEY` | string | — | trading | Controls apca api secret key for trading. |
 | `CI` | boolean | `false` | kernel | Controls ci for kernel. |
-| `CONDA_ROOT` | string | — | launcher | Controls conda root for launcher. |
+| `CONDA_ROOT` | string | — | kernel | Controls conda root for kernel. |
 | `FRED_API_KEY` | string | — | trading | Controls fred api key for trading. |
 | `HERMES_API_KEY` | string | — | chat, providers, research, rpg, trading | Controls hermes api key for chat, providers, research, rpg, trading. |
 | `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | launcher, providers | Controls hermes base url for launcher, providers. |
@@ -150,6 +150,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_GOOGLE_CLIENT_SECRET` | string | — | security | Controls google client secret for security. |
 | `OMNIX_GOOGLE_REDIRECT_URI` | string | — | security | Controls google redirect uri for security. |
 | `OMNIX_IBKR_CLIENT_ID` | string | — | trading | Controls ibkr client id for trading. |
+| `OMNIX_IBKR_CONNECTION` | string | — | trading | Controls ibkr connection for trading. |
 | `OMNIX_IBKR_ENABLED` | string | — | trading | Controls ibkr enabled for trading. |
 | `OMNIX_IBKR_HOST` | string | — | trading | Controls ibkr host for trading. |
 | `OMNIX_IBKR_LIVE_AUTHORITY` | string | — | trading | Controls ibkr live authority for trading. |
@@ -176,6 +177,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_KASA_DEVICE_ALIAS` | string | — | assistant-tools | Controls kasa device alias for assistant-tools. |
 | `OMNIX_KASA_DEVICE_HOST` | string | — | assistant-tools | Controls kasa device host for assistant-tools. |
 | `OMNIX_KASA_ENABLED` | boolean | — | assistant-tools | Controls kasa enabled for assistant-tools. |
+| `OMNIX_KEYCHAIN_DISABLED` | string | — | security | Controls keychain disabled for security. |
 | `OMNIX_KEYCHAIN_SERVICE` | string | `Omnix` | security | Controls keychain service for security. |
 | `OMNIX_LAUNCHER_AUTO_START` | string | `0` | launcher | Controls launcher auto start for launcher. |
 | `OMNIX_LAUNCHER_KILL_PORT` | boolean | `false` | tooling | Controls launcher kill port for tooling. |

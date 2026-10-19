@@ -6,7 +6,10 @@ provider packages inside deterministic modules.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def chat_completion(*, messages: list[dict[str, Any]], stream: bool = False, **kwargs: Any) -> Any:
@@ -29,6 +32,8 @@ def rpg_llm_route() -> tuple[str, str] | None:
 
         provider_id, model_id = effective_llm_route(load_settings_profile(load_settings()), "rpg", "turn")
     except Exception:
+        # Unreadable settings leave RPG on the provider's own default route.
+        logger.debug("rpg_llm_route_unavailable", exc_info=True)
         return None
     provider = str(provider_id or "").strip().removeprefix("llm:")
     if not provider:

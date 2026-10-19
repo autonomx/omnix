@@ -328,7 +328,7 @@ def test_initialize_tts_provider_fails_when_startup_not_running(monkeypatch):
         def start(self):
             return {"running": False, "error": "provider_start_failed"}
 
-    monkeypatch.setattr(tts_server, "_load_qwen3_provider", lambda: _BadProvider())
+    monkeypatch.setattr(tts_server, "_load_provider", lambda _name: _BadProvider())
 
     result = tts_server.initialize_tts_provider()
     assert result["ok"] is False

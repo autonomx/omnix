@@ -16,13 +16,14 @@
     --c-slate-240: #1e222d;
     --c-slate-260-2: #2a2e39;
     --c-blue-390: #363a45;
-    /* Lines and muted text: neutral grey instead of blue-grey. */
-    --c-blue-660: #787b86;
+    /* Lines and muted text: neutral grey instead of blue-grey. TradingView's #787b86 is a shade lighter here,
+       so small muted labels reach WCAG AA contrast (4.5:1) on the chart and panel surfaces. */
+    --c-blue-660: #80838e;
     --c-blue-710: #b2b5be;
     --c-slate-550: #5d606b;
     --c-slate-600: #6a6d78;
-    --c-slate-630: #787b86;
-    --c-slate-660: #787b86;
+    --c-slate-630: #80838e;
+    --c-slate-660: #80838e;
     --c-slate-680: #868993;
     --c-slate-740: #9598a1;
     --c-slate-790: #a3a6af;

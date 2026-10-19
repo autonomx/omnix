@@ -90,6 +90,21 @@ class FeaturePermissions:
 LegacyRestore = Callable[[Any, Any, str, dict[str, Any]], None]
 
 
+def deferred_restore(module: str, attribute: str) -> LegacyRestore:
+    """A restore handler that imports ``module`` only when it runs.
+
+    A declaration names it without importing it, so ``declarations.py`` keeps to
+    kernel imports while the restore itself can use the module's own code.
+    """
+
+    def restore(work: Any, context: Any, stable_id: str, item: dict[str, Any]) -> None:
+        handler: LegacyRestore = getattr(importlib.import_module(module), attribute)
+        handler(work, context, stable_id, item)
+
+    restore.__qualname__ = f"deferred_restore({module}.{attribute})"
+    return restore
+
+
 @dataclass(frozen=True)
 class LegacyImport:
     """A step of the legacy cutover importer a module owns (PA-2.2): its name and restore handler."""

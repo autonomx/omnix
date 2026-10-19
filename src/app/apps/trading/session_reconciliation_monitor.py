@@ -433,6 +433,8 @@ def _prior_symbol_result(
             try:
                 found[item["source_id"]] = EvidenceInput.model_validate(item)
             except Exception:
+                # A malformed earlier result is treated as absent, so the symbol is reconciled again.
+                logger.debug("prior_symbol_result_unreadable source_id=%s", item.get("source_id"), exc_info=True)
                 return None
     if set(found) != set(source_ids):
         return None

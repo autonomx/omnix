@@ -3,7 +3,8 @@ from __future__ import annotations
 import types
 import pytest
 
-# Needs torch/diffusers model dependencies from the GPU lock sets.
+# Needs torch/diffusers model dependencies from the GPU lock sets; skipped where torch is not installed.
+pytest.importorskip("torch")
 pytestmark = pytest.mark.gpu
 
 

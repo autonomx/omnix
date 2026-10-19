@@ -44,6 +44,7 @@ def _client() -> TestClient:
     )
     return TestClient(
         create_gateway_app(provider_facade_factory=lambda: facade),
+        base_url="http://localhost",
         raise_server_exceptions=False,
     )
 

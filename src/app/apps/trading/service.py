@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Iterator
@@ -48,6 +49,8 @@ from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
 from app.apps.trading.us_equity_calendar import EASTERN
 from app.apps.trading.us_equity_calendar import regular_close_time
 
+
+logger = logging.getLogger(__name__)
 
 RECOVERY_STAGES = ("total", "reused", "primary", "yahoo_evidence", "yahoo_exact", "ibkr", "iex")
 
@@ -292,6 +295,8 @@ class TradingMarketDataService:
                     instrument_id, interval, limit, binding_id, session_date=session_date, as_of=as_of
                 )
             except Exception:
+                # Warming is best effort: the reader's own request fetches and reports again.
+                logger.debug("recovered_bars_prefetch_failed instrument_id=%s interval=%s", instrument_id, interval, exc_info=True)
                 return
 
         from concurrent.futures import ThreadPoolExecutor

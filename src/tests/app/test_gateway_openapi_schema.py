@@ -39,6 +39,7 @@ _DOCUMENTED_NON_JSON_RESPONSES = {
     ("POST", "/api/auth/invites/{invite_id}/revoke"),
     ("GET", "/api/auth/google/login"),
     ("GET", "/api/auth/google/callback"),
+    ("GET", "/api/auth/google/desktop/begin"),
     ("GET", "/api/agent-runs/{run_id}/events/stream"),
     ("GET", "/api/agent-runs/{run_id}/workspace-preview/{asset_path}"),
     ("GET", "/api/task-graph-runs/{run_id}/events/stream"),

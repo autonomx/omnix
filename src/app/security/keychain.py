@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 import ctypes
 import ctypes.util
-import os
 import secrets
 import sys
 from typing import Protocol
@@ -92,7 +91,7 @@ def keychain() -> KeychainBackend:
 def keychain_available() -> bool:
     if _backend is not None:
         return True
-    if sys.platform != "darwin" or os.environ.get("OMNIX_KEYCHAIN_DISABLED") == "1":
+    if sys.platform != "darwin" or env_str("OMNIX_KEYCHAIN_DISABLED") == "1":
         return False
     try:
         keychain()

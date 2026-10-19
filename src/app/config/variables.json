@@ -22,8 +22,8 @@
   },
   {
     "default": "",
-    "description": "Controls conda root for launcher.",
-    "feature": "launcher",
+    "description": "Controls conda root for kernel.",
+    "feature": "kernel",
     "name": "CONDA_ROOT",
     "type": "string"
   },
@@ -1023,6 +1023,13 @@
   },
   {
     "default": null,
+    "description": "Controls ibkr connection for trading.",
+    "feature": "trading",
+    "name": "OMNIX_IBKR_CONNECTION",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls ibkr enabled for trading.",
     "feature": "trading",
     "name": "OMNIX_IBKR_ENABLED",
@@ -1202,6 +1209,13 @@
     "feature": "assistant-tools",
     "name": "OMNIX_KASA_ENABLED",
     "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls keychain disabled for security.",
+    "feature": "security",
+    "name": "OMNIX_KEYCHAIN_DISABLED",
+    "type": "string"
   },
   {
     "default": "Omnix",

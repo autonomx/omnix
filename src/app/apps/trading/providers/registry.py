@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -34,6 +35,8 @@ from .coinmarketcap import CoinMarketCapProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
 from .errors import ProviderContractError, ProviderFallbackEligibleError
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderRegistry:
@@ -536,6 +539,8 @@ class ProviderRegistry:
                 return None
             return ibkr.live_observation(instrument_id, policy=policy)
         except Exception:
+            # The consumer's own call repeats the request and records the error.
+            logger.debug("ibkr_execution_fallback_unavailable instrument_id=%s", instrument_id, exc_info=True)
             return None
 
     def execution_indicator_bars(
