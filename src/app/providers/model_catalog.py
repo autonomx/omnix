@@ -88,7 +88,10 @@ RichUiLevel = Literal["none", "basic", "full"]
 # instructions. Every model starts at "none"; an entry is added only from a dated
 # evaluation report in docs/roadmap/ that passed the gate for that level. Keys are
 # (provider, model) without the "llm:" prefixes.
-RICH_UI_CAPABILITIES: dict[tuple[str, str], RichUiLevel] = {}
+RICH_UI_CAPABILITIES: dict[tuple[str, str], RichUiLevel] = {
+    # docs/roadmap/evaluations/GUI_EVAL_2026-10-19_claude_cli_haiku_full.md: passed.
+    ("claude_cli", "haiku"): "full",
+}
 
 
 def rich_ui_capability(provider_id: str | None, model_id: str | None) -> RichUiLevel:

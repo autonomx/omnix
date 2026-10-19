@@ -181,3 +181,11 @@ def test_the_route_sets_and_clears_the_setting_and_rejects_unknown_sessions(tmp_
 
     assert client.post("/api/chat/sessions/chat:missing/rich-replies", json={"rich_replies": "on"}).status_code == 404
     assert client.post(f"/api/chat/sessions/{created.id}/rich-replies", json={"rich_replies": "maybe"}).status_code == 422
+
+
+def test_only_models_with_a_passing_report_are_enabled():
+    assert model_catalog.RICH_UI_CAPABILITIES == {("claude_cli", "haiku"): "full"}
+    assert model_catalog.rich_ui_capability("llm:claude_cli", "llm:claude_cli:haiku") == "full"
+    assert model_catalog.rich_ui_capability("claude_cli", "sonnet") == "none"
+    report = Path(__file__).resolve().parents[5] / "docs" / "roadmap" / "evaluations" / "GUI_EVAL_2026-10-19_claude_cli_haiku_full.md"
+    assert "Gate: PASSED" in report.read_text(encoding="utf-8")

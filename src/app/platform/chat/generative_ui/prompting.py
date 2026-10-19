@@ -133,7 +133,10 @@ def catalog_instruction(level: RichUiLevel) -> str:
     if "sources" in blocks:
         lines.append('- In "bind", source:N is the source you cite as [SN] and context:N is context item [N].')
     if "choices" in blocks:
-        lines.append("- A choices label is sent as the user's own message: write it in the user's voice.")
+        lines.append(
+            "- Use choices only when the user asks for options or must pick a direction, never as a closing extra."
+            " Each label is sent as the user's own message: write it in the user's voice."
+        )
     lines.extend(["Example:", _EXAMPLE])
     return "\n".join(lines)
 

@@ -1,6 +1,6 @@
 # Omnix Chat Generative UI — Implementation Roadmap
 
-**Status:** Implemented on branch `generative-ui` (2026-10-18), except the GUI-3.3 model evaluation run, which needs a running gateway; until a model passes it, every model stays at `none`. Progress: [PROGRESS.md](../roadmap/PROGRESS.md) ("Chat generative UI roadmap"); deviations: [DECISIONS.md](../roadmap/DECISIONS.md); security review: [OMNIX_CHAT_GENERATIVE_UI_SECURITY_REVIEW.md](OMNIX_CHAT_GENERATIVE_UI_SECURITY_REVIEW.md)
+**Status:** Implemented on branch `generative-ui` (2026-10-18/19). Rich replies are enabled for `claude_cli:haiku` only, which passed the GUI-3.3 gate ([report](../roadmap/evaluations/GUI_EVAL_2026-10-19_claude_cli_haiku_full.md)); every other model stays at `none` until it passes. Progress: [PROGRESS.md](../roadmap/PROGRESS.md) ("Chat generative UI roadmap"); deviations: [DECISIONS.md](../roadmap/DECISIONS.md); security review: [OMNIX_CHAT_GENERATIVE_UI_SECURITY_REVIEW.md](OMNIX_CHAT_GENERATIVE_UI_SECURITY_REVIEW.md)
 **Date:** 2026-10-11
 **Base:** `main` at `cbba27a9fea98e07c6601a3a1dc7cdfc3c5d291b`
 **Surfaces:** assistant chat (`web/src/features/assistant/chat`), chat generation and admission (`src/app/platform/chat`)

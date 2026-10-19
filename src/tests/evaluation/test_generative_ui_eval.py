@@ -40,14 +40,12 @@ PROMPTS = ROOT / "resources" / "chat" / "generative_ui" / "evaluation" / "prompt
 SYSTEM_PROMPT = "You are Omnix, a helpful assistant. Answer clearly and concisely."
 
 
-class StaticSymbols:
-    """Trading's static instrument catalog only: the evaluation makes no market-data calls."""
+class AnySymbol:
+    """Every well-formed symbol is known: the evaluation measures how the model writes blocks,
+    not catalog coverage, and makes no market-data calls."""
 
     def instrument_id(self, symbol: str) -> str | None:
-        from app.apps.trading.catalog import search_instruments
-
-        exact = [item for item in search_instruments(symbol) if item.display_symbol.upper() == symbol.upper()]
-        return exact[0].instrument_id if exact else None
+        return f"equity:EVAL:{symbol}"
 
 
 def _models() -> list[tuple[str, str, str]]:
@@ -85,7 +83,7 @@ def _sample(provider, model: str, prompt, level: str) -> EvalSample:
     content = (getattr(response, "content", "") or "").strip()
     usage = getattr(response, "usage", None) or {}
     tokens = usage.get("completion_tokens") or usage.get("output_tokens") if isinstance(usage, dict) else None
-    ui = finalize_reply_ui(content, {}, context_items=[dict(item) for item in prompt.context_items], symbol_lookup=StaticSymbols()).get("ui")
+    ui = finalize_reply_ui(content, {}, context_items=[dict(item) for item in prompt.context_items], symbol_lookup=AnySymbol()).get("ui")
     return EvalSample(prompt, content, ui, latency, tokens if isinstance(tokens, int) else None)
 
 

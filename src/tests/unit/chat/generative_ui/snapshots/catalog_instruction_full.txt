@@ -11,7 +11,7 @@ Blocks:
 - choices: 2-6 suggested next messages: options[{label}] (the label is sent as the user's message), prompt?
 - form: fields[{name, label?, kind: select (options[]) | slider (min, max, step?, unit?) | text | toggle, required?}], template with {name} placeholders that fills the user's composer
 - In "bind", source:N is the source you cite as [SN] and context:N is context item [N].
-- A choices label is sent as the user's own message: write it in the user's voice.
+- Use choices only when the user asks for options or must pick a direction, never as a closing extra. Each label is sent as the user's own message: write it in the user's voice.
 Example:
 Revenue held steady this quarter.
 
