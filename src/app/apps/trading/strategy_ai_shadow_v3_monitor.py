@@ -22,10 +22,11 @@ from app.runtime.features import FeatureContext
 from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution import ExecutionObservation
 from .execution_observation_plane import (
-    CausalExecutionSelection,
     ExecutionObservationPlane,
     default_execution_observation_plane,
+    first_causal_execution,
 )
+from .ibkr_settings import ibkr_live_quotes_authorized
 from .llm_reliability_metrics import (
     LLMReliabilityLedger,
     classify_llm_failure,
@@ -83,46 +84,6 @@ _EVENT_TYPES = (
     "ai_v3_agreement_cohort",
 )
 _LAST_ENTRY_ET = time(15, 30)
-
-
-def _ibkr_live_quotes_authorized() -> bool:
-    """The IBKR live-data gate in Settings; off (or unreadable) keeps IEX alone."""
-    try:
-        from .ibkr_settings import load_ibkr_settings
-
-        settings = load_ibkr_settings()[0]
-    except Exception:
-        logger.debug("suppressed error in %s", "_ibkr_live_quotes_authorized", exc_info=True)
-        return False
-    return bool(settings.enabled and settings.live_authority_enabled)
-
-
-def _causal_selection(
-    plane: ExecutionObservationPlane,
-    instrument_id: str,
-    *,
-    decision_completed_at: datetime,
-    actionable_at: datetime,
-    market_snapshot_as_of: datetime,
-    binding_id: str | None,
-    ibkr_live: bool,
-) -> CausalExecutionSelection | None:
-    """The first quote after the decision, from IBKR's live NBBO when authorized.
-
-    IEX's own book is thin for small caps: it can sit unchanged for minutes and
-    is far wider than the market. The source is fixed by policy, never chosen by
-    price, and each source still contributes only its first post-decision quote.
-    """
-    timing = dict(
-        decision_completed_at=decision_completed_at,
-        actionable_at=actionable_at,
-        market_snapshot_as_of=market_snapshot_as_of,
-    )
-    if ibkr_live:
-        live = plane.first_causal_after(instrument_id, purpose="LIVE_DATA", **timing)
-        if live is not None and live.provider == "ibkr":
-            return live
-    return plane.first_causal_after(instrument_id, binding_id=binding_id, **timing)
 
 
 def _iex_book_spread_only(observation: ExecutionObservation, max_spread_bps: Decimal) -> bool:
@@ -526,14 +487,14 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             return
 
         actionable_at = current.updated_at or market.observed_at
-        selection = _causal_selection(
+        selection = first_causal_execution(
             self.execution_plane,
             current.instrument_id,
             decision_completed_at=current.created_at,
             actionable_at=actionable_at,
             market_snapshot_as_of=market.observed_at,
             binding_id=candidate.binding_id,
-            ibkr_live=await asyncio.to_thread(_ibkr_live_quotes_authorized),
+            ibkr_live=await asyncio.to_thread(ibkr_live_quotes_authorized),
         )
         if selection is None:
             if self.now_factory().astimezone(timezone.utc) >= current.expires_at:

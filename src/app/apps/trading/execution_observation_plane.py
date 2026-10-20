@@ -270,6 +270,34 @@ _DEFAULT_PLANE = ExecutionObservationPlane(
 )
 
 
+def first_causal_execution(
+    plane: ExecutionObservationPlane,
+    instrument_id: str,
+    *,
+    decision_completed_at: datetime,
+    actionable_at: datetime,
+    market_snapshot_as_of: datetime,
+    binding_id: str | None,
+    ibkr_live: bool,
+) -> CausalExecutionSelection | None:
+    """The first quote after the decision, from IBKR's live NBBO when authorized.
+
+    IEX's own book is thin for small caps: it can sit unchanged for minutes and
+    is far wider than the market. The source is fixed by policy, never chosen by
+    price, and each source still contributes only its first post-decision quote.
+    """
+    timing = dict(
+        decision_completed_at=decision_completed_at,
+        actionable_at=actionable_at,
+        market_snapshot_as_of=market_snapshot_as_of,
+    )
+    if ibkr_live:
+        live = plane.first_causal_after(instrument_id, purpose="LIVE_DATA", **timing)
+        if live is not None and live.provider == "ibkr":
+            return live
+    return plane.first_causal_after(instrument_id, binding_id=binding_id, **timing)
+
+
 def default_execution_observation_plane() -> ExecutionObservationPlane:
     return _DEFAULT_PLANE
 
@@ -284,4 +312,5 @@ __all__ = [
     "ExecutionObservationEnvelope",
     "ExecutionObservationPlane",
     "default_execution_observation_plane",
+    "first_causal_execution",
 ]

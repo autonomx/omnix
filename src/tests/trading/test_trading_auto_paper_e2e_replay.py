@@ -320,6 +320,7 @@ class ReplayMarketService:
             halted=False,
             execution_eligible=True,
         )
+        self.live_first_requests: list[bool] = []
 
     def bars(self, instrument_id, interval, limit, binding_id):
         assert instrument_id == self.instrument_id
@@ -327,9 +328,10 @@ class ReplayMarketService:
         assert binding_id == self.binding_id
         return SimpleNamespace(bars=list(self._bars))
 
-    def execution_observation(self, instrument_id, binding_id=None):
+    def execution_observation(self, instrument_id, binding_id=None, *, live_first=False):
         assert instrument_id == self.instrument_id
         assert binding_id in {None, self.binding_id}
+        self.live_first_requests.append(live_first)
         return self.execution
 
 
@@ -679,6 +681,23 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(monkeypatc
         f"symbol={selected['symbol']} order={order.order_id} qty={fills[0].quantity} "
         f"fill={fills[0].price} authorization={authorization.state} protection={protections[0].status}"
     )
+
+
+def test_auto_paper_entry_accepts_an_ibkr_live_quote_and_asks_for_it_first(monkeypatch) -> None:
+    session = _replay_session(monkeypatch)
+    # IBKR's live NBBO, as the registry returns it while IBKR's authority holds.
+    session.market_service.execution = session.market_service.execution.model_copy(
+        update={"provider": "ibkr", "binding_purpose": "LIVE_DATA", "market_data_type": "LIVE", "live_entitled": True}
+    )
+
+    assert asyncio.run(session.monitor.run_once()) == 1
+    [authorization] = [
+        event for event in session.strategy_repository.events if event.event_type == "trade_authorization"
+    ]
+    assert authorization.state == "authorized"
+    assert authorization.payload["assessment"]["reason_codes"] == []
+    # The entry check and the gateway's re-check both asked for IBKR first.
+    assert session.market_service.live_first_requests and all(session.market_service.live_first_requests)
 
 
 def _without_run_ids(value):

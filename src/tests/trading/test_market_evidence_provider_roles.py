@@ -8,7 +8,9 @@ def test_market_evidence_policy_serializes_independent_provider_roles():
     assert payload["live_quote_primary_provider"] == "ibkr"
     assert payload["live_quote_fallback_provider"] == "alpaca_iex"
     assert payload["gap_repair_fallback_provider"] == "alpaca_iex"
-    assert payload["paper_fill_observation_provider"] == "alpaca_iex"
+    # Fills read IBKR's live NBBO while its authority holds, IEX otherwise.
+    assert payload["paper_fill_observation_provider"] == "ibkr"
+    assert payload["paper_fill_observation_fallback_provider"] == "alpaca_iex"
     assert payload["order_execution_provider"] is None
     assert "execution_provider" not in payload
     assert "shadow_bar_fallback_provider" not in payload
@@ -21,3 +23,4 @@ def test_market_evidence_legacy_accessors_are_compatibility_only():
     assert policy.regular_bar_primary_provider == policy.historical_canonical_provider
     assert policy.shadow_bar_fallback_provider == policy.gap_repair_fallback_provider
     assert policy.execution_provider == policy.paper_fill_observation_provider
+    assert policy.paper_fill_observation_providers == ("ibkr", "alpaca_iex")

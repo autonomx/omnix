@@ -473,7 +473,7 @@ class _Market:
         self.low = Decimal(low) if low else None
         self.bar_start = bar_start
 
-    def execution_observation(self, instrument_id, binding_id=None):
+    def execution_observation(self, instrument_id, binding_id=None, *, live_first=False):
         now = datetime.now(timezone.utc)
         return ExecutionObservation(
             instrument_id=instrument_id, binding_id=binding_id or BINDING, provider="fixture",

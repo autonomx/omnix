@@ -980,12 +980,14 @@ class TradingMarketDataService:
         *,
         policy: ExecutionEligibilityPolicy | None = None,
         cancellation: threading.Event | None = None,
+        live_first: bool = False,
     ) -> ExecutionObservation:
         return self.registry.execution_observation(
             instrument_id,
             binding_id,
             policy=policy,
             cancellation=cancellation,
+            live_first=live_first,
         )
 
     def execution_indicator_bars(

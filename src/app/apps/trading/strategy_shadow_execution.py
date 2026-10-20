@@ -85,7 +85,8 @@ def observe_shadow_execution(
     execution observation returned by the authoritative execution provider.
     """
 
-    execution = market_service.execution_observation(instrument_id, binding_id)
+    # IBKR's live NBBO while its live-data authority holds, IEX otherwise.
+    execution = market_service.execution_observation(instrument_id, binding_id, live_first=True)
     payload = {field: getattr(execution, field, None) for field in _EXECUTION_FIELDS}
     payload["indicator_context_source"] = "alpaca_iex_same_day_1m"
     payload["indicator_context_partial_market"] = ALPACA_IEX_PARTIAL_MARKET

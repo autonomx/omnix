@@ -286,7 +286,8 @@ class FakeMarketService:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str | None]] = []
 
-    def execution_observation(self, instrument_id, binding_id=None):
+    def execution_observation(self, instrument_id, binding_id=None, *, live_first=False):
+        assert live_first is True  # fills read the entry check's source: IBKR live, else IEX
         self.calls.append((instrument_id, binding_id))
         return ExecutionObservation(
             instrument_id=instrument_id,

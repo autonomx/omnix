@@ -62,7 +62,7 @@ class Protections:
 
 
 class Market:
-    def execution_observation(self, instrument_id, binding_id=None):
+    def execution_observation(self, instrument_id, binding_id=None, *, live_first=False):
         return ExecutionObservation(
             instrument_id=instrument_id,
             binding_id=binding_id or BINDING,

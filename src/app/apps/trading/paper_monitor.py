@@ -491,10 +491,13 @@ class TradingPaperMonitor(ScheduledTradingMonitor):
             targets.items(), key=lambda item: (item[0][0], item[0][1] or "")
         ):
             try:
+                # Fills, stops and targets read the quote the entry check used:
+                # IBKR's live NBBO while its live-data authority holds, IEX otherwise.
                 execution = await asyncio.to_thread(
                     service.execution_observation,
                     instrument_id,
                     requested_binding,
+                    live_first=True,
                 )
                 self.quote_count += 1
                 now = datetime.now(timezone.utc)

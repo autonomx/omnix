@@ -321,20 +321,23 @@ class StrategyEntryAuthorizer:
         provider_readiness = None
         if candidate is not None:
             try:
+                # The same source as the entry check: IBKR live, else IEX.
                 execution = self._market_service.execution_observation(
                     candidate.instrument_id,
                     candidate.binding_id,
+                    live_first=True,
                 )
             except Exception as exc:
+                # IBKR being unavailable is not an error; a raise comes from IEX.
                 provider_readiness = classify_provider_exception(
                     exc,
-                    provider=DEFAULT_MARKET_EVIDENCE_POLICY.execution_provider,
+                    provider=DEFAULT_MARKET_EVIDENCE_POLICY.paper_fill_observation_fallback_provider,
                     observed_at=now,
                 )
         provider_ready = (
             execution is not None
             and getattr(execution, "provider", None)
-            == DEFAULT_MARKET_EVIDENCE_POLICY.execution_provider
+            in DEFAULT_MARKET_EVIDENCE_POLICY.paper_fill_observation_providers
         )
         provider_circuit_clear = provider_ready
         execution_eligible = bool(

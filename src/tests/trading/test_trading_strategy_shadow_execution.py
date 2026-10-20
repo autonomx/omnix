@@ -74,7 +74,8 @@ class FakeMarketService:
         self.calls: list[tuple[str, str | None]] = []
         self.indicator_calls: list[tuple[str, str | None, datetime]] = []
 
-    def execution_observation(self, instrument_id: str, binding_id: str | None):
+    def execution_observation(self, instrument_id: str, binding_id: str | None, *, live_first: bool = False):
+        assert live_first is True  # shadow evidence reads IBKR's live NBBO first
         self.calls.append((instrument_id, binding_id))
         return self.execution
 

@@ -320,7 +320,7 @@ def test_trailing_stop_loss_leg_is_persisted_and_resumed(paper) -> None:
     now = datetime.now(timezone.utc) + timedelta(seconds=1)
 
     class _Market:
-        def execution_observation(self, instrument_id, binding_id=None):
+        def execution_observation(self, instrument_id, binding_id=None, *, live_first=False):
             return ExecutionObservation(
                 instrument_id=instrument_id, binding_id="alpaca-paper:test", provider="integration",
                 bid=Decimal("10.9"), ask=Decimal("10.9"), last=Decimal("10.9"),

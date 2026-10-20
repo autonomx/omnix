@@ -7,8 +7,8 @@ from decimal import Decimal
 
 from app.apps.trading.execution import ExecutionObservation, assess_execution_observation
 from app.apps.trading.strategy_ai_shadow import simulate_ai_shadow_fill
-from app.apps.trading.execution_observation_plane import ExecutionObservationPlane
-from app.apps.trading.strategy_ai_shadow_v3_monitor import _causal_selection, _iex_book_spread_only
+from app.apps.trading.execution_observation_plane import ExecutionObservationPlane, first_causal_execution
+from app.apps.trading.strategy_ai_shadow_v3_monitor import _iex_book_spread_only
 
 
 ACTIONABLE_AT = datetime(2026, 10, 16, 13, 32, tzinfo=timezone.utc)
@@ -112,7 +112,7 @@ def _plane_quote(plane, *, provider, purpose, seconds_after, bid, ask):
 
 
 def _select(plane, *, ibkr_live):
-    return _causal_selection(
+    return first_causal_execution(
         plane,
         "equity:NASDAQ:TCRT",
         decision_completed_at=ACTIONABLE_AT,

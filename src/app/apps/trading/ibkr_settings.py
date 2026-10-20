@@ -11,7 +11,6 @@ This section stores only which connection to use, the Gateway socket and the
 rollout switches for the market-data observation plane.
 """
 
-import os
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
@@ -150,11 +149,22 @@ def save_ibkr_settings(patch: dict[str, Any]) -> IbkrSettings:
     return validated
 
 
+def ibkr_live_quotes_authorized() -> bool:
+    """The IBKR live-data gate in Settings; off (or unreadable) keeps IEX alone."""
+
+    try:
+        settings = load_ibkr_settings()[0]
+    except Exception:
+        return False
+    return bool(settings.enabled and settings.live_authority_enabled)
+
+
 __all__ = [
     "DEFAULT_IBKR_SETTINGS",
     "IBKR_CONNECTIONS",
     "IbkrConnection",
     "IbkrSettings",
+    "ibkr_live_quotes_authorized",
     "load_ibkr_settings",
     "save_ibkr_settings",
     "settings_from_mapping",

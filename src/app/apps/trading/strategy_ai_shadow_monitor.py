@@ -31,7 +31,9 @@ from .monitor_task import ScheduledTradingMonitor, TradingMonitorTask
 from .execution_observation_plane import (
     ExecutionObservationPlane,
     default_execution_observation_plane,
+    first_causal_execution,
 )
+from .ibkr_settings import ibkr_live_quotes_authorized
 from .gapper_dataset import GapperCandidate
 from .indicator_signals import multi_timeframe_indicator_context
 from .market_evidence import (
@@ -895,12 +897,14 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         if execution_override is not None:
             execution = dict(execution_override)
         else:
-            selection = self.execution_plane.first_causal_after(
+            selection = first_causal_execution(
+                self.execution_plane,
                 candidate.instrument_id,
                 decision_completed_at=completed_at,
                 actionable_at=completed_at,
                 market_snapshot_as_of=observed_at,
                 binding_id=candidate.binding_id,
+                ibkr_live=await asyncio.to_thread(ibkr_live_quotes_authorized),
             )
             if selection is None:
                 if side == "buy" and pending_entry is None:
@@ -1448,11 +1452,12 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                     market_service.execution_observation(
                         candidate.instrument_id,
                         candidate.binding_id,
+                        live_first=True,
                     )
                 except Exception as exc:
                     readiness = classify_provider_exception(
                         exc,
-                        provider=DEFAULT_MARKET_EVIDENCE_POLICY.execution_provider,
+                        provider=DEFAULT_MARKET_EVIDENCE_POLICY.paper_fill_observation_fallback_provider,
                         observed_at=observed_at,
                     )
             if readiness is None:

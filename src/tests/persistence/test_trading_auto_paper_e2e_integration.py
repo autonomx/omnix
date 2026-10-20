@@ -281,7 +281,7 @@ class ReplayMarketService:
         assert binding_id == self.binding_id
         return SimpleNamespace(bars=list(self._bars))
 
-    def execution_observation(self, instrument_id, binding_id=None):
+    def execution_observation(self, instrument_id, binding_id=None, *, live_first=False):
         assert instrument_id == self.instrument_id
         assert binding_id in {None, self.binding_id}
         return self.execution

@@ -482,11 +482,24 @@ class ProviderRegistry:
         *,
         policy: ExecutionEligibilityPolicy | None = None,
         cancellation: threading.Event | None = None,
+        live_first: bool = False,
     ) -> ExecutionObservation:
+        """The execution quote for an instrument.
+
+        Equities resolve to Alpaca IEX. ``live_first`` asks IBKR's live NBBO
+        first and uses IEX only when IBKR's live-data authority does not hold:
+        IEX's own book is thin for small caps and can sit far wider than the
+        market. The source is fixed by that order, never chosen by price.
+        """
         requested = self.resolve_binding(instrument_id, binding_id)
         binding = self.resolve_execution_binding(instrument_id, requested.binding_id)
         provider = self.provider(binding.provider)
         if binding.provider == "alpaca_iex":
+            live = self._ibkr_execution_fallback(instrument_id, policy) if live_first else None
+            if live is not None:
+                if requested.binding_id != live.binding_id:
+                    live = live.model_copy(update={"binding_id": requested.binding_id})
+                return live
             try:
                 observation = provider.execution_observation(
                     instrument_id,
@@ -497,7 +510,7 @@ class ProviderRegistry:
                 # IEX sees part of the market; thin stocks often have no IEX
                 # quote. A quote from IBKR is used only while IBKR holds
                 # per-contract live-data authority, and stays attributed to it.
-                fallback = self._ibkr_execution_fallback(instrument_id, policy)
+                fallback = None if live_first else self._ibkr_execution_fallback(instrument_id, policy)
                 if fallback is None:
                     raise
                 observation = fallback

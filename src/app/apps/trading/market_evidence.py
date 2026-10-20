@@ -31,7 +31,11 @@ class MarketEvidencePolicy(BaseModel):
     live_quote_primary_provider: str = "ibkr"
     live_quote_fallback_provider: str = "alpaca_iex"
     gap_repair_fallback_provider: str = "alpaca_iex"
-    paper_fill_observation_provider: str = "alpaca_iex"
+    # Paper and shadow fills observe IBKR's live NBBO while its per-contract
+    # live-data authority holds, and Alpaca IEX otherwise. IEX's own book is
+    # thin for small caps and often far wider than the market.
+    paper_fill_observation_provider: str = "ibkr"
+    paper_fill_observation_fallback_provider: str = "alpaca_iex"
     order_execution_provider: None = None
     minimum_tod_rvol_baseline_sessions: int = Field(
         default=MIN_TOD_RVOL_BASELINE_SESSIONS,
@@ -57,6 +61,10 @@ class MarketEvidencePolicy(BaseModel):
     @property
     def execution_provider(self) -> str:
         return self.paper_fill_observation_provider
+
+    @property
+    def paper_fill_observation_providers(self) -> tuple[str, str]:
+        return (self.paper_fill_observation_provider, self.paper_fill_observation_fallback_provider)
 
 
 DEFAULT_MARKET_EVIDENCE_POLICY = MarketEvidencePolicy()

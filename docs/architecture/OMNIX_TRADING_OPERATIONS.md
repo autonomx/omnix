@@ -48,6 +48,8 @@ Market-data providers and the optional research model use Omnix provider configu
 
 Execution-grade data is a stricter contract than chart/research data. An execution observation must pass source-time freshness, session, bid/ask, and spread policy before it can drive a paper fill. The Yahoo equity adapter is deliberately research/diagnostic only and returns `PROVIDER_NOT_EXECUTION_GRADE`; therefore US-equity AUTO PAPER remains fail-closed until an approved execution-grade feed is configured. Never remove that rejection merely to make a simulation fill.
 
+US-equity entry checks, the order gateway's re-check, paper fills, stops and targets, SHADOW entry evidence (gap pullback, stoch trend capture) and AI shadow v1/v3 fills read IBKR's live NBBO first, while IBKR holds per-contract live-data authority (the Settings gate, a connected Gateway, a qualified contract, LIVE data, proven entitlement and a fresh quote), and Alpaca IEX otherwise (`execution_observation(..., live_first=True)`; the policy's `paper_fill_observation_provider` is `ibkr` with `alpaca_iex` as fallback). IEX's own book is thin for small caps: on 2026-10-20 it showed 1.55 x 1.83 for YMAT while the NBBO was 1.83 x 1.84, and IEX quotes caused 23 of 27 spread rejections over three weeks. The source is fixed by that order and never chosen by price, so a genuinely wide IBKR quote is still rejected. An IBKR quote keeps its LIVE_DATA purpose: it supports paper and shadow fills, never broker execution authority. The execution-observation capture monitor still records IEX quotes, which the IBKR monitor uses as its parity reference.
+
 ## Provider outage procedure
 
 1. Open the Trading **Data** tab and record provider/stream diagnostics.

@@ -165,10 +165,12 @@ async def submit_entry_proposals(
             )
             continue
         try:
+            # IBKR's live NBBO when its live-data authority holds; IEX otherwise.
             execution = await asyncio.to_thread(
                 market_service.execution_observation,
                 candidate.instrument_id,
                 candidate.binding_id,
+                live_first=True,
             )
         except Exception as exc:
             host.rejection_count += 1

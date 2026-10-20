@@ -365,3 +365,69 @@ def test_execution_observation_falls_back_to_an_authoritative_ibkr_quote_when_ie
         assert "missing executable prices" in str(exc)  # without IBKR authority: the IEX error stands
     else:
         raise AssertionError("no fallback without IBKR live-data authority")
+
+
+def test_live_first_reads_the_authoritative_ibkr_quote_before_the_wide_iex_book(monkeypatch):
+    from app.apps.trading.providers.errors import ProviderContractError
+
+    monkeypatch.setattr(registry_module, "alpaca_iex_configured", lambda: True)
+    iex_calls: list[str] = []
+
+    class _WideIexBook:
+        # 2026-10-20 10:02 ET, YMAT: IEX showed 1.55 x 1.83 while the NBBO was 1.83 x 1.84.
+        def execution_observation(self, instrument_id, policy=None, cancellation=None):
+            iex_calls.append(instrument_id)
+            binding = next(item for item in bindings_for_instrument(instrument_id) if item.provider == "alpaca_iex")
+            observation = ExecutionObservation(
+                instrument_id=instrument_id, binding_id=binding.binding_id, provider="alpaca_iex",
+                bid=Decimal("1.55"), ask=Decimal("1.83"), last=Decimal("1.82"),
+                source_time=NOW, received_at=NOW, session="regular", freshness_mode="live",
+            )
+            return assess_execution_observation(observation, policy)
+
+    class _Ibkr(_UnavailableIbkr):
+        def __init__(self, authoritative: bool, *, ask: str = "1.84") -> None:
+            self.authoritative = authoritative
+            self.ask = ask
+
+        def authority_decision(self, instrument_id):
+            return super().authority_decision(instrument_id).model_copy(update={"authoritative": self.authoritative})
+
+        def live_observation(self, instrument_id, *, policy=None):
+            binding = next(item for item in bindings_for_instrument(instrument_id) if item.provider == "ibkr")
+            observation = ExecutionObservation(
+                instrument_id=instrument_id, binding_id=binding.binding_id, provider="ibkr",
+                bid=Decimal("1.83"), ask=Decimal(self.ask), last=Decimal("1.83"),
+                source_time=NOW, received_at=NOW, session="regular", freshness_mode="live",
+                market_data_type="LIVE", live_entitled=True,
+            )
+            return assess_execution_observation(observation, policy, binding_purpose="LIVE_DATA")
+
+    def registry(ibkr: _Ibkr, iex=_WideIexBook) -> ProviderRegistry:
+        return ProviderRegistry(factories={"alpaca_iex": lambda: iex(), "ibkr": lambda: ibkr})
+
+    requested = next(item.binding_id for item in bindings_for_instrument(INSTRUMENT) if item.provider == "alpaca_iex")
+    live = registry(_Ibkr(True)).execution_observation(INSTRUMENT, requested, live_first=True)
+    assert live.provider == "ibkr" and live.ask == Decimal("1.84")
+    assert live.binding_id == requested  # kept on the binding the consumer asked for
+    assert live.broker_execution_authorized is False
+    assert iex_calls == []  # IEX is not asked while IBKR's authority holds
+
+    # Without IBKR authority, or without live_first, the IEX quote is used as before.
+    assert registry(_Ibkr(False)).execution_observation(INSTRUMENT, live_first=True).provider == "alpaca_iex"
+    assert registry(_Ibkr(True)).execution_observation(INSTRUMENT).provider == "alpaca_iex"
+
+    # The source is fixed by policy, not by price: a wide IBKR quote is not swapped for IEX.
+    wide = registry(_Ibkr(True, ask="2.40")).execution_observation(INSTRUMENT, live_first=True)
+    assert wide.provider == "ibkr" and wide.ask == Decimal("2.40")
+
+    class _NoIexQuote:
+        def execution_observation(self, instrument_id, policy=None, cancellation=None):
+            raise ProviderContractError("Alpaca IEX snapshot is missing executable prices")
+
+    try:
+        registry(_Ibkr(False), iex=_NoIexQuote).execution_observation(INSTRUMENT, live_first=True)
+    except ProviderContractError:
+        pass  # neither source: the IEX error stands
+    else:
+        raise AssertionError("no quote without IEX or IBKR authority")
