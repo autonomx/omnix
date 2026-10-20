@@ -461,3 +461,26 @@ def test_removed_lower_low_config_fields_are_ignored_for_compatibility() -> None
 
     assert "minimum_swing_bounce_pct" not in config.model_dump()
     assert "lower_low_close_break_pct" not in config.model_dump()
+
+
+@pytest.mark.parametrize(
+    ("periods", "first_signal"),
+    [((14, 14, 3, 3), "12:10:00"), ((9, 9, 3, 3), "11:20:00")],
+)
+def test_first_signal_time_matches_the_evaluator_warm_up(periods, first_signal) -> None:
+    rsi, stochastic, k, d = periods
+    config = StochRsi5mConfig(
+        rsi_period=rsi, stochastic_period=stochastic, k_smoothing_period=k, d_smoothing_period=d
+    )
+    assert strategy.stoch_rsi_first_signal_et(config).isoformat() == first_signal
+
+    # Alternating closes keep RSI defined; the bar that closes at the first
+    # signal time is the first one with %K/%D.
+    bars = [_bar(index, close="10.2" if index % 2 else "9.8") for index in range(40)]
+    ready = next(
+        count
+        for count in range(1, len(bars) + 1)
+        if strategy.evaluate_stoch_rsi_5m(bars[:count], config).reason_code
+        not in {"STOCH_RSI_5M_WARMUP", "STOCH_RSI_5M_5_5M_EMA_WARMUP"}
+    )
+    assert bars[ready - 1].end_time.astimezone(strategy._ET).time().isoformat() == first_signal

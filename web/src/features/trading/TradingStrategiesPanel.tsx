@@ -5,6 +5,7 @@ import { tradingHermesResearchApi } from './tradingHermesResearchApi';
 import { OvernightShadowSummary } from './OvernightShadowSummary';
 import { TradingStrategyBacktest } from './TradingStrategyBacktest';
 import { TradingStrategyExecutionCredentials } from './TradingStrategyExecutionCredentials';
+import { stochRsiFirstSignalEt, stochRsiWarmupBars } from './stochRsiWarmup';
 import { TRADING_STRATEGY_DEFINITIONS } from './tradingStrategyCatalog';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
@@ -35,7 +36,8 @@ const INTERDAY_SUBSTRATEGIES = [
   { key: 'ai-event-driven', label: 'D · AI event-driven', description: 'Embedded event-driven AI shadow policy', strategyId: null },
   { key: 'stoch-rsi-5min', label: 'E · 5m Stoch RSI', description: 'Linked deterministic child strategy', strategyId: 'stoch-rsi-5min' },
   { key: 'stoch-rsi-5min-early-single', label: 'F · 5m Stoch RSI early-single', description: 'Linked child: first trade per symbol per session only', strategyId: 'stoch-rsi-5min-early-single' },
-  { key: 'gap-pullback-v2-prospective-20260825', label: 'G · Gap pullback V2', description: 'Linked deterministic prospective child strategy', strategyId: 'gap-pullback-v2-prospective-20260825' },
+  { key: 'stoch-rsi-5min-fast', label: 'G · 5m Stoch RSI fast', description: 'Linked child: 9/9/3/3 periods, first signal 11:20 ET instead of 12:10', strategyId: 'stoch-rsi-5min-fast' },
+  { key: 'gap-pullback-v2-prospective-20260825', label: 'H · Gap pullback V2', description: 'Linked deterministic prospective child strategy', strategyId: 'gap-pullback-v2-prospective-20260825' },
 ] as const;
 
 const strictV11Config = (): GapPullbackConfig => ({
@@ -443,6 +445,7 @@ function StochRsi5mEditor({
     onChange({ ...draft, risk: { ...draft.risk, [key]: value } });
   };
   const stochEvents = events.filter((event) => event.event_type === 'stoch_rsi_5m');
+  const firstSignalEt = stochRsiFirstSignalEt(draft.config);
 
   return (
     <>
@@ -457,7 +460,7 @@ function StochRsi5mEditor({
       {draft.archived_at ? <div className="trading-strategy-notice" role="status">Archived {new Date(draft.archived_at).toLocaleString()}. This strategy is read-only.</div> : null}
       {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
       <section className="trading-strategy-overview">
-        <div><strong>Arm below 18, confirm %K above %D, then buy after rising through 20; sell on a %K/%D cross down below 80 or above 95.</strong><small>Non-bullish confirmation candles require a later close above their high; bullish confirmation candles use the next five-minute bar open. The actual entry open must be strictly above the 5-period EMA calculated from finalized five-minute closes. Open positions exit after a completed five-minute close below that EMA or a bearish Stoch RSI cross. After an exit, a fresh setup may produce another sequential trade. Signals use completed candles and research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
+        <div><strong>Arm below {draft.config.oversold_threshold}, confirm %K above %D, then buy after rising through {draft.config.recovery_threshold}; sell on a %K/%D cross down below 80 or above {draft.config.overbought_threshold}.</strong><small>The indicator warms up from each day's open on regular-session bars only, so with these periods no setup can arm before {firstSignalEt} ET ({stochRsiWarmupBars(draft.config)} finished five-minute bars), whatever the entry start. Non-bullish confirmation candles require a later close above their high; bullish confirmation candles use the next five-minute bar open. The actual entry open must be strictly above the 5-period EMA calculated from finalized five-minute closes. Open positions exit after a completed five-minute close below that EMA or a bearish Stoch RSI cross. After an exit, a fresh setup may produce another sequential trade. Signals use completed candles and research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
         <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
           {(['off', 'shadow'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => onChange({ ...draft, mode })}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
         </div>
@@ -477,6 +480,7 @@ function StochRsi5mEditor({
             <label><span>%K smoothing</span><input type="number" min="1" max="20" value={draft.config.k_smoothing_period} onChange={(event) => setConfig('k_smoothing_period', Number(event.target.value))} /></label>
             <label><span>%D smoothing</span><input type="number" min="1" max="20" value={draft.config.d_smoothing_period} onChange={(event) => setConfig('d_smoothing_period', Number(event.target.value))} /></label>
             <label><span>Entry starts ET</span><input type="time" step="1" value={draft.config.entry_start_et} onChange={(event) => setConfig('entry_start_et', event.target.value)} /></label>
+            <label><span>First possible signal ET</span><input value={firstSignalEt} readOnly title="Set by the indicator periods: the evaluator warms up from each day's open" /></label>
             <label><span>Last entry ET</span><input type="time" step="1" value={draft.config.last_entry_et} onChange={(event) => setConfig('last_entry_et', event.target.value)} /></label>
             <label><span>Force flat ET</span><input type="time" step="1" value={draft.config.force_flat_et ?? '15:55:00'} onChange={(event) => setConfig('force_flat_et', event.target.value)} /></label>
           </div>
@@ -1413,7 +1417,7 @@ export function TradingStrategiesPanel() {
               <section className="trading-config-block" aria-label="Interday SHADOW substrategy group">
                 <header>
                   <strong>Interday SHADOW substrategy group</strong>
-                  <small>Same frozen Finviz Top-5 cohort · four embedded arms plus three linked deterministic child strategies</small>
+                  <small>Same frozen Finviz Top-5 cohort · four embedded arms plus four linked deterministic child strategies</small>
                 </header>
                 <div className="trading-strategy-grid">
                   {INTERDAY_SUBSTRATEGIES.map((substrategy) => {

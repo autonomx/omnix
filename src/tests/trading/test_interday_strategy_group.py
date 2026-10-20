@@ -13,8 +13,8 @@ from app.apps.trading.strategy_dynamic_discovery import INTERDAY_SUBSTRATEGIES
 from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
 
 
-def test_interday_group_has_five_embedded_and_three_linked_substrategies() -> None:
-    assert len(INTERDAY_TRADING_SUBSTRATEGY_KEYS) == 8
+def test_interday_group_has_five_embedded_and_four_linked_substrategies() -> None:
+    assert len(INTERDAY_TRADING_SUBSTRATEGY_KEYS) == 9
     assert INTERDAY_TRADING_SUBSTRATEGY_KEYS[:5] == (
         "deterministic-v2",
         "stoch-trend-capture",
@@ -22,9 +22,10 @@ def test_interday_group_has_five_embedded_and_three_linked_substrategies() -> No
         "ai-every-minute",
         "ai-event-driven",
     )
-    assert INTERDAY_TRADING_SUBSTRATEGY_KEYS[-3:] == (
+    assert INTERDAY_TRADING_SUBSTRATEGY_KEYS[-4:] == (
         "stoch-rsi-5min",
         "stoch-rsi-5min-early-single",
+        "stoch-rsi-5min-fast",
         "gap-pullback-v2-prospective-20260825",
     )
     assert INTERDAY_TRADING_SUBSTRATEGY_KEYS == INTERDAY_SUBSTRATEGIES
@@ -62,5 +63,22 @@ def test_early_single_migration_clones_stoch_rsi_child_into_interday_group() -> 
     assert "'interday-trading-strategy-shadow'" in sql
     assert "WHERE source.strategy_id = 'stoch-rsi-5min'" in sql
     assert '"trade_selection": "early_single"' in sql
+    assert "'shadow'" in sql
+    assert "ON CONFLICT (workspace_id, strategy_id) DO NOTHING" in sql
+
+
+def test_fast_migration_clones_stoch_rsi_child_with_shorter_periods() -> None:
+    migration = (
+        Path(__file__).parents[2]
+        / "app/apps/trading/migrations/0167_trading_interday_stoch_rsi_fast.sql"
+    )
+    sql = migration.read_text(encoding="utf-8")
+
+    # Data only, so older application code stays compatible with the row.
+    assert sql.startswith("-- omnix-migration: phase=data transactional=true")
+    assert "'stoch-rsi-5min-fast'" in sql
+    assert "'interday-trading-strategy-shadow'" in sql
+    assert "WHERE source.strategy_id = 'stoch-rsi-5min'" in sql
+    assert '"rsi_period": 9, "stochastic_period": 9, "k_smoothing_period": 3, "d_smoothing_period": 3' in sql
     assert "'shadow'" in sql
     assert "ON CONFLICT (workspace_id, strategy_id) DO NOTHING" in sql

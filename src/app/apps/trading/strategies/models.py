@@ -224,6 +224,11 @@ class StochRsi5mConfig(BaseModel):
     # %K is below 80. After an exit, a fresh setup may produce another
     # sequential trade during the same session.
     #
+    # The indicator warms up from each day's open (regular-session bars only),
+    # so no setup can arm before rsi + stochastic + k + d - 2 finished 5m bars:
+    # 12:10 ET for 14/14/3/3 and 11:20 ET for 9/9/3/3, even though entries are
+    # allowed from ``entry_start_et`` (see ``stoch_rsi_first_signal_et``).
+    #
     # ``early_single`` keeps only the first current-session trade per symbol
     # and vetoes it when the pre-entry regular-session range exceeds 150%.
     trade_selection: Literal["sequential", "early_single"] = "sequential"

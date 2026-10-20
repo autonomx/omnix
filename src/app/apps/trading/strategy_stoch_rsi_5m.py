@@ -17,7 +17,7 @@ research evidence; it has no broker or order side effects.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal, cast
 
@@ -264,6 +264,20 @@ def _minimum_stochastic_rsi_bars(config: StochRsi5mConfig) -> int:
         + config.d_smoothing_period
         - 2
     )
+
+
+def stoch_rsi_first_signal_et(config: StochRsi5mConfig | None = None) -> time:
+    """Earliest ET time a setup can arm: the close of the first bar with %K/%D.
+
+    The evaluator reads only the current regular session, so the indicator
+    warms up from the open every day: 14/14/3/3 needs 32 finished five-minute
+    bars and cannot signal before 12:10 ET, whatever ``entry_start_et`` says.
+    """
+
+    active = config or StochRsi5mConfig()
+    bars = max(_minimum_stochastic_rsi_bars(active), _EMA_PERIOD)
+    opened = datetime.combine(date(2000, 1, 3), _REGULAR_OPEN)
+    return (opened + timedelta(minutes=5 * bars)).time()
 
 
 def _signal_requires_breakout(bar: MarketBar) -> bool:
@@ -1053,4 +1067,5 @@ __all__ = [
     "StochRsi5mState",
     "StochRsi5mTrade",
     "evaluate_stoch_rsi_5m",
+    "stoch_rsi_first_signal_et",
 ]

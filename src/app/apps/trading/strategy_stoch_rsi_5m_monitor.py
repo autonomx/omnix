@@ -11,7 +11,7 @@ from .strategy_repository import (
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
 )
-from .strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
+from .strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m, stoch_rsi_first_signal_et
 from .strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
 from .strategies.models import StochRsi5mConfig
 from .trade_logging import trade_log
@@ -155,6 +155,14 @@ async def record_stoch_rsi_5m_candidates(
                 ),
                 "five_minute_ema_period": 5,
                 "entry_policy": {
+                    "stoch_rsi_periods": [
+                        stoch_config.rsi_period,
+                        stoch_config.stochastic_period,
+                        stoch_config.k_smoothing_period,
+                        stoch_config.d_smoothing_period,
+                    ],
+                    # Same-session warm-up: no setup can arm before this.
+                    "first_signal_et": stoch_rsi_first_signal_et(stoch_config).isoformat(),
                     "oversold_arm_threshold": str(stoch_config.oversold_threshold),
                     "recovery_confirmation_threshold": str(
                         stoch_config.recovery_threshold

@@ -4,8 +4,8 @@ A/B (deterministic V2 and Stoch trend capture) are produced by the canonical
 strategy monitor. This monitor adds C/D: a stateful every-minute AI policy and a
 stateful event-driven AI policy over the identical frozen cohort. It never
 creates paper orders or protections. The linked standalone ``stoch-rsi-5min``,
-``stoch-rsi-5min-early-single`` and ``gap-pullback-v2-prospective-20260825``
-configurations are separate children; their deterministic monitors remain the
+``stoch-rsi-5min-early-single``, ``stoch-rsi-5min-fast`` and
+``gap-pullback-v2-prospective-20260825`` configurations are separate children; their deterministic monitors remain the
 owners of their own evidence.
 """
 

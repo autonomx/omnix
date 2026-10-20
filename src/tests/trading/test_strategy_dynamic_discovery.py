@@ -186,6 +186,7 @@ def test_shared_vector_produces_strategy_specific_rankings():
         "ai-event-driven",
         "stoch-rsi-5min",
         "stoch-rsi-5min-early-single",
+        "stoch-rsi-5min-fast",
         "gap-pullback-v2-prospective-20260825",
     }
 

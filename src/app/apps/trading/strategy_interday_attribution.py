@@ -63,6 +63,8 @@ def _arm_for_event(event: StrategyEvent, source_strategy_id: str) -> str | None:
         return "stoch-rsi-5min"
     if source_strategy_id == "stoch-rsi-5min-early-single":
         return "stoch-rsi-5min-early-single"
+    if source_strategy_id == "stoch-rsi-5min-fast":
+        return "stoch-rsi-5min-fast"
     if source_strategy_id == "gap-pullback-v2-prospective-20260825":
         return "gap-pullback-v2-prospective-20260825"
     if source_strategy_id == INTERDAY_TRADING_STRATEGY_ID:
