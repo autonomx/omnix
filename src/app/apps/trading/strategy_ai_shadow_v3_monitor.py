@@ -34,6 +34,7 @@ from .market_data_recovery import RecoveredBarSeries, RecoveryAttempt
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
 from .strategy_ai_shadow_v3 import (
+    AI_SHADOW_V3_CONTRACT,
     AI_SHADOW_V3_POLICY_VERSION,
     AIShadowV3Analyzer,
     V3FeatureSnapshot,
@@ -52,6 +53,11 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .trade_logging import trade_log
+from .trading_ai_budget import (
+    TradingAIBudgetExhausted,
+    default_trading_ai_budget,
+    research_decision_slot,
+)
 from .trigger_plan import (
     TriggerMarketSnapshot,
     TriggerPlan,
@@ -158,6 +164,17 @@ def _key(*parts: object) -> str:
     return hashlib.sha256(
         "|".join(str(part) for part in parts).encode("utf-8")
     ).hexdigest()
+
+
+def _alpha_decision_due(last_decision_at: datetime | None, observed_at: datetime) -> bool:
+    """One model decision per name per five-minute slot.
+
+    The deterministic trigger plans are still serviced on every pass.
+    """
+
+    return last_decision_at is None or research_decision_slot(last_decision_at) < research_decision_slot(
+        observed_at
+    )
 
 
 def _eligible(config: TradingStrategyConfigDocument) -> bool:
@@ -290,6 +307,42 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         self.geometry_challenger_count = 0
         self.agreement_count = 0
         self.data_gap_count = 0
+        self.budget_skip_count = 0
+        # (strategy id, session date) pairs whose budget refusal is recorded.
+        self._budget_notices: set[tuple[str, object]] = set()
+
+    async def _record_budget_refusal(
+        self,
+        repository: TradingStrategyRepository,
+        config: TradingStrategyConfigDocument,
+        *,
+        session_date,
+        now: datetime,
+        detail: str | None,
+    ) -> None:
+        """One event per strategy and session, instead of an error per name on every poll."""
+
+        self.budget_skip_count += 1
+        notice = (config.strategy_id, session_date)
+        if notice in self._budget_notices:
+            return
+        self._budget_notices.add(notice)
+        await self._append(
+            repository,
+            config,
+            instrument_id="__universe__",
+            event_type="ai_v3_alpha_error",
+            state="budget_exhausted",
+            reason_code="AI_V3_ALPHA_BUDGET_EXHAUSTED",
+            observed_at=now,
+            payload={
+                "contract_id": AI_SHADOW_V3_CONTRACT,
+                "detail": detail,
+                "research_only": True,
+                "execution_authority": False,
+            },
+            identity=(str(session_date), "budget-exhausted"),
+        )
 
     async def _append(
         self,
@@ -868,8 +921,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             if not feature.alpha_input_ready:
                 self.data_gap_count += 1
                 continue
-            last = latest_decision_at.get(candidate.instrument_id)
-            if last is not None and last >= feature.observed_at:
+            if not _alpha_decision_due(latest_decision_at.get(candidate.instrument_id), feature.observed_at):
                 continue
             prepared.append(
                 {
@@ -887,6 +939,11 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
 
         if not prepared:
             return 0
+        if not default_trading_ai_budget().can_acquire(AI_SHADOW_V3_CONTRACT):
+            await self._record_budget_refusal(
+                repository, config, session_date=universe.session_date, now=now, detail=None
+            )
+            return 0
 
         analyzer = self.analyzer_factory()
         provider = "unknown"
@@ -901,6 +958,11 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
         started = monotonic_time.monotonic()
         try:
             result = await asyncio.to_thread(analyzer.assess, prepared)
+        except TradingAIBudgetExhausted as exc:
+            await self._record_budget_refusal(
+                repository, config, session_date=universe.session_date, now=now, detail=str(exc)
+            )
+            return 0
         except Exception as exc:
             kind = classify_llm_failure(exc)
             self.reliability.failure(
@@ -1145,6 +1207,7 @@ class TradingAIShadowV3Monitor(ScheduledTradingMonitor):
             "geometry_challenger_count": self.geometry_challenger_count,
             "agreement_count": self.agreement_count,
             "data_gap_count": self.data_gap_count,
+            "budget_skip_count": self.budget_skip_count,
             "llm_reliability": self.reliability.snapshot().model_dump(mode="json"),
             "v2_champion_mutated": False,
             "execution_authority": False,

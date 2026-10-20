@@ -8,10 +8,13 @@ for materially changing names, and gets a low-frequency heartbeat for the top
 research candidates. It never creates or changes execution authority.
 """
 
+import hashlib
 import json
 from collections.abc import Callable, Iterable
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from threading import Lock
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,6 +24,7 @@ from app.providers import ChatMessage
 from .gapper_dataset import GapperCandidate
 from .strategy_intraday_learning import IntradayLearningSnapshot
 from .structured_llm import TradingModelOutputError, trading_model_call, sends_json_schema
+from .trading_ai_budget import INTRADAY_LLM_LIVE_CONTRACT
 
 
 ThesisChange = Literal["initial", "strengthened", "weakened", "flipped", "unchanged"]
@@ -632,6 +636,52 @@ def build_intraday_llm_payload(
     }
 
 
+@dataclass(frozen=True)
+class SharedIntradayAssessment:
+    assessment: IntradayLLMAssessment
+    provider: str
+    model: str | None
+    strategy_id: str
+    payload_mode: Literal["delta", "full"]
+
+
+class SharedIntradayAssessments:
+    """Intraday LLM assessments shared by the strategies of one process.
+
+    Strategies watching the same name read the same bars and derive the same
+    deterministic learning snapshot, so an assessment of a name at one bar is
+    reused by every strategy that selects it for that bar instead of asking the
+    model again. ``lock`` is held from the lookup through the provider call to
+    the store, so a second strategy waits for the first and reuses its answer.
+    """
+
+    def __init__(self, retention: timedelta = timedelta(minutes=30)) -> None:
+        self.lock = Lock()
+        self.retention = retention
+        self._entries: dict[tuple[str, datetime, str], SharedIntradayAssessment] = {}
+
+    @staticmethod
+    def key(
+        instrument_id: str, observed_at: datetime, learning: IntradayLearningSnapshot
+    ) -> tuple[str, datetime, str]:
+        learning_hash = hashlib.sha256(learning.model_dump_json().encode("utf-8")).hexdigest()
+        return instrument_id, observed_at.astimezone(timezone.utc), learning_hash
+
+    def get(self, key: tuple[str, datetime, str]) -> SharedIntradayAssessment | None:
+        return self._entries.get(key)
+
+    def put(self, key: tuple[str, datetime, str], entry: SharedIntradayAssessment) -> None:
+        self._entries[key] = entry
+        cutoff = key[1] - self.retention
+        for stale in [item for item in self._entries if item[1] < cutoff]:
+            del self._entries[stale]
+
+
+# Shared by the hosts that use the default analyzer; a host given another
+# analyzer factory (tests) keeps a private cache.
+SHARED_INTRADAY_ASSESSMENTS = SharedIntradayAssessments()
+
+
 class IntradayLLMAnalyzer:
     def __init__(self, provider_factory: Callable[[], Any] | None = None) -> None:
         self.provider_factory = provider_factory or _default_provider
@@ -644,6 +694,7 @@ class IntradayLLMAnalyzer:
         previous_by_instrument: dict[str, dict[str, Any]] | None = None,
         trigger_reasons_by_instrument: dict[str, tuple[str, ...]] | None = None,
         payload_modes_by_instrument: dict[str, Literal["delta", "full"]] | None = None,
+        contract_id: str = INTRADAY_LLM_LIVE_CONTRACT,
     ) -> IntradayLLMResult:
         from .strategy_ai_shadow_provider import assess_intraday_with_shared_circuit
 
@@ -652,6 +703,7 @@ class IntradayLLMAnalyzer:
             "previous_by_instrument": previous_by_instrument,
             "trigger_reasons_by_instrument": trigger_reasons_by_instrument,
             "payload_modes_by_instrument": payload_modes_by_instrument,
+            "contract_id": contract_id,
         }
         return assess_intraday_with_shared_circuit(
             self,
@@ -669,6 +721,7 @@ class IntradayLLMAnalyzer:
         previous_by_instrument: dict[str, dict[str, Any]] | None = None,
         trigger_reasons_by_instrument: dict[str, tuple[str, ...]] | None = None,
         payload_modes_by_instrument: dict[str, Literal["delta", "full"]] | None = None,
+        contract_id: str = INTRADAY_LLM_LIVE_CONTRACT,
     ) -> IntradayLLMResult:
         rows = list(rows)
         if not rows:
@@ -712,7 +765,7 @@ class IntradayLLMAnalyzer:
                 provider,
                 messages,
                 output_model=IntradayLLMBatchResponse,
-                contract_id="trading.intraday_llm.batch",
+                contract_id=contract_id,
                 schema_name="intraday_llm_batch_response",
                 model=model,
                 max_tokens=max(900, 350 * len(rows)),
@@ -766,6 +819,9 @@ __all__ = [
     "IntradayLLMAssessment",
     "IntradayLLMAnalyzer",
     "IntradayLLMResult",
+    "SHARED_INTRADAY_ASSESSMENTS",
+    "SharedIntradayAssessment",
+    "SharedIntradayAssessments",
     "build_intraday_llm_payload",
     "intraday_llm_trigger_reasons",
     "select_intraday_llm_candidates",

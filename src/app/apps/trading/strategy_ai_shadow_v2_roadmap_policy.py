@@ -34,11 +34,13 @@ from . import strategy_ai_shadow_v2_hardening as hardening
 from . import strategy_ai_shadow_v2_monitor as monitor
 from .research.contracts import TradingEvidence
 from .strategy_ai_shadow_v2 import (
+    AI_SHADOW_V2_CONTRACT,
     AI_SHADOW_V2_POLICY_VERSION,
     AIShadowV2AlphaDecision,
     CatalystIntelligenceSnapshot,
 )
 from .strategy_repository import StrategyEvent
+from .trading_ai_budget import TradingAIBudgetExhausted, default_trading_ai_budget, research_decision_slot
 
 _ALPHA_ERROR_COOLDOWN = timedelta(seconds=60)
 _OUTCOME_HORIZON = timedelta(minutes=60)
@@ -455,6 +457,34 @@ def _pair_has_recent_error(
     return at - latest.observed_at.astimezone(at.tzinfo) < _ALPHA_ERROR_COOLDOWN
 
 
+async def _record_budget_refusal(self, config, repository, *, now: datetime, detail: str | None) -> None:
+    """One event per strategy and session, instead of an error per name on every poll."""
+
+    self.budget_skip_count += 1
+    session_date = now.astimezone(monitor._ET).date()
+    notice = (config.strategy_id, session_date)
+    if notice in self.budget_notices:
+        return
+    self.budget_notices.add(notice)
+    await self._append(
+        repository,
+        config,
+        instrument_id="__universe__",
+        event_type="ai_v2_alpha_error",
+        state="budget_exhausted",
+        reason_code="AI_V2_ALPHA_BUDGET_EXHAUSTED",
+        observed_at=now,
+        payload={
+            "contract_id": AI_SHADOW_V2_CONTRACT,
+            "policy_version": AI_SHADOW_V2_POLICY_VERSION,
+            "detail": detail,
+            "research_only": True,
+            "execution_authority": False,
+        },
+        identity=(str(session_date), AI_SHADOW_V2_POLICY_VERSION, "budget-exhausted"),
+    )
+
+
 def _due_reasons(
     events: list[StrategyEvent],
     *,
@@ -470,14 +500,19 @@ def _due_reasons(
     previous = [item for item in (own, pair) if item is not None]
     reasons: list[str] = []
 
+    # An arm asks the model at most once per clock-aligned five-minute slot, so
+    # every due name shares the slot's call; a paired arm that has not decided
+    # in the slot yet still catches up.
+    slot = research_decision_slot(at)
+    if own is not None and research_decision_slot(own.observed_at) >= slot:
+        return ()
+
     if own is None or (paired_arm is not None and pair is None):
         reasons.append("paired_initial" if paired_arm is not None else "initial")
     if any(_previous_trigger_satisfied(item, structure=structure) for item in previous):
         reasons.append("paired_armed_trigger_satisfied" if paired_arm is not None else "armed_trigger_satisfied")
-    if previous:
-        oldest = min(item.observed_at.astimezone(at.tzinfo) for item in previous)
-        if at - oldest >= timedelta(minutes=5):
-            reasons.append("paired_five_minute_heartbeat" if paired_arm is not None else "five_minute_heartbeat")
+    if previous and min(research_decision_slot(item.observed_at) for item in previous) < slot:
+        reasons.append("paired_five_minute_heartbeat" if paired_arm is not None else "five_minute_heartbeat")
 
     if arm.startswith("full_session_") and paired_arm is not None:
         catalyst_decision = monitor._previous_decision(
@@ -727,12 +762,20 @@ async def _run_arm_policy(
             }
         )
 
+    decided_at = max(row["observed_at"] for row in prepared)
+    if not default_trading_ai_budget().can_acquire(AI_SHADOW_V2_CONTRACT):
+        await _record_budget_refusal(self, config, repository, now=decided_at, detail=None)
+        return None
+
     token = hardening._OBSERVED_SPREAD_BPS.set(observed_spreads)
     self.alpha_call_count += 1
     try:
         analyzer = self.alpha_analyzer_factory()
         try:
             decisions = await monitor.asyncio.to_thread(analyzer.assess, arm=arm, rows=analyzer_rows)
+        except TradingAIBudgetExhausted as exc:
+            await _record_budget_refusal(self, config, repository, now=decided_at, detail=str(exc))
+            return None
         except Exception as exc:
             self.last_error = f"{config.strategy_id}/{arm}: {type(exc).__name__}: {exc}"
             for row in prepared:

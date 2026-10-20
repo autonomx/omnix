@@ -310,6 +310,8 @@ def create_trading_strategy_operations_router(
                     "intraday_llm_output_token_count",
                     "intraday_llm_total_token_count",
                     "intraday_llm_estimated_usage_count",
+                    "intraday_llm_shared_assessment_count",
+                    "intraday_llm_budget_skip_count",
                     "auto_paper_ready_strategy_count",
                     "auto_paper_blocked_strategy_count",
                     "auto_paper_archive_not_ready_strategy_count",

@@ -418,7 +418,7 @@ def _union_refined(
     ):
         return result
 
-    from .gapper_dataset import GapperCandidate, freeze_gapper_universe
+    from .gapper_dataset import GapperCandidate, freeze_gapper_universe, live_shadow_universe_id
     from .strategy_dynamic_discovery_repository import (
         DynamicDiscoveryEventRepository,
         EVENT_DISCOVERY,
@@ -490,10 +490,7 @@ def _union_refined(
         ]
     )
     return freeze_gapper_universe(
-        universe_id=(
-            f"{frozen.universe_id}-live-shadow-"
-            f"{evaluation_time.astimezone(timezone.utc).strftime('%H%M%S')}"
-        ),
+        universe_id=live_shadow_universe_id(frozen.universe_id, evaluation_time),
         session_date=session_date,
         evaluation_time=evaluation_time,
         discovery_source="import",

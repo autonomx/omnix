@@ -314,3 +314,21 @@ def freeze_gapper_universe(
         candidates=ordered,
         source_fingerprint=fingerprint,
     )
+
+
+# Live shadow passes re-freeze the morning universe with the names discovery
+# added since, under a new id each time: "<base id>-live-shadow-<HHMMSS UTC>".
+LIVE_SHADOW_UNIVERSE_MARKER = "-live-shadow-"
+
+
+def live_shadow_universe_id(base_universe_id: str, evaluation_time: datetime) -> str:
+    return (
+        f"{base_universe_id}{LIVE_SHADOW_UNIVERSE_MARKER}"
+        f"{evaluation_time.astimezone(timezone.utc).strftime('%H%M%S')}"
+    )
+
+
+def universe_lineage_id(universe_id: str) -> str:
+    """The frozen universe a live shadow union was built from (the id itself otherwise)."""
+
+    return universe_id.split(LIVE_SHADOW_UNIVERSE_MARKER, 1)[0]

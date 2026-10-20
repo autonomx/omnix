@@ -37,6 +37,7 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 
 AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-1"
+AI_SHADOW_V3_CONTRACT = "trading.ai_shadow_v3.batch"
 RUNNER_GEOMETRY_CHALLENGER_VERSION = "runner-geometry-challenger-v1"
 
 V3State = Literal["avoid", "watch", "armed", "enter"]
@@ -340,7 +341,7 @@ class AIShadowV3Analyzer:
                 provider,
                 messages,
                 output_model=AIShadowV3BatchResponse,
-                contract_id="trading.ai_shadow_v3.batch",
+                contract_id=AI_SHADOW_V3_CONTRACT,
                 schema_name="ai_shadow_v3_batch_response",
                 model=model,
                 max_tokens=max(1200, 420 * len(rows)),
@@ -604,6 +605,7 @@ def agreement_cohort(
 
 
 __all__ = [
+    "AI_SHADOW_V3_CONTRACT",
     "AI_SHADOW_V3_POLICY_VERSION",
     "RUNNER_GEOMETRY_CHALLENGER_VERSION",
     "AIShadowV3AnalysisResult",

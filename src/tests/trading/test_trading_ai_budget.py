@@ -10,9 +10,12 @@ from app.apps.trading.evidence_storage import MemoryEvidenceBackend
 from app.apps.trading.structured_llm import sends_json_schema, trading_model_call, trading_response_format
 from app.apps.trading.trading_ai_budget import (
     AI_BUDGET_COUNTER_PROVIDER,
+    INTRADAY_LLM_SHADOW_CONTRACT,
     TradingAIBudget,
     TradingAIBudgetExhausted,
     contract_tier,
+    research_decision_slot,
+    tier_limits,
 )
 from app.providers import ChatMessage
 from app.providers.base import ChatResponse
@@ -26,22 +29,55 @@ def _budget(daily: int, clock=None) -> TradingAIBudget:
     return TradingAIBudget(backend=MemoryEvidenceBackend(), daily_calls=daily, clock=now)
 
 
-def test_tiers_spend_only_their_share_of_the_day() -> None:
-    assert (contract_tier(INTRADAY), contract_tier(SHADOW)) == ("high", "normal")
-    assert contract_tier("trading.unlisted.batch") == "normal"
-    budget = _budget(10)
-    for _ in range(6):
-        budget.acquire(SHADOW)  # normal: up to 60% of the day's calls
-    with pytest.raises(TradingAIBudgetExhausted) as normal:
+def test_each_tier_has_its_own_cap_and_the_live_reserve_is_kept() -> None:
+    assert (contract_tier(INTRADAY), contract_tier(INTRADAY_LLM_SHADOW_CONTRACT), contract_tier(SHADOW)) == (
+        "live", "shadow", "research",
+    )
+    assert contract_tier("trading.unlisted.batch") == "research"
+    assert tier_limits(20) == {"live": 20, "shadow": 3, "research": 14, "non_live_total": 15}
+    budget = _budget(20)
+    for _ in range(14):
+        budget.acquire(SHADOW)  # research: its own 70%
+    with pytest.raises(TradingAIBudgetExhausted) as research:
         budget.acquire(SHADOW)
-    assert (normal.value.tier, normal.value.used, normal.value.limit) == ("normal", 6, 6)
-    for _ in range(4):
-        budget.acquire(INTRADAY)  # high: the rest of the day
+    assert (research.value.tier, research.value.used, research.value.limit) == ("research", 14, 14)
+
+    budget.acquire(INTRADAY_LLM_SHADOW_CONTRACT)  # shadow: under its 15%, but the day reaches the reserve
+    assert budget.can_acquire(INTRADAY_LLM_SHADOW_CONTRACT) is False
+    with pytest.raises(TradingAIBudgetExhausted) as shadow:
+        budget.acquire(INTRADAY_LLM_SHADOW_CONTRACT)
+    assert (shadow.value.tier, shadow.value.used, shadow.value.limit) == ("shadow", 15, 15)
+
+    assert budget.can_acquire(INTRADAY) is True
+    for _ in range(5):
+        budget.acquire(INTRADAY)  # live: the reserved rest of the day
+    assert budget.can_acquire(INTRADAY) is False
     with pytest.raises(TradingAIBudgetExhausted):
         budget.acquire(INTRADAY)
     counters = budget.status()["counters"]
-    assert counters["calls"] == 10
-    assert counters["calls:high"] == 4 and counters["denied:normal"] == 1 and counters["denied:high"] == 1
+    assert counters["calls"] == 20
+    assert counters["calls:live"] == 5 and counters["calls:shadow"] == 1 and counters["calls:research"] == 14
+    # can_acquire counts nothing; only refused acquire calls are recorded.
+    assert counters["denied:research"] == 1 and counters["denied:shadow"] == 1 and counters["denied:live"] == 1
+
+
+def test_a_shadow_tier_cap_applies_before_the_reserve() -> None:
+    budget = _budget(20)
+    for _ in range(3):
+        budget.acquire(INTRADAY_LLM_SHADOW_CONTRACT)
+    with pytest.raises(TradingAIBudgetExhausted) as shadow:
+        budget.acquire(INTRADAY_LLM_SHADOW_CONTRACT)
+    assert (shadow.value.used, shadow.value.limit) == (3, 3)
+    budget.acquire(SHADOW)  # the research cap is separate
+
+
+def test_research_decision_slots_are_clock_aligned_five_minutes() -> None:
+    def at(hour: int, minute: int, second: int = 0) -> datetime:
+        return datetime(2026, 10, 20, hour, minute, second, tzinfo=timezone.utc)
+
+    assert research_decision_slot(at(13, 35)) == at(13, 35)
+    assert research_decision_slot(at(13, 39, 59)) == at(13, 35)
+    assert research_decision_slot(at(13, 40)) == at(13, 40)
 
 
 def test_the_count_is_per_eastern_day_and_zero_turns_the_budget_off() -> None:

@@ -29,7 +29,9 @@ from .strategy_intraday_learning import (
     IntradayLearningSnapshot,
 )
 from .strategy_intraday_llm import (
+    SHARED_INTRADAY_ASSESSMENTS,
     IntradayLLMAnalyzer,
+    SharedIntradayAssessments,
 )
 from .strategy_managed_finviz_shadow import (
     managed_finviz_shadow_autoprovision_enabled,
@@ -388,6 +390,17 @@ class StrategyRunHost:
         self.intraday_llm_output_token_count = 0
         self.intraday_llm_total_token_count = 0
         self.intraday_llm_estimated_usage_count = 0
+        self.intraday_llm_shared_assessment_count = 0
+        self.intraday_llm_budget_skip_count = 0
+        # Strategies of this process reuse each other's assessment of a name at
+        # the same bar (a custom analyzer factory gets a private cache).
+        self.intraday_llm_assessments = (
+            SHARED_INTRADAY_ASSESSMENTS
+            if intraday_llm_analyzer_factory is IntradayLLMAnalyzer
+            else SharedIntradayAssessments()
+        )
+        # (strategy id, session date) pairs whose budget refusal is recorded.
+        self.intraday_llm_budget_notices: set[tuple[str, date]] = set()
         self._last_evaluated_bar_end: dict[tuple[str, str, str], datetime] = {}
         self._last_diagnostic_log_at: dict[tuple[str, ...], datetime] = {}
         self.auto_paper_readiness_by_strategy: dict[str, dict[str, Any]] = {}

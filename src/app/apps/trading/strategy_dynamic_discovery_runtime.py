@@ -2057,7 +2057,7 @@ def _union_complete(config, repository, frozen, *, session_date, observed_at=Non
     ):
         return frozen
     from .strategy_dynamic_discovery_repository import DynamicDiscoveryEventRepository
-    from .gapper_dataset import GapperCandidate, freeze_gapper_universe
+    from .gapper_dataset import GapperCandidate, freeze_gapper_universe, live_shadow_universe_id
 
     event_repo = DynamicDiscoveryEventRepository(repository)
     latest = event_repo.latest_candidates(session_date)
@@ -2109,10 +2109,7 @@ def _union_complete(config, repository, frozen, *, session_date, observed_at=Non
         ]
     )
     return freeze_gapper_universe(
-        universe_id=(
-            f"{frozen.universe_id}-live-shadow-"
-            f"{evaluation_time.astimezone(timezone.utc).strftime('%H%M%S')}"
-        ),
+        universe_id=live_shadow_universe_id(frozen.universe_id, evaluation_time),
         session_date=session_date,
         evaluation_time=evaluation_time,
         discovery_source="import",

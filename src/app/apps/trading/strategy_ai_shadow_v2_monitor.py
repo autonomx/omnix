@@ -336,6 +336,9 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
         self.decision_count = 0
         self.fill_count = 0
         self.episode_count = 0
+        self.budget_skip_count = 0
+        # (strategy id, session date) pairs whose budget refusal is recorded.
+        self.budget_notices: set[tuple[str, object]] = set()
 
     async def _append(
         self, repository: TradingStrategyRepository, config: TradingStrategyConfigDocument,
@@ -1005,7 +1008,8 @@ class TradingAIShadowV2Monitor(ScheduledTradingMonitor):
             "last_error": self.last_error, "alpha_call_count": self.alpha_call_count,
             "catalyst_refresh_count": self.catalyst_refresh_count,
             "decision_count": self.decision_count, "fill_count": self.fill_count,
-            "episode_count": self.episode_count, "execution_authority": False,
+            "episode_count": self.episode_count, "budget_skip_count": self.budget_skip_count,
+            "execution_authority": False,
         }
 
 

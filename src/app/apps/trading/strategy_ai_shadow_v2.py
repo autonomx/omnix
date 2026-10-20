@@ -19,6 +19,7 @@ from .research.contracts import TradingEvidence, TradingResearchReport
 
 AI_SHADOW_V2_VERSION = "ai-shadow-v2"
 AI_SHADOW_V2_POLICY_VERSION = "ai-shadow-v2-roadmap-2"
+AI_SHADOW_V2_CONTRACT = "trading.ai_shadow_v2.batch"
 AIShadowV2Arm = Literal[
     "morning_control",
     "morning_catalyst",
@@ -740,7 +741,7 @@ class AIShadowV2Analyzer:
             provider,
             messages,
             output_model=AIShadowV2BatchResponse,
-            contract_id="trading.ai_shadow_v2.batch",
+            contract_id=AI_SHADOW_V2_CONTRACT,
             schema_name="ai_shadow_v2_batch_response",
             model=model,
             max_tokens=max(1200, 500 * len(rows)),
@@ -918,6 +919,7 @@ def evaluate_opportunity_episode(
 
 
 __all__ = [
+    "AI_SHADOW_V2_CONTRACT",
     "AI_SHADOW_V2_VERSION",
     "AIShadowV2AlphaDecision",
     "AIShadowV2Analyzer",

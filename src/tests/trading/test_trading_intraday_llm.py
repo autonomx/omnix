@@ -8,7 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.apps.trading import strategy_monitor_intraday_llm
+from app.apps.trading.evidence_storage import MemoryEvidenceBackend
+from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe, live_shadow_universe_id
 from app.apps.trading.strategies.models import (
     GapPullbackConfig,
     GapPullbackFeatures,
@@ -29,6 +31,12 @@ from app.apps.trading.strategy_intraday_llm import (
 )
 from app.apps.trading.strategy_monitor import TradingStrategyMonitor
 from app.apps.trading.strategy_repository import TradingStrategyConfigDocument
+from app.apps.trading.trading_ai_budget import (
+    INTRADAY_LLM_LIVE_CONTRACT,
+    INTRADAY_LLM_SHADOW_CONTRACT,
+    TradingAIBudget,
+    TradingAIBudgetExhausted,
+)
 
 
 OBSERVED = datetime(2026, 8, 28, 14, 0, tzinfo=timezone.utc)
@@ -493,6 +501,7 @@ class FixtureAnalyzer:
     def __init__(self, *, fail=False):
         self.fail = fail
         self.calls = 0
+        self.last_contract_id = None
         self.last_trigger_reasons = None
         self.last_payload_modes = None
 
@@ -504,11 +513,15 @@ class FixtureAnalyzer:
         previous_by_instrument=None,
         trigger_reasons_by_instrument=None,
         payload_modes_by_instrument=None,
+        contract_id=None,
     ):
         del ranks, previous_by_instrument
         self.calls += 1
+        self.last_contract_id = contract_id
         self.last_trigger_reasons = trigger_reasons_by_instrument
         self.last_payload_modes = payload_modes_by_instrument
+        if isinstance(self.fail, Exception):
+            raise self.fail
         if self.fail:
             raise RuntimeError("fixture provider unavailable")
         assessments = [
@@ -546,10 +559,10 @@ def _llm_strategy() -> TradingStrategyConfigDocument:
     )
 
 
-def _llm_universe():
+def _llm_universe(universe_id: str = "finviz-intraday-llm-test"):
     observed = OBSERVED - timedelta(minutes=10)
     return freeze_gapper_universe(
-        universe_id="finviz-intraday-llm-test",
+        universe_id=universe_id,
         session_date=OBSERVED.date(),
         evaluation_time=OBSERVED,
         discovery_source="finviz",
@@ -727,3 +740,104 @@ def test_entry_ready_can_bypass_short_batch_cooldown():
         )
     )
     assert succeeding.calls == 1
+
+
+def _monitor(analyzer):
+    monitor = TradingStrategyMonitor(intraday_llm_analyzer_factory=lambda: analyzer, interval_seconds=30)
+    monitor.current_run_id = "run-budget"
+    return monitor
+
+
+def test_live_shadow_universe_ids_keep_the_assessment_history():
+    # A live shadow pass re-freezes its universe under a new id every minute.
+    repository = MemoryEventRepository()
+    analyzer = FixtureAnalyzer()
+    monitor = _monitor(analyzer)
+    for minute in range(3):
+        at = OBSERVED + timedelta(minutes=minute)
+        universe = _llm_universe(live_shadow_universe_id("finviz-intraday-llm-test", at))
+        asyncio.run(monitor._run_intraday_llm(_llm_strategy(), repository, universe, [row("AAA", 1, observed_at=at)]))
+
+    # Later passes find the first assessment: no "initial" reason, no repeated call.
+    assert analyzer.calls == 1
+
+
+def test_auto_paper_strategies_spend_the_live_tier_and_shadow_strategies_their_own():
+    analyzer = FixtureAnalyzer()
+    monitor = _monitor(analyzer)
+    asyncio.run(monitor._run_intraday_llm(_llm_strategy(), MemoryEventRepository(), _llm_universe(), [row("AAA", 1)]))
+    assert analyzer.last_contract_id == INTRADAY_LLM_SHADOW_CONTRACT
+
+    live = _llm_strategy().model_copy(update={"mode": "auto_paper"})
+    asyncio.run(monitor._run_intraday_llm(live, MemoryEventRepository(), _llm_universe(), [row("BBB", 1)]))
+    assert analyzer.last_contract_id == INTRADAY_LLM_LIVE_CONTRACT
+
+
+def test_strategies_share_one_assessment_of_a_name_at_the_same_bar():
+    repository = MemoryEventRepository()
+    analyzer = FixtureAnalyzer()
+    monitor = _monitor(analyzer)
+    first = _llm_strategy()
+    second = first.model_copy(update={"strategy_id": "intraday-llm-test-live", "mode": "auto_paper"})
+    for strategy in (first, second):
+        asyncio.run(monitor._run_intraday_llm(strategy, repository, _llm_universe(), [row("AAA", 1)]))
+
+    assert analyzer.calls == 1
+    assert monitor.intraday_llm_call_count == 1
+    assert monitor.intraday_llm_shared_assessment_count == 1
+    by_strategy = {
+        (event.strategy_id, event.event_type): event for event in repository.events
+    }
+    assert by_strategy[(first.strategy_id, "intraday_llm")].payload["shared_from_strategy_id"] is None
+    reused = by_strategy[(second.strategy_id, "intraday_llm")].payload
+    assert reused["shared_from_strategy_id"] == first.strategy_id
+    assert reused["assessment"] == by_strategy[(first.strategy_id, "intraday_llm")].payload["assessment"]
+    batch = by_strategy[(second.strategy_id, "intraday_llm_batch")].payload
+    assert batch["model_called"] is False
+    assert batch["shared_instrument_ids"] == ["equity:NASDAQ:AAA"]
+    assert batch["token_usage"]["total_tokens"] == 0
+
+    # A later bar is not shared: the heartbeat asks the model again.
+    later = OBSERVED + timedelta(minutes=11)
+    asyncio.run(monitor._run_intraday_llm(second, repository, _llm_universe(), [row("AAA", 1, observed_at=later)]))
+    assert analyzer.calls == 2
+
+
+def test_a_refused_budget_skips_the_call_and_is_recorded_once(monkeypatch):
+    budget = TradingAIBudget(backend=MemoryEvidenceBackend(), daily_calls=20, clock=lambda: OBSERVED)
+    for _ in range(3):
+        budget.acquire(INTRADAY_LLM_SHADOW_CONTRACT)  # the shadow tier's whole cap
+    monkeypatch.setattr(strategy_monitor_intraday_llm, "default_trading_ai_budget", lambda: budget)
+    repository = MemoryEventRepository()
+    analyzer = FixtureAnalyzer()
+    monitor = _monitor(analyzer)
+    for minute in (0, 6):
+        at = OBSERVED + timedelta(minutes=minute)
+        asyncio.run(monitor._run_intraday_llm(_llm_strategy(), repository, _llm_universe(), [row("AAA", 1, observed_at=at)]))
+
+    assert analyzer.calls == 0
+    assert monitor.intraday_llm_call_count == 0
+    assert monitor.intraday_llm_error_count == 0
+    assert monitor.intraday_llm_budget_skip_count == 2
+    assert [(event.event_type, event.state) for event in repository.events] == [
+        ("intraday_llm_batch", "budget_exhausted"),
+    ]
+    assert repository.events[0].payload["contract_id"] == INTRADAY_LLM_SHADOW_CONTRACT
+
+    # The live tier still has its reserve.
+    live = _llm_strategy().model_copy(update={"strategy_id": "intraday-llm-test-live", "mode": "auto_paper"})
+    asyncio.run(monitor._run_intraday_llm(live, repository, _llm_universe(), [row("AAA", 1)]))
+    assert analyzer.calls == 1
+
+
+def test_a_budget_refusal_from_the_provider_path_is_not_an_error():
+    refused = TradingAIBudgetExhausted(INTRADAY_LLM_SHADOW_CONTRACT, "shadow", 3, 3)
+    repository = MemoryEventRepository()
+    monitor = _monitor(FixtureAnalyzer(fail=refused))
+    asyncio.run(monitor._run_intraday_llm(_llm_strategy(), repository, _llm_universe(), [row("AAA", 1)]))
+
+    assert monitor.intraday_llm_error_count == 0
+    assert [(event.event_type, event.state) for event in repository.events] == [
+        ("intraday_llm_batch", "budget_exhausted"),
+    ]
+    assert repository.events[0].payload["detail"] == str(refused)
