@@ -876,6 +876,10 @@ def register_tts_live_call_websocket(
             )
             return
 
+        # A durable live-speech lease for the whole call: GPU engine swaps wait while it exists.
+        from app.persistence.tts_swap import LiveSpeechLease
+
+        live_lease = await asyncio.to_thread(LiveSpeechLease("live_call", f"live-call:{id(websocket)}").start)
         try:
             await websocket.accept()
             state = ConnectionState(
@@ -920,3 +924,4 @@ def register_tts_live_call_websocket(
                     await websocket.close()
         finally:
             capacity.release()
+            await asyncio.to_thread(live_lease.close)

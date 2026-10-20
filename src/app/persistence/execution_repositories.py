@@ -874,6 +874,60 @@ class PostgresJobRepository:
         )
         return result
 
+    def defer(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+        delay_seconds: float,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Return an active lease to the queue after ``delay_seconds`` without spending an attempt.
+
+        For a handler that cannot run yet for a reason outside the job (its
+        TTS engine is being swapped in): the claim's attempt is given back, so
+        waiting never exhausts ``max_attempts``. The next claim reuses the
+        attempt number; the deferral stays in the job's event log.
+        """
+        delay = max(1.0, min(float(delay_seconds), 3600.0))
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs
+               SET status = 'queued', error = NULL,
+                   available_at = clock_timestamp() + (%s * INTERVAL '1 second'),
+                   attempt_count = GREATEST(attempt_count - 1, 0),
+                   lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL,
+                   completed_at = NULL, updated_at = clock_timestamp()
+             WHERE id = %s AND workspace_id = %s
+               AND lease_owner = %s AND lease_token = %s
+               AND status IN ('leased', 'running')
+               AND lease_expires_at > clock_timestamp()
+            RETURNING {_JOB_COLUMNS}
+            """,
+            (delay, job_id, context.workspace_id, worker_id, lease_token),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"job deferral rejected: {job_id}")
+        result = _job(row)
+        self.connection.execute(
+            """
+            UPDATE omnix_job_attempts
+               SET status = 'deferred', completed_at = clock_timestamp(), error = %s::jsonb
+             WHERE job_id = %s AND lease_token = %s
+            """,
+            (_json({"code": "job_deferred", "message": str(reason or "Job deferred"), "retryable": True}),
+             job_id, lease_token),
+        )
+        self._event(
+            context,
+            job_id,
+            "job.deferred",
+            {"worker_id": worker_id, "delay_seconds": delay, "reason": reason},
+        )
+        return result
+
     def request_cancel(self, context: TenantContext, job_id: str) -> dict[str, Any]:
         row = self.connection.execute(
             f"""

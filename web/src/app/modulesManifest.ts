@@ -10,6 +10,7 @@ import { sttModule } from '../features/stt/module';
 import { tradingModule } from '../features/trading/module';
 import { voiceCloningModule } from '../features/voice-cloning/module';
 import { voiceModule } from '../features/voice/module';
+import { dubbingModule } from '../features/dubbing/module';
 
 /**
  * Every workspace module, in navigation order (WP-9.7). Each line registers
@@ -34,4 +35,5 @@ export const moduleManifests = [
   reportsModule,
   settingsModule,
   diagnosticsModule,
+  dubbingModule,
 ] as const;

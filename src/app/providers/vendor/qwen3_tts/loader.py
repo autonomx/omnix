@@ -121,11 +121,15 @@ def _resolve_model_source(model_name: str) -> str:
     """
     Prefer a known local directory when possible so we can validate artifacts before load.
     Resolution order:
-      1. explicit env override
-      2. explicit local path in config
-      3. locally cached HF snapshot
-      4. raw repo id / original model name
+      1. an explicit local directory that exists (another checkpoint, such as VoiceDesign, names its own)
+      2. explicit env override (the selected engine's checkpoint)
+      3. explicit local path in config
+      4. locally cached HF snapshot
+      5. raw repo id / original model name
     """
+    requested = str(model_name or "").strip()
+    if requested and _looks_like_local_model_path(requested) and Path(requested).expanduser().is_dir():
+        return str(Path(requested).expanduser().resolve())
     env_override = _find_env_model_override(model_name)
     if env_override is not None:
         return str(env_override)

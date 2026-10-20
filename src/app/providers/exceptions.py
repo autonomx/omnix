@@ -20,6 +20,18 @@ class ProviderNotAvailableError(ProviderError):
     pass
 
 
+class TtsEngineNotLoaded(ProviderError):
+    """A job pinned to one TTS engine found another one loaded; nothing was switched."""
+
+    def __init__(self, requested: str, loaded: str = "") -> None:
+        self.requested = requested
+        self.loaded = loaded
+        loaded_note = f" (the loaded engine is {loaded})" if loaded else ""
+        super().__init__(
+            f"TTS engine {requested} is not loaded{loaded_note}; select it in Voice Studio and try again"
+        )
+
+
 class StreamInterruptedError(ProviderError):
     """Stream was interrupted or cancelled."""
     pass

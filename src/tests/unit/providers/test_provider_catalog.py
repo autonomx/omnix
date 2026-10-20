@@ -16,7 +16,7 @@ def test_registries_hold_exactly_the_catalog() -> None:
     audio.discover_providers()
 
     assert sorted(llm._providers) == sorted(spec.id for spec in catalog.specs("llm"))
-    assert sorted(audio._tts_providers) == ["faster-qwen3-tts", "fish-s2-pro"]
+    assert sorted(audio._tts_providers) == ["faster-qwen3-tts", "fish-s2-pro", "omnivoice", "qwen3-tts-voicedesign"]
     assert sorted(audio._stt_providers) == ["parakeet"]
 
 

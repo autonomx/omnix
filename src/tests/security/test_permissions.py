@@ -59,9 +59,15 @@ def test_every_route_requires_a_permission_unless_public(gateway) -> None:
     app, authenticator = gateway
     client = _client(app, authenticator, ("nobody",))
     checked = 0
+    # Feature-declared public paths take their own credential, never a session: still refused.
+    declared = set(getattr(app.state, "public_route_paths", ()))
     for context in iter_route_contexts(app.router.routes):
         route = context.original_route
         path = context.path or route.path
+        if path in declared:
+            for method in sorted(getattr(route, "methods", None) or {"GET"}):
+                assert client.request(method, _concrete(path)).status_code == 401, (method, path)
+            continue
         if _public(path) or path in BUILT_IN_DOCS:
             continue
         if "WebSocket" in type(route).__name__:

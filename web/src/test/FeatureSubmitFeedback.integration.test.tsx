@@ -14,6 +14,13 @@ import { VoiceCloningWorkspace } from '../features/voice-cloning/VoiceCloningWor
 import { VoiceWorkspace } from '../features/voice/VoiceWorkspace';
 import { createTestQueryClient } from './renderWithProviders';
 
+// CodeMirror needs a real layout engine; jsdom gets a textarea with the same contract.
+vi.mock('../features/voice/VoiceScriptEditor', () => ({
+  VoiceScriptEditor: ({ value, onChange, label = 'Script' }: { value: string; onChange: (value: string) => void; label?: string }) => (
+    <textarea aria-label={label} value={value} onChange={(event) => onChange(event.currentTarget.value)} />
+  ),
+}));
+
 function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
 }
@@ -110,7 +117,7 @@ function installFailingJobApiMock() {
     }
 
     if (path === '/api/assets') {
-      return Response.json({ assets: [] });
+      return Response.json({ assets: [{ id: 'asset:input', module: 'voice', type: 'audio', mime_type: 'audio/wav', file_name: 'input.wav', created_at: '2026-06-14T00:00:00Z' }] });
     }
 
     if (path === '/api/reports') {
@@ -159,7 +166,7 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<VoiceWorkspace module={moduleById('voice')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Text-to-Speech (Multi-Voice)' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Speak' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Narrator: Read this aloud.' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
 
@@ -171,7 +178,8 @@ describe('provider-backed feature submit feedback', () => {
     renderWithProviders(<SttWorkspace module={moduleById('stt')} />);
 
     expect(await screen.findByRole('heading', { name: 'Transcription' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Source path'), { target: { value: 'resources/data/input.wav' } });
+    fireEvent.change(await screen.findByLabelText('Audio asset'), { target: { value: 'asset:input' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Queue transcription' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Queue transcription' }));
 
     expect(await screen.findByText(/STT request failed with status 500/)).toBeInTheDocument();
@@ -181,11 +189,13 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<VoiceCloningWorkspace module={moduleById('voice-cloning')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Voice profile' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'Narrator profile' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue voice profile' }));
+    expect(await screen.findByRole('region', { name: 'Clone a Voice' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Voice Name'), { target: { value: 'Narrator profile' } });
+    fireEvent.change(screen.getByLabelText(/Audio sample/), { target: { files: [new File(['voice sample'], 'narrator.wav', { type: 'audio/wav' })] } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Clone' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Create Clone' }));
 
-    expect(await screen.findByText(/Voice profile request failed with status 500/)).toBeInTheDocument();
+    expect(await screen.findByText(/Voice clone request failed with status 500/)).toBeInTheDocument();
   });
 
   it('surfaces image generation job failures', async () => {

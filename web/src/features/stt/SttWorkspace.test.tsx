@@ -100,12 +100,16 @@ describe('SttWorkspace', () => {
     renderStt();
 
     expect(await screen.findByRole('heading', { name: 'Transcription' })).toBeInTheDocument();
-    expect(await screen.findByText('Parakeet STT')).toBeInTheDocument();
+    // One engine: no picker, just its name. No server-path field; the language is a real choice now.
+    expect(await screen.findByText('Engine: Parakeet STT')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'transcript / stt' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Provider')).toBeNull();
+    expect(screen.queryByLabelText('Source path')).toBeNull();
+    expect(screen.getByLabelText('Language')).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'de' } });
+    expect(screen.getByRole('button', { name: 'Queue transcription' })).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'parakeet' } });
     fireEvent.change(screen.getByLabelText('Audio asset'), { target: { value: 'asset:audio' } });
-    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'en' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue transcription' }));
 
     expect(await screen.findByText('STT job queued: job:stt')).toBeInTheDocument();
@@ -118,7 +122,10 @@ describe('SttWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"type":"stt.transcribe"');
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:stt"');
       expect(createCall?.[1]?.body).toContain('"asset_id":"asset:audio"');
-      expect(createCall?.[1]?.body).toContain('"provider_id":"parakeet"');
+      expect(createCall?.[1]?.body).not.toContain('source_path');
+      expect(createCall?.[1]?.body).not.toContain('alignment');
+      expect(createCall?.[1]?.body).toContain('"timed":true');
+      expect(createCall?.[1]?.body).toContain('"language":"de"');
     });
   });
 
@@ -133,8 +140,7 @@ describe('SttWorkspace', () => {
     if (!module) throw new Error('STT module is missing');
     renderWithProviders(<SttWorkspace module={module} />);
 
-    expect(await screen.findByText('Parakeet STT')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'parakeet' } });
+    expect(await screen.findByText('Engine: Parakeet STT')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Audio asset'), { target: { value: 'asset:audio' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue transcription' }));
 

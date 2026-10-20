@@ -43,6 +43,8 @@ role to permission list; `owner` cannot be changed).
 | `client:report` | Report browser errors | yes | yes |  |  | yes | yes |  |  | yes |
 | `companion:read` | Desktop companion (read) | yes | yes |  |  | yes | yes |  |  | yes |
 | `companion:write` | Desktop companion (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `dubbing:read` | Dubbing (read) | yes | yes |  |  | yes | yes |  |  | yes |
+| `dubbing:write` | Dubbing (write) | yes | yes |  |  | yes | yes |  |  |  |
 | `image:generate` | Generate images | yes | yes |  |  | yes | yes |  |  |  |
 | `image:models:admin` | Image model management | yes | yes |  |  |  |  |  |  |  |
 | `image:read` | Image workspace (read) | yes | yes |  |  | yes | yes |  |  | yes |
@@ -92,6 +94,7 @@ role to permission list; `owner` cannot be changed).
 | chat | `chat:read` | `chat:write` |
 | companion_activity | `companion:read` | `companion:write` |
 | desktop_companion | `companion:read` | `companion:write` |
+| dubbing | `dubbing:read` | `dubbing:write` |
 | hermes | `assistant:read` | `assistant:write` |
 | image | `image:read` | `image:generate` |
 | live_speech | `voice:read` | `voice:write` |

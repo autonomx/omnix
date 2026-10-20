@@ -125,7 +125,9 @@ def test_the_engine_list_marks_the_selected_engine_and_its_install_state(monkeyp
 
     assert listing["selected"] == "fish-s2-pro"
     by_id = {engine["id"]: engine for engine in listing["engines"]}
-    assert set(by_id) == {"faster-qwen3-tts", "fish-s2-pro"}
+    # The voice-design engine is a tool, never listed for selection.
+    assert set(by_id) == {"faster-qwen3-tts", "fish-s2-pro", "omnivoice"}
+    assert by_id["omnivoice"]["needs_transcripts"] is True
     assert by_id["fish-s2-pro"]["selected"] is True
     assert by_id["fish-s2-pro"]["installed"] is False
     assert by_id["fish-s2-pro"]["needs_transcripts"] is True

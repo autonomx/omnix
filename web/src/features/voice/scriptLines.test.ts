@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseScriptSegments, parseScriptSpeakers } from './scriptLines';
+import vectors from './scriptGrammar.vectors.json';
 
 describe('Voice Studio script parsing', () => {
   it('detects one speaker per tagged character and keeps per-line stages', () => {
@@ -22,5 +23,12 @@ describe('Voice Studio script parsing', () => {
   it('assumes a single Narrator speaker when no character is specified', () => {
     expect(parseScriptSpeakers('hello there')).toEqual([{ name: 'Narrator', count: 1 }]);
     expect(parseScriptSegments('hello there')).toEqual([{ index: 0, speaker: 'Narrator', text: 'hello there' }]);
+  });
+});
+
+
+describe('Voice Studio script grammar vectors (shared with platform/voice/script.py)', () => {
+  it.each(vectors.map((vector) => [vector.name, vector] as const))('%s', (_name, vector) => {
+    expect(parseScriptSegments(vector.script)).toEqual(vector.segments);
   });
 });

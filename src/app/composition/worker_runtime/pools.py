@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from app.jobs.models import ResourceClass
 
 
-DEFAULT_POOLS = "llm=2,image=1,tts=1,research=2,cpu=4,stt=1"
+DEFAULT_POOLS = "llm=2,image=1,tts=1,research=2,cpu=4,stt=1,audio=1"
 RESOURCE_POOLS: dict[str, tuple[str, ...]] = {
     "llm": (ResourceClass.GPU_LLM.value,),
     "image": (ResourceClass.GPU_IMAGE.value,),
@@ -17,6 +17,7 @@ RESOURCE_POOLS: dict[str, tuple[str, ...]] = {
         ResourceClass.GPU_TTS_OFFLINE.value,
     ),
     "stt": (ResourceClass.GPU_STT.value,),
+    "audio": (ResourceClass.GPU_AUDIO.value,),
     "research": (ResourceClass.NETWORK.value,),
     "cpu": (
         ResourceClass.CPU.value,

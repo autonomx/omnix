@@ -23,7 +23,7 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
     quickSearchProgress, refreshActivityPanel, register, runtimeConfig, selectedPersonalityLabel, selectedSessionId,
     sendMutation, sessionsLoading, setActiveUtilityPanel, setChatImageError, setIsChatFullscreen,
     setPastedChatImages, setPastedChatTextFile, setSelectedSessionId, showAssistantView, submitComposerMessage,
-    toggleLiveCallFromControls, ttsOutputLabel, updateAssistantSettings, voiceProfiles,
+    toggleLiveCallFromControls, ttsOutputLabel, updateAssistantSettings, voiceProfiles, getValues, setValue,
   } = ws;
   // Widgets answer through user messages: the latest reply's widgets are active, and each
   // widget shows the submission that answered it (GUI-5.1, GUI-5.3).
@@ -98,6 +98,10 @@ export function ChatConversation({ ws }: { ws: ChatWorkspaceModel }) {
         onPaste={handleComposerPaste}
         liveVoiceActive={liveVoiceActive}
         onToggleCall={toggleLiveCallFromControls}
+        onDictated={(text) => {
+          const current = String(getValues('content') ?? '');
+          setValue('content', current.trim() ? `${current.replace(/\s+$/, '')} ${text}` : text, { shouldDirty: true, shouldValidate: true });
+        }}
         sendPending={sendMutation.isPending}
         chatJobInProgress={chatJobInProgress}
       />

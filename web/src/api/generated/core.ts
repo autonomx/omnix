@@ -850,6 +850,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Job
+         * @description Queue a new job with a failed or cancelled job's inputs; the original stays as it ended.
+         *
+         *     The copy goes through the same submission checks as ``POST /api/jobs``
+         *     (the handler's input model and submission policy), so a retry can never
+         *     do what a fresh submission could not.
+         */
+        post: operations["retry_job_api_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/model-residency": {
         parameters: {
             query?: never;
@@ -1473,7 +1497,7 @@ export interface components {
          * AssetType
          * @enum {string}
          */
-        AssetType: "audio" | "voice_sample" | "voice_profile" | "image" | "transcript" | "story" | "podcast_script" | "report" | "rpg_checkpoint" | "run_log" | "export" | "settings_artifact" | "source" | "cover" | "render" | "chapter-audio" | "other";
+        AssetType: "audio" | "voice_sample" | "voice_profile" | "image" | "transcript" | "story" | "podcast_script" | "report" | "rpg_checkpoint" | "run_log" | "export" | "settings_artifact" | "source" | "cover" | "render" | "chapter-audio" | "voice_take" | "other";
         /**
          * AssistantToolAction
          * @description Backend-owned action definition for an assistant tool.
@@ -3541,7 +3565,7 @@ export interface components {
          * ResourceClass
          * @enum {string}
          */
-        ResourceClass: "cpu" | "gpu:llm" | "gpu:tts" | "gpu:tts:realtime" | "gpu:tts:preview" | "gpu:tts:offline" | "gpu:stt" | "gpu:image" | "network" | "rpg_campaign_genesis";
+        ResourceClass: "cpu" | "gpu:llm" | "gpu:tts" | "gpu:tts:realtime" | "gpu:tts:preview" | "gpu:tts:offline" | "gpu:stt" | "gpu:audio" | "gpu:image" | "network" | "rpg_campaign_genesis";
         /**
          * RetentionRunDiagnostics
          * @description The newest retention run; the error is reported by class only.
@@ -5493,6 +5517,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetiredWorkerProtocolResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_job_api_jobs__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRecord"];
                 };
             };
             /** @description Validation Error */

@@ -1,0 +1,16 @@
+# Voice Studio's audio service (Phase 4): vocal isolation, speech enhancement, watermarking.
+# Torch matches the STT service so both use the CUDA 12.4 wheels.
+torch==2.6.0+cu124
+torchaudio==2.6.0+cu124
+# Mel-Band RoFormer and Demucs (htdemucs_ft) separation, one package for both.
+audio-separator[gpu]==0.47.1
+# Speech enhancement: sherpa-onnx's offline denoiser running GTCRN (Apache-2.0, ONNX).
+# DeepFilterNet's package is stale, and ClearerVoice pins numpy<2 and other exact versions
+# that conflict with audio-separator.
+sherpa-onnx==1.13.8
+# Watermark embedding and detection.
+audioseal==0.2.0
+fastapi
+uvicorn[standard]
+python-multipart
+soundfile

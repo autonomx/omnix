@@ -501,3 +501,36 @@ def test_gateway_job_list_pages_with_cursor_and_filters(tmp_path: Path) -> None:
     assert [job["id"] for job in client.get("/api/jobs", params={"type": "diagnostics.echo"}).json()["jobs"]] == [other]
     assert client.get("/api/jobs", params={"limit": 201}).status_code == 422
     assert client.get("/api/jobs", params={"cursor": "bad"}).status_code == 400
+
+
+def test_retry_queues_a_fresh_copy_of_a_cancelled_job_only(tmp_path: Path) -> None:
+    client = _client(tmp_path / "jobs.sqlite")
+    created = _create_job(client)
+
+    # A job that is still queued is not retried: it can still run.
+    assert client.post(f"/api/jobs/{created['id']}/retry").status_code == 409
+    assert client.post(f"/api/jobs/{created['id']}/cancel", json={"reason": "user_request"}).status_code == 200
+
+    response = client.post(f"/api/jobs/{created['id']}/retry")
+    assert response.status_code == 200
+    retried = response.json()
+    assert retried["id"] != created["id"]
+    assert retried["status"] == "queued"
+    assert retried["type"] == created["type"] and retried["input_payload"] == created["input_payload"]
+    assert client.get(f"/api/jobs/{created['id']}").json()["status"] == "canceled"
+    assert client.post("/api/jobs/job:missing/retry").status_code == 404
+
+
+def test_a_retry_starts_its_stages_afresh(tmp_path: Path) -> None:
+    client = _client(tmp_path / "jobs.sqlite")
+    created = client.post("/api/jobs", json={
+        "module": "image", "type": "image.generate", "resource_class": "gpu:image",
+        "input_payload": {"prompt": "tiny smoke test"},
+        "stages": [{"id": "render", "label": "Render", "resource_class": "gpu:image",
+                    "progress": {"current": 3, "total": 4}, "checkpoint_ref": {"step": 3}}],
+    }).json()
+    assert client.post(f"/api/jobs/{created['id']}/cancel", json={"reason": "user_request"}).status_code == 200
+
+    stage = client.post(f"/api/jobs/{created['id']}/retry").json()["stages"][0]
+    assert stage["id"] == "render" and stage["label"] == "Render" and stage["status"] == "queued"
+    assert stage["checkpoint_ref"] is None and stage["progress"]["current"] == 0

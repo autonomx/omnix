@@ -7,6 +7,13 @@ export const ENGINES_QUERY_KEY = ['voice', 'tts-engines'] as const;
 const BUSY_PHASES: ReadonlySet<TtsEngineSwitchPhase> = new Set(['unloading', 'preparing_voices', 'loading']);
 
 /** Choose Omnix's TTS engine. One engine is loaded at a time; the choice becomes the default everywhere. */
+/** The picker lists engines by what they are best at. */
+const ENGINE_GROUPS = [
+  { id: 'clone', label: 'Voice cloning' },
+  { id: 'delivery', label: 'Expressive (delivery directions)' },
+  { id: 'many_languages', label: 'Many languages' },
+] as const;
+
 export function TtsEnginePicker() {
   const queryClient = useQueryClient();
   const enginesQuery = useQuery({
@@ -45,11 +52,18 @@ export function TtsEnginePicker() {
           value={data?.selected ?? ''}
           onChange={(event) => selectMutation.mutate(event.currentTarget.value)}
         >
-          {data?.engines.map((engine) => (
-            <option key={engine.id} value={engine.id} disabled={!engine.installed && !engine.selected} title={engine.unavailable_reason || engine.description}>
-              {engine.label}{engine.installed ? '' : ' (not installed)'}
-            </option>
-          ))}
+          {ENGINE_GROUPS.map((group) => {
+            const engines = (data?.engines ?? []).filter((engine) => (engine.group ?? 'clone') === group.id);
+            return engines.length ? (
+              <optgroup key={group.id} label={group.label}>
+                {engines.map((engine) => (
+                  <option key={engine.id} value={engine.id} disabled={!engine.installed && !engine.selected} title={engine.unavailable_reason || engine.description}>
+                    {engine.label}{engine.installed ? '' : ' (not installed)'}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null;
+          })}
         </select>
       </label>
       {data ? <EngineSwitchStatus data={data} /> : null}

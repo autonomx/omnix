@@ -651,6 +651,34 @@
     "type": "string"
   },
   {
+    "default": "1",
+    "description": "Controls audio enabled for launcher.",
+    "feature": "launcher",
+    "name": "OMNIX_AUDIO_ENABLED",
+    "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls audio max upload bytes for launcher.",
+    "feature": "launcher",
+    "name": "OMNIX_AUDIO_MAX_UPLOAD_BYTES",
+    "type": "string"
+  },
+  {
+    "default": "5401",
+    "description": "Controls audio port for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_AUDIO_PORT",
+    "type": "integer"
+  },
+  {
+    "default": "http://127.0.0.1:5401",
+    "description": "Controls audio url for launcher.",
+    "feature": "launcher",
+    "name": "OMNIX_AUDIO_URL",
+    "type": "string"
+  },
+  {
     "default": "false",
     "description": "Controls auth cookie secure for security.",
     "feature": "security",
@@ -953,8 +981,8 @@
   },
   {
     "default": "",
-    "description": "Controls ffmpeg for audiobook, tooling.",
-    "feature": "audiobook, tooling",
+    "description": "Controls ffmpeg for kernel, tooling.",
+    "feature": "kernel, tooling",
     "name": "OMNIX_FFMPEG",
     "type": "string"
   },
@@ -2419,6 +2447,13 @@
     "description": "Controls voice debug log dir for providers.",
     "feature": "providers",
     "name": "OMNIX_VOICE_DEBUG_LOG_DIR",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls voice watch folders for voice.",
+    "feature": "voice",
+    "name": "OMNIX_VOICE_WATCH_FOLDERS",
     "type": "string"
   },
   {

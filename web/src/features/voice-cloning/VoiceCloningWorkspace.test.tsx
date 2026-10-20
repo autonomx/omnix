@@ -10,11 +10,7 @@ import { createTestQueryClient } from '../../test/renderWithProviders';
 function renderVoiceCloning() {
   const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'voice-cloning');
-
-  if (!module) {
-    throw new Error('Voice Cloning module is missing');
-  }
-
+  if (!module) throw new Error('Voice Cloning module is missing');
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <QueryClientProvider client={queryClient}>
@@ -33,122 +29,44 @@ afterEach(() => {
 });
 
 describe('VoiceCloningWorkspace', () => {
-  it('loads central defaults, resets edits, and preserves explicit job overrides', async () => {
+  it('clones through the same working job as Voice Studio, with central defaults', async () => {
+    let request: Record<string, unknown> | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-
       if (path === '/api/settings/profile') {
-        return Response.json({
-          success: true,
-          provider: 'lmstudio',
-          audio_provider_tts: 'faster-qwen3-tts',
-          audio_provider_stt: 'parakeet',
-          settings: {
-            settings_control_center: {
-              revision: 'voice-defaults-r1',
-              global: { providers: { voiceCloning: 'qwen-voice' } },
-              voice: { cloningLanguage: 'French', cloningQuality: 'Standard' },
-            },
-          },
-        });
+        return Response.json({ success: true, settings: { settings_control_center: {
+          revision: 'voice-defaults-r1',
+          global: { providers: { voiceCloning: 'qwen-voice' } },
+          voice: { cloningLanguage: 'French', cloningQuality: 'Standard' },
+        } } });
       }
-
-      if (path === '/api/providers') {
-        return Response.json({
-          providers: [
-            {
-              id: 'qwen-voice',
-              label: 'Qwen Voice',
-              family: 'tts',
-              source: 'settings',
-              status: 'configured',
-              capabilities: ['tts', 'voice_cloning'],
-            },
-          ],
-          models: [],
-        });
-      }
-
       if (path === '/api/jobs' && init?.method === 'POST') {
-        return Response.json({
-          id: 'job:voice-profile',
-          module: 'voice-cloning',
-          type: 'voice-cloning.train',
-          status: 'queued',
-          resource_class: 'gpu:tts',
-          created_at: '2026-06-14T00:00:01Z',
-          updated_at: '2026-06-14T00:00:01Z',
-          priority: 0,
-        });
+        request = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return Response.json({ id: 'job:clone', module: 'voice-cloning', type: 'voice-cloning.create-profile', status: 'queued', resource_class: 'gpu:tts', created_at: '2026-06-14T00:00:00Z', updated_at: '2026-06-14T00:00:00Z', priority: 0 });
       }
-
-      if (path === '/api/jobs') {
-        return Response.json({ jobs: [] });
-      }
-
+      if (path === '/api/jobs') return Response.json({ jobs: [] });
       if (path === '/api/assets') {
-        return Response.json({
-          assets: [
-            {
-              id: 'asset:sample',
-              module: 'voice-cloning',
-              type: 'voice_sample',
-              mime_type: 'audio/wav',
-              file_name: 'ref.wav',
-              created_at: '2026-06-14T00:00:00Z',
-            },
-            {
-              id: 'asset:profile',
-              module: 'voice-cloning',
-              type: 'voice_profile',
-              mime_type: 'application/json',
-              file_name: 'narrator.json',
-              created_at: '2026-06-14T00:00:00Z',
-            },
-          ],
-        });
+        return Response.json({ assets: [{ id: 'voice-cloning:narrator', module: 'voice-cloning', type: 'voice_profile', mime_type: 'audio/wav', file_name: 'narrator.wav', metadata: { profile_name: 'Narrator' }, created_at: '2026-06-14T00:00:00Z' }] });
       }
-
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
 
     renderVoiceCloning();
-
-    expect(await screen.findByRole('heading', { name: 'Voice profile' })).toBeInTheDocument();
-    expect(await screen.findByText('Qwen Voice')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'voice_profile / voice-cloning' })).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Provider')).toHaveValue('qwen-voice');
-      expect(screen.getByLabelText('Language')).toHaveValue('French');
-      expect(screen.getByLabelText('Quality')).toHaveValue('Standard');
-    });
-
-    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'Spanish' } });
-    fireEvent.change(screen.getByLabelText('Quality'), { target: { value: 'Draft' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Reset defaults' }));
-    expect(screen.getByLabelText('Language')).toHaveValue('French');
+    expect(await screen.findByRole('region', { name: 'Clone a Voice' })).toBeInTheDocument();
+    expect(await screen.findByText('Narrator')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Language / Accent')).toHaveValue('French'));
     expect(screen.getByLabelText('Quality')).toHaveValue('Standard');
+    // Preview and Use belong to Voice Studio, which has the engine and the script.
+    expect(screen.queryByRole('button', { name: 'Use' })).toBeNull();
 
-    fireEvent.change(screen.getByLabelText('Sample asset'), { target: { value: 'asset:sample' } });
-    fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'Narrator' } });
-    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'Spanish' } });
-    fireEvent.change(screen.getByLabelText('Quality'), { target: { value: 'Draft' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue voice profile' }));
-
-    expect(await screen.findByText('Voice profile job queued: job:voice-profile')).toBeInTheDocument();
-
-    await waitFor(() => {
-      const createCall = fetchMock.mock.calls.find(
-        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
-      );
-      expect(createCall?.[1]?.body).toContain('"module":"voice-cloning"');
-      expect(createCall?.[1]?.body).toContain('"type":"voice-cloning.train"');
-      expect(createCall?.[1]?.body).toContain('"sample_asset_id":"asset:sample"');
-      expect(createCall?.[1]?.body).toContain('"provider_id":"qwen-voice"');
-      expect(createCall?.[1]?.body).toContain('"language":"Spanish"');
-      expect(createCall?.[1]?.body).toContain('"quality":"Draft"');
-    });
+    fireEvent.change(screen.getByLabelText('Voice Name'), { target: { value: 'Maya' } });
+    fireEvent.change(screen.getByLabelText(/Audio sample/), { target: { files: [new File(['voice sample'], 'maya.wav', { type: 'audio/wav' })] } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Clone' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Create Clone' }));
+    await waitFor(() => expect(request).toBeDefined());
+    expect(request?.type).toBe('voice-cloning.create-profile');
+    expect((request?.input_payload as Record<string, unknown>).provider_id).toBe('qwen-voice');
+    expect((request?.input_payload as Record<string, unknown>).language).toBe('French');
   });
 });

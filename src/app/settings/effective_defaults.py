@@ -157,7 +157,6 @@ def _apply_voice_defaults(payload: dict[str, Any], profile: SettingsProfile) -> 
 def _apply_stt_defaults(payload: dict[str, Any], profile: SettingsProfile) -> None:
     set_if_missing(payload, "provider_id", profile.global_settings.providers.stt)
     set_if_missing(payload, "language", profile.stt.language)
-    set_if_missing(payload, "alignment", profile.stt.alignment)
     set_if_missing(payload, "save_transcript", profile.stt.save_transcript)
 
 

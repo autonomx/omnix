@@ -2,7 +2,8 @@
 
 The service serves one local engine at a time (Qwen3-TTS or Fish S2 Pro).
 Every request names the engine this facade stands for; the service switches
-to it first when it is serving the other one.
+to it first when it is serving the other one, unless the facade was built with
+``require_loaded`` (a pinned job), when the service refuses with 409 instead.
 """
 from __future__ import annotations
 
@@ -36,9 +37,11 @@ class TtsServiceSaturated(RuntimeError):
 class QwenHttpGatewayProvider:
     provider_name = 'faster-qwen3-tts'
 
-    def __init__(self, base_url: str, provider_name: str = 'faster-qwen3-tts'):
+    def __init__(self, base_url: str, provider_name: str = 'faster-qwen3-tts', *, require_loaded: bool = False):
         self.base_url = base_url.strip().strip('"').strip("'").replace(' ', '').rstrip('/')
         self.provider_name = provider_name
+        # A pinned facade never makes the service switch engines.
+        self.require_loaded = require_loaded
         # Shares the TTS service's connection pool with app.tts_http_client.
         self.http = shared_http_client("tts-service")
 
@@ -104,12 +107,21 @@ class QwenHttpGatewayProvider:
         # base64 form is built here, in process, not on the wire.
         payload = {'text': text, 'speaker': speaker or 'default', 'language': language or 'en',
                    'provider': self.provider_name}
+        if self.require_loaded:
+            payload['require_loaded'] = True
         overrides = generation_overrides(kwargs)
         if overrides:
             payload['parameters'] = overrides
+        if kwargs.get('speaker_blend'):
+            payload['speaker_blend'] = list(kwargs['speaker_blend'])
         response = self.http.post(self.base_url + '/api/tts/generate_audio',
             json=payload, timeout=120,
             headers={**service_headers(), 'Accept': 'audio/wav, application/json;q=0.5'})
+        if self.require_loaded and response.status_code == 409:
+            from app.providers.exceptions import TtsEngineNotLoaded
+
+            detail = response.json() if 'json' in response.headers.get('content-type', '') else {}
+            raise TtsEngineNotLoaded(self.provider_name, loaded=str(detail.get('loaded') or ''))
         response.raise_for_status()
         if response.headers.get('content-type', '').startswith('audio/wav'):
             result = {

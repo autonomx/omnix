@@ -11,8 +11,8 @@ function engines(selected: string, phase: TtsEnginesResponse['switch']['phase'],
   return {
     selected,
     engines: [
-      { id: 'faster-qwen3-tts', label: 'Faster Qwen3 TTS', description: '', selected: selected === 'faster-qwen3-tts', installed: true, unavailable_reason: '', needs_transcripts: false, voice_controls: ['stability', 'similarity', 'style', 'speed', 'pitch', 'volume'] },
-      { id: 'fish-s2-pro', label: 'Fish Audio S2 Pro', description: '', selected: selected === 'fish-s2-pro', installed: true, unavailable_reason: '', needs_transcripts: true, voice_controls: ['stability', 'style', 'speed', 'pitch', 'volume'] },
+      { id: 'faster-qwen3-tts', label: 'Faster Qwen3 TTS', description: '', selected: selected === 'faster-qwen3-tts', installed: true, unavailable_reason: '', needs_transcripts: false, delivery_instruction: false, voice_blend: true, group: 'clone', voice_controls: ['stability', 'similarity', 'style', 'speed', 'pitch', 'volume'] },
+      { id: 'fish-s2-pro', label: 'Fish Audio S2 Pro', description: '', selected: selected === 'fish-s2-pro', installed: true, unavailable_reason: '', needs_transcripts: true, delivery_instruction: true, voice_blend: false, group: 'delivery', voice_controls: ['stability', 'style', 'speed', 'pitch', 'volume'] },
     ],
     switch: { provider: phase === 'idle' ? null : selected, phase, error: null, voices: { prepared: [], failed: [], already_ready: 0 }, ...overrides },
   };

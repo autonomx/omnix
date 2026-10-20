@@ -31,6 +31,10 @@ class TtsEngine(BaseModel):
     unavailable_reason: str
     needs_transcripts: bool
     voice_controls: list[str]
+    delivery_instruction: bool = False
+    voice_blend: bool = False
+    # The task the engine picker groups it under: clone, delivery or many_languages.
+    group: str = "clone"
 
 
 class VoiceTranscriptFailure(BaseModel):

@@ -484,6 +484,30 @@ class PostgresJobStoreAdapter:
             work.commit()
         return self._record(record)
 
+    def defer_job(
+        self,
+        job_id: str,
+        *,
+        delay_seconds: float,
+        reason: str = "",
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+    ) -> JobRecord | None:
+        """Requeue a leased job after a delay without spending an attempt (see ``defer``)."""
+        if not worker_id or not lease_token:
+            raise JobClaimConflict(f"job deferral requires caller lease credentials: {job_id}")
+        with unit_of_work(self.database) as work:
+            record = work.jobs.defer(
+                self.context,
+                job_id=job_id,
+                worker_id=worker_id,
+                lease_token=lease_token,
+                delay_seconds=delay_seconds,
+                reason=reason,
+            )
+            work.commit()
+        return self._record(record)
+
     def request_cancel(self, job_id: str, request: CancelJobRequest) -> JobRecord | None:
         with unit_of_work(self.database) as work:
             record = work.jobs.get_job(self.context, job_id)

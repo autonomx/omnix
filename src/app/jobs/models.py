@@ -31,6 +31,8 @@ class ResourceClass(str, Enum):
     GPU_TTS_PREVIEW = "gpu:tts:preview"
     GPU_TTS_OFFLINE = "gpu:tts:offline"
     GPU_STT = "gpu:stt"
+    # Separation, enhancement and watermark detection (Voice Studio audio tools).
+    GPU_AUDIO = "gpu:audio"
     GPU_IMAGE = "gpu:image"
     NETWORK = "network"
     RPG_CAMPAIGN_GENESIS = "rpg_campaign_genesis"

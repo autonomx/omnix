@@ -118,6 +118,7 @@ def _configured_worker_specs(env: Mapping[str, str]) -> list[WorkerSpec]:
         "tts": "OMNIX_TTS_URL",
         "stt": "OMNIX_STT_URL",
         "image": "OMNIX_IMAGE_URL",
+        "audio": "OMNIX_AUDIO_URL",
     }
     for worker_id, env_key in compatibility_envs.items():
         if worker_id in seen:

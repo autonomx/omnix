@@ -106,6 +106,16 @@ def register_tts_pcm_websocket(router: APIRouter, state: Any) -> None:
 
     @router.websocket(TTS_PCM_WEBSOCKET_PATH)
     async def tts_pcm_websocket(websocket: WebSocket) -> None:
+        # Read-aloud is someone listening now: GPU engine swaps wait while it streams.
+        from app.persistence.tts_swap import LiveSpeechLease
+
+        live_lease = await asyncio.to_thread(LiveSpeechLease("read_aloud", f"read-aloud:{id(websocket)}").start)
+        try:
+            await _serve_pcm_websocket(websocket)
+        finally:
+            await asyncio.to_thread(live_lease.close)
+
+    async def _serve_pcm_websocket(websocket: WebSocket) -> None:
         await websocket.accept()
         stop_event = threading.Event()
         client_finished = asyncio.Event()

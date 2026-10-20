@@ -403,12 +403,27 @@ def _save_render(
     return {"render_id": render_id, "audio_asset_id": asset_id}
 
 
+def _tts_swap_pending() -> bool:
+    """A job waits for another engine to be swapped in, or one holds the GPU: let the GPU go first.
+
+    During a swap (or an engine selection) the selected engine is not loaded,
+    and a chapter claimed then would fail instead of waiting.
+    """
+    try:
+        from app.persistence.tts_swap import swap_requests_pending, swap_state
+
+        return swap_requests_pending() or not swap_state().idle
+    except Exception:
+        return False  # coordination unavailable: render as before
+
+
 def run_render_once(
     database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
-        if higher_priority_tts_pending(work.connection, context) or other_process_priority_pending():
+        if (higher_priority_tts_pending(work.connection, context) or other_process_priority_pending()
+                or _tts_swap_pending()):
             work.rollback()
             return False
         job = work.jobs.claim_next(

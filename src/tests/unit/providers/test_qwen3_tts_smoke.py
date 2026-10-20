@@ -399,3 +399,49 @@ def test_generate_audio_stream_retries_graph_failure_before_first_chunk(monkeypa
     assert fresh_model.calls == [True]
     assert fresh_model._cuda_graphs_enabled is False
     assert reset_calls == [True]
+
+
+def test_a_blend_survives_the_streaming_fallback(monkeypatch, tmp_path):
+    """A blended voice keeps its blend when a CUDA-graph failure falls back to streaming."""
+    import ast
+    from pathlib import Path
+
+    from app.providers import faster_qwen3_tts_provider as provider_module
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    sample_rate = 12000
+    audio = np.sin(np.linspace(0, 20, sample_rate, dtype=np.float32)) * 0.1
+    for name in ("Maya", "Nate"):
+        sf.write(tmp_path / f"{name}.wav", audio, sample_rate)
+    monkeypatch.setattr(provider_module, "VOICE_CLONES_DIR", str(tmp_path))
+
+    class Broken:
+        def generate_voice_clone(self, **kwargs):
+            raise RuntimeError("The size of tensor a (39) must match the size of tensor b (20) at non-singleton dimension 3")
+
+    class Streaming(Broken):
+        def __init__(self) -> None:
+            self.stream_calls: list[dict[str, object]] = []
+
+        def generate_voice_clone_streaming(self, **kwargs):
+            self.stream_calls.append(dict(kwargs))
+            yield audio[:256], sample_rate, {"chunk": 0}
+
+    references = {f"voice-cloning:{name}": (str(tmp_path / f"{name}.wav"), "") for name in ("Maya", "Nate")}
+    monkeypatch.setattr(provider_module, "_clone_reference", lambda speaker: references.get(speaker, (None, "")))
+    streaming = Streaming()
+    models = [Broken(), Broken(), Broken(), streaming]
+    provider = FasterQwen3TTSProvider(config={"device": "cpu"})
+    monkeypatch.setattr(provider, "_get_model", lambda: models.pop(0))
+    monkeypatch.setattr(provider_module, "reset_tts_model_cache", lambda: None)
+    out = provider.generate_audio(text="hello", speaker="voice-cloning:Maya", language="en",
+                                  speaker_blend=[{"speaker": "voice-cloning:Maya", "weight": 0.5},
+                                                 {"speaker": "voice-cloning:Nate", "weight": 0.5}])
+    assert out["success"] is True
+    blend = streaming.stream_calls[0]["speaker_blend"]
+    assert [Path(path).stem for path, _weight in blend] == ["Maya", "Nate"] and streaming.stream_calls[0]["xvec_only"] is True
+    # The real streaming method takes it too (checked in source: importing the model needs torch).
+    source = Path(provider_module.__file__).parent / "vendor" / "faster_qwen3_tts" / "model.py"
+    method = next(node for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
+                  if isinstance(node, ast.FunctionDef) and node.name == "generate_voice_clone_streaming")
+    assert "speaker_blend" in [arg.arg for arg in method.args.args + method.args.kwonlyargs]

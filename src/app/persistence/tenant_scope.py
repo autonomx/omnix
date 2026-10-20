@@ -32,6 +32,9 @@ SYSTEM_OPERATIONS: dict[str, str] = {
     "retention": "Retention deletes rows by age and state across every workspace.",
     "outbox.relay": "The outbox relay claims and delivers committed events of every workspace.",
     "notifications.delivery": "One alert notification monitor claims and records the deliveries of every workspace.",
+    "voice.client_credentials": "Looks up a voice API client's credential by token hash before its workspace is known.",
+    "voice.automation": "The batch advancer and watch folders find the runs and folders of every workspace to serve.",
+    "voice.swap": "The GPU swap controller sees the TTS jobs of every workspace: those running on the loaded engine, and those whose swap requests outlived them.",
 }
 
 _SYSTEM_OPERATION: ContextVar[str | None] = ContextVar("omnix_system_operation", default=None)

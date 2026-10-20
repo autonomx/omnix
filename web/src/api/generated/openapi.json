@@ -2229,6 +2229,7 @@
           "cover",
           "render",
           "chapter-audio",
+          "voice_take",
           "other"
         ],
         "title": "AssetType",
@@ -4066,6 +4067,40 @@
         "title": "AssistantToolsConfigPayload",
         "type": "object"
       },
+      "AudioToolsStatus": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "tools": {
+            "additionalProperties": true,
+            "title": "Tools",
+            "type": "object"
+          },
+          "watermark": {
+            "$ref": "#/components/schemas/WatermarkSetting"
+          }
+        },
+        "required": [
+          "configured",
+          "available",
+          "watermark",
+          "detail",
+          "tools"
+        ],
+        "title": "AudioToolsStatus",
+        "type": "object"
+      },
       "AuthOptionsResponse": {
         "description": "How someone may sign in here; the sign-in page shows only these.",
         "properties": {
@@ -4887,6 +4922,193 @@
         "title": "BarsResponse",
         "type": "object"
       },
+      "BatchItem": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "current_asset_id": {
+            "title": "Current Asset Id",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "output_name": {
+            "title": "Output Name",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "step_index": {
+            "title": "Step Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "source_asset_id",
+          "current_asset_id",
+          "step_index",
+          "status",
+          "job_id",
+          "attempts",
+          "outputs",
+          "error",
+          "output_name"
+        ],
+        "title": "BatchItem",
+        "type": "object"
+      },
+      "BatchList": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/BatchRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "BatchList",
+        "type": "object"
+      },
+      "BatchRun": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "recipe_id": {
+            "title": "Recipe Id",
+            "type": "string"
+          },
+          "recipe_version": {
+            "title": "Recipe Version",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "watch_folder": {
+            "title": "Watch Folder",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "recipe_id",
+          "recipe_version",
+          "title",
+          "watch_folder",
+          "status",
+          "created_at",
+          "updated_at",
+          "steps",
+          "counts",
+          "items"
+        ],
+        "title": "BatchRun",
+        "type": "object"
+      },
+      "BatchStart": {
+        "properties": {
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Asset Ids",
+            "type": "array"
+          },
+          "recipe_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Recipe Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipe_id",
+          "asset_ids"
+        ],
+        "title": "BatchStart",
+        "type": "object"
+      },
       "BinaryForecastMetrics": {
         "additionalProperties": false,
         "properties": {
@@ -5016,6 +5238,39 @@
           "brier_skill"
         ],
         "title": "BinaryForecastMetrics",
+        "type": "object"
+      },
+      "Body_client_audio_api_voice_v1_audio_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_client_audio_api_voice_v1_audio_post",
+        "type": "object"
+      },
+      "Body_dictate_api_voice_dictate_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "language": {
+            "default": "",
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_dictate_api_voice_dictate_post",
         "type": "object"
       },
       "BookPerformance": {
@@ -9597,6 +9852,181 @@
         "title": "ClassificationRequest",
         "type": "object"
       },
+      "ClientAudio": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "title",
+          "mime_type",
+          "size"
+        ],
+        "title": "ClientAudio",
+        "type": "object"
+      },
+      "ClientCredential": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "title": "Owner User Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "owner_user_id",
+          "capabilities",
+          "created_at",
+          "expires_at",
+          "revoked_at",
+          "last_used_at",
+          "token"
+        ],
+        "title": "ClientCredential",
+        "type": "object"
+      },
+      "ClientCredentialList": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "clients": {
+            "items": {
+              "$ref": "#/components/schemas/ClientCredential"
+            },
+            "title": "Clients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clients",
+          "capabilities"
+        ],
+        "title": "ClientCredentialList",
+        "type": "object"
+      },
+      "ClientCredentialWrite": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 3650,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 90,
+            "title": "Expires In Days"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "capabilities"
+        ],
+        "title": "ClientCredentialWrite",
+        "type": "object"
+      },
       "ClientErrorAccepted": {
         "properties": {
           "accepted": {
@@ -11903,6 +12333,41 @@
         "title": "DeliveryTestResponse",
         "type": "object"
       },
+      "DesignRequest": {
+        "properties": {
+          "description": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "language": {
+            "default": "en",
+            "maxLength": 16,
+            "title": "Language",
+            "type": "string"
+          },
+          "preview_text": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Preview Text",
+            "type": "string"
+          },
+          "seeds": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 3,
+            "title": "Seeds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "DesignRequest",
+        "type": "object"
+      },
       "DesktopActivitySignal": {
         "additionalProperties": false,
         "description": "Conservative browser-side visual activity classification.",
@@ -14145,6 +14610,48 @@
         "title": "DiagnosticsPayload",
         "type": "object"
       },
+      "Dictation": {
+        "properties": {
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "language",
+          "duration"
+        ],
+        "title": "Dictation",
+        "type": "object"
+      },
+      "DictationWarm": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready",
+          "detail"
+        ],
+        "title": "DictationWarm",
+        "type": "object"
+      },
       "DirectPerformance": {
         "description": "Chapters to direct; empty directs the whole book.",
         "properties": {
@@ -14158,6 +14665,398 @@
           }
         },
         "title": "DirectPerformance",
+        "type": "object"
+      },
+      "DubApproval": {
+        "properties": {
+          "approve": {
+            "default": true,
+            "title": "Approve",
+            "type": "boolean"
+          },
+          "line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Line Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "line_ids"
+        ],
+        "title": "DubApproval",
+        "type": "object"
+      },
+      "DubDeleted": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DubDeleted",
+        "type": "object"
+      },
+      "DubLineUpdate": {
+        "properties": {
+          "translation": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation"
+          },
+          "voice_override": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Override"
+          }
+        },
+        "title": "DubLineUpdate",
+        "type": "object"
+      },
+      "DubProject": {
+        "properties": {
+          "approved_count": {
+            "default": 0,
+            "title": "Approved Count",
+            "type": "integer"
+          },
+          "assets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Assets",
+            "type": "object"
+          },
+          "casting": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Casting",
+            "type": "object"
+          },
+          "created_at": {
+            "default": "",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "default": 0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "engine": {
+            "default": "",
+            "title": "Engine",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line_count": {
+            "default": 0,
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/DubSegment"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          },
+          "source_language": {
+            "title": "Source Language",
+            "type": "string"
+          },
+          "speakers": {
+            "default": 0,
+            "title": "Speakers",
+            "type": "integer"
+          },
+          "steps": {
+            "additionalProperties": true,
+            "title": "Steps",
+            "type": "object"
+          },
+          "target_language": {
+            "title": "Target Language",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "translator": {
+            "default": "",
+            "title": "Translator",
+            "type": "string"
+          },
+          "updated_at": {
+            "default": "",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "source_asset_id",
+          "source_language",
+          "target_language",
+          "translator",
+          "engine",
+          "speakers",
+          "duration_seconds",
+          "steps",
+          "assets",
+          "casting",
+          "created_at",
+          "updated_at",
+          "line_count",
+          "approved_count",
+          "segments"
+        ],
+        "title": "DubProject",
+        "type": "object"
+      },
+      "DubProjectList": {
+        "properties": {
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/DubProject"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "title": "DubProjectList",
+        "type": "object"
+      },
+      "DubProjectUpdate": {
+        "properties": {
+          "casting": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Casting"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
+          "speakers": {
+            "anyOf": [
+              {
+                "maximum": 8,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speakers"
+          },
+          "target_language": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z]{2,3}(-[A-Za-z]{2,4})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Language"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "translator": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translator"
+          }
+        },
+        "title": "DubProjectUpdate",
+        "type": "object"
+      },
+      "DubSegment": {
+        "description": "One line: what was said, its translation, its take and whether a person approved them.",
+        "properties": {
+          "approved": {
+            "default": false,
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "budget_seconds": {
+            "default": 0,
+            "title": "Budget Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "fit_ratio": {
+            "default": 0,
+            "title": "Fit Ratio",
+            "type": "number"
+          },
+          "fit_status": {
+            "default": "pending",
+            "title": "Fit Status",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "shortenings": {
+            "default": 0,
+            "title": "Shortenings",
+            "type": "integer"
+          },
+          "source_text": {
+            "title": "Source Text",
+            "type": "string"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "start_seconds": {
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "take_asset_id": {
+            "default": "",
+            "title": "Take Asset Id",
+            "type": "string"
+          },
+          "take_current": {
+            "default": false,
+            "title": "Take Current",
+            "type": "boolean"
+          },
+          "take_revision": {
+            "default": 0,
+            "title": "Take Revision",
+            "type": "integer"
+          },
+          "take_seconds": {
+            "default": 0,
+            "title": "Take Seconds",
+            "type": "number"
+          },
+          "translation": {
+            "default": "",
+            "title": "Translation",
+            "type": "string"
+          },
+          "translation_origin": {
+            "default": "",
+            "title": "Translation Origin",
+            "type": "string"
+          },
+          "translation_revision": {
+            "default": 0,
+            "title": "Translation Revision",
+            "type": "integer"
+          },
+          "voice_override": {
+            "default": "",
+            "title": "Voice Override",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "speaker",
+          "start_seconds",
+          "end_seconds",
+          "source_text",
+          "budget_seconds",
+          "translation",
+          "translation_revision",
+          "translation_origin",
+          "voice_override",
+          "take_asset_id",
+          "take_revision",
+          "take_seconds",
+          "fit_status",
+          "fit_ratio",
+          "shortenings",
+          "take_current",
+          "approved"
+        ],
+        "title": "DubSegment",
         "type": "object"
       },
       "EconomicCalendar": {
@@ -22208,6 +23107,18 @@
         "title": "HermesTestResponseResultResult",
         "type": "object"
       },
+      "HubTokenWrite": {
+        "properties": {
+          "token": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "title": "HubTokenWrite",
+        "type": "object"
+      },
       "IbkrSettingsPayload": {
         "additionalProperties": false,
         "properties": {
@@ -24057,6 +24968,27 @@
           "note"
         ],
         "title": "InviteSummaryResponse",
+        "type": "object"
+      },
+      "IsolateRequest": {
+        "properties": {
+          "asset_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "model": {
+            "default": "roformer",
+            "pattern": "^(roformer|demucs)$",
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "IsolateRequest",
         "type": "object"
       },
       "IssuerIdentity": {
@@ -39827,6 +40759,135 @@
         "title": "RecentAutomaticMemoryResponse",
         "type": "object"
       },
+      "Recipe": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "steps",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Recipe",
+        "type": "object"
+      },
+      "RecipeList": {
+        "properties": {
+          "recipes": {
+            "items": {
+              "$ref": "#/components/schemas/Recipe"
+            },
+            "title": "Recipes",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipes",
+          "tools"
+        ],
+        "title": "RecipeList",
+        "type": "object"
+      },
+      "RecipeStep": {
+        "properties": {
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "tool": {
+            "maxLength": 40,
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "settings"
+        ],
+        "title": "RecipeStep",
+        "type": "object"
+      },
+      "RecipeStep-Input": {
+        "properties": {
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "tool": {
+            "maxLength": 40,
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "RecipeStep",
+        "type": "object"
+      },
+      "RecipeWrite": {
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeStep-Input"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "steps"
+        ],
+        "title": "RecipeWrite",
+        "type": "object"
+      },
       "RedirectUrlResponse": {
         "properties": {
           "url": {
@@ -41275,6 +42336,7 @@
           "gpu:tts:preview",
           "gpu:tts:offline",
           "gpu:stt",
+          "gpu:audio",
           "gpu:image",
           "network",
           "rpg_campaign_genesis"
@@ -41876,6 +42938,19 @@
           "revoked"
         ],
         "title": "RevokeSessionsResponse",
+        "type": "object"
+      },
+      "Revoked": {
+        "properties": {
+          "revoked": {
+            "title": "Revoked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "title": "Revoked",
         "type": "object"
       },
       "RouteRequest": {
@@ -54731,6 +55806,119 @@
         "title": "SourceTarget",
         "type": "object"
       },
+      "SpeakRequest": {
+        "properties": {
+          "engine": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Engine",
+            "type": "string"
+          },
+          "language": {
+            "default": "en",
+            "maxLength": 16,
+            "title": "Language",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "voice": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Voice",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SpeakRequest",
+        "type": "object"
+      },
+      "SpeakerSample": {
+        "description": "A speaker's cleanest 10-30 s, ready to clone: WAV audio and the words it holds.",
+        "properties": {
+          "audio_base64": {
+            "title": "Audio Base64",
+            "type": "string"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "sample_rate": {
+            "title": "Sample Rate",
+            "type": "integer"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/SpeakerSampleSpan"
+            },
+            "title": "Spans",
+            "type": "array"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker",
+          "text",
+          "duration",
+          "sample_rate",
+          "mime_type",
+          "audio_base64",
+          "spans"
+        ],
+        "title": "SpeakerSample",
+        "type": "object"
+      },
+      "SpeakerSampleRequest": {
+        "properties": {
+          "speaker": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Speaker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker"
+        ],
+        "title": "SpeakerSampleRequest",
+        "type": "object"
+      },
+      "SpeakerSampleSpan": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SpeakerSampleSpan",
+        "type": "object"
+      },
       "SpeculativeTtsPrefetchRequest": {
         "properties": {
           "generation_id": {
@@ -54811,6 +55999,161 @@
           "text"
         ],
         "title": "SpeechDeliveryPlanRequest",
+        "type": "object"
+      },
+      "SpeechModelListResponse": {
+        "properties": {
+          "hardware": {
+            "additionalProperties": true,
+            "title": "Hardware",
+            "type": "object"
+          },
+          "hub_token_source": {
+            "title": "Hub Token Source",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/SpeechModelStatus"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "vram_target_gb": {
+            "default": 24,
+            "title": "Vram Target Gb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "models",
+          "hub_token_source",
+          "hardware",
+          "vram_target_gb"
+        ],
+        "title": "SpeechModelListResponse",
+        "type": "object"
+      },
+      "SpeechModelStatus": {
+        "properties": {
+          "accepted_terms": {
+            "title": "Accepted Terms",
+            "type": "boolean"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "commercial_use": {
+            "title": "Commercial Use",
+            "type": "boolean"
+          },
+          "disk_bytes": {
+            "title": "Disk Bytes",
+            "type": "integer"
+          },
+          "environment": {
+            "additionalProperties": true,
+            "title": "Environment",
+            "type": "object"
+          },
+          "gated": {
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed_revision": {
+            "title": "Installed Revision",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "licence": {
+            "title": "Licence",
+            "type": "string"
+          },
+          "licence_url": {
+            "title": "Licence Url",
+            "type": "string"
+          },
+          "output_terms": {
+            "title": "Output Terms",
+            "type": "string"
+          },
+          "repo_id": {
+            "title": "Repo Id",
+            "type": "string"
+          },
+          "requires_acceptance": {
+            "title": "Requires Acceptance",
+            "type": "boolean"
+          },
+          "residency": {
+            "title": "Residency",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "size_gb": {
+            "title": "Size Gb",
+            "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "vram_gb": {
+            "title": "Vram Gb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "repo_id",
+          "revision",
+          "licence",
+          "licence_url",
+          "size_gb",
+          "vram_gb",
+          "residency",
+          "service",
+          "commercial_use",
+          "gated",
+          "source",
+          "output_terms",
+          "capabilities",
+          "requires_acceptance",
+          "status",
+          "installed_revision",
+          "accepted_terms",
+          "disk_bytes",
+          "environment"
+        ],
+        "title": "SpeechModelStatus",
         "type": "object"
       },
       "SpeechOnsetPolicy": {
@@ -59480,6 +60823,81 @@
         "title": "TaskRevision",
         "type": "object"
       },
+      "ToolCall": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          }
+        },
+        "title": "ToolCall",
+        "type": "object"
+      },
+      "ToolInfo": {
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "capability",
+          "allowed",
+          "input_schema"
+        ],
+        "title": "ToolInfo",
+        "type": "object"
+      },
+      "ToolList": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolInfo"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "ToolList",
+        "type": "object"
+      },
+      "ToolResult": {
+        "properties": {
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "ToolResult",
+        "type": "object"
+      },
       "TradingAlert": {
         "additionalProperties": false,
         "properties": {
@@ -62873,6 +64291,87 @@
         "title": "TradingStrategyConfigDocument",
         "type": "object"
       },
+      "TranscribeRequest": {
+        "properties": {
+          "asset_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "diarize": {
+            "default": true,
+            "title": "Diarize",
+            "type": "boolean"
+          },
+          "language": {
+            "default": "",
+            "maxLength": 16,
+            "title": "Language",
+            "type": "string"
+          },
+          "speakers": {
+            "default": 0,
+            "maximum": 8,
+            "minimum": 0,
+            "title": "Speakers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "title": "TranscribeRequest",
+        "type": "object"
+      },
+      "TranscriptResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "title",
+          "revision",
+          "document"
+        ],
+        "title": "TranscriptResponse",
+        "type": "object"
+      },
+      "TranscriptWrite": {
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document",
+          "expected_revision"
+        ],
+        "title": "TranscriptWrite",
+        "type": "object"
+      },
       "TrendlineAlertPoint-Input": {
         "additionalProperties": false,
         "properties": {
@@ -62976,8 +64475,18 @@
       },
       "TtsEngine": {
         "properties": {
+          "delivery_instruction": {
+            "default": false,
+            "title": "Delivery Instruction",
+            "type": "boolean"
+          },
           "description": {
             "title": "Description",
+            "type": "string"
+          },
+          "group": {
+            "default": "clone",
+            "title": "Group",
             "type": "string"
           },
           "id": {
@@ -63004,6 +64513,11 @@
             "title": "Unavailable Reason",
             "type": "string"
           },
+          "voice_blend": {
+            "default": false,
+            "title": "Voice Blend",
+            "type": "boolean"
+          },
           "voice_controls": {
             "items": {
               "type": "string"
@@ -63020,7 +64534,10 @@
           "installed",
           "unavailable_reason",
           "needs_transcripts",
-          "voice_controls"
+          "voice_controls",
+          "delivery_instruction",
+          "voice_blend",
+          "group"
         ],
         "title": "TtsEngine",
         "type": "object"
@@ -65354,6 +66871,54 @@
         "title": "VersionedOutcomeLabels",
         "type": "object"
       },
+      "VoiceCastEntry": {
+        "properties": {
+          "delivery_instruction": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Delivery Instruction",
+            "type": "string"
+          },
+          "voice_id": {
+            "default": "",
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "title": "VoiceCastEntry",
+        "type": "object"
+      },
+      "VoicePeaksResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "peaks": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Peaks",
+            "type": "array"
+          },
+          "sample_rate": {
+            "title": "Sample Rate",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_id",
+          "duration",
+          "sample_rate",
+          "peaks"
+        ],
+        "title": "VoicePeaksResponse",
+        "type": "object"
+      },
       "VoiceProfileGovernance": {
         "additionalProperties": false,
         "properties": {
@@ -65492,6 +67057,243 @@
           "deletion_reason"
         ],
         "title": "VoiceProfileGovernance",
+        "type": "object"
+      },
+      "VoiceScript": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceScriptLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "text",
+          "engine",
+          "revision",
+          "created_at",
+          "updated_at",
+          "settings",
+          "lines"
+        ],
+        "title": "VoiceScript",
+        "type": "object"
+      },
+      "VoiceScriptLine": {
+        "properties": {
+          "delivery_instruction": {
+            "default": "",
+            "title": "Delivery Instruction",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "pause_before_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Before Ms"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "selected_take_id": {
+            "default": "",
+            "title": "Selected Take Id",
+            "type": "string"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "takes": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceTake"
+            },
+            "title": "Takes",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "voice_id": {
+            "default": "",
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "speaker",
+          "text",
+          "pause_before_ms",
+          "delivery_instruction",
+          "voice_id",
+          "selected_take_id",
+          "takes"
+        ],
+        "title": "VoiceScriptLine",
+        "type": "object"
+      },
+      "VoiceScriptListResponse": {
+        "properties": {
+          "scripts": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceScriptSummary"
+            },
+            "title": "Scripts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scripts"
+        ],
+        "title": "VoiceScriptListResponse",
+        "type": "object"
+      },
+      "VoiceScriptSummary": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "text",
+          "engine",
+          "revision",
+          "created_at",
+          "updated_at",
+          "settings"
+        ],
+        "title": "VoiceScriptSummary",
+        "type": "object"
+      },
+      "VoiceScriptWrite": {
+        "properties": {
+          "casting": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/VoiceCastEntry"
+            },
+            "title": "Casting",
+            "type": "object"
+          },
+          "engine": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Engine",
+            "type": "string"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "text": {
+            "maxLength": 200000,
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "VoiceScriptWrite",
         "type": "object"
       },
       "VoiceSessionEvaluationCreate": {
@@ -66043,6 +67845,72 @@
         "title": "VoiceSessionEvaluationRecord",
         "type": "object"
       },
+      "VoiceTake": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "number"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "line_id": {
+            "title": "Line Id",
+            "type": "string"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "text_hash": {
+            "title": "Text Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "line_id",
+          "asset_id",
+          "job_id",
+          "engine",
+          "text_hash",
+          "duration",
+          "pinned",
+          "created_at"
+        ],
+        "title": "VoiceTake",
+        "type": "object"
+      },
+      "VoiceTakePin": {
+        "properties": {
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pinned"
+        ],
+        "title": "VoiceTakePin",
+        "type": "object"
+      },
       "VoiceTranscriptFailure": {
         "properties": {
           "error": {
@@ -66117,6 +67985,19 @@
           "default_limit"
         ],
         "title": "WatchlistAlertCapacity",
+        "type": "object"
+      },
+      "WatermarkSetting": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "WatermarkSetting",
         "type": "object"
       },
       "WorkerHealth": {
@@ -78250,6 +80131,374 @@
         ]
       }
     },
+    "/api/dubbing/projects": {
+      "get": {
+        "operationId": "list_projects_api_dubbing_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DubProjectList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Projects"
+      },
+      "post": {
+        "description": "Upload the video to dub (MP4, MOV, MKV or WebM, up to 2 GB) and create its project.",
+        "operationId": "create_project_api_dubbing_projects_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Filename",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "title",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "pattern": "^[a-z]{2,3}(-[A-Za-z]{2,4})?$",
+              "title": "Source Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_language",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z]{2,3}(-[A-Za-z]{2,4})?$",
+              "title": "Target Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "speakers",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 8,
+              "minimum": 0,
+              "title": "Speakers",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "translator",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 64,
+              "title": "Translator",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "engine",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 64,
+              "title": "Engine",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "title": "Video Content",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DubProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project"
+      }
+    },
+    "/api/dubbing/projects/{project_id}": {
+      "delete": {
+        "description": "Delete the project and its lines; the assets it made stay in the library.",
+        "operationId": "delete_project_api_dubbing_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DubDeleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Project"
+      },
+      "get": {
+        "operationId": "get_project_api_dubbing_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DubProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project"
+      },
+      "patch": {
+        "operationId": "update_project_api_dubbing_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DubProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DubProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Project"
+      }
+    },
+    "/api/dubbing/projects/{project_id}/approval": {
+      "post": {
+        "operationId": "approve_lines_api_dubbing_projects__project_id__approval_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DubApproval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DubProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Lines"
+      }
+    },
+    "/api/dubbing/projects/{project_id}/lines/{line_id}": {
+      "put": {
+        "description": "Edit a line's translation (it becomes the person's, and needs a new take) or its voice.",
+        "operationId": "update_line_api_dubbing_projects__project_id__lines__line_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DubLineUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DubProject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Line"
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "api_health_api_health_get",
@@ -80345,6 +82594,49 @@
           }
         },
         "summary": "Retired Worker Protocol",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/jobs/{job_id}/retry": {
+      "post": {
+        "description": "Queue a new job with a failed or cancelled job's inputs; the original stays as it ended.\n\nThe copy goes through the same submission checks as ``POST /api/jobs``\n(the handler's input model and submission policy), so a retry can never\ndo what a fresh submission could not.",
+        "operationId": "retry_job_api_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Job",
         "tags": [
           "jobs"
         ]
@@ -98551,6 +100843,302 @@
         ]
       }
     },
+    "/api/voice/assets/{asset_id}/peaks": {
+      "get": {
+        "description": "Peaks of a stored take or recording, for Voice Studio's waveforms.",
+        "operationId": "voice_asset_peaks_api_voice_assets__asset_id__peaks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bins",
+            "required": false,
+            "schema": {
+              "default": 480,
+              "maximum": 4096,
+              "minimum": 16,
+              "title": "Bins",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicePeaksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Voice Asset Peaks"
+      }
+    },
+    "/api/voice/audio-tools": {
+      "get": {
+        "description": "The audio service: is it there, which tools work, and whether renders are watermarked.",
+        "operationId": "audio_tools_status_api_voice_audio_tools_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioToolsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Audio Tools Status"
+      }
+    },
+    "/api/voice/batches": {
+      "get": {
+        "operationId": "list_batches_api_voice_batches_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Batches"
+      },
+      "post": {
+        "operationId": "start_batch_api_voice_batches_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Batch"
+      }
+    },
+    "/api/voice/batches/{run_id}": {
+      "get": {
+        "operationId": "get_batch_api_voice_batches__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Batch"
+      }
+    },
+    "/api/voice/batches/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_batch_api_voice_batches__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Batch"
+      }
+    },
+    "/api/voice/clients": {
+      "get": {
+        "operationId": "list_clients_api_voice_clients_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCredentialList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Clients"
+      },
+      "post": {
+        "operationId": "issue_client_api_voice_clients_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientCredentialWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCredential"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Client"
+      }
+    },
+    "/api/voice/clients/{client_id}": {
+      "delete": {
+        "operationId": "revoke_client_api_voice_clients__client_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revoked"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Client"
+      }
+    },
     "/api/voice/cues/{voice_id}/manifest": {
       "get": {
         "operationId": "live_voice_cue_manifest_api_voice_cues__voice_id__manifest_get",
@@ -98649,6 +101237,1279 @@
           }
         },
         "summary": "Live Voice Cue File"
+      }
+    },
+    "/api/voice/dictate": {
+      "post": {
+        "operationId": "dictate_api_voice_dictate_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_dictate_api_voice_dictate_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dictation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dictate"
+      }
+    },
+    "/api/voice/dictate/warm": {
+      "post": {
+        "description": "Load the batch engine ahead of a dictation (the composer opened); it unloads again when idle.",
+        "operationId": "dictate_warm_api_voice_dictate_warm_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DictationWarm"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dictate Warm"
+      }
+    },
+    "/api/voice/models": {
+      "get": {
+        "description": "Speech models Omnix can install: licence, size, VRAM and whether the weights are present.",
+        "operationId": "list_speech_models_api_voice_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechModelListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Speech Models"
+      }
+    },
+    "/api/voice/models/hub-token": {
+      "put": {
+        "description": "Store (or clear) the Hugging Face token in the protected store; workspace admins only.",
+        "operationId": "save_hub_token_api_voice_models_hub_token_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HubTokenWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechModelListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Hub Token"
+      }
+    },
+    "/api/voice/recipes": {
+      "get": {
+        "operationId": "list_recipes_api_voice_recipes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Recipes"
+      },
+      "post": {
+        "operationId": "create_recipe_api_voice_recipes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecipeWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recipe"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Recipe"
+      }
+    },
+    "/api/voice/recipes/{recipe_id}": {
+      "delete": {
+        "operationId": "delete_recipe_api_voice_recipes__recipe_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revoked"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Recipe"
+      },
+      "put": {
+        "operationId": "update_recipe_api_voice_recipes__recipe_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecipeWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recipe"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Recipe"
+      }
+    },
+    "/api/voice/scripts": {
+      "get": {
+        "description": "Saved Voice Studio scripts, most recently edited first.",
+        "operationId": "list_voice_scripts_api_voice_scripts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceScriptListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Voice Scripts"
+      },
+      "post": {
+        "description": "Save a new script; its lines get stable ids.",
+        "operationId": "create_voice_script_api_voice_scripts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceScriptWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceScript"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Voice Script"
+      }
+    },
+    "/api/voice/scripts/{script_id}": {
+      "delete": {
+        "description": "Delete a script and its takes' rows; the take audio stays in the asset store.",
+        "operationId": "delete_voice_script_api_voice_scripts__script_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "script_id",
+            "required": true,
+            "schema": {
+              "title": "Script Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Voice Script"
+      },
+      "get": {
+        "description": "One script with its lines and every take.",
+        "operationId": "get_voice_script_api_voice_scripts__script_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "script_id",
+            "required": true,
+            "schema": {
+              "title": "Script Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceScript"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Voice Script"
+      },
+      "put": {
+        "description": "Save edits; unchanged lines keep their id and takes. 409 when the script moved on.",
+        "operationId": "update_voice_script_api_voice_scripts__script_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "script_id",
+            "required": true,
+            "schema": {
+              "title": "Script Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceScriptWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceScript"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Voice Script"
+      }
+    },
+    "/api/voice/scripts/{script_id}/lines/{line_id}/takes/{take_id}/select": {
+      "post": {
+        "description": "Use this take for the line; restitch rebuilds the render from selected takes.",
+        "operationId": "select_voice_take_api_voice_scripts__script_id__lines__line_id__takes__take_id__select_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "script_id",
+            "required": true,
+            "schema": {
+              "title": "Script Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "title": "Line Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "take_id",
+            "required": true,
+            "schema": {
+              "title": "Take Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceScript"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Voice Take"
+      }
+    },
+    "/api/voice/takes/{take_id}/pin": {
+      "post": {
+        "description": "Pin a take so it stands out in the line's take list.",
+        "operationId": "pin_voice_take_api_voice_takes__take_id__pin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "take_id",
+            "required": true,
+            "schema": {
+              "title": "Take Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceTakePin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin Voice Take"
+      }
+    },
+    "/api/voice/transcripts/{asset_id}": {
+      "get": {
+        "description": "A transcript as an ``omnix-transcript-v1`` document (untimed transcripts open as one speaker).",
+        "operationId": "get_transcript_api_voice_transcripts__asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Transcript"
+      },
+      "put": {
+        "description": "Save an edited transcript as the asset's next revision (renamed speakers, fixed words, split segments).",
+        "operationId": "save_transcript_api_voice_transcripts__asset_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Transcript"
+      }
+    },
+    "/api/voice/transcripts/{asset_id}/export": {
+      "get": {
+        "description": "The transcript as SRT or WebVTT subtitles, plain text, or JSON.",
+        "operationId": "export_transcript_file_api_voice_transcripts__asset_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "srt",
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Transcript File"
+      }
+    },
+    "/api/voice/transcripts/{asset_id}/speaker-sample": {
+      "post": {
+        "description": "Cut a speaker's cleanest 10-30 s from the source recording, as a clone sample with its words.",
+        "operationId": "speaker_sample_api_voice_transcripts__asset_id__speaker_sample_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeakerSampleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerSample"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Speaker Sample"
+      }
+    },
+    "/api/voice/v1/audio": {
+      "post": {
+        "description": "Store a recording for ``transcribe`` or ``isolate`` (a client holding either may upload).",
+        "operationId": "client_audio_api_voice_v1_audio_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_client_audio_api_voice_v1_audio_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAudio"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Audio"
+      }
+    },
+    "/api/voice/v1/design": {
+      "post": {
+        "operationId": "client_design_api_voice_v1_design_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Design"
+      }
+    },
+    "/api/voice/v1/isolate": {
+      "post": {
+        "operationId": "client_isolate_api_voice_v1_isolate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IsolateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Isolate"
+      }
+    },
+    "/api/voice/v1/jobs/{job_id}": {
+      "get": {
+        "operationId": "client_job_api_voice_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Job"
+      }
+    },
+    "/api/voice/v1/speak": {
+      "post": {
+        "operationId": "client_speak_api_voice_v1_speak_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeakRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Speak"
+      }
+    },
+    "/api/voice/v1/tools": {
+      "get": {
+        "operationId": "client_tools_api_voice_v1_tools_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Tools"
+      }
+    },
+    "/api/voice/v1/tools/{name}": {
+      "post": {
+        "operationId": "client_call_api_voice_v1_tools__name__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolCall"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Call"
+      }
+    },
+    "/api/voice/v1/transcribe": {
+      "post": {
+        "operationId": "client_transcribe_api_voice_v1_transcribe_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscribeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Transcribe"
+      }
+    },
+    "/api/voice/v1/voices": {
+      "get": {
+        "operationId": "client_voices_api_voice_v1_voices_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Client Voices"
+      }
+    },
+    "/api/voice/watermark": {
+      "put": {
+        "description": "Turn render watermarking on or off for the workspace; workspace admins only.",
+        "operationId": "save_watermark_setting_api_voice_watermark_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatermarkSetting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WatermarkSetting"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Watermark Setting"
       }
     },
     "/api/workers/health": {
@@ -99142,6 +103003,79 @@
         "tags": [
           "internal-jobs"
         ]
+      }
+    },
+    "/mcp/voice": {
+      "post": {
+        "description": "MCP over streamable HTTP (JSON responses): initialize, tools/list, tools/call, ping.",
+        "operationId": "mcp_voice_mcp_voice_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A JSON-RPC 2.0 response, or an array of them for a batch"
+          },
+          "202": {
+            "description": "Only notifications were sent: no body"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mcp Voice"
       }
     },
     "/metrics": {

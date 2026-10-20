@@ -97,6 +97,10 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_ASSISTANT_TURN_STORE_PATH` | string | — | chat | Controls assistant turn store path for chat. |
 | `OMNIX_AUDIOBOOK_CLASSIFICATION_LOG_PATH` | string | — | audiobook | Controls audiobook classification log path for audiobook. |
 | `OMNIX_AUDIOBOOK_LOG_DIR` | string | — | audiobook | Controls audiobook log dir for audiobook. |
+| `OMNIX_AUDIO_ENABLED` | boolean | `1` | launcher | Controls audio enabled for launcher. |
+| `OMNIX_AUDIO_MAX_UPLOAD_BYTES` | string | — | launcher | Controls audio max upload bytes for launcher. |
+| `OMNIX_AUDIO_PORT` | integer | `5401` | tooling | Controls audio port for tooling. |
+| `OMNIX_AUDIO_URL` | string | `http://127.0.0.1:5401` | launcher | Controls audio url for launcher. |
 | `OMNIX_AUTH_COOKIE_SECURE` | boolean | `false` | security | Controls auth cookie secure for security. |
 | `OMNIX_AUTH_DESKTOP_HANDOFF` | boolean | `false` | security | Controls auth desktop handoff for security. |
 | `OMNIX_AUTH_GUESTS` | boolean | — | security | Controls auth guests for security. |
@@ -140,7 +144,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_EOU_MODEL` | string | `nvidia/parakeet_realtime_eou_120m-v1` | providers | Controls eou model for providers. |
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
 | `OMNIX_EVENT_LOOP_LAG_MONITOR` | boolean | `1` | gateway | Controls event loop lag monitor for gateway. |
-| `OMNIX_FFMPEG` | string | — | audiobook, tooling | Controls ffmpeg for audiobook, tooling. |
+| `OMNIX_FFMPEG` | string | — | kernel, tooling | Controls ffmpeg for kernel, tooling. |
 | `OMNIX_FRED_API_KEY` | string | — | trading | Controls fred api key for trading. |
 | `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | — | kernel, observability | Controls gateway background role for kernel, observability. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
@@ -350,6 +354,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_VOICE_CLONES_FILE` | string | — | assets | Controls voice clones file for assets. |
 | `OMNIX_VOICE_DEBUG_LOGGING` | string | `1` | providers | Controls voice debug logging for providers. |
 | `OMNIX_VOICE_DEBUG_LOG_DIR` | string | — | providers | Controls voice debug log dir for providers. |
+| `OMNIX_VOICE_WATCH_FOLDERS` | string | — | voice | Controls voice watch folders for voice. |
 | `OMNIX_WEB_SEARCH_API_KEY` | string | — | research, security | Controls web search api key for research, security. |
 | `OMNIX_WEB_SEARCH_PROVIDER` | string | — | research, security | Controls web search provider for research, security. |
 | `OMNIX_WEB_SEARCH_TIMEOUT_SECONDS` | string | `8.0` | research | Controls web search timeout seconds for research. |

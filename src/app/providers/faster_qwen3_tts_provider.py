@@ -47,6 +47,20 @@ FALLBACK_HARMONIC_FREQ_HZ = 330.0
 DEFAULT_QWEN3_TTS_MODEL_REPO = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 
 
+def _speaker_blend(value: Any) -> list[tuple[str, float]]:
+    """``[{"speaker": voice, "weight": w}, ...]`` as (voice, weight) pairs: two to four voices, weights > 0."""
+    if not value:
+        return []
+    parts = [(str(part.get("speaker") or ""), float(part.get("weight") or 0.0)) for part in value
+             if isinstance(part, dict)]
+    if not 2 <= len(parts) <= 4 or any(not voice or weight <= 0 for voice, weight in parts):
+        raise ValueError("a blend names two to four voices, each with a positive weight")
+    # Library voice ids only: a bare name falls back to the default reference, which would blend silently.
+    if any(not voice.startswith("voice-cloning:") for voice, _weight in parts):
+        raise ValueError("a blend names library voices (voice-cloning:<id>)")
+    return parts
+
+
 def _clone_conditioning(kwargs: dict[str, Any], model_config: dict[str, Any], saved_text: str) -> tuple[str, bool]:
     ref_text = str(kwargs.get("ref_text") or saved_text).strip()
     xvec_only = kwargs.get("xvec_only")
@@ -724,6 +738,10 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             Dict with 'success', 'audio' (base64 WAV), 'sample_rate', 'duration'
         """
         try:
+            blend = _speaker_blend(kwargs.get("speaker_blend"))
+            if blend:
+                # A blend speaks from the mixed speaker embedding of the voices it names (x-vector mode).
+                speaker = blend[0][0]
             ref_audio_path, saved_ref_text = _clone_reference(speaker)
             ref_text, xvec_only = _clone_conditioning(kwargs, self._model_config, saved_ref_text)
             
@@ -755,7 +773,12 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'parity_mode': _decode_in_parity_mode(model, kwargs, self._model_config),
                 'progress_callback': progress_callback,
             }
-            
+            if blend:
+                gen_kwargs['speaker_blend'] = [(_clone_reference(voice)[0], weight) for voice, weight in blend]
+                gen_kwargs['xvec_only'] = True
+                if not all(path for path, _weight in gen_kwargs['speaker_blend']):
+                    return {"success": False, "error": "a blended voice has no reference audio"}
+
             # Generate audio (non-streaming)
             try:
                 audio_list, sample_rate = model.generate_voice_clone(**gen_kwargs)

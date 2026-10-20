@@ -146,6 +146,21 @@ def test_the_facade_has_the_service_serve_the_engine_it_names():
     assert requests[2][2]['provider'] == 'fish-s2-pro'
 
 
+def test_a_duration_target_reaches_the_tts_service():
+    """Dubbing fits OmniVoice lines to their budget; the facade must not drop the duration."""
+    requests = []
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, content=b'RIFF', headers={'content-type': 'audio/wav', 'X-Omnix-Sample-Rate': '24000'})
+
+    provider = QwenHttpGatewayProvider('http://127.0.0.1:5101', provider_name='omnivoice', require_loaded=True)
+    provider.http = mock_http_client(handler)
+    provider.generate_audio('Hola.', speaker='voice-cloning:anaka', language='es', duration=2.5, _hint='private')
+
+    assert requests[0]['parameters'] == {'duration': 2.5}
+
+
 def test_an_older_tts_service_cannot_switch_engines():
     def handler(request):
         if request.url.path == '/health':

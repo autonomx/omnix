@@ -29,6 +29,7 @@ FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
     "story": "app.apps.story.feature:FEATURE",
     "rpg": "app.apps.rpg.feature:FEATURE",
     "trading": "app.apps.trading.feature:FEATURE",
+    "dubbing": "app.apps.dubbing.feature:FEATURE",
 })
 
 

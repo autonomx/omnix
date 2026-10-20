@@ -61,11 +61,20 @@ print(json.dumps({"created": created, "settings": settings, "job": str(store.get
 """
 
 
-def _changed_outside_module(tree: Path) -> set[str]:
+def _changed_outside_module(tree: Path) -> dict[str, str]:
+    """Each file git reports as changed outside the module, with a hash of its content.
+
+    The content counts, not the status: a registration file the working tree already changed (a branch
+    adding its own module) is still reported when the scaffolder edits it again.
+    """
+    import hashlib
+
     status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=tree,
                             capture_output=True, text=True, check=True).stdout.splitlines()
     module_paths = (f"src/app/apps/{PACKAGE}/", f"src/tests/{PACKAGE}/", f"web/src/features/{MODULE_ID}/")
-    return {line[3:] for line in status if not line[3:].startswith(module_paths)}
+    paths = {line[3:] for line in status if not line[3:].startswith(module_paths)}
+    return {path: hashlib.sha256((tree / path).read_bytes()).hexdigest() if (tree / path).is_file() else ""
+            for path in paths}
 
 
 def _tenant_isolation(url: str, item_owner: str) -> dict[str, object]:
@@ -109,7 +118,7 @@ def test_a_scaffolded_app_is_two_registration_lines_and_passes_every_gate(worktr
            "OMNIX_DATABASE_URL": fresh_database, "OMNIX_MIGRATION_DATABASE_URL": fresh_database}
 
     _run([sys.executable, "scripts/new_module.py", MODULE_ID, "--tier", "app", "--web"], worktree, env)
-    changed = _changed_outside_module(worktree) - before
+    changed = {path for path, digest in _changed_outside_module(worktree).items() if before.get(path) != digest}
     generated = {"web/src/api/generated/openapi.json", "web/src/api/generated/route-owners.json"}
     assert changed - generated == {"src/app/runtime/feature_catalog.py", "web/src/app/modulesManifest.ts"}
 

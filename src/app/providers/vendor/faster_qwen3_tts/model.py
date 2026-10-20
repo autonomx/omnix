@@ -8,9 +8,11 @@ from app.config.env import env_str as _env_str
 import logging
 import time
 from pathlib import Path
-from typing import Callable, Generator, Optional, Tuple, Union
+from typing import Any, Callable, Generator, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
+from app.providers.speaker_blend import mix_speaker_embeddings
 import soundfile as sf
 import torch
 
@@ -617,8 +619,12 @@ class FasterQwen3TTS:
         append_silence: bool = True,
         skip_warmup: bool = False,
         timing: Optional[dict] = None,
+        speaker_blend: Optional[Sequence[Tuple[str, float]]] = None,
     ):
         """Prepare inputs for generation (shared by streaming and non-streaming).
+
+        ``speaker_blend`` (Omnix, Voice Studio §5): reference audio paths with weights. The speaker
+        embedding is their weighted mix (x-vector mode), a voice between the references.
 
         Args:
             xvec_only: When True (default), use only the speaker embedding (x-vector) for voice
@@ -632,11 +638,25 @@ class FasterQwen3TTS:
         input_ids = self.model._tokenize_texts(input_texts)
         tokenization_completed_at = time.perf_counter()
 
-        cache_key = (str(ref_audio), ref_text, xvec_only, append_silence)
+        blend = tuple((str(path), float(weight)) for path, weight in (speaker_blend or ()))
+        if blend:
+            xvec_only = True
+        cache_key = (str(ref_audio), ref_text, xvec_only, append_silence, blend)
         voice_prompt_started_at = tokenization_completed_at
         voice_prompt_cache_hit = cache_key in self._voice_prompt_cache
         if cache_key in self._voice_prompt_cache:
             vcp, ref_ids = self._voice_prompt_cache[cache_key]
+        elif blend:
+            embeddings = [self.model.create_voice_clone_prompt(ref_audio=path, ref_text="", x_vector_only_mode=True)[0]
+                          .ref_spk_embedding for path, _weight in blend]
+            vcp = dict(
+                ref_code=[None],
+                ref_spk_embedding=[mix_speaker_embeddings(embeddings, [weight for _path, weight in blend])],
+                x_vector_only_mode=[True],
+                icl_mode=[False],
+            )
+            ref_ids = [None] * len(input_ids)
+            self._voice_prompt_cache[cache_key] = (vcp, ref_ids)
         elif xvec_only:
             prompt_items = self.model.create_voice_clone_prompt(
                 ref_audio=str(ref_audio),
@@ -1001,6 +1021,7 @@ class FasterQwen3TTS:
         append_silence: bool = True,
         parity_mode: bool = False,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        speaker_blend: Optional[Sequence[Tuple[str, float]]] = None,
     ) -> Tuple[list, int]:
         """
         Generate speech with voice cloning using reference audio.
@@ -1035,6 +1056,7 @@ class FasterQwen3TTS:
             ref_text,
             language=language,
             xvec_only=xvec_only,
+            speaker_blend=speaker_blend,
             non_streaming_mode=non_streaming_mode,
             append_silence=append_silence,
             skip_warmup=parity_mode,
@@ -1119,6 +1141,7 @@ class FasterQwen3TTS:
         non_streaming_mode: bool = True,
         append_silence: bool = True,
         parity_mode: bool = False,
+        speaker_blend: Optional[Sequence[Tuple[str, float]]] = None,
     ) -> Generator[Tuple[np.ndarray, int, dict], None, None]:
         """
         Stream voice-cloned speech generation, yielding audio chunks.
@@ -1159,6 +1182,7 @@ class FasterQwen3TTS:
             ref_text,
             language=language,
             xvec_only=xvec_only,
+            speaker_blend=speaker_blend,
             non_streaming_mode=non_streaming_mode,
             append_silence=append_silence,
             skip_warmup=parity_mode,

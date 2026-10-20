@@ -53,11 +53,18 @@ def test_every_non_public_route_requires_authentication(gateway) -> None:
     client = _client(app)
     checked = 0
     websockets: list[str] = []
+    # Public paths a feature declares authenticate on their own (voice API clients send a bearer
+    # credential); without one they still refuse.
+    declared = set(getattr(app.state, "public_route_paths", ()))
     for context in iter_route_contexts(app.router.routes):
         route = context.original_route
         path = context.path or route.path
         if "WebSocket" in type(route).__name__:
             websockets.append(path)
+            continue
+        if path in declared:
+            for method in sorted(getattr(route, "methods", None) or {"GET"}):
+                assert client.request(method, _concrete(path)).status_code == 401, (method, path)
             continue
         if _public(path):
             continue

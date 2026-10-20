@@ -63,6 +63,20 @@ HYBRID_NEGOTIATION = LiveSttNegotiation(
 )
 
 
+_LAST_LIVE_AUDIO = 0.0
+LIVE_AUDIO_QUIET_SECONDS = 1.5
+
+
+def live_audio_active() -> bool:
+    """True while live audio frames are arriving; batch transcription yields to them."""
+    return time.monotonic() - _LAST_LIVE_AUDIO < LIVE_AUDIO_QUIET_SECONDS
+
+
+def _mark_live_audio() -> None:
+    global _LAST_LIVE_AUDIO
+    _LAST_LIVE_AUDIO = time.monotonic()
+
+
 def _metric(event: str, **fields: Any) -> None:
     logger.info("[STT_METRIC] "
         + json.dumps(
@@ -451,6 +465,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         state.segments[segment_id] = segment
                         owned_segments[segment_id] = state
                     try:
+                        _mark_live_audio()
                         payload = audio_message_pcm(data, validate=True)
                         accepted = segment.append(sample_start, payload)
                     except Exception:  # noqa: BLE001 - malformed frames become protocol errors

@@ -7,6 +7,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "provider": "lmstudio",
     "audio_provider_tts": "faster-qwen3-tts",
     "audio_provider_stt": "parakeet",
+    # Voice Studio Phase 4: AudioSeal-mark every render; off unless a workspace admin opts in.
+    "voice_watermark": {"enabled": False},
     "global_system_prompt": """You are Maya, a warm, friendly, emotionally aware AI. Keep responses short (1-3 sentences for voice, 5 for text), match the user's emotional tone, avoid filler and tangents. Be clear and concise, admit uncertainty when needed, and maintain a natural, human-like presence.""",
     "lmstudio": {"base_url": "http://localhost:1234", "direct": False},
     "openrouter": {"api_key": "", "model": "openai/gpt-4o-mini", "context_size": 128000, "thinking_budget": 0},

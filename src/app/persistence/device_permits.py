@@ -15,7 +15,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.unit_of_work import unit_of_work
 
 
-DeviceModelClass = Literal["tts", "stt", "image", "llm-local"]
+DeviceModelClass = Literal["tts", "stt", "image", "llm-local", "audio"]
 PermitPriority = Literal["realtime", "interactive", "batch"]
 _PRIORITY_ORDER = {"realtime": 0, "interactive": 1, "batch": 2}
 _LOG = logging.getLogger(__name__)
@@ -543,7 +543,7 @@ class PostgresDevicePermitService:
         priority: PermitPriority,
         lease_seconds: int,
     ) -> None:
-        if model_class not in {"tts", "stt", "image", "llm-local"}:
+        if model_class not in {"tts", "stt", "image", "llm-local", "audio"}:
             raise ValueError("unsupported device model class")
         if not holder_id or len(holder_id) > 255:
             raise ValueError("holder_id must contain between 1 and 255 characters")

@@ -94,7 +94,7 @@ class PostgresSharedAssetStoreAdapter:
                 asset_type=self._enum_value(asset.type),
                 mime_type=asset.mime_type,
                 metadata=dict(asset.metadata),
-                compat=dict(asset.compat),
+                compat=self._compat(asset),
                 generation_job_id=asset.source_job_id,
             )
             work.commit()
@@ -121,7 +121,7 @@ class PostgresSharedAssetStoreAdapter:
                         "generation_job_id": asset.source_job_id,
                         "metadata": dict(asset.metadata),
                         "compat": {
-                            **dict(asset.compat),
+                            **self._compat(asset),
                             "legacy_source_path": str(source),
                         },
                     },
@@ -131,6 +131,30 @@ class PostgresSharedAssetStoreAdapter:
             if blob.get("created"):
                 self.blob_store.delete(storage_key)
             raise
+        return self._asset(record)
+
+    def replace_content(self, asset_id: str, source: Path, *, metadata: dict[str, Any],
+                        expected_revision: int | None = None) -> AssetRecord | None:
+        """Store ``source`` as the asset's content (its file name keys the blob); None on a revision conflict."""
+        import uuid
+
+        # Unique per write: two saves of one revision never share a blob, so the loser's cleanup
+        # cannot delete (or overwrite) what the winner's row points at.
+        storage_key = f"assets/{self._safe(asset_id)}/{uuid.uuid4().hex[:12]}-{Path(source).name}"
+        blob = self.blob_store.put_file(storage_key, source)
+        try:
+            with unit_of_work(self.database) as work:
+                record = work.assets.replace_content(self.context, str(asset_id), blob=blob, metadata=dict(metadata),
+                                                     expected_revision=expected_revision)
+                work.commit()
+        except Exception:
+            if blob.get("created"):
+                self.blob_store.delete(storage_key)
+            raise
+        if record is None:
+            if blob.get("created"):
+                self.blob_store.delete(storage_key)
+            return None
         return self._asset(record)
 
     def delete_asset(self, asset_id: str, *, delete_file: bool = True) -> dict[str, Any]:
@@ -184,8 +208,18 @@ class PostgresSharedAssetStoreAdapter:
             "runtime manifest import is retired; use scripts/import_legacy_persistence_bundle.py"
         )
 
+    @staticmethod
+    def _compat(asset: AssetRecord) -> dict[str, Any]:
+        """The record's compat, carrying its lineage (the table has no lineage column)."""
+        compat = dict(asset.compat)
+        if asset.parent_asset_ids:
+            compat["parent_asset_ids"] = [str(value) for value in asset.parent_asset_ids]
+        return compat
+
     def _asset(self, record: dict[str, Any]) -> AssetRecord:
         local_path = getattr(self.blob_store, "local_path", None)
+        compat = dict(record.get("compat") or {})
+        parents = compat.pop("parent_asset_ids", None)
         return AssetRecord(
             id=record["id"],
             owner_id=record.get("owner_user_id"),
@@ -199,7 +233,8 @@ class PostgresSharedAssetStoreAdapter:
             checksum_sha256=record.get("checksum_sha256"),
             metadata=dict(record.get("metadata") or {}),
             created_at=record["created_at"],
-            compat=dict(record.get("compat") or {}),
+            compat=compat,
+            parent_asset_ids=[str(value) for value in parents] if isinstance(parents, list) else [],
         )
 
     @staticmethod

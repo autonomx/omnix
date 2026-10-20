@@ -181,13 +181,16 @@ class PostgresAssetRepository:
         """Update an asset's descriptive fields in one statement (WP-8.1).
 
         Content (storage key, checksum, size) is immutable here; a provided
-        source job replaces the recorded one, otherwise it is kept.
+        source job replaces the recorded one, otherwise it is kept. So is the
+        asset's lineage (``compat.parent_asset_ids``) when ``compat`` names none.
         """
         row = self.connection.execute(
             f"""
             UPDATE omnix_assets
                SET module = %s, asset_type = %s, mime_type = %s,
-                   metadata = %s::jsonb, compat = %s::jsonb,
+                   metadata = %s::jsonb,
+                   compat = jsonb_strip_nulls(jsonb_build_object('parent_asset_ids', compat -> 'parent_asset_ids'))
+                            || %s::jsonb,
                    generation_job_id = COALESCE(%s, generation_job_id),
                    revision = revision + 1, updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND id = %s
@@ -202,6 +205,44 @@ class PostgresAssetRepository:
                 generation_job_id,
                 context.workspace_id,
                 asset_id,
+            ),
+        ).fetchone()
+        return _asset(row) if row is not None else None
+
+    def replace_content(
+        self,
+        context: TenantContext,
+        asset_id: str,
+        *,
+        blob: dict[str, Any],
+        metadata: dict[str, Any],
+        expected_revision: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Point an asset at new content (a stored blob) and new metadata, in one statement.
+
+        For documents edited in place (a transcript's next revision). With
+        ``expected_revision`` the update happens only while ``metadata.revision``
+        still has that value, so two concurrent saves cannot both win.
+        """
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_assets
+               SET storage_provider = %s, storage_key = %s, checksum_sha256 = %s, byte_size = %s,
+                   metadata = %s::jsonb, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND id = %s AND lifecycle_status <> 'deleted'
+               AND (%s::integer IS NULL OR COALESCE((metadata ->> 'revision')::integer, 1) = %s::integer)
+            RETURNING {_ASSET_COLUMNS}
+            """,
+            (
+                blob["storage_provider"],
+                blob["storage_key"],
+                blob["checksum_sha256"],
+                blob["byte_size"],
+                json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+                context.workspace_id,
+                asset_id,
+                expected_revision,
+                expected_revision,
             ),
         ).fetchone()
         return _asset(row) if row is not None else None

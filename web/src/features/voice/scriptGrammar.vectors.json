@@ -1,0 +1,96 @@
+[
+  {
+    "name": "tagged lines keep one segment per line",
+    "script": "dave: hello there\nbob: how do you do\nmarry: i am doing fine",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "hello there" },
+      { "index": 1, "speaker": "bob", "text": "how do you do" },
+      { "index": 2, "speaker": "marry", "text": "i am doing fine" }
+    ]
+  },
+  {
+    "name": "untagged text is one Narrator segment",
+    "script": "hello there\nhow are you",
+    "segments": [{ "index": 0, "speaker": "Narrator", "text": "hello there how are you" }]
+  },
+  {
+    "name": "untagged text between tagged lines stays Narrator",
+    "script": "dave: hi\nthe door creaks\nbob: who is there",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "hi" },
+      { "index": 1, "speaker": "Narrator", "text": "the door creaks" },
+      { "index": 2, "speaker": "bob", "text": "who is there" }
+    ]
+  },
+  {
+    "name": "blank lines are ignored",
+    "script": "dave: one\n\n\nbob: two",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "one" },
+      { "index": 1, "speaker": "bob", "text": "two" }
+    ]
+  },
+  {
+    "name": "a pause line sets the gap before the next segment",
+    "script": "dave: one\n{pause 600ms}\nbob: two",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "one" },
+      { "index": 1, "speaker": "bob", "text": "two", "pause_before_ms": 600 }
+    ]
+  },
+  {
+    "name": "a pause inside a line splits it for the same speaker, seconds allowed",
+    "script": "dave: wait for it {pause 1.5s} now",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "wait for it" },
+      { "index": 1, "speaker": "dave", "text": "now", "pause_before_ms": 1500 }
+    ]
+  },
+  {
+    "name": "a leading pause on a tagged line",
+    "script": "dave: one\n{PAUSE 250 ms} bob: two",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "one" },
+      { "index": 1, "speaker": "bob", "text": "two", "pause_before_ms": 250 }
+    ]
+  },
+  {
+    "name": "consecutive pauses add up and are capped at ten seconds",
+    "script": "dave: one\n{pause 6s}\n{pause 6s}\nbob: two",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "one" },
+      { "index": 1, "speaker": "bob", "text": "two", "pause_before_ms": 10000 }
+    ]
+  },
+  {
+    "name": "a pause before the first segment and after the last has no effect",
+    "script": "{pause 2s}\ndave: one\n{pause 2s}",
+    "segments": [{ "index": 0, "speaker": "dave", "text": "one" }]
+  },
+  {
+    "name": "pauses split untagged Narrator text",
+    "script": "the door creaks {pause 800ms} silence",
+    "segments": [
+      { "index": 0, "speaker": "Narrator", "text": "the door creaks" },
+      { "index": 1, "speaker": "Narrator", "text": "silence", "pause_before_ms": 800 }
+    ]
+  },
+  {
+    "name": "square brackets stay in the text for the engine",
+    "script": "dave: [whispering] be quiet",
+    "segments": [{ "index": 0, "speaker": "dave", "text": "[whispering] be quiet" }]
+  },
+  {
+    "name": "Windows line endings",
+    "script": "dave: one\r\nbob: two\r\n",
+    "segments": [
+      { "index": 0, "speaker": "dave", "text": "one" },
+      { "index": 1, "speaker": "bob", "text": "two" }
+    ]
+  },
+  {
+    "name": "an empty script has no segments",
+    "script": "  \n\n",
+    "segments": []
+  }
+]

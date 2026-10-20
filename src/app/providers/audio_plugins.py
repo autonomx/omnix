@@ -174,7 +174,58 @@ class ParakeetSTT(BaseSTTProvider):
             traceback.print_exc()
             return {"success": False, "error": str(e)}
     
-    def transcribe_raw(self, audio_data: bytes, sample_rate: int = 16000, 
+    def transcribe_timed(self, audio_file_path: str, *, language: str = "", diarize: bool = True,
+                         speakers: int = 0) -> dict[str, Any]:
+        """A timed, speaker-labelled ``TranscriptDocument`` from the service's batch engine.
+
+        Returns ``{"success": True, "document": ...}`` or
+        ``{"success": False, "code": ..., "error": ...}``; ``model_unavailable``
+        means Parakeet-TDT or TitaNet is not installed or does not fit in VRAM.
+        """
+        base_url = _parakeet_base_url(self.config)
+        with open(audio_file_path, "rb") as audio_file:
+            response = _stt_http().post(
+                f"{base_url}/transcribe/timed",
+                files={"file": (os.path.basename(audio_file_path), audio_file, "application/octet-stream")},
+                data={"language": language, "diarize": "true" if diarize else "false", "speakers": str(int(speakers))},
+                timeout=1800,
+                headers=service_headers(),
+            )
+        # Outcomes to act on arrive as 200 envelopes ({"ok": false, "code", "message"}): the
+        # service's middleware replaces error bodies with a bare {"error": <code>}.
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok") is False:
+                return {"success": False, "code": str(data.get("code") or "model_service_error"),
+                        "error": str(data.get("message") or "Timed transcription failed")}
+            return {"success": True, "document": data}
+        if response.status_code == 404:
+            return {"success": False, "code": "unsupported",
+                    "error": "The STT service has no timed transcription; update and restart it"}
+        try:
+            code = str(response.json().get("error") or "model_service_error")
+        except ValueError:
+            code = "model_service_error"
+        return {"success": False, "code": code, "error": f"The STT service refused the request ({code})"}
+
+    def warm_timed(self) -> dict[str, Any]:
+        """Ask the service to load its batch engine now (push-to-talk opened); ``{"ready", "detail"}``."""
+        try:
+            response = _stt_http().post(f"{_parakeet_base_url(self.config)}/transcribe/timed/warm", timeout=300,
+                                        headers=service_headers())
+        except Exception as exc:
+            logger.info("[PARAKEET-PLUGIN] Warm-up failed: %s", exc)
+            return {"ready": False, "detail": "The speech-to-text service is not reachable"}
+        if response.status_code == 404:
+            return {"ready": False, "detail": "The STT service has no batch engine warm-up; update and restart it"}
+        if response.status_code != 200:
+            return {"ready": False, "detail": f"The STT service refused the warm-up ({response.status_code})"}
+        data = response.json()
+        if data.get("ok") is False:
+            return {"ready": False, "detail": str(data.get("message") or "The batch engine could not load")}
+        return {"ready": True, "detail": ""}
+
+    def transcribe_raw(self, audio_data: bytes, sample_rate: int = 16000,
                       language: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         try:
             base_url = _parakeet_base_url(self.config)

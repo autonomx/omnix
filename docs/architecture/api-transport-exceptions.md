@@ -54,6 +54,10 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/runtime/{filename}` | Runtime script or binary bytes |
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/assets/{asset_id}/{asset_path}` | Live2D model asset bytes |
 | `src/app/platform/voice/live_voice_cue_asset_routes.py` | GET | `/api/voice/cues/{voice_id}/{cue_id}/{variant_id}.wav` | WAV audio bytes |
+| `src/app/platform/voice/voice_studio_routes.py` | DELETE | `/api/voice/scripts/{script_id}` | 204 No Content |
+| `src/app/platform/voice/voice_studio_routes.py` | POST | `/api/voice/takes/{take_id}/pin` | 204 No Content |
+| `src/app/platform/voice/voice_studio_routes.py` | GET | `/api/voice/transcripts/{asset_id}/export` | SRT, WebVTT, plain-text or JSON transcript download |
+| `src/app/platform/voice/automation_routes.py` | POST | `/mcp/voice` | MCP over HTTP: a JSON-RPC 2.0 response or batch array, or 202 with no body when only notifications were sent |
 | `src/app/platform/image/routes/assets.py` | GET | `/api/assets/{asset_id}/file` | Allowlisted image bytes |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_map_editor_routes.py` | POST | `/api/rpg/map-editor/export` | Validated JSON document download |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_world_bundle_routes.py` | GET | `/api/rpg/worlds/{world_id}/export` | ZIP archive bytes |

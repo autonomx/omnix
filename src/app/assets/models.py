@@ -26,6 +26,8 @@ class AssetType(str, Enum):
     COVER = "cover"
     RENDER = "render"
     CHAPTER_AUDIO = "chapter-audio"
+    # One rendered line of a saved Voice Studio script; kept out of generic asset lists.
+    VOICE_TAKE = "voice_take"
     OTHER = "other"
 
 

@@ -94,7 +94,6 @@ export function speechInputDefaults(document: SettingsDocument = DEFAULT_SETTING
   return {
     providerId: document.global.providers.stt,
     language: document.stt.language,
-    alignment: document.stt.alignment,
     saveTranscript: document.stt.saveTranscript,
   };
 }

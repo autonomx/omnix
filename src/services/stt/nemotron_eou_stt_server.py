@@ -19,6 +19,7 @@ from app.security.model_service import ModelServiceMiddleware
 from app.providers.nemotron_eou_live_websocket import (
     PROVIDER_NAME,
     install_nemotron_eou_websocket,
+    live_audio_active,
 )
 from app.providers.nemotron_eou_quality import quality_model_manager as model_manager
 from app.providers.nemotron_eou_streaming import SAMPLE_RATE
@@ -186,6 +187,15 @@ async def transcribe(
         "provider": PROVIDER_NAME,
         "inference_ms": round(inference_ms, 3),
     }
+
+
+def _install_timed_transcription() -> None:
+    from services.stt.timed_transcription import install_timed_transcription_routes
+
+    install_timed_transcription_routes(app, decode=_decode_audio, live_active=live_audio_active)
+
+
+_install_timed_transcription()
 
 
 def main() -> None:

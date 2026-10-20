@@ -4,31 +4,25 @@ import { buildSttInputPayload, buildSttStages, type SttModuleDefaults } from './
 const defaults: SttModuleDefaults = {
   providerId: 'parakeet',
   language: 'en',
-  alignment: true,
   saveTranscript: true,
 };
 
 describe('STT default request helpers', () => {
-  it('uses central provider and language when the job form has no override', () => {
-    expect(buildSttInputPayload({ providerId: '', audioAssetId: '', sourcePath: 'input.wav', language: '' }, defaults)).toEqual({
-      source_path: 'input.wav',
-      provider_id: 'parakeet',
-      language: 'en',
-      alignment: true,
-      save_transcript: true,
+  it('sends a stored asset and the central provider, never a server path', () => {
+    const payload = buildSttInputPayload({ providerId: '', audioAssetId: 'asset:audio', language: 'de' }, defaults);
+    expect(payload).toEqual({
+      asset_id: 'asset:audio', provider_id: 'parakeet', save_transcript: true, timed: true, diarize: false, language: 'de',
     });
+    expect(payload).not.toHaveProperty('source_path');
+    expect(payload).not.toHaveProperty('alignment');
   });
 
-  it('preserves explicit per-job provider and language overrides', () => {
-    expect(buildSttInputPayload({ providerId: 'remote-stt', audioAssetId: '', sourcePath: '', language: 'fr' }, defaults)).toMatchObject({
-      provider_id: 'remote-stt',
-      language: 'fr',
-      source_path: null,
-    });
+  it('preserves an explicit per-job provider', () => {
+    expect(buildSttInputPayload({ providerId: 'remote-stt', audioAssetId: 'asset:audio', language: '' }, defaults)).toMatchObject({ provider_id: 'remote-stt' });
   });
 
-  it('only schedules optional stages enabled by central defaults', () => {
-    expect(buildSttStages({ ...defaults, alignment: false }).map((stage) => stage.id)).toEqual(['transcribe', 'store-transcript']);
-    expect(buildSttStages({ ...defaults, saveTranscript: false }).map((stage) => stage.id)).toEqual(['transcribe', 'align']);
+  it('stores the transcript only when central defaults ask for it', () => {
+    expect(buildSttStages(defaults).map((stage) => stage.id)).toEqual(['transcribe', 'store-transcript']);
+    expect(buildSttStages({ ...defaults, saveTranscript: false }).map((stage) => stage.id)).toEqual(['transcribe']);
   });
 });

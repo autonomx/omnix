@@ -163,6 +163,598 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voice/assets/{asset_id}/peaks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Voice Asset Peaks
+         * @description Peaks of a stored take or recording, for Voice Studio's waveforms.
+         */
+        get: operations["voice_asset_peaks_api_voice_assets__asset_id__peaks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/audio-tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audio Tools Status
+         * @description The audio service: is it there, which tools work, and whether renders are watermarked.
+         */
+        get: operations["audio_tools_status_api_voice_audio_tools_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Batches */
+        get: operations["list_batches_api_voice_batches_get"];
+        put?: never;
+        /** Start Batch */
+        post: operations["start_batch_api_voice_batches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/batches/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Batch */
+        get: operations["get_batch_api_voice_batches__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/batches/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Batch */
+        post: operations["cancel_batch_api_voice_batches__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Clients */
+        get: operations["list_clients_api_voice_clients_get"];
+        put?: never;
+        /** Issue Client */
+        post: operations["issue_client_api_voice_clients_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/clients/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Client */
+        delete: operations["revoke_client_api_voice_clients__client_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/dictate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dictate */
+        post: operations["dictate_api_voice_dictate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/dictate/warm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dictate Warm
+         * @description Load the batch engine ahead of a dictation (the composer opened); it unloads again when idle.
+         */
+        post: operations["dictate_warm_api_voice_dictate_warm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Speech Models
+         * @description Speech models Omnix can install: licence, size, VRAM and whether the weights are present.
+         */
+        get: operations["list_speech_models_api_voice_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/models/hub-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Hub Token
+         * @description Store (or clear) the Hugging Face token in the protected store; workspace admins only.
+         */
+        put: operations["save_hub_token_api_voice_models_hub_token_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Recipes */
+        get: operations["list_recipes_api_voice_recipes_get"];
+        put?: never;
+        /** Create Recipe */
+        post: operations["create_recipe_api_voice_recipes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/recipes/{recipe_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Recipe */
+        put: operations["update_recipe_api_voice_recipes__recipe_id__put"];
+        post?: never;
+        /** Delete Recipe */
+        delete: operations["delete_recipe_api_voice_recipes__recipe_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/scripts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Voice Scripts
+         * @description Saved Voice Studio scripts, most recently edited first.
+         */
+        get: operations["list_voice_scripts_api_voice_scripts_get"];
+        put?: never;
+        /**
+         * Create Voice Script
+         * @description Save a new script; its lines get stable ids.
+         */
+        post: operations["create_voice_script_api_voice_scripts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/scripts/{script_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Voice Script
+         * @description One script with its lines and every take.
+         */
+        get: operations["get_voice_script_api_voice_scripts__script_id__get"];
+        /**
+         * Update Voice Script
+         * @description Save edits; unchanged lines keep their id and takes. 409 when the script moved on.
+         */
+        put: operations["update_voice_script_api_voice_scripts__script_id__put"];
+        post?: never;
+        /**
+         * Delete Voice Script
+         * @description Delete a script and its takes' rows; the take audio stays in the asset store.
+         */
+        delete: operations["delete_voice_script_api_voice_scripts__script_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/scripts/{script_id}/lines/{line_id}/takes/{take_id}/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Select Voice Take
+         * @description Use this take for the line; restitch rebuilds the render from selected takes.
+         */
+        post: operations["select_voice_take_api_voice_scripts__script_id__lines__line_id__takes__take_id__select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/takes/{take_id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pin Voice Take
+         * @description Pin a take so it stands out in the line's take list.
+         */
+        post: operations["pin_voice_take_api_voice_takes__take_id__pin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/transcripts/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Transcript
+         * @description A transcript as an ``omnix-transcript-v1`` document (untimed transcripts open as one speaker).
+         */
+        get: operations["get_transcript_api_voice_transcripts__asset_id__get"];
+        /**
+         * Save Transcript
+         * @description Save an edited transcript as the asset's next revision (renamed speakers, fixed words, split segments).
+         */
+        put: operations["save_transcript_api_voice_transcripts__asset_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/transcripts/{asset_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Transcript File
+         * @description The transcript as SRT or WebVTT subtitles, plain text, or JSON.
+         */
+        get: operations["export_transcript_file_api_voice_transcripts__asset_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/transcripts/{asset_id}/speaker-sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Speaker Sample
+         * @description Cut a speaker's cleanest 10-30 s from the source recording, as a clone sample with its words.
+         */
+        post: operations["speaker_sample_api_voice_transcripts__asset_id__speaker_sample_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Client Audio
+         * @description Store a recording for ``transcribe`` or ``isolate`` (a client holding either may upload).
+         */
+        post: operations["client_audio_api_voice_v1_audio_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Client Design */
+        post: operations["client_design_api_voice_v1_design_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/isolate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Client Isolate */
+        post: operations["client_isolate_api_voice_v1_isolate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Client Job */
+        get: operations["client_job_api_voice_v1_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/speak": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Client Speak */
+        post: operations["client_speak_api_voice_v1_speak_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Client Tools */
+        get: operations["client_tools_api_voice_v1_tools_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/tools/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Client Call */
+        post: operations["client_call_api_voice_v1_tools__name__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/transcribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Client Transcribe */
+        post: operations["client_transcribe_api_voice_v1_transcribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/v1/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Client Voices */
+        get: operations["client_voices_api_voice_v1_voices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice/watermark": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Watermark Setting
+         * @description Turn render watermarking on or off for the workspace; workspace admins only.
+         */
+        put: operations["save_watermark_setting_api_voice_watermark_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/voice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mcp Voice
+         * @description MCP over streamable HTTP (JSON responses): initialize, tools/list, tools/call, ping.
+         */
+        post: operations["mcp_voice_mcp_voice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -197,6 +789,23 @@ export interface components {
          * @description Backend-owned assistant tool metadata and actions.
          */
         AssistantToolSpec: core["schemas"]["AssistantToolSpec"];
+        /** AudioToolsStatus */
+        AudioToolsStatus: {
+            /** Available */
+            available: boolean;
+            /** Configured */
+            configured: boolean;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /** Tools */
+            tools: {
+                [key: string]: unknown;
+            };
+            watermark: components["schemas"]["WatermarkSetting"];
+        };
         /**
          * AuthOptionsResponse
          * @description How someone may sign in here; the sign-in page shows only these.
@@ -208,6 +817,94 @@ export interface components {
         AuthSessionResponse: core["schemas"]["AuthSessionResponse"];
         /** AuthSessionSummary */
         AuthSessionSummary: core["schemas"]["AuthSessionSummary"];
+        /** BatchItem */
+        BatchItem: {
+            /** Attempts */
+            attempts: number;
+            /** Current Asset Id */
+            current_asset_id: string;
+            /** Error */
+            error: string;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /** Output Name */
+            output_name: string;
+            /** Outputs */
+            outputs: {
+                [key: string]: unknown;
+            }[];
+            /** Position */
+            position: number;
+            /** Source Asset Id */
+            source_asset_id: string;
+            /** Status */
+            status: string;
+            /** Step Index */
+            step_index: number;
+        };
+        /** BatchList */
+        BatchList: {
+            /** Runs */
+            runs: components["schemas"]["BatchRun"][];
+        };
+        /** BatchRun */
+        BatchRun: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Items */
+            items: components["schemas"]["BatchItem"][];
+            /** Recipe Id */
+            recipe_id: string;
+            /** Recipe Version */
+            recipe_version: number;
+            /** Status */
+            status: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
+            /** Watch Folder */
+            watch_folder: string;
+        };
+        /** BatchStart */
+        BatchStart: {
+            /** Asset Ids */
+            asset_ids: string[];
+            /** Recipe Id */
+            recipe_id: string;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /** Body_client_audio_api_voice_v1_audio_post */
+        Body_client_audio_api_voice_v1_audio_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_dictate_api_voice_dictate_post */
+        Body_dictate_api_voice_dictate_post: {
+            /** File */
+            file: string;
+            /**
+             * Language
+             * @default
+             */
+            language?: string;
+        };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
@@ -249,6 +946,57 @@ export interface components {
         ClaimJobRequest: core["schemas"]["ClaimJobRequest"];
         /** ClaimJobResponse */
         ClaimJobResponse: core["schemas"]["ClaimJobResponse"];
+        /** ClientAudio */
+        ClientAudio: {
+            /** Asset Id */
+            asset_id: string;
+            /** Mime Type */
+            mime_type: string;
+            /** Size */
+            size: number;
+            /** Title */
+            title: string;
+        };
+        /** ClientCredential */
+        ClientCredential: {
+            /** Capabilities */
+            capabilities: string[];
+            /** Created At */
+            created_at: string;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /** Owner User Id */
+            owner_user_id: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Token */
+            token: string | null;
+        };
+        /** ClientCredentialList */
+        ClientCredentialList: {
+            /** Capabilities */
+            capabilities: string[];
+            /** Clients */
+            clients: components["schemas"]["ClientCredential"][];
+        };
+        /** ClientCredentialWrite */
+        ClientCredentialWrite: {
+            /** Capabilities */
+            capabilities: string[];
+            /**
+             * Expires In Days
+             * @default 90
+             */
+            expires_in_days?: number | null;
+            /** Name */
+            name: string;
+        };
         /** ClientErrorAccepted */
         ClientErrorAccepted: core["schemas"]["ClientErrorAccepted"];
         /** ClientErrorReport */
@@ -272,6 +1020,23 @@ export interface components {
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
+        /** DesignRequest */
+        DesignRequest: {
+            /** Description */
+            description: string;
+            /**
+             * Language
+             * @default en
+             */
+            language?: string;
+            /**
+             * Preview Text
+             * @default
+             */
+            preview_text?: string;
+            /** Seeds */
+            seeds?: number[];
+        };
         /** DesktopGoogleHandoffRequest */
         DesktopGoogleHandoffRequest: core["schemas"]["DesktopGoogleHandoffRequest"];
         /** DesktopGoogleHandoffResponse */
@@ -285,6 +1050,25 @@ export interface components {
         DesktopGoogleStartResponse: core["schemas"]["DesktopGoogleStartResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /** Dictation */
+        Dictation: {
+            /** Duration */
+            duration: number;
+            /** Language */
+            language: string;
+            /** Text */
+            text: string;
+        };
+        /** DictationWarm */
+        DictationWarm: {
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /** Ready */
+            ready: boolean;
+        };
         /** EmailChangeRequest */
         EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
@@ -314,6 +1098,14 @@ export interface components {
          * @description Sidecar reachability and the runtime configuration that reaches it.
          */
         HermesStatusResponse: core["schemas"]["HermesStatusResponse"];
+        /** HubTokenWrite */
+        HubTokenWrite: {
+            /**
+             * Token
+             * @default
+             */
+            token?: string;
+        };
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: core["schemas"]["IbkrSettingsPayload"];
         /** IbkrSettingsStatus */
@@ -344,6 +1136,16 @@ export interface components {
         InviteResponse: core["schemas"]["InviteResponse"];
         /** InviteSummaryResponse */
         InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
+        /** IsolateRequest */
+        IsolateRequest: {
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Model
+             * @default roformer
+             */
+            model?: string;
+        };
         /** JobError */
         JobError: core["schemas"]["JobError"];
         /** JobError */
@@ -450,6 +1252,53 @@ export interface components {
          *     become file names.
          */
         PublicAssetRecord: core["schemas"]["PublicAssetRecord"];
+        /** Recipe */
+        Recipe: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Steps */
+            steps: components["schemas"]["RecipeStep"][];
+            /** Updated At */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** RecipeList */
+        RecipeList: {
+            /** Recipes */
+            recipes: components["schemas"]["Recipe"][];
+            /** Tools */
+            tools: string[];
+        };
+        /** RecipeStep */
+        RecipeStep: {
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Tool */
+            tool: string;
+        };
+        /** RecipeStep */
+        "RecipeStep-Input": {
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** Tool */
+            tool: string;
+        };
+        /** RecipeWrite */
+        RecipeWrite: {
+            /** Name */
+            name: string;
+            /** Steps */
+            steps: components["schemas"]["RecipeStep-Input"][];
+        };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
         /** RegisterRequest */
@@ -500,6 +1349,11 @@ export interface components {
         RevokeSessionsRequest: core["schemas"]["RevokeSessionsRequest"];
         /** RevokeSessionsResponse */
         RevokeSessionsResponse: core["schemas"]["RevokeSessionsResponse"];
+        /** Revoked */
+        Revoked: {
+            /** Revoked */
+            revoked: boolean;
+        };
         /**
          * RuntimeDiagnostics
          * @description One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md.
@@ -562,14 +1416,217 @@ export interface components {
         SettingsProfileSaveRequest: core["schemas"]["SettingsProfileSaveRequest"];
         /** SettingsSaveResponse */
         SettingsSaveResponse: core["schemas"]["SettingsSaveResponse"];
+        /** SpeakRequest */
+        SpeakRequest: {
+            /**
+             * Engine
+             * @default
+             */
+            engine?: string;
+            /**
+             * Language
+             * @default en
+             */
+            language?: string;
+            /** Text */
+            text: string;
+            /**
+             * Voice
+             * @default
+             */
+            voice?: string;
+        };
+        /**
+         * SpeakerSample
+         * @description A speaker's cleanest 10-30 s, ready to clone: WAV audio and the words it holds.
+         */
+        SpeakerSample: {
+            /** Audio Base64 */
+            audio_base64: string;
+            /** Duration */
+            duration: number;
+            /** Mime Type */
+            mime_type: string;
+            /** Sample Rate */
+            sample_rate: number;
+            /** Spans */
+            spans: components["schemas"]["SpeakerSampleSpan"][];
+            /** Speaker */
+            speaker: string;
+            /** Text */
+            text: string;
+        };
+        /** SpeakerSampleRequest */
+        SpeakerSampleRequest: {
+            /** Speaker */
+            speaker: string;
+        };
+        /** SpeakerSampleSpan */
+        SpeakerSampleSpan: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+        };
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: {
+            /** Hardware */
+            hardware: {
+                [key: string]: unknown;
+            };
+            /** Hub Token Source */
+            hub_token_source: string;
+            /** Models */
+            models: components["schemas"]["SpeechModelStatus"][];
+            /**
+             * Vram Target Gb
+             * @default 24
+             */
+            vram_target_gb: number;
+        };
+        /** SpeechModelStatus */
+        SpeechModelStatus: {
+            /** Accepted Terms */
+            accepted_terms: boolean;
+            /** Capabilities */
+            capabilities: string[];
+            /** Commercial Use */
+            commercial_use: boolean;
+            /** Disk Bytes */
+            disk_bytes: number;
+            /** Environment */
+            environment: {
+                [key: string]: unknown;
+            };
+            /** Gated */
+            gated: boolean;
+            /** Id */
+            id: string;
+            /** Installed Revision */
+            installed_revision: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Licence */
+            licence: string;
+            /** Licence Url */
+            licence_url: string;
+            /** Output Terms */
+            output_terms: string;
+            /** Repo Id */
+            repo_id: string;
+            /** Requires Acceptance */
+            requires_acceptance: boolean;
+            /** Residency */
+            residency: string;
+            /** Revision */
+            revision: string;
+            /** Service */
+            service: string;
+            /** Size Gb */
+            size_gb: number;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Vram Gb */
+            vram_gb: number;
+        };
         /** StateHashRequest */
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
         StateHashResponse: core["schemas"]["StateHashResponse"];
-        /** TtsEngine */
-        TtsEngine: {
+        /** ToolCall */
+        ToolCall: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ToolInfo */
+        ToolInfo: {
+            /** Allowed */
+            allowed: boolean;
+            /** Capability */
+            capability: string;
             /** Description */
             description: string;
+            /** Input Schema */
+            input_schema: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+        };
+        /** ToolList */
+        ToolList: {
+            /** Tools */
+            tools: components["schemas"]["ToolInfo"][];
+        };
+        /** ToolResult */
+        ToolResult: {
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            };
+        };
+        /** TranscribeRequest */
+        TranscribeRequest: {
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Diarize
+             * @default true
+             */
+            diarize?: boolean;
+            /**
+             * Language
+             * @default
+             */
+            language?: string;
+            /**
+             * Speakers
+             * @default 0
+             */
+            speakers?: number;
+        };
+        /** TranscriptResponse */
+        TranscriptResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Revision */
+            revision: number;
+            /** Title */
+            title: string;
+        };
+        /** TranscriptWrite */
+        TranscriptWrite: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Expected Revision */
+            expected_revision: number;
+        };
+        /** TtsEngine */
+        TtsEngine: {
+            /**
+             * Delivery Instruction
+             * @default false
+             */
+            delivery_instruction: boolean;
+            /** Description */
+            description: string;
+            /**
+             * Group
+             * @default clone
+             */
+            group: string;
             /** Id */
             id: string;
             /** Installed */
@@ -582,6 +1639,11 @@ export interface components {
             selected: boolean;
             /** Unavailable Reason */
             unavailable_reason: string;
+            /**
+             * Voice Blend
+             * @default false
+             */
+            voice_blend: boolean;
             /** Voice Controls */
             voice_controls: string[];
         };
@@ -610,6 +1672,160 @@ export interface components {
         ValidationError: core["schemas"]["ValidationError"];
         /** VersionDiagnostics */
         VersionDiagnostics: core["schemas"]["VersionDiagnostics"];
+        /** VoiceCastEntry */
+        VoiceCastEntry: {
+            /**
+             * Delivery Instruction
+             * @default
+             */
+            delivery_instruction?: string;
+            /**
+             * Voice Id
+             * @default
+             */
+            voice_id?: string;
+        };
+        /** VoicePeaksResponse */
+        VoicePeaksResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Duration */
+            duration: number;
+            /** Peaks */
+            peaks: number[];
+            /** Sample Rate */
+            sample_rate: number;
+        };
+        /** VoiceScript */
+        VoiceScript: {
+            /** Created At */
+            created_at: string;
+            /** Engine */
+            engine: string;
+            /** Id */
+            id: string;
+            /** Lines */
+            lines: components["schemas"]["VoiceScriptLine"][];
+            /** Revision */
+            revision: number;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** VoiceScriptLine */
+        VoiceScriptLine: {
+            /**
+             * Delivery Instruction
+             * @default
+             */
+            delivery_instruction: string;
+            /** Id */
+            id: string;
+            /** Pause Before Ms */
+            pause_before_ms: number | null;
+            /** Position */
+            position: number;
+            /**
+             * Selected Take Id
+             * @default
+             */
+            selected_take_id: string;
+            /** Speaker */
+            speaker: string;
+            /** Takes */
+            takes: components["schemas"]["VoiceTake"][];
+            /** Text */
+            text: string;
+            /**
+             * Voice Id
+             * @default
+             */
+            voice_id: string;
+        };
+        /** VoiceScriptListResponse */
+        VoiceScriptListResponse: {
+            /** Scripts */
+            scripts: components["schemas"]["VoiceScriptSummary"][];
+        };
+        /** VoiceScriptSummary */
+        VoiceScriptSummary: {
+            /** Created At */
+            created_at: string;
+            /** Engine */
+            engine: string;
+            /** Id */
+            id: string;
+            /** Revision */
+            revision: number;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** VoiceScriptWrite */
+        VoiceScriptWrite: {
+            /** Casting */
+            casting?: {
+                [key: string]: components["schemas"]["VoiceCastEntry"];
+            };
+            /**
+             * Engine
+             * @default
+             */
+            engine?: string;
+            /** Expected Revision */
+            expected_revision?: number | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** Text */
+            text: string;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /** VoiceTake */
+        VoiceTake: {
+            /** Asset Id */
+            asset_id: string;
+            /** Created At */
+            created_at: string;
+            /** Duration */
+            duration: number;
+            /** Engine */
+            engine: string;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /** Line Id */
+            line_id: string;
+            /** Pinned */
+            pinned: boolean;
+            /** Text Hash */
+            text_hash: string;
+        };
+        /** VoiceTakePin */
+        VoiceTakePin: {
+            /** Pinned */
+            pinned: boolean;
+        };
         /** VoiceTranscriptFailure */
         VoiceTranscriptFailure: {
             /** Error */
@@ -625,6 +1841,11 @@ export interface components {
             failed: components["schemas"]["VoiceTranscriptFailure"][];
             /** Prepared */
             prepared: string[];
+        };
+        /** WatermarkSetting */
+        WatermarkSetting: {
+            /** Enabled */
+            enabled: boolean;
         };
         /** WorkerHealth */
         WorkerHealth: core["schemas"]["WorkerHealth"];
@@ -849,6 +2070,1228 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicAssetListResponse"];
+                };
+            };
+        };
+    };
+    voice_asset_peaks_api_voice_assets__asset_id__peaks_get: {
+        parameters: {
+            query?: {
+                bins?: number;
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoicePeaksResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audio_tools_status_api_voice_audio_tools_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioToolsStatus"];
+                };
+            };
+        };
+    };
+    list_batches_api_voice_batches_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchList"];
+                };
+            };
+        };
+    };
+    start_batch_api_voice_batches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_batch_api_voice_batches__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_batch_api_voice_batches__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_clients_api_voice_clients_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientCredentialList"];
+                };
+            };
+        };
+    };
+    issue_client_api_voice_clients_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientCredentialWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientCredential"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_client_api_voice_clients__client_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Revoked"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dictate_api_voice_dictate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_dictate_api_voice_dictate_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dictation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dictate_warm_api_voice_dictate_warm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictationWarm"];
+                };
+            };
+        };
+    };
+    list_speech_models_api_voice_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeechModelListResponse"];
+                };
+            };
+        };
+    };
+    save_hub_token_api_voice_models_hub_token_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HubTokenWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeechModelListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_recipes_api_voice_recipes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeList"];
+                };
+            };
+        };
+    };
+    create_recipe_api_voice_recipes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recipe"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_recipe_api_voice_recipes__recipe_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recipe_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recipe"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_recipe_api_voice_recipes__recipe_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recipe_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Revoked"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_voice_scripts_api_voice_scripts_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceScriptListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_voice_script_api_voice_scripts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceScriptWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceScript"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_voice_script_api_voice_scripts__script_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                script_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceScript"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_voice_script_api_voice_scripts__script_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                script_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceScriptWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceScript"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_voice_script_api_voice_scripts__script_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                script_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_voice_take_api_voice_scripts__script_id__lines__line_id__takes__take_id__select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                script_id: string;
+                line_id: string;
+                take_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceScript"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_voice_take_api_voice_takes__take_id__pin_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                take_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceTakePin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transcript_api_voice_transcripts__asset_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_transcript_api_voice_transcripts__asset_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranscriptWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_transcript_file_api_voice_transcripts__asset_id__export_get: {
+        parameters: {
+            query?: {
+                format?: string;
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    speaker_sample_api_voice_transcripts__asset_id__speaker_sample_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeakerSampleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeakerSample"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_audio_api_voice_v1_audio_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_client_audio_api_voice_v1_audio_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientAudio"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_design_api_voice_v1_design_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_isolate_api_voice_v1_isolate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IsolateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_job_api_voice_v1_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_speak_api_voice_v1_speak_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeakRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_tools_api_voice_v1_tools_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_call_api_voice_v1_tools__name__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolCall"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_transcribe_api_voice_v1_transcribe_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranscribeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_voices_api_voice_v1_voices_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_watermark_setting_api_voice_watermark_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatermarkSetting"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatermarkSetting"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mcp_voice_mcp_voice_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                } | {
+                    [key: string]: unknown;
+                }[];
+            };
+        };
+        responses: {
+            /** @description A JSON-RPC 2.0 response, or an array of them for a batch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Only notifications were sent: no body */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

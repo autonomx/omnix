@@ -4,7 +4,7 @@ import { defineModule } from '../../app/moduleManifest';
 export const sttModule = defineModule({
   id: 'stt',
   label: 'STT',
-  summary: 'Speech-to-text transcription, alignment, transcript assets, and diagnostics.',
+  summary: 'Speech-to-text transcription of stored audio into transcript assets.',
   route: '/stt',
   icon: '⌁',
   backendModules: [],

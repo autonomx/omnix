@@ -40,6 +40,10 @@ ACTIONS = frozenset({
     "feature.toggle",
     "admin.workspace.update",
     "admin.membership.update",
+    # Voice Studio API clients (Phase 7): issuing and revoking credentials, and every call (denials too).
+    "voice.client.issue",
+    "voice.client.revoke",
+    "voice.client.call",
 })
 
 # Writes guarded by these permissions are audited by the permission guards

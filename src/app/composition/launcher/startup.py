@@ -32,6 +32,7 @@ WEB_URL = "http://127.0.0.1:5173/"
 FIXED_ENVIRONMENT: tuple[tuple[str, str], ...] = (
     ("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
     ("OMNIX_STT_URL", "http://127.0.0.1:5201"),
+    ("OMNIX_AUDIO_URL", "http://127.0.0.1:5401"),
     ("OMNIX_GATEWAY_URL", "http://127.0.0.1:8000"),
     ("OMNIX_LAUNCHER_URL", LAUNCHER_URL),
 )

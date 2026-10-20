@@ -571,6 +571,52 @@ def save_research_provider_secret(provider: str, value: str | None) -> None:
     _write_payload(stored_payload)
 
 
+_MODEL_HUB_ENVIRONMENT_KEYS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
+
+
+def load_model_hub_token() -> str:
+    """The Hugging Face token speech-model installs use; the environment wins over the store.
+
+    Kept apart from the LLM provider keys (``api_keys``), which a settings
+    payload round-trips: the token is never sent back to the browser.
+    """
+    environment_value = _first_environment_value(_MODEL_HUB_ENVIRONMENT_KEYS)
+    if environment_value:
+        return environment_value
+    try:
+        stored = _stored_payload_strict().get("model_hub_tokens")
+    except Exception:
+        return ""
+    return str(stored.get("huggingface") or "") if isinstance(stored, dict) else ""
+
+
+def model_hub_token_source() -> str:
+    if _first_environment_value(_MODEL_HUB_ENVIRONMENT_KEYS):
+        return "environment"
+    return "os_protected_store" if load_model_hub_token() else "missing"
+
+
+@_serialized
+def save_model_hub_token(value: str | None) -> None:
+    """Store (or, with an empty value, delete) the Hugging Face token in the protected store."""
+    if _first_environment_value(_MODEL_HUB_ENVIRONMENT_KEYS):
+        return  # environment-owned; the UI cannot override it
+    requested = str(value or "").strip()
+    if not os_credential_store_available():
+        if requested:
+            raise LegacyPersistenceRetired("model hub token editing requires an operating-system credential store")
+        return
+    stored_payload = _stored_payload_strict()
+    existing = stored_payload.get("model_hub_tokens")
+    tokens: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
+    if requested:
+        tokens["huggingface"] = requested
+    else:
+        tokens.pop("huggingface", None)
+    stored_payload["model_hub_tokens"] = tokens
+    _write_payload(stored_payload)
+
+
 def _alert_webhooks(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
     entries = payload.get("alert_webhooks")
     if not isinstance(entries, dict):

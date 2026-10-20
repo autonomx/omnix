@@ -24,6 +24,10 @@ _INTERPRETERS = {
     "app": ("RPG_FLUX_PYTHON", "rpg-flux"),
     "tts": ("RPG_TTS_PYTHON", "rpg-tts"),
     "stt": ("RPG_STT_PYTHON", "rpg-stt"),
+    # Voice Studio audio tools (src/services/audio/audio.lock.txt).
+    "audio": ("OMNIX_AUDIO_PYTHON", "omnix-audio"),
+    # OmniVoice's child server, started by the omnivoice TTS provider (src/services/omnivoice).
+    "omnivoice": ("OMNIX_OMNIVOICE_PYTHON", "omnix-omnivoice"),
     # Fish Audio S2 Pro's API server, started by the fish-s2-pro TTS provider.
     "fish": ("OMNIX_FISH_PYTHON", "fish-speech"),
 }

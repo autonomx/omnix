@@ -516,6 +516,10 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     app_python = launcher.python("app")
     tts_python = launcher.python("tts")
     stt_python = launcher.python("stt")
+    audio_python = launcher.python("audio")
+    # The audio service starts when its environment exists (it is optional).
+    audio_enabled = _env_flag("OMNIX_AUDIO_ENABLED", "1")
+    audio_auto_start = audio_enabled and Path(audio_python).is_file()
     image_enabled = _env_flag("OMNIX_IMAGE_ENABLED")
     image_auto_start = image_enabled and _env_flag("OMNIX_START_IMAGE_SERVICE")
     hermes_enabled = _env_flag("HERMES_ENABLED")
@@ -530,6 +534,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         "PYTHONPATH": str(root / "src"),
         "OMNIX_TTS_URL": environment().get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
         "OMNIX_STT_URL": environment().get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
+        "OMNIX_AUDIO_URL": environment().get("OMNIX_AUDIO_URL", "http://127.0.0.1:5401") if audio_enabled else "",
         "OMNIX_IMAGE_ENABLED": environment().get("OMNIX_IMAGE_ENABLED", "0"),
         "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
         "OMNIX_CHARACTER_MODE_ENABLED": environment().get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
@@ -633,6 +638,21 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             description=(
                 f"Optional Hermes messaging and planner gateway on {hermes_base_url}."
             ),
+        ),
+        ServiceSpec(
+            service_id="audio",
+            label="Audio Tools",
+            command=[audio_python, "-m", "services.audio.audio_server"],
+            cwd=root,
+            # Separation needs the full-quality recording: 44.1 kHz stereo is about 10 MB a minute,
+            # so the 50 MB default would refuse anything past five minutes.
+            env={**common, "OMNIX_MAX_UPLOAD_BYTES": environment().get("OMNIX_AUDIO_MAX_UPLOAD_BYTES", str(1024 ** 3))},
+            ports=(5401,),
+            optional=True,
+            enabled=audio_enabled,
+            auto_start=audio_auto_start,
+            startup_critical=False,
+            description="Voice Studio audio tools (vocal isolation, enhancement, watermarks) on 127.0.0.1:5401.",
         ),
         ServiceSpec(
             service_id="image",

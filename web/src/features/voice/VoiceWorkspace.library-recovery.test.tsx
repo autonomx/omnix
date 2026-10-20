@@ -48,7 +48,7 @@ settings_control_center: {
         },
       });
       if (path === '/api/providers') return Response.json({ providers: [], models: [] });
-      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
       if (path === '/api/assets') {
         assetRequests += 1;
         if (assetRequests === 1) return new Response('asset index unavailable', { status: 500 });
@@ -69,6 +69,7 @@ assets: [{
     vi.stubGlobal('fetch', fetchMock);
 
     renderVoice();
+    fireEvent.click(screen.getByRole('button', { name: 'Voices' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Voice Library failed to load');
     expect(screen.getByRole('button', { name: 'Refresh voice library' })).toBeInTheDocument();

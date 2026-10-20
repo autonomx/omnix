@@ -1,14 +1,29 @@
-"""Lossless span-to-chapter timeline with per-speaker loudness mastering."""
+"""Lossless span-to-chapter timeline with per-speaker loudness mastering.
+
+Shared speech assembly (ADR-0016): Voice Studio stitches script segments with it
+and the audiobook app assembles chapters with it, through
+``app.platform.voice.contracts``. The version string keeps its audiobook name so
+existing chapter assembly keys stay valid.
+"""
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import math
 import wave
 from array import array
 from dataclasses import asdict, dataclass
-from typing import Sequence
+from typing import Any, Sequence
 
-from .hashing import bytes_hash, object_hash
+
+def bytes_hash(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def object_hash(value: Any) -> str:
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 ASSEMBLY_VERSION = "audiobook-assembly-v3"
@@ -33,6 +48,8 @@ class AudioSpan:
     source_text: str
     wav_bytes: bytes
     source_span_id: str | None = None
+    # Explicit silence before this span (a script ``{pause}``); overrides the policy.
+    pause_before_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,9 +171,10 @@ def _normalization_gains(
 
 
 def assemble_chapter(
-    spans: Sequence[AudioSpan], *, policy: PausePolicy = PausePolicy(),
+    spans: Sequence[AudioSpan], *, policy: PausePolicy | None = None,
     target_rms_dbfs: float = -20.0,
 ) -> AssembledChapter:
+    policy = policy or PausePolicy()
     if not spans:
         raise ValueError("chapter has no rendered audio")
     if not -35 <= target_rms_dbfs <= -10:
@@ -192,6 +210,8 @@ def assemble_chapter(
                 )
             if previous.source_text.endswith("\n\n") or span.source_text.startswith("\n\n"):
                 pause_ms = max(pause_ms, policy.paragraph_ms)
+            if span.pause_before_ms is not None:
+                pause_ms = max(0, int(span.pause_before_ms))
         pause_frames = round(rate * pause_ms / 1000)
         raw_parts.append((b"\x00\x00" * pause_frames, None))
         total_frames += pause_frames
@@ -207,6 +227,8 @@ def assemble_chapter(
         total_frames += len(samples)
         timeline.append(TimelineEntry(span.render_id, start, total_frames / rate, pause_frames / rate))
         previous = span
+    if sample_rate is None:
+        raise ValueError("a chapter needs at least one rendered span")
 
     gains, measured_dbfs, normalized_dbfs, effective_gain_db, peak_dbfs = _normalization_gains(
         speaker_stats, target_rms_dbfs=target_rms_dbfs,
@@ -223,7 +245,7 @@ def assemble_chapter(
         writer.setsampwidth(2)
         writer.setframerate(sample_rate)
         writer.writeframes(mastered.tobytes())
-    key = object_hash({
+    key_parts: dict[str, Any] = {
         "version": ASSEMBLY_VERSION,
         "render_keys": [span.render_key for span in spans],
         "audio_checksums": [bytes_hash(span.wav_bytes) for span in spans],
@@ -237,7 +259,12 @@ def assemble_chapter(
             for index, span in enumerate(spans)
         ],
         "pause_policy": asdict(policy), "target_rms_dbfs": target_rms_dbfs,
-    })
+    }
+    explicit_pauses = [span.pause_before_ms for span in spans]
+    if any(pause is not None for pause in explicit_pauses):
+        # Only when used, so keys of assemblies without explicit pauses are unchanged.
+        key_parts["explicit_pauses_ms"] = explicit_pauses
+    key = object_hash(key_parts)
     return AssembledChapter(
         output.getvalue(), total_frames / sample_rate, sample_rate,
         tuple(timeline), key, measured_dbfs, normalized_dbfs, effective_gain_db,
@@ -245,3 +272,19 @@ def assemble_chapter(
          for speaker_id, gain in gains.items()},
         peak_dbfs,
     )
+
+
+# Building blocks for assemblers that stream from files (audiobook chapters).
+active_energy = _active_energy
+normalization_gains = _normalization_gains
+
+__all__ = [
+    "ASSEMBLY_VERSION",
+    "AssembledChapter",
+    "AudioSpan",
+    "PausePolicy",
+    "TimelineEntry",
+    "active_energy",
+    "assemble_chapter",
+    "normalization_gains",
+]

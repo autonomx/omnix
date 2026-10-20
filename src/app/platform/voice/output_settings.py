@@ -34,6 +34,12 @@ _SAMPLING: dict[str, dict[str, tuple[str, float, float, float]]] = {
         "stability": ("temperature", 1.0, 0.7, 0.45),
         "style": ("top_p", 0.5, 0.7, 0.95),
     },
+    "omnivoice": {
+        # Token sampling temperature: 0 (its default) is the steadiest; less stability adds variation.
+        "stability": ("class_temperature", 0.6, 0.0, 0.0),
+        # Stronger guidance follows the voice prompt more closely and sounds more pronounced.
+        "style": ("guidance_scale", 1.5, 2.0, 3.0),
+    },
 }
 # Qwen clones from the sample and its transcript (copies delivery closely) or,
 # below this similarity, from the voice's timbre alone.

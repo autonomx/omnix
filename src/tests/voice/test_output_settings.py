@@ -114,5 +114,6 @@ def test_voice_studio_jobs_apply_the_sliders(monkeypatch):
     assert calls[0]["temperature"] == 0.45
     assert "xvec_only" not in calls[0]  # Fish has no similarity control.
     assert metadata["duration"] == pytest.approx(0.5, abs=0.01)
-    assert metadata["voice_controls"] == {"sampling": {"temperature": 0.45}, "audio": {"speed": 2.0, "volume": -6.0}}
+    # Volume is applied once to the assembled take, not per segment.
+    assert metadata["voice_controls"] == {"sampling": {"temperature": 0.45}, "audio": {"speed": 2.0}}
     assert len(_samples(wav_bytes)) == pytest.approx(RATE / 2, abs=50)

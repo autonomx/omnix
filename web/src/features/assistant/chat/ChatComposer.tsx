@@ -1,5 +1,6 @@
 import type { ClipboardEvent as ReactClipboardEvent, FormEventHandler, KeyboardEvent } from 'react';
 import type { FieldErrors, UseFormRegister } from 'react-hook-form';
+import { PushToTalkButton } from '../../voice';
 import { AssistantContextControls, DesktopShareButton } from '../workspace';
 import { suggestedPrompts, type ChatbotFormValues, type PastedChatImage, type PastedChatTextFile } from './chatbotWorkspaceModel';
 
@@ -30,6 +31,8 @@ type ChatComposerProps = {
   onPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
   liveVoiceActive: boolean;
   onToggleCall: () => void;
+  /** Push-to-talk: a transcribed utterance to add to the message. */
+  onDictated: (text: string) => void;
   sendPending: boolean;
   chatJobInProgress: boolean;
 };
@@ -60,6 +63,7 @@ export function ChatComposer({
   onPaste,
   liveVoiceActive,
   onToggleCall,
+  onDictated,
   sendPending,
   chatJobInProgress,
 }: ChatComposerProps) {
@@ -82,7 +86,7 @@ export function ChatComposer({
       {pastedChatTextFile ? <div className="assistant-chat-file-attachment" role="status"><span aria-hidden="true">📄</span><div><strong>{pastedChatTextFile.filename}</strong><small>{pastedChatTextFile.mimeType} · {(pastedChatTextFile.size / 1024).toFixed(0)} KB</small></div><button type="button" aria-label="Remove attached file" onClick={onRemoveTextFile}>×</button></div> : null}
       {chatImageError ? <p className="assistant-chat-image-error" role="alert">{chatImageError}</p> : null}
       <label className="assistant-message-input"><span>Message <small className="assistant-chat-paste-hint">Paste an image, or use + to add a photo or text file</small></span><textarea rows={3} aria-label="Message" aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} onPaste={onPaste} {...register('content', { validate: (value) => (value.trim() || pastedChatImages.length > 0 || pastedChatTextFile) ? true : 'Enter a message, paste an image, or add a file before sending.' })} /></label>
-      <div className="assistant-composer-actions"><DesktopShareButton /><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={onToggleCall}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendPending ? 'Queueing response' : chatJobInProgress ? 'Interrupt and send' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendPending}>{sendPending ? 'Queueing response…' : chatJobInProgress ? 'Interrupt & send' : 'Send message'}</button></div>
+      <div className="assistant-composer-actions"><DesktopShareButton /><PushToTalkButton onText={onDictated} /><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={onToggleCall}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendPending ? 'Queueing response' : chatJobInProgress ? 'Interrupt and send' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendPending}>{sendPending ? 'Queueing response…' : chatJobInProgress ? 'Interrupt & send' : 'Send message'}</button></div>
     <AssistantContextControls />
     </form>
   );

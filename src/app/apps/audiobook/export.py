@@ -1,14 +1,10 @@
 """Frozen export planning and lossless book assembly."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
 
 import io
-import os
-import shutil
 import subprocess
 import wave
-from pathlib import Path
 from typing import Any, Sequence
 
 from .hashing import object_hash
@@ -21,24 +17,9 @@ FORMAT_MIME = {
 
 
 def ffmpeg_binary() -> str:
-    configured = environment().get("OMNIX_FFMPEG", "").strip()
-    executable = configured or shutil.which("ffmpeg")
-    if not executable:
-        # The repository's Windows development environment may carry the
-        # imageio-ffmpeg binary without adding it to the launcher PATH.
-        # Prefer that local, pinned binary before reporting the prerequisite
-        # as unavailable. An explicit OMNIX_FFMPEG value and PATH still win.
-        root = Path(__file__).resolve().parents[4]
-        bundled = sorted(
-            (root / "venv" / "Lib" / "site-packages" / "imageio_ffmpeg" / "binaries").glob(
-                "ffmpeg*.exe"
-            )
-        )
-        if bundled:
-            executable = str(bundled[-1])
-    if not executable or not Path(executable).is_file():
-        raise RuntimeError("FFmpeg is required for audiobook export")
-    return str(executable)
+    from app.runtime.ffmpeg import ffmpeg_binary as shared_ffmpeg_binary
+
+    return shared_ffmpeg_binary("audiobook export")
 
 
 def ffmpeg_version(executable: str) -> str:

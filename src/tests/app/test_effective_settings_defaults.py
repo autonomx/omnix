@@ -68,7 +68,7 @@ def _settings() -> dict:
                 "playbackRate": 1.1,
                 "stability": 0.6,
                 "similarity": 0.7,
-                "effects": ["Compression"],
+                "effects": ["compressor"],
             },
             "voice": {
                 "language": "French",
@@ -78,7 +78,7 @@ def _settings() -> dict:
                 "speed": 1.2,
                 "pitch": 0.1,
                 "volume": -1,
-                "effects": ["De-esser"],
+                "effects": ["deesser"],
                 "streaming": True,
                 "cloningLanguage": "French",
                 "cloningQuality": "Studio",
@@ -200,7 +200,7 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
     assert podcast.input_payload["tone"] == "Conversational"
     assert podcast.input_payload["language"] == "English (CA)"
     assert podcast.input_payload["output_settings"] == {"stability": 0.6, "similarity": 0.7}
-    assert podcast.input_payload["audio_effects"] == ["Compression"]
+    assert podcast.input_payload["audio_effects"] == ["compressor"]
 
     voice = _registered_submission("voice", CreateJobRequest(
         module="voice",
@@ -211,7 +211,7 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
     assert voice.input_payload["provider_id"] == "faster-qwen3-tts"
     assert voice.input_payload["language"] == "French"
     assert voice.input_payload["output_settings"]["speed"] == 1.2
-    assert voice.input_payload["audio_effects"] == ["De-esser"]
+    assert voice.input_payload["audio_effects"] == ["deesser"]
 
     cloning = _registered_submission("voice", CreateJobRequest(
         module="voice-cloning",
@@ -234,10 +234,10 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
         resource_class=ResourceClass.GPU_STT,
         input_payload={},
     ))
+    # Alignment is not a job input until Phase 2 adds word timing.
     assert stt.input_payload == {
         "provider_id": "parakeet",
         "language": "fr",
-        "alignment": False,
         "save_transcript": False,
     }
 
@@ -275,3 +275,12 @@ def test_unrelated_cpu_job_payload_is_not_mutated(monkeypatch) -> None:
     )
 
     assert request.input_payload is None
+
+
+def test_saved_effect_labels_load_as_off() -> None:
+    """Labels were saved while effects did nothing; turning effects on must not change old renders."""
+    from app.platform.voice.declarations import VoiceSettingsProfile
+    from app.platform.voice.feature import VoiceJobInput
+
+    assert VoiceSettingsProfile(effects=["Compression", "De-esser", "reverb"]).effects == ["reverb"]
+    assert VoiceJobInput(audio_effects=["Equalizer", "Noise Reduction", "eq"]).audio_effects == ["eq"]

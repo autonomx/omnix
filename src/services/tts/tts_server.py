@@ -50,10 +50,17 @@ app.add_middleware(ModelServiceMiddleware)
 MAX_TTS_TEXT_CHARS = 20_000
 
 
+class TtsBlendPart(BaseModel):
+    speaker: str = Field(min_length=1, max_length=200)
+    weight: float = Field(gt=0, le=1)
+
+
 class TtsGenerateRequest(BaseModel):
     text: str = Field(max_length=MAX_TTS_TEXT_CHARS)
     # The engine the caller expects; empty serves whichever engine is loaded.
     provider: str = ""
+    # A pinned caller (a Voice Studio job): refuse with 409 instead of switching.
+    require_loaded: bool = False
     speaker: str = "default"
     language: str = "en"
     speed: float = 1.0
@@ -62,6 +69,8 @@ class TtsGenerateRequest(BaseModel):
     trace_id: str = ""
     # Sampling overrides (audiobook renders); unknown keys are dropped.
     parameters: dict[str, Any] = Field(default_factory=dict)
+    # A voice between library voices (Voice Studio §5): engines with the voice_blend capability only.
+    speaker_blend: list[TtsBlendPart] = Field(default_factory=list, max_length=4)
 
 
 class TtsGenerationParametersRequest(BaseModel):
@@ -104,6 +113,56 @@ _TTS_PROVIDER_NAME: str = "faster-qwen3-tts"
 _TTS_MODEL_OWNER_GUARD: Any = None
 # Serializes engine switches: one engine is loaded at a time.
 _TTS_SWITCH_LOCK = threading.Lock()
+
+# Generations running on the loaded engine. A switch lets them finish before it unloads the engine,
+# for at most this long; meanwhile new requests that are not live speech hear "engine loading" (409)
+# and wait. Live speech is never held back: a switch it asks for cuts the wait short.
+SWITCH_DRAIN_SECONDS = env_int("OMNIX_TTS_SWITCH_DRAIN_SECONDS", 120, minimum=0, maximum=900)
+_IN_FLIGHT = threading.Condition()
+_IN_FLIGHT_COUNT = 0
+_DRAINING = False
+_URGENT_SWITCHES = 0
+
+
+class EngineLoading(RuntimeError):
+    """An engine switch is under way; a request that is not live speech waits for it."""
+
+
+def _begin_generation(*, realtime: bool = False) -> None:
+    """Count a generation on the loaded engine; refused while a switch drains, unless it is live speech."""
+    global _IN_FLIGHT_COUNT
+    with _IN_FLIGHT:
+        if _DRAINING and not realtime:
+            raise EngineLoading("an engine switch is waiting for running generations to finish")
+        _IN_FLIGHT_COUNT += 1
+
+
+def _end_generation() -> None:
+    global _IN_FLIGHT_COUNT
+    with _IN_FLIGHT:
+        _IN_FLIGHT_COUNT = max(0, _IN_FLIGHT_COUNT - 1)
+        _IN_FLIGHT.notify_all()
+
+
+def _drain_generations(timeout_seconds: float) -> int:
+    """Hold back new generations and wait for running ones; returns how many were still running."""
+    global _DRAINING
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    with _IN_FLIGHT:
+        _DRAINING = True
+        while _IN_FLIGHT_COUNT and not _URGENT_SWITCHES:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            _IN_FLIGHT.wait(remaining)
+        return _IN_FLIGHT_COUNT
+
+
+def _stop_draining() -> None:
+    global _DRAINING
+    with _IN_FLIGHT:
+        _DRAINING = False
+        _IN_FLIGHT.notify_all()
 
 
 def _provider_payload_ok(details: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -322,37 +381,100 @@ def _handle_tts_model_owner_loss(provider: Any, guard: Any) -> None:
         _TTS_MODEL_OWNER_GUARD = None
 
 
-def select_tts_provider(name: str) -> dict[str, Any]:
-    """Serve ``name``: unload the current engine first, then load the new one."""
-    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR
+def select_tts_provider(name: str, *, realtime: bool = False) -> dict[str, Any]:
+    """Serve ``name``: let running generations finish, unload the current engine, then load the new one.
+
+    A switch for live speech (``realtime``) does not wait for running generations, and cuts short a
+    switch already waiting for them: someone is listening.
+    """
+    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR, _URGENT_SWITCHES
     from app.providers.catalog import LOCAL_DEVICE, provider_supports
 
     if not provider_supports(name, LOCAL_DEVICE, "tts"):
         # Checked before unloading: a bad name must not leave the service empty.
         raise ValueError(f"{name!r} is not a local TTS engine")
-    with _TTS_SWITCH_LOCK:
-        if _TTS_PROVIDER is not None and _TTS_PROVIDER_NAME == name:
-            return get_tts_service_status()
-        previous, _TTS_PROVIDER = _TTS_PROVIDER, None
-        stop = getattr(previous, "stop", None)
-        if callable(stop):
-            stop()
-        _TTS_PROVIDER_ERROR = f"switching to {name}"
-        status = initialize_tts_provider(name)
-        guard = _TTS_MODEL_OWNER_GUARD
-        if status.get("ok") and guard is not None:
-            provider = _TTS_PROVIDER
-            if not guard.set_on_lost(lambda: _handle_tts_model_owner_loss(provider, guard)):
-                status = get_tts_service_status()
-        voice_debug_log("tts", "tts_provider_selected", provider=name, provider_ready=bool(status.get("ok")),
-                        provider_error=status.get("error", ""))
-        return status
+    if realtime:
+        with _IN_FLIGHT:
+            _URGENT_SWITCHES += 1
+            _IN_FLIGHT.notify_all()
+    try:
+        with _TTS_SWITCH_LOCK:
+            if _TTS_PROVIDER is not None and _TTS_PROVIDER_NAME == name:
+                return get_tts_service_status()
+            try:
+                return _switch_engine(name, drain_seconds=0.0 if realtime else SWITCH_DRAIN_SECONDS)
+            finally:
+                _stop_draining()
+    finally:
+        if realtime:
+            with _IN_FLIGHT:
+                _URGENT_SWITCHES -= 1
 
 
-def _ensure_provider(name: str) -> None:
-    """Switch to the engine a request names; an empty name accepts the current one."""
-    if name and name != _TTS_PROVIDER_NAME:
-        select_tts_provider(name)
+def _switch_engine(name: str, *, drain_seconds: float) -> dict[str, Any]:
+    """Unload the current engine and load ``name`` (the caller holds the switch lock)."""
+    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR
+    if _TTS_PROVIDER is not None:
+        still_running = _drain_generations(drain_seconds)
+        if still_running:
+            voice_debug_log("tts", "tts_switch_interrupts_generations", provider=name, running=still_running)
+    previous, _TTS_PROVIDER = _TTS_PROVIDER, None
+    # Before stopping the old engine (a Fish process can take a while to end): a pinned request in
+    # between hears "loading" (409, it waits), not "unavailable".
+    _TTS_PROVIDER_ERROR = f"switching to {name}"
+    stop = getattr(previous, "stop", None)
+    if callable(stop):
+        stop()
+    status = initialize_tts_provider(name)
+    guard = _TTS_MODEL_OWNER_GUARD
+    if status.get("ok") and guard is not None:
+        provider = _TTS_PROVIDER
+        if not guard.set_on_lost(lambda: _handle_tts_model_owner_loss(provider, guard)):
+            status = get_tts_service_status()
+    voice_debug_log("tts", "tts_provider_selected", provider=name, provider_ready=bool(status.get("ok")),
+                    provider_error=status.get("error", ""))
+    return status
+
+
+class EngineSwapped(RuntimeError):
+    """A voice tool has swapped another engine in; non-live requests wait instead of switching."""
+
+
+# The swap the controller started (Voice Studio Phase 1 §6): which engine it swapped in,
+# under which fence token, and which engine to restore. Live speech interrupts it.
+_SWAP_LOCK = threading.Lock()
+_SWAP: dict[str, Any] = {"fence": None, "engine": "", "restore": "", "interrupted": False}
+
+
+def _swap_snapshot() -> dict[str, Any]:
+    with _SWAP_LOCK:
+        return dict(_SWAP)
+
+
+def _ensure_provider(name: str, *, realtime: bool = False) -> None:
+    """Serve the engine a request names; an empty name accepts the current one.
+
+    Outside a swap this switches engines as before. During a swap only live
+    speech switches (it interrupts the swap and gets the selected engine back);
+    any other request for a different engine is refused (409) and waits.
+    """
+    if not name or name == _TTS_PROVIDER_NAME:
+        return
+    with _SWAP_LOCK:
+        swapping = _SWAP["fence"] is not None
+        if swapping and realtime:
+            _SWAP.update(fence=None, engine="", restore="", interrupted=True)
+            voice_debug_log("tts", "tts_swap_interrupted_by_live_speech", requested=name)
+        elif swapping:
+            raise EngineSwapped(f"{_TTS_PROVIDER_NAME} is swapped in for a voice tool; {name} waits")
+    select_tts_provider(name, realtime=realtime)
+
+
+def _gpu_memory() -> dict[str, Any]:
+    """Used and free memory on the accelerator: a CUDA device's VRAM, or Apple Silicon's unified memory."""
+    from app.providers.gpu_report import gpu_memory
+
+    return gpu_memory()
 
 
 def get_tts_service_status() -> Dict[str, Any]:
@@ -545,12 +667,19 @@ def health() -> Dict[str, Any]:
         "details": {key: status["details"][key] for key in
                     ("provider_class", "provider_name", "configured_model", "configured_device")
                     if key in status["details"]},
+        # What the swap controller reads: the engine actually loaded, any swap, VRAM and host memory.
+        "swap": _swap_snapshot(),
+        "gpu": _gpu_memory(),
+        "host": _host_memory(),
     }
 
 
 @app.post("/api/tts/provider")
 async def select_provider(request: TtsProviderSelectRequest) -> dict[str, Any]:
-    """Load ``provider`` as the served engine, unloading the current one."""
+    """Load ``provider`` as the served engine, unloading the current one (refused during a swap)."""
+    swap = _swap_snapshot()
+    if swap["fence"] is not None and request.provider != _TTS_PROVIDER_NAME:
+        return JSONResponse({"ok": False, "error": "engine_swapped", "swap": swap}, status_code=409)
     try:
         status = await asyncio.to_thread(select_tts_provider, request.provider)
     except ValueError as exc:
@@ -558,6 +687,66 @@ async def select_provider(request: TtsProviderSelectRequest) -> dict[str, Any]:
     if not status.get("ok"):
         return JSONResponse(status, status_code=503)
     return status
+
+
+class TtsSwapRequest(BaseModel):
+    provider: str = Field(min_length=1, max_length=64)
+    fence_token: int = Field(ge=1)
+    restore_provider: str = Field(default="", max_length=64)
+
+
+def _host_memory() -> dict[str, Any]:
+    """Host memory a load can still use (Windows: the commit left), when the platform reports it."""
+    from app.providers.host_memory import available_commit_bytes
+
+    available = available_commit_bytes()
+    return {} if available is None else {"commit_free_bytes": available}
+
+
+@app.post("/api/tts/engine/swap")
+async def swap_engine(request: TtsSwapRequest) -> dict[str, Any]:
+    """The swap controller: unload the current engine and load ``provider`` under a fence token."""
+    with _SWAP_LOCK:
+        current = _SWAP["fence"]
+        if current is not None and int(current) > request.fence_token:
+            return JSONResponse({"ok": False, "error": "stale_fence", "swap": dict(_SWAP)}, status_code=409)
+        _SWAP.update(fence=request.fence_token, engine=request.provider,
+                     restore=request.restore_provider or _TTS_PROVIDER_NAME, interrupted=False)
+    try:
+        status = await asyncio.to_thread(select_tts_provider, request.provider)
+    except ValueError as exc:
+        with _SWAP_LOCK:
+            _SWAP.update(fence=None, engine="", restore="")
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not status.get("ok"):
+        with _SWAP_LOCK:
+            _SWAP.update(fence=None, engine="", restore="")
+        return JSONResponse({**status, "swap": _swap_snapshot()}, status_code=503)
+    return {**status, "swap": _swap_snapshot(), "gpu": _gpu_memory()}
+
+
+@app.post("/api/tts/engine/restore")
+async def restore_engine(request: TtsSwapRequest) -> dict[str, Any]:
+    """End a swap: load ``provider`` (the selected engine) again. A newer fence is never undone."""
+    with _SWAP_LOCK:
+        current = _SWAP["fence"]
+        if current is not None and int(current) > request.fence_token:
+            return JSONResponse({"ok": False, "error": "stale_fence", "swap": dict(_SWAP)}, status_code=409)
+    try:
+        status = await asyncio.to_thread(select_tts_provider, request.provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    with _SWAP_LOCK:
+        if _SWAP["fence"] is None or int(_SWAP["fence"]) <= request.fence_token:
+            if status.get("ok"):
+                _SWAP.update(fence=None, engine="", restore="", interrupted=False)
+            else:
+                # The swap stays open until the selected engine is back: the controller retries the restore
+                # (a load refused for host memory succeeds once memory frees), and live speech still interrupts.
+                _SWAP.update(fence=request.fence_token, engine=request.provider, restore=request.provider)
+    if not status.get("ok"):
+        return JSONResponse({**status, "swap": _swap_snapshot()}, status_code=503)
+    return {**status, "swap": _swap_snapshot(), "gpu": _gpu_memory()}
 
 
 @app.get("/api/tts/speakers")
@@ -619,6 +808,8 @@ def generation_parameters(request: TtsGenerationParametersRequest) -> dict[str, 
     try:
         _ensure_provider(request.provider)
         provider = _require_provider()
+    except EngineSwapped as exc:
+        raise HTTPException(status_code=409, detail="engine_swapped") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="model_unavailable") from exc
     overrides = generation_overrides(request.parameters)
@@ -658,74 +849,37 @@ def _generate_audio(request: TtsGenerateRequest, wants_wav: bool = False):
         text_fingerprint=text_fingerprint(request.text),
         **snapshot,
     )
-    try:
-        _ensure_provider(request.provider)
-        provider = _require_provider()
-
-        if hasattr(provider, "generate_audio"):
-            result = provider.generate_audio(
-                text=request.text,
-                speaker=request.speaker,
-                language=request.language,
-                voice_trace_id=trace_id,
-                **generation_overrides(request.parameters),
-            )
-        elif hasattr(provider, "generate_tts"):
-            result = provider.generate_tts(
-                text=request.text,
-                speaker=request.speaker,
-                language=request.language,
-            )
-        else:
-            voice_debug_log(
-                "tts",
-                "tts_audio_provider_missing",
-                trace_id=trace_id,
-                provider_class=type(provider).__name__,
-            )
-            return JSONResponse(
-                {"success": False, "error": "provider_missing_generate_audio", "trace_id": trace_id},
-                status_code=500,
-            )
-
-        voice_debug_log(
-            "tts",
-            "tts_audio_completed",
-            trace_id=trace_id,
-            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 3),
-            success=bool(result.get("success")) if isinstance(result, dict) else None,
-            is_fallback=bool(result.get("is_fallback")) if isinstance(result, dict) else None,
-            error=result.get("error") if isinstance(result, dict) else None,
-            resolution_strategy=snapshot["resolution_strategy"],
-            resolved_reference_path=snapshot["resolved_reference_path"],
+    if request.require_loaded and request.provider and request.provider != _TTS_PROVIDER_NAME:
+        voice_debug_log("tts", "tts_audio_engine_not_loaded", trace_id=trace_id,
+                        requested=request.provider, loaded=_TTS_PROVIDER_NAME)
+        return JSONResponse(
+            {"success": False, "error": "engine_not_loaded", "requested": request.provider,
+             "loaded": _TTS_PROVIDER_NAME or "", "trace_id": trace_id},
+            status_code=409,
+            headers={"X-Omnix-Voice-Trace": trace_id},
         )
-
-        if isinstance(result, dict) and result.get("is_fallback"):
+    try:
+        try:
+            _ensure_provider(request.provider)
+        except EngineSwapped as exc:
             return JSONResponse(
-                {
-                    "success": False,
-                    "provider": _TTS_PROVIDER_NAME,
-                    "error": "tts_model_unavailable",
-                    "details": result,
-                    "trace_id": trace_id,
-                },
-                status_code=503,
-                headers={"X-Omnix-Voice-Trace": trace_id},
+                {"success": False, "error": "engine_swapped", "detail": str(exc),
+                 "loaded": _TTS_PROVIDER_NAME or "", "trace_id": trace_id},
+                status_code=409,
+                headers={"X-Omnix-Voice-Trace": trace_id, "Retry-After": "5"},
             )
-
-        if isinstance(result, dict) and not result.get("success", False):
-            result = {**result, "trace_id": trace_id}
-            return JSONResponse(
-                result,
-                status_code=503,
-                headers={"X-Omnix-Voice-Trace": trace_id},
-            )
-
-        if isinstance(result, dict) and wants_wav:
-            return _wav_result_response(result, trace_id)
-        if isinstance(result, dict):
-            result = {**result, "trace_id": trace_id}
-        return result
+        if _TTS_PROVIDER is None and str(_TTS_PROVIDER_ERROR or "").startswith("switching to"):
+            # The engine is still loading (a swap or a switch): a pinned job waits, it does not fail.
+            return _engine_loading_response(trace_id)
+        try:
+            _begin_generation()
+        except EngineLoading:
+            # A switch is letting running generations finish: this one waits for the next engine.
+            return _engine_loading_response(trace_id)
+        try:
+            return _generate_on_engine(request, wants_wav, trace_id, started_at, snapshot)
+        finally:
+            _end_generation()
     except Exception as exc:
         voice_debug_log(
             "tts",
@@ -746,6 +900,96 @@ def _generate_audio(request: TtsGenerateRequest, wants_wav: bool = False):
             status_code=500,
             headers={"X-Omnix-Voice-Trace": trace_id},
         )
+
+
+def _engine_loading_response(trace_id: str) -> JSONResponse:
+    return JSONResponse(
+        {"success": False, "error": "engine_loading", "loaded": "", "requested": _TTS_PROVIDER_NAME or "",
+         "trace_id": trace_id},
+        status_code=409,
+        headers={"X-Omnix-Voice-Trace": trace_id, "Retry-After": "5"},
+    )
+
+
+def _generate_on_engine(request: TtsGenerateRequest, wants_wav: bool, trace_id: str, started_at: float,
+                        snapshot: dict[str, Any]):
+    """One utterance on the loaded engine (counted as running, so a switch lets it finish)."""
+    provider = _require_provider()
+
+    blend: dict[str, Any] = {}
+    if request.speaker_blend:
+        from app.providers.catalog import VOICE_BLEND, provider_supports
+
+        if not provider_supports(_TTS_PROVIDER_NAME, VOICE_BLEND, "tts"):
+            return JSONResponse({"success": False, "error": "voice_blend_unsupported",
+                                 "provider": _TTS_PROVIDER_NAME, "trace_id": trace_id}, status_code=422,
+                                headers={"X-Omnix-Voice-Trace": trace_id})
+        blend["speaker_blend"] = [part.model_dump() for part in request.speaker_blend]
+    if hasattr(provider, "generate_audio"):
+        result = provider.generate_audio(
+            text=request.text,
+            speaker=request.speaker,
+            language=request.language,
+            voice_trace_id=trace_id,
+            **generation_overrides(request.parameters),
+            **blend,
+        )
+    elif hasattr(provider, "generate_tts"):
+        result = provider.generate_tts(
+            text=request.text,
+            speaker=request.speaker,
+            language=request.language,
+        )
+    else:
+        voice_debug_log(
+            "tts",
+            "tts_audio_provider_missing",
+            trace_id=trace_id,
+            provider_class=type(provider).__name__,
+        )
+        return JSONResponse(
+            {"success": False, "error": "provider_missing_generate_audio", "trace_id": trace_id},
+            status_code=500,
+        )
+
+    voice_debug_log(
+        "tts",
+        "tts_audio_completed",
+        trace_id=trace_id,
+        elapsed_ms=round((time.perf_counter() - started_at) * 1000, 3),
+        success=bool(result.get("success")) if isinstance(result, dict) else None,
+        is_fallback=bool(result.get("is_fallback")) if isinstance(result, dict) else None,
+        error=result.get("error") if isinstance(result, dict) else None,
+        resolution_strategy=snapshot["resolution_strategy"],
+        resolved_reference_path=snapshot["resolved_reference_path"],
+    )
+
+    if isinstance(result, dict) and result.get("is_fallback"):
+        return JSONResponse(
+            {
+                "success": False,
+                "provider": _TTS_PROVIDER_NAME,
+                "error": "tts_model_unavailable",
+                "details": result,
+                "trace_id": trace_id,
+            },
+            status_code=503,
+            headers={"X-Omnix-Voice-Trace": trace_id},
+        )
+
+    if isinstance(result, dict) and not result.get("success", False):
+        result = {**result, "trace_id": trace_id}
+        return JSONResponse(
+            result,
+            status_code=503,
+            headers={"X-Omnix-Voice-Trace": trace_id},
+        )
+
+    if isinstance(result, dict) and wants_wav:
+        return _wav_result_response(result, trace_id)
+    if isinstance(result, dict):
+        result = {**result, "trace_id": trace_id}
+    return result
 
 
 @app.post("/api/tts/generate_stream_audio")
@@ -770,7 +1014,8 @@ def _generate_stream_audio(request: TtsGenerateStreamRequest):
     )
     provider = None
     try:
-        _ensure_provider(request.provider)
+        # Streamed speech is someone listening now: it interrupts a voice-tool swap.
+        _ensure_provider(request.provider, realtime=True)
         provider = _require_provider()
         if not hasattr(provider, "generate_audio_stream"):
             voice_debug_log(
@@ -792,24 +1037,28 @@ def _generate_stream_audio(request: TtsGenerateStreamRequest):
             f"language={request.language!r} text_len={len(request.text)} trace_id={trace_id}"
         )
 
-        for audio_chunk, sr, timing in provider.generate_audio_stream(
-            text=request.text,
-            speaker=request.speaker,
-            language=request.language,
-            chunk_size=request.chunk_size,
-            temperature=request.temperature,
-            top_k=request.top_k,
-            top_p=request.top_p,
-            repetition_penalty=request.repetition_penalty,
-            append_silence=request.append_silence,
-            max_new_tokens=request.max_new_tokens,
-            voice_trace_id=trace_id,
-        ):
-            if audio_chunk is None:
-                continue
-            sample_rate = sr or sample_rate
-            pcm = (audio_chunk * 32767).astype("int16").tobytes()
-            pcm_chunks.append(pcm)
+        _begin_generation(realtime=True)  # counted, so a switch lets it finish; never held back
+        try:
+            for audio_chunk, sr, timing in provider.generate_audio_stream(
+                text=request.text,
+                speaker=request.speaker,
+                language=request.language,
+                chunk_size=request.chunk_size,
+                temperature=request.temperature,
+                top_k=request.top_k,
+                top_p=request.top_p,
+                repetition_penalty=request.repetition_penalty,
+                append_silence=request.append_silence,
+                max_new_tokens=request.max_new_tokens,
+                voice_trace_id=trace_id,
+            ):
+                if audio_chunk is None:
+                    continue
+                sample_rate = sr or sample_rate
+                pcm = (audio_chunk * 32767).astype("int16").tobytes()
+                pcm_chunks.append(pcm)
+        finally:
+            _end_generation()
 
         response = _pcm16_chunks_to_wav_response(pcm_chunks, sample_rate)
         voice_debug_log(
@@ -855,7 +1104,8 @@ def _generate_stream_audio(request: TtsGenerateStreamRequest):
 async def generate_live_call_stream(request: TtsGenerateStreamRequest):
     """Stream little-endian PCM16 while holding admission through disconnect."""
     trace_id = _request_trace_id(request.trace_id, "tts-live-stream")
-    await asyncio.to_thread(_ensure_provider, request.provider)
+    # Live speech always wins: it interrupts a voice-tool swap.
+    await asyncio.to_thread(lambda: _ensure_provider(request.provider, realtime=True))
     provider = _require_provider()
     if not hasattr(provider, "generate_audio_stream"):
         return JSONResponse(
@@ -880,6 +1130,8 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
             headers={"X-Omnix-Voice-Trace": trace_id},
         )
 
+    # Counted until the stream is finalized, so a switch lets it finish; live speech is never held back.
+    _begin_generation(realtime=True)
     try:
         stream = provider.generate_audio_stream(
             text=request.text,
@@ -896,6 +1148,7 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
             _device_permit_held=True,
         )
     except Exception:
+        _end_generation()
         await asyncio.to_thread(permit.__exit__, None, None, None)
         return JSONResponse(
             {"success": False, "error": "tts_provider_unavailable", "trace_id": trace_id},
@@ -928,6 +1181,7 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
             if callable(close):
                 close()
         finally:
+            _end_generation()
             release_device_permit()
 
     def pcm_chunks():
@@ -978,6 +1232,18 @@ async def voice_clone(
 
 
 def _voice_clone(request: TtsVoiceCloneRequest, audio_data: bytes):
+    """Counted as running on the loaded engine, so a switch lets it finish (or it waits for the switch)."""
+    try:
+        _begin_generation()
+    except EngineLoading:
+        return _engine_loading_response(_request_trace_id("", "tts-clone"))
+    try:
+        return _voice_clone_on_engine(request, audio_data)
+    finally:
+        _end_generation()
+
+
+def _voice_clone_on_engine(request: TtsVoiceCloneRequest, audio_data: bytes):
     trace_id = _request_trace_id("", "tts-clone")
     voice_debug_log(
         "tts",

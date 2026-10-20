@@ -13,14 +13,15 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from app.providers.catalog import LOCAL_DEVICE, provider_supports, specs
+from app.providers.catalog import DELIVERY_INSTRUCTION, LOCAL_DEVICE, VOICE_BLEND, VOICE_DESIGN, provider_supports, specs
 
 from .output_settings import engine_controls
 
 logger = logging.getLogger(__name__)
 
-# Engines that need a reference transcript for every voice they clone.
-TRANSCRIPT_ENGINES = frozenset({"fish-s2-pro"})
+# Engines that need a reference transcript for every voice they clone (OmniVoice would
+# otherwise transcribe each sample itself with a Whisper model it downloads).
+TRANSCRIPT_ENGINES = frozenset({"fish-s2-pro", "omnivoice"})
 
 _LOCK = threading.Lock()
 _SWITCH: dict[str, Any] = {
@@ -41,8 +42,13 @@ def _update(**values: Any) -> None:
         _SWITCH.update(values)
 
 
+def _selectable(capabilities: frozenset[str]) -> bool:
+    """A local engine people can select; voice tools (design) are only ever swapped in."""
+    return LOCAL_DEVICE in capabilities and VOICE_DESIGN not in capabilities
+
+
 def local_engine_ids() -> tuple[str, ...]:
-    return tuple(spec.id for spec in specs("tts") if LOCAL_DEVICE in spec.capabilities)
+    return tuple(spec.id for spec in specs("tts") if _selectable(spec.capabilities))
 
 
 def _installed(provider_id: str) -> tuple[bool, str]:
@@ -64,7 +70,7 @@ def tts_engines() -> dict[str, Any]:
     selected = selected_tts_provider_id()
     engines = []
     for spec in specs("tts"):
-        if LOCAL_DEVICE not in spec.capabilities:
+        if not _selectable(spec.capabilities):
             continue
         try:
             provider_class = spec.load()
@@ -72,7 +78,10 @@ def tts_engines() -> dict[str, Any]:
             engines.append({"id": spec.id, "label": spec.id, "description": "", "selected": spec.id == selected,
                             "installed": False, "unavailable_reason": f"{type(exc).__name__}: {exc}",
                             "needs_transcripts": spec.id in TRANSCRIPT_ENGINES,
-                            "voice_controls": engine_controls(spec.id)})
+                            "voice_controls": engine_controls(spec.id),
+                            "delivery_instruction": DELIVERY_INSTRUCTION in spec.capabilities,
+                            "voice_blend": VOICE_BLEND in spec.capabilities,
+                            "group": engine_group(spec.id, spec.capabilities)})
             continue
         installed, reason = _installed(spec.id)
         engines.append({
@@ -85,6 +94,12 @@ def tts_engines() -> dict[str, Any]:
             "needs_transcripts": spec.id in TRANSCRIPT_ENGINES,
             # The Voice Studio sliders that change this engine's output.
             "voice_controls": engine_controls(spec.id),
+            # Whether per-speaker delivery instructions reach this engine.
+            "delivery_instruction": DELIVERY_INSTRUCTION in spec.capabilities,
+            # Whether it can blend library voices (the Design tool's Blend).
+            "voice_blend": VOICE_BLEND in spec.capabilities,
+            # The task the picker lists it under.
+            "group": engine_group(spec.id, spec.capabilities),
         })
     return {"selected": selected, "engines": engines, "switch": _snapshot()}
 
@@ -160,7 +175,57 @@ def prepare_voice_transcripts() -> dict[str, Any]:
     return {"prepared": prepared, "failed": failed, "already_ready": already_ready}
 
 
-def _run_switch(provider_id: str) -> None:
+# Engines whose strength is language breadth (OmniVoice: 600+ languages).
+MANY_LANGUAGE_ENGINES = frozenset({"omnivoice"})
+
+
+def engine_group(provider_id: str, capabilities: frozenset[str]) -> str:
+    """The task the picker groups an engine under: many_languages, delivery or clone."""
+    if provider_id in MANY_LANGUAGE_ENGINES:
+        return "many_languages"
+    if DELIVERY_INSTRUCTION in capabilities:
+        return "delivery"
+    return "clone"
+
+
+# A switch holds the swap lease this long at most; a crashed switch is recovered after it.
+SELECT_LEASE_SECONDS = 900.0
+
+
+def _take_swap_lease(provider_id: str) -> int | None:
+    """Hold the swap lease for the switch, so the swap controller cannot start a swap meanwhile.
+
+    Without swap coordination (no TTS service or PostgreSQL) there is no lease to hold.
+    If the switch's process dies, the controller's recovery loads ``provider_id``.
+    """
+    from .swap_controller import swaps_enabled
+
+    if not swaps_enabled():
+        return None
+    import os
+    import socket
+
+    from app.persistence.tts_swap import begin_swap
+
+    fence = begin_swap(f"{socket.gethostname()}:{os.getpid()}:engine-select", engine=provider_id,
+                       restore_engine=provider_id, lease_seconds=SELECT_LEASE_SECONDS)
+    if fence is None:
+        raise RuntimeError("a voice tool has another engine swapped in; choose an engine when it finishes")
+    return fence
+
+
+def _release_swap_lease(fence: int | None) -> None:
+    if fence is None:
+        return
+    from app.persistence.tts_swap import end_swap
+
+    try:
+        end_swap(fence, detail="engine selected")
+    except Exception:
+        logger.warning("The engine switch's swap lease could not be released; it expires on its own", exc_info=True)
+
+
+def _run_switch(provider_id: str, fence: int | None = None) -> None:
     from app.providers.service import invalidate_audio_provider_cache
 
     from .tts_runtime_actions import warm_tts_runtime
@@ -181,6 +246,8 @@ def _run_switch(provider_id: str) -> None:
     except Exception as exc:
         logger.exception("TTS engine switch to %s failed", provider_id)
         _update(phase="failed", error=str(exc))
+    finally:
+        _release_swap_lease(fence)
 
 
 def select_tts_engine(provider_id: str) -> dict[str, Any]:
@@ -189,9 +256,12 @@ def select_tts_engine(provider_id: str) -> dict[str, Any]:
 
     if not provider_supports(provider_id, LOCAL_DEVICE, "tts"):
         raise ValueError(f"{provider_id!r} is not a local TTS engine")
+    if provider_supports(provider_id, VOICE_DESIGN, "tts"):
+        raise ValueError(f"{provider_id!r} is a voice design tool, not an engine to select")
     with _LOCK:
         if _SWITCH["phase"] in {"unloading", "preparing_voices", "loading"}:
             raise RuntimeError(f"a switch to {_SWITCH['provider']} is still in progress")
+        fence = _take_swap_lease(provider_id)
         _SWITCH.update(provider=provider_id, phase="unloading", error=None,
                        voices={"prepared": [], "failed": [], "already_ready": 0})
     try:
@@ -199,8 +269,9 @@ def select_tts_engine(provider_id: str) -> dict[str, Any]:
             save_settings({"audio_provider_tts": provider_id})
     except Exception:
         _update(phase="failed", error="the engine choice could not be saved")
+        _release_swap_lease(fence)
         raise
-    threading.Thread(target=_run_switch, args=(provider_id,), name="tts-engine-switch", daemon=True).start()
+    threading.Thread(target=_run_switch, args=(provider_id, fence), name="tts-engine-switch", daemon=True).start()
     return tts_engines()
 
 

@@ -6,7 +6,7 @@ from app.providers import catalog, tts_artifacts
 def test_only_catalogued_tts_providers_with_local_artifacts_are_resolved(monkeypatch):
     local = {spec.id for spec in catalog.specs("tts")
              if tts_artifacts.LOCAL_ARTIFACTS in spec.capabilities}
-    assert local == {"faster-qwen3-tts", "fish-s2-pro"}
+    assert local == {"faster-qwen3-tts", "fish-s2-pro", "omnivoice", "qwen3-tts-voicedesign"}
     for provider_id in ("parakeet", "lmstudio", "unknown"):
         with pytest.raises(tts_artifacts.LocalArtifactsUnavailable, match="unavailable"):
             tts_artifacts.local_model_artifacts(provider_id)

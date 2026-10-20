@@ -1,0 +1,9 @@
+# OmniVoice (Voice Studio Phase 5): k2-fsa's 600-language zero-shot TTS, served as a child
+# process of the TTS service. It needs transformers 5, which the Qwen TTS environment cannot
+# take, so it has its own environment. Torch matches the STT and audio services.
+torch==2.6.0+cu124
+torchaudio==2.6.0+cu124
+omnivoice==0.2.1
+fastapi
+uvicorn[standard]
+soundfile

@@ -447,7 +447,9 @@ test('stt module queues a shared transcription job', async ({ page }) => {
   await page.goto('/stt');
 
   await expect(page.getByRole('main').getByRole('heading', { name: 'STT', level: 2 })).toBeVisible();
-  await page.getByLabel('Provider').selectOption('parakeet');
+  // One engine: its name instead of a picker; stored assets only, no server path.
+  await expect(page.getByText('Engine: Parakeet STT')).toBeVisible();
+  await expect(page.getByLabel('Source path')).toHaveCount(0);
   await page.getByLabel('Audio asset').selectOption('asset:audio');
   await page.getByRole('button', { name: 'Queue transcription' }).click();
 
@@ -734,7 +736,7 @@ test('voice cloning module queues a shared voice profile job', async ({ page }) 
         body: JSON.stringify({
           id: 'job:voice-profile',
           module: 'voice-cloning',
-          type: 'voice-cloning.train',
+          type: 'voice-cloning.create-profile',
           status: 'queued',
           resource_class: 'gpu:tts',
           created_at: '2026-06-14T00:00:01Z',
@@ -772,12 +774,11 @@ test('voice cloning module queues a shared voice profile job', async ({ page }) 
   await page.goto('/voice-cloning');
 
   await expect(page.getByRole('main').getByRole('heading', { name: 'Voice Cloning', level: 2 })).toBeVisible();
-  await page.getByLabel('Provider').selectOption('qwen-voice');
-  await page.getByLabel('Sample asset').selectOption('asset:sample');
-  await page.getByLabel('Profile name').fill('Narrator');
-  await page.getByRole('button', { name: 'Queue voice profile' }).click();
+  await page.getByLabel('Voice Name').fill('Narrator');
+  await page.getByLabel(/Audio sample/).setInputFiles({ name: 'ref.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFF....WAVEfmt ') });
+  await page.getByRole('button', { name: 'Create Clone' }).click();
 
-  await expect(page.getByText('Voice profile job queued: job:voice-profile')).toBeVisible();
+  await expect(page.getByText('Voice clone job queued: job:voice-profile')).toBeVisible();
 });
 
 test('rpg module queues a replay-preserving shared turn job', async ({ page }) => {

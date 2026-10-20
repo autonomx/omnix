@@ -29,6 +29,7 @@ def test_default_pools_cover_each_registered_durable_resource_class():
         "research": 2,
         "cpu": 4,
         "stt": 1,
+        "audio": 1,
     }
 
 
@@ -164,7 +165,7 @@ def test_cli_parser_uses_standalone_defaults_and_accepts_example_pools():
     )
 
     assert args.pools == "llm=2,image=1,tts=1,research=2,cpu=4"
-    assert len(parse_pools()) == 6
+    assert len(parse_pools()) == 7
     assert len(parse_pools(args.pools)) == 5
 
 

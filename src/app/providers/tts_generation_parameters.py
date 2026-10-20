@@ -11,6 +11,8 @@ TTS_GENERATION_PARAMETER_KEYS = frozenset({
     "do_sample", "repetition_penalty", "xvec_only", "non_streaming_mode",
     "append_silence", "parity_mode", "use_cuda_graphs",
     "chunk_length", "normalize", "seed", "instruct",
+    # OmniVoice (diffusion steps, guidance, token temperature, and the length in seconds dubbing fits a line to).
+    "num_step", "guidance_scale", "class_temperature", "duration",
 })
 
 

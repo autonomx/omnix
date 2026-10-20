@@ -45,11 +45,24 @@ SYNTHESIS = "synthesis"
 VOICE_CLONE = "voice_clone"
 LOCAL_ARTIFACTS = "local_artifacts"
 TRANSCRIPTION = "transcription"
+# Reads a natural-language delivery instruction (``instruct``) per utterance.
+# ``audio_base.AudioProviderCapability`` describes what a provider object can do
+# at runtime; these catalog flags are what callers check before asking for it.
+DELIVERY_INSTRUCTION = "delivery_instruction"
+# Creates a voice from a written description (``instruct``) and a seed. Such an engine is a
+# voice tool: it is swapped in for a design session and is never Omnix's selected engine.
+VOICE_DESIGN = "voice_design"
+# Batch transcription with word timing / with speaker labels (``transcribe_timed``).
+WORD_TIMESTAMPS = "word_timestamps"
+DIARIZATION = "diarization"
+# Mixes the speaker embeddings of two library voices (``speaker_blend``): a voice between them.
+VOICE_BLEND = "voice_blend"
 
 CAPABILITIES = frozenset({
     CHAT, STREAMING, MODELS, TOOLS, CANCELLATION, CONVERSATION_SESSIONS, LOCAL_DEVICE,
     RUNTIME_STATS, THINKING_TOGGLE, LOADED_MODEL, NATIVE_JSON_SCHEMA, CLOSED_OBJECT_SCHEMA,
     API_KEY, DESKTOP_VISION, SYNTHESIS, VOICE_CLONE, LOCAL_ARTIFACTS, TRANSCRIPTION,
+    DELIVERY_INSTRUCTION, WORD_TIMESTAMPS, DIARIZATION, VOICE_DESIGN, VOICE_BLEND,
 })
 
 
@@ -93,13 +106,22 @@ CATALOG: tuple[ProviderSpec, ...] = (
     _llm("openrouter", "openrouter_provider", "OpenRouterProvider", STREAMING, MODELS, API_KEY),
     ProviderSpec(
         "faster-qwen3-tts", "tts", "app.providers.faster_qwen3_tts_provider", "FasterQwen3TTSProvider",
-        frozenset({SYNTHESIS, STREAMING, VOICE_CLONE, LOCAL_ARTIFACTS, LOCAL_DEVICE}),
+        frozenset({SYNTHESIS, STREAMING, VOICE_CLONE, LOCAL_ARTIFACTS, LOCAL_DEVICE, VOICE_BLEND}),
     ),
     ProviderSpec(
         "fish-s2-pro", "tts", "app.providers.fish_s2_pro_provider", "FishS2ProTTSProvider",
-        frozenset({SYNTHESIS, STREAMING, VOICE_CLONE, LOCAL_ARTIFACTS, LOCAL_DEVICE}),
+        frozenset({SYNTHESIS, STREAMING, VOICE_CLONE, LOCAL_ARTIFACTS, LOCAL_DEVICE, DELIVERY_INSTRUCTION}),
     ),
-    ProviderSpec("parakeet", "stt", "app.providers.audio_plugins", "ParakeetSTT", frozenset({TRANSCRIPTION})),
+    ProviderSpec(
+        "omnivoice", "tts", "app.providers.omnivoice_provider", "OmniVoiceTTSProvider",
+        frozenset({SYNTHESIS, VOICE_CLONE, LOCAL_ARTIFACTS, LOCAL_DEVICE}),
+    ),
+    ProviderSpec(
+        "qwen3-tts-voicedesign", "tts", "app.providers.qwen3_voice_design_provider", "Qwen3VoiceDesignProvider",
+        frozenset({SYNTHESIS, LOCAL_ARTIFACTS, LOCAL_DEVICE, VOICE_DESIGN}),
+    ),
+    ProviderSpec("parakeet", "stt", "app.providers.audio_plugins", "ParakeetSTT",
+                 frozenset({TRANSCRIPTION, WORD_TIMESTAMPS, DIARIZATION})),
 )
 
 

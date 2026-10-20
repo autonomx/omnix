@@ -19,6 +19,20 @@ def test_resolve_model_source_prefers_env_override(monkeypatch, tmp_path):
     assert Path(resolved) == override_dir.resolve()
 
 
+def test_an_explicit_checkpoint_directory_wins_over_the_env_override(monkeypatch, tmp_path):
+    """VoiceDesign names its own checkpoint; the selected engine's override must not replace it."""
+    from app.providers.vendor.qwen3_tts import loader as loader_module
+
+    base, design = tmp_path / "Qwen3-TTS-12Hz-0.6B-Base", tmp_path / "Qwen3-TTS-12Hz-1.7B-VoiceDesign"
+    base.mkdir()
+    design.mkdir()
+    monkeypatch.setenv("OMNIX_TTS_MODEL_DIR", str(base))
+    monkeypatch.setenv("OMNIX_QWEN3_TTS_MODEL_DIR", str(base))
+
+    assert Path(loader_module._resolve_model_source(str(design))) == design.resolve()
+    assert Path(loader_module._resolve_model_source("Qwen/Qwen3-TTS-12Hz-0.6B-Base")) == base.resolve()
+
+
 def test_resolve_model_source_rewrites_legacy_broken_local_default(monkeypatch):
     from app.providers.vendor.qwen3_tts import loader as loader_module
 

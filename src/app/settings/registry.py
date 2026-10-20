@@ -22,6 +22,7 @@ CORE_SETTING_SPECS: tuple[SettingSpec, ...] = (
     SettingSpec("llamacpp", dict, deepcopy(DEFAULT_SETTINGS["llamacpp"])),
     SettingSpec("audio_provider_tts", str, DEFAULT_SETTINGS["audio_provider_tts"]),
     SettingSpec("audio_provider_stt", str, DEFAULT_SETTINGS["audio_provider_stt"]),
+    SettingSpec("voice_watermark", dict, deepcopy(DEFAULT_SETTINGS["voice_watermark"])),
     SettingSpec("tts_worker_url", str, ""),
     SettingSpec("stt_worker_url", str, ""),
     SettingSpec("image_worker_url", str, ""),

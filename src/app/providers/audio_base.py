@@ -47,6 +47,7 @@ class AudioProviderCapability(Enum):
     OFFLINE_BATCH = "offline_batch"
     CUSTOM_VOICE = "custom_voice"
     VOICE_DESIGN = "voice_design"
+    VOICE_BLEND = "voice_blend"
     LORA_VOICE = "lora_voice"
 
 

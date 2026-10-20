@@ -22,7 +22,7 @@ from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 from .base import BaseProvider, ChatMessage, ProviderConfig
 from .registry import get_registry
 from .audio_registry import get_audio_registry
-from .catalog import LOCAL_DEVICE, provider_supports
+from .catalog import LOCAL_DEVICE, VOICE_DESIGN, provider_supports
 
 _PROVIDER_CACHE_TTL_SECONDS = 3600.0
 _PROVIDER_CACHE_MAX_ENTRIES = 16
@@ -377,9 +377,12 @@ DEFAULT_TTS_PROVIDER_ID = "faster-qwen3-tts"
 
 
 def selected_tts_provider_id(settings: dict[str, Any] | None = None) -> str:
-    """The TTS engine Omnix uses when a caller does not name one."""
+    """The TTS engine Omnix uses when a caller does not name one (never a voice design tool)."""
     values = load_settings() if settings is None else settings
-    return str(values.get("audio_provider_tts") or DEFAULT_TTS_PROVIDER_ID)
+    selected = str(values.get("audio_provider_tts") or DEFAULT_TTS_PROVIDER_ID)
+    if provider_supports(selected, VOICE_DESIGN, "tts"):
+        return DEFAULT_TTS_PROVIDER_ID
+    return selected
 
 
 def get_tts_provider(provider_name: str | None = None) -> Any:
@@ -482,6 +485,38 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
             claimed_guard.close()
         raise
     return instance
+
+
+def pinned_tts_provider(provider_name: str | None = None) -> Any:
+    """The TTS engine a job names, without switching engines to get it.
+
+    ``get_tts_provider(name)`` replaces the running engine when ``name`` differs,
+    which would pull the GPU engine out from under live speech and audiobook
+    renders. Here a different engine raises ``TtsEngineNotLoaded`` instead; over
+    HTTP the facade asks the service to refuse (409) rather than switch.
+    """
+    from .exceptions import TtsEngineNotLoaded
+
+    settings = load_settings()
+    selected = selected_tts_provider_id(settings)
+    name = str(provider_name or "").strip() or selected
+    runtime = get_runtime_config()
+    local_gpu = provider_supports(name, LOCAL_DEVICE, "tts")
+    if not local_gpu:
+        return get_tts_provider(name)
+    if runtime.use_remote_tts:
+        from .qwen_http_gateway import QwenHttpGatewayProvider
+
+        endpoint = runtime.tts.url if runtime.tts else ""
+        if not endpoint:
+            raise ValueError("Gateway HTTP TTS requires OMNIX_TTS_URL")
+        # A fresh facade: the shared one stands for the selected engine.
+        return QwenHttpGatewayProvider(endpoint, provider_name=name, require_loaded=True)
+    if _tts_provider_instance is not None and _tts_provider_name == name:
+        return _tts_provider_instance
+    if name == selected and _tts_provider_instance is None:
+        return get_tts_provider(name)
+    raise TtsEngineNotLoaded(name, loaded=str(_tts_provider_name or ""))
 
 
 def get_stt_provider(provider_name: str | None = None) -> Any:

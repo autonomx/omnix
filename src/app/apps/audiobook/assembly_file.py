@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Callable
 
 
-from .assembly import (ASSEMBLY_VERSION, PausePolicy, TimelineEntry,
-                       _active_energy, _normalization_gains)
+from app.platform.voice.contracts import (ASSEMBLY_VERSION, PausePolicy, TimelineEntry,
+                                         active_energy as _active_energy,
+                                         normalization_gains as _normalization_gains)
 from .hashing import object_hash
 from app.persistence.contracts import BlobStore
 

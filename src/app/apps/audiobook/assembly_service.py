@@ -15,7 +15,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .assembly import PausePolicy
+from app.platform.voice.contracts import PausePolicy
 from .assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
 from .hashing import canonical_json
 from .leases import JOB_LEASE_SECONDS, lease_heartbeat

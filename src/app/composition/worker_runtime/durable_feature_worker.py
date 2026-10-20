@@ -36,6 +36,7 @@ class _LeaseBoundJobStore:
             "fail_job",
             "finalize_cancel",
             "append_log",
+            "defer_job",
         }
     )
 

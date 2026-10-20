@@ -19,7 +19,7 @@ describe('module default adapters', () => {
       stt: { ...DEFAULT_SETTINGS_DOCUMENT.stt, language: 'en', alignment: false, saveTranscript: false },
     };
     expect(imageGenerationDefaults(document)).toMatchObject({ width: 1024, height: 640, providerId: 'image:flux_klein' });
-    expect(speechInputDefaults(document)).toEqual({ providerId: 'parakeet', language: 'en', alignment: false, saveTranscript: false });
+    expect(speechInputDefaults(document)).toEqual({ providerId: 'parakeet', language: 'en', saveTranscript: false });
   });
 
   it('uses flux as the image provider when older profiles have no image default', () => {

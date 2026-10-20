@@ -17,6 +17,7 @@ from app.jobs.models import (
     CreateJobRequest,
     JobListResponse,
     JobRecord,
+    JobStage,
 )
 from app.jobs.projections import summarize_job
 from app.runtime.pagination import MAX_PAGE_SIZE, InvalidCursor
@@ -50,6 +51,9 @@ def register_core_jobs_routes(router: APIRouter, state, *, get_chat_store, get_j
             except ValueError as exc:
                 # Includes pydantic validation of the job input model.
                 raise HTTPException(status_code=422, detail=f"job_input_invalid:{type(exc).__name__}") from exc
+            except PermissionError as exc:
+                # A job type reserved for some roles (installing models: workspace admins).
+                raise HTTPException(status_code=403, detail="job_submission_forbidden") from exc
         from app.persistence.module_states import ModuleNotAcceptingWork
 
         job_store = get_job_store()
@@ -200,3 +204,47 @@ def register_core_jobs_routes(router: APIRouter, state, *, get_chat_store, get_j
         if job is None:
             raise HTTPException(status_code=404, detail="job_not_found")
         return job
+
+    @router.post("/api/jobs/{job_id}/retry", response_model=JobRecord, tags=["jobs"])
+    def retry_job(job_id: str) -> JobRecord:
+        """Queue a new job with a failed or cancelled job's inputs; the original stays as it ended.
+
+        The copy goes through the same submission checks as ``POST /api/jobs``
+        (the handler's input model and submission policy), so a retry can never
+        do what a fresh submission could not.
+        """
+        job_store = get_job_store()
+        current = job_store.get_job(job_id)
+        if current is None:
+            raise HTTPException(status_code=404, detail="job_not_found")
+        status = getattr(current.status, "value", current.status)
+        if status not in {"failed", "canceled", "stale"}:
+            raise HTTPException(status_code=409, detail="job_not_retryable")
+        if current.type in {"chat.generate", "rpg.turn.foreground_record"}:
+            raise HTTPException(status_code=422, detail="job_execution_authority_is_server_owned")
+        request = CreateJobRequest(
+            module=current.module,
+            type=current.type,
+            resource_class=current.resource_class,
+            priority=current.priority,
+            # Fresh stages: nothing of the ended run (progress, checkpoints, retry counts) carries over.
+            stages=[JobStage(id=stage.id, label=stage.label, resource_class=stage.resource_class)
+                    for stage in current.stages],
+            input_ref=current.input_ref,
+            input_payload=current.input_payload,
+            compat={"retry_of": current.id},
+        )
+        registry = getattr(state, "job_handler_registry", None)
+        if registry is not None:
+            try:
+                request = registry.validate_submission(request)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=f"job_input_invalid:{type(exc).__name__}") from exc
+            except PermissionError as exc:
+                raise HTTPException(status_code=403, detail="job_submission_forbidden") from exc
+        from app.persistence.module_states import ModuleNotAcceptingWork
+
+        try:
+            return job_store.create_job(request)
+        except ModuleNotAcceptingWork as exc:
+            raise HTTPException(status_code=503, detail=f"module_{exc.state.state}", headers={"Retry-After": "30"}) from exc

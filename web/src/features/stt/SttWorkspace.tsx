@@ -9,6 +9,7 @@ import { speechInputDefaults } from '../settings';
 import { loadSettingsProfile } from '../settings';
 import { FeatureSubmitFeedback } from '../../shared/FeatureSubmitFeedback';
 import { buildSttInputPayload, buildSttStages, type SttJobFormValues } from './sttJobDefaults';
+import { TRANSCRIPT_LANGUAGES, transcriptLanguage } from '../voice';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
@@ -35,19 +36,16 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { isDirty },
   } = useForm<SttJobFormValues>({
-    defaultValues: { providerId: '', audioAssetId: '', sourcePath: '', language: '' },
+    defaultValues: { providerId: '', audioAssetId: '', language: '' },
   });
   useEffect(() => {
     if (!settingsQuery.data || isDirty) return;
-    reset({
-      providerId: moduleDefaults.providerId,
-      audioAssetId: '',
-      sourcePath: '',
-      language: moduleDefaults.language,
-    });
+    reset({ providerId: moduleDefaults.providerId, audioAssetId: '', language: transcriptLanguage(moduleDefaults.language) });
   }, [isDirty, moduleDefaults, reset, settingsQuery.data]);
+  const audioAssetId = watch('audioAssetId');
   const sttProviders = useMemo(() => sttCapableProviders(providersQuery.data), [providersQuery.data]);
   const audioAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'audio' || asset.type === 'voice_sample') ?? [];
   const transcriptAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'transcript') ?? [];
@@ -64,7 +62,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
         stages: buildSttStages(moduleDefaults),
       }),
     onSuccess: async (_job, values) => {
-      reset({ providerId: values.providerId, audioAssetId: values.audioAssetId, sourcePath: '', language: values.language });
+      reset({ providerId: values.providerId, audioAssetId: values.audioAssetId, language: values.language });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
@@ -94,21 +92,25 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
-            <label>
-              Provider
-              <select {...register('providerId')}>
-                <option value="">Default STT provider</option>
-                {sttProviders.map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {sttProviders.length > 1 ? (
+              <label>
+                Provider
+                <select {...register('providerId')}>
+                  <option value="">Default STT provider</option>
+                  {sttProviders.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <p className="feature-form-note">Engine: {sttProviders[0]?.label ?? 'Default STT provider'}</p>
+            )}
             <label>
               Audio asset
-              <select {...register('audioAssetId')}>
-                <option value="">External path</option>
+              <select {...register('audioAssetId', { required: true })}>
+                <option value="">Choose a stored recording</option>
                 {audioAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
                     {asset.file_name}
@@ -116,15 +118,13 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 ))}
               </select>
             </label>
-            <label>
+            <label title="The engine detects the language itself; the choice is recorded on the transcript.">
               Language
-              <input {...register('language')} placeholder="auto" />
+              <select {...register('language')}>
+                {TRANSCRIPT_LANGUAGES.map((entry) => <option key={entry.code} value={entry.code}>{entry.label}</option>)}
+              </select>
             </label>
-            <label className="feature-form-wide">
-              Source path
-              <input {...register('sourcePath')} placeholder="resources/data/input.wav" />
-            </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending || !audioAssetId} loading={createJobMutation.isPending}>
               {createJobMutation.isPending ? 'Queueing transcription…' : 'Queue transcription'}
             </Button>
           </form>

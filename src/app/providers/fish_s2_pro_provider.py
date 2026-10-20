@@ -48,6 +48,8 @@ DEFAULT_FISH_SETTINGS: dict[str, Any] = {
     "code_dir": "",
     "python": "",
     "half": False,
+    # Host memory (Windows commit) the server takes while it loads and serves S2 Pro, measured on a 4090.
+    "host_memory_gb": 24.0,
     "compile": False,
     # Context positions; the KV cache and mask scale with it (32768: ~6 GB).
     "max_seq_len": 12288,
@@ -224,6 +226,13 @@ class FishS2ProTTSProvider(BaseTTSProvider):
         with self._lock:
             if self._server_healthy():
                 return {"running": True, "message": f"Fish Audio S2 Pro is serving at {self.base_url}"}
+            shortfall = self._host_memory_shortfall()
+            if shortfall:
+                # Refused before anything is launched: nothing to clean up, and no other process is touched.
+                self._last_error = shortfall
+                logger.error("Fish Audio S2 Pro was not started: %s", shortfall)
+                return {"running": False, "message": f"Failed to start: {shortfall}", "error": shortfall,
+                        "provider_state": self.get_runtime_status()}
             try:
                 self._launch_and_wait()
             except Exception as exc:
@@ -234,6 +243,18 @@ class FishS2ProTTSProvider(BaseTTSProvider):
                         "provider_state": self.get_runtime_status()}
             self._last_error = ""
             return {"running": True, "message": f"Fish Audio S2 Pro loaded from {self.checkpoint_dir(self.config)}"}
+
+    def _host_memory_shortfall(self) -> str:
+        """Why the host cannot hold Fish now, or "" (starting anyway pages for minutes and starves the machine)."""
+        from .host_memory import available_commit_bytes
+
+        needed = float(self.config.get("host_memory_gb") or 0)
+        available = available_commit_bytes()
+        # Plus 2 GB, so the rest of the machine is not left without any.
+        if needed and available is not None and available < (needed + 2) * 1024 ** 3:
+            return (f"Fish Audio S2 Pro needs about {needed:.0f} GB of free host memory to load, but "
+                    f"{available / 1024 ** 3:.1f} GB is free; close other programs or stop other model services")
+        return ""
 
     def _launch_and_wait(self) -> None:
         checkpoint = self.checkpoint_dir(self.config)

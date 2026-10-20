@@ -12,8 +12,8 @@ from urllib.parse import urlsplit
 
 from .env import env_int, environment
 
-DeviceModelClass = Literal["tts", "stt", "image", "llm-local"]
-_DEVICE_MODEL_CLASSES: tuple[DeviceModelClass, ...] = ("tts", "stt", "image", "llm-local")
+DeviceModelClass = Literal["tts", "stt", "image", "llm-local", "audio"]
+_DEVICE_MODEL_CLASSES: tuple[DeviceModelClass, ...] = ("tts", "stt", "image", "llm-local", "audio")
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +138,8 @@ class RuntimeConfig:
     tts: ServiceEndpoint | None = None
     stt: ServiceEndpoint | None = None
     image: ServiceEndpoint | None = None
+    # Voice Studio's audio service: isolation, enhancement, watermarking (Phase 4).
+    audio: ServiceEndpoint | None = None
     use_remote_tts: bool = False
     tts_model_owner: str | None = None
     api_replica_origins: tuple[str, ...] = ()
@@ -267,7 +269,7 @@ class RuntimeConfig:
         if flag("OMNIX_GATEWAY_ALLOW_LOCAL_TTS", local) != local:
             raise ValueError("Explicit local TTS policy contradicts gateway topology")
         return cls(
-            gateway_role=role, tts=tts, stt=endpoint("stt"), image=endpoint("image"),
+            gateway_role=role, tts=tts, stt=endpoint("stt"), image=endpoint("image"), audio=endpoint("audio"),
             use_remote_tts=remote,
             tts_model_owner=permit_settings.tts_model_owner,
             api_replica_origins=tuple(value.strip() for value in env.get("OMNIX_GATEWAY_API_ORIGINS", "").split(",") if value.strip()),
@@ -294,7 +296,7 @@ class RuntimeConfig:
 
     def worker_discovery_environment(self) -> dict[str, str]:
         env = dict(self.worker_environment)
-        for name in ('tts', 'stt', 'image'):
+        for name in ('tts', 'stt', 'image', 'audio'):
             endpoint = getattr(self, name)
             if endpoint is not None:
                 env[f'OMNIX_{name.upper()}_URL'] = endpoint.url
