@@ -401,6 +401,16 @@ class StrategyRunHost:
         )
         # (strategy id, session date) pairs whose budget refusal is recorded.
         self.intraday_llm_budget_notices: set[tuple[str, date]] = set()
+        # Leader Momentum arm: the last recorded (state, reason, trades) per
+        # (strategy, instrument, session), so only changes are recorded.
+        self.leader_momentum_last: dict[tuple[str, str, str], tuple[str, str, int]] = {}
+        self.leader_momentum_event_count = 0
+        self.leader_momentum_evaluated_through: dict[tuple[str, str], datetime] = {}
+        # Trend continuation T1 arm (same bookkeeping, plus captured entries).
+        self.trend_t1_last: dict[tuple[str, str, str], tuple[str, str]] = {}
+        self.trend_t1_evaluated_through: dict[tuple[str, str], datetime] = {}
+        self.trend_t1_entries_captured: set[tuple[str, str, str]] = set()
+        self.trend_t1_event_count = 0
         self._last_evaluated_bar_end: dict[tuple[str, str, str], datetime] = {}
         self._last_diagnostic_log_at: dict[tuple[str, ...], datetime] = {}
         self.auto_paper_readiness_by_strategy: dict[str, dict[str, Any]] = {}

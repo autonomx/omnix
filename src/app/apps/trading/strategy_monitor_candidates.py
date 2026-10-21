@@ -56,6 +56,8 @@ from .strategy_stoch_execution_cost import (
 from .strategy_stoch_execution_cost import (
     requested_fraction_for_action as stoch_requested_fraction_for_action,
 )
+from .strategy_monitor_leader_momentum import record_leader_momentum
+from .strategy_monitor_trend_t1 import record_trend_t1
 from .strategy_stoch_trend_capture import (
     evaluate_stoch_trend_capture,
     stoch_trend_capture_risk_decision,
@@ -624,6 +626,12 @@ async def evaluate_candidates(
                     for bar in base_bars[-10:]
                 ],
             },
+        )
+        await record_leader_momentum(
+            monitor, config, strategy_repository, universe, candidate, base_bars
+        )
+        await record_trend_t1(
+            monitor, config, strategy_repository, market_service, universe, candidate, base_bars
         )
         if config.config.stoch_trend_capture_enabled:
             try:

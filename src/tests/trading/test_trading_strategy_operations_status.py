@@ -61,6 +61,8 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "intraday_llm_estimated_usage_count": 0,
             "intraday_llm_shared_assessment_count": 0,
             "intraday_llm_budget_skip_count": 0,
+            "leader_momentum_event_count": 0,
+            "trend_t1_event_count": 0,
             "auto_paper_ready_strategy_count": 0,
             "auto_paper_blocked_strategy_count": 0,
             "auto_paper_archive_not_ready_strategy_count": 0,

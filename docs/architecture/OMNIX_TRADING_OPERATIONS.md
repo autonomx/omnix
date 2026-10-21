@@ -167,6 +167,11 @@ Operational sequence:
 
 Interday dynamic discovery keeps a candidate active while it is on the live top-gainers board (`finviz_live_leaders`, top 20) in the current scan, whatever its attention score; off the board, the retention hysteresis applies as before (cooling after 30 minutes below the retention score, expired after 60), counted from when it left. Active candidates are ranked into tiers A and B, which the live shadow unions add to the interday children's universes. After the open, leaderboard observations score the day's volume and dollar volume so far (premarket plus the regular-session Yahoo 1m bars the scan stores), not the premarket figures alone. Before this, intraday leaders such as HOST on 2026-10-20 scored on their gap alone, expired about an hour after discovery and never reached a strategy.
 
+Two research arms run daily as embedded SHADOW arms of the interday group, as forward evidence; both failed their holdouts (research cache PREREG_TREND1 on 2023-03..2024-02 and PREREG_TREND2 on 2019-01..2021-12) and have no order path:
+
+- Leader Momentum v1.2 (`leader-momentum-continuation`): evaluated on each candidate's finalized 1m session bars once per finished bar, entries 09:35-15:00 ET; `leader_momentum` events when its state, reason or completed trades change.
+- Trend continuation T1 (`strategy_trend_continuation`, the TREND-1 rule): `trend_t1` events on state changes, and one `trend_t1_entry` event per simulated entry with its setup features and the live execution quote (IBKR first), so real spreads per liquidity tier can replace assumed costs. It builds 5m bars from whatever 1m bars exist, so trade-free minutes never block it.
+
 If AUTO PAPER is unexpectedly active, set the strategy kill switch and mode to `off`, or set `OMNIX_TRADING_STRATEGY_MONITOR=0` and restart the gateway. Do not use data/research model failures as a reason to bypass execution eligibility.
 
 ## Catalyst and AI shadow operations
