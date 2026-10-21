@@ -60,6 +60,7 @@ from .strategy_ai_shadow import (
     policy_feature_snapshot,
     simulate_ai_shadow_fill,
 )
+from .strategy_ai_shadow_provider import AIShadowLaneUnavailable
 from .strategy_intraday_learning import build_intraday_learning_snapshot
 from .strategy_evaluability import (
     assess_bar_coverage,
@@ -540,7 +541,7 @@ def _batch_checkpoint_exists(
     target = observed_at.astimezone(timezone.utc)
     return any(
         event.event_type == "ai_shadow_batch"
-        and event.state in {"complete", "error"}
+        and event.state in {"complete", "error", "skipped"}
         and event.observed_at.astimezone(timezone.utc) == target
         and isinstance(event.payload, dict)
         and event.payload.get("policy") == policy
@@ -1779,7 +1780,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
         requested_instrument_ids = [
             member["instrument_id"] for member in request_members
         ]
-        # A persisted complete/error batch checkpoints the exact causal request,
+        # A persisted complete/error/skipped batch checkpoints the exact causal request,
         # not merely the latest minute. Symbols can finalize asynchronously; a
         # later due set at the same max minute must still receive its decision.
         if _batch_checkpoint_exists(
@@ -1802,13 +1803,19 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 rows=[row["analyzer_row"] for row in due],
             )
         except Exception as exc:
+            # No model call behind a busy lane or an open circuit: a skip,
+            # not a provider error.
+            skipped = isinstance(exc, AIShadowLaneUnavailable)
+            state = "skipped" if skipped else "error"
             await self._append(
                 repository,
                 config,
                 instrument_id="__universe__",
                 event_type="ai_shadow_batch",
-                state="error",
-                reason_code="AI_SHADOW_LLM_BATCH_ERROR",
+                state=state,
+                reason_code=(
+                    "AI_SHADOW_LLM_BATCH_SKIPPED" if skipped else "AI_SHADOW_LLM_BATCH_ERROR"
+                ),
                 observed_at=observed_at,
                 payload={
                     "policy": policy,
@@ -1824,12 +1831,12 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                     policy,
                     observed_at.astimezone(timezone.utc).isoformat(),
                     request_signature,
-                    "error",
+                    state,
                 ),
             )
             trade_log(
                 "auto_trading",
-                "ai_shadow_llm_error",
+                "ai_shadow_llm_skipped" if skipped else "ai_shadow_llm_error",
                 strategy_id=config.strategy_id,
                 policy=policy,
                 error_type=type(exc).__name__,
@@ -2115,6 +2122,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             ]
             complete_batches = [event for event in policy_batches if event.state == "complete"]
             error_batches = [event for event in policy_batches if event.state == "error"]
+            skipped_batches = [event for event in policy_batches if event.state == "skipped"]
             data_gaps = [
                 event for event in events if event.event_type == "ai_shadow_data_gap"
             ]
@@ -2158,6 +2166,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 ),
                 "llm_call_count": len(complete_batches),
                 "llm_error_count": len(error_batches),
+                "llm_skipped_count": len(skipped_batches),
                 "llm_total_tokens": sum(
                     int(event.payload.get("total_tokens") or 0)
                     for event in complete_batches
@@ -2311,6 +2320,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
             ]
             batches = [event for event in policy_batches if event.state == "complete"]
             error_batches = [event for event in policy_batches if event.state == "error"]
+            skipped_batches = [event for event in policy_batches if event.state == "skipped"]
             total_decisions, total_action_changes, overall_stability = _policy_action_stats(
                 events,
                 policy=policy,
@@ -2355,6 +2365,7 @@ class TradingAIShadowMonitor(ScheduledTradingMonitor):
                 ),
                 "llm_call_count": len(batches),
                 "llm_error_count": len(error_batches),
+                "llm_skipped_count": len(skipped_batches),
                 "llm_total_tokens": sum(
                     int(event.payload.get("total_tokens") or 0) for event in batches
                 ),

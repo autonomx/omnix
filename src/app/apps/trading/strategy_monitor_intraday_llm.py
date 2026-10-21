@@ -9,6 +9,7 @@ from app.apps.trading.us_equity_calendar import EASTERN as _ET
 
 from .gapper_dataset import GapperCandidate, universe_lineage_id
 from .strategies.models import GapPullbackResult
+from .strategy_ai_shadow_provider import AIShadowLaneUnavailable
 from .strategy_intraday_learning import IntradayLearningSnapshot
 from .strategy_intraday_llm import (
     EVENT_BATCH_COOLDOWN_MINUTES,
@@ -251,10 +252,14 @@ async def run_intraday_llm(
         )
         return
     except Exception as exc:
-        monitor.intraday_llm_error_count += 1
+        # The shared research circuit was open, so no model call was made:
+        # recorded as a skip, not counted as a provider error.
+        skipped = isinstance(exc, AIShadowLaneUnavailable)
+        if not skipped:
+            monitor.intraday_llm_error_count += 1
         trade_log(
             "auto_trading",
-            "intraday_llm_error",
+            "intraday_llm_skipped" if skipped else "intraday_llm_error",
             run_id=monitor.current_run_id,
             strategy_id=config.strategy_id,
             universe_id=universe.universe_id,
@@ -273,8 +278,8 @@ async def run_intraday_llm(
             config,
             instrument_id="__universe__",
             event_type="intraday_llm_batch",
-            state="error",
-            reason_code="INTRADAY_LLM_BATCH_ERROR",
+            state="skipped" if skipped else "error",
+            reason_code="INTRADAY_LLM_BATCH_SKIPPED" if skipped else "INTRADAY_LLM_BATCH_ERROR",
             observed_at=observed_at,
             payload={
                 "universe_id": universe.universe_id,

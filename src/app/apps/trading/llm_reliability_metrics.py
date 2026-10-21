@@ -131,6 +131,11 @@ class LLMReliabilityLedger:
 
 def classify_llm_failure(exc: BaseException) -> str:
     text = f"{type(exc).__name__}: {exc}".casefold()
+    # An explicit output-failure code decides first: its detail can quote
+    # decoder or model text that mentions a timeout or an open circuit.
+    code = str(exc).split(":", 1)[0].casefold()
+    if code.endswith(("_invalid_json", "_missing_decisions")):
+        return "malformed"
     if "circuit" in text and "open" in text:
         return "circuit_open"
     if isinstance(exc, TimeoutError) or "timeout" in text or "timed out" in text:

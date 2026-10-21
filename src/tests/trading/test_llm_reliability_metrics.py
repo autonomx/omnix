@@ -1,6 +1,18 @@
 from decimal import Decimal
 
-from app.apps.trading.llm_reliability_metrics import LLMReliabilityLedger
+from app.apps.trading.llm_reliability_metrics import LLMReliabilityLedger, classify_llm_failure
+
+
+def test_explicit_output_failure_code_wins_over_detail_text():
+    quoted = RuntimeError(
+        "ai_shadow_v3_invalid_json:schema;detail=thesis says the open timed out near the circuit"
+    )
+    assert classify_llm_failure(quoted) == "malformed"
+    assert classify_llm_failure(TimeoutError("Claude CLI exceeded 30s")) == "timeout"
+    assert (
+        classify_llm_failure(RuntimeError("ai_shadow_provider_circuit_open:retry_after_seconds=90"))
+        == "circuit_open"
+    )
 
 
 def test_llm_reliability_separates_attempts_from_circuit_suppressions():

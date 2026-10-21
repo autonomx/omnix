@@ -348,7 +348,11 @@ class AIShadowV3Analyzer:
                 response_format=response_format,
             )
         except TradingModelOutputError as exc:
-            raise RuntimeError("ai_shadow_v3_invalid_json") from exc
+            # Keep why the output was unusable (empty, truncated, syntax or
+            # schema); the bare code made these failures undiagnosable.
+            raise RuntimeError(
+                f"ai_shadow_v3_invalid_json:{exc.reason};detail={exc.detail[:300]}"
+            ) from exc
         latency = Decimal(str((monotonic_time.monotonic() - started) * 1000))
         response = reply.response
         parsed = reply.value

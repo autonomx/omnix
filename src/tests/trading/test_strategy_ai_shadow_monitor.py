@@ -14,6 +14,7 @@ from app.apps.trading.strategy_ai_shadow import (
     AIShadowResult,
 )
 from app.apps.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
+from app.apps.trading.strategy_ai_shadow_provider import AIShadowLaneUnavailable
 from app.apps.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
 from app.apps.trading.strategy_repository import StrategyEvent
 
@@ -72,6 +73,18 @@ class FailingAnalyzer:
         del policy, rows
         self.calls += 1
         raise RuntimeError("fixture invalid json")
+
+
+class LaneUnavailableAnalyzer:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def assess(self, *, policy, rows):
+        del policy, rows
+        self.calls += 1
+        raise AIShadowLaneUnavailable(
+            "ai_shadow_provider_circuit_open", "retry_after_seconds=90;failure_count=1"
+        )
 
 
 def _feature(price: str = "10") -> dict[str, object]:
@@ -565,6 +578,21 @@ async def test_postclose_comparison_preserves_spread_cost_and_data_quality_bound
         ),
         StrategyEvent(
             strategy_id=config.strategy_id,
+            event_id="minute-batch-skipped",
+            run_id="fixture",
+            instrument_id="__universe__",
+            event_type="ai_shadow_batch",
+            state="skipped",
+            reason_code="AI_SHADOW_LLM_BATCH_SKIPPED",
+            observed_at=START,
+            idempotency_key="minute-batch-skipped",
+            payload={
+                "policy": "minute",
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
             event_id="event-batch-error",
             run_id="fixture",
             instrument_id="__universe__",
@@ -662,7 +690,10 @@ async def test_postclose_comparison_preserves_spread_cost_and_data_quality_bound
     assert arm_c["llm_call_count"] == 1
     assert arm_c["llm_total_tokens"] == 125
     assert arm_c["total_decisions"] == 1
+    assert arm_c["llm_error_count"] == 0
+    assert arm_c["llm_skipped_count"] == 1
     assert arm_d["llm_error_count"] == 1
+    assert arm_d["llm_skipped_count"] == 0
     assert comparison["cross_arm_return_units_harmonized"] is False
     assert comparison["cross_arm_execution_models_harmonized"] is False
     assert comparison["ranking_deferred_until_risk_normalized"] is True
@@ -716,6 +747,36 @@ async def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_min
         events=list(repository.events),
     )
     assert analyzer.calls == 2
+
+
+@pytest.mark.anyio
+async def test_lane_unavailable_batch_is_a_skip_checkpoint_not_an_error() -> None:
+    repository = MemoryRepository()
+    analyzer = LaneUnavailableAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    row = _row(START, _feature())
+
+    for _ in range(2):
+        await monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=list(repository.events),
+        )
+
+    batches = [event for event in repository.events if event.event_type == "ai_shadow_batch"]
+    assert [(event.state, event.reason_code) for event in batches] == [
+        ("skipped", "AI_SHADOW_LLM_BATCH_SKIPPED"),
+    ]
+    assert batches[0].payload["error_type"] == "AIShadowLaneUnavailable"
+    # The skip checkpoints the minute like an error did: no re-request storm.
+    assert analyzer.calls == 1
 
 
 @pytest.mark.anyio

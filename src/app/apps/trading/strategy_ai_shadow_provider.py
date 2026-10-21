@@ -43,6 +43,9 @@ AI_SHADOW_TOTAL_CALL_BUDGET_SECONDS = 60.0
 AI_SHADOW_PRIMARY_ATTEMPT_SECONDS = 30.0
 AI_SHADOW_MIN_RETRY_BUDGET_SECONDS = 5.0
 AI_SHADOW_CIRCUIT_BACKOFF_SECONDS = (120, 300, 600)
+# How long a batch waits for the shared research lane while v2 or the intraday
+# LLM holds it. The call budget starts only once the batch holds the lane.
+AI_SHADOW_LANE_WAIT_SECONDS = 60.0
 
 
 class AIShadowReliabilityError(RuntimeError):
@@ -50,6 +53,13 @@ class AIShadowReliabilityError(RuntimeError):
         self.code = code
         self.detail = detail
         super().__init__(f"{code}:{detail}" if detail else code)
+
+
+class AIShadowLaneUnavailable(AIShadowReliabilityError):
+    """No model call was made: the circuit is open or the lane stayed busy.
+
+    Monitors record this as a skipped batch, not a provider error.
+    """
 
 
 @dataclass
@@ -314,7 +324,7 @@ def assess_ai_shadow_v2_with_shared_circuit(
     with _PROVIDER_LOCK:
         now = time.monotonic()
         if _CIRCUIT.is_open(now):
-            raise AIShadowReliabilityError(
+            raise AIShadowLaneUnavailable(
                 "ai_shadow_v2_provider_circuit_open",
                 f"retry_after_seconds={_CIRCUIT.retry_after(now)};failure_count={_CIRCUIT.failure_count}",
             )
@@ -360,7 +370,7 @@ def assess_intraday_with_shared_circuit(
     with _PROVIDER_LOCK:
         now = time.monotonic()
         if _CIRCUIT.is_open(now):
-            raise AIShadowReliabilityError(
+            raise AIShadowLaneUnavailable(
                 "intraday_llm_provider_circuit_open",
                 f"retry_after_seconds={_CIRCUIT.retry_after(now)};failure_count={_CIRCUIT.failure_count}",
             )
@@ -429,7 +439,7 @@ def _chat_call_unlocked(
     dedicated = _uses_dedicated_lane(analyzer)
     now = time.monotonic()
     if dedicated and _CIRCUIT.is_open(now):
-        raise AIShadowReliabilityError(
+        raise AIShadowLaneUnavailable(
             "ai_shadow_provider_circuit_open",
             f"retry_after_seconds={_CIRCUIT.retry_after(now)};failure_count={_CIRCUIT.failure_count}",
         )
@@ -478,13 +488,17 @@ def _chat_call_unlocked(
                 continue
             break
 
+    if last_error is None:
+        # The budget ran out before any attempt: the provider was never asked,
+        # so this says nothing about its health and must not trip the circuit.
+        raise AIShadowReliabilityError("ai_shadow_call_budget_exhausted", "attempts=0")
     if dedicated:
         delay = _CIRCUIT.trip(time.monotonic())
     else:
         delay = 0
     detail = (
         f"attempts=2;retry_after_seconds={delay};"
-        f"last={type(last_error).__name__ if last_error else 'timeout'}:{last_error or 'budget exhausted'}"
+        f"last={type(last_error).__name__}:{last_error}"
     )
     raise AIShadowReliabilityError("ai_shadow_transport_exhausted", detail)
 
@@ -635,6 +649,26 @@ def _reliable_assess(
     if not rows:
         return shadow.AIShadowResult(policy=policy, decisions=(), provider="none")
 
+    # v2 and the intraday LLM hold the lane for a whole call. Time queued
+    # behind them is not provider time, so a batch that never gets the lane is
+    # skipped rather than counted against the provider.
+    if not _PROVIDER_LOCK.acquire(timeout=AI_SHADOW_LANE_WAIT_SECONDS):
+        raise AIShadowLaneUnavailable(
+            "ai_shadow_provider_lane_busy",
+            f"waited_seconds={AI_SHADOW_LANE_WAIT_SECONDS:.0f}",
+        )
+    try:
+        return _assess_holding_lane(self, policy=policy, rows=rows)
+    finally:
+        _PROVIDER_LOCK.release()
+
+
+def _assess_holding_lane(
+    self: shadow.AIShadowPolicyAnalyzer,
+    *,
+    policy: shadow.AIShadowPolicy,
+    rows: list[dict[str, Any]],
+) -> shadow.AIShadowResult:
     payload = shadow._build_payload(rows, policy=policy)
     requested_ids = {str(row["instrument_id"]) for row in rows}
     base_messages = _messages(policy, payload)
@@ -741,8 +775,10 @@ atexit.register(_retire_trading_research_provider)
 
 
 __all__ = [
+    "AIShadowLaneUnavailable",
     "AIShadowReliabilityError",
     "AI_SHADOW_CIRCUIT_BACKOFF_SECONDS",
+    "AI_SHADOW_LANE_WAIT_SECONDS",
     "get_trading_research_provider",
     "reset_ai_shadow_reliability_state",
 ]

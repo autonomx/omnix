@@ -243,6 +243,106 @@ def test_30_minute_provider_outage_has_bounded_external_calls(monkeypatch):
     assert reliability._CIRCUIT.failure_count >= 3
 
 
+class _QueuedLane:
+    """The shared lane held by another research call for ``wait`` seconds."""
+
+    def __init__(self, clock, *, wait: float, granted: bool = True):
+        self.clock = clock
+        self.wait = wait
+        self.granted = granted
+        self.inner = reliability.threading.RLock()
+        self.timeouts = []
+
+    def acquire(self, blocking=True, timeout=-1):
+        if not self.timeouts:
+            self.clock[0] += self.wait
+        self.timeouts.append(timeout)
+        return self.granted and self.inner.acquire()
+
+    def release(self):
+        self.inner.release()
+
+    def __enter__(self):
+        return self.inner.__enter__()
+
+    def __exit__(self, *exc):
+        return self.inner.__exit__(*exc)
+
+
+def _dedicated_analyzer(monkeypatch, provider):
+    monkeypatch.setattr(reliability, "get_trading_research_provider", lambda: provider)
+    return AIShadowPolicyAnalyzer(provider_factory=reliability.get_trading_research_provider)
+
+
+def test_time_queued_behind_the_lane_does_not_spend_the_call_budget(monkeypatch):
+    # 2026-10-21: v1 waited ~58s behind v2/intraday calls, reached the provider
+    # with under 5s left, made no call and still tripped the shared circuit.
+    clock = [0.0]
+    provider = SequenceProvider([VALID])
+    monkeypatch.setattr(reliability.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(reliability, "_PROVIDER_LOCK", _QueuedLane(clock, wait=58.0))
+    analyzer = _dedicated_analyzer(monkeypatch, provider)
+
+    result = analyzer.assess(policy="minute", rows=[_row()])
+
+    assert len(result.decisions) == 1
+    assert provider.calls == 1
+    assert (
+        provider.kwargs[0]["request_timeout_seconds"]
+        == reliability.AI_SHADOW_PRIMARY_ATTEMPT_SECONDS
+    )
+    assert reliability._CIRCUIT.failure_count == 0
+
+
+def test_lane_that_stays_busy_skips_without_tripping_the_circuit(monkeypatch):
+    clock = [0.0]
+    provider = SequenceProvider([])
+    lane = _QueuedLane(clock, wait=reliability.AI_SHADOW_LANE_WAIT_SECONDS, granted=False)
+    monkeypatch.setattr(reliability.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(reliability, "_PROVIDER_LOCK", lane)
+    analyzer = _dedicated_analyzer(monkeypatch, provider)
+
+    with pytest.raises(reliability.AIShadowLaneUnavailable) as exc_info:
+        analyzer.assess(policy="minute", rows=[_row()])
+
+    assert exc_info.value.code == "ai_shadow_provider_lane_busy"
+    assert lane.timeouts == [reliability.AI_SHADOW_LANE_WAIT_SECONDS]
+    assert provider.calls == 0
+    assert reliability._CIRCUIT.failure_count == 0
+
+
+def test_open_circuit_is_reported_as_lane_unavailable(monkeypatch):
+    provider = SequenceProvider([])
+    analyzer = _dedicated_analyzer(monkeypatch, provider)
+    reliability._CIRCUIT.trip(reliability.time.monotonic())
+
+    with pytest.raises(reliability.AIShadowLaneUnavailable) as exc_info:
+        analyzer.assess(policy="event", rows=[_row()])
+
+    assert exc_info.value.code == "ai_shadow_provider_circuit_open"
+    assert provider.calls == 0
+
+
+def test_budget_spent_before_any_attempt_does_not_trip_the_circuit(monkeypatch):
+    provider = SequenceProvider([])
+    analyzer = _dedicated_analyzer(monkeypatch, provider)
+
+    with pytest.raises(reliability.AIShadowReliabilityError) as exc_info:
+        reliability._chat_call_unlocked(
+            analyzer,
+            messages=[],
+            model=None,
+            response_format={"type": "json_object"},
+            max_tokens=900,
+            deadline=reliability.time.monotonic() + 1.0,
+        )
+
+    assert not isinstance(exc_info.value, reliability.AIShadowLaneUnavailable)
+    assert exc_info.value.code == "ai_shadow_call_budget_exhausted"
+    assert provider.calls == 0
+    assert reliability._CIRCUIT.failure_count == 0
+
+
 def test_transport_recovery_retries_once_then_succeeds(monkeypatch):
     provider = SequenceProvider([
         ConnectionError("websocket disconnected"),

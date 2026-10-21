@@ -11,6 +11,7 @@ import pytest
 from app.apps.trading import strategy_monitor_intraday_llm
 from app.apps.trading.evidence_storage import MemoryEvidenceBackend
 from app.apps.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe, live_shadow_universe_id
+from app.apps.trading.strategy_ai_shadow_provider import AIShadowLaneUnavailable
 from app.apps.trading.strategies.models import (
     GapPullbackConfig,
     GapPullbackFeatures,
@@ -708,6 +709,33 @@ def test_monitor_failure_checkpoint_bounds_event_driven_provider_retries():
             ranked,
         )
     )
+    assert analyzer.calls == 1
+
+
+def test_open_shared_circuit_is_a_skipped_batch_not_an_error():
+    repository = MemoryEventRepository()
+    analyzer = FixtureAnalyzer(
+        fail=AIShadowLaneUnavailable(
+            "intraday_llm_provider_circuit_open", "retry_after_seconds=90;failure_count=1"
+        )
+    )
+    monitor = TradingStrategyMonitor(
+        intraday_llm_analyzer_factory=lambda: analyzer,
+        interval_seconds=30,
+    )
+    monitor.current_run_id = "run-skip"
+    ranked = [row("AAA", 1)]
+
+    for _ in range(2):
+        asyncio.run(
+            monitor._run_intraday_llm(_llm_strategy(), repository, _llm_universe(), ranked)
+        )
+
+    assert monitor.intraday_llm_error_count == 0
+    assert [(event.event_type, event.state, event.reason_code) for event in repository.events] == [
+        ("intraday_llm_batch", "skipped", "INTRADAY_LLM_BATCH_SKIPPED"),
+    ]
+    # A skip keeps the short cooldown checkpoint an error had.
     assert analyzer.calls == 1
 
 

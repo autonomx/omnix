@@ -2,8 +2,14 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from types import SimpleNamespace
+
+import pytest
+
+from app.apps.trading.llm_reliability_metrics import classify_llm_failure
 from app.apps.trading.models import MarketBar
 from app.apps.trading.strategy_ai_shadow_v3 import (
+    AIShadowV3Analyzer,
     AIShadowV3Decision,
     GeometrySuggestion,
     agreement_cohort,
@@ -40,6 +46,36 @@ def _bars(count: int = 40):
             )
         )
     return rows
+
+
+class _TruncatingProvider:
+    provider_name = "fixture"
+
+    def chat_completion(self, **kwargs):
+        del kwargs
+        return SimpleNamespace(
+            content='{"decisions": [{"instrument_id": "equity:NASDAQ:TEST"',
+            model="fixture-ai",
+            usage=None,
+            finish_reason="stop",
+        )
+
+
+def test_v3_unusable_output_keeps_why_it_failed(monkeypatch):
+    # 2026-10-21: 77 v3 failures were recorded as a bare
+    # "ai_shadow_v3_invalid_json", so nobody could tell why.
+    monkeypatch.setenv("OMNIX_TRADING_AI_DAILY_CALL_BUDGET", "0")
+    analyzer = AIShadowV3Analyzer(provider_factory=_TruncatingProvider)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        analyzer.assess([{"instrument_id": INSTRUMENT}])
+
+    message = str(exc_info.value)
+    code, _, rest = message.partition(":")
+    assert code == "ai_shadow_v3_invalid_json"
+    assert rest.split(";", 1)[0] in {"truncated", "syntax"}
+    assert ";detail=" in message
+    assert classify_llm_failure(exc_info.value) == "malformed"
 
 
 def test_v3_llm_geometry_is_advisory_not_required_for_enter():
