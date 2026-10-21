@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .evidence_storage import YahooEvidenceBackend, default_evidence_backend
 from .models import AdjustmentMode, MarketBar
+from .providers.bar_semantics import is_whole_minute
 from app.apps.trading.us_equity_calendar import EASTERN as _ET
 from app.apps.trading.us_equity_calendar import regular_close_time
 
@@ -205,7 +206,12 @@ class YahooEvidenceStore:
             lambda: defaultdict(list)
         )
         for bar in bars:
-            if bar.provider != "yahoo" or bar.interval != "1m" or not bar.is_final:
+            if (
+                bar.provider != "yahoo"
+                or bar.interval != "1m"
+                or not bar.is_final
+                or not is_whole_minute(bar.start_time)
+            ):
                 continue
             symbol = self._symbol(bar.instrument_id)
             local_date = bar.start_time.astimezone(_ET).date()
@@ -254,7 +260,7 @@ class YahooEvidenceStore:
             except Exception:
                 logger.debug("suppressed error in %s", "YahooEvidenceStore.persist_chart_result", exc_info=True)
                 continue
-            if end > cutoff_utc:
+            if end > cutoff_utc or not is_whole_minute(start):
                 continue
             if not all(value.is_finite() for value in (open_value, high, low, close, volume)):
                 continue
@@ -303,7 +309,11 @@ class YahooEvidenceStore:
         knowledge_mode: KnowledgeMode,
         known_by: datetime | None = None,
     ) -> list[dict[str, Any]]:
-        """Select the newest revision that was actually knowable at the cutoff."""
+        """Select the newest revision that was actually knowable at the cutoff.
+
+        Rows stored before the forming-candle guard may start off the minute;
+        they are Yahoo's forming row, never a finished bar, so they are skipped.
+        """
 
         cutoff = self._utc(known_by) if known_by is not None else None
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -311,6 +321,11 @@ class YahooEvidenceStore:
         for row in self._records_for_date(symbol, session_date):
             key = str(row.get("start_time") or "")
             if not key:
+                continue
+            try:
+                if not is_whole_minute(datetime.fromisoformat(key)):
+                    continue
+            except ValueError:
                 continue
             if knowledge_mode == "causal_replay":
                 try:

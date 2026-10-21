@@ -74,3 +74,15 @@ def equity_bar_times(
 
 def is_final_bar(end_time: datetime, received_at: datetime) -> bool:
     return normalized_utc(end_time) <= normalized_utc(received_at)
+
+
+def is_whole_minute(timestamp: datetime) -> bool:
+    """Whether an intraday provider timestamp starts on a minute boundary.
+
+    Yahoo stamps its still-forming intraday row with the latest trade time
+    (for example 13:42:30), and on a thin tape that row can outlive its own
+    minute. Finished Yahoo rows always start on a whole minute, so an
+    off-minute row is the forming candle and never a final bar.
+    """
+
+    return timestamp.second == 0 and timestamp.microsecond == 0

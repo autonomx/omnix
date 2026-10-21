@@ -14,7 +14,7 @@ from app.apps.trading.catalog import POLICIES, bindings_for_instrument, instrume
 from app.apps.trading.models import AdjustmentMode, BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
 from .base import ProviderAdapter
-from .bar_semantics import equity_bar_times, equity_session_bounds, is_final_bar
+from .bar_semantics import equity_bar_times, equity_session_bounds, is_final_bar, is_whole_minute
 from .errors import ProviderContractError, ProviderDataUnavailableError, ProviderFallbackEligibleError
 from .http_runtime import ProviderHttpRuntime
 from ..yahoo_evidence import default_yahoo_evidence_store
@@ -259,7 +259,7 @@ class YahooEquityProvider(ProviderAdapter):
                     low=Decimal(str(row[3])),
                     close=Decimal(str(row[4])),
                     volume=Decimal(str(row[5])),
-                    is_final=is_final_bar(end, received),
+                    is_final=is_final_bar(end, received) and is_whole_minute(start),
                     adjustment_mode=AdjustmentMode.RAW,
                     session=session,
                     provider=self.provider_id,
@@ -374,7 +374,7 @@ class YahooEquityProvider(ProviderAdapter):
                     low=low,
                     close=close,
                     volume=volume,
-                    is_final=is_final_bar(bar_end, received),
+                    is_final=is_final_bar(bar_end, received) and is_whole_minute(bar_start),
                     adjustment_mode=AdjustmentMode.RAW,
                     session=session,
                     provider=self.provider_id,

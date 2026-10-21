@@ -106,6 +106,98 @@ def test_yahoo_store_persists_and_reloads_finalized_one_minute_bars(tmp_path) ->
     assert all(bar.provider == "yahoo" for bar in loaded)
 
 
+def _forming_bar(session_date: date, minute: int, second: int) -> MarketBar:
+    """Yahoo's forming row: stamped at its last trade, zero volume."""
+
+    bar = _bar(session_date, minute, volume="0")
+    start = bar.start_time + timedelta(seconds=second)
+    return bar.model_copy(
+        update={
+            "start_time": start,
+            "end_time": start + timedelta(minutes=1),
+            "provider_event_id": str(int(start.timestamp())),
+            "received_at": start + timedelta(minutes=1, seconds=2),
+        }
+    )
+
+
+def test_yahoo_store_never_persists_or_loads_an_off_minute_forming_row(tmp_path) -> None:
+    store = _store(tmp_path)
+    session_date = date(2026, 10, 21)
+    finished = [_bar(session_date, minute) for minute in range(15)]
+    forming = _forming_bar(session_date, 12, 30)
+
+    assert store.persist_market_bars([*finished, forming]) == len(finished)
+
+    # Rows stored before the guard existed are skipped on read.
+    store.backend.add_revisions(
+        store._symbol(INSTRUMENT),
+        session_date,
+        [store._record_from_market_bar(forming)],
+    )
+    loaded = store.load_market_bars(
+        INSTRUMENT,
+        start=finished[0].start_time,
+        end=finished[-1].end_time + timedelta(minutes=1),
+        session="regular",
+    )
+    assert [bar.start_time for bar in loaded] == [bar.start_time for bar in finished]
+
+
+def test_yahoo_chart_result_drops_the_off_minute_forming_row(tmp_path) -> None:
+    store = _store(tmp_path)
+    finished = _bar(date(2026, 10, 21), 12)
+    forming = finished.start_time + timedelta(seconds=30)
+    result = {
+        "timestamp": [int(finished.start_time.timestamp()), int(forming.timestamp())],
+        "indicators": {
+            "quote": [{
+                "open": [10, 10],
+                "high": [10.1, 10],
+                "low": [9.9, 10],
+                "close": [10, 10],
+                "volume": [100, 0],
+            }],
+        },
+    }
+
+    written = store.persist_chart_result(
+        INSTRUMENT,
+        result,
+        received_at=forming + timedelta(minutes=5),
+    )
+
+    assert written == 1
+
+
+def test_stoch_trend_capture_no_longer_sees_a_gap_from_the_forming_row(tmp_path) -> None:
+    from app.apps.trading.strategy_stoch_trend_capture import evaluate_stoch_trend_capture
+
+    store = _store(tmp_path)
+    session_date = date(2026, 10, 21)
+    finished = [_bar(session_date, minute) for minute in range(15)]
+    forming = _forming_bar(session_date, 12, 30)
+    store.persist_market_bars(finished)
+    store.backend.add_revisions(
+        store._symbol(INSTRUMENT),
+        session_date,
+        [store._record_from_market_bar(forming)],
+    )
+
+    # The overlap the forming row created is what stoch trend capture read as
+    # a regular-session gap for the rest of the day.
+    polluted = sorted([*finished, forming], key=lambda bar: bar.start_time)
+    assert evaluate_stoch_trend_capture(polluted).state == "data_gap"
+
+    loaded = store.load_market_bars(
+        INSTRUMENT,
+        start=finished[0].start_time,
+        end=finished[-1].end_time,
+        session="regular",
+    )
+    assert evaluate_stoch_trend_capture(loaded).state != "data_gap"
+
+
 def test_yahoo_relative_rvol_uses_persistent_same_feed_baseline(tmp_path) -> None:
     store = _store(tmp_path)
     current = date(2026, 9, 17)

@@ -5,13 +5,16 @@ from pathlib import Path
 
 from app.apps.trading.cache import TradingMarketDataCache
 from app.apps.trading.providers.additional_crypto import AdditionalCryptoProvider
+from app.apps.trading.evidence_storage import MemoryEvidenceBackend
 from app.apps.trading.providers.bar_semantics import (
     continuous_bar_end,
     equity_bar_times,
     is_final_bar,
+    is_whole_minute,
 )
 from app.apps.trading.providers.equity import YahooEquityProvider
 from app.apps.trading.providers.http_runtime import ProviderHttpRuntime
+from app.apps.trading.yahoo_evidence import YahooEvidenceStore
 
 
 class FakeResponse:
@@ -114,6 +117,52 @@ def test_yahoo_daily_history_keeps_the_full_stock_window() -> None:
     assert response.bars[0].provider_event_id == str(timestamps[5])
     assert response.provenance.history_complete is False
     assert session.calls == 1
+
+
+def test_yahoo_forming_row_stamped_off_the_minute_is_never_final() -> None:
+    # SVRN on 2026-10-21: Yahoo's forming row kept its 13:42:30 last-trade stamp
+    # past 13:43:30 on a thin tape and used to be persisted as a final bar.
+    finished = datetime(2026, 10, 21, 13, 42, tzinfo=timezone.utc)
+    forming = finished + timedelta(seconds=30)
+    assert is_whole_minute(finished) is True
+    assert is_whole_minute(forming) is False
+    payload = {
+        "chart": {
+            "result": [{
+                "timestamp": [int(finished.timestamp()), int(forming.timestamp())],
+                "indicators": {
+                    "quote": [{
+                        "open": [32.6, 32.6],
+                        "high": [32.7, 32.6],
+                        "low": [32.5, 32.6],
+                        "close": [32.6, 32.6],
+                        "volume": [1_683, 0],
+                    }],
+                },
+            }],
+        },
+    }
+    runtime = ProviderHttpRuntime(
+        "yahoo",
+        session=FakeSession([FakeResponse(payload)]),
+        max_attempts=1,
+        initial_backoff_seconds=0,
+    )
+    provider = YahooEquityProvider(runtime=runtime, cache=TradingMarketDataCache())
+    provider.evidence_store = YahooEvidenceStore(MemoryEvidenceBackend())
+
+    response = provider.get_bars("equity:NASDAQ:AAPL", "1m", 10)
+
+    assert [(bar.start_time, bar.is_final) for bar in response.bars] == [
+        (finished, True),
+        (forming, False),
+    ]
+    stored = provider.evidence_store.load_market_bars(
+        "equity:NASDAQ:AAPL",
+        start=finished,
+        end=forming + timedelta(minutes=1),
+    )
+    assert [bar.start_time for bar in stored] == [finished]
 
 
 def test_yahoo_currency_rate_normalizes_stablecoins_and_caches() -> None:
