@@ -87,10 +87,19 @@ def test_live_and_replay_share_leader_fallback_and_lifecycle():
     assert len(live_first.candidates) == 1
     assert live_first.events[0].attention_score == 35.0
 
-    weak_at = T0 + timedelta(minutes=31)
+    # Off the live leaderboard from T0+5; cooling 31 minutes later.
+    left_at = T0 + timedelta(minutes=5)
+    left = _observation(left_at, source="fixture", gap=1.0, rvol=0.0)
+    live_left = dd.apply_discovery_scan(
+        previous_state={row.instrument_id: row for row in live_first.candidates},
+        observations=(left,),
+        watermark=left_at,
+        session_date=SESSION,
+    )
+    weak_at = left_at + timedelta(minutes=31)
     weak = _observation(weak_at, source="fixture", gap=1.0, rvol=0.0)
     live_second = dd.apply_discovery_scan(
-        previous_state={row.instrument_id: row for row in live_first.candidates},
+        previous_state={row.instrument_id: row for row in live_left.candidates},
         observations=(weak,),
         watermark=weak_at,
         session_date=SESSION,
@@ -105,6 +114,12 @@ def test_live_and_replay_share_leader_fallback_and_lifecycle():
                 observed_at=first.observed_at,
                 source=first.source,
                 market=first.market,
+            ),
+            DiscoveryReplayObservation(
+                instrument_id=left.instrument_id,
+                observed_at=left.observed_at,
+                source=left.source,
+                market=left.market,
             ),
             DiscoveryReplayObservation(
                 instrument_id=weak.instrument_id,
@@ -404,3 +419,53 @@ def test_replay_precision_ignores_unlabeled_symbols_instead_of_calling_them_fals
     )
     assert result.discovery_precision == 1.0
     assert result.false_positive_symbols == ()
+
+
+def test_a_live_leaderboard_member_stays_active_while_its_features_are_thin():
+    # HOST, 2026-10-20: on the top-gainers board all day, but its scored features stayed
+    # near zero (attention ~18, below the 42 retention score), so it expired at 09:17
+    # and never reached a strategy.
+    state: dict = {}
+    result = None
+    for minute in range(0, 181, 5):
+        at = T0 + timedelta(minutes=minute)
+        result = dd.apply_discovery_scan(
+            previous_state=state, observations=(_observation(at, gap=17.0),), watermark=at, session_date=SESSION
+        )
+        state = {row.instrument_id: row for row in result.candidates}
+    [candidate] = result.candidates
+    assert candidate.common_priority < dd.DEFAULT_DYNAMIC_DISCOVERY_CONFIG.retention_score
+    assert candidate.lifecycle == dd.CandidateLifecycleState.ACTIVE
+    assert candidate.tier == dd.EvaluationTier.A
+    assert candidate.instrument_id in result.experiment_cohorts[dd.DiscoveryExperimentArm.MARKET_ONLY.value]
+    assert candidate.instrument_id in result.experiment_cohorts[dd.DiscoveryExperimentArm.COMBINED.value]
+
+    # Off the board the retention hysteresis applies as before.
+    last = T0 + timedelta(minutes=180)
+    for minute in (5, 65):
+        at = last + timedelta(minutes=minute)
+        result = dd.apply_discovery_scan(previous_state=state, observations=(), watermark=at, session_date=SESSION)
+        state = {row.instrument_id: row for row in result.candidates}
+    assert result.candidates[0].lifecycle == dd.CandidateLifecycleState.EXPIRED
+
+    # Back on the board, it is active again.
+    back = last + timedelta(minutes=70)
+    result = dd.apply_discovery_scan(
+        previous_state=state, observations=(_observation(back, gap=17.0),), watermark=back, session_date=SESSION
+    )
+    assert result.candidates[0].lifecycle == dd.CandidateLifecycleState.ACTIVE
+
+
+def test_another_source_does_not_retain_a_weak_candidate():
+    state: dict = {}
+    result = None
+    for minute in range(0, 71, 5):
+        at = T0 + timedelta(minutes=minute)
+        result = dd.apply_discovery_scan(
+            previous_state=state,
+            observations=(_observation(at, gap=17.0, source="fixture" if minute else "finviz_live_leaders"),),
+            watermark=at,
+            session_date=SESSION,
+        )
+        state = {row.instrument_id: row for row in result.candidates}
+    assert result.candidates[0].lifecycle == dd.CandidateLifecycleState.EXPIRED

@@ -28,6 +28,13 @@ EVENT_CAUSALITY_VIOLATION = "interday_discovery_causality_violation"
 EVENT_COHORT = "interday_discovery_cohort"
 EVENT_PARENT_EXPOSURE = "interday_parent_exposure"
 EVENT_EXECUTION_ECONOMICS = "interday_discovery_execution_economics"
+# The live top-gainers board. A stock seen on it in the current scan stays
+# active: membership is market attention even when the scored features are thin.
+LIVE_LEADERBOARD_SOURCE = "finviz_live_leaders"
+_LEADERBOARD_RETAINED_ARMS = {
+    dd.DiscoveryExperimentArm.MARKET_ONLY,
+    dd.DiscoveryExperimentArm.COMBINED,
+}
 
 _MARKET_TRIGGERS = {
     dd.DiscoveryTriggerType.MARKET_ANOMALY,
@@ -128,6 +135,7 @@ def _update_experiment_state(
     current_priority: float,
     config: dd.DynamicDiscoveryConfig,
     admitted: bool = False,
+    retained: bool = False,
 ) -> dd.ExperimentCandidateState:
     now = _utc(observed_at)
     priority = _clip(current_priority)
@@ -145,7 +153,7 @@ def _update_experiment_state(
     below = state.below_retention_since
     lifecycle = state.lifecycle
     expired_at = state.expired_at
-    if priority >= config.retention_score:
+    if priority >= config.retention_score or retained:
         lifecycle = dd.CandidateLifecycleState.ACTIVE
         below = None
         expired_at = None
@@ -413,6 +421,7 @@ def _advance_complete_candidate(
     observed_at: datetime,
     current_market_priority: float | None,
     config: dd.DynamicDiscoveryConfig,
+    on_leaderboard: bool = False,
 ) -> dd.DynamicCandidate:
     now = _utc(observed_at)
     current_market = (
@@ -438,7 +447,7 @@ def _advance_complete_candidate(
     lifecycle = candidate.lifecycle
     cooling_since = candidate.cooling_since
     expired_at = candidate.expired_at
-    if common >= config.retention_score:
+    if common >= config.retention_score or on_leaderboard:
         lifecycle = dd.CandidateLifecycleState.ACTIVE
         below = None
         cooling_since = None
@@ -468,6 +477,7 @@ def _advance_complete_candidate(
             observed_at=now,
             current_priority=priority,
             config=config,
+            retained=on_leaderboard and arm in _LEADERBOARD_RETAINED_ARMS,
         )
     return candidate.model_copy(
         update={
@@ -574,7 +584,7 @@ def _tier_complete_candidates(
 def _leader_fallback_event(observation, *, config: dd.DynamicDiscoveryConfig):
     if (
         observation.market is None
-        or observation.source != "finviz_live_leaders"
+        or observation.source != LIVE_LEADERBOARD_SOURCE
         or abs(observation.market.gap_pct) < 5.0
     ):
         return None
@@ -673,6 +683,7 @@ def apply_discovery_scan(
     emitted: list[dd.DiscoveryEvent] = []
     violations: list[dd.DiscoveryScanViolation] = []
     latest: dict[str, Any] = {}
+    on_leaderboard: set[str] = set()
 
     ordered = sorted(
         observations,
@@ -702,6 +713,8 @@ def apply_discovery_scan(
             )
             continue
         latest[observation.instrument_id] = observation
+        if observation.source == LIVE_LEADERBOARD_SOURCE:
+            on_leaderboard.add(observation.instrument_id)
         events = _events_from_observation(observation, config=config)
         for event in events:
             if event.causal_as_of > now or event.discovered_at > now:
@@ -748,6 +761,7 @@ def apply_discovery_scan(
             observed_at=now,
             current_market_priority=market_priority,
             config=config,
+            on_leaderboard=symbol in on_leaderboard,
         )
 
     tiered = _tier_complete_candidates(tuple(state.values()), config=config)

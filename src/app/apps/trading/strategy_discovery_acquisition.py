@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 """Provider-neutral causal acquisition contracts for dynamic discovery."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from threading import RLock
 from types import MappingProxyType
@@ -46,6 +46,33 @@ class DiscoveryAcquisitionSource(Protocol):
     def capture(self, *, observed_at: datetime) -> tuple[CausalMarketObservation, ...]: ...
 
 
+def _regular_session_activity(instrument_id: str, observed_at: datetime) -> tuple[Decimal, Decimal] | None:
+    """Regular-session (volume, dollar volume) so far, from the Yahoo 1m bars the scan just stored.
+
+    None before the open or when nothing is stored. The Finviz candidate's liquidity
+    fields describe the premarket only, so after the open they miss the session.
+    """
+
+    local = observed_at.astimezone(EASTERN)
+    if local.time() < time(9, 30):
+        return None
+    try:
+        from .yahoo_evidence import default_yahoo_evidence_store
+
+        bars = default_yahoo_evidence_store().load_market_bars(
+            instrument_id,
+            start=datetime.combine(local.date(), time(9, 30), tzinfo=EASTERN),
+            end=observed_at,
+            session="regular",
+        )
+    except Exception:
+        logger.debug("regular_session_activity_unavailable instrument_id=%s", instrument_id, exc_info=True)
+        return None
+    if not bars:
+        return None
+    return sum((bar.volume for bar in bars), Decimal("0")), sum((bar.close * bar.volume for bar in bars), Decimal("0"))
+
+
 class FinvizLiveLeaderSource:
     name = "finviz_live_leaders"
 
@@ -65,9 +92,14 @@ class FinvizLiveLeaderSource:
         rows: list[CausalMarketObservation] = []
         for candidate in snapshot.candidates:
             observed = candidate.observed_at or snapshot.evaluation_time
+            # The day's activity so far: premarket plus the regular session once it opens.
+            volume, dollar_volume = candidate.premarket_volume, candidate.premarket_dollar_volume
+            session = _regular_session_activity(candidate.instrument_id, observed)
+            if session is not None:
+                volume, dollar_volume = volume + session[0], dollar_volume + session[1]
             volume_to_float = None
             if candidate.float_shares is not None and candidate.float_shares > 0:
-                volume_to_float = float(candidate.premarket_volume / candidate.float_shares)
+                volume_to_float = float(volume / candidate.float_shares)
             rows.append(
                 CausalMarketObservation(
                     instrument_id=candidate.instrument_id,
@@ -80,7 +112,7 @@ class FinvizLiveLeaderSource:
                         gap_pct=float(candidate.gap_pct),
                         tod_rvol=float(candidate.tod_rvol) if candidate.tod_rvol is not None else None,
                         volume_to_float=volume_to_float,
-                        dollar_volume=float(candidate.premarket_dollar_volume),
+                        dollar_volume=float(dollar_volume),
                         spread_bps=float(candidate.spread_bps) if candidate.spread_bps is not None else None,
                     ),
                     candidate_payload=candidate.model_dump(mode="json"),
