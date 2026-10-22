@@ -408,6 +408,30 @@ describe('ChatbotWorkspace', () => {
     expect(document.querySelector('.assistant-chat-layout')).not.toHaveClass('assistant-chat-layout-sidebar-minimized');
   });
 
+  it('folds the chat list in a narrow window so Live Voice keeps the right-hand rail', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      return new Response('not found', { status: 404 });
+    }));
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 1180px)', media: query, onchange: null,
+      addListener: () => undefined, removeListener: () => undefined,
+      addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+    }));
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    expect(document.querySelector('.assistant-chat-layout')).toHaveClass('assistant-chat-layout-sidebar-minimized');
+    fireEvent.click(screen.getByRole('button', { name: 'Expand assistant sidebar' }));
+    expect(document.querySelector('.assistant-chat-layout')).not.toHaveClass('assistant-chat-layout-sidebar-minimized');
+    // Opening it in a narrow window is not saved as the wide-window choice.
+    expect(window.localStorage.getItem('omnix.chatbot.assistantSidebarMinimized')).toBe('false');
+  });
+
   it('keeps the side panel focused on Live Voice without a duplicate Tools tab', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);

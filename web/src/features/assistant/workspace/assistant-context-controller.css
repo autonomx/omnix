@@ -15,6 +15,15 @@
     z-index: 2;
   }
 
+  /* A narrow chat column: a row of their own above the send buttons (ChatbotWorkspaceAssistantNav.css pads the input). */
+  @container assistant-composer (max-width: 36rem) {
+    .assistant-chat-main .assistant-composer > .assistant-context-controls {
+      bottom: 4.35rem;
+      max-width: calc(100% - 2.7rem);
+      right: 1.35rem;
+    }
+  }
+
   .assistant-context-tools {
     align-items: center;
     display: inline-flex;

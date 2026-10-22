@@ -121,6 +121,30 @@
     width: 2.7rem;
   }
 
+  /* Push-to-talk dictation, beside the microphone: the same pill. */
+  .assistant-composer-actions .voice-ptt-button {
+    appearance: none;
+    background: color-mix(in srgb, var(--c-neutral-1000) 5%, transparent);
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: var(--omnix-text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    min-height: 2.7rem;
+    padding: 0 1rem;
+    white-space: nowrap;
+  }
+
+  .assistant-composer-actions .voice-ptt-button:hover,
+  .assistant-composer-actions .voice-ptt-button:focus-visible,
+  .assistant-composer-actions .voice-ptt-button.recording {
+    background: color-mix(in srgb, var(--c-indigo-600) 30%, transparent);
+    border-color: color-mix(in srgb, var(--c-violet-660) 52%, transparent);
+    outline: none;
+  }
+
   .assistant-send-button {
     background: linear-gradient(135deg, var(--c-indigo-500), var(--c-indigo-600));
     color: var(--c-neutral-1000);
@@ -289,10 +313,13 @@
     padding: 0;
   }
 
+  /* The chat list, the chat, and the Live Voice rail; a minimized panel sets its width to 3.75rem. */
   .assistant-chat-layout {
+    --assistant-chat-list-width: minmax(14rem, 16.5rem);
+    --assistant-chat-rail-width: minmax(21rem, 25rem);
     display: grid;
     gap: 0.75rem;
-    grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) minmax(21rem, 25rem);
+    grid-template-columns: var(--assistant-chat-list-width) minmax(0, 1fr) var(--assistant-chat-rail-width);
     height: calc(100vh - 6.25rem);
     min-height: 44rem;
   }
@@ -997,22 +1024,27 @@
     color: var(--omnix-cyan);
   }
 
+  /*
+   * Narrower windows keep the Live Voice rail on the right with slimmer side panels (below 1180px useChatLayout
+   * folds the chat list to its icons). Only a phone-sized window stacks the panels.
+   */
   @media (max-width: 1500px) {
-    .assistant-chat-layout { grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); height: auto;
-    }
-
-    .assistant-chat-main { min-height: 44rem;
-    }
-
-    .assistant-chat-side { grid-column: 1 / -1; grid-template-columns: 1fr;
-    }
-
-    .assistant-live-card { height: auto; min-height: 32rem;
+    .assistant-chat-layout {
+      --assistant-chat-list-width: minmax(13rem, 15rem);
+      --assistant-chat-rail-width: minmax(19rem, 22rem);
     }
   }
 
   @media (max-width: 1180px) {
-    .assistant-chat-layout { grid-template-columns: 1fr; height: auto;
+    .assistant-chat-layout { --assistant-chat-rail-width: minmax(18rem, 20rem);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .workspace-card.assistant-chat-page { margin: 1rem 0.75rem;
+    }
+
+    .assistant-chat-layout { grid-template-columns: 1fr; height: auto; min-height: 0;
     }
 
     .assistant-chat-sidebar { min-height: 38rem;
@@ -1021,18 +1053,10 @@
     .assistant-chat-main { min-height: 44rem;
     }
 
-    .assistant-chat-side { grid-template-columns: 1fr;
+    .assistant-chat-side { grid-column: 1 / -1; grid-template-columns: 1fr;
     }
 
     .assistant-live-card { height: auto; min-height: 44rem;
-    }
-  }
-
-  @media (max-width: 900px) {
-    .workspace-card.assistant-chat-page { margin: 1rem 0.75rem;
-    }
-
-    .assistant-chat-layout { min-height: 0;
     }
 
     .assistant-chat-header {

@@ -4,11 +4,7 @@
 /* Side panels. */
 @layer features {
   .assistant-chat-layout-side-minimized {
-    grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) 3.75rem;
-  }
-
-  .assistant-chat-layout-sidebar-minimized.assistant-chat-layout-side-minimized {
-    grid-template-columns: 3.75rem minmax(0, 1fr) 3.75rem;
+    --assistant-chat-rail-width: 3.75rem;
   }
 
   .assistant-chat-side-minimized {
@@ -162,17 +158,7 @@
     outline: none;
   }
 
-  @media (max-width: 1500px) {
-    .assistant-chat-layout-side-minimized {
-      grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr) 3.75rem;
-    }
-
-    .assistant-chat-layout-side-minimized .assistant-chat-side {
-      grid-column: auto;
-    }
-  }
-
-  @media (max-width: 1180px) {
+  @media (max-width: 900px) {
     .assistant-chat-layout-side-minimized {
       grid-template-columns: minmax(0, 1fr);
     }

@@ -33,7 +33,7 @@
   }
 
   .assistant-chat-layout-sidebar-minimized {
-    grid-template-columns: 3.75rem minmax(0, 1fr) minmax(21rem, 25rem);
+    --assistant-chat-list-width: 3.75rem;
   }
 
   .assistant-chat-sidebar-controls {
@@ -98,19 +98,13 @@
     display: none;
   }
 
-  @media (max-width: 1500px) {
+  @media (max-width: 900px) {
     .assistant-chat-layout-sidebar-minimized {
       grid-template-columns: 3.75rem minmax(0, 1fr);
     }
 
     .assistant-chat-layout-sidebar-minimized .assistant-chat-side {
       grid-column: 1 / -1;
-    }
-  }
-
-  @media (max-width: 1180px) {
-    .assistant-chat-layout-sidebar-minimized {
-      grid-template-columns: 3.75rem minmax(0, 1fr);
     }
   }
 
@@ -952,6 +946,19 @@
   .assistant-chat-main .assistant-message-input textarea {
     padding-bottom: 3.5rem;
     padding-right: 13.4rem;
+  }
+
+  /* The composer's width, not the window's, decides whether its two button rows fit side by side. */
+  .assistant-chat-main .assistant-composer {
+    container: assistant-composer / inline-size;
+  }
+
+  /* A narrow chat column: the context controls take their own row above the send buttons (assistant-context-controller.css). */
+  @container assistant-composer (max-width: 36rem) {
+    .assistant-chat-main .assistant-message-input textarea {
+      padding-bottom: 7.4rem;
+      padding-right: 1rem;
+    }
   }
 
   .assistant-chat-image-attachment,
