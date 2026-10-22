@@ -2,8 +2,8 @@
 // Windows NSIS from a windows-x64 stage, macOS dmg + zip from a macos-arm64 or macos-x64 stage (on a Mac).
 import { Arch, build, Platform } from 'electron-builder';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,7 +69,7 @@ const targets = mac
   ? Platform.MAC.createTarget(['dmg', 'zip'], stagedPlatform === 'macos-arm64' ? Arch.arm64 : Arch.x64)
   : Platform.WINDOWS.createTarget(['nsis'], Arch.x64);
 
-await build({
+const artifacts = await build({
   projectDir: root,
   targets,
   config: {
@@ -79,3 +79,14 @@ await build({
   publish: process.argv.includes('--publish') ? 'always' : 'never',
 });
 console.log(`${stagedPlatform} installer written to desktop/release/`);
+
+// A copy at the repository root, easy to find (git ignores it): the latest installer only.
+const repoRoot = join(root, '..');
+const installers = artifacts.filter((path) => /\.(exe|dmg)$/i.test(path) && !/uninstaller/i.test(path));
+for (const name of readdirSync(repoRoot)) {
+  if (/^Omnix-.*\.(exe|dmg)$/i.test(name)) rmSync(join(repoRoot, name));
+}
+for (const installer of installers) {
+  copyFileSync(installer, join(repoRoot, basename(installer)));
+  console.log(`copied to ${basename(installer)} at the repository root`);
+}
