@@ -6,7 +6,8 @@ import logging
 import time
 from typing import Any
 
-from app.providers.service import get_tts_provider
+from app.providers.catalog import STREAMING, provider_supports
+from app.providers.service import get_tts_provider, selected_tts_provider_id
 
 from .tts_engines import TRANSCRIPT_ENGINES
 from .tts_runtime_state import (
@@ -98,22 +99,29 @@ def warm_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
         speaker = _select_speaker(provider)
         with STATE_LOCK:
             STATE.update(speaker=speaker, model_loaded=True)
-        iterator = provider.generate_audio_stream(
-            text="Audio runtime ready.",
-            speaker=speaker,
-            language="English",
-            chunk_size=8,
-            temperature=0.6,
-            top_k=20,
-            top_p=0.85,
-            repetition_penalty=1.0,
-            append_silence=False,
-            max_new_tokens=192,
-            non_streaming_mode=False,
-            parity_mode=False,
-        )
-        audio, sample_rate, timing = next(iterator)
-        samples = len(audio) if hasattr(audio, "__len__") else None
+        if provider_supports(selected_tts_provider_id(), STREAMING, "tts"):
+            iterator = provider.generate_audio_stream(
+                text="Audio runtime ready.",
+                speaker=speaker,
+                language="English",
+                chunk_size=8,
+                temperature=0.6,
+                top_k=20,
+                top_p=0.85,
+                repetition_penalty=1.0,
+                append_silence=False,
+                max_new_tokens=192,
+                non_streaming_mode=False,
+                parity_mode=False,
+            )
+            audio, sample_rate, timing = next(iterator)
+            samples = len(audio) if hasattr(audio, "__len__") else None
+        else:
+            # An engine that renders whole utterances (OmniVoice) warms on one short one.
+            result = provider.generate_audio("Audio runtime ready.", speaker=speaker, language="English")
+            if not result.get("success", True):
+                raise RuntimeError(str(result.get("error") or "the TTS engine did not synthesize"))
+            sample_rate, timing, samples = result.get("sample_rate"), None, None
         try:
             import torch
 

@@ -62,6 +62,7 @@ def test_warmup_loads_model_and_executes_fast_stream_chunk(monkeypatch) -> None:
     reset_state()
     provider = FakeProvider()
     monkeypatch.setattr(tts_runtime_actions, "get_tts_provider", lambda: provider)
+    monkeypatch.setattr(tts_runtime_actions, "selected_tts_provider_id", lambda: "faster-qwen3-tts")
     monkeypatch.setattr(tts_runtime_actions, "stream_log", lambda *args, **kwargs: None)
     monkeypatch.setattr(tts_runtime_actions, "configured_speaker", lambda: None)
 
@@ -77,6 +78,36 @@ def test_warmup_loads_model_and_executes_fast_stream_chunk(monkeypatch) -> None:
     assert provider.stream_calls[0]["parity_mode"] is False
     assert provider.stream_calls[0]["max_new_tokens"] == 192
     assert provider.stream_calls[0]["chunk_size"] == 8
+
+
+def test_warmup_renders_one_whole_utterance_on_an_engine_that_does_not_stream(monkeypatch) -> None:
+    reset_state()
+
+    class WholeUtterances(FakeProvider):
+        provider_name = "omnivoice"
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.generated: list[str] = []
+
+        def generate_audio(self, text: str, **kwargs: Any) -> dict[str, Any]:
+            self.generated.append(text)
+            return {"success": True, "audio": "", "sample_rate": 24_000}
+
+        def generate_audio_stream(self, **kwargs: Any):
+            raise NotImplementedError("OmniVoice renders whole utterances; it does not stream")
+
+    provider = WholeUtterances()
+    monkeypatch.setattr(tts_runtime_actions, "get_tts_provider", lambda: provider)
+    monkeypatch.setattr(tts_runtime_actions, "selected_tts_provider_id", lambda: "omnivoice")
+    monkeypatch.setattr(tts_runtime_actions, "stream_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tts_runtime_actions, "configured_speaker", lambda: None)
+
+    result = tts_runtime_actions.warm_tts_runtime("engine-switch")
+
+    assert result["status"] == "ready", result["error"]
+    assert provider.generated == ["Audio runtime ready."]
+    assert result["sample_rate"] == 24_000
 
 
 def test_unload_clears_provider_and_vendored_cache(monkeypatch) -> None:
