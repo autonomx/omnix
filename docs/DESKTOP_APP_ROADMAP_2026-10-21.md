@@ -924,6 +924,34 @@ driver 617.42). The Mac items need the owner's Mac. Signing and the release feed
 - **`default_ref.wav`:** confirm its provenance before the first public build.
 - **Clean-machine checks:** the clean Windows account (Phase 3) and the clean machine (Phase 6 gate).
 - **Older NVIDIA driver:** a voice-input run on a driver below 580, to confirm NeMo's fallback (R-3).
+### Model choices and defaults (added 2026-10-22, owner request)
+
+- **Choosing models:** a bundle can offer models to choose from, as catalog v2 options. Each option has its own
+  runtimes, its own load requirements and a default flag, and a bundle can require a number of them.
+  - **Voice output** keeps Qwen3-TTS 0.6B and offers Qwen3-TTS 1.7B VoiceDesign and OmniVoice. OmniVoice is
+    non-commercial and runs on its own overlay, `omnivoice-windows-x64` (transformers 5), on the shared Torch layer,
+    as the TTS service's child started through `service_boot`, on a free port.
+  - **Image generation** needs one of FLUX.2 klein 4B (the default), FLUX.2 klein Base 4B and Z-Image Turbo.
+- **Changing them later:** options can be chosen before the download, or added and removed one at a time afterwards.
+  - Adding one brings its runtime.
+  - Removing one takes only the runtime it alone needs.
+- **Defaults:** the setup screen and Settings → Models set the default voice engine and image model, from the
+  downloaded ones.
+- **Image loads:** each image model's load is checked against its own requirement (`OMNIX_MODEL_LOAD_COMMIT_MB`).
+  - Z-Image Turbo's 36 GB of commit is an estimate. Its CPU-offload memory has not been measured.
+- **Lock fingerprints** now cover requirements only, so a header comment no longer marks every installed pack out of
+  date.
+- **OmniVoice in the app:**
+  - An engine switch warms an engine that does not stream (OmniVoice) on one whole utterance; it used to fail on the
+    streaming warm-up.
+  - OmniVoice clones from a voice sample's transcript; without one it would fetch Whisper, and the app is offline. So
+    the installer ships the default voice's transcript (`resources/voice_clones/default_ref.json`). A voice with no
+    transcript gets an error that asks for Speech input, which transcribes samples at the next engine switch.
+  - Its child log is in the writable data folder (`resources/logs/tts/omnivoice.log`), not the install folder.
+- **Later:**
+  - Krea 2 Turbo, once the owner's Hugging Face token can read gated repositories (it is pinned then).
+  - Fish S2 Pro, which needs its own Torch 2.8 layer and a measured memory gate.
+
 ### Live2D avatars (added 2026-10-22, owner request)
 
 - **Where:** the setup screen and Settings → Models have an Avatars section beside the AI models.

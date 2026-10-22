@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import platform as _platform
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -100,6 +100,19 @@ class RuntimePack:
 
 
 @dataclass(frozen=True)
+class BundleOption:
+    """A model the user may add to a bundle (another voice engine, another image model)."""
+
+    model: str
+    runtimes: tuple[str, ...] = ()
+    default: bool = False
+    # Its own load requirements (an image model, a voice engine's child process); None: not measured.
+    min_vram_mb: int | None = None
+    min_commit_mb: int | None = None
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class BundleVariant:
     platform: str
     accelerator: str
@@ -108,6 +121,41 @@ class BundleVariant:
     min_vram_mb: int | None = None
     min_commit_mb: int | None = None
     note: str = ""
+    options: tuple[BundleOption, ...] = ()
+    # How many options the bundle needs (image generation needs a model to generate with).
+    min_options: int = 0
+
+    def option(self, model_id: str) -> BundleOption | None:
+        return next((item for item in self.options if item.model == model_id), None)
+
+    def default_options(self) -> tuple[str, ...]:
+        return tuple(item.model for item in self.options if item.default)
+
+    def chosen(self, picked: Iterable[str] | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """(models, runtimes) for the required models and the picked options (the defaults when none are named)."""
+        names = list(self.default_options() if picked is None else picked)
+        unknown = [name for name in names if self.option(name) is None]
+        if unknown:
+            raise CatalogError(f"not an option of this bundle: {', '.join(unknown)}")
+        options = [item for item in self.options if item.model in names]
+        models = (*self.models, *(item.model for item in options))
+        runtimes = list(self.runtimes)
+        for item in options:
+            runtimes.extend(runtime for runtime in item.runtimes if runtime not in runtimes)
+        return models, tuple(runtimes)
+
+    def all_models(self) -> tuple[str, ...]:
+        return (*self.models, *(item.model for item in self.options))
+
+    def installed_options(self, has_model: Callable[[str], bool],
+                          has_runtime: Callable[[str], bool] = lambda runtime_id: True) -> tuple[str, ...]:
+        return tuple(item.model for item in self.options
+                     if has_model(item.model) and all(has_runtime(runtime_id) for runtime_id in item.runtimes))
+
+    def satisfied(self, has_model: Callable[[str], bool]) -> bool:
+        """Its required models are installed, and enough of its options (runtimes are checked by the caller)."""
+        return (all(has_model(model_id) for model_id in self.models)
+                and len(self.installed_options(has_model)) >= self.min_options)
 
 
 @dataclass(frozen=True)
@@ -180,8 +228,12 @@ class Catalog:
         found: list[str] = []
         for bundle in self.bundles.values():
             variant = bundle.variant(platform)
-            if variant is not None and canonical in variant.models:
-                found.extend(item for item in variant.runtimes if item not in found)
+            if variant is None:
+                continue
+            option = variant.option(canonical)
+            if canonical in variant.models or option is not None:
+                runtimes = (*variant.runtimes, *(option.runtimes if option is not None else ()))
+                found.extend(item for item in runtimes if item not in found)
         return found
 
 
@@ -272,6 +324,17 @@ def _runtime(runtime_id: str, raw: Mapping[str, Any]) -> RuntimePack:
     )
 
 
+def _option(raw: Mapping[str, Any], where: str) -> BundleOption:
+    return BundleOption(
+        model=str(_require(raw, "model", where)),
+        runtimes=tuple(str(runtime) for runtime in raw.get("runtimes") or ()),
+        default=bool(raw.get("default")),
+        min_vram_mb=None if raw.get("min_vram_mb") is None else int(raw["min_vram_mb"]),
+        min_commit_mb=None if raw.get("min_commit_mb") is None else int(raw["min_commit_mb"]),
+        note=str(raw.get("note") or ""),
+    )
+
+
 def _bundle(bundle_id: str, raw: Mapping[str, Any]) -> Bundle:
     where = f"bundle {bundle_id}"
     variants = []
@@ -287,7 +350,11 @@ def _bundle(bundle_id: str, raw: Mapping[str, Any]) -> Bundle:
             min_vram_mb=None if item.get("min_vram_mb") is None else int(item["min_vram_mb"]),
             min_commit_mb=None if item.get("min_commit_mb") is None else int(item["min_commit_mb"]),
             note=str(item.get("note") or ""),
+            options=tuple(_option(option, where) for option in item.get("options") or ()),
+            min_options=int(item.get("min_options") or 0),
         ))
+        if variants[-1].min_options > len(variants[-1].default_options()):
+            raise CatalogError(f"{where}: {platform} needs {variants[-1].min_options} options, but fewer are defaults")
     platforms = [item.platform for item in variants]
     if len(platforms) != len(set(platforms)):
         raise CatalogError(f"{where}: one variant per platform")
@@ -321,13 +388,13 @@ def parse_catalog(raw: Mapping[str, Any]) -> Catalog:
     bundles = {bundle_id: _bundle(bundle_id, entry) for bundle_id, entry in dict(raw.get("bundles") or {}).items()}
     for bundle in bundles.values():
         for variant in bundle.variants:
-            for model_id in variant.models:
+            for model_id in variant.all_models():
                 entry = models.get(names.get(model_id, ""))
                 if entry is None:
                     raise CatalogError(f"bundle {bundle.id}: unknown model {model_id!r}")
                 if not entry.pinned:
                     raise CatalogError(f"bundle {bundle.id}: {model_id} has no pinned files")
-            for runtime_id in variant.runtimes:
+            for runtime_id in (*variant.runtimes, *(runtime for item in variant.options for runtime in item.runtimes)):
                 pack = runtimes.get(runtime_id)
                 if pack is None:
                     raise CatalogError(f"bundle {bundle.id}: unknown runtime {runtime_id!r}")
@@ -352,6 +419,6 @@ def load(path: Path = CATALOG_PATH) -> Catalog:
 
 
 __all__ = [
-    "CATALOG_PATH", "Bundle", "BundleVariant", "Catalog", "CatalogError", "Licence", "ModelEntry", "ModelFile",
+    "CATALOG_PATH", "Bundle", "BundleOption", "BundleVariant", "Catalog", "CatalogError", "Licence", "ModelEntry", "ModelFile",
     "PLATFORMS", "RuntimePack", "current_platform", "load", "parse_catalog",
 ]

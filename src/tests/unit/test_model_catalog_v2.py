@@ -39,11 +39,12 @@ def test_the_shipped_catalog_loads_and_every_bundle_is_installable() -> None:
     assert {"voice-input", "voice-output", "transcription", "image-generation"} <= set(shipped.bundles)
     for bundle in shipped.bundles.values():
         for variant in bundle.variants:
-            assert variant.models and variant.runtimes
-            for model_id in variant.models:
+            models, runtimes = variant.chosen()  # what the bundle installs by default
+            assert models and runtimes and len(variant.default_options()) >= variant.min_options
+            for model_id in variant.all_models():
                 entry = shipped.model(model_id)
                 assert entry.pinned and entry.licence.id and entry.licence.url
-            for pack in shipped.runtime_closure(variant.runtimes):
+            for pack in shipped.runtime_closure([*variant.runtimes, *(r for o in variant.options for r in o.runtimes)]):
                 assert pack.platform == variant.platform
 
 

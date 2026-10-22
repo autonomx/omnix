@@ -3,7 +3,7 @@
  "runtime": "stt-mlx-macos-arm64",
  "platform": "macos-arm64",
  "lock": "requirements/desktop/stt-mlx.macos-arm64.lock.txt",
- "lock_sha256": "6a2435247bb0998e1f0bfda6583f407b48763f7388c03bf89cb9c88153511f3b",
+ "lock_sha256": "45da617c24bb7d07dab659ecabb4ee42b072a7f7dfe7a05936f2a26447877ce1",
  "files": [
   {
    "name": "annotated-doc",

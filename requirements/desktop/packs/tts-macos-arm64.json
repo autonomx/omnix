@@ -3,7 +3,7 @@
  "runtime": "tts-macos-arm64",
  "platform": "macos-arm64",
  "lock": "requirements/desktop/tts.macos-arm64.lock.txt",
- "lock_sha256": "e1867755919c13b20c81023180bf46a15ef2f21c63b1f46375e5585ec45e08de",
+ "lock_sha256": "0353edc4fd06b115916d91ef46465ba46fa7dcfc082edea918fde1de104065b9",
  "files": [
   {
    "name": "accelerate",

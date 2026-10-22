@@ -5065,6 +5065,15 @@ export interface components {
             /** Max Pages */
             max_pages: number;
         };
+        /** DefaultChoice */
+        DefaultChoice: core["schemas"]["DefaultChoice"];
+        /** DefaultModels */
+        DefaultModels: core["schemas"]["DefaultModels"];
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: core["schemas"]["DefaultSlot"];
         /** DeleteCharacterAvatarPackResponse */
         DeleteCharacterAvatarPackResponse: {
             /** Character Id */
@@ -7810,6 +7819,13 @@ export interface components {
         PackModelLicence: core["schemas"]["PackModelLicence"];
         /** PackModelStatus */
         PackModelStatus: core["schemas"]["PackModelStatus"];
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: core["schemas"]["PackOption"];
+        /** PackOptionLicence */
+        PackOptionLicence: core["schemas"]["PackOptionLicence"];
         /** PackRuntimeStatus */
         PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
         /** PackTarget */
@@ -8517,6 +8533,8 @@ export interface components {
              */
             write_memory: boolean;
         };
+        /** SetDefaultModels */
+        SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SetSessionInteractionRequest */
         SetSessionInteractionRequest: {
             /** Character Id */

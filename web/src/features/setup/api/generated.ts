@@ -109,6 +109,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/model-packs/defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Model Packs Set Defaults
+         * @description Makes downloaded models Omnix's default voice engine and image model.
+         */
+        post: operations["model_packs_set_defaults_api_model_packs_defaults_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/voice/models": {
         parameters: {
             query?: never;
@@ -298,6 +318,15 @@ export interface components {
         CreateChatSessionRequest: core["schemas"]["CreateChatSessionRequest"];
         /** CreateJobRequest */
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
+        /** DefaultChoice */
+        DefaultChoice: core["schemas"]["DefaultChoice"];
+        /** DefaultModels */
+        DefaultModels: core["schemas"]["DefaultModels"];
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: core["schemas"]["DefaultSlot"];
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DesktopGoogleHandoffRequest */
@@ -446,6 +475,13 @@ export interface components {
         PackModelLicence: core["schemas"]["PackModelLicence"];
         /** PackModelStatus */
         PackModelStatus: core["schemas"]["PackModelStatus"];
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: core["schemas"]["PackOption"];
+        /** PackOptionLicence */
+        PackOptionLicence: core["schemas"]["PackOptionLicence"];
         /** PackRuntimeStatus */
         PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
         /** PackTarget */
@@ -569,6 +605,8 @@ export interface components {
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
         SendChatMessageResponse: core["schemas"]["SendChatMessageResponse"];
+        /** SetDefaultModels */
+        SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SettingsPatch */
         SettingsPatch: core["schemas"]["SettingsPatch"];
         /** SettingsPayload */
@@ -773,6 +811,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_packs_set_defaults_api_model_packs_defaults_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDefaultModels"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultModels"];
                 };
             };
             /** @description Validation Error */

@@ -166,9 +166,11 @@ class FluxKleinImageProvider(BaseImageProvider):
 
     def _local_dir(self) -> str:
         from app.models.local import installed_snapshot
+        from app.platform.image.downloads import catalog_model_for
 
-        # The desktop app installs the pinned catalog model only; a folder named in settings does not apply there.
-        snapshot = installed_snapshot("flux2-klein-4b")
+        # The desktop app installs the pinned catalog model only (the distilled or the base variant); a folder named
+        # in settings does not apply there.
+        snapshot = installed_snapshot(catalog_model_for("flux_klein", self.config) or "flux2-klein-4b")
         if snapshot is not None:
             return os.path.normpath(str(snapshot))
         local_dir = _safe_str(self.config.get("local_dir")).strip()

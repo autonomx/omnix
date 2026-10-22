@@ -309,6 +309,15 @@ export interface components {
         CreateChatSessionRequest: core["schemas"]["CreateChatSessionRequest"];
         /** CreateJobRequest */
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
+        /** DefaultChoice */
+        DefaultChoice: core["schemas"]["DefaultChoice"];
+        /** DefaultModels */
+        DefaultModels: core["schemas"]["DefaultModels"];
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: core["schemas"]["DefaultSlot"];
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DesktopGoogleHandoffRequest */
@@ -457,6 +466,13 @@ export interface components {
         PackModelLicence: core["schemas"]["PackModelLicence"];
         /** PackModelStatus */
         PackModelStatus: core["schemas"]["PackModelStatus"];
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: core["schemas"]["PackOption"];
+        /** PackOptionLicence */
+        PackOptionLicence: core["schemas"]["PackOptionLicence"];
         /** PackRuntimeStatus */
         PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
         /** PackTarget */
@@ -580,6 +596,8 @@ export interface components {
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
         SendChatMessageResponse: core["schemas"]["SendChatMessageResponse"];
+        /** SetDefaultModels */
+        SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SettingsPatch */
         SettingsPatch: core["schemas"]["SettingsPatch"];
         /** SettingsPayload */

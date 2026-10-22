@@ -304,6 +304,7 @@
     "GET /api/live/voice/execution-lane": "live-voice",
     "GET /api/model-packs": "voice",
     "GET /api/model-packs/capabilities": "voice",
+    "POST /api/model-packs/defaults": "voice",
     "POST /api/model-packs/install": "voice",
     "POST /api/model-packs/remove": "voice",
     "POST /api/model-packs/selection": "voice",

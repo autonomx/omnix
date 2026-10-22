@@ -135,8 +135,13 @@ def test_check_pack_files_refuses_unlocked_digests_and_stale_lists(tmp_path: Pat
     write_pack_files(path, "rt", "windows-x64", "x.lock", text, [forged])
     assert any("digest is not in the lock" in item for item in
                check_pack_files(load_pack_files(path), parse_lock(text), text, wheelhouse=tmp_path))
+    changed = text.replace("numpy==1.26.4", "numpy==1.26.5")
     assert any("another version" in item for item in
-               check_pack_files(load_pack_files(path), parse_lock(text), text + "\n", wheelhouse=tmp_path))
+               check_pack_files(load_pack_files(path), parse_lock(changed), changed, wheelhouse=tmp_path))
+    # A comment (a header naming one more service on the Torch layer) is not another version.
+    write_pack_files(path, "rt", "windows-x64", "x.lock", text, [good])
+    commented = "# also used by another service\n" + text
+    assert check_pack_files(load_pack_files(path), parse_lock(commented), commented, wheelhouse=tmp_path) == []
 
 
 def test_pack_files_only_come_from_pypi_or_pytorch(tmp_path: Path) -> None:

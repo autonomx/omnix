@@ -265,7 +265,7 @@ def service_environment(config: LaunchConfig, service: str, *, service_token: st
         if sys.platform == "darwin":
             env["OMNIX_TTS_DEVICE"] = "mps"
     elif service == "image":
-        # FLUX loads when the image view asks for it, after a memory check (OMNIX_MODEL_LOAD_COMMIT_BYTES).
+        # Image models load when the image view asks for one, after a memory check (OMNIX_MODEL_LOAD_COMMIT_MB).
         env.update({"OMNIX_IMAGE_PORT": port, "OMNIX_IMAGE_ENABLED": "1", "OMNIX_IMAGE_SERVICE_MODE": "1",
                     "OMNIX_IMAGE_URL": ""})
     else:

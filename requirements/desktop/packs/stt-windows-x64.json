@@ -3,7 +3,7 @@
  "runtime": "stt-windows-x64",
  "platform": "windows-x64",
  "lock": "requirements/desktop/stt.windows-x64.lock.txt",
- "lock_sha256": "078f1f2ff09d353f2f4e8ecf106f29c0ed3f7ebe23c4572cdd1cd838acf2fc27",
+ "lock_sha256": "63e29a0a31156036bbef51b4feca9ab875ea47852023180e388da03e559ee703",
  "files": [
   {
    "name": "absl-py",

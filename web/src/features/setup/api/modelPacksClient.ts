@@ -11,6 +11,8 @@ export type PackModelStatus = components['schemas']['PackModelStatus'];
 export type SelectionSize = components['schemas']['SelectionSize'];
 export type CapabilitiesResponse = components['schemas']['CapabilitiesResponse'];
 export type PackTarget = components['schemas']['PackTarget'];
+export type PackOption = components['schemas']['PackOption'];
+export type DefaultModels = components['schemas']['DefaultModels'];
 
 export type AvatarLibrary = components['schemas']['Live2DModelCatalogResponse'];
 export type AvatarModel = components['schemas']['Live2DModelCatalogItem'];
@@ -43,8 +45,12 @@ export const modelPacksClient = {
     return sendGatewayCall(() => api.GET('/api/model-packs'));
   },
 
-  async selection(bundles: string[]): Promise<SelectionSize> {
-    return sendGatewayCall(() => api.POST('/api/model-packs/selection', { body: { bundles } }));
+  async selection(bundles: string[], options: Record<string, string[]> = {}): Promise<SelectionSize> {
+    return sendGatewayCall(() => api.POST('/api/model-packs/selection', { body: { bundles, options } }));
+  },
+
+  async setDefaults(defaults: { voice?: string; image?: string }): Promise<DefaultModels> {
+    return sendGatewayCall(() => api.POST('/api/model-packs/defaults', { body: { voice: defaults.voice ?? '', image: defaults.image ?? '' } }));
   },
 
   async capabilities(): Promise<CapabilitiesResponse> {

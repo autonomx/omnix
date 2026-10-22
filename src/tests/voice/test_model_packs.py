@@ -1,6 +1,7 @@
 """Desktop model packs: who may install what, licence acceptance, and the install and removal jobs (DT-2.2-2.4)."""
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -372,3 +373,86 @@ def test_bundles_and_runtimes_are_desktop_only(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_PACKS_DIR", raising=False)
     with pytest.raises(ModelInstallError, match="installed by the desktop app"):
         model_install.execute_model_job(SimpleNamespace(id="j", type="models.install", input_payload={"bundle_id": "x"}))
+
+
+OPTIONS_CATALOG = model_catalog.parse_catalog({
+    "runtimes": {
+        "torch-win": {"label": "GPU runtime", "kind": "torch-layer", "platform": "windows-x64", "lock": "t", "files": "t.json"},
+        "tts-win": {"label": "Voice output runtime", "kind": "overlay", "base": "torch-win", "platform": "windows-x64",
+                    "service": "tts", "lock": "tts", "files": "tts.json"},
+        "omni-win": {"label": "OmniVoice runtime", "kind": "overlay", "base": "torch-win", "platform": "windows-x64",
+                     "lock": "o", "files": "o.json"},
+        "image-win": {"label": "Image runtime", "kind": "overlay", "base": "torch-win", "platform": "windows-x64",
+                      "service": "image", "lock": "i", "files": "i.json"},
+    },
+    "bundles": {
+        "voice-output": {"label": "Voice output", "capability": "tts", "variants": [
+            {"platform": "windows-x64", "models": ["qwen3-tts-0.6b-base"], "runtimes": ["tts-win"],
+             "options": [{"model": "omnivoice", "runtimes": ["omni-win"]}]}]},
+        "image-generation": {"label": "Image generation", "capability": "image", "variants": [
+            {"platform": "windows-x64", "models": [], "runtimes": ["image-win"], "min_options": 1,
+             "options": [{"model": "flux2-klein-4b", "default": True}, {"model": "z-image-turbo"}]}]},
+    },
+    "models": {name: {"label": name, "repo": f"org/{name}", "revision": REVISION, "service": "x", "files": {"m": FILE},
+                      "licence": {"id": "Apache-2.0", "url": "https://x"}}
+               for name in ("qwen3-tts-0.6b-base", "omnivoice", "flux2-klein-4b", "z-image-turbo")},
+})
+
+
+@pytest.fixture
+def with_options(desktop, monkeypatch):
+    monkeypatch.setattr(model_catalog, "load", lambda *args, **kwargs: OPTIONS_CATALOG)
+    return desktop
+
+
+def test_a_bundle_installs_its_defaults_or_the_options_chosen(with_options) -> None:
+    planned = model_packs.plan({"bundle_id": "voice-output"})
+    assert [entry.id for entry in planned["models"]] == ["qwen3-tts-0.6b-base"] and "omni-win" not in planned["runtimes"]
+    planned = model_packs.plan({"bundle_id": "voice-output", "options": ["omnivoice"]})
+    assert [entry.id for entry in planned["models"]] == ["qwen3-tts-0.6b-base", "omnivoice"]
+    assert planned["runtimes"] == ["torch-win", "tts-win", "omni-win"]
+    with pytest.raises(ModelInstallError, match="not an option"):
+        model_packs.plan({"bundle_id": "voice-output", "options": ["z-image-turbo"]})
+
+
+def test_image_generation_needs_one_of_its_models(with_options) -> None:
+    assert [entry.id for entry in model_packs.plan({"bundle_id": "image-generation"})["models"]] == ["flux2-klein-4b"]
+    assert [entry.id for entry in model_packs.plan({"bundle_id": "image-generation", "options": ["z-image-turbo"]})["models"]] == [
+        "z-image-turbo"]
+    with pytest.raises(ModelInstallError, match="needs at least 1 of its models"):
+        model_packs.plan({"bundle_id": "image-generation", "options": []})
+    with_options.models.have.add("flux2-klein-4b")  # one is installed already: adding none is fine
+    assert model_packs.plan({"bundle_id": "image-generation", "options": []})["models"] == []
+
+
+def test_adding_a_voice_engine_brings_its_runtime_and_removing_it_takes_only_that(with_options) -> None:
+    added = model_packs.plan({"model_id": "omnivoice"})
+    assert added["runtimes"] == ["torch-win", "tts-win", "omni-win"]
+    assert model_packs.plan({"model_id": "omnivoice"}, removing=True)["runtimes"] == ["omni-win"]
+    removed = model_packs.plan({"bundle_id": "voice-output"}, removing=True)
+    assert [entry.id for entry in removed["models"]] == ["qwen3-tts-0.6b-base", "omnivoice"] and "omni-win" in removed["runtimes"]
+
+
+def test_defaults_are_set_from_downloaded_models_only(with_options, monkeypatch) -> None:
+    import app.providers.service as provider_service
+    import app.settings.access as settings_access
+    from app.platform.voice import tts_engines
+
+    saved: dict[str, Any] = {"image": {"provider": "flux_klein"}}
+    selected: list[str] = []
+    monkeypatch.setattr(settings_access, "load_settings", lambda **kwargs: json.loads(json.dumps(saved)))
+    monkeypatch.setattr(settings_access, "save_settings", lambda settings: saved.update(settings))
+    monkeypatch.setattr(provider_service, "selected_tts_provider_id", lambda: "faster-qwen3-tts")
+    monkeypatch.setattr(tts_engines, "select_tts_engine", selected.append)
+    with_options.models.have.update({"qwen3-tts-0.6b-base", "omnivoice", "flux2-klein-4b"})
+
+    defaults = model_packs.default_models(with_options.models)
+    assert defaults["voice"] == {"choices": [{"model": "qwen3-tts-0.6b-base", "label": "qwen3-tts-0.6b-base"},
+                                             {"model": "omnivoice", "label": "omnivoice"}],
+                                 "current": "qwen3-tts-0.6b-base"}
+    assert defaults["image"]["current"] == "flux2-klein-4b"
+    with pytest.raises(ModelInstallError, match="not a downloaded model"):
+        model_packs.set_default_models(image="z-image-turbo")
+    model_packs.set_default_models(voice="omnivoice", image="flux2-klein-4b")
+    assert selected == ["omnivoice"] and saved["image"]["provider"] == "flux_klein"
+    assert saved["image"]["flux_klein"]["variant"] == "distilled"

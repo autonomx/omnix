@@ -193,6 +193,15 @@ def sdist_for(item: LockedRequirement, fetch: Fetch = _http_get) -> dict[str, An
     return None
 
 
+def lock_fingerprint(lock_text: str) -> str:
+    """The lock's requirements (comments and blank lines left out): what a pack was installed from.
+
+    A header comment naming one more service that shares the Torch layer must not make every installed pack look
+    out of date."""
+    lines = [line.rstrip() for line in lock_text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
 def write_pack_files(path: Path, runtime_id: str, platform: str, lock_path: str, lock_text: str,
                      files: Iterable[PackFile]) -> None:
     payload = {
@@ -200,7 +209,7 @@ def write_pack_files(path: Path, runtime_id: str, platform: str, lock_path: str,
         "runtime": runtime_id,
         "platform": platform,
         "lock": lock_path,
-        "lock_sha256": hashlib.sha256(lock_text.encode("utf-8")).hexdigest(),
+        "lock_sha256": lock_fingerprint(lock_text),
         "files": [item.as_dict() for item in files],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -239,7 +248,7 @@ def load_pack_files(path: Path) -> PackFiles:
 def check_pack_files(pack: PackFiles, lock: Lock, lock_text: str, *, wheelhouse: Path) -> list[str]:
     """Problems: one file per locked requirement, each with a digest the lock (or the shipped wheelhouse) vouches for."""
     problems = []
-    if pack.lock_sha256 != hashlib.sha256(lock_text.encode("utf-8")).hexdigest():
+    if pack.lock_sha256 != lock_fingerprint(lock_text):
         problems.append(f"{pack.runtime}: the file list was made from another version of {pack.lock}")
     by_key: dict[str, list[PackFile]] = {}
     for item in pack.files:

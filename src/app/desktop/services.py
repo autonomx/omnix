@@ -71,6 +71,8 @@ class ServicePlan:
     # on-demand service checks itself before each load.
     needed_bytes: int = 0
     load_bytes: int = 0
+    # Each model's load requirement in MB (an on-demand service checks the one it is asked to load).
+    load_commit_mb: dict[str, int] = field(default_factory=dict)
     # Each bundle's requirement and models: a service that serves two bundles loads both bundles' models.
     requirements: list[tuple[int, list[str]]] = field(default_factory=list)
 
@@ -137,7 +139,7 @@ def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models
         if variant is None:
             continue
         closure = catalog.runtime_closure(variant.runtimes)
-        if not all(models.installed(model_id) for model_id in variant.models):
+        if not variant.satisfied(models.installed):
             continue
         # An installed pack runs even when an app update shipped a newer one (the user downloads it when they
         # choose); it stops while that newer version replaces it, and an overlay never runs on another Torch layer.
@@ -157,6 +159,14 @@ def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models
             weights = sum(catalog.model(model_id).size for model_id in variant.models)
             need = int(weights * HEADROOM_FACTOR) + HEADROOM_BASE_BYTES
         plan.requirements.append((need, list(variant.models)))
+        for model_id in variant.models:
+            plan.load_commit_mb[model_id] = need // 2**20
+        for option in variant.options:
+            if option.min_commit_mb is not None:
+                plan.load_commit_mb[option.model] = option.min_commit_mb
+            else:
+                weights = catalog.model(option.model).size
+                plan.load_commit_mb[option.model] = (int(weights * HEADROOM_FACTOR) + HEADROOM_BASE_BYTES) // 2**20
         if service == "tts":
             plan.model_dir = models.snapshot(variant.models[0])
     for plan in found.values():
@@ -271,8 +281,8 @@ class ModelServices:
         env["PYTHONPATH"] = str(self.app_source)
         # macOS: the service stops itself once this supervisor is gone (Windows: the Job Object ends it).
         env["OMNIX_DESKTOP_PARENT_PID"] = str(os.getpid())
-        # The measured memory its models need: an on-demand service refuses a load when less than this is free.
-        env["OMNIX_MODEL_LOAD_COMMIT_BYTES"] = str(plan.load_bytes)
+        # The memory each of its models needs to load: an on-demand service refuses a load with less free.
+        env["OMNIX_MODEL_LOAD_COMMIT_MB"] = json.dumps(plan.load_commit_mb, sort_keys=True)
         self.logs.mkdir(parents=True, exist_ok=True)
         log = (self.logs / f"{plan.service}.log").open("ab")
         self._report(plan.service, "starting", port=port)

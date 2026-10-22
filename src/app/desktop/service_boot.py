@@ -38,6 +38,8 @@ ENTRY_MODULES = {
     "stt": "services.stt.parakeet_stt_server",
     "tts": "services.tts.tts_server",
     "stt-mlx": "services.stt.parakeet_mlx_server",
+    # OmniVoice runs as the TTS service's child, in its own overlay (transformers 5), when it is the engine.
+    "omnivoice": "services.omnivoice.omnivoice_server",
 }
 
 
@@ -117,7 +119,7 @@ def _stop_when_orphaned(parent: int, getppid=os.getppid, poll: float = PARENT_PO
     return thread
 
 
-def run(service: str) -> None:
+def run(service: str, arguments: list[str] | None = None) -> None:
     folders = pack_site_dirs()
     prepare(folders)
     parent = os.environ.get("OMNIX_DESKTOP_PARENT_PID", "")
@@ -135,17 +137,17 @@ def run(service: str) -> None:
     module = ENTRY_MODULES.get(service)
     if module is None:
         raise ServiceBootError(f"unknown model service {service!r}")
-    sys.argv = [module]
+    sys.argv = [module, *(arguments or [])]
     runpy.run_module(module, run_name="__main__", alter_sys=True)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    if len(args) != 1:
-        sys.stderr.write("usage: python -S -m app.desktop.service_boot stt|tts|image|stt-mlx\n")
+    if not args:
+        sys.stderr.write("usage: python -S -m app.desktop.service_boot stt|tts|image|stt-mlx|omnivoice [args]\n")
         return 2
     try:
-        run(args[0])
+        run(args[0], args[1:])
     except ServiceBootError as exc:
         sys.stderr.write(f"[service_boot] {exc}\n")
         return 3

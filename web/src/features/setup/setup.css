@@ -65,6 +65,42 @@
     color: var(--omnix-text);
   }
 
+  .setup-bundle-options {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--omnix-border) 35%, transparent);
+  }
+
+  .setup-bundle-options ul {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .setup-defaults {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .setup-defaults h3 {
+    margin: 0;
+  }
+
+  .setup-default {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .setup-default span {
+    min-width: 11rem;
+  }
+
   .setup-avatars {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));

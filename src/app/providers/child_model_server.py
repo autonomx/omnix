@@ -50,6 +50,8 @@ class ManagedChildServer:
     health_path: str = "/health"
     process: subprocess.Popen[Any] | None = None
     token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
+    # Extra environment for the child (the desktop app names its runtime packs); it may keep PYTHONPATH.
+    environment: Callable[[], dict[str, str]] | None = None
     _http_client: Any = None
 
     @property
@@ -93,6 +95,8 @@ class ManagedChildServer:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         env = environment_copy()
         env.pop("PYTHONPATH", None)  # the child must not import Omnix's packages ahead of its own
+        if self.environment is not None:
+            env.update(self.environment())
         env.update(PYTHONUNBUFFERED="1", OMNIX_CHILD_TOKEN=self.token)
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         with self.log_path.open("w", encoding="utf-8") as log_file:

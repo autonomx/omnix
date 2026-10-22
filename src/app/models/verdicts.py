@@ -51,6 +51,9 @@ class Verdict:
     runtime_bytes: int = 0
     recommended: bool = False
     note: str = ""
+    # Models the user may add to the bundle (other voice engines, other image models), each with its own verdict.
+    options: list[dict[str, Any]] = field(default_factory=list)
+    min_options: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -109,12 +112,19 @@ def bundle_verdict(bundle: Bundle, catalog: Catalog, facts: Mapping[str, Any], i
         verdict.reasons = [f"Not available on {names.get(platform, platform)}."]
         return verdict
     verdict.note = variant.note
-    closure = catalog.runtime_closure(variant.runtimes)
-    verdict.models = list(variant.models)
+    verdict.min_options = variant.min_options
+    required_closure = catalog.runtime_closure(variant.runtimes)
+    installed_options = [item.model for item in variant.options if catalog.canonical_id(item.model) in installed.models
+                         and all(pack.id in installed.runtimes for pack in catalog.runtime_closure(item.runtimes))]
+    verdict.installed = (all(catalog.canonical_id(model_id) in installed.models for model_id in variant.models)
+                         and all(pack.id in installed.runtimes for pack in required_closure)
+                         and len(installed_options) >= variant.min_options)
+    # Sizes and the runtimes listed: the required parts and the default options (what the Recommended preset picks).
+    chosen_models, chosen_runtimes = variant.chosen()
+    closure = catalog.runtime_closure(chosen_runtimes)
+    verdict.models = list(chosen_models)
     verdict.runtimes = [pack.id for pack in closure]
-    canonical = [catalog.canonical_id(model_id) for model_id in variant.models]
-    verdict.installed = (all(model_id in installed.models for model_id in canonical)
-                         and all(pack.id in installed.runtimes for pack in closure))
+    canonical = [catalog.canonical_id(model_id) for model_id in chosen_models]
     verdict.model_bytes = sum(catalog.model(model_id).size for model_id in canonical if model_id not in installed.models)
     verdict.runtime_bytes = sum(runtime_bytes(pack.id) for pack in closure if pack.id not in installed.runtimes)
     status, reasons, action = _gpu_reasons(variant, closure, facts)
@@ -135,7 +145,46 @@ def bundle_verdict(bundle: Bundle, catalog: Catalog, facts: Mapping[str, Any], i
             verdict.status = "unavailable"
             verdict.reasons.append(f"Not enough disk space: about {needed / 1e9:.1f} GB needed, "
                                    f"{free / 1e9:.1f} GB free.")
+    verdict.options = [_option_verdict(catalog, variant, item, facts, installed, runtime_bytes, verdict)
+                       for item in variant.options]
     return verdict
+
+
+def _option_verdict(catalog: Catalog, variant: BundleVariant, option: Any, facts: Mapping[str, Any],
+                    installed: Installed, runtime_bytes: Callable[[str], int], bundle: Verdict) -> dict[str, Any]:
+    """An optional model's own verdict: the bundle's GPU verdict, then its own memory and disk needs."""
+    entry = catalog.model(option.model)
+    extra = [pack for pack in catalog.runtime_closure(option.runtimes) if pack.id not in installed.runtimes
+             and pack.id not in {item.id for item in catalog.runtime_closure(variant.runtimes)}]
+    is_installed = entry.id in installed.models and not [pack for pack in catalog.runtime_closure(option.runtimes)
+                                                         if pack.id not in installed.runtimes]
+    status = bundle.status if bundle.status == "unavailable" else "fits"
+    reasons = list(bundle.reasons) if bundle.status == "unavailable" else []
+    if status != "unavailable":
+        memory = facts.get("memory") or {}
+        commit = memory.get("commit_available_bytes")
+        if option.min_commit_mb is not None and commit is not None and commit < option.min_commit_mb * 2**20:
+            status = "warn"
+            reasons.append(f"Low on memory: {commit / 2**30:.1f} GB of commit left, about "
+                           f"{option.min_commit_mb / 1024:.0f} GB needed to load it.")
+        gpus = [gpu for gpu in facts.get("gpus") or [] if gpu.get("vendor") == "nvidia"]
+        if option.min_vram_mb is not None and gpus:
+            best = max(gpus, key=lambda gpu: gpu.get("vram_total_mb") or 0)
+            if (best.get("vram_total_mb") or 0) < option.min_vram_mb:
+                status = "warn"
+                reasons.append(f"Needs about {option.min_vram_mb / 1024:.0f} GB of video memory; {best['name']} has "
+                               f"{(best.get('vram_total_mb') or 0) / 1024:.0f} GB.")
+        if option.min_vram_mb is None and option.min_commit_mb is None and variant.accelerator == "cuda":
+            reasons.append("Its memory needs have not been measured yet.")
+            status = "warn" if status == "fits" else status
+    return {
+        "model": entry.id, "label": entry.label, "default": option.default, "installed": is_installed,
+        "model_bytes": 0 if entry.id in installed.models else entry.size,
+        "runtime_bytes": sum(runtime_bytes(pack.id) for pack in extra),
+        "status": status, "reasons": reasons, "note": option.note,
+        "licence": {"id": entry.licence.id, "url": entry.licence.url, "commercial_use": entry.licence.commercial_use,
+                    "gated": entry.licence.gated},
+    }
 
 
 def verdicts(catalog: Catalog, facts: Mapping[str, Any], installed: Installed,
@@ -149,16 +198,20 @@ def verdicts(catalog: Catalog, facts: Mapping[str, Any], installed: Installed,
 
 
 def selection_size(catalog: Catalog, bundles: Iterable[str], platform: str, installed: Installed,
-                   runtime_bytes: Callable[[str], int]) -> dict[str, int]:
-    """The download a selection of bundles needs, counting each runtime and model once."""
+                   runtime_bytes: Callable[[str], int],
+                   options: Mapping[str, Iterable[str]] | None = None) -> dict[str, int]:
+    """The download a selection of bundles needs, counting each runtime and model once. ``options`` names the
+    optional models picked per bundle (its default options when a bundle is not named)."""
     models: set[str] = set()
     runtimes: set[str] = set()
     for bundle_id in bundles:
         variant = catalog.bundle(bundle_id).variant(platform)
         if variant is None:
             continue
-        models.update(catalog.canonical_id(model_id) for model_id in variant.models)
-        runtimes.update(pack.id for pack in catalog.runtime_closure(variant.runtimes))
+        picked = (options or {}).get(bundle_id)
+        chosen_models, chosen_runtimes = variant.chosen(None if picked is None else list(picked))
+        models.update(catalog.canonical_id(model_id) for model_id in chosen_models)
+        runtimes.update(pack.id for pack in catalog.runtime_closure(chosen_runtimes))
     model_bytes = sum(catalog.model(model_id).size for model_id in models - installed.models)
     runtime_total = sum(runtime_bytes(runtime_id) for runtime_id in runtimes - installed.runtimes)
     return {"model_bytes": model_bytes, "runtime_bytes": runtime_total, "total_bytes": model_bytes + runtime_total}

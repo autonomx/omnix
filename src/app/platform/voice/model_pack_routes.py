@@ -30,6 +30,28 @@ logger = logging.getLogger(__name__)
 _SERVICE_OF_CAPABILITY = {"live_stt": "stt", "stt_batch": "stt", "tts": "tts", "image": "image"}
 
 
+class PackOptionLicence(BaseModel):
+    id: str
+    url: str
+    commercial_use: bool = True
+    gated: bool = False
+
+
+class PackOption(BaseModel):
+    """A model the user may add to a bundle, with its own verdict on this machine."""
+
+    model: str
+    label: str
+    default: bool = False
+    installed: bool = False
+    model_bytes: int = 0
+    runtime_bytes: int = 0
+    status: Literal["fits", "warn", "unavailable"]
+    reasons: list[str] = Field(default_factory=list)
+    note: str = ""
+    licence: PackOptionLicence
+
+
 class PackVerdict(BaseModel):
     """One bundle on this machine: what it installs and whether it can run here."""
 
@@ -47,6 +69,8 @@ class PackVerdict(BaseModel):
     runtime_bytes: int = 0
     recommended: bool = False
     note: str = ""
+    options: list[PackOption] = Field(default_factory=list)
+    min_options: int = 0
 
 
 class PackRuntimeStatus(BaseModel):
@@ -84,6 +108,28 @@ class PackModelStatus(BaseModel):
     accepted: bool = False
 
 
+class DefaultChoice(BaseModel):
+    model: str
+    label: str
+
+
+class DefaultSlot(BaseModel):
+    """The downloaded models that can be this default, and the current one ('' when none of them is)."""
+
+    choices: list[DefaultChoice] = Field(default_factory=list)
+    current: str = ""
+
+
+class DefaultModels(BaseModel):
+    voice: DefaultSlot = Field(default_factory=DefaultSlot)
+    image: DefaultSlot = Field(default_factory=DefaultSlot)
+
+
+class SetDefaultModels(BaseModel):
+    voice: str = Field(default="", max_length=200)
+    image: str = Field(default="", max_length=200)
+
+
 class ModelPacksStatus(BaseModel):
     """The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty."""
 
@@ -94,6 +140,7 @@ class ModelPacksStatus(BaseModel):
     runtimes: list[PackRuntimeStatus] = Field(default_factory=list)
     models: list[PackModelStatus] = Field(default_factory=list)
     packs_folder: str = ""
+    defaults: DefaultModels = Field(default_factory=lambda: DefaultModels())
     # What the signed-in account may change: models (owner or admin) and runtimes (owner). The routes and the job
     # submission enforce it; these only decide which controls the screen shows.
     can_manage: bool = False
@@ -123,6 +170,8 @@ class PackTarget(BaseModel):
     runtime_id: str = Field(default="", max_length=100)
     model_id: str = Field(default="", max_length=200)
     accept_terms: bool = False
+    # A bundle's optional models to install with it (its defaults when left out).
+    options: list[str] | None = Field(default=None, max_length=20)
 
     @model_validator(mode="after")
     def _one_target(self) -> PackTarget:
@@ -134,6 +183,8 @@ class PackTarget(BaseModel):
 
 class SelectionRequest(BaseModel):
     bundles: list[str] = Field(default_factory=list, max_length=20)
+    # Per bundle, the optional models chosen (its defaults for a bundle not named).
+    options: dict[str, list[str]] = Field(default_factory=dict)
 
 
 def _require_desktop() -> None:
@@ -185,7 +236,7 @@ def capabilities() -> dict[str, Any]:
                 installed = False
             else:
                 runtimes, models = packs.runtime_store(catalog), packs.model_store(catalog)
-                installed = all(models.installed(model_id) for model_id in variant.models) and all(
+                installed = variant.satisfied(models.installed) and all(
                     runtimes.runnable(pack.id) for pack in catalog.runtime_closure(variant.runtimes))
         found[bundle.capability] = {"bundle": bundle.id, "label": bundle.label, "installed": installed,
                                     "running": answers.get(service, False)}
@@ -245,7 +296,27 @@ def register_model_pack_routes(router: APIRouter, state: Any) -> None:
             runtimes=frozenset(pack.id for pack in catalog.runtimes.values() if runtimes.current(pack.id)),
             models=frozenset(entry.id for entry in catalog.models.values() if entry.pinned and models.installed(entry.id)),
         )
-        return selection_size(catalog, request.bundles, platform, installed, runtimes.download_bytes)
+        try:
+            return selection_size(catalog, request.bundles, platform, installed, runtimes.download_bytes, request.options)
+        except model_catalog.CatalogError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/api/model-packs/defaults", response_model=DefaultModels, openapi_extra=requires("settings:write"))
+    def model_packs_set_defaults(request: SetDefaultModels) -> dict[str, Any]:
+        """Makes downloaded models Omnix's default voice engine and image model."""
+        _require_desktop()
+        from app.models import packs
+
+        from .model_install import ModelInstallError
+        from .model_packs import default_models, set_default_models
+
+        try:
+            set_default_models(voice=request.voice, image=request.image)
+        except ModelInstallError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except (ValueError, RuntimeError) as exc:  # the TTS engine cannot switch now (a switch is in progress)
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return default_models(packs.model_store())
 
     @router.get("/api/model-packs/capabilities", response_model=CapabilitiesResponse,
                 openapi_extra=requires("settings:read"))

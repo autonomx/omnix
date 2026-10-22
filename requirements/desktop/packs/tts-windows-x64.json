@@ -3,7 +3,7 @@
  "runtime": "tts-windows-x64",
  "platform": "windows-x64",
  "lock": "requirements/desktop/tts.windows-x64.lock.txt",
- "lock_sha256": "9dbc32f238f4ffd592349846796c34d4116db866b15630de6c2e228189009662",
+ "lock_sha256": "decf34bf184ca028e1d3de099c0449911c85bdb722e8e3478f23dca899a4eb09",
  "files": [
   {
    "name": "accelerate",

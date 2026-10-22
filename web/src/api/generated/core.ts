@@ -2247,6 +2247,31 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** DefaultChoice */
+        DefaultChoice: {
+            /** Label */
+            label: string;
+            /** Model */
+            model: string;
+        };
+        /** DefaultModels */
+        DefaultModels: {
+            image: components["schemas"]["DefaultSlot"];
+            voice: components["schemas"]["DefaultSlot"];
+        };
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: {
+            /** Choices */
+            choices: components["schemas"]["DefaultChoice"][];
+            /**
+             * Current
+             * @default
+             */
+            current: string;
+        };
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: {
             /**
@@ -3072,6 +3097,7 @@ export interface components {
              * @default false
              */
             can_manage_runtimes: boolean;
+            defaults: components["schemas"]["DefaultModels"];
             /** Enabled */
             enabled: boolean;
             /** Hardware */
@@ -3231,6 +3257,66 @@ export interface components {
             /** Size Bytes */
             size_bytes: number;
         };
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: {
+            /**
+             * Default
+             * @default false
+             */
+            default: boolean;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /** Label */
+            label: string;
+            licence: components["schemas"]["PackOptionLicence"];
+            /** Model */
+            model: string;
+            /**
+             * Model Bytes
+             * @default 0
+             */
+            model_bytes: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Runtime Bytes
+             * @default 0
+             */
+            runtime_bytes: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "fits" | "warn" | "unavailable";
+        };
+        /** PackOptionLicence */
+        PackOptionLicence: {
+            /**
+             * Commercial Use
+             * @default true
+             */
+            commercial_use: boolean;
+            /**
+             * Gated
+             * @default false
+             */
+            gated: boolean;
+            /** Id */
+            id: string;
+            /** Url */
+            url: string;
+        };
         /** PackRuntimeStatus */
         PackRuntimeStatus: {
             /** Accelerator */
@@ -3283,6 +3369,8 @@ export interface components {
              * @default
              */
             model_id?: string;
+            /** Options */
+            options?: string[] | null;
             /**
              * Runtime Id
              * @default
@@ -3312,6 +3400,11 @@ export interface components {
             /** Label */
             label: string;
             /**
+             * Min Options
+             * @default 0
+             */
+            min_options: number;
+            /**
              * Model Bytes
              * @default 0
              */
@@ -3323,6 +3416,8 @@ export interface components {
              * @default
              */
             note: string;
+            /** Options */
+            options: components["schemas"]["PackOption"][];
             /** Reasons */
             reasons: string[];
             /**
@@ -4000,6 +4095,10 @@ export interface components {
         SelectionRequest: {
             /** Bundles */
             bundles?: string[];
+            /** Options */
+            options?: {
+                [key: string]: string[];
+            };
         };
         /** SelectionSize */
         SelectionSize: {
@@ -4060,6 +4159,19 @@ export interface components {
             job: components["schemas"]["JobRecord"];
             session: components["schemas"]["ChatSession"];
             user_message: components["schemas"]["ChatMessage"];
+        };
+        /** SetDefaultModels */
+        SetDefaultModels: {
+            /**
+             * Image
+             * @default
+             */
+            image?: string;
+            /**
+             * Voice
+             * @default
+             */
+            voice?: string;
         };
         /** SettingsPatch */
         SettingsPatch: {

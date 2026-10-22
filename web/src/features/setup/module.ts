@@ -18,6 +18,7 @@ export const setupModule = defineModule({
     'POST /api/model-packs/install',
     'POST /api/model-packs/remove',
     'POST /api/model-packs/verify',
+    'POST /api/model-packs/defaults',
     'GET /api/voice/models',
     'PUT /api/voice/models/hub-token',
     'GET /api/character-live2d/models',

@@ -12239,6 +12239,63 @@
         "title": "DeepResearchPlanUpdateRequest",
         "type": "object"
       },
+      "DefaultChoice": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "label"
+        ],
+        "title": "DefaultChoice",
+        "type": "object"
+      },
+      "DefaultModels": {
+        "properties": {
+          "image": {
+            "$ref": "#/components/schemas/DefaultSlot"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/DefaultSlot"
+          }
+        },
+        "required": [
+          "voice",
+          "image"
+        ],
+        "title": "DefaultModels",
+        "type": "object"
+      },
+      "DefaultSlot": {
+        "description": "The downloaded models that can be this default, and the current one ('' when none of them is).",
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/DefaultChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "current": {
+            "default": "",
+            "title": "Current",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choices",
+          "current"
+        ],
+        "title": "DefaultSlot",
+        "type": "object"
+      },
       "DeleteCharacterAvatarPackResponse": {
         "properties": {
           "character_id": {
@@ -30139,6 +30196,9 @@
             "title": "Can Manage Runtimes",
             "type": "boolean"
           },
+          "defaults": {
+            "$ref": "#/components/schemas/DefaultModels"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -30181,6 +30241,7 @@
           "runtimes",
           "models",
           "packs_folder",
+          "defaults",
           "can_manage",
           "can_manage_runtimes"
         ],
@@ -32092,6 +32153,107 @@
         "title": "PackModelStatus",
         "type": "object"
       },
+      "PackOption": {
+        "description": "A model the user may add to a bundle, with its own verdict on this machine.",
+        "properties": {
+          "default": {
+            "default": false,
+            "title": "Default",
+            "type": "boolean"
+          },
+          "installed": {
+            "default": false,
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "licence": {
+            "$ref": "#/components/schemas/PackOptionLicence"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_bytes": {
+            "default": 0,
+            "title": "Model Bytes",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "runtime_bytes": {
+            "default": 0,
+            "title": "Runtime Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "fits",
+              "warn",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "label",
+          "status",
+          "licence",
+          "default",
+          "installed",
+          "model_bytes",
+          "runtime_bytes",
+          "reasons",
+          "note"
+        ],
+        "title": "PackOption",
+        "type": "object"
+      },
+      "PackOptionLicence": {
+        "properties": {
+          "commercial_use": {
+            "default": true,
+            "title": "Commercial Use",
+            "type": "boolean"
+          },
+          "gated": {
+            "default": false,
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "commercial_use",
+          "gated"
+        ],
+        "title": "PackOptionLicence",
+        "type": "object"
+      },
       "PackRuntimeStatus": {
         "properties": {
           "accelerator": {
@@ -32187,6 +32349,21 @@
             "title": "Model Id",
             "type": "string"
           },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
           "runtime_id": {
             "default": "",
             "maxLength": 100,
@@ -32235,6 +32412,11 @@
             "title": "Label",
             "type": "string"
           },
+          "min_options": {
+            "default": 0,
+            "title": "Min Options",
+            "type": "integer"
+          },
           "model_bytes": {
             "default": 0,
             "title": "Model Bytes",
@@ -32251,6 +32433,13 @@
             "default": "",
             "title": "Note",
             "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PackOption"
+            },
+            "title": "Options",
+            "type": "array"
           },
           "reasons": {
             "items": {
@@ -32300,7 +32489,9 @@
           "model_bytes",
           "runtime_bytes",
           "recommended",
-          "note"
+          "note",
+          "options",
+          "min_options"
         ],
         "title": "PackVerdict",
         "type": "object"
@@ -55155,6 +55346,16 @@
             "maxItems": 20,
             "title": "Bundles",
             "type": "array"
+          },
+          "options": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Options",
+            "type": "object"
           }
         },
         "title": "SelectionRequest",
@@ -55574,6 +55775,24 @@
           "policy"
         ],
         "title": "SetAutoDirect",
+        "type": "object"
+      },
+      "SetDefaultModels": {
+        "properties": {
+          "image": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Image",
+            "type": "string"
+          },
+          "voice": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Voice",
+            "type": "string"
+          }
+        },
+        "title": "SetDefaultModels",
         "type": "object"
       },
       "SetDocumentOverride": {
@@ -83893,6 +84112,46 @@
         },
         "summary": "Model Packs Capabilities",
         "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/model-packs/defaults": {
+      "post": {
+        "description": "Makes downloaded models Omnix's default voice engine and image model.",
+        "operationId": "model_packs_set_defaults_api_model_packs_defaults_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDefaultModels"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultModels"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Set Defaults",
+        "x-omnix-permission": "settings:write"
       }
     },
     "/api/model-packs/install": {

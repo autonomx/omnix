@@ -412,7 +412,7 @@ def test_services_know_their_supervisor_and_get_their_own_process_group(services
     manager.reconcile()
     _, env, _ = state.launched[0]
     assert env["OMNIX_DESKTOP_PARENT_PID"] == str(os.getpid()) and state.kwargs["stdin"] == subprocess.DEVNULL
-    assert env["OMNIX_MODEL_LOAD_COMMIT_BYTES"] == str(4096 * 2**20)  # its measured need, for an on-demand load
+    assert json.loads(env["OMNIX_MODEL_LOAD_COMMIT_MB"]) == {"tts-model": 4096}  # each model's measured need
     if sys.platform == "win32":
         assert state.kwargs["creationflags"] & subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -475,13 +475,58 @@ def test_the_image_service_loads_flux_on_demand_and_checks_its_memory_then(tmp_p
     assert plan.needed_bytes == 2 * 2**30 and plan.load_bytes == 22528 * 2**20
 
 
-def test_an_image_load_with_too_little_memory_is_refused(monkeypatch) -> None:
+def test_an_image_load_with_too_little_memory_is_refused_for_the_model_it_loads(monkeypatch) -> None:
+    """Each image model has its own need: FLUX.2 klein's measured 22 GB, Z-Image Turbo's more."""
+    from app.platform.image import config as image_config
     from app.platform.image import lifecycle
     from app.providers import host_memory
 
-    monkeypatch.setenv("OMNIX_MODEL_LOAD_COMMIT_BYTES", str(22 * 2**30))
-    monkeypatch.setattr(host_memory, "available_commit_bytes", lambda: 8 * 2**30)
-    with pytest.raises(RuntimeError, match="flux2_klein_insufficient_memory:available_gib=8.00 required_gib=22.00"):
-        lifecycle._validate_commit_budget("flux2_klein")
+    monkeypatch.setenv("OMNIX_MODEL_LOAD_COMMIT_MB", json.dumps({"flux2-klein-4b": 22528, "flux2-klein-base-4b": 22528,
+                                                                 "z-image-turbo": 36864}))
+    settings = {"flux_klein": {}, "z_image_turbo": {}}
+    monkeypatch.setattr(image_config, "get_provider_config", lambda provider: settings[provider])
     monkeypatch.setattr(host_memory, "available_commit_bytes", lambda: 30 * 2**30)
-    lifecycle._validate_commit_budget("flux2_klein")
+    lifecycle._validate_commit_budget("flux_klein")
+    with pytest.raises(RuntimeError, match="z_image_turbo_insufficient_memory:available_gib=30.00 required_gib=36.00"):
+        lifecycle._validate_commit_budget("z_image_turbo")
+    settings["flux_klein"] = {"variant": "base"}  # the base variant is checked as its own model
+    monkeypatch.setattr(host_memory, "available_commit_bytes", lambda: 8 * 2**30)
+    with pytest.raises(RuntimeError, match="flux_klein_insufficient_memory:available_gib=8.00 required_gib=22.00"):
+        lifecycle._validate_commit_budget("flux_klein")
+
+
+def test_omnivoice_starts_from_its_own_runtime_pack_in_the_desktop_app(tmp_path, monkeypatch) -> None:
+    """OmniVoice's child runs the bundled interpreter with its overlay first, on a port of its own (never 5103)."""
+    from app.providers import omnivoice_provider
+
+    overlay = tmp_path / "packs" / "runtimes" / "omnivoice-windows-x64" / "site"
+    layer = tmp_path / "packs" / "runtimes" / "torch-windows-x64" / "site"
+    snapshot = tmp_path / "packs" / "models" / "omnivoice"
+    snapshot.mkdir(parents=True)
+    (snapshot / "model.safetensors").write_bytes(b"w")
+    monkeypatch.setattr(omnivoice_provider, "_desktop_site_dirs", lambda: [overlay, layer])
+    monkeypatch.setattr("app.models.local.installed_snapshot", lambda model_id: snapshot if model_id == "omnivoice" else None)
+    monkeypatch.setenv("PYTHONPATH", "app-source")
+    provider = omnivoice_provider.OmniVoiceTTSProvider()
+    provider.server.port = omnivoice_provider._free_port()
+    command = provider._server_command()
+    assert command[:5] == [sys.executable, "-S", "-m", "app.desktop.service_boot", "omnivoice"]
+    assert command[5:] == ["--model-dir", str(snapshot.resolve()), "--port", str(provider.server.port)]
+    assert provider.server.port != 5103
+    env = provider._child_environment()
+    assert env["OMNIX_DESKTOP_SITE_DIRS"].split(os.pathsep) == [str(overlay), str(layer)]
+    assert env["PYTHONPATH"] == "app-source"
+
+
+def test_omnivoice_refuses_a_voice_with_no_transcript_in_the_desktop_app(tmp_path, monkeypatch) -> None:
+    """Offline, OmniVoice cannot fetch Whisper to transcribe a sample: it says what to download instead."""
+    from app.providers import omnivoice_provider
+
+    sample = tmp_path / "Maya.wav"
+    sample.write_bytes(b"RIFF")
+    monkeypatch.setattr(omnivoice_provider, "_desktop_site_dirs", lambda: [tmp_path / "site"])
+    monkeypatch.setattr(omnivoice_provider, "clone_reference", lambda speaker: (str(sample), ""))
+    provider = omnivoice_provider.OmniVoiceTTSProvider()
+    result = provider.generate_audio("Hello.", speaker="Maya")
+    assert result["success"] is False
+    assert "download Speech input" in result["error"]

@@ -298,10 +298,10 @@ def _not_distributed(relative: str) -> bool:
     """Tracked files a public installer must not carry.
 
     The voice-clone reference samples in resources/voice_clones include recordings of real people and of game
-    characters, with no record of consent or licence; an installer ships only the default reference voice (and its
-    index entry, written by ``stage_app``)."""
+    characters, with no record of consent or licence; an installer ships only the default reference voice, its
+    transcript (OmniVoice clones from it offline) and its index entry, written by ``stage_app``."""
     if relative.startswith("resources/voice_clones/"):
-        return relative != "resources/voice_clones/default_ref.wav"
+        return relative not in {"resources/voice_clones/default_ref.wav", "resources/voice_clones/default_ref.json"}
     return False
 
 
@@ -370,6 +370,13 @@ def check(target_platform: str) -> None:
     longest = max(shipped, key=lambda path: len(str(path.relative_to(STAGE))))
     if len(str(longest.relative_to(STAGE))) > MAX_RELATIVE_PATH:
         raise StageError(f"{longest.relative_to(STAGE)} is longer than {MAX_RELATIVE_PATH} characters")
+    # Every runtime pack's lock and file list ships (staging copies tracked files only: a new one not yet added to
+    # git would leave the setup screen unable to list its bundle).
+    staged_catalog = json.loads((STAGE / "app" / "src" / "app" / "models" / "catalog.json").read_text(encoding="utf-8"))
+    missing = [path for runtime in staged_catalog.get("runtimes", {}).values() for path in (runtime["lock"], runtime["files"])
+               if not (STAGE / "app" / path).is_file()]
+    if missing:
+        raise StageError(f"not staged (add them to git): {', '.join(missing)}")
     script = (
         "import sys, app, gateway_cluster, psycopg, uvicorn, app.desktop.supervise, app.desktop.desktop_app;"
         "from app.models import catalog; catalog.load();"

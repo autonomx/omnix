@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import threading
@@ -147,10 +148,18 @@ def _validate_commit_budget(provider_name: str) -> None:
     from app.config.env import environment
     from app.providers.host_memory import available_commit_bytes
 
-    raw = (environment().get("OMNIX_MODEL_LOAD_COMMIT_BYTES") or "").strip()
-    if not raw.isdigit() or int(raw) <= 0:
+    from app.platform.image.config import get_provider_config
+    from app.platform.image.downloads import catalog_model_for
+
+    try:
+        needs = json.loads(environment().get("OMNIX_MODEL_LOAD_COMMIT_MB") or "{}")
+    except ValueError:
         return
-    needed = int(raw)
+    model_id = catalog_model_for(provider_name, get_provider_config(provider_name))
+    megabytes = needs.get(model_id) if isinstance(needs, dict) and model_id else None
+    if not isinstance(megabytes, int) or megabytes <= 0:
+        return
+    needed = megabytes * 2**20
     available = available_commit_bytes()
     if available is not None and available < needed:
         raise ImageLoadBudgetError(

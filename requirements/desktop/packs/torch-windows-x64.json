@@ -3,7 +3,7 @@
  "runtime": "torch-windows-x64",
  "platform": "windows-x64",
  "lock": "requirements/desktop/torch.windows-x64.lock.txt",
- "lock_sha256": "6d6082b18b20af39029c2db8f4dbbbf14f93f69f036610dcb57a036096f6082e",
+ "lock_sha256": "d97cf08391182c209eeb5c444356145cef9a476f3ddb877f1583c55aa2d06def",
  "files": [
   {
    "name": "torch",

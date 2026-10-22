@@ -15,6 +15,7 @@ function status(overrides: Partial<ModelPacksStatus> = {}): ModelPacksStatus {
     packs_folder: 'C:/Users/me/AppData/Local/OmnixDesktop/packs',
     can_manage: true,
     can_manage_runtimes: true,
+    defaults: { voice: { choices: [], current: '' }, image: { choices: [], current: '' } },
     hardware: {
       gpus: [{ name: 'NVIDIA GeForce RTX 4080', vram_total_mb: 16376, vram_free_mb: 15000 }],
       nvidia_driver: '560.94', memory: { total_bytes: 64 * 2 ** 30 }, disk: { free_bytes: 400 * GB },
@@ -22,11 +23,11 @@ function status(overrides: Partial<ModelPacksStatus> = {}): ModelPacksStatus {
     bundles: [
       { bundle: 'voice-input', label: 'Voice input', description: 'Live voice in chat.', capability: 'live_stt',
         status: 'fits', reasons: [], action: null, models: ['nemotron', 'eou'], runtimes: ['torch', 'stt'],
-        installed: false, model_bytes: 2.9 * GB, runtime_bytes: 2.8 * GB, recommended: true, note: '' },
+        installed: false, model_bytes: 2.9 * GB, runtime_bytes: 2.8 * GB, recommended: true, note: '', options: [], min_options: 0 },
       { bundle: 'image-generation', label: 'Image generation', description: 'Text-to-image.', capability: 'image',
         status: 'unavailable', reasons: ['Needs an NVIDIA GPU (found AMD Radeon RX 7900 XTX).'], action: null,
         models: ['flux'], runtimes: ['torch', 'image'], installed: false, model_bytes: 16 * GB, runtime_bytes: 0.2 * GB,
-        recommended: false, note: '' },
+        recommended: false, note: '', options: [], min_options: 0 },
     ],
     runtimes: [
       { id: 'torch', label: 'GPU runtime', kind: 'torch-layer', platform: 'windows-x64', accelerator: 'cuda', base: '',
@@ -114,7 +115,7 @@ describe('ModelPacksPanel', () => {
     expect(within(dialog).getByText(/GPU runtime \(BSD-3-Clause \(PyTorch\)\)/)).toBeInTheDocument();
     fireEvent.click(confirm);
 
-    await waitFor(() => expect(install).toHaveBeenCalledWith({ bundle_id: 'voice-input', accept_terms: true }));
+    await waitFor(() => expect(install).toHaveBeenCalledWith({ bundle_id: 'voice-input', accept_terms: true, options: [] }));
     expect(await screen.findByText(/Downloading GPU runtime · 25%/)).toBeInTheDocument();
   });
 

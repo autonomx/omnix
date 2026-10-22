@@ -3,7 +3,7 @@
  "runtime": "image-windows-x64",
  "platform": "windows-x64",
  "lock": "requirements/desktop/image.windows-x64.lock.txt",
- "lock_sha256": "dd0b79ae8306b3270b38d779bcc8aebbfd20c1ed2d5624301fb3c1cb4f5996bd",
+ "lock_sha256": "9a31d20a5e58ccfdb60b2fcb4e0a1404b1cd0dedede121536160c8f1af4d9271",
  "files": [
   {
    "name": "accelerate",

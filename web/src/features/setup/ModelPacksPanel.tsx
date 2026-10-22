@@ -6,7 +6,7 @@ import { ApiError } from '../../api/errors';
 import { desktopBridge } from '../../shared/desktopBridge';
 import {
   CAPABILITIES_QUERY_KEY, formatGigabytes, MODEL_PACKS_QUERY_KEY, modelPacksClient,
-  type ModelPacksStatus, type PackModelStatus, type PackRuntimeStatus, type PackVerdict,
+  type ModelPacksStatus, type PackModelStatus, type PackOption, type PackRuntimeStatus, type PackVerdict,
 } from './api/modelPacksClient';
 import './setup.css';
 
@@ -47,8 +47,83 @@ function sharedRuntimeNote(runtimes: PackRuntimeStatus[]): string {
   return shared ? ` (${formatGigabytes(shared.download_bytes)} of it is the shared GPU runtime, downloaded once)` : '';
 }
 
-function BundleRow({ verdict, models, runtimes, selected, onToggle, job, busy, onRemove, onVerify, onCancel, manage }: {
+function OptionChip({ option }: { option: PackOption }) {
+  if (option.installed) return <span className="setup-chip setup-chip-installed">Downloaded</span>;
+  if (option.status === 'warn') return <span className="setup-chip setup-chip-warn">⚠ Check</span>;
+  if (option.status === 'unavailable') return <span className="setup-chip setup-chip-unavailable">✗ Unavailable</span>;
+  return null;
+}
+
+/** A bundle's optional models: chosen before its download, or added and removed one by one afterwards. */
+function BundleOptions({ verdict, picked, onPick, manage, busy, onAdd, onRemove }: {
   verdict: PackVerdict;
+  picked: Set<string>;
+  onPick: (model: string, value: boolean) => void;
+  manage: boolean;
+  busy: boolean;
+  onAdd: (option: PackOption) => void;
+  onRemove: (option: PackOption) => void;
+}) {
+  if (!verdict.options.length) return null;
+  const choosing = !verdict.installed;
+  const installedCount = verdict.options.filter((option) => option.installed).length;
+  return (
+    <div className="setup-bundle-options" role="group" aria-label={`${verdict.label} choices`}>
+      <Text size="xs" className="setup-muted">
+        {verdict.min_options ? `Choose at least ${verdict.min_options}:` : 'Also available:'}
+      </Text>
+      <ul>
+        {verdict.options.map((option) => {
+          const label = (
+            <span>
+              <b>{option.label}</b> · {formatGigabytes(option.model_bytes + option.runtime_bytes || 0)} ·{' '}
+              <a href={option.licence.url} target="_blank" rel="noreferrer">{option.licence.id}</a>
+              {option.licence.gated ? ' · gated' : ''}
+            </span>
+          );
+          // The last chosen option of a bundle that needs one stays chosen.
+          const last = picked.has(option.model) && picked.size <= verdict.min_options;
+          return (
+            <li key={option.model} aria-label={option.label}>
+              <div className="setup-bundle-head">
+                {choosing && manage ? (
+                  <Checkbox size="xs" checked={picked.has(option.model)} disabled={option.status === 'unavailable' || last}
+                    onChange={(event) => onPick(option.model, event.currentTarget.checked)} label={label} />
+                ) : label}
+                <OptionChip option={option} />
+              </div>
+              {option.note ? <Text size="xs" className="setup-muted">{option.note}</Text> : null}
+              {!option.licence.commercial_use ? <Text size="xs" className="setup-reason">Not for commercial use.</Text> : null}
+              {option.reasons.map((reason) => <Text key={reason} size="xs" className="setup-reason">{reason}</Text>)}
+              {!choosing && manage ? (
+                <div className="setup-bundle-actions">
+                  {option.installed
+                    ? (installedCount > verdict.min_options
+                      ? <Button size="compact-xs" variant="subtle" color="red" loading={busy}
+                          onClick={() => { if (window.confirm(`Remove ${option.label}? It is deleted from this computer.`)) onRemove(option); }}>
+                          Remove
+                        </Button>
+                      : null)
+                    : <Button size="compact-xs" variant="light" loading={busy} disabled={option.status === 'unavailable'}
+                        onClick={() => onAdd(option)}>Download</Button>}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function BundleRow({ verdict, models, runtimes, selected, onToggle, job, busy, onRemove, onVerify, onCancel, manage,
+  picked, onPick, onAddOption, onRemoveOption }: {
+  verdict: PackVerdict;
+  /** The chosen optional models, and changing them before or after the bundle's download. */
+  picked: Set<string>;
+  onPick: (model: string, value: boolean) => void;
+  onAddOption: (option: PackOption) => void;
+  onRemoveOption: (option: PackOption) => void;
   /** The bundle's models and runtime packs, as the status lists them. */
   models: PackModelStatus[];
   runtimes: PackRuntimeStatus[];
@@ -99,6 +174,8 @@ function BundleRow({ verdict, models, runtimes, selected, onToggle, job, busy, o
             {sharedRuntimeNote(runtimes)}
           </Text>
         ) : null}
+        <BundleOptions verdict={verdict} picked={picked} onPick={onPick} manage={manage} busy={busy}
+          onAdd={onAddOption} onRemove={onRemoveOption} />
         {verdict.reasons.map((reason) => <Text key={reason} size="xs" className="setup-reason">{reason}</Text>)}
         {verdict.action ? (
           <a className="setup-action-link" href={verdict.action.url} target="_blank" rel="noreferrer">{verdict.action.label}</a>
@@ -208,6 +285,48 @@ function InstalledPacks({ status, onRemoveRuntime, onVerifyRuntime, busy }: {
   );
 }
 
+/**
+ * Which downloaded models Omnix uses by default: the voice engine for spoken replies and Voice Studio, and the model
+ * the image view starts with. Only models on this computer are offered.
+ */
+function DefaultModelsPanel({ status }: { status: ModelPacksStatus }) {
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState('');
+  const save = useMutation({
+    mutationFn: (change: { voice?: string; image?: string }) => modelPacksClient.setDefaults(change),
+    onSuccess: () => {
+      setMessage('Saved.');
+      void queryClient.invalidateQueries({ queryKey: MODEL_PACKS_QUERY_KEY });
+    },
+    onError: (error) => setMessage(errorText(error)),
+  });
+  const slots = [
+    { key: 'voice' as const, label: 'Default voice engine', slot: status.defaults.voice },
+    { key: 'image' as const, label: 'Default image model', slot: status.defaults.image },
+  ].filter((item) => item.slot.choices.length > 0);
+  if (!slots.length) return null;
+  return (
+    <section className="setup-defaults" aria-label="Default models">
+      <h3>Defaults</h3>
+      {slots.map(({ key, label, slot }) => (
+        <label key={key} className="setup-default">
+          <span>{label}</span>
+          <select
+            aria-label={label}
+            value={slot.current}
+            disabled={!status.can_manage || save.isPending}
+            onChange={(event) => save.mutate({ [key]: event.currentTarget.value })}
+          >
+            {slot.current ? null : <option value="">Choose…</option>}
+            {slot.choices.map((choice) => <option key={choice.model} value={choice.model}>{choice.label}</option>)}
+          </select>
+        </label>
+      ))}
+      {message ? <Text size="xs" role="status">{message}</Text> : null}
+    </section>
+  );
+}
+
 /** The install, removal and check jobs this screen started, by bundle (or runtime), polled until they finish. */
 function usePackJobs() {
   const queryClient = useQueryClient();
@@ -251,8 +370,12 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
   const [preset, setPreset] = useState<Preset>('recommended');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [initialised, setInitialised] = useState(false);
+  // Each bundle's chosen optional models, starting from its defaults.
+  const [picked, setPicked] = useState<Record<string, Set<string>>>({});
   useEffect(() => {
     if (!status || initialised) return;
+    setPicked(Object.fromEntries(bundles.map((item) => [item.bundle,
+      new Set(item.options.filter((option) => option.default).map((option) => option.model))])));
     setSelected(new Set(mode === 'setup' && status.can_manage ? bundles.filter((item) => item.recommended).map((item) => item.bundle) : []));
     setPreset(mode === 'setup' ? 'recommended' : 'custom');
     setInitialised(true);
@@ -263,19 +386,22 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
     if (value === 'minimal') setSelected(new Set());
   };
   const selection = [...selected].sort();
+  const chosenOptions = Object.fromEntries(selection.map((bundle) => [bundle, [...(picked[bundle] ?? [])].sort()]));
   const sizeQuery = useQuery({
-    queryKey: ['setup', 'selection', selection],
-    queryFn: () => modelPacksClient.selection(selection),
+    queryKey: ['setup', 'selection', selection, chosenOptions],
+    queryFn: () => modelPacksClient.selection(selection, chosenOptions),
     enabled: Boolean(status?.enabled) && selection.length > 0,
   });
 
   const [message, setMessage] = useState('');
   const [reviewing, setReviewing] = useState(false);
+  // An optional model added to a downloaded bundle: its own licence review, then its own job.
+  const [adding, setAdding] = useState<{ bundle: string; option: PackOption } | null>(null);
   const installMutation = useMutation({
     mutationFn: async (bundleIds: string[]) => {
       const started: Record<string, string> = {};
       for (const bundle of bundleIds) {
-        const job = await modelPacksClient.install({ bundle_id: bundle, accept_terms: true });
+        const job = await modelPacksClient.install({ bundle_id: bundle, accept_terms: true, options: chosenOptions[bundle] ?? [] });
         started[bundle] = job.id;
       }
       return started;
@@ -289,14 +415,17 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
     onError: (error) => { setReviewing(false); setMessage(errorText(error)); },
   });
   const actionMutation = useMutation({
-    mutationFn: async ({ kind, target }: { kind: 'remove' | 'verify'; target: { bundle_id?: string; runtime_id?: string } }) => (
-      kind === 'remove' ? modelPacksClient.remove(target) : modelPacksClient.verify(target)
+    mutationFn: async ({ kind, target }: { kind: 'add' | 'remove' | 'verify'; key?: string;
+      target: { bundle_id?: string; runtime_id?: string; model_id?: string } }) => (
+      kind === 'add' ? modelPacksClient.install({ ...target, accept_terms: true })
+        : kind === 'remove' ? modelPacksClient.remove(target) : modelPacksClient.verify(target)
     ),
-    onSuccess: (job, { kind, target }) => {
-      track({ [target.bundle_id ?? target.runtime_id ?? job.id]: job.id });
-      setMessage(kind === 'remove' ? 'Removing…' : 'Checking every file against its pinned digest…');
+    onSuccess: (job, { kind, key, target }) => {
+      track({ [key ?? target.bundle_id ?? target.runtime_id ?? job.id]: job.id });
+      setAdding(null);
+      setMessage(kind === 'add' ? 'Downloading in the background.' : kind === 'remove' ? 'Removing…' : 'Checking every file against its pinned digest…');
     },
-    onError: (error) => setMessage(errorText(error)),
+    onError: (error) => { setAdding(null); setMessage(errorText(error)); },
   });
 
   if (statusQuery.isError) return <div className="platform-empty" role="alert">{errorText(statusQuery.error)}</div>;
@@ -308,7 +437,9 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
   }
 
   const chosen = bundles.filter((item) => selected.has(item.bundle));
-  const chosenModelIds = new Set(chosen.flatMap((item) => item.models));
+  const optionModels = (verdict: PackVerdict) => new Set(verdict.options.map((option) => option.model));
+  const requiredModels = (verdict: PackVerdict) => verdict.models.filter((id) => !optionModels(verdict).has(id));
+  const chosenModelIds = new Set(chosen.flatMap((item) => [...requiredModels(item), ...(picked[item.bundle] ?? [])]));
   const chosenRuntimeIds = new Set(chosen.flatMap((item) => item.runtimes));
   const reviewModels = status.models.filter((model) => chosenModelIds.has(model.id) && !model.installed);
   const reviewRuntimes = status.runtimes.filter((runtime) => chosenRuntimeIds.has(runtime.id) && !runtime.current);
@@ -342,7 +473,7 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
           <BundleRow
             key={verdict.bundle}
             verdict={verdict}
-            models={verdict.models.map((id) => status.models.find((model) => model.id === id)).filter((model) => model !== undefined)}
+            models={requiredModels(verdict).map((id) => status.models.find((model) => model.id === id)).filter((model) => model !== undefined)}
             runtimes={verdict.runtimes.map((id) => status.runtimes.find((runtime) => runtime.id === id)).filter((runtime) => runtime !== undefined)}
             selected={selected.has(verdict.bundle)}
             onToggle={(value) => {
@@ -359,9 +490,19 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
             onVerify={() => actionMutation.mutate({ kind: 'verify', target: { bundle_id: verdict.bundle } })}
             onCancel={() => { const jobId = jobs[verdict.bundle]; if (jobId) void modelPacksClient.cancel(jobId); }}
             manage={status.can_manage}
+            picked={picked[verdict.bundle] ?? new Set()}
+            onPick={(model, value) => setPicked((current) => {
+              const next = new Set(current[verdict.bundle] ?? []);
+              if (value) next.add(model); else next.delete(model);
+              return { ...current, [verdict.bundle]: next };
+            })}
+            onAddOption={(option) => setAdding({ bundle: verdict.bundle, option })}
+            onRemoveOption={(option) => actionMutation.mutate({ kind: 'remove', key: `${verdict.bundle}:${option.model}`,
+              target: { model_id: option.model } })}
           />
         ))}
       </ul>
+      <DefaultModelsPanel status={status} />
       <Text size="sm" className="setup-chat-note">Chat works without any of these: add an API key in Settings, AI providers, or use a local LM Studio or llama.cpp server.</Text>
       <div className="setup-footer">
         <Text size="sm" role="status">
@@ -385,6 +526,16 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
         runtimes={reviewRuntimes}
         submitting={installMutation.isPending}
         onConfirm={() => installMutation.mutate(selection)}
+      />
+      <LicenceReview
+        opened={adding !== null}
+        onClose={() => setAdding(null)}
+        models={adding ? status.models.filter((model) => model.id === adding.option.model && !model.installed) : []}
+        runtimes={[]}
+        submitting={actionMutation.isPending}
+        onConfirm={() => {
+          if (adding) actionMutation.mutate({ kind: 'add', key: `${adding.bundle}:${adding.option.model}`, target: { model_id: adding.option.model } });
+        }}
       />
     </section>
   );

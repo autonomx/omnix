@@ -3,7 +3,7 @@
  "runtime": "torch-macos-arm64",
  "platform": "macos-arm64",
  "lock": "requirements/desktop/torch.macos-arm64.lock.txt",
- "lock_sha256": "2e8ddb5b991105ae75da0611525b04a8de9d5a34ca19f936da6e29b48c9dc1a2",
+ "lock_sha256": "f43d725f8e9b6727a01c8fb979952cdcb935ae05d60f27eed5a31b82ce3c797c",
  "files": [
   {
    "name": "torch",
