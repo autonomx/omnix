@@ -3,10 +3,11 @@ import {
   type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions, type WebContents,
 } from 'electron';
 import { cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cp } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AlertBadge, alertDotBitmap, NotificationListener } from './notifications';
-import { desktopPaths } from './paths';
+import { desktopPaths, packsFolder } from './paths';
 import { SecretStore, secretEnvironment } from './secrets';
 import { SettingsStore, choosePorts, type DesktopSettings } from './settings';
 import { BackendSupervisor, type SupervisorEvent } from './supervisor';
@@ -320,7 +321,7 @@ async function main(): Promise<void> {
     });
     if (picked.canceled || !picked.filePaths[0]) return null;
     const target = join(picked.filePaths[0], 'OmnixPacks');
-    const current = settings.packsDir ?? join(paths.data, 'packs');
+    const current = packsFolder(paths, settings.packsDir);
     if (resolve(target).toLowerCase() === resolve(current).toLowerCase()) return current;
     if (existsSync(target) && readdirSync(target).length > 0) {
       await dialog.showMessageBox({ type: 'warning', title: 'Omnix', message: `${target} is not empty.`,
@@ -433,7 +434,49 @@ async function main(): Promise<void> {
   });
 
   updates.start();
+  await adoptDefaultPacksFolder();
   if (await listenForNotifications()) startBackend();
+
+  /**
+   * Downloads made before they lived next to the installed app (in the data folder) move there once, before the
+   * backend starts. The copy goes to "packs.partial" and is renamed into place only when complete, so a "packs"
+   * folder is always whole; a failed move leaves the downloads where they were and remembers that folder.
+   */
+  async function adoptDefaultPacksFolder(): Promise<void> {
+    const legacy = join(paths.data, 'packs');
+    const target = paths.defaultPacks;
+    if (settings.packsDir || resolve(legacy).toLowerCase() === resolve(target).toLowerCase()) return;
+    const hasFiles = (folder: string) => existsSync(folder) && readdirSync(folder).length > 0;
+    if (!hasFiles(legacy)) return;
+    if (hasFiles(target)) {
+      // Already moved (an earlier start stopped before removing the old copy).
+      rmSync(legacy, { recursive: true, force: true });
+      return;
+    }
+    splash = windows.shellPage('splash');
+    sendStatus({ kind: 'step', message: 'Moving your downloaded models next to Omnix…' });
+    const partial = `${target}.partial`;
+    try {
+      rmSync(target, { recursive: true, force: true });
+      try {
+        renameSync(legacy, target);
+      } catch {
+        // Another drive: copy (asynchronously, so the splash keeps drawing), then swap the complete copy in.
+        rmSync(partial, { recursive: true, force: true });
+        await cp(legacy, partial, { recursive: true, errorOnExist: true, preserveTimestamps: true });
+        renameSync(partial, target);
+        try {
+          rmSync(legacy, { recursive: true, force: true });
+        } catch {
+          // A file still locked (antivirus): the next start removes the rest.
+        }
+      }
+    } catch (error) {
+      rmSync(partial, { recursive: true, force: true });
+      settings = store.update((saved) => Object.assign(saved, { packsDir: legacy }));
+      console.warn('The downloaded models stay in the data folder:', error);
+    }
+  }
 
   async function backupIfDue(): Promise<void> {
     const last = settings.lastBackupAt ? Date.parse(settings.lastBackupAt) : 0;

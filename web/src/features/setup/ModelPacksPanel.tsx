@@ -247,14 +247,28 @@ function LicenceReview({ opened, onClose, models, runtimes, onConfirm, submittin
   );
 }
 
-function InstalledPacks({ status, onRemoveRuntime, onVerifyRuntime, busy }: {
+/**
+ * The folder downloads go to, and (in the desktop app) the folder picker that changes it: anything already downloaded
+ * moves with it. Shared by the download footer and "On this computer".
+ */
+function usePacksFolder(status: ModelPacksStatus | undefined) {
+  const bridge = desktopBridge();
+  const [moved, setMoved] = useState<string | null>(null);
+  const folder = moved ?? status?.packs_folder ?? '';
+  const choose = bridge?.choosePacksFolder && status?.can_manage_runtimes
+    ? () => { void bridge.choosePacksFolder?.().then((target) => { if (target) setMoved(target); }); }
+    : null;
+  return { folder, choose };
+}
+
+function InstalledPacks({ status, folder, onChooseFolder, onRemoveRuntime, onVerifyRuntime, busy }: {
   status: ModelPacksStatus;
+  folder: string;
+  onChooseFolder: (() => void) | null;
   onRemoveRuntime: (runtime: PackRuntimeStatus) => void;
   onVerifyRuntime: (runtime: PackRuntimeStatus) => void;
   busy: boolean;
 }) {
-  const bridge = desktopBridge();
-  const [folder, setFolder] = useState(status.packs_folder);
   const installedRuntimes = status.runtimes.filter((runtime) => runtime.installed);
   const installedModels = status.models.filter((model) => model.installed);
   const disk = installedModels.reduce((total, model) => total + model.disk_bytes, 0);
@@ -262,8 +276,8 @@ function InstalledPacks({ status, onRemoveRuntime, onVerifyRuntime, busy }: {
     <section className="setup-installed" aria-label="Downloaded runtimes and models">
       <h3>On this computer</h3>
       <Text size="sm">{installedModels.length} models ({formatGigabytes(disk)}) and {installedRuntimes.length} runtimes in <code>{folder}</code></Text>
-      {bridge?.choosePacksFolder && status.can_manage_runtimes ? (
-        <Button size="compact-xs" variant="subtle" onClick={() => { void bridge.choosePacksFolder?.().then((moved) => { if (moved) setFolder(moved); }); }}>
+      {onChooseFolder ? (
+        <Button size="compact-xs" variant="subtle" onClick={onChooseFolder}>
           Move to another folder…
         </Button>
       ) : null}
@@ -367,6 +381,7 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
   });
   const status = statusQuery.data;
   const bundles = useMemo(() => status?.bundles ?? [], [status]);
+  const packsFolder = usePacksFolder(status);
   const [preset, setPreset] = useState<Preset>('recommended');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [initialised, setInitialised] = useState(false);
@@ -511,10 +526,18 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
         </Text>
         {status.can_manage ? <Button disabled={!selection.length || installMutation.isPending} onClick={() => setReviewing(true)}>Review licences and download</Button> : null}
       </div>
+      {packsFolder.folder ? (
+        <div className="setup-download-folder">
+          <Text size="sm">Downloads go to <code>{packsFolder.folder}</code></Text>
+          {packsFolder.choose ? <Button size="compact-xs" variant="subtle" onClick={packsFolder.choose}>Change…</Button> : null}
+        </div>
+      ) : null}
       {message ? <div className="setup-message" role="status">{message}</div> : null}
       {lastVerification ? <div className="setup-message" role="status">{String(lastVerification.logs?.at(-1)?.content ?? 'Verified.')}</div> : null}
       <InstalledPacks
         status={status}
+        folder={packsFolder.folder}
+        onChooseFolder={packsFolder.choose}
         busy={actionMutation.isPending}
         onRemoveRuntime={(runtime) => actionMutation.mutate({ kind: 'remove', target: { runtime_id: runtime.id } })}
         onVerifyRuntime={(runtime) => actionMutation.mutate({ kind: 'verify', target: { runtime_id: runtime.id } })}

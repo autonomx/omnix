@@ -1,7 +1,7 @@
 import { app, dialog, type BrowserWindow } from 'electron';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DesktopPaths } from './paths';
+import { packsFolder, type DesktopPaths } from './paths';
 import type { DesktopSettings } from './settings';
 
 const MAX_LOG_BYTES = 2 * 1024 * 1024;
@@ -68,8 +68,7 @@ function tail(path: string): Buffer {
 }
 
 /** The installed packs' manifests (desktop roadmap DT-6.4): which runtime and model versions are on disk. */
-function packFiles(settings: DesktopSettings | null, dataDir: string): Array<{ name: string; data: Buffer }> {
-  const packs = settings?.packsDir ?? join(dataDir, 'packs');
+function packFiles(packs: string): Array<{ name: string; data: Buffer }> {
   const files: Array<{ name: string; data: Buffer }> = [];
   const runtimes = join(packs, 'runtimes');
   if (existsSync(runtimes)) {
@@ -114,7 +113,7 @@ export function diagnosticsFiles(paths: DesktopPaths, settings: DesktopSettings 
   });
   // desktop.json holds ports, preferences and window bounds: no secrets (those are in desktop-secrets.bin).
   if (settings) files.push({ name: 'desktop.json', data: Buffer.from(JSON.stringify(settings, null, 2)) });
-  files.push(...packFiles(settings, paths.data));
+  files.push(...packFiles(packsFolder(paths, settings?.packsDir)));
   if (extra.hardware) files.push({ name: 'hardware.json', data: Buffer.from(JSON.stringify(extra.hardware, null, 2)) });
   return files;
 }

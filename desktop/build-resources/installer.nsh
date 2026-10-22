@@ -1,8 +1,10 @@
-; Omnix's uninstaller keeps the user's data (%LOCALAPPDATA%\OmnixDesktop: database, settings, logs, downloaded models)
-; unless the user chooses to remove it (desktop roadmap §4.9, DT-6.1).
+; Omnix's uninstaller keeps the user's data (%LOCALAPPDATA%\OmnixDesktop: database, settings, logs) and downloaded
+; runtimes and models (the "packs" folder in the install folder) unless the user chooses to remove them (desktop roadmap
+; §4.9, DT-6.1).
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     MessageBox MB_YESNO|MB_ICONQUESTION "Also remove your Omnix data and downloaded models (database, settings, logs, runtimes and models)?$\r$\n$\r$\nChoose No to keep it for a later install." /SD IDNO IDNO keepData
+      RMDir /r "$INSTDIR\packs"
       ; A packs folder moved to another drive (Settings, Models) is named in packs-location.txt; it is removed only
       ; when it is the "OmnixPacks" folder the move created, never any other folder the file might name.
       ClearErrors
@@ -21,6 +23,52 @@
   ; The app registers itself to start at login; remove that entry with the app.
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.autonomx.omnix"
 !macroend
+
+; The app's files go; the downloaded runtimes and models ("packs", kept unless customUnInstall removed them) stay, on an
+; update and on an uninstall that keeps the data. The install folder itself goes once it is empty.
+!macro customRemoveFiles
+  SetOutPath $TEMP
+  FindFirst $0 $1 "$INSTDIR\*.*"
+  ${doWhile} $1 != ""
+    ${if} $1 != "."
+    ${andIf} $1 != ".."
+    ${andIf} $1 != "packs"
+      ${if} ${FileExists} "$INSTDIR\$1\*.*"
+        RMDir /r "$INSTDIR\$1"
+      ${else}
+        Delete "$INSTDIR\$1"
+      ${endIf}
+    ${endIf}
+    FindNext $0 $1
+  ${loop}
+  FindClose $0
+  RMDir "$INSTDIR"
+!macroend
+
+; An update runs the uninstaller of the version already installed, and one older than customRemoveFiles deletes the
+; whole install folder. So the packs wait beside it while the old version is removed and come back once the new files
+; are in (customInstall); an install that stops in between finds them there the next time.
+!ifndef BUILD_UNINSTALLER
+  !macro keepPacksAside
+    ${if} ${FileExists} "$INSTDIR\packs\*.*"
+    ${andIfNot} ${FileExists} "$INSTDIR.packs-update\*.*"
+      ClearErrors
+      Rename "$INSTDIR\packs" "$INSTDIR.packs-update"
+      ${if} ${Errors}
+        ; Never let the old uninstaller run with the packs still inside the folder it removes.
+        MessageBox MB_OK|MB_ICONSTOP "Omnix's downloaded models in $INSTDIR\packs are in use, so the update cannot continue. Close any program using that folder and run the installer again." /SD IDOK
+        Quit
+      ${endIf}
+    ${endIf}
+  !macroend
+
+  !macro customInstall
+    ${if} ${FileExists} "$INSTDIR.packs-update\*.*"
+    ${andIfNot} ${FileExists} "$INSTDIR\packs\*.*"
+      Rename "$INSTDIR.packs-update" "$INSTDIR\packs"
+    ${endIf}
+  !macroend
+!endif
 
 ; The install folder's length: NSIS cannot remove a file whose path is over 260 characters, and the deepest staged
 ; file is up to 140 characters below resources\runtime\ (MAX_RELATIVE_PATH in desktop/staging/stage.py), so a longer
@@ -68,4 +116,7 @@
       Sleep 2000
     ${endIf}
   ${endIf}
+  !ifndef BUILD_UNINSTALLER
+    !insertmacro keepPacksAside
+  !endif
 !macroend

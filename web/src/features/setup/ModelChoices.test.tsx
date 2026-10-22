@@ -90,6 +90,18 @@ describe('choosing models within a feature', () => {
     await waitFor(() => expect(install).toHaveBeenCalledWith({ model_id: 'z-image-turbo', accept_terms: true }));
   });
 
+  it('shows where downloads go and lets the owner choose another folder before downloading', async () => {
+    vi.spyOn(modelPacksClient, 'status').mockResolvedValue(status({ packs_folder: 'F:/Omnix/packs' }));
+    const choosePacksFolder = vi.fn().mockResolvedValue('E:/Models/OmnixPacks');
+    vi.stubGlobal('omnixDesktop', { choosePacksFolder });
+    renderWithProviders(<ModelPacksPanel mode="setup" />);
+
+    expect(await screen.findByText('Downloads go to', { exact: false })).toHaveTextContent('Downloads go to F:/Omnix/packs');
+    fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
+    await waitFor(() => expect(screen.getByText('Downloads go to', { exact: false })).toHaveTextContent('E:/Models/OmnixPacks'));
+    expect(choosePacksFolder).toHaveBeenCalledTimes(1);
+  });
+
   it('sets the default voice engine and image model from the downloaded ones', async () => {
     vi.spyOn(modelPacksClient, 'status').mockResolvedValue(status({
       defaults: {

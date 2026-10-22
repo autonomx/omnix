@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import type { DesktopPaths } from './paths';
+import { packsFolder, type DesktopPaths } from './paths';
 import type { DesktopSettings } from './settings';
 
 /** supervisor.log -> .1 -> .2 -> .3 once it passes 10 MB, as app.desktop.supervise rotates the backend's logs. */
@@ -73,7 +73,7 @@ export class BackendSupervisor extends EventEmitter {
       service_ports: { stt: this.settings.sttPort, tts: this.settings.ttsPort, image: this.settings.imagePort },
       postgres_bin: this.paths.postgresBin,
       ...(this.paths.ffmpeg ? { ffmpeg: this.paths.ffmpeg } : {}),
-      ...(this.settings.packsDir ? { packs_dir: this.settings.packsDir } : {}),
+      packs_dir: packsFolder(this.paths, this.settings.packsDir),
       // Google sign-in when the build carries a Desktop OAuth client (MarketPulse §4.7); its secret comes in the env.
       ...(this.googleClientId ? { google_client_id: this.googleClientId } : {}),
     }, null, 2), 'utf8');

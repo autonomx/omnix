@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 /**
  * Where things live (desktop roadmap §4.9). Packaged, the staged runtime is the app's resources folder; in development
@@ -9,8 +9,13 @@ import { join, resolve } from 'node:path';
 export interface DesktopPaths {
   /** python/, postgres/, ffmpeg/, app/, web/ (desktop/staging/stage in development). */
   resources: string;
-  /** All per-user data: pgdata, logs, secrets, snapshots, backups, resources, packs, Electron's own session data. */
+  /** All per-user data: pgdata, logs, secrets, snapshots, backups, resources, Electron's own session data. */
   data: string;
+  /**
+   * Where downloaded runtimes and models go unless the user moved them (settings.packsDir): on Windows, the installed
+   * app's own folder, so removing Omnix's folder removes its downloads; elsewhere, and in development, the data folder.
+   */
+  defaultPacks: string;
   logs: string;
   secrets: string;
   python: string;
@@ -20,6 +25,23 @@ export interface DesktopPaths {
   icons: string;
   pages: string;
   preload: string;
+}
+
+/**
+ * The deepest file a pack holds is about 165 characters below the packs folder (a runtime's
+ * site/transformers/.../__pycache__/...pyc), and Windows paths stop at 260: a packs folder longer than this stays in the
+ * data folder (%LOCALAPPDATA%, short) rather than next to an app installed in a deep folder.
+ */
+export const MAX_PACKS_FOLDER_LENGTH = 90;
+
+export function installPacksFolder(installFolder: string, data: string): string {
+  const packs = join(installFolder, 'packs');
+  return packs.length <= MAX_PACKS_FOLDER_LENGTH ? packs : join(data, 'packs');
+}
+
+/** The packs folder in use: the one the user moved them to, or the default. */
+export function packsFolder(paths: Pick<DesktopPaths, 'defaultPacks'>, packsDir?: string): string {
+  return packsDir ?? paths.defaultPacks;
 }
 
 export function desktopPaths(): DesktopPaths {
@@ -38,6 +60,7 @@ export function desktopPaths(): DesktopPaths {
   return {
     resources,
     data,
+    defaultPacks: app.isPackaged && process.platform === 'win32' ? installPacksFolder(dirname(process.execPath), data) : join(data, 'packs'),
     logs: join(data, 'logs'),
     secrets: join(data, 'secrets'),
     python,

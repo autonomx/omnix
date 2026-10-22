@@ -7,6 +7,7 @@ import { allowPermission } from '../src/main/permissions';
 import { choosePorts } from '../src/main/settings';
 import { checkResultMessage, updateMenuItem, updateTooltip } from '../src/main/updateStatus';
 import { rotateLog } from '../src/main/supervisor';
+import { installPacksFolder, MAX_PACKS_FOLDER_LENGTH, packsFolder } from '../src/main/paths';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -178,5 +179,17 @@ test.describe('updates (desktop roadmap DT-6.3)', () => {
   test('the tray tooltip mentions an update only while there is one', () => {
     expect(updateTooltip({ kind: 'up-to-date' })).toBe('');
     expect(updateTooltip({ kind: 'ready', version: '0.1.5' })).toBe('Omnix 0.1.5 is ready: restart to update');
+  });
+});
+
+test.describe('downloaded models folder', () => {
+  test('lives in the install folder, unless that path is too deep for Windows, and a moved folder wins', () => {
+    const data = join('C:', 'Users', 'me', 'AppData', 'Local', 'OmnixDesktop');
+    expect(installPacksFolder(join('F:', 'Omnix'), data)).toBe(join('F:', 'Omnix', 'packs'));
+    const deep = join('D:', 'x'.repeat(MAX_PACKS_FOLDER_LENGTH));
+    expect(installPacksFolder(deep, data)).toBe(join(data, 'packs'));
+    const paths = { defaultPacks: join('F:', 'Omnix', 'packs') };
+    expect(packsFolder(paths)).toBe(paths.defaultPacks);
+    expect(packsFolder(paths, join('E:', 'OmnixPacks'))).toBe(join('E:', 'OmnixPacks'));
   });
 });
