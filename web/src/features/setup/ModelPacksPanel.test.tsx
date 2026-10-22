@@ -74,6 +74,13 @@ describe('ModelPacksPanel', () => {
     expect(within(image).getByRole('checkbox')).toBeDisabled();
     expect(within(image).getByText('Needs an NVIDIA GPU (found AMD Radeon RX 7900 XTX).')).toBeInTheDocument();
     expect(await screen.findByText(/Download: 5\.7 GB/)).toBeInTheDocument();
+    // Each bundle names its models, with size and licence, and says the GPU runtime downloads once.
+    const listed = within(voice).getByRole('list', { name: 'Voice input models' });
+    expect(within(listed).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'Nemotron streaming 0.6B · 2.5 GB · NVIDIA Open Model License',
+      'Parakeet realtime EOU · 0.4 GB · NVIDIA Open Model License',
+    ]);
+    expect(within(voice).getByText(/2\.5 GB of it is the shared GPU runtime, downloaded once/)).toBeInTheDocument();
     expect(screen.getByText(/NVIDIA GeForce RTX 4080 · 16 GB VRAM · driver 560\.94/)).toBeInTheDocument();
   });
 

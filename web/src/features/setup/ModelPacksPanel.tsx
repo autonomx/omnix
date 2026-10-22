@@ -41,8 +41,17 @@ function HardwareSummary({ status }: { status: ModelPacksStatus }) {
   return <p className="setup-hardware" role="status">{parts.join(' · ')}</p>;
 }
 
-function BundleRow({ verdict, selected, onToggle, job, busy, onRemove, onVerify, onCancel, manage }: {
+/** The shared GPU runtime downloads once, however many features use it. */
+function sharedRuntimeNote(runtimes: PackRuntimeStatus[]): string {
+  const shared = runtimes.find((runtime) => runtime.kind === 'torch-layer' && !runtime.current);
+  return shared ? ` (${formatGigabytes(shared.download_bytes)} of it is the shared GPU runtime, downloaded once)` : '';
+}
+
+function BundleRow({ verdict, models, runtimes, selected, onToggle, job, busy, onRemove, onVerify, onCancel, manage }: {
   verdict: PackVerdict;
+  /** The bundle's models and runtime packs, as the status lists them. */
+  models: PackModelStatus[];
+  runtimes: PackRuntimeStatus[];
   /** The signed-in account may download and remove models (the server enforces it either way). */
   manage: boolean;
   selected: boolean;
@@ -72,10 +81,22 @@ function BundleRow({ verdict, selected, onToggle, job, busy, onRemove, onVerify,
       </div>
       <div id={`setup-bundle-${verdict.bundle}-details`} className="setup-bundle-details">
         <Text size="sm">{verdict.description}</Text>
+        {models.length ? (
+          <ul className="setup-bundle-models" aria-label={`${verdict.label} models`}>
+            {models.map((model) => (
+              <li key={model.id}>
+                {model.label} · {formatGigabytes(model.size_bytes)} ·{' '}
+                <a href={model.licence.url} target="_blank" rel="noreferrer">{model.licence.id}</a>
+                {model.installed ? ' · downloaded' : ''}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {!verdict.installed && size > 0 ? (
           <Text size="xs" className="setup-muted">
             {formatGigabytes(verdict.model_bytes)} of models
             {verdict.runtime_bytes ? ` + ${formatGigabytes(verdict.runtime_bytes)} of runtime` : ''}
+            {sharedRuntimeNote(runtimes)}
           </Text>
         ) : null}
         {verdict.reasons.map((reason) => <Text key={reason} size="xs" className="setup-reason">{reason}</Text>)}
@@ -321,6 +342,8 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
           <BundleRow
             key={verdict.bundle}
             verdict={verdict}
+            models={verdict.models.map((id) => status.models.find((model) => model.id === id)).filter((model) => model !== undefined)}
+            runtimes={verdict.runtimes.map((id) => status.runtimes.find((runtime) => runtime.id === id)).filter((runtime) => runtime !== undefined)}
             selected={selected.has(verdict.bundle)}
             onToggle={(value) => {
               setPreset('custom');
