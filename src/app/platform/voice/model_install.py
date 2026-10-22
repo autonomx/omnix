@@ -1,10 +1,11 @@
 """``models.install`` and ``models.remove``: fetch or delete a catalogued speech model's weights.
 
-Downloads come from the Hugging Face hub, pinned to the commit the requested
-revision resolves to, and resume after an interruption (the hub keeps partial
-files beside the target and re-checks each file's hash). A model whose terms
-need acceptance installs only when the request accepts them; the acceptance,
-licence and commit are written to ``.omnix-model.json`` in the model folder.
+Downloads come from the Hugging Face hub at the commit model catalog v2 pins,
+resume after an interruption (the hub keeps partial files beside the target),
+and every pinned file is checked against its catalogued SHA-256 before the
+install counts. A model installs only when the request accepts its terms
+(roadmap D-4); the acceptance, licence and commit are written to
+``.omnix-model.json`` in the model folder.
 
 Weights land under ``resources/models/<kind>/<repository name>``, the layout
 the TTS and STT services already read. Environments are not installed here.
@@ -27,13 +28,13 @@ class ModelInstallError(ValueError):
 
 
 def models_root() -> Path:
-    from app.runtime.paths import resources_root
+    from app.runtime.paths import resources_models_root
 
-    return resources_root() / "models"
+    return resources_models_root()
 
 
 def model_dir(model: SpeechModel) -> Path:
-    return models_root() / model.kind / model.repo_id.split("/")[-1]
+    return models_root() / model.kind / (model.folder or model.repo_id.split("/")[-1])
 
 
 def _marker(model: SpeechModel) -> dict[str, Any] | None:
@@ -112,7 +113,8 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
     if model.source != "huggingface":
         raise ModelInstallError(f"{model.label} is downloaded by its own package on first use, not installed here")
     if model.requires_acceptance and not accept_terms:
-        reason = "is gated" if model.gated else f"is licensed {model.licence} (not for commercial use)"
+        reason = "is gated" if model.gated else f"is licensed {model.licence}" + (
+            "" if model.commercial_use else " (not for commercial use)")
         raise ModelInstallError(f"{model.label} {reason}; accept its terms to install it")
     token = _hub_token()
     if model.gated and not token:
@@ -122,10 +124,11 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
 
     folder = model_dir(model)
     folder.mkdir(parents=True, exist_ok=True)
-    # Pin the commit first, so a resumed or repeated install fetches exactly the same files.
-    commit = hub.HfApi().model_info(model.repo_id, revision=model.revision, token=token).sha
+    # The catalog pins the commit, so a resumed or repeated install fetches exactly the same files.
+    commit = model.revision
     hub.snapshot_download(repo_id=model.repo_id, revision=commit, local_dir=str(folder), token=token,
                           allow_patterns=list(model.files) or None)
+    _check_digests(model, folder)
     marker = {
         "model_id": model.id,
         "repo_id": model.repo_id,
@@ -137,6 +140,22 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
     }
     (folder / MARKER).write_text(json.dumps(marker, indent=2) + "\n", encoding="utf-8")
     return model_status(model)
+
+
+def _check_digests(model: SpeechModel, folder: Path) -> None:
+    """Every pinned file is in the folder with its catalogued SHA-256; anything else fails the install."""
+    from app.models.catalog import load
+    from app.models.downloads import sha256_file
+
+    entry = load().model(model.id)
+    for item in entry.files:
+        target = folder / item.path
+        if not target.is_file():
+            raise ModelInstallError(f"{model.label}: {item.path} did not download")
+        actual = sha256_file(target)
+        if actual != item.sha256:
+            target.unlink(missing_ok=True)
+            raise ModelInstallError(f"{model.label}: {item.path} has SHA-256 {actual}, expected {item.sha256}")
 
 
 def remove_model(model_id: str) -> dict[str, Any]:

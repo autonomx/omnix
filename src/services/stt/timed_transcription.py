@@ -66,9 +66,9 @@ class TimedTranscriptionUnavailable(HelperUnavailable):
 
 
 def models_root() -> Path:
-    from app.runtime.paths import resources_root
+    from app.runtime.paths import resources_models_root
 
-    return resources_root() / "models" / "stt"
+    return resources_models_root() / "stt"
 
 
 def _checkpoint(folder_names: tuple[str, ...]) -> Path | None:

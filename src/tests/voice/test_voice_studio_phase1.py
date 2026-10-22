@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -17,22 +16,24 @@ from app.platform.voice.model_catalog import SPEECH_MODELS, speech_model
 def models_dir(tmp_path: Path, monkeypatch) -> Path:
     monkeypatch.setattr(model_install, "models_root", lambda: tmp_path / "models")
     monkeypatch.setattr(model_install, "_hub_token", lambda: "hf_test")
+    # The real digests belong to the real weights; _check_digests has its own test below.
+    monkeypatch.setattr(model_install, "_check_digests", lambda model, folder: None)
     return tmp_path / "models"
 
 
 class _Hub:
-    """Stands in for ``huggingface_hub``: pins a commit and writes the snapshot."""
+    """Stands in for ``huggingface_hub``: writes the snapshot it is asked for."""
 
-    def __init__(self) -> None:
+    def __init__(self, contents: dict[str, bytes] | None = None) -> None:
         self.downloads: list[dict[str, Any]] = []
-
-    def HfApi(self):  # noqa: N802 - the real module's spelling
-        return SimpleNamespace(model_info=lambda repo_id, revision, token: SimpleNamespace(sha="abc123"))
+        self.contents = contents or {"model.safetensors": b"weights"}
 
     def snapshot_download(self, *, repo_id: str, revision: str, local_dir: str, token: str | None,
                           allow_patterns: list[str] | None = None) -> str:
         self.downloads.append({"repo_id": repo_id, "revision": revision, "token": token})
-        Path(local_dir, "model.safetensors").write_bytes(b"weights")
+        for name, data in self.contents.items():
+            Path(local_dir, name).parent.mkdir(parents=True, exist_ok=True)
+            Path(local_dir, name).write_bytes(data)
         return local_dir
 
 
@@ -40,24 +41,66 @@ def test_the_catalog_names_each_model_once_with_its_licence() -> None:
     ids = [model.id for model in SPEECH_MODELS]
     assert len(ids) == len(set(ids))
     assert all(model.licence and model.licence_url for model in SPEECH_MODELS)
-    assert speech_model("sortformer-4spk-v1").requires_acceptance  # CC-BY-NC-4.0
-    assert not speech_model("qwen3-tts-1.7b-voicedesign").requires_acceptance
+    # Every Hugging Face model installs only after its terms are accepted (desktop roadmap D-4).
+    assert all(model.requires_acceptance for model in SPEECH_MODELS if model.source == "huggingface")
+    assert not speech_model("htdemucs-ft").requires_acceptance  # its package fetches it; nothing to install
+    # Hugging Face models are pinned to a full commit, with the files the service reads.
+    for model in SPEECH_MODELS:
+        if model.source == "huggingface":
+            assert len(model.revision) == 40 and model.files
+
+
+def test_voice_studio_lists_the_same_models_as_before_the_catalogs_merged() -> None:
+    assert [model.id for model in SPEECH_MODELS] == [
+        "qwen3-tts-0.6b-base", "omnivoice", "qwen3-tts-1.7b-voicedesign", "parakeet-tdt-0.6b-v3", "titanet-large",
+        "sortformer-4spk-v1", "audioseal-wm-16bits", "mel-band-roformer-vocals", "gtcrn-speech-enhancement",
+        "htdemucs-ft"]
+    # The old app.models id still finds the model.
+    assert speech_model("qwen3-tts-12hz-0.6b-base").id == "qwen3-tts-0.6b-base"
 
 
 def test_an_install_pins_its_commit_and_records_licence_and_terms(models_dir: Path) -> None:
     hub = _Hub()
-    status = model_install.install_model("qwen3-tts-1.7b-voicedesign", hub=hub)
-    assert status["status"] == "installed" and status["installed_revision"] == "abc123"
-    assert hub.downloads == [{"repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign", "revision": "abc123", "token": "hf_test"}]
+    model = speech_model("qwen3-tts-1.7b-voicedesign")
+    status = model_install.install_model(model.id, accept_terms=True, hub=hub)
+    assert status["status"] == "installed" and status["installed_revision"] == model.revision
+    assert hub.downloads == [{"repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign", "revision": model.revision,
+                              "token": "hf_test"}]
     marker = json.loads((models_dir / "tts" / "Qwen3-TTS-12Hz-1.7B-VoiceDesign" / model_install.MARKER).read_text())
-    assert marker["licence"] == "Apache-2.0" and marker["commit"] == "abc123"
+    assert marker["licence"] == "Apache-2.0" and marker["commit"] == model.revision
+    assert marker["accepted_terms"] is True
 
 
-def test_non_commercial_models_need_their_terms_accepted(models_dir: Path) -> None:
+def test_every_model_needs_its_terms_accepted(models_dir: Path) -> None:
     with pytest.raises(model_install.ModelInstallError, match="accept its terms"):
         model_install.install_model("sortformer-4spk-v1", hub=_Hub())
+    with pytest.raises(model_install.ModelInstallError, match="Apache-2.0; accept its terms"):
+        model_install.install_model("qwen3-tts-1.7b-voicedesign", hub=_Hub())
     status = model_install.install_model("sortformer-4spk-v1", accept_terms=True, hub=_Hub())
     assert status["accepted_terms"] is True
+
+
+def test_a_file_that_does_not_match_its_pinned_digest_fails_the_install(tmp_path: Path, monkeypatch) -> None:
+    import hashlib
+
+    from app.models import catalog
+
+    good = b"pinned weights"
+    test_catalog = catalog.parse_catalog({"models": {"qwen3-tts-1.7b-voicedesign": {
+        "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign", "revision": "0" * 40, "service": "tts",
+        "files": {"model.safetensors": {"sha256": hashlib.sha256(good).hexdigest(), "size": len(good)}}}}})
+    monkeypatch.setattr(catalog, "load", lambda: test_catalog)
+    model = speech_model("qwen3-tts-1.7b-voicedesign")
+    folder = tmp_path / "model"
+    folder.mkdir()
+    (folder / "model.safetensors").write_bytes(good)
+    model_install._check_digests(model, folder)
+    (folder / "model.safetensors").write_bytes(b"tampered")
+    with pytest.raises(model_install.ModelInstallError, match="has SHA-256"):
+        model_install._check_digests(model, folder)
+    assert not (folder / "model.safetensors").exists()
+    with pytest.raises(model_install.ModelInstallError, match="did not download"):
+        model_install._check_digests(model, folder)
 
 
 def test_package_models_are_not_installed_here(models_dir: Path) -> None:
@@ -67,7 +110,7 @@ def test_package_models_are_not_installed_here(models_dir: Path) -> None:
 
 
 def test_remove_deletes_only_inside_the_models_folder(models_dir: Path) -> None:
-    model_install.install_model("qwen3-tts-1.7b-voicedesign", hub=_Hub())
+    model_install.install_model("qwen3-tts-1.7b-voicedesign", accept_terms=True, hub=_Hub())
     status = model_install.remove_model("qwen3-tts-1.7b-voicedesign")
     assert status["status"] == "missing"
     assert not (models_dir / "tts" / "Qwen3-TTS-12Hz-1.7B-VoiceDesign").exists()

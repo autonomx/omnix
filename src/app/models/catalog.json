@@ -1,9 +1,610 @@
 {
+  "catalog_version": 2,
+  "runtimes": {
+    "torch-windows-x64": {
+      "label": "GPU runtime (PyTorch 2.6, NVIDIA CUDA 12.4)",
+      "kind": "torch-layer",
+      "platform": "windows-x64",
+      "accelerator": "cuda",
+      "lock": "requirements/desktop/torch.windows-x64.lock.txt",
+      "files": "requirements/desktop/packs/torch-windows-x64.json",
+      "requires": {
+        "nvidia_driver_min": "528.33",
+        "nvidia_driver_recommended": "551.61"
+      },
+      "licences": [
+        "BSD-3-Clause (PyTorch)"
+      ]
+    },
+    "stt-windows-x64": {
+      "label": "Speech runtime (NVIDIA NeMo)",
+      "kind": "overlay",
+      "base": "torch-windows-x64",
+      "platform": "windows-x64",
+      "accelerator": "cuda",
+      "service": "stt",
+      "source_lock": "src/services/stt/stt.lock.txt",
+      "lock": "requirements/desktop/stt.windows-x64.lock.txt",
+      "files": "requirements/desktop/packs/stt-windows-x64.json",
+      "licences": [
+        "Apache-2.0 (NeMo)"
+      ]
+    },
+    "tts-windows-x64": {
+      "label": "Voice output runtime (Qwen3-TTS)",
+      "kind": "overlay",
+      "base": "torch-windows-x64",
+      "platform": "windows-x64",
+      "accelerator": "cuda",
+      "service": "tts",
+      "source_lock": "src/services/tts/tts.lock.txt",
+      "lock": "requirements/desktop/tts.windows-x64.lock.txt",
+      "files": "requirements/desktop/packs/tts-windows-x64.json",
+      "licences": [
+        "Apache-2.0 (transformers)"
+      ]
+    },
+    "image-windows-x64": {
+      "label": "Image runtime (diffusers)",
+      "kind": "overlay",
+      "base": "torch-windows-x64",
+      "platform": "windows-x64",
+      "accelerator": "cuda",
+      "service": "image",
+      "source_lock": "src/services/image/image.lock.txt",
+      "lock": "requirements/desktop/image.windows-x64.lock.txt",
+      "files": "requirements/desktop/packs/image-windows-x64.json",
+      "licences": [
+        "Apache-2.0 (diffusers)"
+      ]
+    },
+    "torch-macos-arm64": {
+      "label": "GPU runtime (PyTorch 2.6, Apple Metal)",
+      "kind": "torch-layer",
+      "platform": "macos-arm64",
+      "accelerator": "mps",
+      "lock": "requirements/desktop/torch.macos-arm64.lock.txt",
+      "files": "requirements/desktop/packs/torch-macos-arm64.json",
+      "requires": {},
+      "licences": [
+        "BSD-3-Clause (PyTorch)"
+      ]
+    },
+    "tts-macos-arm64": {
+      "label": "Voice output runtime (Qwen3-TTS)",
+      "kind": "overlay",
+      "base": "torch-macos-arm64",
+      "platform": "macos-arm64",
+      "accelerator": "mps",
+      "service": "tts",
+      "source_lock": "requirements/desktop/tts.macos-arm64.full.lock.txt",
+      "lock": "requirements/desktop/tts.macos-arm64.lock.txt",
+      "files": "requirements/desktop/packs/tts-macos-arm64.json",
+      "licences": [
+        "Apache-2.0 (transformers)"
+      ]
+    },
+    "stt-mlx-macos-arm64": {
+      "label": "Speech runtime (Parakeet-MLX)",
+      "kind": "standalone",
+      "platform": "macos-arm64",
+      "accelerator": "mlx",
+      "service": "stt",
+      "lock": "requirements/desktop/stt-mlx.macos-arm64.lock.txt",
+      "files": "requirements/desktop/packs/stt-mlx-macos-arm64.json",
+      "licences": [
+        "Apache-2.0 (parakeet-mlx)",
+        "MIT (MLX)"
+      ]
+    }
+  },
+  "bundles": {
+    "voice-input": {
+      "label": "Voice input",
+      "capability": "live_stt",
+      "description": "Live voice in chat.",
+      "recommended_rank": 1,
+      "variants": [
+        {
+          "platform": "windows-x64",
+          "accelerator": "cuda",
+          "models": [
+            "nemotron-speech-streaming-en-0.6b",
+            "parakeet-realtime-eou-120m-v1"
+          ],
+          "runtimes": [
+            "stt-windows-x64"
+          ],
+          "min_vram_mb": null,
+          "min_commit_mb": null
+        },
+        {
+          "platform": "macos-arm64",
+          "accelerator": "mlx",
+          "models": [
+            "parakeet-tdt-0.6b-v3-mlx"
+          ],
+          "runtimes": [
+            "stt-mlx-macos-arm64"
+          ],
+          "min_vram_mb": null,
+          "min_commit_mb": null,
+          "note": "Push-to-talk: end-of-utterance detection on macOS is energy-based."
+        }
+      ]
+    },
+    "voice-output": {
+      "label": "Voice output",
+      "capability": "tts",
+      "description": "Spoken replies, Voice Studio and audiobooks.",
+      "recommended_rank": 2,
+      "variants": [
+        {
+          "platform": "windows-x64",
+          "accelerator": "cuda",
+          "models": [
+            "qwen3-tts-0.6b-base"
+          ],
+          "runtimes": [
+            "tts-windows-x64"
+          ],
+          "min_vram_mb": null,
+          "min_commit_mb": null
+        },
+        {
+          "platform": "macos-arm64",
+          "accelerator": "mps",
+          "models": [
+            "qwen3-tts-0.6b-base"
+          ],
+          "runtimes": [
+            "tts-macos-arm64"
+          ],
+          "min_vram_mb": null,
+          "min_commit_mb": null
+        }
+      ]
+    },
+    "transcription": {
+      "label": "Transcription",
+      "capability": "stt_batch",
+      "description": "The Speech to Text page: transcripts with word timings and speakers.",
+      "recommended_rank": 3,
+      "variants": [
+        {
+          "platform": "windows-x64",
+          "accelerator": "cuda",
+          "models": [
+            "parakeet-tdt-0.6b-v3",
+            "titanet-large"
+          ],
+          "runtimes": [
+            "stt-windows-x64"
+          ],
+          "min_vram_mb": null,
+          "min_commit_mb": null
+        }
+      ]
+    },
+    "image-generation": {
+      "label": "Image generation",
+      "capability": "image",
+      "description": "Text-to-image and image editing.",
+      "recommended_rank": 4,
+      "variants": [
+        {
+          "platform": "windows-x64",
+          "accelerator": "cuda",
+          "models": [
+            "flux2-klein-4b"
+          ],
+          "runtimes": [
+            "image-windows-x64"
+          ],
+          "min_vram_mb": 14336,
+          "min_commit_mb": null
+        }
+      ]
+    }
+  },
   "models": {
+    "qwen3-tts-0.6b-base": {
+      "label": "Qwen3-TTS 0.6B Base",
+      "kind": "tts",
+      "service": "tts",
+      "repo": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+      "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "source": "huggingface",
+      "files": {
+        "config.json": {
+          "sha256": "2e714c787c8edb98b05432685cddb634add2de4d4e645f653d68251ef72ba011",
+          "size": 4494
+        },
+        "generation_config.json": {
+          "sha256": "f1b90b4513f3b34c62851049e2492d7b4c5940daf1276f89c82b8ef04127f3aa",
+          "size": 245
+        },
+        "merges.txt": {
+          "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+          "size": 1671839
+        },
+        "model.safetensors": {
+          "sha256": "180b3b10eb1c9f1b4db7806d5475bae3071c0243c299d49926bab1da3b6946f6",
+          "size": 1829344272
+        },
+        "preprocessor_config.json": {
+          "sha256": "efdde1022ea9d76928bf7a9cd53139138f5ba2e466e837f08f6105ab1af1c119",
+          "size": 127
+        },
+        "speech_tokenizer/config.json": {
+          "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167",
+          "size": 2336
+        },
+        "speech_tokenizer/configuration.json": {
+          "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd",
+          "size": 76
+        },
+        "speech_tokenizer/model.safetensors": {
+          "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258",
+          "size": 682293092
+        },
+        "speech_tokenizer/preprocessor_config.json": {
+          "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb",
+          "size": 234
+        },
+        "tokenizer_config.json": {
+          "sha256": "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670",
+          "size": 7344
+        },
+        "vocab.json": {
+          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+          "size": 2776833
+        }
+      },
+      "aliases": [
+        "qwen3-tts-12hz-0.6b-base"
+      ],
+      "licence": {
+        "id": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 4.0,
+      "residency": "engine",
+      "capabilities": [
+        "synthesis",
+        "voice_clone"
+      ],
+      "voice_studio": true
+    },
+    "omnivoice": {
+      "label": "OmniVoice (600+ languages)",
+      "kind": "tts",
+      "service": "omnivoice",
+      "repo": "k2-fsa/OmniVoice",
+      "revision": "c5fdb5ccb189668d56333f77ba2629f4cd7535f4",
+      "source": "huggingface",
+      "files": {
+        "README.md": {
+          "sha256": "b5d645a1874baa96a460a0e3a7d5a262811d682d04ce235878a16d5fed287fd3",
+          "size": 9424
+        },
+        "audio_tokenizer/LICENSE": {
+          "sha256": "ac933dc084d119bd20401956b90d11ae87c248b2da62622cd580d82cdf2fa049",
+          "size": 9171
+        },
+        "audio_tokenizer/README.md": {
+          "sha256": "0336368f8274a5ed09f54cee8d56a851ecee96026d9f391a6735762c16608a60",
+          "size": 5174
+        },
+        "audio_tokenizer/config.json": {
+          "sha256": "eefb20806f7104e77c9a5277c9df0f9bb8826b08eb1d4e8ab2b9829b6ef9fac1",
+          "size": 2531
+        },
+        "audio_tokenizer/model.safetensors": {
+          "sha256": "fe7c5e8785e0a05833e1bfc3e002ec7f55af21e306b2e7154a448c1f54ccfb0d",
+          "size": 805665628
+        },
+        "audio_tokenizer/preprocessor_config.json": {
+          "sha256": "ae61eea88558608ee2fa86d2aec9fce8d99a5ff75d09cb7651ccce21ae1d9084",
+          "size": 206
+        },
+        "chat_template.jinja": {
+          "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+          "size": 4168
+        },
+        "config.json": {
+          "sha256": "5e359117e13b420c5e0c925d4aba650d624767131f1d1746928f8b850d5dc372",
+          "size": 2238
+        },
+        "model.safetensors": {
+          "sha256": "730839316de585f4c8298ec0e1712efc10fb19c6fa4e36eb741cb8d51ebcf6aa",
+          "size": 2450344112
+        },
+        "tokenizer.json": {
+          "sha256": "408f669b7e2b045fdf54201d815bd364e6667dbd845115da81239c40bc6dcfd1",
+          "size": 11423986
+        },
+        "tokenizer_config.json": {
+          "sha256": "49f78845596a82bf15c83673794bdf9f76f812b11f60ab6a2239d9be65b00676",
+          "size": 533
+        }
+      },
+      "licence": {
+        "id": "CC-BY-NC-4.0",
+        "url": "https://huggingface.co/k2-fsa/OmniVoice",
+        "commercial_use": false,
+        "gated": false,
+        "output_terms": "Non-commercial use only (CC-BY-NC-4.0 weights); clone only voices you have consent for."
+      },
+      "vram_gb": 3.0,
+      "residency": "engine",
+      "capabilities": [
+        "synthesis",
+        "voice_clone",
+        "many_languages"
+      ],
+      "voice_studio": true
+    },
+    "qwen3-tts-1.7b-voicedesign": {
+      "label": "Qwen3-TTS 1.7B VoiceDesign",
+      "kind": "tts",
+      "service": "tts",
+      "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+      "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+      "source": "huggingface",
+      "files": {
+        "config.json": {
+          "sha256": "aecd2cc4c1fe9edef1cb7ca7c401685a43879ad43f3f9e883f1c6760b61731e0",
+          "size": 4421
+        },
+        "generation_config.json": {
+          "sha256": "f1b90b4513f3b34c62851049e2492d7b4c5940daf1276f89c82b8ef04127f3aa",
+          "size": 245
+        },
+        "merges.txt": {
+          "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+          "size": 1671839
+        },
+        "model.safetensors": {
+          "sha256": "391e8db219f292c515297cdceeb43e4eae67cdde35fa57e79a6a8a532fca0522",
+          "size": 3833402552
+        },
+        "preprocessor_config.json": {
+          "sha256": "efdde1022ea9d76928bf7a9cd53139138f5ba2e466e837f08f6105ab1af1c119",
+          "size": 127
+        },
+        "speech_tokenizer/config.json": {
+          "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167",
+          "size": 2336
+        },
+        "speech_tokenizer/configuration.json": {
+          "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd",
+          "size": 76
+        },
+        "speech_tokenizer/model.safetensors": {
+          "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258",
+          "size": 682293092
+        },
+        "speech_tokenizer/preprocessor_config.json": {
+          "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb",
+          "size": 234
+        },
+        "tokenizer_config.json": {
+          "sha256": "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670",
+          "size": 7344
+        },
+        "vocab.json": {
+          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+          "size": 2776833
+        }
+      },
+      "licence": {
+        "id": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 7.0,
+      "residency": "swap",
+      "capabilities": [
+        "voice_design"
+      ],
+      "voice_studio": true
+    },
+    "parakeet-tdt-0.6b-v3": {
+      "label": "NVIDIA Parakeet-TDT 0.6B v3",
+      "kind": "stt",
+      "service": "stt",
+      "repo": "nvidia/parakeet-tdt-0.6b-v3",
+      "revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b",
+      "source": "huggingface",
+      "files": {
+        "README.md": {
+          "sha256": "7a4306a43f395e3a716e77f1d81c03db18a0a355d7b566bb1d6307213ba0302b",
+          "size": 42888
+        },
+        "parakeet-tdt-0.6b-v3.nemo": {
+          "sha256": "3cbdc85877e668ca7b82d0d56770eb1fac76691f55d6b97545e8d61ca588d10d",
+          "size": 2509332480
+        }
+      },
+      "licence": {
+        "id": "CC-BY-4.0",
+        "url": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": "Attribution required when redistributing the model."
+      },
+      "vram_gb": 2.5,
+      "residency": "helper",
+      "capabilities": [
+        "transcription",
+        "word_timestamps"
+      ],
+      "voice_studio": true
+    },
+    "titanet-large": {
+      "label": "NVIDIA TitaNet speaker embeddings",
+      "kind": "stt",
+      "service": "stt",
+      "repo": "nvidia/speakerverification_en_titanet_large",
+      "revision": "0dc382f40121a5fbd34db10a2bb04d826c2be6a8",
+      "source": "huggingface",
+      "files": {
+        "README.md": {
+          "sha256": "fc21d601b62a6645490308611caf681958d8141dcf21e7fc5c53f1d7bc97e2f7",
+          "size": 8114
+        },
+        "speakerverification_en_titanet_large.nemo": {
+          "sha256": "e838520693f269e7984f55bc8eb3c2d60ccf246bf4b896d4be9bcabe3e4b0fe3",
+          "size": 101621760
+        }
+      },
+      "licence": {
+        "id": "CC-BY-4.0",
+        "url": "https://huggingface.co/nvidia/speakerverification_en_titanet_large",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": "Attribution required when redistributing the model."
+      },
+      "vram_gb": 1.0,
+      "residency": "helper",
+      "capabilities": [
+        "diarization",
+        "speaker_embedding"
+      ],
+      "voice_studio": true
+    },
+    "sortformer-4spk-v1": {
+      "label": "NVIDIA Sortformer diarizer (4 speakers)",
+      "kind": "stt",
+      "service": "stt",
+      "repo": "nvidia/diar_sortformer_4spk-v1",
+      "revision": "2617bffbd820aa29d8f1fb6ab6f9ed7f0adbc996",
+      "source": "huggingface",
+      "files": {
+        "README.md": {
+          "sha256": "30eb79f49f833e265e678558af922cf2901ab1ce27235a45e79077fe4a9f027a",
+          "size": 16298
+        },
+        "diar_sortformer_4spk-v1.nemo": {
+          "sha256": "bc74dfd8ca314240abcdc7e2949901eeaa72947a04ce1fab893e373d81f1e689",
+          "size": 493434880
+        }
+      },
+      "licence": {
+        "id": "CC-BY-NC-4.0",
+        "url": "https://huggingface.co/nvidia/diar_sortformer_4spk-v1",
+        "commercial_use": false,
+        "gated": false,
+        "output_terms": "Non-commercial use only; opt in to use it."
+      },
+      "vram_gb": 1.0,
+      "residency": "helper",
+      "capabilities": [
+        "diarization"
+      ],
+      "voice_studio": true
+    },
+    "audioseal-wm-16bits": {
+      "label": "AudioSeal watermark (16 bits)",
+      "kind": "audio",
+      "service": "audio",
+      "repo": "facebookresearch/audioseal",
+      "revision": "audioseal_wm_16bits",
+      "source": "package",
+      "files": {},
+      "licence": {
+        "id": "MIT",
+        "url": "https://github.com/facebookresearch/audioseal",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 0.5,
+      "residency": "helper",
+      "capabilities": [
+        "watermark"
+      ],
+      "voice_studio": true
+    },
+    "mel-band-roformer-vocals": {
+      "label": "Mel-Band RoFormer vocal separation",
+      "kind": "audio",
+      "service": "audio",
+      "repo": "KimberleyJSN/melbandroformer",
+      "revision": "main",
+      "source": "package",
+      "files": {},
+      "licence": {
+        "id": "MIT",
+        "url": "https://huggingface.co/KimberleyJSN/melbandroformer",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": "Training data is not disclosed by the checkpoint's author."
+      },
+      "vram_gb": 2.0,
+      "residency": "helper",
+      "capabilities": [
+        "separation"
+      ],
+      "voice_studio": true
+    },
+    "gtcrn-speech-enhancement": {
+      "label": "GTCRN speech enhancement",
+      "kind": "audio",
+      "service": "audio",
+      "repo": "k2-fsa/sherpa-onnx",
+      "revision": "speech-enhancement-models",
+      "source": "package",
+      "files": {},
+      "licence": {
+        "id": "MIT",
+        "url": "https://github.com/Xiaobin-Rong/gtcrn",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 0.0,
+      "residency": "helper",
+      "capabilities": [
+        "enhancement"
+      ],
+      "voice_studio": true
+    },
+    "htdemucs-ft": {
+      "label": "Demucs v4 (fine-tuned)",
+      "kind": "audio",
+      "service": "audio",
+      "repo": "facebookresearch/demucs",
+      "revision": "htdemucs_ft",
+      "source": "package",
+      "files": {},
+      "licence": {
+        "id": "MIT",
+        "url": "https://github.com/facebookresearch/demucs",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 2.0,
+      "residency": "helper",
+      "capabilities": [
+        "separation"
+      ],
+      "voice_studio": true
+    },
     "flux2-klein-4b": {
+      "label": "FLUX.2 [klein] 4B",
+      "kind": "image",
+      "service": "image",
       "repo": "black-forest-labs/FLUX.2-klein-4B",
       "revision": "e7b7dc27f91deacad38e78976d1f2b499d76a294",
-      "service": "image",
+      "source": "huggingface",
       "files": {
         "model_index.json": {
           "sha256": "51a76cb1cf3ed37423a1128c79c22faee8e6fbe7f5aaeb737f0a258930dbaac0",
@@ -77,12 +678,30 @@
           "sha256": "ca70d2202afe6415bdbcb8793ba8cd99fd159cfe6192381504d6c4d3036e0f04",
           "size": 168120878
         }
-      }
+      },
+      "licence": {
+        "id": "Apache-2.0",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/blob/e7b7dc27f91deacad38e78976d1f2b499d76a294/LICENSE.md",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 13.0,
+      "residency": "engine",
+      "capabilities": [
+        "image_generation",
+        "image_to_image"
+      ],
+      "voice_studio": false,
+      "legacy_folder": "flux2-klein-4b"
     },
     "flux2-klein-base-4b": {
+      "label": "FLUX.2 [klein] Base 4B",
+      "kind": "image",
+      "service": "image",
       "repo": "black-forest-labs/FLUX.2-klein-base-4B",
       "revision": "a3b4f4849157f664bdbc776fd7453c2783562f4d",
-      "service": "image",
+      "source": "huggingface",
       "files": {
         "model_index.json": {
           "sha256": "de1fef01845f0af3e1e2f2581cd5e86f2dfa4a4776f7f0b26b4c77feac4ee70f",
@@ -156,80 +775,122 @@
           "sha256": "ca70d2202afe6415bdbcb8793ba8cd99fd159cfe6192381504d6c4d3036e0f04",
           "size": 168120878
         }
-      }
+      },
+      "licence": {
+        "id": "Apache-2.0",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B/blob/a3b4f4849157f664bdbc776fd7453c2783562f4d/LICENSE.md",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 13.0,
+      "residency": "engine",
+      "capabilities": [
+        "image_generation"
+      ],
+      "voice_studio": false
     },
     "nemotron-speech-streaming-en-0.6b": {
+      "label": "NVIDIA Nemotron streaming 0.6B",
+      "kind": "stt",
+      "service": "stt",
       "repo": "nvidia/nemotron-speech-streaming-en-0.6b",
       "revision": "ebe59e5a817142986528bbbee5dba8db7b38ed50",
-      "service": "stt",
+      "source": "huggingface",
       "files": {
         "nemotron-speech-streaming-en-0.6b.nemo": {
           "sha256": "283638054c44f6794e74fe9af9048d78a6d9d6c058c12131856c7859a62ac9cd",
           "size": 2473041920
         }
-      }
+      },
+      "licence": {
+        "id": "NVIDIA Open Model License",
+        "url": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 3.0,
+      "residency": "engine",
+      "capabilities": [
+        "live_transcription"
+      ],
+      "voice_studio": false
     },
     "parakeet-realtime-eou-120m-v1": {
+      "label": "NVIDIA Parakeet realtime EOU 120M",
+      "kind": "stt",
+      "service": "stt",
       "repo": "nvidia/parakeet_realtime_eou_120m-v1",
       "revision": "a7e2b4629593dce0ec19f600e00e9904353fda2d",
-      "service": "stt",
+      "source": "huggingface",
       "files": {
         "parakeet_realtime_eou_120m-v1.nemo": {
           "sha256": "6603a22a53b7c1a4bac4736cb24628fb568a7102ba931a28c799e2e72f109893",
           "size": 460062720
         }
-      }
+      },
+      "licence": {
+        "id": "NVIDIA Open Model License",
+        "url": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": ""
+      },
+      "vram_gb": 1.0,
+      "residency": "helper",
+      "capabilities": [
+        "end_of_utterance"
+      ],
+      "voice_studio": false
     },
-    "qwen3-tts-12hz-0.6b-base": {
-      "repo": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-      "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
-      "service": "tts",
+    "parakeet-tdt-0.6b-v3-mlx": {
+      "label": "Parakeet-TDT 0.6B v3 (MLX)",
+      "kind": "stt",
+      "service": "stt",
+      "repo": "mlx-community/parakeet-tdt-0.6b-v3",
+      "revision": "ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15",
+      "source": "huggingface",
       "files": {
+        "README.md": {
+          "sha256": "724e3ba46903986ff6caeb8fddb7495c06b5a7a8d908f11e43cc0a7e136b5e23",
+          "size": 1081
+        },
         "config.json": {
-          "sha256": "2e714c787c8edb98b05432685cddb634add2de4d4e645f653d68251ef72ba011",
-          "size": 4494
-        },
-        "generation_config.json": {
-          "sha256": "f1b90b4513f3b34c62851049e2492d7b4c5940daf1276f89c82b8ef04127f3aa",
-          "size": 245
-        },
-        "merges.txt": {
-          "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
-          "size": 1671839
+          "sha256": "f320f1292511f34ec47f513755fe20fd01dbfc09a925d42730e66059a6e1ef4c",
+          "size": 244093
         },
         "model.safetensors": {
-          "sha256": "180b3b10eb1c9f1b4db7806d5475bae3071c0243c299d49926bab1da3b6946f6",
-          "size": 1829344272
+          "sha256": "05e01c7f396c298cf7d23f61da7b504adeab698f0aaeafd9c82d198625464592",
+          "size": 2508288736
         },
-        "preprocessor_config.json": {
-          "sha256": "efdde1022ea9d76928bf7a9cd53139138f5ba2e466e837f08f6105ab1af1c119",
-          "size": 127
+        "tokenizer.model": {
+          "sha256": "eacec2b0a77f336d4a2ca4a25a7047575d3c2b74de47e997f4c205126ed3135e",
+          "size": 360916
         },
-        "speech_tokenizer/config.json": {
-          "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167",
-          "size": 2336
+        "tokenizer.vocab": {
+          "sha256": "41130ff456706304a1adec782ccc9e003c4d417e8e324353d281be958cac4e17",
+          "size": 101024
         },
-        "speech_tokenizer/configuration.json": {
-          "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd",
-          "size": 76
-        },
-        "speech_tokenizer/model.safetensors": {
-          "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258",
-          "size": 682293092
-        },
-        "speech_tokenizer/preprocessor_config.json": {
-          "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb",
-          "size": 234
-        },
-        "tokenizer_config.json": {
-          "sha256": "dc3c31c3bdaedd5016382bb3cbe07323026775ad51f5a4fb564505992ae4a670",
-          "size": 7344
-        },
-        "vocab.json": {
-          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
-          "size": 2776833
+        "vocab.txt": {
+          "sha256": "3cde1409fd78783a79b29ed4d32da57c746993856f7c8263bcb905d2e5839db7",
+          "size": 46772
         }
-      }
+      },
+      "licence": {
+        "id": "CC-BY-4.0",
+        "url": "https://huggingface.co/mlx-community/parakeet-tdt-0.6b-v3",
+        "commercial_use": true,
+        "gated": false,
+        "output_terms": "Attribution required when redistributing the model."
+      },
+      "vram_gb": 2.5,
+      "residency": "engine",
+      "capabilities": [
+        "live_transcription",
+        "transcription"
+      ],
+      "voice_studio": false
     }
   }
 }

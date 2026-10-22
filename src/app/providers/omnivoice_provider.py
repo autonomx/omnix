@@ -23,7 +23,7 @@ import wave
 from pathlib import Path
 from typing import Any, Optional
 
-from app.runtime.paths import repo_root, resources_root
+from app.runtime.paths import repo_root, resources_models_root, resources_root
 
 from .audio_base import AudioProviderCapability, BaseTTSProvider
 from .child_model_server import ManagedChildServer
@@ -48,7 +48,7 @@ _GENERATION_KEYS = ("num_step", "guidance_scale", "class_temperature", "speed", 
 
 def model_dir(config: Optional[dict[str, Any]] = None) -> Path:
     configured = str((config or {}).get("model_dir") or "").strip()
-    return Path(configured) if configured else resources_root() / "models" / "tts" / MODEL_DIR_NAME
+    return Path(configured) if configured else resources_models_root() / "tts" / MODEL_DIR_NAME
 
 
 def _python(configured: str) -> str:

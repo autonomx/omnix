@@ -214,6 +214,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_TIMEOUT_SECONDS` | string | `8` | assistant-memory | Controls memory structured extraction timeout seconds for assistant-memory. |
 | `OMNIX_MIGRATE_ON_START` | boolean | `false` | production.py | Controls migrate on start for production.py. |
 | `OMNIX_MIGRATION_DATABASE_URL` | string | — | kernel | Controls migration database url for kernel. |
+| `OMNIX_MODELS_DIR` | string | — | kernel | Controls models dir for kernel. |
 | `OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT` | integer | `13` | providers | Controls nemotron final right context for providers. |
 | `OMNIX_NEMOTRON_MODEL` | string | `nvidia/nemotron-speech-streaming-en-0.6b` | providers | Controls nemotron model for providers. |
 | `OMNIX_NEMOTRON_RIGHT_CONTEXT` | integer | `1` | providers | Controls nemotron right context for providers. |
@@ -340,6 +341,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TTS_MODEL_DIR` | string | — | launcher | Controls tts model dir for launcher. |
 | `OMNIX_TTS_PORT` | integer | `5101` | tooling | Controls tts port for tooling. |
 | `OMNIX_TTS_STARTUP_WARMUP` | string | — | voice | Controls tts startup warmup for voice. |
+| `OMNIX_TTS_SWITCH_DRAIN_SECONDS` | integer | `120` | tooling | Controls tts switch drain seconds for tooling. |
 | `OMNIX_TTS_SYNTHESIS_WORKERS` | integer | `8` | tooling | Controls tts synthesis workers for tooling. |
 | `OMNIX_TTS_URL` | string | `http://127.0.0.1:5101` | launcher | Controls tts url for launcher. |
 | `OMNIX_TTS_WARMUP_SPEAKER` | string | — | voice | Controls tts warmup speaker for voice. |

@@ -1470,6 +1470,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls models dir for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_MODELS_DIR",
+    "type": "string"
+  },
+  {
     "default": "13",
     "description": "Controls nemotron final right context for providers.",
     "feature": "providers",
@@ -2350,6 +2357,13 @@
     "feature": "voice",
     "name": "OMNIX_TTS_STARTUP_WARMUP",
     "type": "string"
+  },
+  {
+    "default": "120",
+    "description": "Controls tts switch drain seconds for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_TTS_SWITCH_DRAIN_SECONDS",
+    "type": "integer"
   },
   {
     "default": "8",

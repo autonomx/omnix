@@ -25,7 +25,7 @@ from typing import Any, Iterator, Optional
 import numpy as np
 
 from app.config.env import environment_copy
-from app.runtime.paths import repo_root, resources_root
+from app.runtime.paths import repo_root, resources_models_root, resources_root
 
 from .audio_base import AudioProviderCapability, BaseTTSProvider
 from .tts_priority import generation_slot
@@ -85,7 +85,7 @@ class FishReferenceTranscriptMissing(RuntimeError):
 
 
 def _models_dir() -> Path:
-    return resources_root() / "models" / "tts"
+    return resources_models_root() / "tts"
 
 
 def _fish_python(configured: str) -> str:

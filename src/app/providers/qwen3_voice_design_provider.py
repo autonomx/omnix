@@ -35,9 +35,9 @@ class VoiceDesignUnavailable(RuntimeError):
 
 
 def voice_design_model_dir() -> Path:
-    from app.runtime.paths import resources_root
+    from app.runtime.paths import resources_models_root
 
-    return resources_root() / "models" / "tts" / VOICE_DESIGN_MODEL_DIR
+    return resources_models_root() / "tts" / VOICE_DESIGN_MODEL_DIR
 
 
 def seeded(seed: int | None) -> None:
