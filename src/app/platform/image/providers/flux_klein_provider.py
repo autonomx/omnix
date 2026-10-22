@@ -165,6 +165,12 @@ class FluxKleinImageProvider(BaseImageProvider):
         return _safe_str(self.config.get("repo_id")).strip() or "black-forest-labs/FLUX.2-klein-4B"
 
     def _local_dir(self) -> str:
+        from app.models.local import installed_snapshot
+
+        # The desktop app installs the pinned catalog model only; a folder named in settings does not apply there.
+        snapshot = installed_snapshot("flux2-klein-4b")
+        if snapshot is not None:
+            return os.path.normpath(str(snapshot))
         local_dir = _safe_str(self.config.get("local_dir")).strip()
         if local_dir:
             return os.path.normpath(local_dir)

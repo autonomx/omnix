@@ -72,6 +72,15 @@ def models_root() -> Path:
 
 
 def _checkpoint(folder_names: tuple[str, ...]) -> Path | None:
+    from app.models.local import installed_snapshot
+
+    for name in folder_names:
+        # The desktop app keeps the pinned model in its packs folder (names are catalog ids there).
+        snapshot = installed_snapshot(name)
+        if snapshot is not None:
+            found = sorted(snapshot.glob("*.nemo"))
+            if found:
+                return found[0]
     for name in folder_names:
         folder = models_root() / name
         if folder.is_dir():

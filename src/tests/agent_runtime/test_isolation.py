@@ -219,3 +219,45 @@ def test_the_relay_forwards_only_agent_runtime_routes() -> None:
         assert not allowed.match(refused)
     # A relay started before v2 (raw TCP to the whole gateway) is replaced.
     assert isolation.relay_signature([(8000, "h:8000")]) == "v2;8000=h:8000"
+
+
+def test_a_second_omnix_names_its_own_network_and_relay(tmp_path, monkeypatch) -> None:
+    """DT-3.5: the desktop app beside a developer checkout must not replace the other's relay."""
+    monkeypatch.delenv("OMNIX_AGENT_DOCKER_NETWORK", raising=False)
+    monkeypatch.delenv("OMNIX_AGENT_CONTAINER_BROKER_URL", raising=False)
+    monkeypatch.setenv("OMNIX_AGENT_SANDBOX_NETWORK", "omnix-desktop-agent-sandbox")
+    monkeypatch.setenv("OMNIX_AGENT_RELAY_CONTAINER", "omnix-desktop-agent-relay")
+    sandbox = DockerStrongIsolation(image="omnix-agent-sandbox:test")
+    sandbox.docker = "docker"
+    command = sandbox.build_command(
+        _spec(tmp_path, capabilities=("workspace.command",)), argv=["pi"], cwd=tmp_path,
+        env={"OMNIX_AGENT_BROKER_URL": "http://127.0.0.1:43117/api/agent-runs"})
+    assert command[command.index("--network") + 1] == "omnix-desktop-agent-sandbox"
+    envs = [command[i + 1] for i, item in enumerate(command) if item == "--env"]
+    assert "OMNIX_AGENT_BROKER_URL=http://omnix-desktop-agent-relay:43117/api/agent-runs" in envs
+    # The lockdown is the same as for the default names.
+    assert "--read-only" in command and command[command.index("--cap-drop") + 1] == "ALL"
+
+    calls: list[tuple[str, ...]] = []
+
+    class _Done:
+        def __init__(self, code: int = 0, stdout: str = "", stderr: str = "") -> None:
+            self.returncode, self.stdout, self.stderr = code, stdout, stderr
+
+    def docker(binary, *args, **kwargs):
+        calls.append(args)
+        return _Done(1) if args[:2] == ("network", "inspect") or args[0] == "inspect" else _Done()
+
+    monkeypatch.setattr(isolation, "_docker", docker)
+    sandbox.ensure_network(["http://127.0.0.1:43117/api/agent-runs"])
+    named = [call for call in calls if call[0] in {"network", "rm", "run"}]
+    assert ("network", "create", "--internal", "omnix-desktop-agent-sandbox") in named
+    assert ("rm", "-f", "omnix-desktop-agent-relay") in named
+    assert not any(RELAY_CONTAINER in call or SANDBOX_NETWORK in call for call in calls)
+    assert ("network", "connect", "omnix-desktop-agent-sandbox", "omnix-desktop-agent-relay") in named
+
+
+def test_a_sandbox_name_that_is_not_a_docker_name_is_refused(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_RELAY_CONTAINER", "relay --privileged")
+    with pytest.raises(AgentIsolationError, match="not a valid Docker name"):
+        DockerStrongIsolation(image="omnix-agent-sandbox:test")
