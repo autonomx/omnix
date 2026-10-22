@@ -141,10 +141,10 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
             result = _execute_transcribe_sample_job(job)
         elif job.type in {"tts.synthesize", "tts.multi_speaker_synthesize", "voice.restitch"}:
             result = _execute_tts_job(job, job_store=job_store)
-        elif job.type in {"models.install", "models.remove"}:
+        elif job.type in {"models.install", "models.remove", "models.verify"}:
             from .model_install import execute_model_job
 
-            result = execute_model_job(job)
+            result = execute_model_job(job, job_store=job_store)
         elif job.type == "voice.export":
             from .export import execute_export_job
 
@@ -178,6 +178,11 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
         else:  # pragma: no cover - guarded by caller.
             raise RuntimeError(f"Unsupported Voice Studio job type: {job.type}")
     except Exception as exc:
+        from app.models.packs import PackCancelled
+
+        if isinstance(exc, PackCancelled):
+            # The user cancelled a download: the partial pack is gone, and the job ends as cancelled.
+            return job_store.finalize_cancel(job.id, "cancelled by the user") or job
         deferred = _defer_for_swap(job_store, job, exc)
         if deferred is not None:
             return deferred

@@ -41,11 +41,19 @@ TTS_JOB_TYPES = ("tts.synthesize", "tts.multi_speaker_synthesize")
 
 def voice_submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
     value = request.model_dump(mode="python")
-    if request.type in {"models.install", "models.remove"}:
+    if request.type in {"models.install", "models.remove", "models.verify"}:
         # Installs download from the internet into the shared models folder: workspace admins only.
+        from app.models import packs
         from app.runtime.tenant_context import current_tenant
 
         current_tenant().require_role("owner", "admin")
+        if packs.desktop_mode():
+            if request.type != "models.verify":
+                from .model_packs import check_submission
+
+                check_submission(request.type, dict(request.input_payload or {}))
+        elif request.type == "models.install":
+            _record_voice_studio_acceptance(dict(request.input_payload or {}))
         return request
     if request.type in {"voice.export", "voice.restitch", "voice.design", "voice.design.save", "voice.blend",
                         "voice.subtitles",
@@ -68,8 +76,25 @@ def voice_submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
 
 
 
+def _record_voice_studio_acceptance(payload: dict[str, Any]) -> None:
+    """Voice Studio outside the desktop app: an accepted install is recorded like the setup screen's (D-4)."""
+    from app.models import catalog as model_catalog
+
+    from . import licence_acceptances
+
+    if not payload.get("accept_terms") or not licence_acceptances.available():
+        return
+    try:
+        entry = model_catalog.load().model(str(payload.get("model_id") or ""))
+    except KeyError:
+        return
+    if entry.pinned:
+        licence_acceptances.record([entry])
+
+
 def _voice_router(context):
     from .automation_routes import register_automation_routes
+    from .model_pack_routes import register_model_pack_routes
     from .stt_proxy_routes import register_stt_proxy_routes
     from .tts_pcm_websocket import register_tts_pcm_websocket
     from .tts_runtime_routes import register_tts_runtime_routes
@@ -86,6 +111,7 @@ def _voice_router(context):
     register_voice_library_route(router, state)
     register_voice_studio_routes(router, state)
     register_automation_routes(router, state)
+    register_model_pack_routes(router, state)
     return router
 
 def _swap_controller_worker(_context):
@@ -129,6 +155,7 @@ _JOB_RESOURCE_CLASSES = {
     "voice.restitch": ResourceClass.CPU,
     "models.install": ResourceClass.CPU,
     "models.remove": ResourceClass.CPU,
+    "models.verify": ResourceClass.CPU,
 }
 
 FEATURE = FeatureModule(
@@ -167,6 +194,7 @@ FEATURE = FeatureModule(
             "stt.transcribe",
             "models.install",
             "models.remove",
+            "models.verify",
         )
     ),
 )

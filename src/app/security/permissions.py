@@ -85,6 +85,9 @@ _KERNEL_CATALOG: dict[str, str] = {
     "image:read": "Image workspace (read)",
     "image:generate": "Generate images",
     "image:models:admin": "Image model management",
+    "models:admin": "Install and remove models; accept their licences",
+    # Runtime packs are executable code (desktop roadmap §4.5): owners only, never the admin role.
+    "models:runtimes:admin": "Install and remove runtime packs",
     "settings:read": "Settings (read)",
     "settings:write": "Settings (write)",
     "admin:diagnostics": "Diagnostics",
@@ -121,7 +124,7 @@ _module_catalog, _module_defaults, _MODULE_MEMBER = _declared_module_permissions
 # Every permission: the kernel catalog above and the ones modules declare (PA-4.2).
 CATALOG: Mapping[str, str] = MappingProxyType({**_KERNEL_CATALOG, **_module_catalog})
 
-_ADMIN_EXCLUDED = frozenset({"workspace:transfer", "secrets:export", "internal:service"})
+_ADMIN_EXCLUDED = frozenset({"workspace:transfer", "secrets:export", "internal:service", "models:runtimes:admin"})
 _MEMBER = frozenset({
     "chat:read", "chat:write", "characters:read", "characters:write",
     "memory:read", "memory:write", "assets:read", "assets:write", "assets:delete",

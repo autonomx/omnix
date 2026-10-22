@@ -384,6 +384,12 @@ async def ensure_image_model_loaded(request: ImageModelActionRequest) -> dict[st
     response_model_exclude_unset=True,
 )
 async def download_image_model(request: ImageModelDownloadRequest) -> dict[str, Any]:  # validated by response_model
+    from app.models.packs import desktop_mode
+
+    if desktop_mode():
+        # The desktop app installs image models from the pinned catalog only (Settings → Models), never a
+        # repository named in settings (desktop roadmap §4.5).
+        raise HTTPException(status_code=409, detail="install_image_models_from_settings_models")
     provider_name = _provider(request.provider)
     token = request.hf_token.get_secret_value().strip() if request.hf_token else ""
     with _DOWNLOAD_TOTALS_LOCK:

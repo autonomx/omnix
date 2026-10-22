@@ -55,6 +55,8 @@ role to permission list; `owner` cannot be changed).
 | `memory:admin` | Memory management | yes | yes |  |  |  |  |  |  |  |
 | `memory:read` | Memory items and settings (read) | yes | yes |  |  | yes | yes |  |  | yes |
 | `memory:write` | Memory items (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `models:admin` | Install and remove models; accept their licences | yes | yes |  |  |  |  |  |  |  |
+| `models:runtimes:admin` | Install and remove runtime packs | yes |  |  |  |  |  |  |  |  |
 | `research:read` | Research (read) | yes | yes |  |  | yes | yes |  |  | yes |
 | `research:run` | Run research | yes | yes |  |  |  | yes |  |  |  |
 | `rpg:admin` | RPG administration | yes | yes |  |  |  |  |  |  |  |

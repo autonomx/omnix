@@ -57,12 +57,18 @@ def _folder_bytes(folder: Path) -> int:
     return total
 
 
-def service_environment(service: str) -> dict[str, Any]:
+def service_environment(service: str, model_id: str = "") -> dict[str, Any]:
     """The model service's Python environment: whether it exists, and how to set it up when it does not.
 
     The install job downloads weights only; environments come from each service's
-    hashed lock file (``src/services/<service>/<service>.lock.txt``).
+    hashed lock file (``src/services/<service>/<service>.lock.txt``). In the
+    desktop app the environment is the model's runtime pack, ready when its
+    manifest is current (desktop roadmap §4.5); the setup screen installs it.
     """
+    from app.models import packs
+
+    if packs.desktop_mode():
+        return _pack_environment(model_id)
     from app.config.launcher import load_launcher_config
     from app.runtime.paths import repo_root
 
@@ -79,8 +85,47 @@ def service_environment(service: str) -> dict[str, Any]:
     return {"name": name, "ready": python.is_file(), "setup": setup}
 
 
+def _pack_environment(model_id: str) -> dict[str, Any]:
+    from app.models import catalog as model_catalog
+    from app.models import packs
+
+    catalog = model_catalog.load()
+    try:
+        runtime_ids = catalog.runtimes_for_model(model_id, model_catalog.current_platform()) if model_id else []
+    except KeyError:
+        runtime_ids = []
+    if not runtime_ids:
+        return {"name": "", "ready": False, "setup": "", "available": False}
+    store = packs.runtime_store(catalog)
+    closure = [pack.id for pack in catalog.runtime_closure(runtime_ids)]
+    missing = [catalog.runtime(item).label for item in closure if not store.current(item)]
+    return {"name": catalog.runtime(runtime_ids[0]).label, "ready": not missing, "available": True,
+            "setup": "" if not missing else "Install it from Settings, Models: " + ", ".join(missing)}
+
+
+def _pack_status(model: SpeechModel) -> dict[str, Any]:
+    from app.models import packs
+
+    store = packs.model_store()
+    installed = model.source == "huggingface" and store.installed(model.id)
+    marker = store.marker(model.id) if installed else None
+    status = "package" if model.source == "package" else "installed" if installed else "missing"
+    return {
+        **model.as_dict(),
+        "status": status,
+        "installed_revision": (marker or {}).get("commit", ""),
+        "accepted_terms": installed,
+        "disk_bytes": store.disk_bytes(model.id) if installed else 0,
+        "environment": service_environment(model.service, model.id),
+    }
+
+
 def model_status(model: SpeechModel) -> dict[str, Any]:
     """Whether the weights are present, where they came from, and their disk use."""
+    from app.models import packs
+
+    if packs.desktop_mode():
+        return _pack_status(model)
     folder = model_dir(model)
     marker = _marker(model)
     present = folder.is_dir() and any(entry.name != MARKER for entry in folder.iterdir()) if folder.exists() else False
@@ -142,6 +187,16 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
     return model_status(model)
 
 
+def _require_recorded_acceptance(model: SpeechModel) -> None:
+    """With PostgreSQL, the job also needs the acceptance the submission recorded (roadmap D-4)."""
+    from . import licence_acceptances
+
+    if model.requires_acceptance and licence_acceptances.available() and not licence_acceptances.accepted(
+            model.id, model.revision):
+        raise ModelInstallError(f"{model.label}'s licence ({model.licence}) has not been accepted for this revision; "
+                                "accept it and install again")
+
+
 def _check_digests(model: SpeechModel, folder: Path) -> None:
     """Every pinned file is in the folder with its catalogued SHA-256; anything else fails the install."""
     from app.models.catalog import load
@@ -170,8 +225,16 @@ def remove_model(model_id: str) -> dict[str, Any]:
     return model_status(model)
 
 
-def execute_model_job(job: Any) -> dict[str, Any]:
+def execute_model_job(job: Any, *, job_store: Any = None) -> dict[str, Any]:
+    from app.models import packs
+
     payload = job.input_payload or {}
+    if packs.desktop_mode():
+        from .model_packs import execute
+
+        return execute(job, job_store=job_store)
+    if payload.get("bundle_id") or payload.get("runtime_id"):
+        raise ModelInstallError("bundles and runtime packs are installed by the desktop app")
     model_id = str(payload.get("model_id") or "").strip()
     if not model_id:
         raise ModelInstallError("model_id is required")
@@ -179,7 +242,10 @@ def execute_model_job(job: Any) -> dict[str, Any]:
         speech_model(model_id)
     except KeyError as exc:
         raise ModelInstallError(str(exc)) from exc
+    if job.type == "models.verify":
+        raise ModelInstallError("verifying models is a desktop app tool")
     if job.type == "models.install":
+        _require_recorded_acceptance(speech_model(model_id))
         status = install_model(model_id, accept_terms=bool(payload.get("accept_terms")))
         verb = "Installed"
     else:
