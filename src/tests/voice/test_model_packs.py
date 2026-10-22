@@ -19,16 +19,16 @@ FILE = {"sha256": "a" * 64, "size": 1000}
 
 CATALOG = model_catalog.parse_catalog({
     "runtimes": {
-        "torch-win": {"label": "GPU runtime", "kind": "torch-layer", "platform": "windows-x64", "lock": "t",
+        "torch-win": {"label": "GPU runtime", "kind": "torch-layer", "platform": "windows-x64", "lock": "t", "accelerator": "cuda",
                       "files": "t.json"},
-        "tts-win": {"label": "Voice output runtime", "kind": "overlay", "base": "torch-win",
+        "tts-win": {"label": "Voice output runtime", "kind": "overlay", "base": "torch-win", "accelerator": "cuda",
                     "platform": "windows-x64", "service": "tts", "lock": "tts", "files": "tts.json"},
         "stt-win": {"label": "Speech runtime", "kind": "overlay", "base": "torch-win", "platform": "windows-x64",
                     "service": "stt", "lock": "stt", "files": "stt.json"},
     },
     "bundles": {
         "voice-output": {"label": "Voice output", "capability": "tts", "variants": [
-            {"platform": "windows-x64", "models": ["tts-model"], "runtimes": ["tts-win"]}]},
+            {"platform": "windows-x64", "models": ["tts-model"], "runtimes": ["tts-win"], "accelerator": "cuda"}]},
         "voice-input": {"label": "Voice input", "capability": "live_stt", "variants": [
             {"platform": "windows-x64", "models": ["stt-model", "eou-model"], "runtimes": ["stt-win"]}]},
     },
@@ -47,45 +47,49 @@ CATALOG = model_catalog.parse_catalog({
 
 class _Runtimes:
     def __init__(self, installed: set[str] | None = None) -> None:
-        self.present = set(installed or ())
+        self.have = set(installed or ())
         self.calls: list[str] = []
         self.root = "packs"
 
     def current(self, runtime_id: str) -> bool:
-        return runtime_id in self.present
+        return runtime_id in self.have
 
     installed = current
 
+    def download_bytes(self, runtime_id: str) -> int:
+        return 0
+    present = current
+
     def install(self, runtime_id: str, **_: Any) -> dict:
-        if CATALOG.runtime(runtime_id).base and CATALOG.runtime(runtime_id).base not in self.present:
+        if CATALOG.runtime(runtime_id).base and CATALOG.runtime(runtime_id).base not in self.have:
             raise packs.PackError("base first")
         self.calls.append(f"install {runtime_id}")
-        self.present.add(runtime_id)
+        self.have.add(runtime_id)
         return {}
 
     def remove(self, runtime_id: str, *, needed_by=()) -> None:
         if list(needed_by):
             raise packs.PackError(f"needed by {', '.join(needed_by)}")
         self.calls.append(f"remove {runtime_id}")
-        self.present.discard(runtime_id)
+        self.have.discard(runtime_id)
 
 
 class _Models:
     def __init__(self, installed: set[str] | None = None) -> None:
-        self.present = set(installed or ())
+        self.have = set(installed or ())
         self.calls: list[str] = []
 
     def installed(self, model_id: str) -> bool:
-        return model_id in self.present
+        return model_id in self.have
 
     def install(self, model_id: str, **_: Any) -> dict:
         self.calls.append(f"install {model_id}")
-        self.present.add(model_id)
+        self.have.add(model_id)
         return {}
 
     def remove(self, model_id: str) -> None:
         self.calls.append(f"remove {model_id}")
-        self.present.discard(model_id)
+        self.have.discard(model_id)
 
 
 @pytest.fixture
@@ -99,8 +103,11 @@ def desktop(monkeypatch, tmp_path):
     monkeypatch.setattr(licence_acceptances, "available", lambda: True)
     monkeypatch.setattr(licence_acceptances, "record", lambda entries: state.recorded.extend(e.id for e in entries)
                         or state.accepted.update((e.id, e.revision) for e in entries))
-    monkeypatch.setattr(licence_acceptances, "accepted", lambda model_id, revision: (model_id, revision) in state.accepted)
+    monkeypatch.setattr(licence_acceptances, "accepted", lambda model_id, revision, licence_id: (model_id, revision) in state.accepted)
     monkeypatch.setattr(model_packs, "_hub_token", lambda: None)
+    state.facts = {"gpus": [{"name": "NVIDIA GeForce RTX 4090", "vendor": "nvidia", "vram_total_mb": 24564,
+                             "vram_free_mb": 20000, "driver": "617.42"}], "nvidia_driver": "617.42"}
+    monkeypatch.setattr(model_packs, "_hardware_facts", lambda: state.facts)
     return state
 
 
@@ -133,7 +140,7 @@ def test_an_admin_is_refused_a_bundle_whose_runtime_is_missing(desktop) -> None:
         with pytest.raises(TenantAccessDenied, match="only the workspace owner"):
             model_packs.check_submission("models.install", {"runtime_id": "torch-win"})
         # With the runtime there, an admin may install the bundle's models.
-        desktop.runtimes.present.update({"torch-win", "tts-win"})
+        desktop.runtimes.have.update({"torch-win", "tts-win"})
         model_packs.check_submission("models.install", {"bundle_id": "voice-output", "accept_terms": True})
     finally:
         pop_tenant(token)
@@ -151,6 +158,17 @@ def test_an_install_needs_the_licences_accepted(desktop) -> None:
     assert ("tts-model", REVISION) in desktop.accepted
 
 
+def test_a_bundle_this_computer_cannot_run_is_not_queued(desktop) -> None:
+    desktop.facts = {"gpus": [], "adapters": [{"name": "AMD Radeon RX 7900 XTX"}]}
+    token = _as("owner")
+    try:
+        with pytest.raises(ModelInstallError, match="Voice output cannot run on this computer: Needs an NVIDIA GPU"):
+            model_packs.check_submission("models.install", {"bundle_id": "voice-output", "accept_terms": True})
+    finally:
+        pop_tenant(token)
+    assert desktop.recorded == []  # nothing was accepted either
+
+
 def test_a_model_without_a_desktop_runtime_is_refused(desktop) -> None:
     token = _as("owner")
     try:
@@ -161,7 +179,47 @@ def test_a_model_without_a_desktop_runtime_is_refused(desktop) -> None:
 
 
 def _job(job_type: str, **payload: Any) -> Any:
+    """A job as the owner submitted it: the submission policy authorized every runtime it plans."""
+    payload.setdefault(model_packs.AUTHORIZED_RUNTIMES, list(CATALOG.runtimes))
     return SimpleNamespace(id="job-1", type=job_type, input_payload=payload)
+
+
+def test_an_admins_job_never_installs_a_runtime_that_went_missing_after_submission(desktop) -> None:
+    """Submitted while the runtime was current; by the time it runs, an app update changed its lock."""
+    desktop.accepted.add(("tts-model", REVISION))
+    desktop.runtimes.have.update({"torch-win"})  # tts-win is no longer current
+    with pytest.raises(ModelInstallError, match="only the workspace owner can install it"):
+        model_packs.execute(_job("models.install", bundle_id="voice-output", authorized_runtimes=[]))
+    assert desktop.runtimes.calls == [] and desktop.models.calls == []
+
+
+def test_an_admins_bundle_removal_keeps_the_runtimes(desktop) -> None:
+    desktop.runtimes.have.update({"torch-win", "tts-win"})
+    desktop.models.have.add("tts-model")
+    model_packs.execute(_job("models.remove", bundle_id="voice-output", authorized_runtimes=[]))
+    assert desktop.models.calls == ["remove tts-model"] and desktop.runtimes.calls == []
+
+
+def test_the_submission_policy_replaces_a_client_supplied_authorization(desktop, monkeypatch) -> None:
+    from app.jobs.models import CreateJobRequest
+    from app.platform.voice.feature import voice_submission_defaults
+
+    desktop.runtimes.have.update({"torch-win", "tts-win"})
+    request = CreateJobRequest.model_validate({"module": "voice", "type": "models.install", "resource_class": "cpu",
+        "input_payload": {"bundle_id": "voice-output", "accept_terms": True,
+                          "authorized_runtimes": ["torch-win", "tts-win", "stt-win"]}})
+    token = _as("admin")
+    try:
+        stored = voice_submission_defaults(request)
+    finally:
+        pop_tenant(token)
+    assert stored.input_payload["authorized_runtimes"] == []
+    token = _as("owner")
+    try:
+        stored = voice_submission_defaults(request)
+    finally:
+        pop_tenant(token)
+    assert stored.input_payload["authorized_runtimes"] == ["torch-win", "tts-win"]
 
 
 def test_a_bundle_installs_bases_first_then_runtimes_then_models(desktop) -> None:
@@ -172,6 +230,20 @@ def test_a_bundle_installs_bases_first_then_runtimes_then_models(desktop) -> Non
     assert result["content"] == "Installed GPU runtime, Voice output runtime, TTS"
 
 
+def test_a_download_that_broke_off_fails_the_attempt_retryably(desktop, monkeypatch) -> None:
+    from app.platform.voice.jobs import _failure_code
+
+    desktop.accepted.add(("tts-model", REVISION))
+
+    def broken(runtime_id: str, **_: Any) -> dict:
+        raise packs.PackDownloadError("download failed (503), try again later")
+
+    monkeypatch.setattr(desktop.runtimes, "install", broken)
+    with pytest.raises(packs.PackDownloadError) as failure:
+        model_packs.execute(_job("models.install", bundle_id="voice-output"))
+    assert _failure_code(failure.value)[1] is True
+
+
 def test_the_job_refuses_a_model_whose_licence_was_not_recorded(desktop) -> None:
     with pytest.raises(ModelInstallError, match="has not been accepted for revision"):
         model_packs.execute(_job("models.install", bundle_id="voice-output"))
@@ -179,32 +251,32 @@ def test_the_job_refuses_a_model_whose_licence_was_not_recorded(desktop) -> None
 
 
 def test_removing_a_bundle_keeps_the_torch_layer_another_bundle_uses(desktop) -> None:
-    desktop.runtimes.present.update({"torch-win", "tts-win", "stt-win"})
-    desktop.models.present.update({"tts-model", "stt-model", "eou-model"})
+    desktop.runtimes.have.update({"torch-win", "tts-win", "stt-win"})
+    desktop.models.have.update({"tts-model", "stt-model", "eou-model"})
     model_packs.execute(_job("models.remove", bundle_id="voice-output"))
     assert desktop.models.calls == ["remove tts-model"]
     assert desktop.runtimes.calls == ["remove tts-win"]
-    assert "torch-win" in desktop.runtimes.present
+    assert "torch-win" in desktop.runtimes.have
 
 
 def test_removing_the_last_bundle_removes_the_torch_layer_too(desktop) -> None:
-    desktop.runtimes.present.update({"torch-win", "tts-win"})
-    desktop.models.present.add("tts-model")
+    desktop.runtimes.have.update({"torch-win", "tts-win"})
+    desktop.models.have.add("tts-model")
     assert model_packs.runtimes_removed_with_bundle("voice-output", ["torch-win", "tts-win"]) == ["tts-win", "torch-win"]
     model_packs.execute(_job("models.remove", bundle_id="voice-output"))
     assert desktop.runtimes.calls == ["remove tts-win", "remove torch-win"]
 
 
 def test_a_runtime_an_installed_bundle_needs_cannot_be_removed_directly(desktop) -> None:
-    desktop.runtimes.present.update({"torch-win", "tts-win"})
-    desktop.models.present.add("tts-model")
+    desktop.runtimes.have.update({"torch-win", "tts-win"})
+    desktop.models.have.add("tts-model")
     with pytest.raises(ModelInstallError, match="needed by Voice output"):
         model_packs.execute(_job("models.remove", runtime_id="tts-win"))
 
 
 def test_removing_a_bundle_that_takes_its_runtime_needs_the_owner(desktop) -> None:
-    desktop.runtimes.present.update({"torch-win", "tts-win", "stt-win"})
-    desktop.models.present.update({"tts-model", "stt-model", "eou-model"})
+    desktop.runtimes.have.update({"torch-win", "tts-win", "stt-win"})
+    desktop.models.have.update({"tts-model", "stt-model", "eou-model"})
     token = _as("admin")
     try:
         # Voice output's overlay goes with it (nothing else runs on it), so only the owner may remove it.
@@ -263,7 +335,7 @@ def test_voice_studio_outside_the_desktop_records_and_checks_acceptance(monkeypa
     monkeypatch.setattr(licence_acceptances, "available", lambda: True)
     monkeypatch.setattr(licence_acceptances, "record",
                         lambda entries: accepted.update((entry.id, entry.revision) for entry in entries))
-    monkeypatch.setattr(licence_acceptances, "accepted", lambda model_id, revision: (model_id, revision) in accepted)
+    monkeypatch.setattr(licence_acceptances, "accepted", lambda model_id, revision, licence_id: (model_id, revision) in accepted)
     model = speech_model("qwen3-tts-1.7b-voicedesign")
     job = SimpleNamespace(id="job-1", type="models.install", input_payload={"model_id": model.id})
     with pytest.raises(ModelInstallError, match="has not been accepted"):

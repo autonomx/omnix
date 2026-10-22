@@ -19,7 +19,9 @@ States reported to the shell: ``starting``, ``running``, ``stopped``,
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -44,6 +46,9 @@ STOP_SECONDS = 20.0
 # Without a measured requirement: the model files' size, half again, plus room for the service itself.
 HEADROOM_FACTOR = 1.5
 HEADROOM_BASE_BYTES = 2 * 2**30
+# A started service's memory is reserved for this long (or until it is healthy, if later): its commit charge
+# grows while it loads, so the next service's headroom check must not count that memory as free.
+SETTLE_SECONDS = 90.0
 
 
 @dataclass
@@ -57,6 +62,8 @@ class ServicePlan:
     bundles: list[str]
     model_dir: Path | None = None
     needed_bytes: int = 0
+    # Each bundle's requirement and models: a service that serves two bundles loads both bundles' models.
+    requirements: list[tuple[int, list[str]]] = field(default_factory=list)
 
 
 @dataclass
@@ -78,9 +85,19 @@ class ServiceState:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-def _new_process_group() -> int:
-    # Windows: its own process group, so Ctrl+Break reaches it (and only it) for a graceful stop.
-    return getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if sys.platform == "win32" else 0
+def _process_group() -> dict[str, Any]:
+    """Each service in its own process group: Windows sends it Ctrl+Break for a graceful stop, macOS signals the
+    whole group, so nothing a service started outlives it."""
+    if sys.platform == "win32":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+    return {"start_new_session": True}
+
+
+def _signal_group(process: subprocess.Popen[bytes], signum: int) -> None:
+    try:
+        os.killpg(process.pid, signum)
+    except (OSError, AttributeError):
+        process.send_signal(signum)
 
 
 def stop_gracefully(process: subprocess.Popen[bytes], timeout: float = STOP_SECONDS) -> None:
@@ -91,11 +108,14 @@ def stop_gracefully(process: subprocess.Popen[bytes], timeout: float = STOP_SECO
         if sys.platform == "win32":
             process.send_signal(signal.CTRL_BREAK_EVENT)
         else:
-            process.terminate()
+            _signal_group(process, signal.SIGTERM)
     try:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        process.kill()
+        if sys.platform == "win32":
+            process.kill()
+        else:
+            _signal_group(process, signal.SIGKILL)
 
 
 def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models: ModelStore,
@@ -110,7 +130,9 @@ def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models
         closure = catalog.runtime_closure(variant.runtimes)
         if not all(models.installed(model_id) for model_id in variant.models):
             continue
-        if not all(runtimes.current(pack.id) for pack in closure):
+        # An installed pack runs even when an app update shipped a newer one (the user downloads it when they
+        # choose); it stops only while that newer version replaces it.
+        if not all(runtimes.installed(pack.id) and not runtimes.updating(pack.id) for pack in closure):
             continue
         service_pack = next(pack for pack in reversed(closure) if pack.service)
         service = service_pack.service
@@ -121,12 +143,18 @@ def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models
             plan = found[service] = ServicePlan(service, entry, service_pack.id, sites, [])
         plan.bundles.append(bundle.id)
         if variant.min_commit_mb is not None:
-            plan.needed_bytes = max(plan.needed_bytes, variant.min_commit_mb * 2**20)
+            need = variant.min_commit_mb * 2**20
         else:
             weights = sum(catalog.model(model_id).size for model_id in variant.models)
-            plan.needed_bytes = max(plan.needed_bytes, int(weights * HEADROOM_FACTOR) + HEADROOM_BASE_BYTES)
+            need = int(weights * HEADROOM_FACTOR) + HEADROOM_BASE_BYTES
+        plan.requirements.append((need, list(variant.models)))
         if service == "tts":
             plan.model_dir = models.snapshot(variant.models[0])
+    for plan in found.values():
+        # The largest bundle's measured need, plus the other bundles' models that it does not already load.
+        largest, counted = max(plan.requirements, key=lambda item: item[0])
+        extra = {model_id for _, model_ids in plan.requirements for model_id in model_ids} - set(counted)
+        plan.needed_bytes = largest + int(sum(catalog.model(model_id).size for model_id in extra) * HEADROOM_FACTOR)
     return found
 
 
@@ -137,11 +165,19 @@ def _available_commit() -> int | None:
 
 
 def _healthy(port: int) -> bool:
+    """The service answers and its models are loaded: STT answers ``"ok": false`` while it warms its models."""
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as response:  # noqa: S310
-            return response.status == 200
+            if response.status != 200:
+                return False
+            body = response.read()
     except OSError:
         return False
+    try:
+        answer = json.loads(body)
+    except ValueError:
+        return True
+    return not (isinstance(answer, dict) and answer.get("ok") is False)
 
 
 class ModelServices:
@@ -191,13 +227,30 @@ class ModelServices:
     def _signature(self, plan: ServicePlan) -> str:
         return "|".join([plan.runtime, *map(str, plan.site_dirs), str(plan.model_dir or ""), *sorted(plan.bundles)])
 
+    def _loading(self) -> list[_Running]:
+        """Services still loading: started, and not yet both healthy and settled."""
+        now = time.monotonic()
+        return [item for name, item in self.running.items()
+                if self.states.get(name, ServiceState()).state == "starting" or now - item.started < SETTLE_SECONDS]
+
     def _start(self, plan: ServicePlan, restarts: int = 0) -> None:
         port = self.config.port(plan.service)
         if not self.port_free(port):
             self._report(plan.service, "blocked", f"port {port} is in use by another program", port=port)
             return
+        loading = self._loading()
+        if any(self.states.get(item.plan.service, ServiceState()).state == "starting" for item in loading):
+            # One model loads at a time, so each headroom check sees the memory the others really take.
+            self._report(plan.service, "waiting", "waiting for another model to finish loading")
+            return
         available = self.available_commit()
+        if available is not None:
+            available -= sum(item.plan.needed_bytes for item in loading)
         if available is not None and available < plan.needed_bytes:
+            if loading:
+                # Checked again on the next pass, once the loading service's real use shows in the figure.
+                self._report(plan.service, "waiting", "waiting for another model to finish loading")
+                return
             self._report(plan.service, "blocked",
                          f"not enough memory to load it: {available / 2**30:.1f} GB free, about "
                          f"{plan.needed_bytes / 2**30:.1f} GB needed; close other programs")
@@ -206,12 +259,14 @@ class ModelServices:
                                   site_dirs=plan.site_dirs, model_dir=plan.model_dir)
         # A development interpreter (no ._pth) finds the app source through PYTHONPATH; -S keeps its packages out.
         env["PYTHONPATH"] = str(self.app_source)
+        # macOS: the service stops itself once this supervisor is gone (Windows: the Job Object ends it).
+        env["OMNIX_DESKTOP_PARENT_PID"] = str(os.getpid())
         self.logs.mkdir(parents=True, exist_ok=True)
         log = (self.logs / f"{plan.service}.log").open("ab")
         self._report(plan.service, "starting", port=port)
         process = self.launch([self.python, "-S", "-m", "app.desktop.service_boot", plan.entry], env=env,
                               stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                              cwd=str(self.config.data_dir), creationflags=_new_process_group())
+                              cwd=str(self.config.data_dir), **_process_group())
         log.close()
         self.running[plan.service] = _Running(plan, process, time.monotonic(), restarts)
         self.states[plan.service].restarts = restarts

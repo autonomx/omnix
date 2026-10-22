@@ -41,8 +41,10 @@ function HardwareSummary({ status }: { status: ModelPacksStatus }) {
   return <p className="setup-hardware" role="status">{parts.join(' · ')}</p>;
 }
 
-function BundleRow({ verdict, selected, onToggle, job, busy, onRemove, onVerify, onCancel }: {
+function BundleRow({ verdict, selected, onToggle, job, busy, onRemove, onVerify, onCancel, manage }: {
   verdict: PackVerdict;
+  /** The signed-in account may download and remove models (the server enforces it either way). */
+  manage: boolean;
   selected: boolean;
   onToggle: (value: boolean) => void;
   job: JobRecord | undefined;
@@ -55,7 +57,7 @@ function BundleRow({ verdict, selected, onToggle, job, busy, onRemove, onVerify,
   const progress = job?.progress;
   const share = progress && progress.total ? Math.min(100, (Number(progress.current) / progress.total) * 100) : 0;
   const size = verdict.model_bytes + verdict.runtime_bytes;
-  const selectable = !verdict.installed && verdict.status !== 'unavailable' && !running;
+  const selectable = manage && !verdict.installed && verdict.status !== 'unavailable' && !running;
   return (
     <li className={`setup-bundle setup-bundle-${verdict.status}`} aria-label={verdict.label}>
       <div className="setup-bundle-head">
@@ -85,11 +87,11 @@ function BundleRow({ verdict, selected, onToggle, job, busy, onRemove, onVerify,
           <div className="setup-progress" role="status">
             <Progress value={share} size="sm" aria-label={`${verdict.label} progress`} />
             <Text size="xs">{progress?.message || 'Waiting to start'}{share ? ` · ${share.toFixed(0)}%` : ''}</Text>
-            <Button size="compact-xs" variant="subtle" onClick={onCancel}>Cancel</Button>
+            {manage ? <Button size="compact-xs" variant="subtle" onClick={onCancel}>Cancel</Button> : null}
           </div>
         ) : null}
         {job && job.status === 'failed' ? <Text size="xs" className="setup-reason" role="alert">{job.error?.message ?? 'The download failed.'}</Text> : null}
-        {verdict.installed ? (
+        {verdict.installed && manage ? (
           <div className="setup-bundle-actions">
             <Button size="compact-xs" variant="subtle" loading={busy} onClick={onVerify}>Verify files</Button>
             <Button size="compact-xs" variant="subtle" color="red" loading={busy}
@@ -162,7 +164,7 @@ function InstalledPacks({ status, onRemoveRuntime, onVerifyRuntime, busy }: {
     <section className="setup-installed" aria-label="Downloaded runtimes and models">
       <h3>On this computer</h3>
       <Text size="sm">{installedModels.length} models ({formatGigabytes(disk)}) and {installedRuntimes.length} runtimes in <code>{folder}</code></Text>
-      {bridge?.choosePacksFolder ? (
+      {bridge?.choosePacksFolder && status.can_manage_runtimes ? (
         <Button size="compact-xs" variant="subtle" onClick={() => { void bridge.choosePacksFolder?.().then((moved) => { if (moved) setFolder(moved); }); }}>
           Move to another folder…
         </Button>
@@ -172,11 +174,11 @@ function InstalledPacks({ status, onRemoveRuntime, onVerifyRuntime, busy }: {
           {installedRuntimes.map((runtime) => (
             <li key={runtime.id}>
               <span><b>{runtime.label}</b>{runtime.current ? '' : ' · an update is available: download it again'}</span>
-              <span className="setup-bundle-actions">
+              {status.can_manage_runtimes ? <span className="setup-bundle-actions">
                 <Button size="compact-xs" variant="subtle" loading={busy} onClick={() => onVerifyRuntime(runtime)}>Verify</Button>
                 <Button size="compact-xs" variant="subtle" color="red" loading={busy}
                   onClick={() => { if (window.confirm(`Remove ${runtime.label}?`)) onRemoveRuntime(runtime); }}>Remove</Button>
-              </span>
+              </span> : null}
             </li>
           ))}
         </ul>
@@ -230,7 +232,7 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
   const [initialised, setInitialised] = useState(false);
   useEffect(() => {
     if (!status || initialised) return;
-    setSelected(new Set(mode === 'setup' ? bundles.filter((item) => item.recommended).map((item) => item.bundle) : []));
+    setSelected(new Set(mode === 'setup' && status.can_manage ? bundles.filter((item) => item.recommended).map((item) => item.bundle) : []));
     setPreset(mode === 'setup' ? 'recommended' : 'custom');
     setInitialised(true);
   }, [status, initialised, bundles, mode]);
@@ -301,7 +303,10 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
         </header>
       ) : null}
       <HardwareSummary status={status} />
-      <SegmentedControl
+      {!status.can_manage ? (
+        <div className="setup-message" role="status">The workspace owner or an admin downloads and removes models on this computer.</div>
+      ) : null}
+      {status.can_manage ? <SegmentedControl
         value={preset}
         onChange={(value) => choosePreset(value as Preset)}
         data={[
@@ -310,7 +315,7 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
           { label: 'Custom', value: 'custom' },
         ]}
         aria-label="Which models to download"
-      />
+      /> : null}
       <ul className="setup-bundles">
         {bundles.map((verdict) => (
           <BundleRow
@@ -330,6 +335,7 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
             onRemove={() => actionMutation.mutate({ kind: 'remove', target: { bundle_id: verdict.bundle } })}
             onVerify={() => actionMutation.mutate({ kind: 'verify', target: { bundle_id: verdict.bundle } })}
             onCancel={() => { const jobId = jobs[verdict.bundle]; if (jobId) void modelPacksClient.cancel(jobId); }}
+            manage={status.can_manage}
           />
         ))}
       </ul>
@@ -339,7 +345,7 @@ export function ModelPacksPanel({ mode }: { mode: 'setup' | 'settings' }) {
           {selection.length ? `Download: ${formatGigabytes(total)}` : 'Nothing selected'}
           {sizeQuery.data?.runtime_bytes ? ` (${formatGigabytes(sizeQuery.data.runtime_bytes)} of it runtimes, shared by every model)` : ''}
         </Text>
-        <Button disabled={!selection.length || installMutation.isPending} onClick={() => setReviewing(true)}>Review licences and download</Button>
+        {status.can_manage ? <Button disabled={!selection.length || installMutation.isPending} onClick={() => setReviewing(true)}>Review licences and download</Button> : null}
       </div>
       {message ? <div className="setup-message" role="status">{message}</div> : null}
       {lastVerification ? <div className="setup-message" role="status">{String(lastVerification.logs?.at(-1)?.content ?? 'Verified.')}</div> : null}

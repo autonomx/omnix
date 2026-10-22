@@ -1,6 +1,6 @@
 # Omnix Desktop App Roadmap
 
-**Revision 4, 2026-10-22. Status: plan; nothing is implemented.** A standalone Omnix desktop app for Windows and
+**Revision 4, 2026-10-22. Status: implemented on branch `electron`; see §11 for results and open items.** A standalone Omnix desktop app for Windows and
 macOS, shipped as a small installer. On first run it guides the user through downloading the GPU runtime and the
 AI models their machine can run. The browser deployment stays as it is; the desktop app is an additional way to run
 Omnix. Review history is in §10.
@@ -809,4 +809,106 @@ output in live voice chat. The first mic use shows the macOS permission prompt w
 
 ## 11. Status
 
-Not started. Phase 0 results and measured sizes go here.
+**2026-10-22: Phases 0-6 and 8 are built on branch `electron`. Windows was checked on the owner's PC (RTX 4090,
+driver 617.42). The Mac items need the owner's Mac. Signing and the release feed wait on Q-4 and Q-5.**
+
+### Phase 0 results (DT-0.1, DT-0.4)
+
+- **Shared Torch works (D-6 confirmed).** The layer is `torch` and `torchaudio` 2.6.0+cu124, with the three overlays
+  on top. It ran on the staged python-build-standalone 3.11 through `service_boot`, with the gateway's
+  `site-packages` stripped. Every gate check passed:
+  - TTS spoke;
+  - live STT returned partials, an end-of-utterance and the right transcript, and batch STT agreed;
+  - FLUX.2 klein generated a picture.
+- **Source-only packages.** Four are prebuilt into `requirements/desktop/wheelhouse`, hashed and shipped: antlr4,
+  kaldi-python-io, sox and wget.
+- **NeMo's CUDA bindings (R-3).**
+  - The STT overlay keeps NeMo's `cuda-bindings` 13.4.3 and `cuda-pathfinder`.
+  - On this PC (driver 617.42, new enough for CUDA 13), live and batch STT ran.
+  - Not checked yet: a driver older than CUDA 13's (below 580), where NeMo should fall back from CUDA-graph decoding.
+  - The verdicts check the Torch layer's minimum, 528.33 (551.61 recommended). That stays an open item until a run
+    on such a driver.
+- **Downloads per pack (Windows x64).** The layers and overlays are summed from `requirements/desktop/packs`. The
+  models are their pinned files.
+
+  | Pack | Download |
+  |------|----------|
+  | Torch layer | 2,419 MiB |
+  | STT overlay | 286 MiB |
+  | TTS overlay | 154 MiB |
+  | Image overlay | 189 MiB |
+  | Nemotron streaming 0.6B | 2,358 MiB |
+  | Parakeet realtime EOU | 439 MiB |
+  | Qwen3-TTS 0.6B | 2,400 MiB |
+  | Parakeet-TDT v3 | 2,393 MiB |
+  | TitaNet | 97 MiB |
+  | FLUX.2 klein 4B | 15,240 MiB |
+
+  So voice input plus output is 2.9 GB of runtimes and 5.2 GB of models.
+- **Measured peaks, one service at a time.** Catalog v2's `min_vram_mb` / `min_commit_mb` add headroom to these.
+
+  | Service | VRAM | Commit | Catalog: voice-input / voice-output / transcription / image (MiB) |
+  |---------|------|--------|---------------------------------------------------------------------|
+  | TTS | 2.8 GB | 6.3 GB | 3584 / 8192 (voice-output) |
+  | STT | 3.6 GB | 7.2 GB | 4608 / 9216 (voice-input), 4096 / 9216 (transcription) |
+  | FLUX | 15.6 GB | 17.8 GB | 16384 / 22528 |
+
+- **Mac spikes not run.** DT-0.2 and DT-0.3 need the owner's Mac. The Mac locks resolve: the Torch layer, TTS on
+  MPS, and Parakeet-MLX with mlx/onnxruntime wheels. Those wheels need macOS 14, so the macOS minimum is 14.0.
+
+### Sizes (DT-3.4)
+
+- **Staged runtime:** 519 MiB. That is python 280, PostgreSQL 68, ffmpeg (LGPL, BtbN 8.1.3) 128, app 36 and web 7.
+- **Unsigned NSIS installer:** 236.8 MiB, and 838.5 MiB installed. MarketPulse's reduced mirror is 161 MB and
+  571 MB.
+- **Start time:** the first start (initdb plus every migration) reaches the setup screen in about 25 s, and a later
+  start reaches chat in about 15 s.
+
+### Gates
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 0 | Windows: passed. Mac: open | Results above. |
+| 1 | Passed, one item dropped | Voice Studio's list is unchanged apart from the pins. Catalog, lock, download, resume and tamper tests pass. The DT-1.1 migration of Voice Studio's folder installs into the Hugging Face cache was not built (see Deviations). |
+| 2 | Passed | Members and guests are refused at submission, through the routes and `/api/jobs` alike. The runtimes the submitter may change are written into the stored job, so an admin's job never installs or removes a runtime when it runs, even after an app update or a removal changed what it would touch. A bundle the verdicts call unavailable is refused at submission. The acceptance table's RLS and per-revision tests ran on the scratch PostgreSQL. A worker killed mid-unpack leaves no pack, and the job's retry after an expired lease completes it. |
+| 3 | Passed on this PC | Clean-account check pending on a second machine. Covered on this PC: the headless supervisor from a fresh data folder, on ports and sandbox names of its own; the service boot isolation test; busy ports reported, never killed; graceful stop, then restarts after 30, 60 and 120 s; models load one at a time, with a loading service's memory reserved. The gateway cannot import Torch: its staged lock pins none, which a test checks. Not tested: STT decoding a non-WAV upload and an audiobook export with the bundled ffmpeg (only the environment is asserted). |
+| 4 | Passed | The 10-test Electron smoke suite covers splash, setup screen, first password, mic audio-only, links, the model pack API, crash reload, tray, clean quit and the installer's `--quit`. 12 shell unit tests also pass. |
+| 5 | REALMODELS_RESULT | Vitest covers verdicts, presets, bundles and licence gating. GPU items are greyed with the reason when there is no NVIDIA GPU. `desktop/tests/realmodels.spec.ts` runs the gate in Electron. |
+| 6 | Built, not released | The NSIS installer builds unsigned. A runtime update keeps the old pack running; the supervisor stops its services only while the new one replaces it (tested in the pack store and the planner). Signing (DT-6.2) is wired for Azure Artifact Signing or a certificate, and needs Q-5. The updater reads a public feed (Q-4). The clean-machine install and upgrade checks follow signing. |
+| 7 | Not applicable yet | It waits for first-release feedback. |
+| 8 | Built, not verified | Covered: macOS staging, Keychain, process groups (each service in its own session, signalled as a group) and a parent watch that stops a service whose supervisor died (Windows uses the Job Object), the Parakeet-MLX service with energy end-of-utterance (protocol tests on Windows), Qwen3-TTS on `mps`, the entitlements and usage text. Mac runs are needed for DT-0.2, DT-0.3 and the Phase 8 gate. |
+| 9 | Later | — |
+
+### Deviations from the plan
+
+- **Wheel installer.** Packs install through our own wheel installer (`app/models/wheels.py`), not PyPA
+  `installer`, because PyTorch's wheels list files their RECORD omits. The installer accepts unlisted files, hashes
+  everything it writes and rewrites RECORD, so the verify job checks every file.
+- **Pytorch download host.** The pytorch index serves wheels from `download-r2.pytorch.org`, so that host is on the
+  download allow-list.
+- **Licence migration number.** The acceptance migration is `0168` in the voice feature folder, because 0166 and
+  0167 were already applied in the live database.
+- **Staged voice samples.** Staging ships only `voice_clones/default_ref.wav`. The repository's other voice samples
+  are recordings of real people and are not staged.
+- **Mac end-of-utterance.** The Mac service detects it from audio energy (700 ms of silence after 250 ms of speech,
+  with an adaptive noise floor), not from a model. DT-0.2 decides whether that is good enough or push-to-talk stays.
+
+- **Voice Studio folder installs.** DT-1.1's migration of Voice Studio's `resources/models/<kind>/...` installs and
+  their `.omnix-model.json` acceptances into the Hugging Face cache was dropped. The desktop app never had those
+  folders, and outside it Voice Studio keeps installing as before, now with pinned revisions, digest checks and
+  acceptances recorded in the table.
+- **`.pth` files run.** `service_boot` adds pack folders with `site.addsitedir`, so `.pth` files inside packs run
+  (§4.3 said none). The packs come only from hashed wheels, and some wheels need theirs.
+- **Gateway online.** The gateway and job worker do not get `HF_HUB_OFFLINE=1` (§4.2 lists it): the job worker
+  downloads the packs. Model services are offline.
+- **Embedding model without acceptance.** The memory embedding model downloads on first start without a licence
+  prompt (D-4 says every model). It is part of the core app, like the gateway's own packages, not a model pack.
+- **Not built from §4.5 / DT-5.2:** download progress in the tray, and a link from Voice Studio to Settings, Models.
+
+### Open items for the owner
+
+- **Q-1 to Q-5** (§7): Intel Macs, workspaces shown, names, release feed, signing identities.
+- **Mac runs:** DT-0.2, DT-0.3, DT-8.x, and the Mac ffmpeg pin. No LGPL arm64 build is pinned yet.
+- **`default_ref.wav`:** confirm its provenance before the first public build.
+- **Clean-machine checks:** the clean Windows account (Phase 3) and the clean machine (Phase 6 gate).
+- **Older NVIDIA driver:** a voice-input run on a driver below 580, to confirm NeMo's fallback (R-3).

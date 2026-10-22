@@ -17,6 +17,8 @@ export const chatbotModule = defineModule({
     '/api/live-call', '/api/tts', '/api/voice', '/api/voice-profiles', '/api/voice-library', '/api/assets',
     '/api/jobs', '/api/providers', '/api/settings', '/api/hermes', '/api/agent', '/api/agent-runs', '/api/prompts',
     '/api/desktop-companion',
+    // Live voice's speech service, through the gateway's proxy (authority probe, live socket, batch fallback).
+    '/api/stt',
   ],
   modeLabel: 'Chat',
   loadWorkspace: () => import('./chat/ChatbotWorkspace').then((module) => module.ChatbotWorkspace),

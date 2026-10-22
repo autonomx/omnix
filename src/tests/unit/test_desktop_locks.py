@@ -153,3 +153,13 @@ def test_the_shipped_desktop_locks_pass_the_release_gate() -> None:
     completed = subprocess.run([sys.executable, str(ROOT / "scripts" / "desktop_locks.py"), "check"],
                                capture_output=True, text=True, cwd=ROOT, check=False)
     assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_the_gateway_the_desktop_app_stages_cannot_import_torch() -> None:
+    """The gateway and job worker run on the staged interpreter with requirements/gateway.lock.txt alone: TTS, STT and
+    images can only run in their services (roadmap DT-3.3, OMNIX_GATEWAY_TTS_HTTP)."""
+    import re
+
+    lock = (ROOT / "requirements" / "gateway.lock.txt").read_text(encoding="utf-8")
+    pinned = {match.group(1).lower() for match in re.finditer(r"^([A-Za-z0-9_.-]+)==", lock, flags=re.MULTILINE)}
+    assert pinned and not pinned & {"torch", "torchaudio", "torchvision", "nemo-toolkit", "diffusers"}

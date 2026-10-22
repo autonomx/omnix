@@ -9,12 +9,14 @@ import { join, resolve } from 'node:path';
 //   OMNIXDESKTOP_TEST_HF_CACHE  a Hugging Face cache that already holds the voice models (they are hard-linked into
 //                               the fresh packs folder, so only the runtimes are downloaded: about 2.9 GB on Windows)
 //   OMNIXDESKTOP_TEST_SPEECH    a WAV of someone saying OMNIXDESKTOP_TEST_SPEECH_WORDS (comma separated)
+//   OMNIXDESKTOP_TEST_DATA_DIR  optional: a data folder to keep between runs, so a second run skips the downloads
 // It loads the speech and TTS models together (about 14 GB of commit and 7 GB of VRAM): check headroom first.
 const DESKTOP = resolve(__dirname, '..');
 const STAGE = resolve(DESKTOP, 'staging', 'stage');
 const CACHE = process.env.OMNIXDESKTOP_TEST_HF_CACHE ?? '';
 const SPEECH = process.env.OMNIXDESKTOP_TEST_SPEECH ?? '';
 const WORDS = (process.env.OMNIXDESKTOP_TEST_SPEECH_WORDS ?? 'omnix,desktop').split(',').map((word) => word.trim().toLowerCase());
+const KEPT = process.env.OMNIXDESKTOP_TEST_DATA_DIR ?? '';
 const VOICE_REPOS = ['models--Qwen--Qwen3-TTS-12Hz-0.6B-Base', 'models--nvidia--nemotron-speech-streaming-en-0.6b',
   'models--nvidia--parakeet_realtime_eou_120m-v1'];
 
@@ -55,10 +57,10 @@ let dataDir: string;
 let main: Page;
 
 test.beforeAll(async () => {
-  dataDir = mkdtempSync(join(tmpdir(), 'omnix-desktop-realmodels-'));
+  dataDir = KEPT ? resolve(KEPT) : mkdtempSync(join(tmpdir(), 'omnix-desktop-realmodels-'));
   for (const repo of VOICE_REPOS) {
     if (!existsSync(join(CACHE, repo))) throw new Error(`${CACHE} has no ${repo}`);
-    linkTree(join(CACHE, repo), join(dataDir, 'packs', 'models', repo));
+    if (!existsSync(join(dataDir, 'packs', 'models', repo))) linkTree(join(CACHE, repo), join(dataDir, 'packs', 'models', repo));
   }
   // Chromium's fake microphone plays the speech, padded with silence so the end of the utterance is heard.
   const microphone = join(dataDir, 'microphone.wav');
@@ -72,14 +74,25 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close();
-  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5 });
+  if (!KEPT) rmSync(dataDir, { recursive: true, force: true, maxRetries: 5 });
 });
 
 test('the recommended preset downloads voice input and output, and their services start', async () => {
   test.setTimeout(60 * 60_000);
-  main = await appWindow(app, (url) => url.startsWith('http://127.0.0.1') && url.includes('/setup'));
+  main = await appWindow(app, (url) => url.startsWith('http://127.0.0.1') && (url.includes('/setup') || url.includes('/chatbot')));
+  if (!main.url().includes('/setup')) await main.goto(new URL('/setup', main.url()).toString());  // a kept data folder
   const row = (label: string) => main.getByRole('listitem', { name: label });
   await expect(row('Voice input')).toBeVisible({ timeout: 120_000 });
+  const done = async () => (await row('Voice input').getByText('Installed', { exact: true }).count()) > 0
+    && (await row('Voice output').getByText('Installed', { exact: true }).count()) > 0;
+  if (!(await done())) await download(row);
+  await expect.poll(async () => {
+    const answer = await main.evaluate(async () => (await fetch('/api/model-packs/capabilities')).json());
+    return [answer.capabilities.tts?.running, answer.capabilities.live_stt?.running];
+  }, { timeout: 10 * 60_000, intervals: [5_000] }).toEqual([true, true]);
+});
+
+async function download(row: (label: string) => ReturnType<Page['getByRole']>): Promise<void> {
   const status = await main.evaluate(async () => (await fetch('/api/model-packs')).json());
   const verdicts = JSON.stringify(status.bundles.map((item: Record<string, unknown>) => [item.bundle, item.status, item.installed,
     item.recommended, item.reasons]));
@@ -93,16 +106,14 @@ test('the recommended preset downloads voice input and output, and their service
   }
   await main.getByRole('button', { name: 'Review licences and download' }).click();
   const review = main.getByRole('dialog', { name: 'Review the licences' });
+  // The three voice models need accepting (the runtimes are listed for information only).
+  await expect(review.getByRole('checkbox')).toHaveCount(3);
   for (const box of await review.getByRole('checkbox').all()) await box.check();
   await review.getByRole('button', { name: /^(Accept and download|Download)$/ }).click();
   for (const label of ['Voice input', 'Voice output']) {
     await expect(row(label).getByText('Installed', { exact: true })).toBeVisible({ timeout: 50 * 60_000 });
   }
-  await expect.poll(async () => {
-    const answer = await main.evaluate(async () => (await fetch('/api/model-packs/capabilities')).json());
-    return [answer.capabilities.tts?.running, answer.capabilities.live_stt?.running];
-  }, { timeout: 10 * 60_000, intervals: [5_000] }).toEqual([true, true]);
-});
+}
 
 test('voice output: a speech job completes through the TTS service', async () => {
   test.setTimeout(10 * 60_000);
@@ -122,12 +133,36 @@ test('voice output: a speech job completes through the TTS service', async () =>
 test('voice input: a live call hears the microphone, ends the utterance and sends the transcript to chat', async () => {
   test.setTimeout(10 * 60_000);
   await main.goto(new URL('/chatbot', main.url()).toString());
+  const seen: string[] = [];
+  const note = (line: string) => seen.push(`${new Date().toISOString()} ${line}`);
+  main.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning' || /live|stt|websocket/i.test(message.text())) {
+      note(`${message.type()}: ${message.text().slice(0, 200)}`);
+    }
+  });
+  main.on('websocket', (socket) => {
+    note(`ws open ${socket.url()}`);
+    socket.on('framesent', (frame) => { if (typeof frame.payload === 'string' && !frame.payload.includes('"audio"')) note(`ws -> ${frame.payload.slice(0, 120)}`); });
+    socket.on('framereceived', (frame) => { if (typeof frame.payload === 'string' && !frame.payload.includes('audio_buffered')) note(`ws <- ${frame.payload.slice(0, 160)}`); });
+    socket.on('socketerror', (error) => note(`ws error ${error}`));
+    socket.on('close', () => note(`ws closed ${socket.url()}`));
+  });
+  main.on('request', (request) => { if (/\/api\/(stt|tts\/live-call|chat\/sessions\/[^/]+\/live)/.test(request.url())) note(`req ${request.method()} ${request.url().slice(21, 140)}`); });
   const card = main.locator('.assistant-live-card');
   await expect(card).toBeVisible({ timeout: 60_000 });
-  const sent = main.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/messages'),
-    { timeout: 180_000 });
+  // Chat's runtime installs the streaming voice controller after the page renders; it shows the task picker once it
+  // owns the call. A click before then takes the record-then-transcribe fallback instead.
+  await expect(card.getByRole('combobox', { name: 'Live task' })).toBeVisible({ timeout: 60_000 });
+  // The end of the utterance sends the final transcript as the user's chat message. No word boundaries: an
+  // article's text runs its time into the message ("03:28Hello from ...").
+  const said = new RegExp(WORDS.map((word) => `(?=.*${word})`).join(''), 'i');
+  const turns = main.getByRole('log').getByRole('article').filter({ hasText: said });
+  const before = await turns.count();  // a kept data folder keeps earlier runs' calls
   await card.getByRole('button', { name: 'Start Call' }).click();
-  const content = String((await sent).postDataJSON()?.content ?? '').toLowerCase();
-  for (const word of WORDS) expect(content, content).toContain(word);
+  try {
+    await expect.poll(() => turns.count(), { timeout: 180_000, intervals: [2_000] }).toBeGreaterThan(before);
+  } finally {
+    console.log(['live call activity:', ...seen.slice(0, 80)].join('\n'));
+  }
   await card.getByRole('button', { name: 'End Call' }).click();
 });

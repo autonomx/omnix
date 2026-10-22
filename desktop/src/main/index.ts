@@ -2,7 +2,7 @@ import {
   app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, Tray,
   type IpcMainEvent, type IpcMainInvokeEvent, type MenuItemConstructorOptions, type WebContents,
 } from 'electron';
-import { cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AlertBadge, alertDotBitmap, NotificationListener } from './notifications';
@@ -183,6 +183,11 @@ async function main(): Promise<void> {
         const firstLaunch = origin === null;
         origin = event.origin;
         if (firstLaunch || !windows.get('main')) void openApp(event.first_run);
+        else if (splash && !splash.isDestroyed()) {
+          // A restart with the app already open (a packs folder move, Retry): the splash has done its job.
+          splash.destroy();
+          splash = null;
+        }
       } else if (event.event === 'error') showError(event);
       else if (event.event === 'service') {
         serviceStates[event.service] = { state: event.state, message: event.message };
@@ -300,6 +305,11 @@ async function main(): Promise<void> {
       return { ...serviceStates };
     }
   });
+  // The uninstaller reads the moved folder from this plain file (it cannot parse desktop.json) to offer removing it.
+  const usePacksFolder = (target: string) => {
+    settings = store.update((saved) => Object.assign(saved, { packsDir: target }));
+    writeFileSync(join(paths.data, 'packs-location.txt'), target, 'utf8');
+  };
   ipcMain.handle('ox:choose-packs-folder', async (event) => {
     if (!fromApp(event) || !(await ownerSignedIn())) return null;
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -320,22 +330,37 @@ async function main(): Promise<void> {
     await supervisor.stop();
     sendStatus({ kind: 'step', message: 'Moving your downloaded models…' });
     splash = windows.shellPage('splash');
+    let leftBehind = '';
     try {
       if (existsSync(current)) {
         try {
           renameSync(current, target);
         } catch {
-          // Another drive: copy, then remove the old folder once the copy is complete.
+          // Another drive: copy, and use the copy as soon as it is complete.
           cpSync(current, target, { recursive: true, errorOnExist: true });
-          rmSync(current, { recursive: true, force: true });
+          usePacksFolder(target);
+          try {
+            rmSync(current, { recursive: true, force: true });
+          } catch {
+            leftBehind = current;  // a file still locked (antivirus): the copy is in use, the old folder can go later
+          }
         }
       }
-      settings = store.update((saved) => Object.assign(saved, { packsDir: target }));
+      usePacksFolder(target);
     } catch (error) {
-      showError({ message: `The models could not be moved: ${error instanceof Error ? error.message : String(error)}`, step: 'packs' });
+      // The copy failed part-way: it is removed, so the same folder can be chosen again, and Omnix carries on with
+      // the models where they were.
+      if (settings.packsDir !== target) rmSync(target, { recursive: true, force: true });
+      startBackend();
+      await dialog.showMessageBox({ type: 'error', title: 'Omnix', message: 'The models could not be moved.',
+        detail: error instanceof Error ? error.message : String(error) });
       return null;
     }
     startBackend();
+    if (leftBehind) {
+      void dialog.showMessageBox({ type: 'info', title: 'Omnix', message: 'Your models are in the new folder.',
+        detail: `Some files in ${leftBehind} could not be deleted yet; you can delete that folder yourself.` });
+    }
     return target;
   });
 

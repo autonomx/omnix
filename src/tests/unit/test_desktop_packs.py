@@ -124,7 +124,8 @@ def test_an_interrupted_download_resumes_and_is_checked(tmp_path: Path) -> None:
     client = _Client({"https://files.pythonhosted.org/w.whl": data}, fail_after=40)
     target = tmp_path / "w.whl"
     seen: list[int] = []
-    with pytest.raises(ConnectionError):
+    # A broken-off transfer is worth retrying: the job framework runs it again and it resumes.
+    with pytest.raises(packs.PackDownloadError, match="ConnectionError"):
         packs.download_file("https://files.pythonhosted.org/w.whl", target, sha256=hashlib.sha256(data).hexdigest(),
                             size=len(data), progress=seen.append, cancelled=lambda: False, client=client)
     assert (tmp_path / "w.whl.part").stat().st_size == 40
@@ -140,6 +141,27 @@ def test_a_download_with_the_wrong_digest_is_deleted(tmp_path: Path) -> None:
         packs.download_file("https://files.pythonhosted.org/w.whl", tmp_path / "w.whl", sha256="0" * 64, size=4,
                             progress=lambda n: None, cancelled=lambda: False, client=client)
     assert not (tmp_path / "w.whl").exists() and not (tmp_path / "w.whl.part").exists()
+
+
+def test_a_server_error_is_retryable_and_a_missing_file_is_not(tmp_path: Path) -> None:
+    class _Status(_Client):
+        def __init__(self, status: int) -> None:
+            super().__init__({})
+            self.status = status
+
+        @contextlib.contextmanager
+        def stream(self, method: str, url: str, headers: dict | None = None):
+            yield _Response(self.status, b"")
+
+    def fetch(status: int) -> None:
+        packs.download_file("https://files.pythonhosted.org/w.whl", tmp_path / "w.whl", sha256="0" * 64, size=4,
+                            progress=lambda n: None, cancelled=lambda: False, client=_Status(status))
+
+    with pytest.raises(packs.PackDownloadError, match="503"):
+        fetch(503)
+    with pytest.raises(packs.PackError, match="404") as refused:
+        fetch(404)
+    assert not isinstance(refused.value, packs.PackDownloadError)
 
 
 def test_a_server_that_ignores_ranges_starts_over(tmp_path: Path) -> None:
@@ -198,10 +220,24 @@ def test_a_runtime_installs_only_on_its_base_and_lands_complete(pack_setup) -> N
     assert (store.site("tts-win") / "servicelib" / "__init__.py").is_file()
     assert (store.site("tts-win") / "sdistonly" / "__init__.py").is_file()
     assert store.verify("tts-win") == []
-    assert seen[-1][0] == seen[-1][1] and "Unpacking" in seen[-1][2]
+    assert seen[-1][0] == seen[-1][1] and "Preparing" in seen[-1][2]
+    # The bytecode is compiled at install, inside the pack, naming the pack's own folder (not the staging one).
+    compiled = next((store.site("tts-win") / "servicelib" / "__pycache__").glob("__init__.*.pyc"))
+    assert str(store.site("tts-win")) in compiled.read_bytes().decode("latin-1")
     # Downloads are cleaned up once the pack is in place; nothing half-built is left in staging.
     assert not any((store.staging / "downloads").glob("*.whl"))
     assert not (store.staging / "tts-win.build").exists()
+
+
+def test_each_pack_downloads_into_its_own_folder(pack_setup) -> None:
+    """Overlays installing at once share wheel filenames: one finishing must not delete another's downloads."""
+    store, client, _ = pack_setup
+    other = store.staging / "downloads" / "tts-win" / "servicelib-1.0-py3-none-any.whl.part"
+    other.parent.mkdir(parents=True)
+    other.write_bytes(b"half a wheel")
+    store.install("torch-win", client=client)
+    assert other.read_bytes() == b"half a wheel"
+    assert not (store.staging / "downloads" / "torch-win").exists()
 
 
 def test_a_cancelled_install_leaves_no_pack(pack_setup) -> None:
@@ -237,6 +273,39 @@ def test_a_worker_killed_while_unpacking_leaves_no_pack_and_the_rerun_completes(
     assert not (store.staging / "tts-win.build").exists()
 
 
+def test_a_pack_in_use_is_left_whole_and_its_removal_is_retried(pack_setup, monkeypatch) -> None:
+    store, client, _ = pack_setup
+    store.install("torch-win", client=client)
+    real_rename = Path.rename
+
+    def locked(self: Path, target: Path) -> Path:
+        if self == store.folder("torch-win"):
+            raise PermissionError("a DLL in it is loaded")  # Windows, while the service runs
+        return real_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    with pytest.raises(packs.PackBusy):
+        store.remove("torch-win")
+    assert store.current("torch-win") and store.verify("torch-win") == []
+    monkeypatch.setattr(Path, "rename", real_rename)
+    store.remove("torch-win")
+    assert not store.present("torch-win")
+    assert not list(store.runtimes.glob(".*"))
+
+
+def test_leftovers_of_an_interrupted_update_or_removal_are_swept(pack_setup) -> None:
+    store, client, _ = pack_setup
+    for leftover in (".torch-win.old-1", ".tts-win.removing-2"):
+        (store.runtimes / leftover / "site").mkdir(parents=True)
+    half = store.folder("tts-win")
+    (half / "site").mkdir(parents=True)  # a removal that failed part-way: no manifest
+    assert store.present("tts-win") and not store.installed("tts-win")
+    store.install("torch-win", client=client)
+    assert sorted(item.name for item in store.runtimes.iterdir()) == ["torch-win", "tts-win"]
+    store.remove("tts-win")
+    assert not half.exists()
+
+
 def test_the_torch_layer_cannot_be_removed_under_an_overlay(pack_setup) -> None:
     store, client, _ = pack_setup
     store.install("torch-win", client=client)
@@ -258,6 +327,24 @@ def test_a_changed_file_list_marks_the_pack_out_of_date(pack_setup) -> None:
     (repo / "torch.json").write_text(json.dumps(listed))
     assert store.installed("torch-win") and not store.current("torch-win")
     assert "older file list" in store.verify("torch-win")[0]
+
+
+def test_an_update_replaces_the_pack_only_once_its_services_have_stopped(pack_setup) -> None:
+    store, client, repo = pack_setup
+    store.install("torch-win", client=client)
+    listed = json.loads((repo / "torch.json").read_text())
+    listed["lock_sha256"] = "f" * 64  # the app update ships a new file list
+    (repo / "torch.json").write_text(json.dumps(listed))
+    seen: list[tuple[bool, bool]] = []
+
+    def before_swap(runtime_id: str) -> None:
+        # The new version is unpacked; the old one is still in place, and marked so the supervisor stops it.
+        seen.append((store.updating(runtime_id), store.installed(runtime_id) and not store.current(runtime_id)))
+
+    store.install("torch-win", client=client, before_swap=before_swap)
+    assert seen == [(True, True)]
+    assert store.current("torch-win") and not store.updating("torch-win")
+    assert not list(store.runtimes.glob(".*"))
 
 
 def test_a_tampered_bundled_wheel_is_refused(pack_setup) -> None:

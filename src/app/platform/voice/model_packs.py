@@ -26,6 +26,7 @@ import logging
 import time
 from typing import Any
 
+from app.config.env import environment
 from app.models import catalog as model_catalog
 from app.models import packs
 from app.models.catalog import Catalog, ModelEntry
@@ -101,8 +102,33 @@ def _missing_runtimes(runtimes: list[str]) -> list[str]:
     return [runtime_id for runtime_id in runtimes if not store.current(runtime_id)]
 
 
-def check_submission(job_type: str, payload: dict[str, Any]) -> None:
-    """Who may submit this install or removal, and record licence acceptances (desktop mode)."""
+AUTHORIZED_RUNTIMES = "authorized_runtimes"
+
+
+def _hardware_facts() -> dict[str, Any]:
+    from app.models.hardware import probe
+
+    return probe(packs_folder=packs.runtime_store(_catalog()).root)
+
+
+def _refuse_unavailable(bundle_id: str) -> None:
+    """A bundle this computer cannot run (no NVIDIA GPU, an old driver, too little disk) is not queued at all."""
+    from app.models.verdicts import Installed, bundle_verdict
+
+    catalog = _catalog()
+    store = packs.runtime_store(catalog)
+    verdict = bundle_verdict(catalog.bundles[bundle_id], catalog, {"platform": _platform(), **_hardware_facts()},
+                             Installed(runtimes=frozenset(), models=frozenset()), store.download_bytes)
+    if verdict.status == "unavailable":
+        raise ModelInstallError(f"{verdict.label} cannot run on this computer: {' '.join(verdict.reasons)}")
+
+
+def check_submission(job_type: str, payload: dict[str, Any]) -> list[str]:
+    """Who may submit this install or removal, and record licence acceptances (desktop mode).
+
+    Returns the runtime packs the submitter may install or remove. The submission policy stores that list in the
+    job (replacing anything the client sent), and the job changes no other runtime when it runs: a retry after an
+    app update, or after the owner removed a runtime, must not install one on an admin's authority."""
     from app.security.permissions import has_permission
 
     from . import licence_acceptances
@@ -113,6 +139,8 @@ def check_submission(job_type: str, payload: dict[str, Any]) -> None:
     planned = plan(payload, removing=job_type == "models.remove")
     catalog = _catalog()
     if job_type == "models.install":
+        if planned["kind"] == "bundle_id":
+            _refuse_unavailable(planned["id"])
         runtime_change = _missing_runtimes(planned["runtimes"])
     elif planned["kind"] == "runtime_id":
         runtime_change = list(planned["runtimes"])
@@ -120,17 +148,20 @@ def check_submission(job_type: str, payload: dict[str, Any]) -> None:
         runtime_change = runtimes_removed_with_bundle(planned["id"], planned["runtimes"])
     else:
         runtime_change = []
-    if runtime_change and not has_permission(tenant.roles, "models:runtimes:admin"):
+    runtime_owner = has_permission(tenant.roles, "models:runtimes:admin")
+    if runtime_change and not runtime_owner:
         labels = ", ".join(catalog.runtime(runtime_id).label for runtime_id in runtime_change)
         verb = "install" if job_type == "models.install" else "remove"
         raise TenantAccessDenied(f"only the workspace owner can {verb} {labels}; ask them to do it")
+    authorized = list(planned["runtimes"]) if runtime_owner else []
     if job_type != "models.install" or not planned["models"]:
-        return
+        return authorized
     if not payload.get("accept_terms"):
         labels = ", ".join(f"{entry.label} ({entry.licence.id})" for entry in planned["models"])
         raise ModelInstallError(f"accept the licences first: {labels}")
     if licence_acceptances.available():
         licence_acceptances.record(planned["models"])
+    return authorized
 
 
 class _JobFeedback:
@@ -175,7 +206,7 @@ class _JobFeedback:
 def _require_acceptance(entry: ModelEntry) -> None:
     from . import licence_acceptances
 
-    if licence_acceptances.available() and not licence_acceptances.accepted(entry.id, entry.revision):
+    if licence_acceptances.available() and not licence_acceptances.accepted(entry.id, entry.revision, entry.licence.id):
         raise ModelInstallError(f"{entry.label}'s licence ({entry.licence.id}) has not been accepted for revision "
                                 f"{entry.revision[:12]}; accept it and install again")
 
@@ -216,6 +247,35 @@ def _models_of_other_installed_bundles(bundle_id: str) -> set[str]:
     return keep
 
 
+STOP_WAIT_SECONDS = 60.0
+
+
+def _wait_until_stopped(service: str, *, timeout: float = STOP_WAIT_SECONDS) -> None:
+    """Waits until the model service no longer answers on its port (the gateway knows it as OMNIX_<SERVICE>_URL)."""
+    import urllib.request
+
+    url = (environment().get(f"OMNIX_{service.upper()}_URL") or "").rstrip("/")
+    if not url:
+        return
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(f"{url}/health", timeout=2):  # noqa: S310 - the loopback service URL
+                pass
+        except OSError:
+            return
+        time.sleep(1.0)
+
+
+def _wait_for_services_on(runtime_id: str) -> None:
+    """Before an update replaces a pack: wait for every model service standing on it to stop."""
+    catalog = _catalog()
+    for item in [runtime_id, *catalog.dependents(runtime_id)]:
+        service = catalog.runtime(item).service
+        if service:
+            _wait_until_stopped(service)
+
+
 def runtimes_removed_with_bundle(bundle_id: str, closure: list[str]) -> list[str]:
     """The bundle's runtime packs that go with it: installed, and needed by no other installed bundle or overlay.
 
@@ -224,7 +284,7 @@ def runtimes_removed_with_bundle(bundle_id: str, closure: list[str]) -> list[str
     store = packs.runtime_store(catalog)
     removed: list[str] = []
     for runtime_id in reversed(closure):
-        if not store.installed(runtime_id) or _installed_bundles_needing(runtime_id, except_bundle=bundle_id):
+        if not store.present(runtime_id) or _installed_bundles_needing(runtime_id, except_bundle=bundle_id):
             continue
         standing = [item for item in catalog.dependents(runtime_id) if store.installed(item) and item not in removed]
         if not standing:
@@ -236,6 +296,8 @@ def execute(job: Any, *, job_store: Any = None) -> dict[str, Any]:
     payload = job.input_payload or {}
     removing = job.type == "models.remove"
     planned = plan(payload, removing=removing)
+    # Written by the submission policy from the submitter's roles; a client-supplied value never survives it.
+    authorized = set(payload.get(AUTHORIZED_RUNTIMES) or ())
     feedback = _JobFeedback(job_store, job)
     catalog = _catalog()
     runtimes = packs.runtime_store(catalog)
@@ -262,10 +324,20 @@ def execute(job: Any, *, job_store: Any = None) -> dict[str, Any]:
                 removed.append(entry.label)
         targets = runtimes_removed_with_bundle(bundle_id, planned["runtimes"]) if bundle_id else planned["runtimes"]
         for runtime_id in targets:
-            if not runtimes.installed(runtime_id):
+            if not runtimes.present(runtime_id):
                 continue
+            if runtime_id not in authorized:
+                if planned["kind"] == "runtime_id":
+                    raise ModelInstallError(f"only the workspace owner can remove {catalog.runtime(runtime_id).label}")
+                continue  # the submitter could remove the bundle's models, not the runtime
+            service = catalog.runtime(runtime_id).service
+            if service:
+                # The supervisor stops a service within seconds of its bundle's models going; wait for that.
+                _wait_until_stopped(service)
             try:
                 runtimes.remove(runtime_id, needed_by=_installed_bundles_needing(runtime_id, except_bundle=bundle_id))
+            except packs.PackRetryable:
+                raise
             except packs.PackError as exc:
                 raise ModelInstallError(str(exc)) from exc
             removed.append(catalog.runtime(runtime_id).label)
@@ -278,7 +350,11 @@ def execute(job: Any, *, job_store: Any = None) -> dict[str, Any]:
         for runtime_id in planned["runtimes"]:
             if runtimes.current(runtime_id):
                 continue
-            runtimes.install(runtime_id, progress=feedback.progress, cancelled=feedback.cancelled)
+            if runtime_id not in authorized:
+                raise ModelInstallError(f"{catalog.runtime(runtime_id).label} needs installing first, and only the "
+                                        "workspace owner can install it")
+            runtimes.install(runtime_id, progress=feedback.progress, cancelled=feedback.cancelled,
+                             before_swap=_wait_for_services_on)
             installed.append(catalog.runtime(runtime_id).label)
         token = _hub_token()
         for entry in planned["models"]:
@@ -286,8 +362,8 @@ def execute(job: Any, *, job_store: Any = None) -> dict[str, Any]:
                 continue
             models.install(entry.id, token=token, progress=feedback.progress, cancelled=feedback.cancelled)
             installed.append(entry.label)
-    except packs.PackCancelled:
-        raise
+    except (packs.PackCancelled, packs.PackRetryable):
+        raise  # cancelled, or worth retrying: the job framework retries a download that broke off
     except packs.PackError as exc:
         raise ModelInstallError(str(exc)) from exc
     return {"content": "Installed " + (", ".join(installed) or "nothing new"), "log_message": "Model packs installed",
@@ -313,7 +389,7 @@ def setup_status(*, include_hardware: bool = True) -> dict[str, Any]:
     found = verdicts(catalog, facts, installed, runtime_store.download_bytes)
     model_ids = sorted({catalog.canonical_id(model_id) for bundle in catalog.bundles.values()
                         for variant in bundle.variants if variant.platform == platform for model_id in variant.models})
-    accepted: dict[str, set[str]] = {}
+    accepted: dict[str, set[tuple[str, str]]] = {}
     from . import licence_acceptances
 
     if licence_acceptances.available():
@@ -331,7 +407,7 @@ def setup_status(*, include_hardware: bool = True) -> dict[str, Any]:
             "size_bytes": entry.size, "installed": model_store.installed(entry.id),
             "disk_bytes": model_store.disk_bytes(entry.id) if model_store.installed(entry.id) else 0,
             "licence": entry.licence.as_dict(),
-            "accepted": entry.revision in accepted.get(entry.id, set()),
+            "accepted": (entry.revision, entry.licence.id) in accepted.get(entry.id, set()),
         } for entry in (catalog.model(model_id) for model_id in model_ids)],
         "packs_folder": str(runtime_store.root),
     }

@@ -13,6 +13,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | launcher, providers | Controls hermes base url for launcher, providers. |
 | `HERMES_ENABLED` | string | — | chat, launcher, providers, research | Controls hermes enabled for chat, launcher, providers, research. |
 | `HERMES_TIMEOUT_SECONDS` | string | `45` | providers | Controls hermes timeout seconds for providers. |
+| `HF_HUB_CACHE` | string | — | models | Controls hf hub cache for models. |
 | `HF_TOKEN` | string | — | image | Controls hf token for image. |
 | `LIVE_SPEECH_INPUT_SAMPLE_RATE` | string | `16000` | live-speech | Controls live speech input sample rate for live-speech. |
 | `LIVE_SPEECH_LLM_BASE_URL` | string | `http://127.0.0.1:1234/v1` | live-speech | Controls live speech llm base url for live-speech. |
@@ -163,6 +164,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_IBKR_PORT` | string | — | trading | Controls ibkr port for trading. |
 | `OMNIX_IBKR_RECOVERY_AUTHORITY` | string | — | trading | Controls ibkr recovery authority for trading. |
 | `OMNIX_IMAGE_ENABLED` | string | — | image, launcher | Controls image enabled for image, launcher. |
+| `OMNIX_IMAGE_PORT` | integer | `5301` | desktop | Controls image port for desktop. |
 | `OMNIX_IMAGE_PRELOAD` | string | `0` | launcher, tooling | Controls image preload for launcher, tooling. |
 | `OMNIX_IMAGE_PROVIDER` | string | — | tooling | Controls image provider for tooling. |
 | `OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD` | string | `1` | image, launcher, tooling | Controls image require explicit load for image, launcher, tooling. |
@@ -230,6 +232,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_OIDC_SCOPES` | list | — | security | Controls oidc scopes for security. |
 | `OMNIX_OIDC_WORKSPACE_ID` | string | `workspace:local` | security | Controls oidc workspace id for security. |
 | `OMNIX_OTEL_ENABLED` | boolean | `false` | observability | Controls otel enabled for observability. |
+| `OMNIX_PACKS_DIR` | string | — | models | Controls packs dir for models. |
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |
@@ -338,6 +341,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_YAHOO_ACQUISITION` | boolean | `1` | trading | Controls trading yahoo acquisition for trading. |
 | `OMNIX_TRADING_YAHOO_ACQUISITION_INTERVAL_SECONDS` | string | `30` | trading | Controls trading yahoo acquisition interval seconds for trading. |
 | `OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS` | boolean | `0` | trading | Controls trading yahoo acquisition in tests for trading. |
+| `OMNIX_TTS_DEVICE` | string | — | providers | Controls tts device for providers. |
 | `OMNIX_TTS_MODEL_DIR` | string | — | launcher | Controls tts model dir for launcher. |
 | `OMNIX_TTS_PORT` | integer | `5101` | tooling | Controls tts port for tooling. |
 | `OMNIX_TTS_STARTUP_WARMUP` | string | — | voice | Controls tts startup warmup for voice. |

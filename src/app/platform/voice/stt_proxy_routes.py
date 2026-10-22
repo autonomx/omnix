@@ -138,6 +138,11 @@ async def _proxy_http(request: Request, path: str, *, authority: bool = False) -
         return _error(503, "stt_unavailable")
 
 
+# The speech service's first live session sets up its streaming models, which can take well over ten seconds on a
+# just-started service (seen in the desktop app's first call); the browser keeps waiting meanwhile.
+UPSTREAM_OPEN_TIMEOUT_SECONDS = 120
+
+
 async def _proxy_websocket(socket: WebSocket) -> None:
     from websockets.exceptions import ConnectionClosed
     try:
@@ -156,7 +161,7 @@ async def _proxy_websocket(socket: WebSocket) -> None:
         # legacy Connect is supported by the repository's websockets>=12 floor,
         # does not use system proxies, and has an explicit redirect rejection.
         async with _ServiceConnect(uri, extra_headers=headers, compression=None,
-                                   max_size=limit, max_queue=8, open_timeout=10,
+                                   max_size=limit, max_queue=8, open_timeout=UPSTREAM_OPEN_TIMEOUT_SECONDS,
                                    close_timeout=2) as upstream:
             await socket.accept()
             accepted = True

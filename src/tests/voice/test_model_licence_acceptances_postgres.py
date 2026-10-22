@@ -64,15 +64,16 @@ def test_an_acceptance_counts_in_its_workspace_and_revision_only(two_workspaces)
     try:
         assert licence_acceptances.record([_entry("tts-model")]) == 1
         licence_acceptances.record([_entry("tts-model")])  # recording twice is harmless
-        assert licence_acceptances.accepted("tts-model", REVISION)
+        assert licence_acceptances.accepted("tts-model", REVISION, "Apache-2.0")
+        assert not licence_acceptances.accepted("tts-model", REVISION, "CC-BY-NC-4.0")  # the licence changed
         # A catalog update that pins another revision needs a new acceptance.
-        assert not licence_acceptances.accepted("tts-model", "f" * 40)
-        assert licence_acceptances.accepted_models() == {"tts-model": {REVISION}}
+        assert not licence_acceptances.accepted("tts-model", "f" * 40, "Apache-2.0")
+        assert licence_acceptances.accepted_models() == {"tts-model": {(REVISION, "Apache-2.0")}}
     finally:
         pop_tenant(token)
     token = push_tenant(second)
     try:
-        assert not licence_acceptances.accepted("tts-model", REVISION)
+        assert not licence_acceptances.accepted("tts-model", REVISION, "Apache-2.0")
         assert licence_acceptances.accepted_models() == {}
     finally:
         pop_tenant(token)

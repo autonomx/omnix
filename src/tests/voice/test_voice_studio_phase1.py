@@ -71,6 +71,17 @@ def test_an_install_pins_its_commit_and_records_licence_and_terms(models_dir: Pa
     assert marker["accepted_terms"] is True
 
 
+def test_an_acceptance_for_an_older_revision_does_not_carry_over(models_dir: Path) -> None:
+    """Voice Studio resends ``accepted_terms`` from the status; a marker for another revision must not supply it."""
+    model = speech_model("qwen3-tts-1.7b-voicedesign")
+    model_install.install_model(model.id, accept_terms=True, hub=_Hub())
+    marker_path = models_dir / "tts" / "Qwen3-TTS-12Hz-1.7B-VoiceDesign" / model_install.MARKER
+    marker = json.loads(marker_path.read_text())
+    marker["commit"] = "f" * 40  # installed at a revision the catalog has since moved past
+    marker_path.write_text(json.dumps(marker))
+    assert model_install.model_status(model)["accepted_terms"] is False
+
+
 def test_every_model_needs_its_terms_accepted(models_dir: Path) -> None:
     with pytest.raises(model_install.ModelInstallError, match="accept its terms"):
         model_install.install_model("sortformer-4spk-v1", hub=_Hub())

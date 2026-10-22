@@ -3,6 +3,18 @@
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     MessageBox MB_YESNO|MB_ICONQUESTION "Also remove your Omnix data and downloaded models (database, settings, logs, runtimes and models)?$\r$\n$\r$\nChoose No to keep it for a later install." /SD IDNO IDNO keepData
+      ; A packs folder moved to another drive (Settings, Models) is named in packs-location.txt; it is removed only
+      ; when it is the "OmnixPacks" folder the move created, never any other folder the file might name.
+      ClearErrors
+      FileOpen $0 "$LOCALAPPDATA\OmnixDesktop\packs-location.txt" r
+      ${ifNot} ${Errors}
+        FileRead $0 $1
+        FileClose $0
+        StrCpy $2 $1 "" -11
+        ${if} $2 == "\OmnixPacks"
+          RMDir /r "$1"
+        ${endIf}
+      ${endIf}
       RMDir /r "$LOCALAPPDATA\OmnixDesktop"
     keepData:
   ${endIf}

@@ -63,6 +63,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls hf hub cache for models.",
+    "feature": "models",
+    "name": "HF_HUB_CACHE",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls hf token for image.",
     "feature": "image",
@@ -1113,6 +1120,13 @@
     "type": "string"
   },
   {
+    "default": "5301",
+    "description": "Controls image port for desktop.",
+    "feature": "desktop",
+    "name": "OMNIX_IMAGE_PORT",
+    "type": "integer"
+  },
+  {
     "default": "0",
     "description": "Controls image preload for launcher, tooling.",
     "feature": "launcher, tooling",
@@ -1580,6 +1594,13 @@
     "feature": "observability",
     "name": "OMNIX_OTEL_ENABLED",
     "type": "boolean"
+  },
+  {
+    "default": "",
+    "description": "Controls packs dir for models.",
+    "feature": "models",
+    "name": "OMNIX_PACKS_DIR",
+    "type": "string"
   },
   {
     "default": null,
@@ -2336,6 +2357,13 @@
     "feature": "trading",
     "name": "OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS",
     "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls tts device for providers.",
+    "feature": "providers",
+    "name": "OMNIX_TTS_DEVICE",
+    "type": "string"
   },
   {
     "default": null,

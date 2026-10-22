@@ -240,6 +240,9 @@ def service_environment(config: LaunchConfig, service: str, *, service_token: st
         raise ValueError("a model service needs the service token")
     env = _system(source, config)
     env.update(_common(config))
+    # A service reads the bytecode its packs were installed with (``__pycache__`` inside the pack), never compiling
+    # into the shared cache folder on its first run (see packs._compile_bytecode).
+    env.pop("PYTHONPYCACHEPREFIX", None)
     port = str(config.port(service))
     env.update({
         "OMNIX_SERVICE_TOKEN": service_token,

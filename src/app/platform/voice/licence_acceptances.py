@@ -44,29 +44,31 @@ def record(models: Iterable[Any]) -> int:
     return len(rows)
 
 
-def accepted(model_id: str, revision: str) -> bool:
-    """Whether anyone in the current workspace accepted this model's licence at this revision."""
+def accepted(model_id: str, revision: str, licence_id: str) -> bool:
+    """Whether anyone in the current workspace accepted this model's licence at this revision.
+
+    A catalog update that changes the licence at the same revision asks again (roadmap R-8)."""
     workspace = current_tenant().workspace_id
     with unit_of_work() as work:
         row = work.connection.execute(
             "SELECT 1 FROM omnix_model_licence_acceptances WHERE workspace_id = %s AND model_id = %s AND revision = %s "
-            "LIMIT 1",
-            (workspace, model_id, revision),
+            "AND licence_id = %s LIMIT 1",
+            (workspace, model_id, revision, licence_id),
         ).fetchone()
     return row is not None
 
 
-def accepted_models() -> dict[str, set[str]]:
-    """model id -> the revisions accepted in the current workspace."""
+def accepted_models() -> dict[str, set[tuple[str, str]]]:
+    """model id -> the (revision, licence id) pairs accepted in the current workspace."""
     workspace = current_tenant().workspace_id
     with unit_of_work() as work:
         rows = work.connection.execute(
-            "SELECT model_id, revision FROM omnix_model_licence_acceptances WHERE workspace_id = %s",
+            "SELECT model_id, revision, licence_id FROM omnix_model_licence_acceptances WHERE workspace_id = %s",
             (workspace,),
         ).fetchall()
-    found: dict[str, set[str]] = {}
-    for model_id, revision in rows:
-        found.setdefault(str(model_id), set()).add(str(revision))
+    found: dict[str, set[tuple[str, str]]] = {}
+    for model_id, revision, licence_id in rows:
+        found.setdefault(str(model_id), set()).add((str(revision), str(licence_id)))
     return found
 
 

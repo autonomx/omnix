@@ -207,6 +207,7 @@ class Supervisor:
         self.logs = self.data / "logs"
         self.gateway: subprocess.Popen[bytes] | None = None
         self.stopping = threading.Event()
+        self.reconcile_now = threading.Event()
         self.first_run = False
         self._lock = threading.Lock()
         self.stopped = threading.Event()
@@ -448,12 +449,15 @@ class Supervisor:
         threading.Thread(target=self._watch_services, name="model-services", daemon=True).start()
 
     def _watch_services(self) -> None:
+        """The one thread that starts and stops model services; ``reconcile`` commands only wake it, so a start never
+        races a command thread's."""
         while not self.stopping.is_set():
+            self.reconcile_now.clear()
             try:
                 self.services.reconcile()
             except Exception as exc:  # reported, never fatal for the backend
                 self.emit({"event": "service", "service": "*", "state": "failed", "message": f"{type(exc).__name__}: {exc}"})
-            self.stopping.wait(RECONCILE_SECONDS)
+            self.reconcile_now.wait(RECONCILE_SECONDS)
 
     def fetch_embeddings(self) -> None:
         """The pinned memory embedding model, fetched once in the background; memory falls back to words without it."""
@@ -522,6 +526,7 @@ class Supervisor:
                 self.stopped.wait(timeout=180)
                 return
             self.stopping.set()
+            self.reconcile_now.set()
         try:
             if self.services is not None:
                 self.services.stop_all()
@@ -555,8 +560,7 @@ class Supervisor:
             elif name == "services":
                 reply["services"] = self.services.status() if self.services is not None else {}
             elif name == "reconcile":
-                if self.services is not None:
-                    self.services.reconcile()
+                self.reconcile_now.set()
                 reply["services"] = self.services.status() if self.services is not None else {}
             elif name == "stop":
                 self.stop()

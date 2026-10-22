@@ -136,7 +136,8 @@ def model_status(model: SpeechModel) -> dict[str, Any]:
         **model.as_dict(),
         "status": status,
         "installed_revision": (marker or {}).get("commit", ""),
-        "accepted_terms": bool((marker or {}).get("accepted_terms")),
+        # Accepted for the installed revision only: an update to a new revision asks again (roadmap R-8).
+        "accepted_terms": bool((marker or {}).get("accepted_terms")) and (marker or {}).get("commit") == model.revision,
         "disk_bytes": _folder_bytes(folder) if present else 0,
         "environment": service_environment(model.service),
     }
@@ -192,7 +193,7 @@ def _require_recorded_acceptance(model: SpeechModel) -> None:
     from . import licence_acceptances
 
     if model.requires_acceptance and licence_acceptances.available() and not licence_acceptances.accepted(
-            model.id, model.revision):
+            model.id, model.revision, model.licence):
         raise ModelInstallError(f"{model.label}'s licence ({model.licence}) has not been accepted for this revision; "
                                 "accept it and install again")
 

@@ -60,6 +60,18 @@ class PackCancelled(PackError):
     pass
 
 
+class PackRetryable(PackError):
+    """The pack could not be changed now, but a later attempt may succeed; the job is retried."""
+
+
+class PackDownloadError(PackRetryable):
+    """A download failed in a way a later attempt may not (a server or network error, a corrupted transfer)."""
+
+
+class PackBusy(PackRetryable):
+    """A pack folder is in use (its model service still has it loaded)."""
+
+
 def packs_root() -> Path | None:
     configured = environment().get("OMNIX_PACKS_DIR", "").strip()
     return Path(configured) if configured else None
@@ -109,6 +121,18 @@ def _remove_tree(path: Path) -> None:
     shutil.rmtree(path)
 
 
+def _compile_bytecode(site: Path, *, final: Path) -> None:
+    """Compiles the pack's bytecode once, at install, into its own ``__pycache__`` folders.
+
+    A service's first run otherwise compiles every module it imports, and on Windows a speech service whose first
+    run did so stopped accepting connections (its first live call never connected; every later start worked). The
+    paths in tracebacks name the folder the pack is renamed to (``final``), not the staging folder."""
+    import compileall
+
+    if site.is_dir():
+        compileall.compile_dir(str(site), ddir=str(final), quiet=2, workers=1)
+
+
 def check_disk(folder: Path, needed: int) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(folder).free
@@ -151,8 +175,26 @@ def download_file(url: str, target: Path, *, sha256: str, size: int | None, prog
     if client is None:
         import httpx
 
-        client = httpx.Client(follow_redirects=True, timeout=httpx.Timeout(60.0, read=300.0),
-                              headers={"User-Agent": "omnix-desktop"})
+        with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(60.0, read=300.0),
+                          headers={"User-Agent": "omnix-desktop"}) as own_client:
+            return download_file(url, target, sha256=sha256, size=size, progress=progress, cancelled=cancelled,
+                                 client=own_client)
+    try:
+        _stream_to(partial, url, size=size, progress=progress, cancelled=cancelled, client=client)
+    except PackError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - httpx's transport errors and OSErrors alike: the next attempt resumes
+        raise PackDownloadError(f"download interrupted ({type(exc).__name__}): {url}") from exc
+    actual = _sha256(partial)
+    if actual != sha256:
+        partial.unlink(missing_ok=True)
+        raise PackDownloadError(f"{target.name} has SHA-256 {actual}, expected {sha256}; it was deleted, try again")
+    partial.replace(target)
+    return target
+
+
+def _stream_to(partial: Path, url: str, *, size: int | None, progress: Callable[[int], None], cancelled: Cancelled,
+               client: Any) -> None:
     have = partial.stat().st_size if partial.exists() else 0
     if size is not None and have > size:
         partial.unlink()
@@ -165,6 +207,8 @@ def download_file(url: str, target: Path, *, sha256: str, size: int | None, prog
             pass
         elif response.status_code == 200:
             have = 0  # the server ignored the range: start over
+        elif response.status_code >= 500 or response.status_code == 429:
+            raise PackDownloadError(f"download failed ({response.status_code}), try again later: {url}")
         else:
             raise PackError(f"download failed ({response.status_code}): {url}")
         if response.status_code != 416:
@@ -176,12 +220,6 @@ def download_file(url: str, target: Path, *, sha256: str, size: int | None, prog
                         raise PackCancelled("cancelled")
                     output.write(chunk)
                     progress(len(chunk))
-    actual = _sha256(partial)
-    if actual != sha256:
-        partial.unlink(missing_ok=True)
-        raise PackError(f"{target.name} has SHA-256 {actual}, expected {sha256}; it was deleted, try again")
-    partial.replace(target)
-    return target
 
 
 # Runtime packs ------------------------------------------------------------------------------------------------
@@ -222,6 +260,25 @@ class RuntimeStore:
     def installed(self, runtime_id: str) -> bool:
         return self.manifest(runtime_id) is not None
 
+    def updating(self, runtime_id: str) -> bool:
+        """A new version is about to replace this pack: its services stop until the swap is done."""
+        return (self.staging / f"{runtime_id}.updating").exists()
+
+    def present(self, runtime_id: str) -> bool:
+        """The pack's folder exists, complete or not (a removal that failed part-way leaves no manifest)."""
+        return self.folder(runtime_id).exists()
+
+    def sweep(self) -> None:
+        """Deletes folders an interrupted update or removal left aside (``.<id>.old-*``, ``.<id>.removing-*``)."""
+        if not self.runtimes.is_dir():
+            return
+        for leftover in self.runtimes.glob(".*"):
+            if leftover.is_dir() and (".old-" in leftover.name or ".removing-" in leftover.name):
+                try:
+                    _remove_tree(leftover)
+                except OSError:
+                    logger.info("Could not delete %s yet", leftover)
+
     def current(self, runtime_id: str) -> bool:
         """Installed from the file list this build ships (an app update can change it)."""
         manifest = self.manifest(runtime_id)
@@ -243,25 +300,33 @@ class RuntimeStore:
         }
 
     def install(self, runtime_id: str, *, progress: Progress = lambda done, total, message: None,
-                cancelled: Cancelled = lambda: False, client: Any = None) -> dict[str, Any]:
+                cancelled: Cancelled = lambda: False, client: Any = None,
+                before_swap: Callable[[str], None] = lambda runtime_id: None) -> dict[str, Any]:
         """Download, check and unpack one runtime pack (its base must be installed first).
 
         Two jobs may want the same pack (two bundles share a Torch layer): the second waits for the first's lock,
-        then finds the pack current and returns."""
+        then finds the pack current and returns.
+
+        An update keeps the old pack running until the new one is unpacked. Then the pack is marked as updating
+        (the supervisor stops the services that stand on it), ``before_swap`` waits for them to stop, and the new
+        folder replaces the old one."""
         pack = self.catalog.runtime(runtime_id)
         if pack.base and not self.installed(pack.base):
             raise PackError(f"{pack.label} stands on {self.catalog.runtime(pack.base).label}; install that first")
         with _pack_lock(self.staging / f"{runtime_id}.lock", cancelled):
+            self.sweep()
             if self.current(runtime_id):
                 return self.manifest(runtime_id) or {}
-            return self._install(pack, progress=progress, cancelled=cancelled, client=client)
+            return self._install(pack, progress=progress, cancelled=cancelled, client=client, before_swap=before_swap)
 
-    def _install(self, pack: RuntimePack, *, progress: Progress, cancelled: Cancelled, client: Any) -> dict[str, Any]:
+    def _install(self, pack: RuntimePack, *, progress: Progress, cancelled: Cancelled, client: Any,
+                 before_swap: Callable[[str], None]) -> dict[str, Any]:
         runtime_id = pack.id
         listed = self.files(runtime_id)
         total = listed.download_bytes
         check_disk(self.root, int(total * (1 + UNPACK_FACTOR)))
-        downloads = self.staging / "downloads"
+        # Each pack downloads into its own folder: overlays installing at once share many wheel filenames.
+        downloads = self.staging / "downloads" / runtime_id
         done = 0
 
         def advance(count: int) -> None:
@@ -283,6 +348,8 @@ class RuntimeStore:
                 _remove_tree(build)
                 raise PackCancelled("cancelled")
             install_wheel(wheel, build)
+        progress(total, total, f"Preparing {pack.label}")
+        _compile_bytecode(build / "site", final=self.site(runtime_id))
         manifest = {
             "manifest_version": MANIFEST_VERSION,
             "runtime": pack.id,
@@ -296,22 +363,32 @@ class RuntimeStore:
         (build / MANIFEST).write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
         target = self.folder(runtime_id)
         self.runtimes.mkdir(parents=True, exist_ok=True)
-        retired = None
-        if target.exists():
-            # An update: the old pack moves aside first, so a failed rename leaves the working one.
-            retired = self.runtimes / f".{runtime_id}.old-{int(time.time())}"
-            target.rename(retired)
-        try:
+        if not target.exists():
             build.rename(target)
-        except OSError:
-            if retired is not None:
+            _remove_tree(downloads)
+            return manifest
+        marker = self.staging / f"{runtime_id}.updating"
+        marker.write_text(_now(), encoding="utf-8")
+        try:
+            before_swap(runtime_id)
+            # The old pack moves aside first, so a failed rename leaves the working one.
+            retired = self.runtimes / f".{runtime_id}.old-{int(time.time())}"
+            try:
+                target.rename(retired)
+            except OSError as exc:
+                raise PackBusy(f"{pack.label} is still in use by its model service; trying again shortly") from exc
+            try:
+                build.rename(target)
+            except OSError:
                 retired.rename(target)
-            raise
-        if retired is not None:
+                raise
+        finally:
+            marker.unlink(missing_ok=True)
+        try:
             _remove_tree(retired)
-        for item in listed.files:
-            if item.source == "index":
-                (downloads / item.filename).unlink(missing_ok=True)
+        except OSError:
+            logger.info("Could not delete %s yet; it is deleted on the next install or removal", retired)
+        _remove_tree(downloads)
         return manifest
 
     def _fetch(self, item: PackFile, downloads: Path, advance: Callable[[int], None], cancelled: Cancelled,
@@ -344,7 +421,21 @@ class RuntimeStore:
         blockers = list(needed_by)
         if blockers:
             raise PackError(f"{pack.label} is needed by {', '.join(blockers)}; remove those first")
-        _remove_tree(self.folder(runtime_id))
+        folder = self.folder(runtime_id)
+        if not folder.exists():
+            return
+        # Moved aside first, so a pack is never left half-deleted under its own name: on Windows the rename fails
+        # while a service has the pack's DLLs loaded, and the job retries once the service has stopped.
+        aside = self.runtimes / f".{runtime_id}.removing-{int(time.time())}"
+        try:
+            folder.rename(aside)
+        except OSError as exc:
+            raise PackBusy(f"{pack.label} is still in use by its model service; trying again shortly") from exc
+        try:
+            _remove_tree(aside)
+        except OSError:
+            logger.info("Could not delete %s yet; it is deleted on the next install or removal", aside)
+        self.sweep()
 
 
 # Model packs --------------------------------------------------------------------------------------------------
@@ -414,7 +505,8 @@ class ModelStore:
         try:
             snapshot = download(entry, **kwargs)
         except ModelDownloadError as exc:
-            raise PackError(str(exc)) from exc
+            # A file that failed its digest or a transfer that broke off: a later attempt may succeed.
+            raise PackDownloadError(str(exc)) from exc
         marker = {"model_id": entry.id, "repo": entry.repo, "commit": entry.revision, "licence": entry.licence.id,
                   "installed_at": _now()}
         self.markers.mkdir(parents=True, exist_ok=True)

@@ -94,6 +94,10 @@ class ModelPacksStatus(BaseModel):
     runtimes: list[PackRuntimeStatus] = Field(default_factory=list)
     models: list[PackModelStatus] = Field(default_factory=list)
     packs_folder: str = ""
+    # What the signed-in account may change: models (owner or admin) and runtimes (owner). The routes and the job
+    # submission enforce it; these only decide which controls the screen shows.
+    can_manage: bool = False
+    can_manage_runtimes: bool = False
 
 
 class SelectionSize(BaseModel):
@@ -151,7 +155,14 @@ def _service_answers(service: str) -> bool:
                                                                 retry=False)
     except Exception:
         return False
-    return response.status_code == 200
+    if response.status_code != 200:
+        return False
+    try:
+        answer = response.json()
+    except ValueError:
+        return True
+    # STT answers 200 with "ok": false while it is still loading its models.
+    return not (isinstance(answer, dict) and answer.get("ok") is False)
 
 
 def capabilities() -> dict[str, Any]:
@@ -175,7 +186,7 @@ def capabilities() -> dict[str, Any]:
             else:
                 runtimes, models = packs.runtime_store(catalog), packs.model_store(catalog)
                 installed = all(models.installed(model_id) for model_id in variant.models) and all(
-                    runtimes.current(pack.id) for pack in catalog.runtime_closure(variant.runtimes))
+                    runtimes.installed(pack.id) for pack in catalog.runtime_closure(variant.runtimes))
         found[bundle.capability] = {"bundle": bundle.id, "label": bundle.label, "installed": installed,
                                     "running": answers.get(service, False)}
     return {"desktop": packs.desktop_mode(), "capabilities": found}
@@ -208,9 +219,14 @@ def register_model_pack_routes(router: APIRouter, state: Any) -> None:
 
         if not desktop_mode():
             return {"enabled": False}
+        from app.runtime.tenant_context import current_tenant
+        from app.security.permissions import has_permission
+
         from .model_packs import setup_status
 
-        return {"enabled": True, **setup_status()}
+        roles = current_tenant().roles
+        return {"enabled": True, **setup_status(), "can_manage": has_permission(roles, "models:admin"),
+                "can_manage_runtimes": has_permission(roles, "models:runtimes:admin")}
 
     @router.post("/api/model-packs/selection", response_model=SelectionSize, openapi_extra=requires("settings:read"))
     def model_packs_selection(request: SelectionRequest) -> dict[str, Any]:

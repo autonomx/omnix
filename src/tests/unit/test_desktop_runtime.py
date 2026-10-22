@@ -66,6 +66,7 @@ def test_a_model_service_gets_only_what_it_needs(tmp_path) -> None:
     assert env["OMNIX_DATABASE_URL"] == "postgresql://omnix_app:app-pw@127.0.0.1:43111/omnix"
     assert env["OMNIX_TTS_PORT"] == "43122" and env["OMNIX_LAUNCHER_KILL_PORT"] == "0"
     assert env["HF_HUB_OFFLINE"] == "1" and env["OMNIX_TTS_MODEL_DIR"].endswith("snap")
+    assert "PYTHONPYCACHEPREFIX" not in env  # it reads the bytecode compiled into its packs at install
     assert env["OMNIX_DESKTOP_SITE_DIRS"].split(";" if sys.platform == "win32" else ":")[0].endswith(
         "tts-windows-x64" + ("\\" if sys.platform == "win32" else "/") + "site")
     for leaked in ("OMNIX_RUN_TOKEN_KEY", "OMNIX_MIGRATION_DATABASE_URL", "OMNIX_AGENT_DEFAULT_REPOSITORY", "PYTHONPATH"):
@@ -185,6 +186,7 @@ def services(tmp_path, monkeypatch):
     def launch(command, **kwargs):
         process = _Process()
         state.launched.append((command, kwargs["env"], process))
+        state.kwargs = kwargs
         return process
 
     state.now = 1000.0
@@ -195,6 +197,7 @@ def services(tmp_path, monkeypatch):
                             stop_process=lambda process: process.terminate(), clock=lambda: state.now)
     installed: dict[str, Any] = {"runtimes": set(), "models": set()}
     manager.runtimes = SimpleNamespace(current=lambda rid: rid in installed["runtimes"],
+                                       installed=lambda rid: rid in installed["runtimes"], updating=lambda rid: False,
                                        site=lambda rid: config.packs / "runtimes" / rid / "site")
     manager.models = SimpleNamespace(installed=lambda mid: mid in installed["models"],
                                      snapshot=lambda mid: config.packs / "models" / mid)
@@ -318,8 +321,114 @@ def test_removing_the_bundle_stops_its_service(services) -> None:
 def test_plans_use_the_measured_requirement(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
     config = _config(tmp_path)
-    runtimes = SimpleNamespace(current=lambda rid: True, site=lambda rid: config.packs / rid)
+    runtimes = SimpleNamespace(current=lambda rid: True, installed=lambda rid: True, updating=lambda rid: False,
+                               site=lambda rid: config.packs / rid)
     models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
     found = plans(config, CATALOG, runtimes, models)
     assert found["tts"].needed_bytes == 4096 * 2**20
     assert [path.name for path in found["tts"].site_dirs] == ["tts-win", "torch-win"]
+
+
+def test_a_service_shared_by_two_bundles_needs_the_other_bundles_models_too(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
+    config = _config(tmp_path)
+    catalog = model_catalog.parse_catalog({
+        "runtimes": {
+            "torch-win": {"kind": "torch-layer", "platform": "windows-x64", "lock": "t", "files": "t.json"},
+            "stt-win": {"kind": "overlay", "base": "torch-win", "platform": "windows-x64", "service": "stt",
+                        "lock": "s", "files": "s.json"},
+        },
+        "bundles": {
+            "voice-input": {"label": "Voice input", "capability": "live_stt", "variants": [
+                {"platform": "windows-x64", "models": ["live"], "runtimes": ["stt-win"], "min_commit_mb": 9216}]},
+            "transcription": {"label": "Transcription", "capability": "stt_batch", "variants": [
+                {"platform": "windows-x64", "models": ["batch"], "runtimes": ["stt-win"], "min_commit_mb": 9216}]},
+        },
+        "models": {name: {"repo": f"org/{name}", "revision": REVISION, "service": "stt",
+                          "files": {"m": {"sha256": "a" * 64, "size": 2 * 2**30}}} for name in ("live", "batch")},
+    })
+    runtimes = SimpleNamespace(current=lambda rid: True, installed=lambda rid: True, updating=lambda rid: False,
+                               site=lambda rid: config.packs / rid)
+    models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
+    found = plans(config, catalog, runtimes, models)
+    assert found["stt"].bundles == ["voice-input", "transcription"]
+    # One service loads both models: the measured 9 GB plus the second model's weights with headroom.
+    assert found["stt"].needed_bytes == 9216 * 2**20 + 3 * 2**30
+
+
+def test_models_load_one_at_a_time_and_a_loading_service_keeps_its_memory(services, monkeypatch) -> None:
+    """Three services that each fit alone must not start together and exhaust commit (roadmap R-9)."""
+    from app.desktop import services as services_module
+
+    manager, state = services
+    need = 8 * 2**30
+    two = {name: services_module.ServicePlan(name, name, f"{name}-win", [], [f"{name}-bundle"], needed_bytes=need)
+           for name in ("stt", "tts")}
+    monkeypatch.setattr(services_module, "plans", lambda *args, **kwargs: two)
+    state.commit = 12 * 2**30  # enough for one, not for both
+    state.healthy = False
+    manager.reconcile()
+    assert [command[-1] for command, _, _ in state.launched] == ["stt"]
+    assert ("tts", "waiting") in _states(state)
+    state.healthy = True
+    manager.reconcile()  # stt is healthy now, but still settling: its memory stays reserved
+    assert len(state.launched) == 1 and manager.states["tts"].state == "waiting"
+    monkeypatch.setattr(services_module, "SETTLE_SECONDS", 0.0)
+    state.commit = 4 * 2**30  # what stt really left once loaded
+    manager.reconcile()
+    assert len(state.launched) == 1 and manager.states["tts"].state == "blocked"
+    assert "not enough memory" in manager.states["tts"].message
+
+
+def test_an_out_of_date_pack_keeps_running_until_its_update_replaces_it(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
+    config = _config(tmp_path)
+    updating: set[str] = set()
+    runtimes = SimpleNamespace(current=lambda rid: False, installed=lambda rid: True,
+                               updating=lambda rid: rid in updating, site=lambda rid: config.packs / rid)
+    models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
+    assert "tts" in plans(config, CATALOG, runtimes, models)  # an app update shipped a newer lock
+    updating.add("torch-win")  # the new Torch layer is unpacked and about to replace the old one
+    assert plans(config, CATALOG, runtimes, models) == {}
+
+
+def test_a_service_stops_once_its_supervisor_is_gone(monkeypatch) -> None:
+    """macOS has no Job Object: a service reparented away from its supervisor stops itself."""
+    import signal as signals
+
+    raised: list[int] = []
+    exited: list[int] = []
+    parents = iter([4242, 4242, 1])
+    monkeypatch.setattr(service_boot.signal, "raise_signal", raised.append)
+    monkeypatch.setattr(service_boot.os, "_exit", exited.append)
+    monkeypatch.setattr(service_boot, "ORPHAN_GRACE_SECONDS", 0.0)
+    service_boot._stop_when_orphaned(4242, getppid=lambda: next(parents), poll=0.0).join(timeout=5)
+    assert raised == [signals.SIGTERM] and exited == [1]
+
+
+def test_services_know_their_supervisor_and_get_their_own_process_group(services) -> None:
+    manager, state = services
+    state.install()
+    manager.reconcile()
+    _, env, _ = state.launched[0]
+    assert env["OMNIX_DESKTOP_PARENT_PID"] == str(os.getpid()) and state.kwargs["stdin"] == subprocess.DEVNULL
+    if sys.platform == "win32":
+        assert state.kwargs["creationflags"] & subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        assert state.kwargs["start_new_session"] is True
+
+
+def test_a_service_still_loading_its_models_is_not_healthy_yet(monkeypatch) -> None:
+    """STT answers /health with 200 while it warms its models; the supervisor waits for "ok"."""
+    import contextlib as contexts
+
+    from app.desktop import services as services_module
+
+    answers = iter([b'{"ok": false, "status": "loading"}', b'{"ok": true, "status": "ready"}', b"not json"])
+
+    @contexts.contextmanager
+    def urlopen(url, timeout):
+        yield SimpleNamespace(status=200, read=lambda: next(answers))
+
+    monkeypatch.setattr(services_module.urllib.request, "urlopen", urlopen)
+    assert [services_module._healthy(47911) for _ in range(3)] == [False, True, True]

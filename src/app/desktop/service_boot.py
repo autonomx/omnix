@@ -10,15 +10,29 @@ in ``OMNIX_DESKTOP_SITE_DIRS`` (the service's overlay first, then the shared
 Torch layer) with ``site.addsitedir``, so ``.pth`` files inside the packs still
 work, and runs the service's usual entry point. Every folder must be inside the
 packs folder; anything else is refused.
+
+On macOS the supervisor names itself in ``OMNIX_DESKTOP_PARENT_PID``: when it
+dies the service is reparented, notices, and shuts down as on a graceful stop,
+so no model stays loaded without an Omnix that owns it. Windows needs no watch:
+the supervisor's kill-on-close Job Object ends every child with it. (Not a stdin
+pipe: on Windows a read pending on it blocks other uses of the handle, such as a
+library starting a subprocess, and the service hung while loading.)
 """
 from __future__ import annotations
 
 import os
 import runpy
+import signal
 import site
 import sys
 import sysconfig
+import threading
+import time
 from pathlib import Path
+
+# After the supervisor is gone: this long for the graceful shutdown, then the process exits regardless.
+ORPHAN_GRACE_SECONDS = 20.0
+PARENT_POLL_SECONDS = 2.0
 
 ENTRY_MODULES = {
     "stt": "services.stt.parakeet_stt_server",
@@ -88,9 +102,27 @@ def foreign_modules(folders: list[Path], *, app_source: Path) -> list[str]:
     return sorted(found)
 
 
+def _stop_when_orphaned(parent: int, getppid=os.getppid, poll: float = PARENT_POLL_SECONDS) -> threading.Thread:
+    """Stops this service gracefully once its supervisor is gone (and for good after a grace period)."""
+
+    def watch() -> None:
+        while getppid() == parent:
+            time.sleep(poll)
+        signal.raise_signal(signal.SIGTERM)
+        time.sleep(ORPHAN_GRACE_SECONDS)
+        os._exit(1)
+
+    thread = threading.Thread(target=watch, name="omnix-parent-watch", daemon=True)
+    thread.start()
+    return thread
+
+
 def run(service: str) -> None:
     folders = pack_site_dirs()
     prepare(folders)
+    parent = os.environ.get("OMNIX_DESKTOP_PARENT_PID", "")
+    if parent.isdigit() and sys.platform != "win32":
+        _stop_when_orphaned(int(parent))
     if service == "image":
         import uvicorn
 

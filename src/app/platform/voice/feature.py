@@ -48,11 +48,15 @@ def voice_submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
 
         current_tenant().require_role("owner", "admin")
         if packs.desktop_mode():
+            payload = dict(request.input_payload or {})
+            payload.pop("authorized_runtimes", None)
             if request.type != "models.verify":
-                from .model_packs import check_submission
+                from .model_packs import AUTHORIZED_RUNTIMES, check_submission
 
-                check_submission(request.type, dict(request.input_payload or {}))
-        elif request.type == "models.install":
+                payload[AUTHORIZED_RUNTIMES] = check_submission(request.type, payload)
+            value["input_payload"] = payload
+            return CreateJobRequest.model_validate(value)
+        if request.type == "models.install":
             _record_voice_studio_acceptance(dict(request.input_payload or {}))
         return request
     if request.type in {"voice.export", "voice.restitch", "voice.design", "voice.design.save", "voice.blend",

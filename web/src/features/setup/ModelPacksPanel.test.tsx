@@ -13,6 +13,8 @@ function status(overrides: Partial<ModelPacksStatus> = {}): ModelPacksStatus {
     enabled: true,
     platform: 'windows-x64',
     packs_folder: 'C:/Users/me/AppData/Local/OmnixDesktop/packs',
+    can_manage: true,
+    can_manage_runtimes: true,
     hardware: {
       gpus: [{ name: 'NVIDIA GeForce RTX 4080', vram_total_mb: 16376, vram_free_mb: 15000 }],
       nvidia_driver: '560.94', memory: { total_bytes: 64 * 2 ** 30 }, disk: { free_bytes: 400 * GB },
@@ -73,6 +75,20 @@ describe('ModelPacksPanel', () => {
     expect(within(image).getByText('Needs an NVIDIA GPU (found AMD Radeon RX 7900 XTX).')).toBeInTheDocument();
     expect(await screen.findByText(/Download: 5\.7 GB/)).toBeInTheDocument();
     expect(screen.getByText(/NVIDIA GeForce RTX 4080 · 16 GB VRAM · driver 560\.94/)).toBeInTheDocument();
+  });
+
+  it('shows a member what this computer runs, without the download and remove controls', async () => {
+    vi.spyOn(modelPacksClient, 'status').mockResolvedValue(status({
+      can_manage: false, can_manage_runtimes: false,
+      bundles: [{ ...status().bundles[0], installed: true }, status().bundles[1]],
+    }));
+    renderWithProviders(<ModelPacksPanel mode="setup" />);
+
+    const voice = await screen.findByRole('listitem', { name: 'Voice input' });
+    expect(within(voice).getByRole('checkbox')).toBeDisabled();
+    expect(within(voice).queryByRole('button', { name: 'Remove' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Review licences and download' })).toBeNull();
+    expect(screen.getByText(/owner or an admin downloads and removes models/)).toBeInTheDocument();
   });
 
   it('installs only after every licence is accepted, and shows the download progress', async () => {

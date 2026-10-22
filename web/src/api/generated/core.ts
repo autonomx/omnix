@@ -2996,6 +2996,16 @@ export interface components {
         ModelPacksStatus: {
             /** Bundles */
             bundles: components["schemas"]["PackVerdict"][];
+            /**
+             * Can Manage
+             * @default false
+             */
+            can_manage: boolean;
+            /**
+             * Can Manage Runtimes
+             * @default false
+             */
+            can_manage_runtimes: boolean;
             /** Enabled */
             enabled: boolean;
             /** Hardware */

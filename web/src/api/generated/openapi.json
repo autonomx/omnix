@@ -30100,6 +30100,16 @@
             "title": "Bundles",
             "type": "array"
           },
+          "can_manage": {
+            "default": false,
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "can_manage_runtimes": {
+            "default": false,
+            "title": "Can Manage Runtimes",
+            "type": "boolean"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -30141,7 +30151,9 @@
           "bundles",
           "runtimes",
           "models",
-          "packs_folder"
+          "packs_folder",
+          "can_manage",
+          "can_manage_runtimes"
         ],
         "title": "ModelPacksStatus",
         "type": "object"
