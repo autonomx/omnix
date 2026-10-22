@@ -4,8 +4,8 @@ import { AccountSection } from './AccountSection';
 
 const OPTIONS = { registration: 'open', guests: true, google: true, install_credential: true, min_password_length: 12 };
 
-function session(account: Record<string, unknown>, roles: string[] = ['owner', 'admin', 'member']) {
-  return Response.json({ enforced: true, mode: 'local', authenticated: true, roles, options: OPTIONS, account });
+function session(account: Record<string, unknown>, roles: string[] = ['owner', 'admin', 'member'], authMethod = 'password') {
+  return Response.json({ enforced: true, mode: 'local', authenticated: true, roles, options: OPTIONS, account, auth_method: authMethod });
 }
 
 const OWNER = { display_name: 'Local Omnix User', email: null, kind: 'standard', has_password: false, google_linked: false, is_owner: true };
@@ -65,6 +65,33 @@ describe('AccountSection', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('not correct');
     const call = fetchMock.mock.calls.find(([url]) => String(url) === '/api/auth/password');
     expect(JSON.parse(String((call?.[1] as RequestInit).body))).toEqual({ current: 'wrong', new_password: 'a long passphrase' });
+  });
+
+  it('in the desktop app, takes the first password without the install credential after the launcher sign-in', async () => {
+    const requestLoginCode = vi.fn(async () => true);
+    window.omnixDesktop = { product: 'omnix', frameless: false, version: '0.1.0', platform: 'win32', setTitleBarOverlay: () => undefined,
+      revealLogs: () => undefined, openExternal: () => undefined, requestLoginCode };
+    const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === '/api/auth/session') return session(OWNER, ['owner', 'admin', 'member'], 'session:local');
+      if (url === '/api/auth/invites') return Response.json({ invites: [] });
+      if (url === '/api/auth/password') return Response.json({ signed_out: 0 });
+      throw new Error(`unexpected ${url}`);
+    });
+    try {
+      render(<AccountSection />);
+      expect(await screen.findByText(/signed in from the Omnix app on this computer/)).toBeInTheDocument();
+      expect(screen.queryByLabelText('Install credential')).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: 'a long passphrase' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Set password' }));
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/auth/password')).toBe(true));
+      const call = fetchMock.mock.calls.find(([url]) => String(url) === '/api/auth/password');
+      expect(JSON.parse(String((call?.[1] as RequestInit).body))).toEqual({ current: null, new_password: 'a long passphrase' });
+      fireEvent.click(screen.getByRole('button', { name: 'Get a new sign-in code' }));
+      expect(requestLoginCode).toHaveBeenCalled();
+    } finally {
+      delete window.omnixDesktop;
+    }
   });
 
   it('connects Google by sending the browser to Google', async () => {

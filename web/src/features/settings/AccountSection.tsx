@@ -175,6 +175,16 @@ export function AccountSection() {
   };
 
   const guest = account.kind === 'guest';
+  // The desktop app signs its first window in with a one-time code and asks for the owner's first password at once:
+  // the server accepts it without the install credential within ten minutes of that sign-in (MarketPulse S-10).
+  // A session principal names how its session began (`session:local` for the launcher's code).
+  const signedInWithCode = auth.auth_method === 'local' || auth.auth_method === 'session:local';
+  const launcherFirstPassword = account.is_owner && !account.has_password && signedInWithCode && desktopBridge() !== null;
+  const freshSignIn = () => {
+    void desktopBridge()?.requestLoginCode().then((issued) => {
+      if (!issued) setStatus('A new sign-in code is only for setting the first password.');
+    });
+  };
   return (
     <SettingsSection title="Your account" scope="session"
       description={guest ? 'You are using a guest account.' : `${account.display_name}${account.email ? ` · ${account.email}` : ''}`}>
@@ -191,6 +201,8 @@ export function AccountSection() {
           <form className="settings-account-form" onSubmit={savePassword} aria-label={account.has_password ? 'Change password' : 'Set a password'}>
             {account.has_password ? (
               <label><span>Current password</span><input type="password" required value={current} autoComplete="current-password" onChange={(event) => setCurrent(event.currentTarget.value)} /></label>
+            ) : launcherFirstPassword ? (
+              <p>You signed in from the Omnix app on this computer: choose your password now. <button type="button" onClick={freshSignIn}>Get a new sign-in code</button> if this page has been open for more than ten minutes.</p>
             ) : account.is_owner ? (
               <label><span>Install credential</span><input type="password" required value={current} autoComplete="off" onChange={(event) => setCurrent(event.currentTarget.value)} /></label>
             ) : null}

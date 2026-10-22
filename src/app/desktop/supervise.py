@@ -28,6 +28,7 @@ Commands (stdin): {"cmd": "login-code", "id": 1}   a one-time owner sign-in code
                   {"cmd": "backup", "id": 3}
                   {"cmd": "services", "id": 4}     the model services' states
                   {"cmd": "reconcile", "id": 5}    look at the packs now (the setup screen just installed one)
+                  {"cmd": "hardware", "id": 6}     the hardware probe, for exported diagnostics
                   {"cmd": "stop"}
 """
 from __future__ import annotations
@@ -547,6 +548,10 @@ class Supervisor:
                 reply["has_password"] = self.owner_has_password()
             elif name == "backup":
                 reply["path"] = str(self.backup())
+            elif name == "hardware":
+                from app.models.hardware import probe
+
+                reply["hardware"] = probe(packs_folder=self.config.packs)
             elif name == "services":
                 reply["services"] = self.services.status() if self.services is not None else {}
             elif name == "reconcile":
