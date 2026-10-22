@@ -4,7 +4,7 @@
     padding: 1rem;
     border: 1px solid color-mix(in srgb, var(--mantine-color-violet-5, var(--c-indigo-600)) 38%, transparent);
     border-radius: 0.9rem;
-    background: color-mix(in srgb, var(--mantine-color-dark-7, var(--c-neutral-220)) 88%, var(--mantine-color-violet-9, var(--c-indigo-500)));
+    background: color-mix(in srgb, var(--mantine-color-dark-7, var(--bg-neutral-220)) 88%, var(--mantine-color-violet-9, var(--c-indigo-500)));
     box-shadow: 0 12px 28px color-mix(in srgb, var(--c-neutral-0) 16%, transparent);
   }
 
@@ -48,7 +48,7 @@
     margin: 0.85rem 0;
     overflow: hidden;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 8%, transparent);
   }
 
   .assistant-research-progress-track > span {
@@ -62,7 +62,7 @@
   .assistant-research-announcement {
     min-height: 1.4rem;
     margin-bottom: 0.75rem;
-    color: var(--mantine-color-gray-3, var(--c-neutral-910));
+    color: var(--mantine-color-gray-3, var(--fg-neutral-910));
   }
 
   .assistant-research-progress-actions button,
@@ -72,7 +72,7 @@
     padding: 0.35rem 0.7rem;
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 16%, transparent);
     border-radius: 0.55rem;
-    background: color-mix(in srgb, var(--c-neutral-1000) 6%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 6%, transparent);
     color: inherit;
     cursor: pointer;
   }
@@ -105,7 +105,7 @@
   }
 
   .assistant-research-plan-list li.is-completed {
-    color: var(--mantine-color-gray-3, var(--c-neutral-910));
+    color: var(--mantine-color-gray-3, var(--fg-neutral-910));
   }
 
   .assistant-research-plan-list i {
@@ -117,7 +117,7 @@
     margin-top: 0.1rem;
     border: 1px solid color-mix(in srgb, var(--c-violet-810) 64%, transparent);
     border-radius: 999px;
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
   }
 
   .assistant-research-plan-list i::after {
@@ -131,7 +131,7 @@
   .assistant-research-plan-list li.is-completed i {
     border-color: var(--c-green-790-2);
     background: color-mix(in srgb, var(--c-green-790-2) 16%, transparent);
-    color: var(--c-green-900);
+    color: var(--fg-green-900);
     font-size: 0.75rem;
     font-style: normal;
     font-weight: 800;
@@ -149,7 +149,7 @@
     padding: 0.7rem;
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 10%, transparent);
     border-radius: 0.65rem;
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
   }
 
   .assistant-research-plan-controls label {
@@ -165,7 +165,7 @@
     min-height: 2rem;
     border: 1px solid color-mix(in srgb, var(--c-violet-810) 34%, transparent);
     border-radius: 0.45rem;
-    background: color-mix(in srgb, var(--c-slate-150-2) 58%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 58%, transparent);
     color: inherit;
     font: inherit;
     font-weight: 800;
@@ -180,7 +180,7 @@
 
   .assistant-research-plan-intro {
     margin-bottom: 0.8rem;
-    color: var(--mantine-color-gray-3, var(--c-neutral-910));
+    color: var(--mantine-color-gray-3, var(--fg-neutral-910));
   }
 
   .status-plan-review {
@@ -193,7 +193,7 @@
 
   .status-plan-progress .assistant-research-status {
     background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
   }
 
   .status-plan-review > header {
@@ -202,11 +202,11 @@
 
   .status-plan-review .assistant-research-status {
     background: color-mix(in srgb, var(--c-green-790-2) 12%, transparent);
-    color: var(--c-teal-900);
+    color: var(--fg-teal-900);
   }
 
   .assistant-research-plan-controls small {
-    color: var(--mantine-color-gray-5, var(--c-slate-770));
+    color: var(--mantine-color-gray-5, var(--fg-slate-770));
     font-size: 0.74rem;
   }
 
@@ -221,7 +221,7 @@
   }
 
   [data-omnix-research-plan-error] {
-    color: var(--c-red-810);
+    color: var(--fg-red-810);
     font-size: 0.78rem;
   }
 
@@ -250,12 +250,12 @@
   .assistant-research-message-details dl > div {
     padding: 0.5rem;
     border-radius: 0.5rem;
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
   }
 
   .assistant-research-job-details dt,
   .assistant-research-message-details dt {
-    color: var(--mantine-color-gray-5, var(--c-slate-770));
+    color: var(--mantine-color-gray-5, var(--fg-slate-770));
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -281,7 +281,7 @@
 
   .assistant-research-source-list small {
     grid-column: 1 / -1;
-    color: var(--mantine-color-gray-5, var(--c-slate-770));
+    color: var(--mantine-color-gray-5, var(--fg-slate-770));
   }
 
   .omnix-research-injected-message .assistant-chat-bubble > p,
@@ -293,7 +293,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 0.95rem;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-260-3) 98%, transparent), color-mix(in srgb, var(--c-indigo-210) 98%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-260-3) 98%, transparent), color-mix(in srgb, var(--bg-indigo-210) 98%, transparent));
     box-shadow: 0 16px 34px color-mix(in srgb, var(--c-neutral-0) 20%, transparent);
   }
 
@@ -328,7 +328,7 @@
 
   .assistant-research-report-kicker {
     display: block;
-    color: var(--c-sky-870);
+    color: var(--fg-sky-870);
     font-size: 0.68rem;
     font-weight: 850;
     letter-spacing: 0.08em;
@@ -337,7 +337,7 @@
 
   .assistant-research-report-heading h3 {
     margin: 0.12rem 0 0;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     font-size: 1rem;
   }
 
@@ -357,7 +357,7 @@
     border: 0;
     border-radius: 0.45rem;
     background: transparent;
-    color: var(--mantine-color-gray-5, var(--c-slate-770));
+    color: var(--mantine-color-gray-5, var(--fg-slate-770));
     cursor: pointer;
     font: inherit;
     font-size: 1.05rem;
@@ -365,8 +365,8 @@
 
   .assistant-research-report-tools button:hover,
   .assistant-research-report-tools button:focus-visible {
-    background: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 8%, transparent);
+    color: var(--fg-neutral-1000);
     outline: none;
   }
 
@@ -377,7 +377,7 @@
     gap: 0.55rem;
     padding: 0.7rem 1rem;
     border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
-    color: var(--c-slate-810);
+    color: var(--fg-slate-810);
     font-size: 0.78rem;
   }
 
@@ -386,19 +386,19 @@
     border: 1px solid color-mix(in srgb, var(--c-yellow-840) 28%, transparent);
     border-radius: 999px;
     background: color-mix(in srgb, var(--c-yellow-840) 10%, transparent);
-    color: var(--c-yellow-920-2);
+    color: var(--fg-yellow-920-2);
     font-weight: 750;
   }
 
   .assistant-research-report-status.complete {
     border-color: color-mix(in srgb, var(--c-green-790-2) 28%, transparent);
     background: color-mix(in srgb, var(--c-green-790-2) 10%, transparent);
-    color: var(--c-teal-900);
+    color: var(--fg-teal-900);
   }
 
   .assistant-research-report-body {
     padding: 1.15rem 1.25rem 1.3rem;
-    color: var(--c-neutral-960);
+    color: var(--fg-neutral-960);
     font-size: 0.95rem;
     line-height: 1.65;
   }
@@ -409,14 +409,14 @@
   .assistant-research-report-body h4,
   .assistant-research-report-body h5,
   .assistant-research-report-body h6 {
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     line-height: 1.25;
   }
 
   .assistant-research-report-body h1 { font-size: 1.55rem; }
   .assistant-research-report-body h2 { font-size: 1.22rem; margin-top: 1.45rem; }
   .assistant-research-report-body p { margin-bottom: 1rem; }
-  .assistant-research-report-body strong { color: var(--c-neutral-1000); font-weight: 800; }
+  .assistant-research-report-body strong { color: var(--fg-neutral-1000); font-weight: 800; }
   .assistant-research-report-body ul,
   .assistant-research-report-body ol { padding-left: 1.45rem; }
 

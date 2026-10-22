@@ -87,7 +87,7 @@
   }
 
   .assistant-live-card > header > select[data-live-task-instruction] {
-    background: color-mix(in srgb, var(--c-slate-150-2) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 78%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 0.65rem;
     box-sizing: border-box;
@@ -119,7 +119,7 @@
   }
 
   .assistant-live-card[data-live-voice-status='idle'] > header strong {
-    color: var(--c-indigo-780);
+    color: var(--fg-indigo-780);
   }
 
   .assistant-live-card[data-live-voice-status='idle'] > header strong::before {
@@ -128,7 +128,7 @@
   }
 
   .assistant-live-card[data-live-voice-status='disconnected'] > header strong {
-    color: var(--c-amber-830);
+    color: var(--fg-amber-830);
   }
 
   .assistant-live-card[data-live-voice-status='disconnected'] > header strong::before {

@@ -136,7 +136,7 @@
   }
 
   .assistant-html-preview-modal {
-    background: color-mix(in srgb, var(--c-neutral-160) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-neutral-160) 72%, transparent);
     inset: 0;
     padding: 1.4rem;
     position: fixed;

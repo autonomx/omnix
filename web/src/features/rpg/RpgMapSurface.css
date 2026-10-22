@@ -7,7 +7,7 @@
 
   .rpg-map-canvas-frame {
     aspect-ratio: 16 / 10;
-    background: var(--c-neutral-180);
+    background: var(--bg-neutral-180);
     border: 1px solid color-mix(in srgb, var(--c-yellow-870) 28%, transparent);
     border-radius: 1rem;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-neutral-1000) 4%, transparent), 0 1.4rem 3rem color-mix(in srgb, var(--c-neutral-0) 30%, transparent);
@@ -23,7 +23,7 @@
   }
 
   .rpg-map-parchment-tile {
-    fill: var(--c-yellow-730);
+    fill: var(--fg-yellow-730);
   }
 
   .rpg-map-parchment-line {
@@ -69,7 +69,7 @@
     font-weight: 700;
     paint-order: stroke;
     pointer-events: none;
-    stroke: color-mix(in srgb, var(--c-yellow-870) 88%, transparent);
+    stroke: color-mix(in srgb, var(--fg-yellow-870) 88%, transparent);
     stroke-width: 20;
     text-anchor: middle;
   }
@@ -79,20 +79,20 @@
   }
 
   .rpg-map-player-marker circle {
-    fill: color-mix(in srgb, var(--c-yellow-840) 20%, transparent);
-    stroke: var(--c-yellow-880);
+    fill: color-mix(in srgb, var(--fg-yellow-840) 20%, transparent);
+    stroke: var(--fg-yellow-880);
     stroke-width: 18;
   }
 
   .rpg-map-player-marker path {
-    fill: var(--c-yellow-880);
+    fill: var(--fg-yellow-880);
     stroke: var(--c-yellow-270);
     stroke-width: 16;
   }
 
   .rpg-map-state-message {
     align-items: flex-start;
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 10%, transparent);
     border-radius: 0.85rem;
     display: flex;
@@ -104,7 +104,7 @@
   }
 
   .rpg-map-state-message span {
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
   }
 
   .rpg-map-state-compact {
@@ -129,10 +129,10 @@
   }
 
   .rpg-map-surface-meta span {
-    background: color-mix(in srgb, var(--c-neutral-1000) 5%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 5%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
     border-radius: 999px;
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
     font-size: 0.72rem;
     padding: 0.25rem 0.55rem;
   }
@@ -150,7 +150,7 @@
 
   .rpg-map-accessible-list li {
     break-inside: avoid;
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
     font-size: 0.78rem;
     margin-bottom: 0.22rem;
   }

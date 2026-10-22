@@ -33,11 +33,11 @@
 
   .assistant-context-add-button {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 90%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 24%, transparent);
     border-radius: 999px;
     box-shadow: 0 0.35rem 0.9rem color-mix(in srgb, var(--c-neutral-0) 16%, transparent);
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     cursor: pointer;
     display: inline-flex;
     font-size: 1.65rem;
@@ -60,7 +60,7 @@
   }
 
   .assistant-context-tool-summary {
-    color: color-mix(in srgb, var(--c-slate-930) 78%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 78%, transparent);
     font-size: 0.78rem;
     font-weight: 760;
     max-width: 18rem;
@@ -70,7 +70,7 @@
   }
 
   .assistant-context-tool-menu {
-    background: color-mix(in srgb, var(--c-indigo-190) 98%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 98%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 36%, transparent);
     border-radius: 0.9rem;
     box-shadow: 0 1.25rem 2.8rem color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
@@ -85,7 +85,7 @@
   }
 
   .assistant-context-tool-menu-heading {
-    color: color-mix(in srgb, var(--c-slate-930) 58%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 58%, transparent);
     font-size: 0.7rem;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -98,7 +98,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.65rem;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     cursor: pointer;
     display: flex;
     gap: 0.8rem;
@@ -142,13 +142,13 @@
   }
 
   .assistant-context-tool-copy strong {
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     font-size: 0.86rem;
     font-weight: 820;
   }
 
   .assistant-context-tool-copy small {
-    color: color-mix(in srgb, var(--c-slate-870) 68%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 68%, transparent);
     font-size: 0.72rem;
     line-height: 1.25;
   }
@@ -161,7 +161,7 @@
   }
 
   .assistant-context-tool-check {
-    color: var(--c-sky-870);
+    color: var(--fg-sky-870);
     flex: 0 0 auto;
     font-size: 1rem;
     opacity: 0;
@@ -190,7 +190,7 @@
   }
 
   .assistant-context-tool-menu .assistant-context-page-budget-menu > span {
-    color: color-mix(in srgb, var(--c-slate-870) 68%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 68%, transparent);
     font-size: 0.72rem;
     font-weight: 760;
   }
@@ -205,10 +205,10 @@
 
   .assistant-context-mode {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 90%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 22%, transparent);
     border-radius: 999px;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     display: inline-flex;
     flex: 0 0 auto;
     gap: 0.45rem;
@@ -218,7 +218,7 @@
   }
 
   .assistant-context-mode span {
-    color: color-mix(in srgb, var(--c-slate-930) 72%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 72%, transparent);
     font-size: 0.72rem;
     font-weight: 760;
     line-height: 1;
@@ -229,10 +229,10 @@
     appearance: none;
     background:
       linear-gradient(45deg, transparent 50%, var(--c-indigo-920) 50%) right 0.42rem center / 0.42rem 0.42rem no-repeat,
-      color-mix(in srgb, var(--c-indigo-190) 34%, transparent);
+      color-mix(in srgb, var(--bg-indigo-190) 34%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-indigo-920) 16%, transparent);
     border-radius: 999px;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     cursor: pointer;
     font: inherit;
     font-size: 0.82rem;
@@ -251,16 +251,16 @@
   }
 
   .assistant-context-mode option {
-    background: var(--c-indigo-210);
-    color: var(--c-neutral-1000);
+    background: var(--bg-indigo-210);
+    color: var(--fg-neutral-1000);
   }
 
   .assistant-context-page-budget {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 90%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 22%, transparent);
     border-radius: 999px;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     display: inline-flex;
     flex: 0 0 auto;
     gap: 0.42rem;
@@ -269,7 +269,7 @@
   }
 
   .assistant-context-page-budget > span {
-    color: color-mix(in srgb, var(--c-slate-930) 72%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 72%, transparent);
     font-size: 0.72rem;
     font-weight: 760;
     line-height: 1;
@@ -281,8 +281,8 @@
     min-height: 2rem;
     border: 1px solid color-mix(in srgb, var(--c-indigo-920) 16%, transparent);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--c-indigo-190) 34%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-indigo-190) 34%, transparent);
+    color: var(--fg-neutral-1000);
     font: inherit;
     font-size: 0.82rem;
     font-weight: 820;
@@ -303,10 +303,10 @@
 
   .assistant-context-desktop-inline {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 90%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 22%, transparent);
     border-radius: 999px;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     cursor: pointer;
     display: inline-flex;
     flex: 0 0 auto;
@@ -320,14 +320,14 @@
   }
 
   .assistant-context-desktop-inline span {
-    color: color-mix(in srgb, var(--c-slate-930) 78%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 78%, transparent);
     font-size: 0.72rem;
     font-weight: 760;
     line-height: 1;
   }
 
   .assistant-context-desktop-inline strong {
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     font-size: 0.84rem;
     line-height: 1.1;
     max-width: 4.6rem;

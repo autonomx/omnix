@@ -43,10 +43,10 @@
     gap: 8px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 30%, transparent);
     border-radius: 7px;
-    background: var(--c-indigo-210);
+    background: var(--bg-indigo-210);
     padding: 10px;
     box-shadow: 0 12px 28px color-mix(in srgb, var(--c-neutral-0) 40%, transparent);
-    color: var(--c-slate-930);
+    color: var(--fg-slate-930);
   }
 
   .trading-custom-range-popover > strong {
@@ -58,7 +58,7 @@
   .trading-custom-range-popover label {
     display: grid;
     gap: 4px;
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 9px;
   }
 
@@ -70,7 +70,7 @@
   }
 
   .trading-custom-range-popover > small {
-    color: var(--c-red-770);
+    color: var(--fg-red-770);
     font-size: 9px;
   }
 
@@ -106,7 +106,7 @@
     overflow-y: auto;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 30%, transparent);
     border-radius: 7px;
-    background: var(--c-indigo-210);
+    background: var(--bg-indigo-210);
     padding: 5px;
     box-shadow: 0 12px 30px color-mix(in srgb, var(--c-neutral-0) 45%, transparent);
   }
@@ -133,7 +133,7 @@
   }
 
   .trading-timezone-menu button b {
-    color: var(--c-blue-770);
+    color: var(--fg-blue-770);
     font-size: 13px;
     line-height: 1;
     text-align: center;
@@ -166,7 +166,7 @@
   }
 
   .trading-custom-range-trigger[aria-pressed='true'] {
-    color: var(--c-blue-770);
+    color: var(--fg-blue-770);
   }
 
   .trading-custom-range-popover input {
@@ -186,7 +186,7 @@
 
   .trading-timezone-trigger:hover,
   .trading-timezone-trigger:focus-visible {
-    color: var(--c-blue-770);
+    color: var(--fg-blue-770);
   }
 
   .trading-timezone-menu button {
@@ -194,14 +194,14 @@
     border-radius: 4px;
     background: transparent;
     padding: 4px 6px;
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
   }
 
   .trading-timezone-menu button:hover,
   .trading-timezone-menu button:focus-visible,
   .trading-timezone-menu button[aria-selected='true'] {
     background: color-mix(in srgb, var(--c-blue-630) 16%, transparent);
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .trading-timezone-menu button {

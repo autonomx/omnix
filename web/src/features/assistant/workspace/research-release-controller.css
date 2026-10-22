@@ -9,10 +9,10 @@
 
   .assistant-research-fallback {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 86%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 86%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 20%, transparent);
     border-radius: 999px;
-    color: color-mix(in srgb, var(--c-slate-930) 84%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 84%, transparent);
     display: inline-flex;
     flex: 0 0 auto;
     font-size: 0.72rem;
@@ -31,7 +31,7 @@
   }
 
   .assistant-research-release-status {
-    color: color-mix(in srgb, var(--c-slate-870) 76%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 76%, transparent);
     display: block;
     flex: 1 1 12rem;
     font-size: 0.68rem;

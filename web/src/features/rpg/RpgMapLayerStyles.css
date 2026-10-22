@@ -11,7 +11,7 @@
   }
 
   .rpg-map-layer-controls legend {
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
     float: left;
     font-size: 0.72rem;
     margin-right: 0.25rem;
@@ -20,7 +20,7 @@
 
   .rpg-map-layer-controls label {
     align-items: center;
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
     border-radius: 999px;
     cursor: pointer;
@@ -80,7 +80,7 @@
     letter-spacing: 24px;
     paint-order: stroke;
     pointer-events: none;
-    stroke: color-mix(in srgb, var(--c-yellow-870) 86%, transparent);
+    stroke: color-mix(in srgb, var(--fg-yellow-870) 86%, transparent);
     stroke-width: 28;
     text-anchor: middle;
   }
@@ -91,24 +91,24 @@
 
   .rpg-map-marker circle,
   .rpg-map-marker path {
-    fill: var(--c-yellow-770);
+    fill: var(--fg-yellow-770);
     stroke: var(--c-slate-260);
     stroke-linejoin: round;
     stroke-width: 18;
   }
 
   .rpg-map-marker-player circle {
-    fill: color-mix(in srgb, var(--c-yellow-840) 20%, transparent);
-    stroke: var(--c-yellow-880);
+    fill: color-mix(in srgb, var(--fg-yellow-840) 20%, transparent);
+    stroke: var(--fg-yellow-880);
   }
 
   .rpg-map-marker-player path {
-    fill: var(--c-yellow-880);
+    fill: var(--fg-yellow-880);
     stroke: var(--c-yellow-270);
   }
 
   .rpg-map-marker-quest path {
-    fill: var(--c-yellow-840);
+    fill: var(--fg-yellow-840);
   }
 
   .rpg-map-marker-danger path {
@@ -133,7 +133,7 @@
     font-size: 96px;
     font-weight: 700;
     paint-order: stroke;
-    stroke: color-mix(in srgb, var(--c-yellow-870) 90%, transparent);
+    stroke: color-mix(in srgb, var(--fg-yellow-870) 90%, transparent);
     stroke-width: 18;
     text-anchor: middle;
   }

@@ -7,7 +7,7 @@
 
   .rpg-generation-candidate-review-banner {
     align-items: flex-start;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 16%, transparent), color-mix(in srgb, var(--c-blue-240-2) 94%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 16%, transparent), color-mix(in srgb, var(--bg-blue-240-2) 94%, transparent));
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 45%, transparent);
     border-radius: 18px;
     display: flex;
@@ -52,7 +52,7 @@
   }
 
   .rpg-generation-candidate-review-editor {
-    background: color-mix(in srgb, var(--c-slate-170-2) 92%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 92%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 10%, transparent);
     border-radius: 16px;
     display: grid;
@@ -66,7 +66,7 @@
   }
 
   .rpg-generation-candidate-review-editor textarea {
-    background: color-mix(in srgb, var(--c-slate-130) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 90%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 14%, transparent);
     border-radius: 12px;
     color: inherit;

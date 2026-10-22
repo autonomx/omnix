@@ -17,7 +17,7 @@
   .trading-watchlist-symbol-picker-heading .symbol-heading{grid-column:1 / 3}
   .trading-watchlist .trading-watchlist-symbol-picker-results li{grid-template-columns:34px 104px minmax(220px,1fr) 190px 44px;gap:10px;min-height:48px;padding:10px 20px}
   .trading-watchlist-symbol-picker-avatar{display:grid;place-items:center;width:29px;height:29px;border:1px solid color-mix(in srgb, var(--c-slate-550) 22%, transparent);border-radius:50%;background:var(--c-neutral-960);color:var(--c-slate-310);font-size:13px;font-weight:700}
-  .trading-watchlist-symbol-picker-avatar.apple{background:var(--c-slate-260-2);color:var(--c-neutral-1000)}
+  .trading-watchlist-symbol-picker-avatar.apple{background:var(--bg-slate-260-2);color:var(--fg-neutral-1000)}
   .trading-watchlist-symbol-picker-avatar.nvidia{background:var(--c-slate-970);color:var(--c-green-560)}
   .trading-watchlist-symbol-picker-avatar.bitcoin{background:var(--c-slate-950);color:var(--c-indigo-490)}
   .trading-watchlist-symbol-picker-avatar.ethereum{background:var(--c-neutral-960);color:var(--c-slate-550)}

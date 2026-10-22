@@ -49,7 +49,7 @@
   .rpg-authoring-timeline-marker span {
     display: inline-block;
     max-width: 100%;
-    color: var(--c-yellow-900);
+    color: var(--fg-yellow-900);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.74rem;
     font-weight: 800;
@@ -60,7 +60,7 @@
 
   .rpg-authoring-timeline-list .rpg-authoring-record-card {
     border-color: color-mix(in srgb, var(--c-yellow-770) 22%, transparent);
-    background: linear-gradient(145deg, color-mix(in srgb, var(--c-indigo-220) 94%, transparent), color-mix(in srgb, var(--c-indigo-170) 96%, transparent));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--bg-indigo-220) 94%, transparent), color-mix(in srgb, var(--bg-indigo-170) 96%, transparent));
   }
 
   .rpg-authoring-timeline-list .rpg-authoring-record-statement p {

@@ -61,7 +61,7 @@
     min-width: 0;
     padding: 7px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 12%, transparent);
-    background: color-mix(in srgb, var(--c-slate-150-2) 20%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 20%, transparent);
   }
 
   .trading-news-research-summary small,
@@ -72,7 +72,7 @@
 
   .trading-news-research-summary strong {
     overflow: hidden;
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
     font-size: 10px;
     text-overflow: ellipsis;
     text-transform: capitalize;
@@ -85,7 +85,7 @@
     min-width: 0;
     padding: 9px;
     border: 1px solid color-mix(in srgb, var(--c-blue-710-2) 22%, transparent);
-    background: linear-gradient(145deg, color-mix(in srgb, var(--c-blue-630) 9%, transparent), color-mix(in srgb, var(--c-slate-150-2) 24%, transparent));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--c-blue-630) 9%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 24%, transparent));
   }
 
   .trading-news-ai-brief > header {
@@ -108,7 +108,7 @@
   }
 
   .trading-news-ai-brief > header strong {
-    color: var(--c-slate-930);
+    color: var(--fg-slate-930);
     font-size: 11px;
     line-height: 1.3;
   }
@@ -118,14 +118,14 @@
     padding: 3px 5px;
     border: 1px solid color-mix(in srgb, var(--c-blue-710-2) 20%, transparent);
     border-radius: 999px;
-    color: var(--c-sky-830);
+    color: var(--fg-sky-830);
     font-size: 8px;
     text-transform: capitalize;
   }
 
   .trading-news-ai-brief > p {
     margin: 0;
-    color: var(--c-slate-850);
+    color: var(--fg-slate-850);
     font-size: 10px;
     line-height: 1.5;
   }
@@ -136,7 +136,7 @@
   }
 
   .trading-news-brief-items > strong {
-    color: var(--c-blue-870);
+    color: var(--fg-blue-870);
     font-size: 9px;
   }
 
@@ -148,7 +148,7 @@
   }
 
   .trading-news-brief-items li {
-    color: var(--c-slate-820);
+    color: var(--fg-slate-820);
     font-size: 9px;
     line-height: 1.4;
   }
@@ -162,14 +162,14 @@
 
   .trading-news-brief-citations a,
   .trading-news-brief-citations small {
-    color: var(--c-sky-830);
+    color: var(--fg-sky-830);
     font-size: 8px;
     text-decoration: underline;
   }
 
   .trading-news-brief-warning {
     margin: 0;
-    color: var(--c-yellow-720);
+    color: var(--fg-yellow-720);
     font-size: 9px;
     line-height: 1.4;
   }
@@ -188,7 +188,7 @@
   }
 
   .trading-news-evidence > header strong {
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
     font-size: 10px;
   }
 
@@ -198,13 +198,13 @@
     min-width: 0;
     padding: 6px 7px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 10%, transparent);
-    background: color-mix(in srgb, var(--c-slate-150-2) 20%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 20%, transparent);
   }
 
   .trading-news-evidence > article a,
   .trading-news-evidence > article strong {
     overflow: hidden;
-    color: var(--c-blue-870);
+    color: var(--fg-blue-870);
     font-size: 9px;
     font-weight: 600;
     line-height: 1.3;
@@ -213,7 +213,7 @@
   }
 
   .trading-news-evidence > article a:hover {
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
   }
 
   .trading-news-evidence > p {

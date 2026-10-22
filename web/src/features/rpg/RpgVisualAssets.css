@@ -33,7 +33,7 @@
 
   .rpg-live-visual-label {
     align-items: center;
-    color: color-mix(in srgb, var(--c-slate-940) 90%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-940) 90%, transparent);
     display: flex;
     font-size: 0.86rem;
     font-weight: 700;
@@ -92,12 +92,12 @@
 @layer overrides {
   .rpg-hero-avatar-art {
     background:
-      linear-gradient(color-mix(in srgb, var(--c-slate-130) 4%, transparent), color-mix(in srgb, var(--c-slate-130) 12%, transparent)),
-      color-mix(in srgb, var(--c-slate-130) 88%, transparent);
+      linear-gradient(color-mix(in srgb, var(--bg-slate-130) 4%, transparent), color-mix(in srgb, var(--bg-slate-130) 12%, transparent)),
+      color-mix(in srgb, var(--bg-slate-130) 88%, transparent);
   }
 
   .rpg-scene-art-has-image,
   .rpg-map-preview-has-image {
-    background: color-mix(in srgb, var(--c-slate-130) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 78%, transparent);
   }
 }

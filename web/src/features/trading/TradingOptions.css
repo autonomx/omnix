@@ -14,10 +14,10 @@
   .trading-option-smile svg,.trading-option-pnl{width:100%;height:auto}
   .trading-option-smile text,.trading-option-pnl text{fill:var(--c-slate-630);font-size:10px}
   .trading-option-smile .calls,.trading-option-pnl .expiry{stroke:var(--c-blue-540);stroke-width:2;color:var(--c-blue-540)}
-  .trading-option-smile .puts{stroke:var(--c-amber-770);stroke-width:2;color:var(--c-amber-770)}
+  .trading-option-smile .puts{stroke:var(--fg-amber-770);stroke-width:2;color:var(--fg-amber-770)}
   .trading-option-pnl .dated{stroke:var(--c-purple-500);stroke-width:1.5;stroke-dasharray:4 3}
   .trading-option-smile .spot,.trading-option-pnl .spot{stroke:var(--c-slate-630);stroke-dasharray:3 3}
-  .trading-option-pnl .zero{stroke:var(--c-neutral-910)}
+  .trading-option-pnl .zero{stroke:var(--fg-neutral-910)}
   .trading-option-builder{display:flex;flex-direction:column;gap:8px}
   .trading-option-builder table{width:100%;border-collapse:collapse}
   .trading-option-builder td,.trading-option-builder th{padding:2px 5px;border-bottom:1px solid var(--c-neutral-910);text-align:left}

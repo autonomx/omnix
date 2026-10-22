@@ -31,8 +31,8 @@
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--c-red-720) 55%, transparent);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--c-orange-400) 35%, transparent);
-    color: var(--c-red-890);
+    background: color-mix(in srgb, var(--bg-orange-400) 35%, transparent);
+    color: var(--fg-red-890);
     font-size: 1.35rem;
     font-weight: 900;
   }
@@ -50,7 +50,7 @@
 
   .rpg-world-delete-preview {
     border: 1px solid color-mix(in srgb, var(--c-red-720) 28%, transparent);
-    background: color-mix(in srgb, var(--c-orange-260) 22%, transparent);
+    background: color-mix(in srgb, var(--bg-orange-260) 22%, transparent);
   }
 
   .rpg-world-delete-blocked h4,
@@ -73,12 +73,12 @@
     gap: 0.2rem;
     padding: 0.65rem;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--c-indigo-210) 48%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 48%, transparent);
   }
 
   .rpg-world-delete-blocked li span,
   .rpg-world-delete-preview small {
-    color: var(--omnix-muted, var(--c-slate-730));
+    color: var(--omnix-muted, var(--fg-slate-730));
   }
 
   .rpg-world-delete-preview dl {
@@ -95,16 +95,16 @@
     gap: 0.75rem;
     padding: 0.55rem 0.65rem;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--c-indigo-210) 52%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 52%, transparent);
   }
 
   .rpg-world-delete-preview dt {
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
   }
 
   .rpg-world-delete-preview dd {
     margin: 0;
-    color: var(--c-red-890);
+    color: var(--fg-red-890);
     font-weight: 800;
   }
 
@@ -119,8 +119,8 @@
 @layer overrides {
   .rpg-danger-button {
     border-color: color-mix(in srgb, var(--c-red-720) 60%, transparent);
-    background: linear-gradient(135deg, var(--c-orange-400), var(--c-red-500));
-    color: var(--c-slate-980);
+    background: linear-gradient(135deg, var(--bg-orange-400), var(--c-red-500));
+    color: var(--fg-slate-980);
   }
 
   .rpg-danger-button:hover:not(:disabled) {

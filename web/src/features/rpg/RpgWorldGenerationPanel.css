@@ -4,7 +4,7 @@
     gap: 0.9rem;
     padding: 0.95rem;
     border-top: 1px solid color-mix(in srgb, var(--c-yellow-770) 13%, transparent);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-170) 50%, transparent), color-mix(in srgb, var(--c-slate-150-2) 28%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-170) 50%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 28%, transparent));
   }
 
   .is-operational-dashboard .rpg-generation-panel .rpg-authoring-page-heading {
@@ -15,12 +15,12 @@
   }
 
   .is-operational-dashboard .rpg-generation-panel .rpg-authoring-page-heading h2 {
-    color: var(--c-slate-980);
+    color: var(--fg-slate-980);
     font-family: Georgia, 'Times New Roman', serif;
   }
 
   .is-operational-dashboard .rpg-generation-panel .rpg-authoring-page-heading > span {
-    color: var(--c-amber-830);
+    color: var(--fg-amber-830);
     font-size: 0.72rem;
   }
 
@@ -31,7 +31,7 @@
     padding: 0.9rem;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 18%, transparent);
     border-radius: 6px;
-    background: color-mix(in srgb, var(--c-indigo-170) 70%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 70%, transparent);
   }
 
   .rpg-generation-settings label,
@@ -50,8 +50,8 @@
     min-height: 38px;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-slate-150-2) 88%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 88%, transparent);
+    color: var(--fg-neutral-1000);
     padding: 0.55rem 0.7rem;
   }
 
@@ -77,7 +77,7 @@
     align-items: center;
     justify-self: start;
     gap: 0.55rem;
-    color: color-mix(in srgb, var(--c-slate-930) 74%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 74%, transparent);
     font-size: 0.72rem;
   }
 
@@ -94,12 +94,12 @@
     padding: 0.8rem 0.9rem;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 16%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-indigo-170) 56%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 56%, transparent);
   }
 
   .rpg-generation-advanced > summary {
     cursor: pointer;
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     font-weight: 800;
   }
 
@@ -112,7 +112,7 @@
 
   .rpg-generation-advanced-grid label > span,
   .rpg-generation-settings label > span {
-    color: color-mix(in srgb, var(--c-slate-870) 68%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 68%, transparent);
     font-size: 0.68rem;
     font-weight: 800;
   }
@@ -132,8 +132,8 @@
     padding: 0.55rem 0.85rem;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-indigo-170) 82%, transparent);
-    color: color-mix(in srgb, var(--c-neutral-960) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 82%, transparent);
+    color: color-mix(in srgb, var(--fg-neutral-960) 90%, transparent);
     font-size: 0.72rem;
   }
 
@@ -158,8 +158,8 @@
   .rpg-generation-panel .rpg-authoring-feedback {
     border: 1px solid color-mix(in srgb, var(--c-green-790-2) 20%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-sky-280) 68%, transparent);
-    color: var(--c-teal-900);
+    background: color-mix(in srgb, var(--bg-sky-280) 68%, transparent);
+    color: var(--fg-teal-900);
   }
 
   .rpg-generation-topic-grid {
@@ -174,7 +174,7 @@
     padding: 0.8rem;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 14%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-indigo-170) 68%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 68%, transparent);
   }
 
   .rpg-generation-topic-choice {
@@ -189,7 +189,7 @@
   }
 
   .rpg-generation-topic-choice small {
-    color: var(--omnix-muted, var(--c-slate-730));
+    color: var(--omnix-muted, var(--fg-slate-730));
   }
 
   @media (max-width: 800px) {

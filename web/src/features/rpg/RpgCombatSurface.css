@@ -4,15 +4,15 @@
   }
 
   .rpg-combat-surface h3 {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     margin: 0.2rem 0 0;
   }
 
   .rpg-combat-status {
-    background: color-mix(in srgb, var(--c-neutral-1000) 5.5%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 5.5%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 16%, transparent);
     border-radius: 999px;
-    color: var(--c-violet-830);
+    color: var(--fg-violet-830);
     font-size: 0.78rem;
     font-weight: 800;
     padding: 0.36rem 0.64rem;
@@ -21,7 +21,7 @@
   .rpg-combat-status-active {
     background: color-mix(in srgb, var(--c-red-640) 14%, transparent);
     border-color: color-mix(in srgb, var(--c-red-720) 36%, transparent);
-    color: var(--c-red-890);
+    color: var(--fg-red-890);
   }
 
   .rpg-combat-overview,
@@ -39,7 +39,7 @@
   .rpg-initiative-strip,
   .rpg-combatant-card,
   .rpg-combat-deltas {
-    background: color-mix(in srgb, var(--c-slate-130) 42%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
     border-radius: 0.72rem;
     display: grid;
@@ -52,14 +52,14 @@
   .rpg-combatant-card small,
   .rpg-combat-deltas li,
   .rpg-initiative-strip p {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
   }
 
   .rpg-combat-overview strong,
   .rpg-combatant-card strong,
   .rpg-combat-deltas strong,
   .rpg-initiative-strip strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .rpg-initiative-strip {
@@ -80,7 +80,7 @@
     background: color-mix(in srgb, var(--c-violet-540) 14%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
     border-radius: 999px;
-    color: var(--c-slate-940);
+    color: var(--fg-slate-940);
     font-size: 0.78rem;
     padding: 0.28rem 0.52rem;
   }
@@ -107,10 +107,10 @@
 
   .rpg-combat-action-button {
     align-items: center;
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
     border-radius: 0.7rem;
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     cursor: pointer;
     display: inline-flex;
     gap: 0.45rem;

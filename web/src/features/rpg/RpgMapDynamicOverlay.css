@@ -33,7 +33,7 @@
   .rpg-map-weather-snow,
   .rpg-map-weather-snowy,
   .rpg-map-weather-blizzard {
-    fill: color-mix(in srgb, var(--c-slate-910) 11%, transparent);
+    fill: color-mix(in srgb, var(--fg-slate-910) 11%, transparent);
   }
 
   .rpg-map-weather-rain,
@@ -56,7 +56,7 @@
   .rpg-map-visibility-poor,
   .rpg-map-visibility-foggy,
   .rpg-map-visibility-low {
-    fill: color-mix(in srgb, var(--c-slate-870) 16%, transparent);
+    fill: color-mix(in srgb, var(--fg-slate-870) 16%, transparent);
   }
 
   .rpg-map-fog-polygon {

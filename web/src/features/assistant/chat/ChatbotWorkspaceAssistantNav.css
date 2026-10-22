@@ -4,7 +4,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.45rem;
-    color: var(--c-slate-940);
+    color: var(--fg-slate-940);
     cursor: pointer;
     display: grid;
     gap: 0.65rem;
@@ -15,7 +15,7 @@
   }
 
   .assistant-sidebar-nav button span:first-child {
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     display: inline-flex;
     justify-content: center;
   }
@@ -50,7 +50,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.45rem;
-    color: var(--c-slate-890);
+    color: var(--fg-slate-890);
     cursor: pointer;
     display: inline-flex;
     font: inherit;
@@ -66,7 +66,7 @@
   .assistant-chat-sidebar-minimize:focus-visible {
     background: color-mix(in srgb, var(--c-indigo-600) 16%, transparent);
     border-color: color-mix(in srgb, var(--c-violet-660) 34%, transparent);
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     outline: none;
   }
 
@@ -144,7 +144,7 @@
   .assistant-view-panel article,
   .assistant-tool-config-list article,
   .assistant-settings-list div {
-    background: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 72%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.75rem;
     padding: 1rem;
@@ -190,7 +190,7 @@
     background: color-mix(in srgb, var(--c-violet-540) 18%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 32%, transparent);
     border-radius: 999px;
-    color: var(--c-violet-920);
+    color: var(--fg-violet-920);
     font-size: 0.75rem;
     padding: 0.35rem 0.65rem;
     white-space: nowrap;
@@ -212,7 +212,7 @@
   }
 
   .assistant-tool-connection-panel {
-    background: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 72%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.75rem;
     display: grid;
@@ -255,7 +255,7 @@
   }
 
   .assistant-tool-oauth-form input {
-    background: color-mix(in srgb, var(--c-indigo-190) 92%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 92%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.55rem;
     color: var(--omnix-text);
@@ -271,7 +271,7 @@
 
   .assistant-tool-action-row {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 72%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.75rem;
     display: grid;
@@ -290,7 +290,7 @@
     background: color-mix(in srgb, var(--c-violet-540) 18%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 32%, transparent);
     border-radius: 999px;
-    color: var(--c-violet-920);
+    color: var(--fg-violet-920);
     font-size: 0.75rem;
     padding: 0.35rem 0.65rem;
     white-space: nowrap;
@@ -299,13 +299,13 @@
   .assistant-tool-toggle,
   .assistant-tool-policy-select {
     align-items: center;
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     display: inline-grid;
     gap: 0.35rem;
   }
 
   .assistant-tool-policy-select select {
-    background: color-mix(in srgb, var(--c-indigo-190) 92%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 92%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.55rem;
     color: var(--omnix-text);
@@ -354,10 +354,10 @@
 
   .assistant-live-draft,
   .assistant-voice-toggle {
-    background: color-mix(in srgb, var(--c-indigo-190) 66%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 66%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
     border-radius: 0.75rem;
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     padding: 0.75rem;
   }
 
@@ -367,7 +367,7 @@
   }
 
   .assistant-live-draft strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .assistant-live-draft p {
@@ -402,11 +402,11 @@
 
   .assistant-live-card[data-live-voice-status='connected'] > header strong,
   .assistant-live-card[data-live-voice-status='connecting'] > header strong {
-    color: var(--c-teal-860-2);
+    color: var(--fg-teal-860-2);
   }
 
   .assistant-live-card[data-live-voice-status='error'] > header strong {
-    color: var(--c-red-720);
+    color: var(--fg-red-720);
   }
 
   .assistant-live-card[data-live-voice-status='connected'] > header strong::before,
@@ -441,7 +441,7 @@
   .assistant-voice-orb::before {
     background:
       radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--c-sky-800) 28%, transparent), transparent 48%),
-      radial-gradient(circle at 54% 46%, color-mix(in srgb, var(--c-teal-860-2) 18%, transparent), transparent 38%);
+      radial-gradient(circle at 54% 46%, color-mix(in srgb, var(--wash-teal-860-2) 18%, transparent), transparent 38%);
     border-radius: 999px;
     filter: blur(16px);
     height: 9.5rem;
@@ -460,7 +460,7 @@
   .assistant-voice-core {
     align-items: center;
     background:
-      linear-gradient(var(--c-indigo-210), var(--c-indigo-210)) padding-box,
+      linear-gradient(var(--bg-indigo-210), var(--bg-indigo-210)) padding-box,
       conic-gradient(from 0deg, var(--c-teal-860-2), var(--c-sky-800), var(--c-indigo-600), var(--c-amber-830), var(--c-teal-860-2)) border-box;
     border: 0.38rem solid transparent;
     border-radius: 999px;
@@ -513,8 +513,9 @@
     width: 3rem;
   }
 
+  /* The microphone glyph is ink: light on the dark orb, dark on the light one. */
   .assistant-voice-orb .assistant-voice-mic::before {
-    background: linear-gradient(180deg, var(--c-neutral-1000), var(--c-indigo-920));
+    background: linear-gradient(180deg, var(--fg-neutral-1000), var(--fg-indigo-920));
     border-radius: 999px;
     content: "";
     height: 2.2rem;
@@ -525,7 +526,7 @@
 
   .assistant-voice-orb .assistant-voice-mic::after {
     background: transparent;
-    border: 0.24rem solid var(--c-neutral-1000);
+    border: 0.24rem solid var(--fg-neutral-1000);
     border-radius: 0 0 1.4rem 1.4rem;
     border-top: 0;
     bottom: 0.48rem;
@@ -536,7 +537,7 @@
   }
 
   .assistant-voice-core::after {
-    background: var(--c-neutral-1000);
+    background: var(--fg-neutral-1000);
     border-radius: 999px;
     bottom: 1.3rem;
     content: "";
@@ -631,7 +632,7 @@
 
   .assistant-voice-orb[data-voice-mode='error'] .assistant-voice-core {
     background:
-      linear-gradient(var(--c-slate-190-3), var(--c-slate-190-3)) padding-box,
+      linear-gradient(var(--bg-slate-190-3), var(--bg-slate-190-3)) padding-box,
       conic-gradient(from 0deg, var(--c-red-720), var(--c-amber-830), var(--c-red-720)) border-box;
     box-shadow: 0 0 1.8rem color-mix(in srgb, var(--c-red-720) 22%, transparent);
   }
@@ -647,10 +648,10 @@
 
   .assistant-voice-input-indicator {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 66%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 66%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
     border-radius: 0.7rem;
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     display: grid;
     gap: 0.5rem;
     grid-template-columns: auto auto minmax(4rem, 1fr);
@@ -659,20 +660,20 @@
   }
 
   .assistant-voice-input-indicator span {
-    color: color-mix(in srgb, var(--c-indigo-920) 72%, transparent);
+    color: color-mix(in srgb, var(--fg-indigo-920) 72%, transparent);
     font-size: 0.78rem;
     font-weight: 820;
   }
 
   .assistant-voice-input-indicator strong {
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     font-size: 0.82rem;
     font-weight: 850;
     white-space: nowrap;
   }
 
   .assistant-voice-input-indicator i {
-    background: color-mix(in srgb, var(--c-slate-150-2) 76%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 76%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 24%, transparent);
     border-radius: 999px;
     display: block;
@@ -699,11 +700,11 @@
   }
 
   .assistant-live-card[data-voice-input='active'] .assistant-voice-input-indicator strong {
-    color: var(--c-teal-860-2);
+    color: var(--fg-teal-860-2);
   }
 
   .assistant-live-card[data-voice-input='error'] .assistant-voice-input-indicator strong {
-    color: var(--c-red-720);
+    color: var(--fg-red-720);
   }
 
   @keyframes assistantLiveStatusBlink {
@@ -764,11 +765,11 @@
   .assistant-chat-main .assistant-message-actions button[aria-expanded='true'] {
     background: color-mix(in srgb, var(--c-indigo-600) 30%, transparent);
     border-color: color-mix(in srgb, var(--c-violet-660) 52%, transparent);
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
   }
 
   .assistant-message-action-menu {
-    background: color-mix(in srgb, var(--c-indigo-190) 98%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 98%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 34%, transparent);
     border-radius: 0.65rem;
     box-shadow: 0 1rem 2.4rem color-mix(in srgb, var(--c-neutral-0) 34%, transparent);
@@ -786,7 +787,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.45rem;
-    color: var(--c-slate-940);
+    color: var(--fg-slate-940);
     justify-content: flex-start;
     min-height: 2rem;
     padding: 0 0.55rem;
@@ -851,7 +852,7 @@
   .assistant-chat-integrated-actions .assistant-chat-fullscreen-button[aria-pressed='true'] {
     background: color-mix(in srgb, var(--c-indigo-600) 30%, transparent);
     border-color: color-mix(in srgb, var(--c-violet-810) 52%, transparent);
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
   }
 
   .assistant-chat-integrated-actions .assistant-header-pill,
@@ -904,7 +905,7 @@
   }
 
   .assistant-chat-integrated-actions .assistant-header-voice-select span {
-    color: color-mix(in srgb, var(--c-slate-970-2) 90%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-970-2) 90%, transparent);
     font-size: 0.78rem;
     font-weight: 850;
     letter-spacing: 0;
@@ -915,10 +916,10 @@
     appearance: none;
     background:
       linear-gradient(45deg, transparent 50%, var(--c-indigo-920) 50%) right 0.55rem center / 0.42rem 0.42rem no-repeat,
-      color-mix(in srgb, var(--c-indigo-190) 38%, transparent);
+      color-mix(in srgb, var(--bg-indigo-190) 38%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-indigo-920) 22%, transparent);
     border-radius: 0.42rem;
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     cursor: pointer;
     font-weight: 760;
     line-height: 1;
@@ -934,8 +935,8 @@
   }
 
   .assistant-chat-integrated-actions .assistant-header-voice-select option {
-    background: var(--c-indigo-210);
-    color: var(--c-slate-970-2);
+    background: var(--bg-indigo-210);
+    color: var(--fg-slate-970-2);
   }
 
   .assistant-chat-main .assistant-message-input {
@@ -964,7 +965,7 @@
   .assistant-chat-image-attachment,
   .assistant-chat-file-attachment {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 72%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-720) 28%, transparent);
     border-radius: 0.75rem;
     display: flex;
@@ -1013,7 +1014,7 @@
   .assistant-chat-image-attachment small,
   .assistant-chat-file-attachment small,
   .assistant-chat-paste-hint {
-    color: var(--assistant-muted, var(--c-slate-740));
+    color: var(--assistant-muted, var(--fg-slate-740));
     font-size: 0.76rem;
   }
 
@@ -1044,7 +1045,7 @@
   }
 
   .assistant-chat-image-error {
-    color: var(--c-red-810);
+    color: var(--fg-red-810);
     font-size: 0.84rem;
     margin: 0;
   }
@@ -1079,7 +1080,7 @@
 
   .assistant-quick-search-progress {
     align-items: center;
-    color: var(--assistant-muted, var(--c-slate-740));
+    color: var(--assistant-muted, var(--fg-slate-740));
     display: flex;
     gap: 0.65rem;
     margin: 0.85rem auto 0;
@@ -1090,11 +1091,11 @@
 
   .assistant-thinking-indicator {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 62%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 62%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 20%, transparent);
     border-radius: 999px;
     box-shadow: 0 0 0.8rem color-mix(in srgb, var(--c-sky-830) 8%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 6%, transparent);
-    color: var(--assistant-muted, var(--c-slate-740));
+    color: var(--assistant-muted, var(--fg-slate-740));
     display: flex;
     gap: 0.75rem;
     margin: 0.85rem auto 0;
@@ -1127,7 +1128,7 @@
   }
 
   .assistant-thinking-orb::after {
-    background: color-mix(in srgb, var(--c-neutral-1000) 20%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 20%, transparent);
     border-radius: inherit;
     content: '';
     inset: 0.47rem;
@@ -1193,7 +1194,7 @@
   .assistant-quick-search-icon {
     align-items: center;
     animation: assistant-quick-search-pulse 1.4s ease-in-out infinite;
-    color: var(--c-sky-830);
+    color: var(--fg-sky-830);
     display: inline-flex;
     font-size: 1.25rem;
     justify-content: center;
@@ -1418,7 +1419,7 @@
     padding: 0.9rem;
     border: 1px solid color-mix(in srgb, var(--omnix-accent, var(--c-sky-830)) 42%, transparent);
     border-radius: 0.85rem;
-    background: color-mix(in srgb, var(--omnix-panel, var(--c-indigo-210)) 88%, var(--omnix-accent, var(--c-sky-830)) 12%);
+    background: color-mix(in srgb, var(--omnix-panel, var(--bg-indigo-210)) 88%, var(--omnix-accent, var(--c-sky-830)) 12%);
   }
 
   .assistant-live-identity {
@@ -1427,7 +1428,7 @@
     padding: 0.25rem 0.55rem;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 999px;
-    color: var(--text-muted, var(--c-indigo-780));
+    color: var(--text-muted, var(--fg-indigo-780));
     font-size: 0.72rem;
     font-weight: 700;
   }
@@ -1435,7 +1436,7 @@
   .assistant-live-identity.active {
     border-color: color-mix(in srgb, var(--c-green-790-2) 38%, transparent);
     background: color-mix(in srgb, var(--c-teal-520) 16%, transparent);
-    color: var(--c-teal-860);
+    color: var(--fg-teal-860);
   }
 
   .assistant-tool-proposal > header,
@@ -1469,7 +1470,7 @@
     border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
     border-radius: 0.55rem;
     color: inherit;
-    background: color-mix(in srgb, var(--omnix-panel, var(--c-indigo-210)) 92%, transparent);
+    background: color-mix(in srgb, var(--omnix-panel, var(--bg-indigo-210)) 92%, transparent);
   }
 
   .assistant-tool-proposal button {

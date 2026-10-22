@@ -13,8 +13,8 @@
   .trading-advanced-details>nav button[aria-selected=true]{border-color:var(--c-blue-630);background:color-mix(in srgb, var(--c-blue-630) 14%, transparent)}
   .trading-advanced-price{display:flex;align-items:baseline;gap:10px;margin:0}
   .trading-advanced-price strong{font-size:22px}
-  .trading-advanced-view .is-up{color:var(--c-green-790-2)}
-  .trading-advanced-view .is-down{color:var(--c-red-720)}
+  .trading-advanced-view .is-up{color:var(--fg-green-790-2)}
+  .trading-advanced-view .is-down{color:var(--fg-red-720)}
   .trading-advanced-company{margin:2px 0 8px;color:var(--c-slate-630)}
   .trading-advanced-overview dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin:0}
   .trading-advanced-stat{display:grid;gap:2px;padding:6px 8px;border:1px solid var(--c-neutral-910);border-radius:5px}

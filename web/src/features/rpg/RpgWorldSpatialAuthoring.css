@@ -14,7 +14,7 @@
     padding: 0.35rem 0.65rem;
     border-radius: 999px;
     background: color-mix(in srgb, var(--c-blue-450) 18%, transparent);
-    color: var(--c-blue-870);
+    color: var(--fg-blue-870);
     font-size: 0.75rem;
     font-weight: 800;
   }
@@ -31,7 +31,7 @@
     padding: 1rem;
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 20%, transparent);
     border-radius: 16px;
-    background: color-mix(in srgb, var(--c-slate-150-2) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 72%, transparent);
   }
 
   .rpg-spatial-layout h3 {
@@ -50,7 +50,7 @@
   }
 
   .rpg-spatial-layout form > label > span {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -64,8 +64,8 @@
     width: 100%;
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--c-indigo-170) 88%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-indigo-170) 88%, transparent);
+    color: var(--fg-neutral-1000);
     font: inherit;
     padding: 0.7rem 0.8rem;
   }
@@ -78,7 +78,7 @@
   }
 
   .rpg-spatial-layout input[readonly] {
-    color: var(--omnix-muted, var(--c-slate-730));
+    color: var(--omnix-muted, var(--fg-slate-730));
   }
 
   .rpg-spatial-actions {
@@ -99,25 +99,25 @@
     padding: 0.85rem;
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--c-indigo-210) 52%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 52%, transparent);
   }
 
   .rpg-spatial-card-list article p {
     margin: 0.25rem 0 0;
-    color: var(--omnix-muted, var(--c-slate-730));
+    color: var(--omnix-muted, var(--fg-slate-730));
   }
 
   .rpg-spatial-card-list article small {
     display: block;
     margin-top: 0.3rem;
-    color: var(--omnix-muted, var(--c-slate-730));
+    color: var(--omnix-muted, var(--fg-slate-730));
     overflow-wrap: anywhere;
   }
 
   .rpg-spatial-card-list article ul {
     margin: 0;
     padding-left: 1.2rem;
-    color: var(--c-red-890);
+    color: var(--fg-red-890);
     font-size: 0.82rem;
   }
 
@@ -129,7 +129,7 @@
 
   .rpg-spatial-layout summary {
     cursor: pointer;
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     font-weight: 800;
   }
 

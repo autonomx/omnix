@@ -5,7 +5,7 @@
     z-index: 80;
     display: flex;
     justify-content: flex-end;
-    background: color-mix(in srgb, var(--c-slate-150-2) 62%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 62%, transparent);
     backdrop-filter: blur(2px);
   }
 
@@ -13,10 +13,10 @@
     width: min(620px, 94vw);
     height: 100%;
     overflow-y: auto;
-    background: var(--c-indigo-190);
+    background: var(--bg-indigo-190);
     border-left: 1px solid var(--c-blue-310);
     box-shadow: -18px 0 48px color-mix(in srgb, var(--c-neutral-0) 35%, transparent);
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
   }
 
   .paper-trade-drilldown-header {
@@ -28,7 +28,7 @@
     justify-content: space-between;
     gap: 18px;
     padding: 18px 20px;
-    background: color-mix(in srgb, var(--c-indigo-190) 97%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 97%, transparent);
     border-bottom: 1px solid var(--c-blue-310);
   }
 
@@ -47,13 +47,13 @@
   }
 
   .paper-trade-drilldown-header span.auto {
-    color: var(--c-blue-870);
+    color: var(--fg-blue-870);
     background: color-mix(in srgb, var(--c-sky-640) 16%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-sky-750) 35%, transparent);
   }
 
   .paper-trade-drilldown-header span.shadow {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     background: color-mix(in srgb, var(--c-violet-570) 16%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-violet-660) 34%, transparent);
   }
@@ -71,16 +71,16 @@
     height: 32px;
     border: 1px solid var(--c-blue-350);
     border-radius: 7px;
-    background: var(--c-blue-230);
-    color: var(--c-slate-810);
+    background: var(--bg-blue-230);
+    color: var(--fg-slate-810);
     font-size: 22px;
     line-height: 1;
     cursor: pointer;
   }
 
   .paper-trade-drilldown-header button:hover {
-    background: var(--c-slate-260-2);
-    color: var(--c-neutral-1000);
+    background: var(--bg-slate-260-2);
+    color: var(--fg-neutral-1000);
   }
 
   .paper-trade-drilldown-header button:focus-visible {
@@ -96,7 +96,7 @@
     overflow: hidden;
     border: 1px solid var(--c-blue-310);
     border-radius: 9px;
-    background: var(--c-blue-310);
+    background: var(--bg-blue-310);
   }
 
   .paper-trade-drilldown-summary > div,
@@ -104,7 +104,7 @@
     display: grid;
     gap: 4px;
     padding: 11px 12px;
-    background: var(--c-blue-230);
+    background: var(--bg-blue-230);
   }
 
   .paper-trade-drilldown-summary small,
@@ -120,17 +120,17 @@
   .paper-trade-drilldown-summary strong,
   .paper-trade-drilldown-kpis strong {
     overflow: hidden;
-    color: var(--c-slate-930);
+    color: var(--fg-slate-930);
     font-size: 13px;
     text-overflow: ellipsis;
   }
 
   .paper-trade-drilldown .positive {
-    color: var(--c-green-790-2);
+    color: var(--fg-green-790-2);
   }
 
   .paper-trade-drilldown .negative {
-    color: var(--c-red-720);
+    color: var(--fg-red-720);
   }
 
   .paper-trade-drilldown-section,
@@ -139,7 +139,7 @@
     padding: 14px;
     border: 1px solid var(--c-blue-310);
     border-radius: 9px;
-    background: var(--c-indigo-210);
+    background: var(--bg-indigo-210);
   }
 
   .paper-trade-drilldown-review {
@@ -155,7 +155,7 @@
   }
 
   .paper-trade-drilldown-section > header strong {
-    color: var(--c-slate-930);
+    color: var(--fg-slate-930);
     font-size: 13px;
   }
 
@@ -194,13 +194,13 @@
   }
 
   .paper-trade-drilldown-notice strong {
-    color: var(--c-slate-930);
+    color: var(--fg-slate-930);
     font-size: 13px;
   }
 
   .paper-trade-drilldown-notice p {
     margin: 7px 0 0;
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 12px;
     line-height: 1.5;
   }
@@ -210,7 +210,7 @@
     padding: 18px;
     border: 1px dashed var(--c-blue-350);
     border-radius: 8px;
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     text-align: center;
     font-size: 12px;
   }
@@ -221,12 +221,12 @@
     padding: 9px 10px;
     border: 1px solid var(--c-blue-280-2);
     border-radius: 6px;
-    background: var(--c-indigo-210);
+    background: var(--bg-indigo-210);
   }
 
   .paper-trade-drilldown-features strong {
     overflow: hidden;
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
     font-size: 12px;
     text-overflow: ellipsis;
   }
@@ -236,7 +236,7 @@
     gap: 7px;
     margin: 0;
     padding-left: 20px;
-    color: var(--c-slate-790);
+    color: var(--fg-slate-790);
     font-size: 12px;
     line-height: 1.45;
   }
@@ -247,12 +247,12 @@
     padding: 8px 9px;
     border: 1px solid var(--c-blue-280-2);
     border-radius: 6px;
-    background: var(--c-indigo-210);
+    background: var(--bg-indigo-210);
   }
 
   .paper-trade-drilldown-identity code {
     overflow: hidden;
-    color: var(--c-slate-820);
+    color: var(--fg-slate-820);
     font-size: 11px;
     text-overflow: ellipsis;
   }
@@ -271,7 +271,7 @@
     overflow: hidden;
     border: 1px solid var(--c-blue-280-2);
     border-radius: 7px;
-    background: var(--c-blue-280-2);
+    background: var(--bg-blue-280-2);
   }
 
   .paper-trade-drilldown-events > div {
@@ -279,7 +279,7 @@
     grid-template-columns: 118px 1fr;
     gap: 12px;
     padding: 9px 10px;
-    background: var(--c-indigo-210);
+    background: var(--bg-indigo-210);
   }
 
   .paper-trade-drilldown-events time {
@@ -293,7 +293,7 @@
   }
 
   .paper-trade-drilldown-events strong {
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
     font-size: 11px;
   }
 
@@ -321,8 +321,8 @@
     border: 1px solid var(--c-blue-350);
     border-radius: 5px;
     padding: 4px 8px;
-    background: var(--c-blue-230);
-    color: var(--c-sky-830);
+    background: var(--bg-blue-230);
+    color: var(--fg-sky-830);
     font: inherit;
     font-size: 10px;
     cursor: pointer;
@@ -331,8 +331,8 @@
   .paper-trade-view-button:hover,
   .paper-trade-view-button:focus-visible {
     border-color: var(--c-blue-580);
-    background: var(--c-indigo-260-3);
-    color: var(--c-blue-930);
+    background: var(--bg-indigo-260-3);
+    color: var(--fg-blue-930);
     outline: none;
   }
 

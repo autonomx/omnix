@@ -5,7 +5,7 @@
     align-items: stretch;
     min-height: 42px;
     border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
-    background: linear-gradient(180deg, var(--c-indigo-190), var(--c-slate-170-2));
+    background: linear-gradient(180deg, var(--bg-indigo-190), var(--bg-slate-170-2));
     overflow: hidden;
   }
 
@@ -48,7 +48,7 @@
   .trading-session-tab > [role='tab']:hover,
   .trading-session-tab.active > [role='tab'] {
     background: color-mix(in srgb, var(--c-blue-510) 17%, transparent);
-    color: var(--c-slate-930);
+    color: var(--fg-slate-930);
   }
 
   .trading-session-tab.active > [role='tab'] {
@@ -160,14 +160,14 @@
 
   .trading-session-tab-close:hover:not(:disabled) {
     background: color-mix(in srgb, var(--c-red-720) 13%, transparent);
-    color: var(--c-red-770);
+    color: var(--fg-red-770);
   }
 
   .trading-session-tab-add {
     padding: 0;
     border-color: color-mix(in srgb, var(--c-blue-680) 32%, transparent);
     background: color-mix(in srgb, var(--c-blue-460-2) 18%, transparent);
-    color: var(--c-blue-770);
+    color: var(--fg-blue-770);
     font-size: 18px;
   }
 
@@ -177,7 +177,7 @@
   }
 
   /* Tab and launcher menus (TVP-4.4): on the page body, placed under their trigger. */
-  .trading-session-tab-menu{z-index:60;display:flex;min-width:220px;max-height:60vh;overflow:auto;flex-direction:column;padding:4px;border:1px solid var(--c-slate-890);border-radius:6px;background:var(--c-slate-170-2);color:var(--c-slate-930);box-shadow:0 8px 24px color-mix(in srgb, var(--c-neutral-0) 35%, transparent)}
+  .trading-session-tab-menu{z-index:60;display:flex;min-width:220px;max-height:60vh;overflow:auto;flex-direction:column;padding:4px;border:1px solid var(--c-slate-890);border-radius:6px;background:var(--bg-slate-170-2);color:var(--fg-slate-930);box-shadow:0 8px 24px color-mix(in srgb, var(--c-neutral-0) 35%, transparent)}
   .trading-session-tab-menu button{padding:6px 10px;border:0;background:none;color:inherit;text-align:left;font:inherit;font-size:12px;cursor:pointer;border-radius:4px}
   .trading-session-tab-menu button:hover:not(:disabled),.trading-session-tab-menu button:focus-visible{background:color-mix(in srgb, var(--c-blue-660) 22%, transparent);outline:none}
   .trading-session-tab-menu button:disabled{opacity:.45;cursor:default}

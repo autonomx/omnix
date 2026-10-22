@@ -44,7 +44,7 @@
   .rpg-world-library-scenario-revision button {
     border: 1px solid var(--mantine-color-dark-3, var(--c-slate-500));
     border-radius: 0.55rem;
-    background: var(--mantine-color-dark-7, var(--c-neutral-220));
+    background: var(--mantine-color-dark-7, var(--bg-neutral-220));
     color: inherit;
     cursor: pointer;
     padding: 0.55rem 0.8rem;
@@ -81,7 +81,7 @@
   .rpg-world-library-card {
     border: 1px solid var(--mantine-color-dark-4, var(--c-slate-430));
     border-radius: 0.8rem;
-    background: var(--mantine-color-dark-8, var(--c-neutral-200));
+    background: var(--mantine-color-dark-8, var(--bg-neutral-200));
     padding: 1rem;
     min-width: 0;
   }
@@ -155,7 +155,7 @@
     box-sizing: border-box;
     border: 1px solid var(--mantine-color-dark-4, var(--c-slate-430));
     border-radius: 0.5rem;
-    background: var(--mantine-color-dark-7, var(--c-neutral-220));
+    background: var(--mantine-color-dark-7, var(--bg-neutral-220));
     color: inherit;
     padding: 0.55rem 0.65rem;
   }
@@ -205,7 +205,7 @@
     max-height: 22rem;
     overflow: auto;
     border-radius: 0.55rem;
-    background: var(--mantine-color-dark-9, var(--c-neutral-180));
+    background: var(--mantine-color-dark-9, var(--bg-neutral-180));
     padding: 0.75rem;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

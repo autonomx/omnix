@@ -271,7 +271,7 @@
 
   .paper-qualification { display: grid; gap: 10px; border: 1px solid color-mix(in srgb, var(--c-yellow-770) 35%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--c-yellow-770) 6%, transparent); padding: 12px; }
   .paper-qualification[data-authorized='true'] { border-color: color-mix(in srgb, var(--c-teal-700) 38%, transparent); background: color-mix(in srgb, var(--c-teal-700) 6%, transparent); }
-  .paper-qualification > header > span { border-radius: 6px; background: color-mix(in srgb, var(--c-yellow-770) 12%, transparent); padding: 5px 8px; color: var(--c-yellow-720); font-size: 9px; font-weight: 800; }
+  .paper-qualification > header > span { border-radius: 6px; background: color-mix(in srgb, var(--c-yellow-770) 12%, transparent); padding: 5px 8px; color: var(--fg-yellow-720); font-size: 9px; font-weight: 800; }
   .paper-qualification[data-authorized='true'] > header > span { background: color-mix(in srgb, var(--c-teal-700) 12%, transparent); color: var(--pd-green); }
   .qualification-grid { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 6px; }
   .qualification-grid > div { position: relative; display: grid; gap: 3px; border-radius: 7px; background: var(--pd-card-soft); padding: 8px 26px 8px 9px; }
@@ -279,7 +279,7 @@
   .qualification-grid strong { font-size: 11px; }
   .qualification-grid > div > span { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; }
   .qualification-grid > div[data-pass='true'] > span { color: var(--pd-green); }
-  .qualification-grid > div[data-pass='false'] > span { color: var(--c-yellow-720); }
+  .qualification-grid > div[data-pass='false'] > span { color: var(--fg-yellow-720); }
   .paper-qualification footer { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--pd-muted); font-size: 8px; }
 
   .paper-dashboard-histogram { display: grid; grid-template-columns: repeat(8, minmax(36px, 1fr)); align-items: end; gap: 5px; height: 200px; }
@@ -296,7 +296,7 @@
   .paper-funnel span { font-size: 8px; font-weight: 700; }
   .paper-funnel strong { font-size: 18px; }
   .paper-funnel small { color: var(--pd-muted); font-size: 8px; }
-  .paper-funnel em { color: var(--c-yellow-720); font-size: 8px; font-style: normal; overflow-wrap: anywhere; }
+  .paper-funnel em { color: var(--fg-yellow-720); font-size: 8px; font-style: normal; overflow-wrap: anywhere; }
 
   .paper-factor-studies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .paper-factor-studies section { display: grid; gap: 6px; min-width: 0; }

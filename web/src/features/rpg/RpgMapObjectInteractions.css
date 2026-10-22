@@ -34,7 +34,7 @@
 
   .rpg-map-object-active > g .rpg-map-object-vector-fallback rect,
   .rpg-map-object:focus-visible > g .rpg-map-object-vector-fallback rect {
-    stroke: var(--c-yellow-840);
+    stroke: var(--fg-yellow-840);
     stroke-width: 28;
   }
 
@@ -46,7 +46,7 @@
   .rpg-map-object-selected .rpg-map-object-vector-fallback rect,
   .rpg-map-object-selected .rpg-map-object-vector-fallback path {
     filter: brightness(1.2);
-    stroke: var(--c-yellow-950);
+    stroke: var(--fg-yellow-950);
   }
 
   .rpg-map-object-selected .rpg-map-object-sprite {
@@ -58,7 +58,7 @@
   }
 
   .rpg-map-object-tooltip {
-    background: color-mix(in srgb, var(--c-neutral-180) 96%, transparent);
+    background: color-mix(in srgb, var(--bg-neutral-180) 96%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-yellow-870) 45%, transparent);
     border-radius: 0.65rem;
     box-shadow: 0 0.8rem 2rem color-mix(in srgb, var(--c-neutral-0) 38%, transparent);
@@ -76,12 +76,12 @@
 
   .rpg-map-object-tooltip span,
   .rpg-map-object-tooltip small {
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
   }
 
   .rpg-map-selected-panel {
     align-items: flex-start;
-    background: color-mix(in srgb, var(--c-neutral-1000) 3.5%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-yellow-870) 20%, transparent);
     border-radius: 0.9rem;
     display: grid;
@@ -95,7 +95,7 @@
   }
 
   .rpg-map-selected-panel small {
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
   }
 
   .rpg-map-object-tags,
@@ -107,7 +107,7 @@
 
   .rpg-map-object-tags span,
   .rpg-map-capability-list span {
-    background: color-mix(in srgb, var(--c-neutral-1000) 5.5%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 5.5%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 9%, transparent);
     border-radius: 999px;
     font-size: 0.72rem;
@@ -115,7 +115,7 @@
   }
 
   .rpg-map-capability-disabled {
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
     opacity: 0.72;
   }
 
@@ -128,7 +128,7 @@
     background: transparent;
     border: 0;
     border-radius: 0.4rem;
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
     cursor: pointer;
     font: inherit;
     padding: 0.18rem 0.28rem;
@@ -142,7 +142,7 @@
   }
 
   .rpg-map-accessible-list button[aria-pressed='true'] {
-    color: var(--c-yellow-870);
+    color: var(--fg-yellow-870);
     font-weight: 700;
   }
 }
@@ -156,7 +156,7 @@
   .rpg-map-accessible-list button:hover,
   .rpg-map-accessible-list button:focus-visible,
   .rpg-map-object-list-active {
-    background: color-mix(in srgb, var(--c-yellow-870) 10%, transparent);
+    background: color-mix(in srgb, var(--wash-yellow-870) 10%, transparent);
     color: inherit;
   }
 }

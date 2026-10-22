@@ -2,7 +2,7 @@
   .rpg-profile-preview {
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 28%, transparent);
     border-radius: 18px;
-    background: color-mix(in srgb, var(--c-slate-150-2) 86%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 86%, transparent);
     padding: 22px;
     margin-bottom: 22px;
   }
@@ -29,7 +29,7 @@
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 18%, transparent);
     border-radius: 999px;
     background: transparent;
-    color: var(--c-slate-890);
+    color: var(--fg-slate-890);
     cursor: pointer;
     font: inherit;
     font-size: 0.82rem;
@@ -38,7 +38,7 @@
 
   .rpg-profile-preview-toggle:hover {
     border-color: color-mix(in srgb, var(--c-yellow-770) 55%, transparent);
-    color: var(--c-yellow-870);
+    color: var(--fg-yellow-870);
   }
 
   .rpg-profile-preview-toggle:focus-visible {
@@ -48,7 +48,7 @@
 
   .rpg-profile-preview > header p:last-child {
     margin: 0;
-    color: var(--rpg-muted, var(--c-slate-740));
+    color: var(--rpg-muted, var(--fg-slate-740));
     max-width: 780px;
   }
 
@@ -56,13 +56,13 @@
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 35%, transparent);
     border-radius: 999px;
     padding: 7px 12px;
-    color: var(--c-yellow-870);
+    color: var(--fg-yellow-870);
     white-space: nowrap;
   }
 
   .rpg-profile-preview.is-approved .rpg-profile-preview-status {
     border-color: color-mix(in srgb, var(--c-teal-740) 45%, transparent);
-    color: var(--c-teal-860);
+    color: var(--fg-teal-860);
   }
 
   .rpg-profile-preview-summary {
@@ -75,7 +75,7 @@
   .rpg-profile-preview-summary span {
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 9%, transparent);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--c-neutral-1000) 2.5%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 2.5%, transparent);
     padding: 12px 14px;
   }
 
@@ -85,7 +85,7 @@
   }
 
   .rpg-profile-preview-summary small {
-    color: var(--rpg-muted, var(--c-slate-740));
+    color: var(--rpg-muted, var(--fg-slate-740));
     margin-bottom: 5px;
   }
 
@@ -105,8 +105,8 @@
 
   .rpg-profile-domain-head {
     padding: 11px 14px;
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
-    color: var(--c-slate-850);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
+    color: var(--fg-slate-850);
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -130,7 +130,7 @@
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 13%, transparent);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--c-blue-130) 86%, transparent);
+    background: color-mix(in srgb, var(--bg-blue-130) 86%, transparent);
     color: inherit;
     padding: 9px 10px;
   }
@@ -146,7 +146,7 @@
   .rpg-profile-domain-row em {
     display: block;
     margin-top: 5px;
-    color: var(--rpg-muted, var(--c-blue-710));
+    color: var(--rpg-muted, var(--fg-blue-710));
     font-size: 0.72rem;
     font-style: normal;
     overflow: hidden;
@@ -166,7 +166,7 @@
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 13%, transparent);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--c-blue-130) 86%, transparent);
+    background: color-mix(in srgb, var(--bg-blue-130) 86%, transparent);
     color: inherit;
     padding: 9px 6px;
   }
@@ -183,7 +183,7 @@
 
   .rpg-profile-json-preview summary {
     cursor: pointer;
-    color: var(--c-slate-890);
+    color: var(--fg-slate-890);
   }
 
   .rpg-profile-json-preview textarea {
@@ -202,7 +202,7 @@
   }
 
   .rpg-profile-preview-actions small {
-    color: var(--c-yellow-870);
+    color: var(--fg-yellow-870);
   }
 
   @media (max-width: 1200px) {

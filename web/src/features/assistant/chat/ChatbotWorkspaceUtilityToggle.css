@@ -1,7 +1,7 @@
 @layer features {
   .assistant-side-panel-toggle {
     align-items: center;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-190) 92%, transparent), color-mix(in srgb, var(--c-slate-150-2) 96%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-190) 92%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 96%, transparent));
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
     border-radius: 0.95rem;
     display: grid;
@@ -16,7 +16,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.72rem;
-    color: var(--c-indigo-780);
+    color: var(--fg-indigo-780);
     cursor: pointer;
     font-weight: 850;
     min-height: 2.7rem;
@@ -29,7 +29,7 @@
   .assistant-side-panel-toggle button:focus-visible {
     background: color-mix(in srgb, var(--c-indigo-600) 12%, transparent);
     border-color: color-mix(in srgb, var(--c-violet-660) 24%, transparent);
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     outline: none;
   }
 

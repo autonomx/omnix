@@ -674,7 +674,7 @@
     .provider-settings-card
   ) {
     background:
-      linear-gradient(180deg, var(--omnix-glass-highlight), transparent 18%, color-mix(in srgb, var(--c-neutral-1000) 1.5%, transparent) 55%, color-mix(in srgb, var(--c-blue-130) 4.5%, transparent)),
+      linear-gradient(180deg, var(--omnix-glass-highlight), transparent 18%, color-mix(in srgb, var(--wash-neutral-1000) 1.5%, transparent) 55%, color-mix(in srgb, var(--bg-blue-130) 4.5%, transparent)),
       var(--omnix-glass-panel);
     border-color: var(--omnix-glass-border);
     color: var(--omnix-text);
@@ -710,7 +710,7 @@
     .platform-empty
   ) {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 7.5%, transparent), transparent 42%),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 7.5%, transparent), transparent 42%),
       var(--omnix-glass-panel-strong);
     border-color: var(--omnix-glass-border);
     box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft);
@@ -725,8 +725,8 @@
     .settings-category-title-row
   ) {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 7%, transparent), transparent),
-      color-mix(in srgb, var(--c-blue-350) 24%, transparent);
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 7%, transparent), transparent),
+      color-mix(in srgb, var(--bg-blue-350) 24%, transparent);
     border-color: var(--omnix-glass-border);
   }
 
@@ -753,7 +753,7 @@
     .image-assets-search input
   ) {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 7%, transparent), transparent 45%),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 7%, transparent), transparent 45%),
       var(--omnix-glass-control);
     border-color: var(--omnix-glass-border);
     color: var(--omnix-control-text);
@@ -788,7 +788,7 @@
     .audio-transport-buttons button
   ) {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 8%, transparent), transparent 46%),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 8%, transparent), transparent 46%),
       var(--omnix-glass-control);
     border: 1px solid var(--omnix-glass-border);
     color: var(--omnix-text);
@@ -813,7 +813,7 @@
   :root[data-omnix-theme='liquid-glass'] .chat-identity-mode-toggle,
   :root[data-omnix-theme='liquid-glass'] .chat-identity-context-select {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 8%, transparent), transparent 44%),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 8%, transparent), transparent 44%),
       var(--omnix-glass-control);
     border-color: var(--omnix-glass-border);
     box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft);
@@ -825,7 +825,7 @@
 
   :root[data-omnix-theme='liquid-glass'] .assistant-chat-message:not(.user) .assistant-chat-bubble p {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 7.5%, transparent), transparent 44%),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 7.5%, transparent), transparent 44%),
       var(--omnix-glass-panel-strong);
     border-color: var(--omnix-glass-border);
     box-shadow: var(--omnix-glass-bevel), 0 0.55rem 1.2rem color-mix(in srgb, var(--c-slate-150-2) 11%, transparent);
@@ -937,7 +937,7 @@
     .trading-alerts-panel-header
   ) {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 6.5%, transparent), transparent 42%),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 6.5%, transparent), transparent 42%),
       var(--omnix-glass-panel);
     border-color: var(--omnix-glass-border);
     box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft);
@@ -947,7 +947,7 @@
   :root[data-omnix-theme='liquid-glass'] .trading-chart-shell {
     background:
       radial-gradient(circle at 16% 4%, color-mix(in srgb, var(--c-blue-660) 10%, transparent), transparent 22rem),
-      color-mix(in srgb, var(--c-indigo-210) 36%, transparent);
+      color-mix(in srgb, var(--bg-indigo-210) 36%, transparent);
   }
 
   :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-shell {
@@ -977,7 +977,7 @@
     .trading-indicator-manager > summary
   ) {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 6%, transparent), transparent),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 6%, transparent), transparent),
       var(--omnix-glass-control);
     border-color: var(--omnix-glass-border);
     color: var(--omnix-text);
@@ -992,7 +992,7 @@
     .mantine-Menu-dropdown
   ) {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 8.5%, transparent), transparent 38%),
+      linear-gradient(180deg, color-mix(in srgb, var(--wash-neutral-1000) 8.5%, transparent), transparent 38%),
       var(--omnix-glass-panel-strong);
     border-color: var(--omnix-glass-border-strong);
     box-shadow: var(--omnix-glass-bevel), 0 1.25rem 3rem color-mix(in srgb, var(--c-slate-150-2) 28%, transparent);

@@ -3,7 +3,7 @@
     align-items: stretch;
     background:
       radial-gradient(circle at 18% 8%, color-mix(in srgb, var(--c-violet-540) 24%, transparent), transparent 34rem),
-      color-mix(in srgb, var(--c-slate-130) 94%, transparent);
+      color-mix(in srgb, var(--bg-slate-130) 94%, transparent);
     display: flex;
     inset: 0;
     overflow: auto;
@@ -13,7 +13,7 @@
   }
 
   .rpg-lore-overlay-shell {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-slate-190-3) 98%, transparent), color-mix(in srgb, var(--c-slate-130) 98%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-190-3) 98%, transparent), color-mix(in srgb, var(--bg-slate-130) 98%, transparent));
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 28%, transparent);
     border-radius: 1rem;
     box-shadow: 0 2rem 6rem color-mix(in srgb, var(--c-neutral-0) 50%, transparent);
@@ -44,7 +44,7 @@
   }
 
   .rpg-world-lore-loading {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     padding: 0.75rem 0;
   }
 
@@ -71,12 +71,12 @@
   }
 
   .rpg-lore-overlay-heading h2 {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     font-size: clamp(1.5rem, 3vw, 2.25rem);
   }
 
   .rpg-lore-overlay-heading p:not(.eyebrow) {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
     margin-top: 0.35rem;
   }
 

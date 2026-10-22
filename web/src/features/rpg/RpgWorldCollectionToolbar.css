@@ -7,7 +7,7 @@
     padding: 0.8rem;
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 18%, transparent);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--c-indigo-210) 44%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 44%, transparent);
   }
 
   .rpg-authoring-collection-toolbar input,
@@ -16,13 +16,13 @@
     min-width: 0;
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--c-blue-130) 78%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-blue-130) 78%, transparent);
+    color: var(--fg-neutral-1000);
     padding: 0.65rem 0.75rem;
   }
 
   .rpg-authoring-collection-toolbar input::placeholder {
-    color: var(--omnix-muted, var(--c-slate-730));
+    color: var(--omnix-muted, var(--fg-slate-730));
   }
 
   .rpg-authoring-collection-view-toggle {
@@ -31,7 +31,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--c-blue-130) 60%, transparent);
+    background: color-mix(in srgb, var(--bg-blue-130) 60%, transparent);
   }
 
   .rpg-authoring-collection-view-toggle button {
@@ -39,7 +39,7 @@
     border: 0;
     border-radius: 0;
     background: transparent;
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
     font-size: 0.76rem;
     font-weight: 800;
   }
@@ -49,8 +49,8 @@
   }
 
   .rpg-authoring-collection-view-toggle button.is-active {
-    background: linear-gradient(145deg, color-mix(in srgb, var(--c-violet-490) 82%, transparent), color-mix(in srgb, var(--c-violet-380) 84%, transparent));
-    color: var(--c-neutral-1000);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--c-violet-490) 82%, transparent), color-mix(in srgb, var(--bg-violet-380) 84%, transparent));
+    color: var(--fg-neutral-1000);
   }
 
   .rpg-authoring-entity-card {
