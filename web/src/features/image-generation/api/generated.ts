@@ -559,6 +559,8 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -611,6 +613,10 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DModelCatalogItem */
+        Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
+        /** Live2DModelCatalogResponse */
+        Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
         /**

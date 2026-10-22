@@ -9,7 +9,7 @@ import { OverviewSettings } from './OverviewSettings';
 import { RpgDefaultsSettings } from './RpgDefaultsSettings';
 import { ServicesSettings } from './ServicesSettings';
 import { SettingsActionHeader } from './SettingsActionHeader';
-import { ModelPacksPanel } from '../setup';
+import { AvatarPacksPanel, ModelPacksPanel } from '../setup';
 import { SettingsCategoryPanel } from './SettingsCategoryPanel';
 import { SettingsCategoryRail } from './SettingsCategoryRail';
 import { SettingsProfileProvider } from './SettingsProfileProvider';
@@ -34,7 +34,7 @@ export function SettingsControlCenter() {
   const content = activeCategory === 'overview'
     ? <OverviewSettings />
     : activeCategory === 'models-runtime'
-      ? <><ModelPacksPanel mode="settings" /><ModelSettings /><CatalogPanel /></>
+      ? <><ModelPacksPanel mode="settings" /><AvatarPacksPanel /><ModelSettings /><CatalogPanel /></>
       : activeCategory === 'storyteller-podcast'
         ? <NarrativeSettings />
         : activeCategory === 'rpg'

@@ -149,6 +149,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/character-live2d/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live2D Model Library
+         * @description The avatars Omnix can download, for the setup screen and Settings, Models.
+         */
+        get: operations["live2d_model_library_api_character_live2d_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/character-live2d/models/{model_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install Live2D Model */
+        post: operations["install_live2d_model_api_character_live2d_models__model_id__post"];
+        /** Remove Live2D Model */
+        delete: operations["remove_live2d_model_api_character_live2d_models__model_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -326,6 +364,8 @@ export interface components {
          * @description What the IBKR Web API connection has saved: never a secret, only whether it is there.
          */
         IbkrWebApiStatus: core["schemas"]["IbkrWebApiStatus"];
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -378,6 +418,10 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DModelCatalogItem */
+        Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
+        /** Live2DModelCatalogResponse */
+        Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
         /**
@@ -782,6 +826,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpeechModelListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    live2d_model_library_api_character_live2d_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
+                };
+            };
+        };
+    };
+    install_live2d_model_api_character_live2d_models__model_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallLive2DModelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_live2d_model_api_character_live2d_models__model_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
                 };
             };
             /** @description Validation Error */

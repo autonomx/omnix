@@ -12,8 +12,30 @@ export type SelectionSize = components['schemas']['SelectionSize'];
 export type CapabilitiesResponse = components['schemas']['CapabilitiesResponse'];
 export type PackTarget = components['schemas']['PackTarget'];
 
+export type AvatarLibrary = components['schemas']['Live2DModelCatalogResponse'];
+export type AvatarModel = components['schemas']['Live2DModelCatalogItem'];
+
 export const MODEL_PACKS_QUERY_KEY = ['setup', 'model-packs'] as const;
+export const AVATARS_QUERY_KEY = ['setup', 'avatars'] as const;
 export const CAPABILITIES_QUERY_KEY = ['setup', 'capabilities'] as const;
+
+/** The Live2D avatars Omnix can download (any character can then use one). */
+export const avatarsClient = {
+  async library(): Promise<AvatarLibrary> {
+    return sendGatewayCall(() => api.GET('/api/character-live2d/models'));
+  },
+
+  async install(modelId: string): Promise<AvatarLibrary> {
+    return sendGatewayCall(() => api.POST('/api/character-live2d/models/{model_id}', {
+      params: { path: { model_id: modelId } },
+      body: { accept_live2d_runtime_terms: true, accept_model_terms: true },
+    }));
+  },
+
+  async remove(modelId: string): Promise<AvatarLibrary> {
+    return sendGatewayCall(() => api.DELETE('/api/character-live2d/models/{model_id}', { params: { path: { model_id: modelId } } }));
+  },
+};
 
 /** The setup screen's gateway calls (desktop roadmap §4.5). */
 export const modelPacksClient = {

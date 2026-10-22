@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.assets.content import asset_available, materialize_asset
 from app.assets import AssetRecord, AssetType, default_asset_store
 from app.runtime.paths import resources_data_root
+from app.security.permissions import requires
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
@@ -32,6 +33,7 @@ from .repository import CharacterNotFoundError
 OPEN_LLM_VTUBER_REVISION = "992309c0aa19845960228f880013d4685fde93b5"
 OPEN_LLM_VTUBER_WEB_REVISION = "d176e7df2366952e3bacbf12cf9a8b18a4315932"
 MAX_LIVE2D_FILE_BYTES = 64 * 1024 * 1024
+MAX_LIVE2D_PREVIEW_BYTES = 4 * 1024 * 1024
 # Whole-archive limits: a model is a few dozen files (ASVS 12.1.2).
 MAX_LIVE2D_ARCHIVE_MEMBERS = 2_000
 MAX_LIVE2D_ARCHIVE_BYTES = 512 * 1024 * 1024
@@ -39,11 +41,17 @@ _LIVE2D_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 _RUNTIME_FILES = {
     "pixi.min.js": "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.10/browser/pixi.min.js",
-    "live2dcubismcore.min.js": (
-        "https://raw.githubusercontent.com/Open-LLM-VTuber/Open-LLM-VTuber-Web/"
-        f"{OPEN_LLM_VTUBER_WEB_REVISION}/src/renderer/WebSDK/Core/live2dcubismcore.min.js"
-    ),
+    # Cubism Core is Live2D's proprietary runtime: fetched from Live2D's own site (its "Redistributable Code"), with
+    # the user's acceptance of the Live2D Proprietary Software License, never from a third-party copy.
+    "live2dcubismcore.min.js": "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js",
     "cubism4.min.js": "https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js",
+}
+# Every runtime file is pinned, as model files are: a changed file (Live2D publishing a new Cubism Core at the same
+# address, a CDN serving something else) is refused until an Omnix update pins it.
+_RUNTIME_SHA256 = {
+    "pixi.min.js": "403f2f2ee8145fa17f60c5c89403056efe2680e5096ec2762036486914ed19c5",
+    "live2dcubismcore.min.js": "25ae938cb4fe282ce189b357bcc97e603d1e1f7ec78bf04150d401c23cdc792f",
+    "cubism4.min.js": "af1267e6d52759b245766c578d905bfa025b532d5c3cc727c370957c4409e21b",
 }
 _CATALOG_INTERNAL_KEYS = {
     "entry_path",
@@ -235,11 +243,22 @@ class Live2DModelCatalogItem(BaseModel):
     license_summary: str
     installed: bool = False
     selected: bool = False
+    # The preview through Omnix itself: the app's content security policy allows only its own images.
+    preview_path: str = ""
 
 
 class Live2DModelCatalogResponse(BaseModel):
     models: list[Live2DModelCatalogItem]
     runtime_installed: bool = False
+    # Whether the signed-in account may download and remove avatars (the routes enforce it either way).
+    can_manage: bool = False
+
+
+class InstallLive2DModelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    accept_live2d_runtime_terms: bool = False
+    accept_model_terms: bool = False
 
 
 class ActivateLive2DAvatarRequest(BaseModel):
@@ -299,12 +318,72 @@ class CharacterLive2DAvatarService:
                     },
                     installed=installed,
                     selected=bool(current and current.renderer == "live2d" and current.rig_asset_id == asset_id),
+                    preview_path=_preview_path(entry["id"]),
                 )
             )
-        return Live2DModelCatalogResponse(
-            models=models,
-            runtime_installed=all((self.runtime_root / filename).is_file() for filename in _RUNTIME_FILES),
-        )
+        return Live2DModelCatalogResponse(models=models, runtime_installed=self.runtime_installed())
+
+    def runtime_installed(self) -> bool:
+        return all(_file_sha256(self.runtime_root / filename) == digest for filename, digest in _RUNTIME_SHA256.items())
+
+    def library(self) -> Live2DModelCatalogResponse:
+        """Every avatar Omnix can download, for the setup screen and Settings, Models (no character involved)."""
+        store = self.asset_store_factory()
+        models = []
+        for entry in _MODEL_CATALOG:
+            asset = store.get_asset(_asset_id(entry["id"]))
+            models.append(Live2DModelCatalogItem(
+                **{key: value for key, value in entry.items() if key not in _CATALOG_INTERNAL_KEYS},
+                installed=bool(asset and asset_available(asset)), selected=False,
+                preview_path=_preview_path(entry["id"])))
+        return Live2DModelCatalogResponse(models=models, runtime_installed=self.runtime_installed())
+
+    def install(self, model_id: str, request: InstallLive2DModelRequest) -> Live2DModelCatalogResponse:
+        """Downloads one avatar (and the runtime, the first time) without giving it to a character."""
+        if not request.accept_live2d_runtime_terms or not request.accept_model_terms:
+            raise ValueError("Live2D runtime and sample-model terms must be accepted before download")
+        self._ensure_model_asset(_catalog_entry(model_id))
+        return self.library()
+
+    def preview_file(self, model_id: str) -> Path:
+        """The catalog's preview image, fetched once from its catalog address (never a requested one)."""
+        entry = _catalog_entry(model_id)
+        target = self.data_root / "previews" / f"{entry['id']}{PurePosixPath(entry['preview_url']).suffix or '.jpg'}"
+        if not target.is_file():
+            data = self.download_bytes(entry["preview_url"])
+            if len(data) > MAX_LIVE2D_PREVIEW_BYTES or not data.startswith((b"\xff\xd8", b"\x89PNG", b"RIFF", b"GIF8")):  # JPEG, PNG, WebP or GIF
+                raise FileNotFoundError(model_id)
+            self._write_local_file(target, data)
+        return target
+
+    def characters_using(self, model_id: str) -> list[str]:
+        from .service import default_character_service
+
+        asset_id = _asset_id(_catalog_entry(model_id)["id"])
+        avatar_service = self.avatar_service_factory()
+        using = []
+        for character in default_character_service().list(include_archived=True):
+            pack = avatar_service.optional_get(character.id)
+            if pack is not None and pack.renderer == "live2d" and pack.rig_asset_id == asset_id:
+                using.append(character.display_name or character.id)
+        return using
+
+    def remove(self, model_id: str) -> Live2DModelCatalogResponse:
+        """Deletes a downloaded avatar no character uses (switch those characters to another avatar first)."""
+        entry = _catalog_entry(model_id)
+        using = self.characters_using(model_id)
+        if using:
+            raise ValueError(f"{entry['name']} is the avatar of {', '.join(using)}; choose another avatar for them first")
+        store = self.asset_store_factory()
+        asset_id = _asset_id(entry["id"])
+        if store.get_asset(asset_id) is not None:
+            store.delete_asset(asset_id, delete_file=False)
+        model_root = (self.models_root / entry["id"]).resolve()
+        if self.models_root.resolve() in model_root.parents and model_root.is_dir():
+            import shutil
+
+            shutil.rmtree(model_root)
+        return self.library()
 
     def activate(
         self,
@@ -508,8 +587,17 @@ class CharacterLive2DAvatarService:
     def _ensure_runtime(self) -> None:
         for filename, url in _RUNTIME_FILES.items():
             path = self.runtime_root / filename
-            if not path.is_file():
-                self._write_remote_file(url, path)
+            expected = _RUNTIME_SHA256[filename]
+            if _file_sha256(path) == expected:
+                continue
+            # Missing, or an earlier unpinned download (Cubism Core once came from a third-party copy): fetched again.
+            data = self.download_bytes(url)
+            if len(data) > MAX_LIVE2D_FILE_BYTES:
+                raise ValueError(f"Live2D download exceeds {MAX_LIVE2D_FILE_BYTES} bytes: {url}")
+            if not hmac.compare_digest(hashlib.sha256(data).hexdigest(), expected):
+                raise ValueError(f"the Live2D runtime file {filename} has changed at its source; update Omnix to use it")
+            path.unlink(missing_ok=True)
+            self._write_local_file(path, data)
 
     def _write_remote_file(self, url: str, target: Path) -> bytes:
         if target.is_file():
@@ -584,6 +672,65 @@ def register_character_live2d_avatar_routes(
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.get(
+        "/api/character-live2d/models",
+        response_model=Live2DModelCatalogResponse,
+        tags=["characters"],
+        openapi_extra=requires("settings:read"),
+    )
+    def live2d_model_library() -> Live2DModelCatalogResponse:
+        """The avatars Omnix can download, for the setup screen and Settings, Models."""
+        from app.runtime.tenant_context import current_tenant
+        from app.security.permissions import has_permission
+
+        library = service_factory().library()
+        try:
+            roles = current_tenant().roles
+        except RuntimeError:  # no signed-in account (a test client): nothing to manage
+            roles = frozenset()
+        return library.model_copy(update={"can_manage": has_permission(roles, "models:admin")})
+
+    @router.get(
+        "/api/character-live2d/previews/{model_id}",
+        response_model=None,
+        response_class=FileResponse,
+        responses={200: {"description": "The avatar's preview image.",
+                         "content": {"image/*": {"schema": {"type": "string", "format": "binary"}}}}},
+        tags=["characters"],
+        openapi_extra=requires("settings:read"),
+    )
+    def live2d_model_preview(model_id: str) -> FileResponse:
+        try:
+            path = service_factory().preview_file(model_id)
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            raise HTTPException(status_code=404, detail="Live2D preview not available") from exc
+        media_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+        return FileResponse(path, media_type=media_type, headers={"Cache-Control": "private, max-age=86400"})
+
+    @router.post(
+        "/api/character-live2d/models/{model_id}",
+        response_model=Live2DModelCatalogResponse,
+        tags=["characters"],
+        openapi_extra=requires("models:admin"),
+    )
+    def install_live2d_model(model_id: str, request: InstallLive2DModelRequest) -> Live2DModelCatalogResponse:
+        try:
+            return service_factory().install(model_id, request)
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.delete(
+        "/api/character-live2d/models/{model_id}",
+        response_model=Live2DModelCatalogResponse,
+        tags=["characters"],
+        openapi_extra=requires("models:admin"),
+    )
+    def remove_live2d_model(model_id: str) -> Live2DModelCatalogResponse:
+        try:
+            return service_factory().remove(model_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @router.post(
         "/api/characters/{character_id}/live2d-avatar/disable",
         response_model=Live2DAvatarActionResponse,
@@ -644,6 +791,17 @@ def register_character_live2d_avatar_routes(
         media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         # Large static files: revalidated by ETag rather than refetched.
         return FileResponse(path, media_type=media_type, headers={"Cache-Control": "private, no-cache"})
+
+
+def _file_sha256(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _preview_path(model_id: str) -> str:
+    return f"/api/character-live2d/previews/{model_id}"
 
 
 def _catalog_entry(model_id: str) -> dict[str, Any]:

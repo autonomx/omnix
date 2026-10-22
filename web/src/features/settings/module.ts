@@ -27,7 +27,7 @@ export const settingsModule = defineModule({
     'PUT /api/trading/execution/providers/alpaca-iex/credentials',
   ],
   apiPrefixes: [
-    '/api/model-packs',
+    '/api/model-packs', '/api/character-live2d',
     '/api/settings', '/api/providers', '/api/models', '/api/runtime', '/api/assistant', '/api/hermes',
     '/api/diagnostics', '/api/workers', '/api/jobs', '/api/trading/market-data', '/api/trading/execution/providers/alpaca-iex/credentials',
   ],

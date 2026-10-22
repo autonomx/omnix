@@ -3507,6 +3507,8 @@ export interface components {
          * @description What the IBKR Web API connection has saved: never a secret, only whether it is there.
          */
         IbkrWebApiStatus: core["schemas"]["IbkrWebApiStatus"];
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -3560,6 +3562,10 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DModelCatalogItem */
+        Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
+        /** Live2DModelCatalogResponse */
+        Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
         /** LoreDiscoveryRequest */

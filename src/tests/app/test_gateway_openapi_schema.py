@@ -49,6 +49,7 @@ _DOCUMENTED_NON_JSON_RESPONSES = {
     ("GET", "/api/task-graph-runs/{run_id}/events/stream"),
     ("GET", "/api/character-live2d/runtime/{filename}"),
     ("GET", "/api/character-live2d/assets/{asset_id}/{asset_path}"),
+    ("GET", "/api/character-live2d/previews/{model_id}"),
     ("GET", "/api/assets/{asset_id}/file"),
     ("GET", "/api/voice/cues/{voice_id}/{cue_id}/{variant_id}.wav"),
     ("GET", "/api/rpg/worlds/{world_id}/export"),

@@ -1,6 +1,7 @@
 import { Button, Text } from '@mantine/core';
 import { useNavigate } from '@tanstack/react-router';
 import type { OmnixModuleDefinition } from '../../app/modules';
+import { AvatarPacksPanel } from './AvatarPacksPanel';
 import { ModelPacksPanel } from './ModelPacksPanel';
 import './setup.css';
 
@@ -26,6 +27,7 @@ export function SetupWorkspace({ module }: { module: OmnixModuleDefinition }) {
         </section>
       ) : null}
       <ModelPacksPanel mode="setup" />
+      <AvatarPacksPanel />
       <div className="setup-footer">
         <span />
         <Button variant="subtle" onClick={() => { void navigate({ to: '/chatbot' }); }}>Continue to Omnix</Button>

@@ -58,6 +58,37 @@
     background: var(--omnix-panel-bg);
   }
 
+  .setup-avatars {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .setup-avatar {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.65rem;
+    background: var(--omnix-panel-bg);
+  }
+
+  .setup-avatar-preview {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background: var(--omnix-border);
+  }
+
+  .setup-avatar-body {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.65rem 0.75rem;
+  }
+
   .setup-bundle-unavailable {
     opacity: 0.72;
   }

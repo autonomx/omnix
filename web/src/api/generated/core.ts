@@ -2653,6 +2653,19 @@ export interface components {
             /** Storage */
             storage: string;
         };
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: {
+            /**
+             * Accept Live2D Runtime Terms
+             * @default false
+             */
+            accept_live2d_runtime_terms?: boolean;
+            /**
+             * Accept Model Terms
+             * @default false
+             */
+            accept_model_terms?: boolean;
+        };
         /** InviteCheckResponse */
         InviteCheckResponse: {
             /** Usable */
@@ -2978,6 +2991,59 @@ export interface components {
              * @default true
              */
             success: boolean;
+        };
+        /** Live2DModelCatalogItem */
+        Live2DModelCatalogItem: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /** License Summary */
+            license_summary: string;
+            /** Model License Url */
+            model_license_url: string;
+            /** Name */
+            name: string;
+            /**
+             * Preview Path
+             * @default
+             */
+            preview_path: string;
+            /** Preview Url */
+            preview_url: string;
+            /** Repository */
+            repository: string;
+            /** Revision */
+            revision: string;
+            /** Runtime License Url */
+            runtime_license_url: string;
+            /**
+             * Selected
+             * @default false
+             */
+            selected: boolean;
+            /** Source Url */
+            source_url: string;
+        };
+        /** Live2DModelCatalogResponse */
+        Live2DModelCatalogResponse: {
+            /**
+             * Can Manage
+             * @default false
+             */
+            can_manage: boolean;
+            /** Models */
+            models: components["schemas"]["Live2DModelCatalogItem"][];
+            /**
+             * Runtime Installed
+             * @default false
+             */
+            runtime_installed: boolean;
         };
         /** LocalLoginRequest */
         LocalLoginRequest: {

@@ -20,6 +20,19 @@ from app.platform.characters.live2d_avatar import (
 )
 from app.platform.characters.service import CharacterService
 
+import pytest
+
+from app.platform.characters import live2d_avatar
+
+FAKE_RUNTIME = b"window.__live2d_test__ = true;"
+
+
+@pytest.fixture(autouse=True)
+def _pinned_fake_runtime(monkeypatch):
+    """The tests serve a stand-in runtime; it is pinned the way the real files are."""
+    digest = hashlib.sha256(FAKE_RUNTIME).hexdigest()
+    monkeypatch.setattr(live2d_avatar, "_RUNTIME_SHA256", {name: digest for name in live2d_avatar._RUNTIME_FILES})
+
 
 def test_live2d_catalog_activation_serving_and_sprite_restore(tmp_path: Path) -> None:
     image = tmp_path / "maya.png"
@@ -79,7 +92,7 @@ def test_live2d_catalog_activation_serving_and_sprite_restore(tmp_path: Path) ->
         if url.endswith("texture_00.png"):
             return b"PNG"
         if url.endswith(".js"):
-            return b"window.__live2d_test__ = true;"
+            return FAKE_RUNTIME
         raise AssertionError(f"unexpected download: {url}")
 
     live2d_service = CharacterLive2DAvatarService(
@@ -167,7 +180,7 @@ def test_live2d_archive_catalog_entry_is_hash_pinned_and_extracts_runtime_only(
         if url == archive_url:
             return archive_bytes
         if url.endswith(".js"):
-            return b"window.__live2d_test__ = true;"
+            return FAKE_RUNTIME
         raise AssertionError(f"unexpected download: {url}")
 
     assets = SharedAssetStore(tmp_path / "assets.json")
@@ -203,3 +216,104 @@ def test_live2d_archive_catalog_entry_is_hash_pinned_and_extracts_runtime_only(
     assert (model_root / "runtime/sample.moc3").read_bytes() == b"MOC3"
     assert (model_root / "runtime/textures/texture_00.png").read_bytes() == b"PNG"
     assert not (model_root / "source/large-authoring-file.cmo3").exists()
+
+
+def test_a_runtime_file_that_changed_at_its_source_is_refused(tmp_path: Path) -> None:
+    service = CharacterLive2DAvatarService(asset_store_factory=lambda: SharedAssetStore(tmp_path / "assets.json"),
+                                           data_root=tmp_path / "live2d", download_bytes=lambda url: b"other code")
+    with pytest.raises(ValueError, match="has changed at its source"):
+        service._ensure_runtime()
+    assert not service.runtime_installed()
+
+
+def test_an_earlier_unpinned_runtime_download_is_replaced(tmp_path: Path) -> None:
+    old = tmp_path / "live2d" / "runtime" / "live2dcubismcore.min.js"
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"a third-party copy")
+    service = CharacterLive2DAvatarService(asset_store_factory=lambda: SharedAssetStore(tmp_path / "assets.json"),
+                                           data_root=tmp_path / "live2d", download_bytes=lambda url: FAKE_RUNTIME)
+    service._ensure_runtime()
+    assert old.read_bytes() == FAKE_RUNTIME and service.runtime_installed()
+
+
+def test_cubism_core_comes_from_live2d_itself() -> None:
+    assert live2d_avatar._RUNTIME_FILES["live2dcubismcore.min.js"].startswith("https://cubism.live2d.com/")
+
+
+def test_avatars_download_and_remove_from_the_library(tmp_path: Path) -> None:
+    """The setup screen and Settings, Models download avatars without a character; removal spares those in use."""
+    assets = SharedAssetStore(tmp_path / "assets.json")
+    model_json = json.dumps({"Version": 3, "FileReferences": {"Moc": "m.moc3"}}).encode()
+
+    def download(url: str) -> bytes:
+        if url.endswith(".js"):
+            return FAKE_RUNTIME
+        if url.endswith(".model3.json"):
+            return model_json
+        return b"MOC3"
+
+    characters = CharacterRepository(tmp_path / "characters.sqlite3")
+    characters.create(CreateCharacterRequest(id="maya", display_name="Maya", personality_prompt="Be warm."))
+    character_service = CharacterService(characters, asset_store_factory=lambda: assets)
+    avatar_service = CharacterAvatarService(CharacterAvatarRepository(tmp_path / "characters.sqlite3"),
+                                            character_service_factory=lambda: character_service,
+                                            asset_store_factory=lambda: assets)
+    service = CharacterLive2DAvatarService(avatar_service_factory=lambda: avatar_service,
+                                           asset_store_factory=lambda: assets, data_root=tmp_path / "live2d",
+                                           download_bytes=download)
+    app = FastAPI()
+    register_character_live2d_avatar_routes(app, service_factory=lambda: service)
+    client = TestClient(app)
+    model_id = "open-llm-vtuber-shizuku"
+
+    library = client.get("/api/character-live2d/models").json()
+    assert not library["runtime_installed"] and not any(item["installed"] for item in library["models"])
+    assert client.post(f"/api/character-live2d/models/{model_id}", json={}).status_code == 422  # terms first
+    installed = client.post(f"/api/character-live2d/models/{model_id}", json={
+        "accept_live2d_runtime_terms": True, "accept_model_terms": True}).json()
+    assert installed["runtime_installed"]
+    assert [item["id"] for item in installed["models"] if item["installed"]] == [model_id]
+
+    # A character using it keeps it; once it uses another avatar, the download can go.
+    service.characters_using = lambda requested: ["Maya"]
+    refused = client.delete(f"/api/character-live2d/models/{model_id}")
+    assert refused.status_code == 409 and "avatar of Maya" in refused.json()["detail"]
+    service.characters_using = lambda requested: []
+    removed = client.delete(f"/api/character-live2d/models/{model_id}").json()
+    assert not any(item["installed"] for item in removed["models"])
+    assert not (tmp_path / "live2d" / "models" / model_id).exists()
+
+
+def test_the_library_routes_declare_their_permissions() -> None:
+    from app.security.permissions import declared_permission
+
+    app = FastAPI()
+    register_character_live2d_avatar_routes(app)
+    routes = {(next(iter(route.methods)), route.path): route for route in app.routes if hasattr(route, "methods")}
+    assert declared_permission(routes[("POST", "/api/character-live2d/models/{model_id}")]) == "models:admin"
+    assert declared_permission(routes[("DELETE", "/api/character-live2d/models/{model_id}")]) == "models:admin"
+    assert declared_permission(routes[("GET", "/api/character-live2d/models")]) == "settings:read"
+
+
+def test_previews_come_through_omnix_from_their_catalog_address(tmp_path: Path) -> None:
+    """The app's content security policy allows only its own images, so the preview is fetched and served."""
+    fetched: list[str] = []
+
+    def download(url: str) -> bytes:
+        fetched.append(url)
+        return b"\xff\xd8\xff\xe0 a jpeg" if "haru" in url else b"<html>not an image</html>"
+
+    service = CharacterLive2DAvatarService(asset_store_factory=lambda: SharedAssetStore(tmp_path / "assets.json"),
+                                           data_root=tmp_path / "live2d", download_bytes=download)
+    app = FastAPI()
+    register_character_live2d_avatar_routes(app, service_factory=lambda: service)
+    client = TestClient(app)
+    library = client.get("/api/character-live2d/models").json()
+    haru = next(item for item in library["models"] if item["id"] == "live2d-sample-haru")
+    assert haru["preview_path"] == "/api/character-live2d/previews/live2d-sample-haru"
+    preview = client.get(haru["preview_path"])
+    assert preview.status_code == 200 and preview.content.startswith(b"\xff\xd8")
+    client.get(haru["preview_path"])
+    assert fetched == [haru["preview_url"]]  # fetched once, then served from disk
+    assert client.get("/api/character-live2d/previews/open-llm-vtuber-shizuku").status_code == 404  # not an image
+    assert client.get("/api/character-live2d/previews/unknown").status_code == 404

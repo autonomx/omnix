@@ -24794,6 +24794,23 @@
         "title": "IndicatorValuesResponse",
         "type": "object"
       },
+      "InstallLive2DModelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "accept_live2d_runtime_terms": {
+            "default": false,
+            "title": "Accept Live2D Runtime Terms",
+            "type": "boolean"
+          },
+          "accept_model_terms": {
+            "default": false,
+            "title": "Accept Model Terms",
+            "type": "boolean"
+          }
+        },
+        "title": "InstallLive2DModelRequest",
+        "type": "object"
+      },
       "InstrumentSearchResponse": {
         "properties": {
           "instruments": {
@@ -26043,6 +26060,11 @@
             "title": "Name",
             "type": "string"
           },
+          "preview_path": {
+            "default": "",
+            "title": "Preview Path",
+            "type": "string"
+          },
           "preview_url": {
             "title": "Preview Url",
             "type": "string"
@@ -26081,13 +26103,19 @@
           "runtime_license_url",
           "license_summary",
           "installed",
-          "selected"
+          "selected",
+          "preview_path"
         ],
         "title": "Live2DModelCatalogItem",
         "type": "object"
       },
       "Live2DModelCatalogResponse": {
         "properties": {
+          "can_manage": {
+            "default": false,
+            "title": "Can Manage",
+            "type": "boolean"
+          },
           "models": {
             "items": {
               "$ref": "#/components/schemas/Live2DModelCatalogItem"
@@ -26103,7 +26131,8 @@
         },
         "required": [
           "models",
-          "runtime_installed"
+          "runtime_installed",
+          "can_manage"
         ],
         "title": "Live2DModelCatalogResponse",
         "type": "object"
@@ -77412,6 +77441,167 @@
         "tags": [
           "characters"
         ]
+      }
+    },
+    "/api/character-live2d/models": {
+      "get": {
+        "description": "The avatars Omnix can download, for the setup screen and Settings, Models.",
+        "operationId": "live2d_model_library_api_character_live2d_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Live2DModelCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live2D Model Library",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/character-live2d/models/{model_id}": {
+      "delete": {
+        "operationId": "remove_live2d_model_api_character_live2d_models__model_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Live2DModelCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Live2D Model",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "models:admin"
+      },
+      "post": {
+        "operationId": "install_live2d_model_api_character_live2d_models__model_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallLive2DModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Live2DModelCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Live2D Model",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "models:admin"
+      }
+    },
+    "/api/character-live2d/previews/{model_id}": {
+      "get": {
+        "operationId": "live2d_model_preview_api_character_live2d_previews__model_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/*": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The avatar's preview image."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live2D Model Preview",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "settings:read"
       }
     },
     "/api/character-live2d/runtime/{filename}": {

@@ -924,6 +924,25 @@ driver 617.42). The Mac items need the owner's Mac. Signing and the release feed
 - **`default_ref.wav`:** confirm its provenance before the first public build.
 - **Clean-machine checks:** the clean Windows account (Phase 3) and the clean machine (Phase 6 gate).
 - **Older NVIDIA driver:** a voice-input run on a driver below 580, to confirm NeMo's fallback (R-3).
+### Live2D avatars (added 2026-10-22, owner request)
+
+- **Where:** the setup screen and Settings → Models have an Avatars section beside the AI models.
+  - It lists Omnix's Live2D catalog: Live2D's official samples, pinned by SHA-256, and two Open-LLM-VTuber models
+    pinned to a commit.
+  - Each card shows a preview. Previews come through Omnix, because the app's content security policy allows only
+    its own images; the character picker uses the same route.
+- **Managing them:** an owner or admin accepts the Live2D Proprietary Software License and the model terms, then
+  downloads or removes avatars. Any character can then use a downloaded one.
+  - Removal is refused while a character uses the avatar.
+  - Members and guests see the list read-only.
+- **The runtime:** Cubism Core, Live2D's proprietary runtime, now downloads from Live2D's own site
+  (`cubism.live2d.com/sdk-web/cubismcore/`, its "Redistributable Code") instead of a third-party copy.
+  - Every runtime file is pinned by SHA-256.
+  - An earlier unpinned download is replaced.
+  - A file that changes at its source is refused until an Omnix update pins it again.
+- **Checked:** `desktop/tests/avatars.spec.ts` (opt in with `OMNIXDESKTOP_TEST_NETWORK=1`) downloads Haru from the
+  setup screen, and Live2D's Cubism Core 5.1 reads its model (84 drawables).
+
 ### Known low-severity items (implementation review round 3)
 
 - Verify checks every file a wheel installed, not the bytecode Omnix compiles into a pack.
