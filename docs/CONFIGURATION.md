@@ -217,6 +217,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_MIGRATE_ON_START` | boolean | `false` | production.py | Controls migrate on start for production.py. |
 | `OMNIX_MIGRATION_DATABASE_URL` | string | — | kernel | Controls migration database url for kernel. |
 | `OMNIX_MODELS_DIR` | string | — | kernel | Controls models dir for kernel. |
+| `OMNIX_MODEL_LOAD_COMMIT_BYTES` | string | — | image | Controls model load commit bytes for image. |
 | `OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT` | integer | `13` | providers | Controls nemotron final right context for providers. |
 | `OMNIX_NEMOTRON_MODEL` | string | `nvidia/nemotron-speech-streaming-en-0.6b` | providers | Controls nemotron model for providers. |
 | `OMNIX_NEMOTRON_RIGHT_CONTEXT` | integer | `1` | providers | Controls nemotron right context for providers. |

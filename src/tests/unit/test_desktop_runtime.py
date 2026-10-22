@@ -412,6 +412,7 @@ def test_services_know_their_supervisor_and_get_their_own_process_group(services
     manager.reconcile()
     _, env, _ = state.launched[0]
     assert env["OMNIX_DESKTOP_PARENT_PID"] == str(os.getpid()) and state.kwargs["stdin"] == subprocess.DEVNULL
+    assert env["OMNIX_MODEL_LOAD_COMMIT_BYTES"] == str(4096 * 2**20)  # its measured need, for an on-demand load
     if sys.platform == "win32":
         assert state.kwargs["creationflags"] & subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -449,8 +450,38 @@ def test_a_service_that_never_gets_ready_stops_holding_the_others_back(services,
     assert [command[-1] for command, _, _ in state.launched] == ["tts", "stt"]
 
 
-def test_the_image_service_preloads_so_its_memory_is_checked_before_it_loads(tmp_path) -> None:
+def test_the_image_service_loads_flux_on_demand_and_checks_its_memory_then(tmp_path, monkeypatch) -> None:
+    """FLUX loads when the image view asks, not at start; the service gets its measured need to check before."""
+    monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
     config = _config(tmp_path)
-    sites = [config.packs / "runtimes" / "image-windows-x64" / "site"]
-    env = service_environment(config, "image", service_token="svc-token", site_dirs=sites, inherited=_inherited())
-    assert env["OMNIX_IMAGE_PRELOAD"] == "1" and env["OMNIX_IMAGE_PORT"] == "43123"
+    env = service_environment(config, "image", service_token="svc-token",
+                              site_dirs=[config.packs / "runtimes" / "image-windows-x64" / "site"], inherited=_inherited())
+    assert "OMNIX_IMAGE_PRELOAD" not in env and env["OMNIX_IMAGE_PORT"] == "43123"
+    catalog = model_catalog.parse_catalog({
+        "runtimes": {
+            "torch-win": {"kind": "torch-layer", "platform": "windows-x64", "lock": "t", "files": "t.json"},
+            "image-win": {"kind": "overlay", "base": "torch-win", "platform": "windows-x64", "service": "image",
+                          "lock": "i", "files": "i.json"},
+        },
+        "bundles": {"image-generation": {"label": "Image generation", "capability": "image", "variants": [
+            {"platform": "windows-x64", "models": ["flux"], "runtimes": ["image-win"], "min_commit_mb": 22528}]}},
+        "models": {"flux": {"repo": "org/flux", "revision": REVISION, "service": "image",
+                            "files": {"m": {"sha256": "a" * 64, "size": 10}}}},
+    })
+    runtimes = SimpleNamespace(current=lambda rid: True, runnable=lambda rid: True, site=lambda rid: config.packs / rid)
+    models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
+    plan = plans(config, catalog, runtimes, models)["image"]
+    # Starting it needs only the process; loading FLUX needs the measured 22 GB, checked at load.
+    assert plan.needed_bytes == 2 * 2**30 and plan.load_bytes == 22528 * 2**20
+
+
+def test_an_image_load_with_too_little_memory_is_refused(monkeypatch) -> None:
+    from app.platform.image import lifecycle
+    from app.providers import host_memory
+
+    monkeypatch.setenv("OMNIX_MODEL_LOAD_COMMIT_BYTES", str(22 * 2**30))
+    monkeypatch.setattr(host_memory, "available_commit_bytes", lambda: 8 * 2**30)
+    with pytest.raises(RuntimeError, match="flux2_klein_insufficient_memory:available_gib=8.00 required_gib=22.00"):
+        lifecycle._validate_commit_budget("flux2_klein")
+    monkeypatch.setattr(host_memory, "available_commit_bytes", lambda: 30 * 2**30)
+    lifecycle._validate_commit_budget("flux2_klein")

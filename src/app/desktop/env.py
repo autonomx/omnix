@@ -265,10 +265,8 @@ def service_environment(config: LaunchConfig, service: str, *, service_token: st
         if sys.platform == "darwin":
             env["OMNIX_TTS_DEVICE"] = "mps"
     elif service == "image":
-        # Preloaded at start, so the supervisor's memory check and one-at-a-time loading cover FLUX's 18 GB (the
-        # service answers only once it is loaded); loading on the first request would bypass both.
+        # FLUX loads when the image view asks for it, after a memory check (OMNIX_MODEL_LOAD_COMMIT_BYTES).
         env.update({"OMNIX_IMAGE_PORT": port, "OMNIX_IMAGE_ENABLED": "1", "OMNIX_IMAGE_SERVICE_MODE": "1",
-                    "OMNIX_IMAGE_PRELOAD": "1",
                     "OMNIX_IMAGE_URL": ""})
     else:
         raise ValueError(f"unknown model service {service!r}")

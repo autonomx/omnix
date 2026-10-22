@@ -133,7 +133,37 @@ def _expire_cached_providers() -> None:
         _release_residency_if_idle()
 
 
+class ImageLoadBudgetError(RuntimeError):
+    """A load refused for want of memory; ``user_message`` says what is free and what is needed."""
+
+    def __init__(self, code: str, user_message: str) -> None:
+        super().__init__(code)
+        self.user_message = user_message
+
+
+def _validate_commit_budget(provider_name: str) -> None:
+    """The desktop app passes the memory FLUX was measured to need; a load with less free would exhaust Windows'
+    commit (or macOS memory and swap) and freeze the computer (roadmap R-9)."""
+    from app.config.env import environment
+    from app.providers.host_memory import available_commit_bytes
+
+    raw = (environment().get("OMNIX_MODEL_LOAD_COMMIT_BYTES") or "").strip()
+    if not raw.isdigit() or int(raw) <= 0:
+        return
+    needed = int(raw)
+    available = available_commit_bytes()
+    if available is not None and available < needed:
+        raise ImageLoadBudgetError(
+            f"{provider_name}_insufficient_memory:"
+            f"available_gib={available / _GIB:.2f} required_gib={needed / _GIB:.2f}; "
+            "close other programs or unload other models before loading",
+            f"Not enough memory to load the image model: {available / _GIB:.1f} GB free, about "
+            f"{needed / _GIB:.0f} GB needed. Close other programs, or end live voice, then load it again.",
+        )
+
+
 def _validate_load_budget(provider_name: str) -> None:
+    _validate_commit_budget(provider_name)
     definition = get_image_provider_definition(provider_name) or {}
     if bool(definition.get("default_cpu_offload")):
         return
@@ -156,10 +186,12 @@ def _validate_load_budget(provider_name: str) -> None:
     total_gib = total_bytes / _GIB
     required_gib = float(minimum)
     if free_gib < required_gib:
-        raise RuntimeError(
+        raise ImageLoadBudgetError(
             f"{provider_name}_insufficient_vram:"
             f"free_gib={free_gib:.2f} required_gib={required_gib:.2f} "
-            f"total_gib={total_gib:.2f}; unload other GPU models before loading"
+            f"total_gib={total_gib:.2f}; unload other GPU models before loading",
+            f"Not enough video memory to load the image model: {free_gib:.1f} GB free of {total_gib:.0f} GB, "
+            f"about {required_gib:.0f} GB needed. Close other GPU programs, or end live voice, then load it again.",
         )
 
 

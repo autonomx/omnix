@@ -1491,6 +1491,13 @@
     "type": "string"
   },
   {
+    "default": null,
+    "description": "Controls model load commit bytes for image.",
+    "feature": "image",
+    "name": "OMNIX_MODEL_LOAD_COMMIT_BYTES",
+    "type": "string"
+  },
+  {
     "default": "13",
     "description": "Controls nemotron final right context for providers.",
     "feature": "providers",

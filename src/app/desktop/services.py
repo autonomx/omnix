@@ -49,6 +49,8 @@ HEADROOM_BASE_BYTES = 2 * 2**30
 # A started service's memory is reserved for this long (or until it is healthy, if later): its commit charge
 # grows while it loads, so the next service's headroom check must not count that memory as free.
 SETTLE_SECONDS = 90.0
+# Services that load their models when asked, not at start: the image view loads FLUX when the user wants it.
+ON_DEMAND_SERVICES = frozenset({"image"})
 # A service still not ready after this long (its model failed to load, but the process lives on) no longer holds the
 # others back; its memory, if any, shows in the commit figure by then.
 LOAD_LIMIT_SECONDS = 600.0
@@ -64,7 +66,11 @@ class ServicePlan:
     site_dirs: list[Path]
     bundles: list[str]
     model_dir: Path | None = None
+    # Memory to start the service: its models' for a service that loads them at start (STT, TTS), the process alone
+    # for one that loads on demand (image generation, from its view). ``load_bytes`` is the models' need, which an
+    # on-demand service checks itself before each load.
     needed_bytes: int = 0
+    load_bytes: int = 0
     # Each bundle's requirement and models: a service that serves two bundles loads both bundles' models.
     requirements: list[tuple[int, list[str]]] = field(default_factory=list)
 
@@ -157,7 +163,8 @@ def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models
         # The largest bundle's measured need, plus the other bundles' models that it does not already load.
         largest, counted = max(plan.requirements, key=lambda item: item[0])
         extra = {model_id for _, model_ids in plan.requirements for model_id in model_ids} - set(counted)
-        plan.needed_bytes = largest + int(sum(catalog.model(model_id).size for model_id in extra) * HEADROOM_FACTOR)
+        plan.load_bytes = largest + int(sum(catalog.model(model_id).size for model_id in extra) * HEADROOM_FACTOR)
+        plan.needed_bytes = HEADROOM_BASE_BYTES if plan.service in ON_DEMAND_SERVICES else plan.load_bytes
     return found
 
 
@@ -264,6 +271,8 @@ class ModelServices:
         env["PYTHONPATH"] = str(self.app_source)
         # macOS: the service stops itself once this supervisor is gone (Windows: the Job Object ends it).
         env["OMNIX_DESKTOP_PARENT_PID"] = str(os.getpid())
+        # The measured memory its models need: an on-demand service refuses a load when less than this is free.
+        env["OMNIX_MODEL_LOAD_COMMIT_BYTES"] = str(plan.load_bytes)
         self.logs.mkdir(parents=True, exist_ok=True)
         log = (self.logs / f"{plan.service}.log").open("ab")
         self._report(plan.service, "starting", port=port)
