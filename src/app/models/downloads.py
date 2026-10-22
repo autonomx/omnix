@@ -96,19 +96,28 @@ def _hub_fetch(**kwargs: Any) -> str:
     return str(hf_hub_download(**kwargs))
 
 
-def download(entry: ModelEntry, *, cache_dir: str | Path | None = None, fetch: Fetch = _hub_fetch) -> Path:
-    """Fetch the pinned files, refusing any whose digest differs; returns the snapshot directory."""
+def download(entry: ModelEntry, *, cache_dir: str | Path | None = None, fetch: Fetch = _hub_fetch,
+             token: str | None = None, on_file: Callable[[ModelFile], None] | None = None) -> Path:
+    """Fetch the pinned files, refusing any whose digest differs; returns the snapshot directory.
+
+    ``token`` is the Hugging Face token for gated repositories; ``on_file`` is called after each file is verified."""
     root = cache_root(cache_dir)
     for item in entry.files:
         target = _snapshot_file(root, entry, item)
         if target.is_file() and sha256_file(target) == item.sha256:
+            if on_file is not None:
+                on_file(item)
             continue
-        fetched = Path(fetch(repo_id=entry.repo, filename=item.path, revision=entry.revision, cache_dir=str(root)))
+        extra = {"token": token} if token else {}
+        fetched = Path(fetch(repo_id=entry.repo, filename=item.path, revision=entry.revision, cache_dir=str(root),
+                             **extra))
         actual = sha256_file(fetched)
         if actual != item.sha256:
             _discard(fetched)
             raise ModelDownloadError(f"{entry.id}: {item.path} has SHA-256 {actual}, expected {item.sha256}")
         logger.info("verified %s %s", entry.id, item.path)
+        if on_file is not None:
+            on_file(item)
     # Services load by repository id; offline, the cache resolves "main" through this ref.
     ref = _repo_cache(root, entry.repo) / "refs" / "main"
     ref.parent.mkdir(parents=True, exist_ok=True)
