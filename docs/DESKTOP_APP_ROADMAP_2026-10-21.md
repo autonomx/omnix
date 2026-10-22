@@ -924,3 +924,43 @@ driver 617.42). The Mac items need the owner's Mac. Signing and the release feed
 - **`default_ref.wav`:** confirm its provenance before the first public build.
 - **Clean-machine checks:** the clean Windows account (Phase 3) and the clean machine (Phase 6 gate).
 - **Older NVIDIA driver:** a voice-input run on a driver below 580, to confirm NeMo's fallback (R-3).
+- **Image generation holds its memory from start.** The image service now preloads FLUX (15.6 GB VRAM, 17.8 GB
+  commit), so the supervisor's memory check covers it. On a 32 GB PC with voice input and output running it will
+  usually show "not enough memory" instead of loading on demand. Decide whether to keep that, or to load on demand
+  with a memory check inside the image service.
+
+### Known low-severity items (implementation review round 3)
+
+- Verify checks every file a wheel installed, not the bytecode Omnix compiles into a pack.
+- The shipped app bytecode is unchecked-hash: an update that replaced `.py` files but not their `.pyc` would run the
+  old code. The installer replaces the whole install folder, so this needs a partial update to happen.
+- A service that never gets ready keeps reporting "starting" (after ten minutes it no longer holds the others back).
+- The STT proxy waits 10 s for the speech service and the browser 5 s; a speech service slower than that to accept
+  fails the call (none was, once first-run bytecode compilation stopped).
+- Migration 0169 is a `contract` migration: an Omnix older than it refuses a database that has it.
+
+### Implementation review log
+
+Three rounds with an independent review agent against `git diff main...electron` (2026-10-22):
+
+- **Round 1:** 2 High, 6 Medium, 9 Low. The highs were concurrent overlay installs deleting each other's wheels, and
+  model services loading at once past the memory headroom. Fixed in `7479a08f20`, along with:
+  - runtime authority bound to the stored job;
+  - pack removal and update while a service runs;
+  - macOS supervision;
+  - the configuration registry;
+  - the packs folder move;
+  - the setup screen for members and guests.
+- **Round 2:** the round-1 fixes held; it found new issues, fixed in `8706f320ac`:
+  - New: install-time bytecode went to the job worker's cache prefix, image models loaded outside the memory check,
+    and services wrote bytecode into the install folder.
+  - Regressions: a never-ready service blocked the others, stale overlays ran on a new Torch layer, re-acceptance
+    after a licence change could not be recorded, and the disk check refused installed bundles.
+- **Round 3:** every round-2 item fixed. One Medium: a packs folder moved across drives loses timestamp-checked
+  bytecode. Fixed with unchecked-hash pack bytecode and timestamp-preserving copies, along with the cheap lows:
+  - a half-removed model's retry;
+  - overlays installed before base locks were recorded;
+  - a failed image preload reporting not ready;
+  - 0169's phase label.
+
+  The reviewer judged the remaining items minor (above).

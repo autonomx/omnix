@@ -127,7 +127,9 @@ def _compile_bytecode(site: Path, *, final: Path) -> None:
 
     A service's first run otherwise compiles every module it imports, and on Windows a speech service whose first
     run did so stopped accepting connections (its first live call never connected; every later start worked). The
-    paths in tracebacks name the folder the pack is renamed to (``final``), not the staging folder.
+    paths in tracebacks name the folder the pack is renamed to (``final``), not the staging folder. Unchecked-hash
+    bytecode stays valid when the packs folder moves to another drive (new timestamps): a pack's files never change
+    after install, and Verify checks the sources.
 
     Each file's output is named explicitly: ``compileall`` would follow the job worker's ``PYTHONPYCACHEPREFIX`` and
     write into the shared cache folder, where no service looks."""
@@ -141,7 +143,7 @@ def _compile_bytecode(site: Path, *, final: Path) -> None:
         target = source.parent / "__pycache__" / f"{source.stem}.{tag}.pyc"
         try:
             py_compile.compile(str(source), cfile=str(target), dfile=str(final / relative), doraise=True,
-                               invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
+                               invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
         except (py_compile.PyCompileError, OSError, ValueError):
             continue  # a file that does not compile (a template, Python 2 code) is compiled, or not, on import
 
@@ -298,6 +300,8 @@ class RuntimeStore:
         if manifest is None or manifest.get("lock_sha256") != self.files(runtime_id).lock_sha256:
             return False
         base = self.catalog.runtime(runtime_id).base
+        if base and "base_lock_sha256" not in manifest:
+            return self.current(base) and self.runnable(runtime_id)  # an older manifest: see ``runnable``
         return not base or manifest.get("base_lock_sha256") == self.files(base).lock_sha256
 
     def runnable(self, runtime_id: str) -> bool:
@@ -312,7 +316,12 @@ class RuntimeStore:
         if not base:
             return True
         installed_base = self.manifest(base)
-        return installed_base is not None and manifest.get("base_lock_sha256") == installed_base.get("lock_sha256")
+        if installed_base is None:
+            return False
+        if "base_lock_sha256" not in manifest:
+            # Installed before overlays recorded their base: built on this base if installed after it.
+            return str(manifest.get("installed_at", "")) >= str(installed_base.get("installed_at", ""))
+        return manifest.get("base_lock_sha256") == installed_base.get("lock_sha256")
 
     def download_bytes(self, runtime_id: str) -> int:
         return self.files(runtime_id).download_bytes
@@ -556,6 +565,12 @@ class ModelStore:
         entry = self.entry(model_id)
         folder = self.cache / ("models--" + entry.repo.replace("/", "--"))
         return _folder_bytes(folder) if folder.exists() else 0
+
+    def present(self, model_id: str) -> bool:
+        """Anything of the model on disk: its marker or its cache folder (a removal that failed part-way)."""
+        entry = self.entry(model_id)
+        return (self.markers / f"{entry.id}.json").is_file() or (
+            self.cache / ("models--" + entry.repo.replace("/", "--"))).exists()
 
     def remove(self, model_id: str) -> None:
         entry = self.entry(model_id)

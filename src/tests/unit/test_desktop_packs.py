@@ -370,8 +370,24 @@ def test_bytecode_lands_in_the_pack_even_with_a_cache_prefix(pack_setup, monkeyp
     store, client, _ = pack_setup
     monkeypatch.setattr(sys, "pycache_prefix", str(tmp_path / "prefix"))
     store.install("torch-win", client=client)
-    assert list((store.site("torch-win") / "torchlike" / "__pycache__").glob("*.pyc"))
-    assert not (tmp_path / "prefix").exists()
+    compiled = list((store.site("torch-win") / "torchlike" / "__pycache__").glob("*.pyc"))
+    assert compiled and not (tmp_path / "prefix").exists()
+    # Unchecked-hash: still valid after the packs folder moves to another drive and every timestamp changes.
+    assert int.from_bytes(compiled[0].read_bytes()[4:8], "little") == 0b01
+
+
+def test_an_overlay_installed_before_overlays_recorded_their_base_still_runs(pack_setup) -> None:
+    store, client, _ = pack_setup
+    store.install("torch-win", client=client)
+    store.install("tts-win", client=client)
+    manifest_path = store.folder("tts-win") / packs.MANIFEST
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["base_lock_sha256"]
+    manifest_path.write_text(json.dumps(manifest))
+    assert store.runnable("tts-win") and store.current("tts-win")
+    manifest["installed_at"] = "2000-01-01T00:00:00+00:00"  # older than the layer: built on an earlier one
+    manifest_path.write_text(json.dumps(manifest))
+    assert not store.runnable("tts-win") and not store.current("tts-win")
 
 
 def test_a_tampered_bundled_wheel_is_refused(pack_setup) -> None:
@@ -396,8 +412,14 @@ def test_a_model_installs_into_the_cache_and_is_removed(pack_setup, tmp_path: Pa
     assert models.installed("tts-model") and models.verify("tts-model") == []
     assert models.snapshot("tts-model").name == REVISION
     models.remove("tts-model")
-    assert not models.installed("tts-model")
+    assert not models.installed("tts-model") and not models.present("tts-model")
     assert not (tmp_path / "hf" / "models--org--tts").exists()
+    # A removal that failed part-way (a file gone, the folder left) is still present, so its retry finishes it.
+    models.install("tts-model", fetch=fetch)
+    next((tmp_path / "hf" / "models--org--tts" / "snapshots").rglob("model.bin")).unlink()
+    assert not models.installed("tts-model") and models.present("tts-model")
+    models.remove("tts-model")
+    assert not models.present("tts-model")
 
 
 def test_packs_are_off_without_a_packs_folder(monkeypatch) -> None:

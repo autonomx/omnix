@@ -320,7 +320,7 @@ def execute(job: Any, *, job_store: Any = None) -> dict[str, Any]:
         bundle_id = planned["id"] if planned["kind"] == "bundle_id" else ""
         keep = _models_of_other_installed_bundles(bundle_id) if bundle_id else set()
         for entry in planned["models"]:
-            if entry.id not in keep and models.installed(entry.id):
+            if entry.id not in keep and models.present(entry.id):
                 models.remove(entry.id)
                 removed.append(entry.label)
         targets = runtimes_removed_with_bundle(bundle_id, planned["runtimes"]) if bundle_id else planned["runtimes"]

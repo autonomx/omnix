@@ -342,7 +342,8 @@ async function main(): Promise<void> {
         } catch {
           // Another drive: copy, and use the copy as soon as it is complete.
           copying = true;
-          cpSync(current, target, { recursive: true, errorOnExist: true });
+          // Timestamps kept: a pack's sources keep their times on the new drive (its bytecode needs none).
+          cpSync(current, target, { recursive: true, errorOnExist: true, preserveTimestamps: true });
           copying = false;
           usePacksFolder(target);
           try {

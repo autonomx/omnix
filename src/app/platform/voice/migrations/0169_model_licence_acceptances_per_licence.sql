@@ -1,4 +1,4 @@
--- omnix-migration: phase=expand transactional=true
+-- omnix-migration: phase=contract transactional=true
 -- An acceptance is for a model's licence at a revision (migration 0168). The key now includes the licence, so a
 -- catalog update that corrects a model's licence at the same revision can record the new acceptance; with the old
 -- key the insert was dropped as a duplicate and the install stayed refused.

@@ -244,6 +244,9 @@ def configure_device_permits() -> None:
     )
 
 
+_PRELOAD_FAILED = False
+
+
 @app.on_event("startup")
 async def startup_load_provider():
     if not is_image_generation_enabled():
@@ -261,6 +264,10 @@ async def startup_load_provider():
         _LOG.info('[IMAGE SERVICE] Image provider preload complete: %s', result)
     except Exception as exc:
         _LOG.warning('[IMAGE SERVICE] Image provider preload failed: %s', repr(exc))
+        # Not ready: the desktop supervisor counts a service ready only when /health says so, and its memory check
+        # covered the preload, not a load on the first request.
+        global _PRELOAD_FAILED
+        _PRELOAD_FAILED = True
 
     if not _truthy(environment().get("OMNIX_IMAGE_WARMUP", "0")):
         return
@@ -291,8 +298,8 @@ async def startup_load_provider():
 def health():
     model = image_model_status()
     return {
-        "ok": True,
-        "status": "ready",
+        "ok": not _PRELOAD_FAILED,
+        "status": "preload_failed" if _PRELOAD_FAILED else "ready",
         "service": "image",
         "enabled": is_image_generation_enabled(),
         "provider_mode": environment().get("OMNIX_IMAGE_SERVICE_MODE", ""),

@@ -82,6 +82,8 @@ class _Models:
     def installed(self, model_id: str) -> bool:
         return model_id in self.have
 
+    present = installed
+
     def install(self, model_id: str, **_: Any) -> dict:
         self.calls.append(f"install {model_id}")
         self.have.add(model_id)
