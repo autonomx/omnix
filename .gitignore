@@ -147,6 +147,9 @@ desktop/staging/stage/
 desktop/staging/cache/
 desktop/out/
 desktop/release/
+# The latest installer, copied to the repository root by npm --prefix desktop run dist.
+/Omnix-*.exe
+/Omnix-*.dmg
 desktop/node_modules/
 desktop/test-results/
 desktop/staging/*.log
