@@ -54,8 +54,8 @@
 
   .paper-trade-drilldown-header span.shadow {
     color: var(--fg-violet-810);
-    background: color-mix(in srgb, var(--c-violet-570) 16%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 34%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-570) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 34%, transparent);
   }
 
   .paper-trade-drilldown-header strong {
@@ -184,8 +184,8 @@
   }
 
   .paper-trade-drilldown-notice.shadow {
-    border-left-color: var(--c-violet-650-2);
-    background: color-mix(in srgb, var(--c-violet-470) 9%, transparent);
+    border-left-color: var(--accent-violet-650-2);
+    background: color-mix(in srgb, var(--accent-violet-470) 9%, transparent);
   }
 
   .paper-trade-drilldown-notice.warning {
@@ -363,7 +363,7 @@
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-header button {
     border-color: var(--c-slate-910);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-440);
   }
 
@@ -407,7 +407,7 @@
 
   :root[data-omnix-appearance='light'] .paper-trade-view-button {
     border-color: var(--c-slate-870);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-510);
   }
 

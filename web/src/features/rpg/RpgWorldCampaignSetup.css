@@ -7,7 +7,7 @@
 
   .rpg-campaign-continue-panel,
   .rpg-campaign-new-panel {
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
     border-radius: 16px;
     background: color-mix(in srgb, var(--bg-slate-150-2) 76%, transparent);
     padding: 1rem;
@@ -24,7 +24,7 @@
     gap: 0.65rem;
     margin-top: 0.75rem;
     padding: 0.8rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 16%, transparent);
     border-radius: 12px;
     background: color-mix(in srgb, var(--bg-indigo-210) 54%, transparent);
   }
@@ -125,7 +125,7 @@
   .rpg-campaign-form-grid select {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--bg-indigo-170) 88%, transparent);
     color: var(--fg-neutral-1000);
@@ -145,7 +145,7 @@
     align-items: center;
     grid-template-columns: auto 1fr;
     padding: 0.55rem 0.7rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 16%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--bg-indigo-210) 50%, transparent);
   }

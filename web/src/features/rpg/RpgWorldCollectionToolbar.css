@@ -5,7 +5,7 @@
     gap: 0.7rem;
     margin-bottom: 1rem;
     padding: 0.8rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 18%, transparent);
     border-radius: 14px;
     background: color-mix(in srgb, var(--bg-indigo-210) 44%, transparent);
   }
@@ -14,7 +14,7 @@
   .rpg-authoring-collection-toolbar select {
     box-sizing: border-box;
     min-width: 0;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--bg-blue-130) 78%, transparent);
     color: var(--fg-neutral-1000);
@@ -29,7 +29,7 @@
     display: flex;
     align-items: stretch;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--bg-blue-130) 60%, transparent);
   }
@@ -45,11 +45,11 @@
   }
 
   .rpg-authoring-collection-view-toggle button + button {
-    border-left: 1px solid color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
   }
 
   .rpg-authoring-collection-view-toggle button.is-active {
-    background: linear-gradient(145deg, color-mix(in srgb, var(--c-violet-490) 82%, transparent), color-mix(in srgb, var(--bg-violet-380) 84%, transparent));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--accent-violet-490) 82%, transparent), color-mix(in srgb, var(--bg-violet-380) 84%, transparent));
     color: var(--fg-neutral-1000);
   }
 
@@ -59,7 +59,7 @@
 
   .rpg-authoring-entity-card.is-featured {
     border-color: color-mix(in srgb, var(--c-yellow-880) 42%, transparent);
-    box-shadow: 0 18px 50px color-mix(in srgb, var(--c-violet-380) 18%, transparent);
+    box-shadow: 0 18px 50px color-mix(in srgb, var(--accent-violet-380) 18%, transparent);
   }
 
   .rpg-authoring-featured-ribbon {

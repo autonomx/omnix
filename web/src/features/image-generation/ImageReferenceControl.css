@@ -38,8 +38,8 @@
 
   .image-reference-dropzone.active {
     background: color-mix(in srgb, var(--bg-violet-230) 62%, transparent);
-    border-color: color-mix(in srgb, var(--c-indigo-600) 86%, transparent);
-    box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--c-indigo-600) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 86%, transparent);
+    box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--accent-indigo-600) 16%, transparent);
   }
 
   .image-reference-dropzone strong {

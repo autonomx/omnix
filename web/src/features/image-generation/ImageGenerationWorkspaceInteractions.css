@@ -17,7 +17,7 @@
   }
 
   .image-model-control.unloaded {
-    border-color: color-mix(in srgb, var(--c-indigo-600) 35%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 35%, transparent);
   }
 
   .image-model-control-copy {
@@ -43,7 +43,7 @@
   }
 
   .image-model-control-icon {
-    color: var(--c-violet-660);
+    color: var(--accent-violet-660);
     font-size: 1.1rem;
   }
 
@@ -102,8 +102,8 @@
 
   .image-clear-filters:hover,
   .image-clear-filters:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 14%, transparent);
-    border-color: color-mix(in srgb, var(--c-indigo-600) 62%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 62%, transparent);
     color: var(--fg-slate-940);
     outline: none;
   }
@@ -122,7 +122,7 @@
   }
 
   .image-asset-select:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--c-indigo-600) 80%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--accent-indigo-600) 80%, transparent);
     outline-offset: -2px;
   }
 

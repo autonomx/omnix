@@ -61,7 +61,7 @@
   .rpg-dossier-editor-fields textarea {
     box-sizing: border-box;
     width: 100%;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 23%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 23%, transparent);
     border-radius: 10px;
     outline: none;
     background: color-mix(in srgb, var(--bg-blue-130) 72%, transparent);
@@ -83,7 +83,7 @@
 
   .rpg-dossier-quick-fact-editor,
   .rpg-dossier-editor-section-list > article {
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 16%, transparent);
     border-radius: 12px;
     background: color-mix(in srgb, var(--bg-blue-130) 35%, transparent);
   }
@@ -195,7 +195,7 @@
 
   .rpg-dossier-editor-preview section {
     padding-top: 0.8rem;
-    border-top: 1px solid color-mix(in srgb, var(--c-violet-710) 14%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--accent-violet-710) 14%, transparent);
   }
 
   .rpg-dossier-editor-preview section h5 {

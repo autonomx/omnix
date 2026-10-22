@@ -53,8 +53,8 @@
   .assistant-context-add-button:hover,
   .assistant-context-add-button:focus-visible,
   .assistant-context-add-button[aria-expanded='true'] {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-500) 96%, transparent), color-mix(in srgb, var(--c-sky-800) 90%, transparent));
-    border-color: color-mix(in srgb, var(--c-violet-810) 56%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-500) 96%, transparent), color-mix(in srgb, var(--c-sky-800) 90%, transparent));
+    border-color: color-mix(in srgb, var(--accent-violet-810) 56%, transparent);
     outline: none;
     transform: translateY(-1px);
   }
@@ -71,7 +71,7 @@
 
   .assistant-context-tool-menu {
     background: color-mix(in srgb, var(--bg-indigo-190) 98%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 36%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 36%, transparent);
     border-radius: 0.9rem;
     box-shadow: 0 1.25rem 2.8rem color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
     display: grid;
@@ -112,8 +112,8 @@
   .assistant-context-tool-item:hover,
   .assistant-context-tool-item:focus-visible,
   .assistant-context-tool-item.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-sky-800) 13%, transparent), color-mix(in srgb, var(--c-indigo-600) 20%, transparent));
-    border-color: color-mix(in srgb, var(--c-violet-660) 32%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-sky-800) 13%, transparent), color-mix(in srgb, var(--accent-indigo-600) 20%, transparent));
+    border-color: color-mix(in srgb, var(--accent-violet-660) 32%, transparent);
     outline: none;
   }
 
@@ -228,9 +228,9 @@
   .assistant-context-mode select {
     appearance: none;
     background:
-      linear-gradient(45deg, transparent 50%, var(--c-indigo-920) 50%) right 0.42rem center / 0.42rem 0.42rem no-repeat,
+      linear-gradient(45deg, transparent 50%, var(--accent-indigo-920) 50%) right 0.42rem center / 0.42rem 0.42rem no-repeat,
       color-mix(in srgb, var(--bg-indigo-190) 34%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-indigo-920) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-920) 16%, transparent);
     border-radius: 999px;
     color: var(--fg-neutral-1000);
     cursor: pointer;
@@ -279,7 +279,7 @@
   .assistant-context-page-budget input {
     width: 3.25rem;
     min-height: 2rem;
-    border: 1px solid color-mix(in srgb, var(--c-indigo-920) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-920) 16%, transparent);
     border-radius: 999px;
     background: color-mix(in srgb, var(--bg-indigo-190) 34%, transparent);
     color: var(--fg-neutral-1000);

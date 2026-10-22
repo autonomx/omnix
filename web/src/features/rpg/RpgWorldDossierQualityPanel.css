@@ -4,7 +4,7 @@
     gap: 1rem;
     margin-top: 1.2rem;
     padding: 1.2rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
     border-radius: 18px;
     background: linear-gradient(145deg, color-mix(in srgb, var(--bg-indigo-210) 70%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 90%, transparent));
   }
@@ -43,7 +43,7 @@
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--c-violet-540), var(--c-yellow-770));
+    background: linear-gradient(90deg, var(--accent-violet-540), var(--c-yellow-770));
   }
 
   .rpg-dossier-quality-metrics {
@@ -56,7 +56,7 @@
     display: grid;
     gap: 0.25rem;
     padding: 0.8rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 14%, transparent);
     border-radius: 12px;
     background: color-mix(in srgb, var(--bg-blue-130) 50%, transparent);
   }
@@ -75,7 +75,7 @@
   }
 
   .rpg-dossier-quality-topics {
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 16%, transparent);
     border-radius: 12px;
     padding: 0.8rem;
   }
@@ -136,7 +136,7 @@
   }
 
   .rpg-dossier-quality-actions select {
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 25%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 25%, transparent);
     border-radius: 9px;
     background: color-mix(in srgb, var(--bg-blue-130) 80%, transparent);
     color: var(--fg-neutral-1000);

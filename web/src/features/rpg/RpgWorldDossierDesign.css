@@ -23,7 +23,7 @@
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 20px;
     background:
-      radial-gradient(circle at 78% 3%, color-mix(in srgb, var(--c-indigo-430) 22%, transparent), transparent 32%),
+      radial-gradient(circle at 78% 3%, color-mix(in srgb, var(--accent-indigo-430) 22%, transparent), transparent 32%),
       linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-150-2) 98%, transparent), color-mix(in srgb, var(--bg-blue-130) 98%, transparent));
     box-shadow: 0 24px 72px color-mix(in srgb, var(--c-neutral-0) 30%, transparent);
   }
@@ -177,7 +177,7 @@
   .rpg-authoring-dossier-facts > dl > div {
     min-width: 0;
     padding: 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 14%, transparent);
     border-radius: 11px;
     background: color-mix(in srgb, var(--bg-blue-130) 50%, transparent);
   }

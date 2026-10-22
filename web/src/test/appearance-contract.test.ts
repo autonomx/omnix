@@ -19,8 +19,10 @@ function lightness(token: string): number {
   return Number(token.split('-')[1]) / 1000;
 }
 
+// A palette colour, or a theme accent (--accent-X, the palette colour X recoloured at the same lightness).
+const PAINT = /var\(--(?:c|accent)-([a-z]+-\d+(?:-\d+)?)\)/g;
 const TOKEN = /var\(--c-([a-z]+-\d+(?:-\d+)?)\)/g;
-const FAINT = /color-mix\(in srgb,\s*var\(--c-([a-z]+-\d+(?:-\d+)?)\)\s+([\d.]+)%/g;
+const FAINT = /color-mix\(in srgb,\s*var\(--(?:c|accent)-([a-z]+-\d+(?:-\d+)?)\)\s+([\d.]+)%/g;
 
 /**
  * Colours written for dark mode only: a dark palette colour painted as a background, or a light one used as text,
@@ -36,13 +38,17 @@ function darkOnlyColours(css: string): string[] {
     const declarations = body.split(';').map((item) => item.split(':')).filter((parts) => parts.length > 1)
       .map(([property, ...value]) => [property.trim(), value.join(':')] as const);
     const backgrounds = declarations.filter(([property]) => /^background(-color|-image)?$/.test(property)).map(([, value]) => value);
-    const painted = backgrounds.flatMap((value) => [...value.matchAll(TOKEN)].map((match) => match[1]));
+    const painted = backgrounds.flatMap((value) => [...value.matchAll(PAINT)].map((match) => match[1]));
     const faint = new Set(backgrounds.flatMap((value) => [...value.matchAll(FAINT)].filter((match) => Number(match[2]) < 60).map((match) => match[1])));
     const accent = painted.some((token) => lightness(token) >= 0.4 && lightness(token) <= 0.72 && !faint.has(token))
       && !painted.some((token) => lightness(token) < 0.4);
     for (const [property, value] of declarations) {
+      if (/^background(-color|-image)?$/.test(property)) {
+        for (const [paint, token] of value.matchAll(PAINT)) {
+          if (lightness(token) < 0.4) found.push(`${selector.trim()} { ${property}: ${paint} }`);
+        }
+      }
       for (const [, token] of value.matchAll(TOKEN)) {
-        if (/^background(-color|-image)?$/.test(property) && lightness(token) < 0.4) found.push(`${selector.trim()} { ${property}: --c-${token} }`);
         if (/^(color|fill|stroke|caret-color)$/.test(property) && lightness(token) > 0.7 && !accent) found.push(`${selector.trim()} { ${property}: --c-${token} }`);
       }
     }
@@ -62,6 +68,7 @@ describe('light and dark appearance', () => {
     expect(darkOnlyColours('.panel { background: var(--c-indigo-190); color: var(--c-slate-970-2); }')).toHaveLength(2);
     expect(darkOnlyColours('.panel { background: var(--bg-indigo-190); color: var(--fg-slate-970-2); }')).toEqual([]);
     expect(darkOnlyColours('.send { background: var(--c-indigo-500); color: var(--c-neutral-1000); }')).toEqual([]);
+    expect(darkOnlyColours('.send { background: var(--accent-indigo-500); color: var(--c-neutral-1000); }')).toEqual([]);
     expect(darkOnlyColours(":root[data-omnix-appearance='light'] .x { background: var(--c-indigo-190); }")).toEqual([]);
   });
 });

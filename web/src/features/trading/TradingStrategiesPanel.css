@@ -226,7 +226,7 @@
     gap:7px;
     margin-bottom:9px;
     padding:8px;
-    border:1px solid color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
+    border:1px solid color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
     border-radius:7px;
     background:linear-gradient(90deg,color-mix(in srgb, var(--bg-violet-390) 10%, transparent),color-mix(in srgb, var(--bg-blue-230) 26%, transparent))
   }

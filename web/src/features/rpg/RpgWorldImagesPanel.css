@@ -115,7 +115,7 @@
   }
 
   .rpg-world-images-progress-track > span {
-    background: linear-gradient(90deg, var(--c-cyan-810), var(--c-violet-710));
+    background: linear-gradient(90deg, var(--c-cyan-810), var(--accent-violet-710));
     border-radius: inherit;
     display: block;
     height: 100%;

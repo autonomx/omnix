@@ -16,7 +16,7 @@
     left: 6.7rem;
     width: 2px;
     border-radius: 999px;
-    background: linear-gradient(var(--c-yellow-900), color-mix(in srgb, var(--c-indigo-600) 72%, transparent), color-mix(in srgb, var(--c-indigo-600) 16%, transparent));
+    background: linear-gradient(var(--c-yellow-900), color-mix(in srgb, var(--accent-indigo-600) 72%, transparent), color-mix(in srgb, var(--accent-indigo-600) 16%, transparent));
   }
 
   .rpg-authoring-timeline-list > li {
@@ -34,8 +34,8 @@
     height: 0.8rem;
     border: 2px solid var(--c-yellow-950);
     border-radius: 50%;
-    background: var(--c-violet-430);
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--c-violet-430) 20%, transparent);
+    background: var(--accent-violet-430);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-violet-430) 20%, transparent);
   }
 
   .rpg-authoring-timeline-marker {

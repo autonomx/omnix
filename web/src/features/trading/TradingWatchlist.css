@@ -311,7 +311,7 @@
   }
 
   .trading-watchlist-asset-icon.apple {
-    border-color: color-mix(in srgb, var(--c-slate-890) 50%, transparent);
+    border-color: color-mix(in srgb, var(--accent-slate-890) 50%, transparent);
     background: var(--bg-slate-280);
     color: var(--fg-neutral-960);
   }
@@ -346,14 +346,14 @@
   }
 
   .trading-watchlist-asset-icon.ethereum {
-    border-color: color-mix(in srgb, var(--c-violet-660) 50%, transparent);
-    background: color-mix(in srgb, var(--c-violet-660) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 50%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
     color: var(--fg-indigo-750);
   }
 
   .trading-watchlist-asset-icon.solana {
     border-color: color-mix(in srgb, var(--c-cyan-810) 50%, transparent);
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-cyan-810) 20%, transparent), color-mix(in srgb, var(--c-violet-630) 20%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-cyan-810) 20%, transparent), color-mix(in srgb, var(--accent-violet-630) 20%, transparent));
     color: var(--fg-teal-860);
   }
 
@@ -495,7 +495,7 @@
 
   .trading-watchlist-flag.purple,
   .trading-watchlist-flag-swatch.purple {
-    --trading-watchlist-flag-color: var(--c-violet-660);
+    --trading-watchlist-flag-color: var(--accent-violet-660);
   }
 
   .trading-watchlist-flag {

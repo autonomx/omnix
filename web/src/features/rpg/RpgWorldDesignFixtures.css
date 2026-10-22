@@ -5,7 +5,7 @@
     min-height: 720px;
     padding: 1.5rem;
     background:
-      radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--c-violet-490) 18%, transparent), transparent 32%),
+      radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--accent-violet-490) 18%, transparent), transparent 32%),
       var(--bg-slate-150-2);
   }
 

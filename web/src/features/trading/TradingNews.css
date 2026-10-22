@@ -232,7 +232,7 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   :root[data-omnix-appearance='light'] .trading-news-status[data-status='running'] {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-510);
   }
 
@@ -273,7 +273,7 @@
 
   :root[data-omnix-appearance='light'] .trading-news-ai-brief {
     border-color: var(--c-blue-870);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-news-ai-brief > header strong,

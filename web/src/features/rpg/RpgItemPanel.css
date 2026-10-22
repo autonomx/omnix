@@ -96,7 +96,7 @@
   }
 
   .rpg-item-detail-tags span {
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 22%, transparent);
     border-radius: 999px;
     padding: 0.2rem 0.5rem;
     color: var(--omnix-muted-text, var(--fg-blue-710));
@@ -145,9 +145,9 @@
 
   .rpg-item-action-icon-button:hover:not(:disabled),
   .rpg-item-action-icon-button:focus-visible:not(:disabled) {
-    border-color: color-mix(in srgb, var(--c-violet-710) 72%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-710) 72%, transparent);
     background: color-mix(in srgb, var(--bg-violet-380-2) 38%, transparent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-violet-710) 22%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-violet-710) 22%, transparent);
   }
 
   .rpg-item-action-icon-button:disabled {

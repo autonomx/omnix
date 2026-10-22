@@ -44,7 +44,7 @@
 
   .rpg-data-status-card {
     background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
     border-radius: 0.7rem;
     display: grid;
     gap: 0.45rem;

@@ -2,7 +2,7 @@
   .rpg-lore-overlay {
     align-items: stretch;
     background:
-      radial-gradient(circle at 18% 8%, color-mix(in srgb, var(--c-violet-540) 24%, transparent), transparent 34rem),
+      radial-gradient(circle at 18% 8%, color-mix(in srgb, var(--accent-violet-540) 24%, transparent), transparent 34rem),
       color-mix(in srgb, var(--bg-slate-130) 94%, transparent);
     display: flex;
     inset: 0;
@@ -14,7 +14,7 @@
 
   .rpg-lore-overlay-shell {
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-190-3) 98%, transparent), color-mix(in srgb, var(--bg-slate-130) 98%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 28%, transparent);
     border-radius: 1rem;
     box-shadow: 0 2rem 6rem color-mix(in srgb, var(--c-neutral-0) 50%, transparent);
     display: grid;

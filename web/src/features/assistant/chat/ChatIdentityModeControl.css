@@ -33,7 +33,7 @@
   }
 
   .chat-identity-mode-toggle button.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 96%, transparent), color-mix(in srgb, var(--c-sky-750) 94%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 96%, transparent), color-mix(in srgb, var(--c-sky-750) 94%, transparent));
     box-shadow: 0 0.35rem 0.95rem color-mix(in srgb, var(--c-blue-540) 28%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 18%, transparent);
     color: var(--c-neutral-1000);
   }
@@ -91,7 +91,7 @@
   .chat-identity-context-select select {
     appearance: none;
     background:
-      linear-gradient(45deg, transparent 50%, var(--c-indigo-920) 50%) right 0.45rem center / 0.38rem 0.38rem no-repeat,
+      linear-gradient(45deg, transparent 50%, var(--accent-indigo-920) 50%) right 0.45rem center / 0.38rem 0.38rem no-repeat,
       transparent;
     border: 0;
     color: var(--fg-slate-970-2);

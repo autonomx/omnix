@@ -40,7 +40,7 @@
   .rpg-authoring-modal textarea {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
     border-radius: 12px;
     background: color-mix(in srgb, var(--bg-indigo-170) 88%, transparent);
     color: var(--fg-neutral-1000);
@@ -55,7 +55,7 @@
   }
 
   .rpg-world-card-more {
-    border-top: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--accent-violet-710) 16%, transparent);
     padding-top: 0.65rem;
   }
 
@@ -86,7 +86,7 @@
     width: min(560px, 100%);
     gap: 0.85rem;
     padding: 1.25rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 28%, transparent);
     border-radius: 18px;
     background: var(--bg-indigo-190);
     box-shadow: 0 24px 80px color-mix(in srgb, var(--c-neutral-0) 45%, transparent);
@@ -113,7 +113,7 @@
   .rpg-authoring-two-column article,
   .rpg-authoring-page,
   .rpg-authoring-empty {
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
     border-radius: 16px;
     background: color-mix(in srgb, var(--bg-slate-150-2) 76%, transparent);
   }
@@ -139,7 +139,7 @@
   .rpg-authoring-editor-header {
     align-items: center;
     padding-bottom: 0.85rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
   }
 
   .rpg-authoring-editor-layout {
@@ -185,7 +185,7 @@
 
   .rpg-authoring-editor-layout nav button:hover,
   .rpg-authoring-editor-layout nav button.is-active {
-    border-color: color-mix(in srgb, var(--c-violet-710) 24%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-710) 24%, transparent);
     background: color-mix(in srgb, var(--bg-violet-380) 30%, transparent);
   }
 

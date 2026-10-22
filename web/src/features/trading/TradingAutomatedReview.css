@@ -175,7 +175,7 @@
 
   :root[data-omnix-appearance='light'] .automated-review-boundary {
     border-color: var(--c-slate-930);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .automated-review-findings > div {

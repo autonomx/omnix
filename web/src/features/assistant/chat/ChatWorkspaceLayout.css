@@ -41,7 +41,7 @@
   .assistant-composer-controls button.assistant-composer-chip:focus-visible,
   .assistant-composer-controls a.assistant-composer-chip:hover,
   .assistant-composer-controls a.assistant-composer-chip:focus-visible {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-sky-800) 13%, transparent), color-mix(in srgb, var(--c-indigo-600) 18%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-sky-800) 13%, transparent), color-mix(in srgb, var(--accent-indigo-600) 18%, transparent));
     border-color: color-mix(in srgb, var(--c-sky-800) 28%, transparent);
     outline: none;
   }
@@ -89,7 +89,7 @@
 
   .assistant-message-input textarea {
     background: color-mix(in srgb, var(--bg-slate-150-2) 94%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-indigo-600) 46%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-600) 46%, transparent);
     border-radius: 0.85rem;
     color: var(--omnix-text);
     min-height: 6.6rem;
@@ -128,7 +128,7 @@
   }
 
   .assistant-send-button {
-    background: linear-gradient(135deg, var(--c-indigo-500), var(--c-indigo-600));
+    background: linear-gradient(135deg, var(--accent-indigo-500), var(--accent-indigo-600));
     color: var(--c-neutral-1000);
     font-weight: 800;
     min-height: 2.7rem;
@@ -194,7 +194,7 @@
 
   .assistant-voice-orb::before,
   .assistant-voice-orb::after {
-    background: repeating-linear-gradient(90deg, transparent 0 0.5rem, color-mix(in srgb, var(--c-indigo-920) 90%, transparent) 0.5rem 0.65rem, transparent 0.65rem 0.95rem);
+    background: repeating-linear-gradient(90deg, transparent 0 0.5rem, color-mix(in srgb, var(--accent-indigo-920) 90%, transparent) 0.5rem 0.65rem, transparent 0.65rem 0.95rem);
     content: "";
     height: 3rem;
     opacity: 0.75;
@@ -260,7 +260,7 @@
   }
 
   .assistant-voice-transcript p {
-    border-left: 2px solid var(--c-indigo-600);
+    border-left: 2px solid var(--accent-indigo-600);
     color: var(--fg-indigo-920);
     display: grid;
     gap: 0.25rem;
@@ -337,7 +337,7 @@
   .assistant-chat-main,
   .assistant-live-card {
     background:
-      radial-gradient(circle at 24% 0%, color-mix(in srgb, var(--c-indigo-600) 12%, transparent), transparent 28rem),
+      radial-gradient(circle at 24% 0%, color-mix(in srgb, var(--accent-indigo-600) 12%, transparent), transparent 28rem),
       linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-210) 94%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 98%, transparent));
     border: 1px solid var(--omnix-border);
     border-radius: 0.95rem;
@@ -426,7 +426,7 @@
   .assistant-chat-avatar {
     align-self: start;
     background:
-      radial-gradient(circle at center, color-mix(in srgb, var(--c-indigo-600) 95%, transparent) 0 30%, transparent 31%),
+      radial-gradient(circle at center, color-mix(in srgb, var(--accent-indigo-600) 95%, transparent) 0 30%, transparent 31%),
       conic-gradient(from 120deg, var(--omnix-cyan), var(--omnix-purple), var(--omnix-cyan));
     border: 1px solid color-mix(in srgb, var(--c-sky-800) 40%, transparent);
     border-radius: 999px;
@@ -647,7 +647,7 @@
 
   .assistant-chat-message.user .assistant-chat-bubble {
     background: linear-gradient(135deg, color-mix(in srgb, var(--bg-indigo-360) 98%, transparent), color-mix(in srgb, var(--bg-indigo-290) 98%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 35%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 35%, transparent);
     border-radius: 0.85rem;
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 5%, transparent);
     gap: 0.2rem;
@@ -701,8 +701,8 @@
 
   .assistant-suggestion-row button:hover,
   .assistant-suggestion-row button:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 22%, transparent);
-    border-color: color-mix(in srgb, var(--c-violet-660) 35%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 35%, transparent);
     outline: none;
   }
 
@@ -741,7 +741,7 @@
   }
 
   .assistant-message-input textarea {
-    border-color: color-mix(in srgb, var(--c-indigo-600) 52%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 52%, transparent);
     min-height: 6rem;
     padding: 1rem 7.2rem 1rem 1rem;
   }
@@ -779,7 +779,7 @@
   }
 
   .assistant-mode-switch button.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 46%, transparent), color-mix(in srgb, var(--c-indigo-440) 62%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 46%, transparent), color-mix(in srgb, var(--accent-indigo-440) 62%, transparent));
     color: var(--omnix-text);
     font-weight: 750;
   }
@@ -878,7 +878,7 @@
 
   .assistant-voice-orb::before,
   .assistant-voice-orb::after {
-    background: repeating-linear-gradient(90deg, transparent 0 0.55rem, color-mix(in srgb, var(--c-indigo-920) 74%, transparent) 0.55rem 0.72rem, transparent 0.72rem 1.05rem);
+    background: repeating-linear-gradient(90deg, transparent 0 0.55rem, color-mix(in srgb, var(--accent-indigo-920) 74%, transparent) 0.55rem 0.72rem, transparent 0.72rem 1.05rem);
     height: 4.6rem;
     width: 6.6rem;
   }

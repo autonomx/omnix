@@ -21,7 +21,7 @@
     border-radius: 3px;
     background:
       linear-gradient(90deg, color-mix(in srgb, var(--bg-blue-130) 96%, transparent), color-mix(in srgb, var(--bg-blue-130) 42%, transparent)),
-      radial-gradient(circle at 72% 30%, color-mix(in srgb, var(--c-indigo-430) 50%, transparent), transparent 35%),
+      radial-gradient(circle at 72% 30%, color-mix(in srgb, var(--accent-indigo-430) 50%, transparent), transparent 35%),
       linear-gradient(140deg, var(--bg-blue-240), var(--bg-blue-240-2) 55%, var(--bg-indigo-170));
     background-position: center;
     background-size: cover;
@@ -245,7 +245,7 @@
     height: 22px;
     place-items: center;
     border-radius: 50%;
-    background: color-mix(in srgb, var(--c-violet-710) 12%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-710) 12%, transparent);
     color: var(--fg-violet-810);
     font-size: 0.7rem;
   }

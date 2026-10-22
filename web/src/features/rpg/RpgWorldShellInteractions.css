@@ -15,7 +15,7 @@
     min-width: 1.1rem;
     height: 1.1rem;
     place-items: center;
-    border: 2px solid var(--c-slate-150-2);
+    border: 2px solid var(--accent-slate-150-2);
     border-radius: 999px;
     background: var(--c-orange-580);
     color: var(--c-neutral-1000);
@@ -34,7 +34,7 @@
     overflow: auto;
     gap: 0.75rem;
     padding: 1rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-810) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-810) 28%, transparent);
     border-radius: 18px;
     background: color-mix(in srgb, var(--bg-slate-150-2) 96%, transparent);
     box-shadow: 0 24px 80px color-mix(in srgb, var(--c-neutral-0) 45%, transparent);
@@ -58,7 +58,7 @@
   .rpg-world-command-popover input {
     box-sizing: border-box;
     width: 100%;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 28%, transparent);
     border-radius: 11px;
     outline: none;
     background: color-mix(in srgb, var(--bg-blue-130) 82%, transparent);
@@ -93,7 +93,7 @@
 
   .rpg-world-command-popover button:hover,
   .rpg-world-command-popover button:focus-visible {
-    border-color: color-mix(in srgb, var(--c-violet-710) 32%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-710) 32%, transparent);
     background: color-mix(in srgb, var(--bg-violet-380) 35%, transparent);
   }
 
@@ -121,7 +121,7 @@
     align-items: center;
     justify-content: space-between;
     padding-bottom: 0.7rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-violet-710) 16%, transparent);
   }
 
   .rpg-world-command-popover header span {
@@ -140,7 +140,7 @@
     margin-left: 0.2rem;
     padding: 0;
     place-items: center;
-    border-color: color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
     border-radius: 8px;
     background: color-mix(in srgb, var(--bg-indigo-210) 64%, transparent);
     color: var(--fg-neutral-1000);

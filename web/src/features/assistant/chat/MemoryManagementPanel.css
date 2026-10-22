@@ -1,9 +1,9 @@
 @layer features {
   .memory-management-panel {
-    --memory-surface: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
-    --memory-surface-strong: color-mix(in srgb, var(--c-indigo-210) 90%, transparent);
-    --memory-accent: var(--c-violet-660);
-    --memory-accent-soft: color-mix(in srgb, var(--c-violet-660) 16%, transparent);
+    --memory-surface: color-mix(in srgb, var(--accent-indigo-190) 72%, transparent);
+    --memory-surface-strong: color-mix(in srgb, var(--accent-indigo-210) 90%, transparent);
+    --memory-accent: var(--accent-violet-660);
+    --memory-accent-soft: color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
     gap: 1.25rem;
     padding: 1.4rem;
   }
@@ -46,7 +46,7 @@
   .memory-page-stats span,
   .memory-metric-row span {
     background: var(--memory-accent-soft);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 30%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 30%, transparent);
     border-radius: 999px;
     color: var(--fg-violet-920);
     display: inline-flex;
@@ -89,7 +89,7 @@
 
   .memory-management-panel .memory-card-primary {
     background:
-      linear-gradient(145deg, color-mix(in srgb, var(--c-indigo-600) 12%, transparent), transparent 58%),
+      linear-gradient(145deg, color-mix(in srgb, var(--accent-indigo-600) 12%, transparent), transparent 58%),
       var(--memory-surface-strong);
   }
 
@@ -107,7 +107,7 @@
   .memory-card-heading > span {
     align-items: center;
     background: var(--memory-accent-soft);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 32%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 32%, transparent);
     border-radius: 0.55rem;
     color: var(--fg-violet-920);
     display: inline-flex;
@@ -232,7 +232,7 @@
 
   .memory-record-card header strong {
     background: var(--memory-accent-soft);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 30%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 30%, transparent);
     border-radius: 999px;
     color: var(--fg-violet-920);
     font-size: 0.72rem;

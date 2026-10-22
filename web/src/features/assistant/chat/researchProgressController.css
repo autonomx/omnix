@@ -2,9 +2,9 @@
   .assistant-research-progress {
     margin: 0.75rem 1rem 1rem;
     padding: 1rem;
-    border: 1px solid color-mix(in srgb, var(--mantine-color-violet-5, var(--c-indigo-600)) 38%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mantine-color-violet-5, var(--accent-indigo-600)) 38%, transparent);
     border-radius: 0.9rem;
-    background: color-mix(in srgb, var(--mantine-color-dark-7, var(--bg-neutral-220)) 88%, var(--mantine-color-violet-9, var(--c-indigo-500)));
+    background: color-mix(in srgb, var(--mantine-color-dark-7, var(--bg-neutral-220)) 88%, var(--mantine-color-violet-9, var(--accent-indigo-500)));
     box-shadow: 0 12px 28px color-mix(in srgb, var(--c-neutral-0) 16%, transparent);
   }
 
@@ -38,7 +38,7 @@
   .assistant-research-status {
     padding: 0.25rem 0.55rem;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
     font-size: 0.75rem;
     font-weight: 700;
   }
@@ -55,7 +55,7 @@
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--c-indigo-600), var(--c-indigo-750));
+    background: linear-gradient(90deg, var(--accent-indigo-600), var(--accent-indigo-750));
     transition: width 240ms ease;
   }
 
@@ -115,7 +115,7 @@
     width: 1.1rem;
     height: 1.1rem;
     margin-top: 0.1rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-810) 64%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-810) 64%, transparent);
     border-radius: 999px;
     color: var(--fg-violet-810);
   }
@@ -124,7 +124,7 @@
     width: 0.35rem;
     height: 0.35rem;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--c-violet-810) 72%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-810) 72%, transparent);
     content: '';
   }
 
@@ -163,7 +163,7 @@
   .assistant-research-plan-controls input {
     width: 3.3rem;
     min-height: 2rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-810) 34%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-810) 34%, transparent);
     border-radius: 0.45rem;
     background: color-mix(in srgb, var(--bg-slate-150-2) 58%, transparent);
     color: inherit;
@@ -192,7 +192,7 @@
   }
 
   .status-plan-progress .assistant-research-status {
-    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
     color: var(--fg-violet-810);
   }
 
@@ -320,7 +320,7 @@
     width: 2rem;
     height: 2rem;
     border-radius: 0.55rem;
-    background: linear-gradient(135deg, var(--c-indigo-600), var(--c-sky-800));
+    background: linear-gradient(135deg, var(--accent-indigo-600), var(--c-sky-800));
     color: var(--c-neutral-1000);
     font-size: 1.05rem;
     font-weight: 900;
@@ -466,15 +466,15 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   .assistant-research-start {
-    border-color: color-mix(in srgb, var(--c-violet-810) 70%, transparent);
-    background: linear-gradient(135deg, var(--c-indigo-600), var(--c-violet-710));
+    border-color: color-mix(in srgb, var(--accent-violet-810) 70%, transparent);
+    background: linear-gradient(135deg, var(--accent-indigo-600), var(--accent-violet-710));
     color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-progress {
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 72%, transparent), color-mix(in srgb, var(--c-slate-930) 44%, transparent)),
-      var(--omnix-panel-bg, color-mix(in srgb, var(--c-slate-970-2) 72%, transparent));
+      var(--omnix-panel-bg, color-mix(in srgb, var(--accent-slate-970-2) 72%, transparent));
     border-color: var(--omnix-border, color-mix(in srgb, var(--c-slate-510) 22%, transparent));
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 78%, transparent), 0 .65rem 1.4rem color-mix(in srgb, var(--c-blue-390) 8%, transparent);
     color: var(--omnix-text, var(--c-blue-310));
@@ -511,7 +511,7 @@
   :root[data-omnix-appearance='light'] .assistant-research-report {
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 78%, transparent), color-mix(in srgb, var(--c-slate-930) 48%, transparent)),
-      var(--omnix-panel-bg, color-mix(in srgb, var(--c-slate-970-2) 72%, transparent));
+      var(--omnix-panel-bg, color-mix(in srgb, var(--accent-slate-970-2) 72%, transparent));
     border-color: var(--omnix-border, color-mix(in srgb, var(--c-blue-560) 22%, transparent));
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 86%, transparent), 0 .75rem 1.5rem color-mix(in srgb, var(--c-blue-390) 9%, transparent);
     color: var(--omnix-text, var(--c-blue-310));

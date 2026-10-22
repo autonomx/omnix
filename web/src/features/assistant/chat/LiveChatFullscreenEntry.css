@@ -9,8 +9,8 @@
   }
 
   .live-chat-fullscreen-action {
-    background: color-mix(in srgb, var(--c-violet-570) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 34%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-570) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 34%, transparent);
     border-radius: 10px;
     color: inherit;
     cursor: pointer;
@@ -23,8 +23,8 @@
   .live-chat-fullscreen-action:focus-visible,
   .live-chat-card button.live-chat-secondary-action:hover,
   .live-chat-card button.live-chat-secondary-action:focus-visible {
-    border-color: color-mix(in srgb, var(--c-indigo-750) 66%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-violet-570) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-750) 66%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-violet-570) 12%, transparent);
     outline: none;
   }
 

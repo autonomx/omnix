@@ -51,7 +51,7 @@
 
   .trading-side-panel .trading-alerts-panel-header [role=tab],.trading-alerts-panel-header [role=tab]{border:0;border-radius:7px;background:transparent;box-shadow:none;padding:0 10px}
 
-  .trading-side-panel .trading-alerts-panel-header [role=tab][aria-selected=true],.trading-alerts-panel-header [role=tab][aria-selected=true]{background:var(--c-slate-970-2);box-shadow:0 1px 4px color-mix(in srgb, var(--c-neutral-0) 16%, transparent)}
+  .trading-side-panel .trading-alerts-panel-header [role=tab][aria-selected=true],.trading-alerts-panel-header [role=tab][aria-selected=true]{background:var(--accent-slate-970-2);box-shadow:0 1px 4px color-mix(in srgb, var(--c-neutral-0) 16%, transparent)}
 
   .trading-alert-icon-button{display:grid;border:0;border-radius:5px;background:transparent;padding:0;color:var(--fg-slate-820);font-size:21px;line-height:1}
 

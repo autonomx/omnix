@@ -35,7 +35,7 @@
     border-right: 1px solid color-mix(in srgb, var(--c-yellow-770) 18%, transparent);
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-190-2) 97%, transparent), color-mix(in srgb, var(--bg-indigo-170) 98%, transparent)),
-      radial-gradient(circle at 30% 88%, color-mix(in srgb, var(--c-purple-500) 35%, transparent), transparent 36%);
+      radial-gradient(circle at 30% 88%, color-mix(in srgb, var(--accent-purple-500) 35%, transparent), transparent 36%);
     box-shadow: 16px 0 50px color-mix(in srgb, var(--c-neutral-0) 22%, transparent);
   }
 
@@ -214,7 +214,7 @@
   }
 
   .rpg-world-breadcrumbs button:first-child {
-    border-color: color-mix(in srgb, var(--c-violet-710) 13%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-710) 13%, transparent);
     background: color-mix(in srgb, var(--bg-indigo-190) 66%, transparent);
   }
 

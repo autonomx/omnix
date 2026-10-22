@@ -1,5 +1,5 @@
 @layer features {
-  .trading-pine-panel{display:flex;flex-direction:column;min-height:0;height:100%;background:var(--c-slate-970-2);color:var(--c-neutral-220)}
+  .trading-pine-panel{display:flex;flex-direction:column;min-height:0;height:100%;background:var(--accent-slate-970-2);color:var(--c-neutral-220)}
   .trading-pine-header{display:flex;flex:0 0 44px;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;border-bottom:1px solid var(--c-neutral-910)}
   .trading-pine-heading{display:flex;align-items:center;gap:8px;font-size:14px}
   .trading-pine-glyph{display:grid;place-items:center;width:25px;height:25px;border:1px solid currentColor;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}
@@ -50,7 +50,7 @@
 
 /* Declarations that must win over every other layer. */
 @layer overrides {
-  .trading-script-toolbar :is(input,select,button),.trading-script-saveas :is(input,button){border:1px solid var(--c-slate-890);border-radius:5px;background:var(--c-neutral-1000);padding:5px 8px;color:var(--c-slate-280)}
+  .trading-script-toolbar :is(input,select,button),.trading-script-saveas :is(input,button){border:1px solid var(--accent-slate-890);border-radius:5px;background:var(--c-neutral-1000);padding:5px 8px;color:var(--c-slate-280)}
 
   .trading-script-toolbar .trading-script-primary{border-color:var(--c-blue-660);background:var(--c-blue-660);color:var(--c-neutral-1000)}
 

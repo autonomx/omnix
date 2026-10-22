@@ -101,8 +101,8 @@
   }
 
   .assistant-live-card > header > select[data-live-task-instruction]:focus-visible {
-    border-color: color-mix(in srgb, var(--c-violet-660) 72%, transparent);
-    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--c-indigo-600) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 72%, transparent);
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--accent-indigo-600) 16%, transparent);
     outline: none;
   }
 
@@ -138,8 +138,8 @@
 
   .assistant-live-fullscreen-button {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-430) 22%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 55%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-430) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 55%, transparent);
     border-radius: 0.65rem;
     color: inherit;
     cursor: pointer;
@@ -154,7 +154,7 @@
 
   .assistant-live-fullscreen-button:hover,
   .assistant-live-fullscreen-button:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 40%, transparent);
     outline: none;
   }
 

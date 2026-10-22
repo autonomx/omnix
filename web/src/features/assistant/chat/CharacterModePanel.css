@@ -6,10 +6,10 @@
   .character-mode-card > header { align-items: start; display: flex; gap: 1rem; justify-content: space-between; }
   .character-mode-card > header h3, .character-mode-card > header p { margin: 0; }
   .character-mode-card > header > span { background: color-mix(in srgb, var(--c-blue-710) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c-blue-710) 24%, transparent); border-radius: 999px; color: var(--omnix-muted); font-size: 0.76rem; font-weight: 800; padding: 0.4rem 0.65rem; white-space: nowrap; }
-  .character-mode-card > header > span.active { background: color-mix(in srgb, var(--c-indigo-600) 20%, transparent); border-color: color-mix(in srgb, var(--c-violet-660) 42%, transparent); color: var(--fg-slate-940); }
+  .character-mode-card > header > span.active { background: color-mix(in srgb, var(--accent-indigo-600) 20%, transparent); border-color: color-mix(in srgb, var(--accent-violet-660) 42%, transparent); color: var(--fg-slate-940); }
   .character-mode-controls { align-items: end; display: grid; gap: 0.8rem; grid-template-columns: minmax(12rem, 1fr) auto; }
   .character-mode-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; }
-  .character-memory-permissions { border: 1px solid color-mix(in srgb, var(--c-violet-660) 20%, transparent); border-radius: 0.65rem; display: flex; flex-wrap: wrap; gap: 1rem; margin: 0; padding: 0.8rem; }
+  .character-memory-permissions { border: 1px solid color-mix(in srgb, var(--accent-violet-660) 20%, transparent); border-radius: 0.65rem; display: flex; flex-wrap: wrap; gap: 1rem; margin: 0; padding: 0.8rem; }
   .character-memory-permissions legend { color: var(--omnix-muted); font-size: 0.76rem; font-weight: 800; padding: 0 0.35rem; }
   .character-memory-permissions label { align-items: center; color: var(--omnix-text); display: flex; gap: 0.45rem; }
   .character-memory-permissions input { min-height: auto; width: auto; }
@@ -26,8 +26,8 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   .character-mode-card {
-    background: linear-gradient(145deg, color-mix(in srgb, var(--c-indigo-600) 16%, transparent), transparent 58%), color-mix(in srgb, var(--bg-indigo-190) 78%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 30%, transparent);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--accent-indigo-600) 16%, transparent), transparent 58%), color-mix(in srgb, var(--bg-indigo-190) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 30%, transparent);
   }
 
   .character-mode-status { color: var(--fg-indigo-900); margin: 0; }

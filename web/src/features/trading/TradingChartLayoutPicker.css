@@ -399,7 +399,7 @@
   :root[data-omnix-appearance='light'] .trading-chart-layout-option:hover,
   :root[data-omnix-appearance='light'] .trading-chart-layout-option[aria-pressed='true'] {
     border-color: color-mix(in srgb, var(--c-blue-630) 55%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-460-2);
     box-shadow: 0 2px 6px color-mix(in srgb, var(--c-blue-630) 14%, transparent);
   }

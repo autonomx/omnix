@@ -45,7 +45,7 @@
   :root[data-omnix-appearance='light'] .trading-workspace button:hover,
   :root[data-omnix-appearance='light'] .trading-workspace select:hover {
     border-color: color-mix(in srgb, var(--c-blue-630) 62%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-terminal-header,
@@ -91,7 +91,7 @@
   :root[data-omnix-appearance='light'] .trading-chart-type-control:hover,
   :root[data-omnix-appearance='light'] .trading-indicator-manager > summary:hover,
   :root[data-omnix-appearance='light'] .trading-indicator-manager[open] > summary {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-symbol-trigger-copy strong,
@@ -144,7 +144,7 @@
   :root[data-omnix-appearance='light'] .trading-watchlist li.active,
   :root[data-omnix-appearance='light'] .trading-watchlist-symbol-cell > button:hover,
   :root[data-omnix-appearance='light'] .trading-watchlist-section-cell > button:hover {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-watchlist li.selected {
@@ -246,7 +246,7 @@
 
   :root[data-omnix-appearance='light'] .trading-indicator-pane-controls button:hover:not(:disabled) {
     border-color: color-mix(in srgb, var(--c-blue-630) 62%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-460-2);
   }
 
@@ -327,7 +327,7 @@
   :root[data-omnix-appearance='light'] .trading-timeframe-buttons button:hover,
   :root[data-omnix-appearance='light'] .trading-tool-shortcuts button:hover,
   :root[data-omnix-appearance='light'] .trading-drawing-tool-cursor-control > button:hover {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-510);
   }
 
@@ -417,7 +417,7 @@
   :root[data-omnix-appearance='light'] .trading-alert-options-menu button:hover,
   :root[data-omnix-appearance='light'] .trading-chart-context-menu button:hover,
   :root[data-omnix-appearance='light'] .trading-chart-context-menu button:focus-visible {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-460-2);
   }
 
@@ -446,7 +446,7 @@
 
   :root[data-omnix-appearance='light'] .trading-price-scale-trigger:hover,
   :root[data-omnix-appearance='light'] .trading-price-scale-trigger[aria-expanded='true'] {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-price-scale-trigger:hover::before,
@@ -456,7 +456,7 @@
 
   :root[data-omnix-appearance='light'] .trading-price-scale-trigger:hover::after,
   :root[data-omnix-appearance='light'] .trading-price-scale-trigger[aria-expanded='true']::after {
-    background: radial-gradient(circle at center, var(--c-slate-970-2) 0 2px, var(--c-blue-510) 2px 3px, var(--c-slate-970-2) 3px 5px, transparent 5px), var(--c-slate-970-2);
+    background: radial-gradient(circle at center, var(--accent-slate-970-2) 0 2px, var(--c-blue-510) 2px 3px, var(--accent-slate-970-2) 3px 5px, transparent 5px), var(--accent-slate-970-2);
   }
 
   /* Edit handles only: a drawing's own markers (the dot tool) keep their colour, as in the dark theme. */
@@ -613,7 +613,7 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-paper-quote.active.buy {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     box-shadow: inset 0 -2px var(--c-blue-580);
   }
 
@@ -671,7 +671,7 @@
   :root[data-omnix-appearance='light'] .trading-indicator-manager > button:hover,
   :root[data-omnix-appearance='light'] .trading-indicator-manager > button[aria-expanded='true'] {
     border-color: color-mix(in srgb, var(--c-blue-630) 62%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-460-2);
   }
 
@@ -692,7 +692,7 @@
 
   :root[data-omnix-appearance='light'] .trading-session-tab > [role='tab']:hover,
   :root[data-omnix-appearance='light'] .trading-session-tab.active > [role='tab'] {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--trading-light-text);
   }
 
@@ -726,7 +726,7 @@
 
   :root[data-omnix-appearance='light'] .trading-session-tab-add {
     border-color: color-mix(in srgb, var(--c-blue-630) 42%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-510);
   }
 

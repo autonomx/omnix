@@ -234,8 +234,8 @@
   }
 
   .relationship-node-card.guest-a b {
-    background: color-mix(in srgb, var(--c-indigo-600) 22%, transparent);
-    border-color: color-mix(in srgb, var(--c-violet-660) 50%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 50%, transparent);
     color: var(--fg-violet-830);
   }
 
@@ -513,8 +513,8 @@
   }
 
   .podcast-studio-header code {
-    background: color-mix(in srgb, var(--c-indigo-600) 22%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 42%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 42%, transparent);
     border-radius: 999px;
     color: var(--fg-slate-940);
     font-weight: 850;
@@ -642,9 +642,9 @@
 
   .format-card-grid button.selected,
   .generation-style.selected {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 38%, transparent), color-mix(in srgb, var(--c-sky-800) 8%, transparent));
-    border-color: color-mix(in srgb, var(--c-violet-660) 75%, transparent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-indigo-600) 25%, transparent), 0 0 24px color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 38%, transparent), color-mix(in srgb, var(--c-sky-800) 8%, transparent));
+    border-color: color-mix(in srgb, var(--accent-violet-660) 75%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-indigo-600) 25%, transparent), 0 0 24px color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
   }
 
   .generation-style-panel {
@@ -737,7 +737,7 @@
 
   .speaker-avatar.guest_a,
   .speaker-avatar.guest_b {
-    border-color: color-mix(in srgb, var(--c-violet-660) 72%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 72%, transparent);
     color: var(--fg-violet-810);
   }
 
@@ -812,7 +812,7 @@
   }
 
   .node.host { left: 46%; top: 0.45rem; background: color-mix(in srgb, var(--c-sky-800) 18%, transparent); color: var(--fg-cyan-910); }
-  .node.guest-a { bottom: 1.35rem; left: 16%; background: color-mix(in srgb, var(--c-indigo-600) 22%, transparent); color: var(--fg-violet-830); }
+  .node.guest-a { bottom: 1.35rem; left: 16%; background: color-mix(in srgb, var(--accent-indigo-600) 22%, transparent); color: var(--fg-violet-830); }
   .node.guest-b { bottom: 1.35rem; right: 16%; background: color-mix(in srgb, var(--c-sky-800) 14%, transparent); color: var(--fg-cyan-910); }
   .line { color: var(--fg-sky-870); font-size: 0.72rem; position: absolute; }
   .line.mod { left: 15%; top: 2.7rem; }
@@ -845,7 +845,7 @@
   }
 
   .podcast-generate-button {
-    background: linear-gradient(100deg, var(--c-indigo-540), var(--c-sky-800) 72%, var(--c-sky-800));
+    background: linear-gradient(100deg, var(--accent-indigo-540), var(--c-sky-800) 72%, var(--c-sky-800));
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 25%, transparent);
     border-radius: 0.75rem;
     box-shadow: 0 0 28px color-mix(in srgb, var(--c-sky-800) 42%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 30%, transparent);
@@ -941,7 +941,7 @@
   }
 
   .waveform i {
-    background: linear-gradient(180deg, var(--c-violet-630), var(--c-sky-800));
+    background: linear-gradient(180deg, var(--accent-violet-630), var(--c-sky-800));
     border-radius: 999px;
     flex: 1;
     opacity: 0.82;
@@ -986,8 +986,8 @@
 
   .live-transcript b {
     align-self: start;
-    background: color-mix(in srgb, var(--c-indigo-600) 22%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 32%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 32%, transparent);
     border-radius: 0.4rem;
     color: var(--fg-indigo-900);
     font-size: 0.74rem;
@@ -1131,7 +1131,7 @@
   .asset-tile.green { border-color: color-mix(in srgb, var(--c-green-720) 32%, transparent); }
   .asset-tile.cyan { border-color: color-mix(in srgb, var(--c-sky-800) 34%, transparent); }
   .asset-tile.orange { border-color: color-mix(in srgb, var(--c-amber-770) 34%, transparent); }
-  .asset-tile.purple { border-color: color-mix(in srgb, var(--c-violet-660) 38%, transparent); }
+  .asset-tile.purple { border-color: color-mix(in srgb, var(--accent-violet-660) 38%, transparent); }
   .asset-tile.blue { border-color: color-mix(in srgb, var(--c-blue-710-2) 32%, transparent); }
 
   .output-layout {
@@ -1142,8 +1142,8 @@
 
   .cover-art {
     align-items: center;
-    background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--c-neutral-1000) 35%, transparent), color-mix(in srgb, var(--c-indigo-600) 65%, transparent), color-mix(in srgb, var(--c-sky-800) 20%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 45%, transparent);
+    background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--c-neutral-1000) 35%, transparent), color-mix(in srgb, var(--accent-indigo-600) 65%, transparent), color-mix(in srgb, var(--c-sky-800) 20%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 45%, transparent);
     border-radius: 0.7rem;
     color: var(--c-neutral-1000);
     display: grid;
@@ -1175,8 +1175,8 @@
 
   .output-copy b,
   .output-copy em {
-    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 24%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
     border-radius: 0.4rem;
     color: var(--fg-violet-810);
     display: inline-flex;

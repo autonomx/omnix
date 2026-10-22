@@ -1,7 +1,7 @@
 @layer features {
   .assistant-view-panel[aria-label='Characters view'] {
     background:
-      radial-gradient(circle at 45% -10%, color-mix(in srgb, var(--c-indigo-500) 14%, transparent), transparent 34rem),
+      radial-gradient(circle at 45% -10%, color-mix(in srgb, var(--accent-indigo-500) 14%, transparent), transparent 34rem),
       linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-150-2) 98%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 99%, transparent));
     gap: 1.15rem;
     padding: clamp(1rem, 2vw, 1.5rem);
@@ -105,8 +105,8 @@
   }
 
   .character-selector-bar select:focus {
-    border-color: color-mix(in srgb, var(--c-indigo-600) 75%, transparent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-indigo-600) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 75%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-indigo-600) 12%, transparent);
   }
 
   .character-selector-bar > div {
@@ -175,8 +175,8 @@
   .character-dashboard-section input:focus,
   .character-dashboard-section textarea:focus,
   .character-dashboard-section select:focus {
-    border-color: color-mix(in srgb, var(--c-indigo-600) 75%, transparent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-indigo-600) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 75%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-indigo-600) 12%, transparent);
   }
 
   .character-roster-toolbar > span {
@@ -212,19 +212,19 @@
 
   .character-roster nav button:hover,
   .character-roster nav button:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 8%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 8%, transparent);
     outline: none;
   }
 
   .character-roster nav button.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-500) 25%, transparent), color-mix(in srgb, var(--bg-indigo-260) 34%, transparent));
-    box-shadow: inset 0 -3px var(--c-violet-660);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-500) 25%, transparent), color-mix(in srgb, var(--bg-indigo-260) 34%, transparent));
+    box-shadow: inset 0 -3px var(--accent-violet-660);
   }
 
   .character-roster-avatar {
     align-items: center;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 45%, transparent), color-mix(in srgb, var(--c-sky-800) 16%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 32%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 45%, transparent), color-mix(in srgb, var(--c-sky-800) 16%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 32%, transparent);
     border-radius: 0.7rem;
     display: inline-flex;
     height: 2.4rem;
@@ -288,8 +288,8 @@
   }
 
   .character-roster footer button {
-    background: color-mix(in srgb, var(--c-indigo-600) 8%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 42%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 42%, transparent);
     color: var(--fg-indigo-900);
     justify-content: center;
     width: 100%;
@@ -307,7 +307,7 @@
   .character-editor-summary {
     align-items: center;
     background:
-      radial-gradient(circle at 0 50%, color-mix(in srgb, var(--c-indigo-600) 18%, transparent), transparent 18rem),
+      radial-gradient(circle at 0 50%, color-mix(in srgb, var(--accent-indigo-600) 18%, transparent), transparent 18rem),
       color-mix(in srgb, var(--bg-indigo-190) 82%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 16%, transparent);
     border-radius: 0.85rem;
@@ -420,8 +420,8 @@
 
   .character-section-heading > div > span {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 999px;
     color: var(--fg-violet-810);
     display: inline-flex;
@@ -496,7 +496,7 @@
   .character-live-activation {
     align-items: center;
     background: color-mix(in srgb, var(--bg-slate-170-2) 70%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-indigo-600) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-600) 20%, transparent);
     border-radius: 0.8rem;
     display: flex;
     gap: 1rem;
@@ -591,7 +591,7 @@
   .voice-governance-icon,
   .character-backfill-icon {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-600) 16%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 16%, transparent);
     border-radius: 0.6rem;
     color: var(--fg-indigo-750);
     display: inline-flex;
@@ -651,8 +651,8 @@
   }
 
   .voice-use-summary span {
-    background: color-mix(in srgb, var(--c-violet-470) 16%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-470) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
     border-radius: 0.45rem;
     color: var(--fg-indigo-900);
     font-size: 0.7rem;
@@ -704,7 +704,7 @@
 
   .voice-use-options input,
   .character-action-options input {
-    accent-color: var(--c-violet-660);
+    accent-color: var(--accent-violet-660);
     min-height: auto;
     width: auto;
   }
@@ -960,8 +960,8 @@
   }
 
   .character-management-status {
-    background: color-mix(in srgb, var(--c-indigo-600) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
     border-radius: 0.65rem;
     color: var(--fg-indigo-900);
     margin: 0.75rem 0 0;
@@ -1083,8 +1083,8 @@
      its own palette so global light-theme text never lands on a dark card. */
   :root[data-omnix-appearance='light'] .assistant-view-panel[aria-label='Characters view'] {
     background:
-      radial-gradient(circle at 45% -10%, color-mix(in srgb, var(--c-indigo-590) 10%, transparent), transparent 32rem),
-      linear-gradient(180deg, var(--c-neutral-1000), var(--c-slate-970-2));
+      radial-gradient(circle at 45% -10%, color-mix(in srgb, var(--accent-indigo-590) 10%, transparent), transparent 32rem),
+      linear-gradient(180deg, var(--c-neutral-1000), var(--accent-slate-970-2));
   }
 
   :root[data-omnix-appearance='light'] .assistant-view-panel[aria-label='Characters view'] > header::after {
@@ -1113,7 +1113,7 @@
   :root[data-omnix-appearance='light'] .character-dashboard-section input,
   :root[data-omnix-appearance='light'] .character-dashboard-section textarea,
   :root[data-omnix-appearance='light'] .character-dashboard-section select {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     border-color: var(--c-slate-910);
     color: var(--c-blue-240-2);
   }
@@ -1136,17 +1136,17 @@
 
   :root[data-omnix-appearance='light'] .character-roster nav button:hover,
   :root[data-omnix-appearance='light'] .character-roster nav button:focus-visible {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .character-roster nav button.active {
-    background: linear-gradient(135deg, var(--c-slate-940), var(--c-slate-970-2));
-    box-shadow: inset 3px 0 var(--c-indigo-540);
+    background: linear-gradient(135deg, var(--accent-slate-940), var(--accent-slate-970-2));
+    box-shadow: inset 3px 0 var(--accent-indigo-540);
   }
 
   :root[data-omnix-appearance='light'] .character-roster-avatar {
-    background: linear-gradient(135deg, var(--c-indigo-500), var(--c-sky-510));
-    border-color: var(--c-violet-470);
+    background: linear-gradient(135deg, var(--accent-indigo-500), var(--c-sky-510));
+    border-color: var(--accent-violet-470);
   }
 
   :root[data-omnix-appearance='light'] .character-roster-avatar strong {
@@ -1160,9 +1160,9 @@
   }
 
   :root[data-omnix-appearance='light'] .character-roster footer button {
-    background: var(--c-slate-970-2);
-    border-color: var(--c-violet-810);
-    color: var(--c-indigo-430);
+    background: var(--accent-slate-970-2);
+    border-color: var(--accent-violet-810);
+    color: var(--accent-indigo-430);
   }
 
   :root[data-omnix-appearance='light'] .character-section-heading h4,
@@ -1182,7 +1182,7 @@
   }
 
   :root[data-omnix-appearance='light'] .character-editor-summary dl div {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     border-color: var(--c-slate-930);
   }
 
@@ -1205,7 +1205,7 @@
   :root[data-omnix-appearance='light'] .character-data-metrics > span,
   :root[data-omnix-appearance='light'] .character-hermes-panel,
   :root[data-omnix-appearance='light'] .character-dashboard-empty {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     border-color: var(--c-slate-930);
   }
 
@@ -1226,9 +1226,9 @@
   }
 
   :root[data-omnix-appearance='light'] .voice-use-summary span {
-    background: var(--c-slate-940);
-    border-color: var(--c-violet-830);
-    color: var(--c-indigo-430);
+    background: var(--accent-slate-940);
+    border-color: var(--accent-violet-830);
+    color: var(--accent-indigo-430);
   }
 
   :root[data-omnix-appearance='light'] .voice-governance-details,
@@ -1253,7 +1253,7 @@
   }
 
   :root[data-omnix-appearance='light'] .character-danger-zone {
-    background: linear-gradient(180deg, var(--c-slate-980), var(--c-slate-970-2));
+    background: linear-gradient(180deg, var(--c-slate-980), var(--accent-slate-970-2));
     border-color: var(--c-red-890);
   }
 
@@ -1273,14 +1273,14 @@
   }
 
   :root[data-omnix-appearance='light'] .character-management-status {
-    background: var(--c-slate-940);
-    border-color: var(--c-violet-830);
-    color: var(--c-indigo-430);
+    background: var(--accent-slate-940);
+    border-color: var(--accent-violet-830);
+    color: var(--accent-indigo-430);
   }
 
   :root[data-omnix-appearance='light'] .character-avatar-preview,
   :root[data-omnix-appearance='light'] .character-viseme-panel {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     border-color: var(--c-slate-930);
   }
 
@@ -1301,14 +1301,14 @@
   }
 
   :root[data-omnix-appearance='light'] .character-avatar-upload-card {
-    background: linear-gradient(135deg, var(--c-slate-940), var(--c-slate-970-2));
-    border-color: var(--c-violet-830);
+    background: linear-gradient(135deg, var(--accent-slate-940), var(--accent-slate-970-2));
+    border-color: var(--accent-violet-830);
   }
 
   :root[data-omnix-appearance='light'] .character-avatar-upload-preview {
     background: var(--c-neutral-1000);
-    border-color: var(--c-indigo-750);
-    color: var(--c-indigo-500);
+    border-color: var(--accent-indigo-750);
+    color: var(--accent-indigo-500);
   }
 
   :root[data-omnix-appearance='light'] .character-avatar-upload-copy > p,
@@ -1318,14 +1318,14 @@
   }
 
   :root[data-omnix-appearance='light'] .character-avatar-upload-picker span {
-    background: var(--c-slate-940);
-    border-color: var(--c-violet-810);
-    color: var(--c-indigo-430);
+    background: var(--accent-slate-940);
+    border-color: var(--accent-violet-810);
+    color: var(--accent-indigo-430);
   }
 
   :root[data-omnix-appearance='light'] .character-avatar-progress,
   :root[data-omnix-appearance='light'] .character-avatar-status {
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     border-color: var(--c-slate-910);
   }
 

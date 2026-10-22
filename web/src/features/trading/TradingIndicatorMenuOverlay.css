@@ -32,7 +32,7 @@
   .trading-indicator-picker-columns{display:grid;grid-template-columns:minmax(280px,1fr) 155px 120px;padding:0 10px 8px 32px;color:var(--c-slate-580);font-size:11px;letter-spacing:.06em}
   .trading-indicator-picker-list{display:grid;gap:2px}
   .trading-indicator-picker-row{display:flex;align-items:center;min-height:40px;border-radius:7px}
-  .trading-indicator-picker-row:hover{background:var(--c-slate-970-2)}
+  .trading-indicator-picker-row:hover{background:var(--accent-slate-970-2)}
   .trading-indicator-picker-row.active{background:var(--c-neutral-1000)}
   .trading-indicator-picker-star{display:grid;place-items:center;width:28px;height:32px;border:0;background:transparent;color:var(--c-slate-240);font-size:19px;cursor:pointer}
   .trading-indicator-picker-star[aria-pressed=false]{color:var(--fg-slate-740)}

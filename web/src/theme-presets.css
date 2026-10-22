@@ -1,11 +1,11 @@
 @layer features {
   :root {
-    --omnix-theme-gradient: linear-gradient(135deg, var(--c-indigo-540) 0%, var(--c-blue-580) 58%, var(--c-sky-800) 100%);
-    --omnix-theme-gradient-hover: linear-gradient(135deg, var(--c-indigo-600) 0%, var(--c-blue-650) 58%, var(--c-sky-800) 100%);
-    --omnix-theme-soft: color-mix(in srgb, var(--c-indigo-540) 15%, transparent);
-    --omnix-theme-soft-strong: color-mix(in srgb, var(--c-indigo-540) 28%, transparent);
-    --omnix-theme-line: color-mix(in srgb, var(--c-indigo-540) 34%, transparent);
-    --omnix-theme-shadow: color-mix(in srgb, var(--c-violet-390) 22%, transparent);
+    --omnix-theme-gradient: linear-gradient(135deg, var(--accent-indigo-540) 0%, var(--c-blue-580) 58%, var(--c-sky-800) 100%);
+    --omnix-theme-gradient-hover: linear-gradient(135deg, var(--accent-indigo-600) 0%, var(--c-blue-650) 58%, var(--c-sky-800) 100%);
+    --omnix-theme-soft: color-mix(in srgb, var(--accent-indigo-540) 15%, transparent);
+    --omnix-theme-soft-strong: color-mix(in srgb, var(--accent-indigo-540) 28%, transparent);
+    --omnix-theme-line: color-mix(in srgb, var(--accent-indigo-540) 34%, transparent);
+    --omnix-theme-shadow: color-mix(in srgb, var(--accent-violet-390) 22%, transparent);
     --omnix-theme-on-accent: var(--c-neutral-1000);
     --omnix-theme-gloss: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 38%, transparent), 0 0.7rem 1.6rem var(--omnix-theme-shadow);
   }
@@ -251,7 +251,7 @@
     background: var(--omnix-panel-solid);
     border: 1px solid var(--omnix-strong-border);
     border-radius: 0.9rem;
-    box-shadow: 0 1.2rem 3rem color-mix(in srgb, var(--c-slate-150-2) 26%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 18%, transparent);
+    box-shadow: 0 1.2rem 3rem color-mix(in srgb, var(--accent-slate-150-2) 26%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 18%, transparent);
     display: grid;
     gap: 0.35rem;
     min-width: 19rem;

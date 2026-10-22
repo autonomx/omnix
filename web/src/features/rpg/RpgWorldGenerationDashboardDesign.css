@@ -379,7 +379,7 @@
     height: 27px;
     place-items: center;
     border-radius: 50%;
-    background: color-mix(in srgb, var(--c-violet-710) 10%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-710) 10%, transparent);
     color: var(--fg-violet-810);
   }
 
@@ -677,7 +677,7 @@
     display: grid;
     gap: 0.2rem;
     padding: 0.55rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 12%, transparent);
     border-radius: 4px;
     background: color-mix(in srgb, var(--bg-indigo-210) 38%, transparent);
   }

@@ -1,6 +1,6 @@
 @layer features {
   .rpg-hero-avatar-art {
-    border-color: color-mix(in srgb, var(--c-indigo-900) 38%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-900) 38%, transparent);
     color: transparent;
     padding: 0;
   }
@@ -47,7 +47,7 @@
   }
 
   .rpg-turn-diagnostics {
-    border: 1px solid color-mix(in srgb, var(--c-indigo-900) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-900) 22%, transparent);
     border-radius: 0.75rem;
     margin: 0.75rem 0;
     padding: 0.65rem 0.8rem;

@@ -14,7 +14,7 @@
     padding: 1rem;
     border: 0;
     border-radius: 0;
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-indigo-600) 34%, transparent), 0 1.5rem 4rem color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-indigo-600) 34%, transparent), 0 1.5rem 4rem color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
   }
 
   .assistant-chat-page-fullscreen .assistant-chat-layout {

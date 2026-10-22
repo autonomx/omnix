@@ -1,8 +1,8 @@
 @layer features {
   .trading-paper-dashboard {
     --pd-bg: var(--c-slate-170-2);
-    --pd-card: var(--c-indigo-210);
-    --pd-card-soft: var(--c-indigo-190);
+    --pd-card: var(--accent-indigo-210);
+    --pd-card-soft: var(--accent-indigo-190);
     --pd-line: color-mix(in srgb, var(--c-blue-710) 18%, transparent);
     --pd-line-soft: color-mix(in srgb, var(--c-blue-710) 11%, transparent);
     --pd-text: var(--c-neutral-960);
@@ -22,15 +22,15 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-paper-dashboard {
-    --pd-bg: var(--c-slate-970-2);
+    --pd-bg: var(--accent-slate-970-2);
     --pd-card: var(--c-neutral-1000);
     --pd-card-soft: var(--c-neutral-1000);
     --pd-line: var(--c-slate-930);
     --pd-line-soft: var(--c-neutral-960);
     --pd-text: var(--c-blue-240-2);
     --pd-muted: var(--c-blue-560);
-    --pd-blue: var(--c-indigo-590);
-    --pd-blue-soft: var(--c-slate-970-2);
+    --pd-blue: var(--accent-indigo-590);
+    --pd-blue-soft: var(--accent-slate-970-2);
     --pd-green: var(--c-teal-700);
     --pd-red: var(--c-red-640);
     --pd-shadow: 0 5px 18px color-mix(in srgb, var(--c-blue-350) 8%, transparent);

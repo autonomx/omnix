@@ -7,8 +7,8 @@
 
   .rpg-generation-candidate-review-banner {
     align-items: flex-start;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 16%, transparent), color-mix(in srgb, var(--bg-blue-240-2) 94%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 45%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 16%, transparent), color-mix(in srgb, var(--bg-blue-240-2) 94%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 45%, transparent);
     border-radius: 18px;
     display: flex;
     gap: 1rem;

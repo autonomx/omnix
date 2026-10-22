@@ -6,7 +6,7 @@
       radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--c-sky-800) 12%, transparent), transparent 18rem),
       linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-190-3) 90%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 90%, transparent)),
       color-mix(in srgb, var(--bg-slate-150-2) 92%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 0.625rem;
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 4.5%, transparent),
@@ -30,7 +30,7 @@
       radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--c-sky-800) 10%, transparent), transparent 14rem),
       linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-190-3) 90%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 90%, transparent)),
       color-mix(in srgb, var(--bg-slate-150-2) 92%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 0.625rem;
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 4.5%, transparent),
@@ -73,8 +73,8 @@
   }
 
   .storyteller-toolbox summary em {
-    background: color-mix(in srgb, var(--c-violet-540) 22%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 24%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-540) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
     border-radius: 999px;
     color: var(--fg-slate-970-2);
     flex: 0 0 auto;
@@ -83,7 +83,7 @@
   }
 
   .storyteller-toolbox[open] summary {
-    border-bottom: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
   }
 
   .storyteller-toolbox[open] summary em::before {
@@ -161,7 +161,7 @@
   .storyteller-cast-add input,
   .storyteller-voice-row select {
     background: color-mix(in srgb, var(--bg-slate-130) 82%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 0.5rem;
     color: var(--fg-slate-970-2);
     min-height: 2.5rem;
@@ -178,7 +178,7 @@
   .storyteller-audio-actions button,
   .storyteller-cast-add button {
     background: color-mix(in srgb, var(--wash-neutral-1000) 3.5%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 24%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
     border-radius: 0.5rem;
     color: var(--fg-slate-970-2);
     cursor: pointer;
@@ -188,8 +188,8 @@
 
   .storyteller-audio-actions button:first-child,
   .storyteller-cast-add button {
-    background: linear-gradient(135deg, var(--c-cyan-720), var(--c-violet-540));
-    border-color: color-mix(in srgb, var(--c-violet-810) 32%, transparent);
+    background: linear-gradient(135deg, var(--c-cyan-720), var(--accent-violet-540));
+    border-color: color-mix(in srgb, var(--accent-violet-810) 32%, transparent);
   }
 
   .storyteller-audio-actions button:disabled,
@@ -228,8 +228,8 @@
   }
 
   .storyteller-cast-heading strong {
-    background: color-mix(in srgb, var(--c-violet-540) 22%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 24%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-540) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
     border-radius: 999px;
     color: var(--fg-slate-970-2);
     padding: 0.25rem 0.65rem;
@@ -248,7 +248,7 @@
   .storyteller-cast-card,
   .storyteller-voice-row {
     background: color-mix(in srgb, var(--bg-slate-130) 55%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
     border-radius: 0.5rem;
     display: grid;
     gap: 0.55rem;

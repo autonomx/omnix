@@ -39,7 +39,7 @@
 
   .trading-indicator-settings-field input,.trading-indicator-settings-field select{border:1px solid var(--c-slate-910);border-radius:8px;background:var(--c-neutral-1000);padding:7px 10px;color:var(--c-slate-240)}
 
-  .trading-indicator-settings-field input:disabled,.trading-indicator-settings-field select:disabled{background:var(--c-slate-970-2);color:var(--c-slate-580)}
+  .trading-indicator-settings-field input:disabled,.trading-indicator-settings-field select:disabled{background:var(--accent-slate-970-2);color:var(--c-slate-580)}
 
   .trading-indicator-settings-symbol{border:1px solid var(--c-slate-910);border-radius:8px;background:var(--c-neutral-1000);padding:7px 10px;color:var(--c-slate-240)}
 

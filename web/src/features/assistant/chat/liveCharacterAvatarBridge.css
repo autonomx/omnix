@@ -16,7 +16,7 @@
   .assistant-live2d-zoom-control {
     align-items: center;
     background: color-mix(in srgb, var(--bg-slate-150-2) 78%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 28%, transparent);
     border-radius: 999px;
     color: var(--fg-slate-940);
     display: flex;
@@ -47,7 +47,7 @@
   }
 
   .assistant-live2d-zoom-control input {
-    accent-color: var(--c-indigo-750);
+    accent-color: var(--accent-indigo-750);
     cursor: pointer;
     width: 5.5rem;
   }
@@ -67,7 +67,7 @@
   }
 
   .assistant-live2d-framing button[aria-pressed='true'] {
-    background: color-mix(in srgb, var(--c-indigo-600) 34%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 34%, transparent);
     color: var(--fg-neutral-1000);
   }
 
@@ -84,7 +84,7 @@
     border: 1px solid color-mix(in srgb, var(--accent, var(--c-blue-630)) 34%, transparent);
     border-radius: 1.25rem;
     min-height: 22rem;
-    background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--c-indigo-490) 24%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 94%, transparent));
+    background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--accent-indigo-490) 24%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 94%, transparent));
     background-position: center;
     background-size: cover;
     box-shadow: 0 1rem 3rem color-mix(in srgb, var(--c-neutral-0) 28%, transparent);
@@ -141,7 +141,7 @@
 
   .assistant-live-character-live2d-status {
     background: color-mix(in srgb, var(--bg-slate-150-2) 76%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 0.65rem;
     color: var(--fg-slate-810);
     font-size: 0.68rem;
@@ -180,10 +180,10 @@
   }
 
   .assistant-live-character-avatar[data-voice-mode='thinking'] {
-    border-color: color-mix(in srgb, var(--c-indigo-750) 48%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-750) 48%, transparent);
     box-shadow:
       0 1rem 3rem color-mix(in srgb, var(--c-neutral-0) 28%, transparent),
-      0 0 1.5rem color-mix(in srgb, var(--c-indigo-750) 10%, transparent);
+      0 0 1.5rem color-mix(in srgb, var(--accent-indigo-750) 10%, transparent);
   }
 
   .assistant-live-character-avatar[data-voice-mode='error'] {
@@ -288,7 +288,7 @@
 
   :root[data-omnix-appearance='light'] .assistant-live2d-zoom-control,
   :root[data-omnix-appearance='light'] .assistant-live-character-live2d-status {
-    background: color-mix(in srgb, var(--c-slate-970-2) 82%, transparent);
+    background: color-mix(in srgb, var(--accent-slate-970-2) 82%, transparent);
     border-color: color-mix(in srgb, var(--c-blue-560) 22%, transparent);
     color: var(--omnix-text, var(--c-blue-310));
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 82%, transparent), 0 .35rem .8rem color-mix(in srgb, var(--c-blue-390) 6%, transparent);
@@ -306,7 +306,7 @@
 
   :root[data-omnix-appearance='light'] .assistant-live-character-avatar {
     background:
-      radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--c-neutral-1000) 72%, transparent), color-mix(in srgb, var(--c-indigo-780) 34%, transparent)),
+      radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--c-neutral-1000) 72%, transparent), color-mix(in srgb, var(--accent-indigo-780) 34%, transparent)),
       color-mix(in srgb, var(--c-slate-930) 50%, transparent);
     border-color: color-mix(in srgb, var(--c-blue-560) 24%, transparent);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 72%, transparent), 0 .75rem 1.5rem color-mix(in srgb, var(--c-blue-390) 9%, transparent);
@@ -317,7 +317,7 @@
   }
 
   :root[data-omnix-appearance='light'] .assistant-live-character-avatar figcaption {
-    background: color-mix(in srgb, var(--c-slate-970-2) 88%, transparent);
+    background: color-mix(in srgb, var(--accent-slate-970-2) 88%, transparent);
     color: var(--omnix-text, var(--c-blue-310));
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -326,14 +326,14 @@
   :root[data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript {
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 58%, transparent), color-mix(in srgb, var(--c-slate-930) 34%, transparent)),
-      color-mix(in srgb, var(--c-slate-970-2) 56%, transparent);
+      color-mix(in srgb, var(--accent-slate-970-2) 56%, transparent);
     border-color: color-mix(in srgb, var(--c-blue-560) 20%, transparent);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 80%, transparent), 0 .5rem 1rem color-mix(in srgb, var(--c-blue-390) 6%, transparent);
     color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript-header {
-    background: color-mix(in srgb, var(--c-slate-970-2) 96%, transparent);
+    background: color-mix(in srgb, var(--accent-slate-970-2) 96%, transparent);
     color: var(--omnix-text, var(--c-blue-310));
   }
 
@@ -349,7 +349,7 @@
   :root[data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript p {
     background: color-mix(in srgb, var(--c-neutral-1000) 42%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-560) 14%, transparent);
-    border-left: 3px solid color-mix(in srgb, var(--c-violet-570) 48%, transparent);
+    border-left: 3px solid color-mix(in srgb, var(--accent-violet-570) 48%, transparent);
     box-shadow: none;
     color: var(--c-blue-390);
     padding: .58rem .65rem;

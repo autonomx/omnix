@@ -27,15 +27,15 @@
 
   .assistant-side-panel-toggle button:hover,
   .assistant-side-panel-toggle button:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 12%, transparent);
-    border-color: color-mix(in srgb, var(--c-violet-660) 24%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 24%, transparent);
     color: var(--fg-slate-970-2);
     outline: none;
   }
 
   .assistant-side-panel-toggle button.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 96%, transparent), color-mix(in srgb, var(--c-sky-800) 42%, transparent));
-    border-color: color-mix(in srgb, var(--c-violet-660) 48%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 96%, transparent), color-mix(in srgb, var(--c-sky-800) 42%, transparent));
+    border-color: color-mix(in srgb, var(--accent-violet-660) 48%, transparent);
     color: var(--c-neutral-1000);
   }
 
