@@ -81,9 +81,16 @@ export class WindowManager {
       : { width: saved?.width ?? 1440, height: saved?.height ?? 900 };
     const window = new BrowserWindow({ ...this.baseOptions(), ...bounds, minWidth: 900, minHeight: 600, show: false });
     this.windows.set(key, window);
-    if (saved?.maximized) window.maximize();
+    // A first launch fills the screen: below 1500 px wide the chat's Live Voice rail moves under the chat.
+    const maximized = saved ? saved.maximized === true : true;
     window.once('ready-to-show', () => {
-      if (options.show !== false) window.show();
+      if (options.show === false) {
+        // Maximizing shows a window, so one that starts in the tray maximizes when it is first shown.
+        if (maximized) window.once('show', () => window.maximize());
+        return;
+      }
+      if (maximized) window.maximize();
+      window.show();
     });
     this.guard(window);
     const remember = () => {
