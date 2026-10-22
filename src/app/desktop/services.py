@@ -4,9 +4,14 @@ A model service runs when a bundle that needs it is installed: its models are
 in the packs folder and its runtime packs are current. Before a start the
 supervisor checks that the service's persisted port is free (a busy port is
 reported, never cleared) and that enough memory is left to load it (on
-Windows, commit headroom: a load past it freezes the PC). A service that exits
-on its own is restarted with a growing delay, three times, then reported as
-failed until its packs change.
+Windows, commit headroom: a load past it freezes the PC).
+
+A service is stopped gracefully (Ctrl+Break on Windows, SIGTERM elsewhere), so
+its shutdown releases the GPU model ownership it holds in PostgreSQL; only one
+that does not exit within 20 seconds is killed. A service that exits on its
+own is restarted after 30, 60 and 120 seconds (a crashed process cannot release
+its ownership lease, which expires on its own in under three minutes), then
+reported as failed until its packs change.
 
 States reported to the shell: ``starting``, ``running``, ``stopped``,
 ``blocked`` (port busy or not enough memory; retried), ``failed``.
@@ -15,7 +20,9 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import signal
 import subprocess
+import sys
 import threading
 import urllib.request
 import time
@@ -31,8 +38,9 @@ from app.models.packs import ModelStore, RuntimeStore
 
 logger = logging.getLogger(__name__)
 
-RESTARTS = 3
+RESTART_DELAYS_SECONDS = (30.0, 60.0, 120.0)
 HEALTHY_SECONDS = 600.0
+STOP_SECONDS = 20.0
 # Without a measured requirement: the model files' size, half again, plus room for the service itself.
 HEADROOM_FACTOR = 1.5
 HEADROOM_BASE_BYTES = 2 * 2**30
@@ -65,7 +73,29 @@ class ServiceState:
     message: str = ""
     restarts: int = 0
     failed_signature: str = ""
+    # A restart after a crash waits until then (time.monotonic()).
+    restart_at: float = 0.0
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+def _new_process_group() -> int:
+    # Windows: its own process group, so Ctrl+Break reaches it (and only it) for a graceful stop.
+    return getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if sys.platform == "win32" else 0
+
+
+def stop_gracefully(process: subprocess.Popen[bytes], timeout: float = STOP_SECONDS) -> None:
+    """Ask the service to shut down (its shutdown handlers release its GPU ownership); kill it only if it hangs."""
+    if process.poll() is not None:
+        return
+    with contextlib.suppress(OSError, ValueError):
+        if sys.platform == "win32":
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            process.terminate()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models: ModelStore,
@@ -122,7 +152,9 @@ class ModelServices:
                  catalog: Catalog | None = None, port_free: Callable[[int], bool] | None = None,
                  available_commit: Callable[[], int | None] = _available_commit,
                  launch: Callable[..., subprocess.Popen[bytes]] | None = None,
-                 healthy: Callable[[int], bool] | None = None) -> None:
+                 healthy: Callable[[int], bool] | None = None,
+                 stop_process: Callable[[Any], None] | None = None,
+                 clock: Callable[[], float] | None = None) -> None:
         from app.desktop.supervise import port_free as _port_free
 
         self.config = config
@@ -138,6 +170,8 @@ class ModelServices:
         self.available_commit = available_commit
         self.launch = launch or subprocess.Popen
         self.healthy = healthy or _healthy
+        self.stop_process = stop_process or stop_gracefully
+        self.clock = clock or time.monotonic
         self.running: dict[str, _Running] = {}
         self.states: dict[str, ServiceState] = {}
         self._lock = threading.Lock()
@@ -177,7 +211,7 @@ class ModelServices:
         self._report(plan.service, "starting", port=port)
         process = self.launch([self.python, "-S", "-m", "app.desktop.service_boot", plan.entry], env=env,
                               stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                              cwd=str(self.config.data_dir), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                              cwd=str(self.config.data_dir), creationflags=_new_process_group())
         log.close()
         self.running[plan.service] = _Running(plan, process, time.monotonic(), restarts)
         self.states[plan.service].restarts = restarts
@@ -186,12 +220,7 @@ class ModelServices:
         running = self.running.pop(service, None)
         if running is None:
             return
-        with contextlib.suppress(OSError):
-            running.process.terminate()
-        try:
-            running.process.wait(timeout=20)
-        except subprocess.TimeoutExpired:
-            running.process.kill()
+        self.stop_process(running.process)
         self._report(service, "stopped")
 
     def reconcile(self) -> None:
@@ -218,15 +247,22 @@ class ModelServices:
                             running.restarts = 0
                         continue
                     del self.running[service]
-                    if running.restarts >= RESTARTS:
+                    if running.restarts >= len(RESTART_DELAYS_SECONDS):
                         state.failed_signature = self._signature(plan)
                         self._report(service, "failed", f"it keeps stopping (exit {code}); see {service}.log")
                         continue
-                    time.sleep(min(2.0 * (running.restarts + 1), 10.0))
-                    self._start(plan, restarts=running.restarts + 1)
+                    delay = RESTART_DELAYS_SECONDS[running.restarts]
+                    state.restarts = running.restarts + 1
+                    state.restart_at = self.clock() + delay
+                    self._report(service, "restarting", f"it stopped (exit {code}); starting again in {delay:.0f} s")
                     continue
                 if state.state == "failed" and state.failed_signature == self._signature(plan):
                     continue  # a new install (another signature) gets a fresh start
+                if state.state == "restarting":
+                    if self.clock() < state.restart_at:
+                        continue
+                    self._start(plan, restarts=state.restarts)
+                    continue
                 self._start(plan)
             for service in list(self.states):
                 if service not in wanted and service not in self.running and self.states[service].state != "stopped":
@@ -238,4 +274,4 @@ class ModelServices:
                 self._stop(service)
 
 
-__all__ = ["ModelServices", "ServicePlan", "plans"]
+__all__ = ["ModelServices", "ServicePlan", "plans", "stop_gracefully"]

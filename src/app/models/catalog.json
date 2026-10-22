@@ -115,8 +115,8 @@
           "runtimes": [
             "stt-windows-x64"
           ],
-          "min_vram_mb": null,
-          "min_commit_mb": null
+          "min_vram_mb": 4608,
+          "min_commit_mb": 9216
         },
         {
           "platform": "macos-arm64",
@@ -148,8 +148,8 @@
           "runtimes": [
             "tts-windows-x64"
           ],
-          "min_vram_mb": null,
-          "min_commit_mb": null
+          "min_vram_mb": 3584,
+          "min_commit_mb": 8192
         },
         {
           "platform": "macos-arm64",
@@ -181,8 +181,8 @@
           "runtimes": [
             "stt-windows-x64"
           ],
-          "min_vram_mb": null,
-          "min_commit_mb": null
+          "min_vram_mb": 4096,
+          "min_commit_mb": 9216
         }
       ]
     },
@@ -201,8 +201,8 @@
           "runtimes": [
             "image-windows-x64"
           ],
-          "min_vram_mb": 14336,
-          "min_commit_mb": null
+          "min_vram_mb": 16384,
+          "min_commit_mb": 22528
         }
       ]
     }

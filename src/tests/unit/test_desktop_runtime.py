@@ -161,7 +161,6 @@ class _Process:
 @pytest.fixture
 def services(tmp_path, monkeypatch):
     monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
-    monkeypatch.setattr("app.desktop.services.time.sleep", lambda seconds: None)
     config = _config(tmp_path)
     for name in SECRETS:
         monkeypatch.setenv(name, SECRETS[name])
@@ -172,10 +171,12 @@ def services(tmp_path, monkeypatch):
         state.launched.append((command, kwargs["env"], process))
         return process
 
+    state.now = 1000.0
     manager = ModelServices(config, python="python", service_token=lambda: "svc-token", emit=state.events.append,
                             logs=tmp_path / "logs", app_source=ROOT / "src", catalog=CATALOG,
                             port_free=lambda port: state.free, available_commit=lambda: state.commit,
-                            launch=launch, healthy=lambda port: state.healthy)
+                            launch=launch, healthy=lambda port: state.healthy,
+                            stop_process=lambda process: process.terminate(), clock=lambda: state.now)
     installed: dict[str, Any] = {"runtimes": set(), "models": set()}
     manager.runtimes = SimpleNamespace(current=lambda rid: rid in installed["runtimes"],
                                        site=lambda rid: config.packs / "runtimes" / rid / "site")
@@ -228,19 +229,64 @@ def test_too_little_memory_blocks_the_start(services) -> None:
     assert state.launched == [] and "not enough memory" in state.events[-1]["message"]
 
 
-def test_a_crashing_service_is_restarted_three_times_then_failed(services) -> None:
+def test_a_crashing_service_is_restarted_after_growing_delays_then_failed(services) -> None:
     manager, state = services
     state.install()
     manager.reconcile()
-    for _ in range(3):
+    for delay in (30.0, 60.0, 120.0):
         state.launched[-1][2].code = 1
         manager.reconcile()
-    assert len(state.launched) == 4
+        assert _states(state)[-1] == ("tts", "restarting")
+        launched = len(state.launched)
+        # Not before the delay: a crashed process's GPU ownership lease has to run out first.
+        state.now += delay - 1
+        manager.reconcile()
+        assert len(state.launched) == launched
+        state.now += 1
+        manager.reconcile()
+        assert len(state.launched) == launched + 1
     state.launched[-1][2].code = 1
     manager.reconcile()
     assert _states(state)[-1] == ("tts", "failed")
+    state.now += 1000
     manager.reconcile()
     assert len(state.launched) == 4  # failed stays failed until its packs change
+
+
+def test_a_stop_asks_the_service_to_shut_down_before_killing_it(monkeypatch) -> None:
+    import signal
+
+    from app.desktop import services as services_module
+
+    class _Stubborn:
+        def __init__(self, exits: bool) -> None:
+            self.exits, self.signals, self.killed, self.code = exits, [], False, None
+
+        def poll(self):
+            return self.code
+
+        def send_signal(self, value):
+            self.signals.append(value)
+            if self.exits:
+                self.code = 0
+
+        terminate = lambda self: self.send_signal("SIGTERM")  # noqa: E731
+
+        def wait(self, timeout=None):
+            if self.code is None:
+                raise subprocess.TimeoutExpired("svc", timeout)
+            return self.code
+
+        def kill(self):
+            self.killed = True
+
+    graceful = _Stubborn(exits=True)
+    services_module.stop_gracefully(graceful, timeout=0.01)
+    expected = signal.CTRL_BREAK_EVENT if sys.platform == "win32" else "SIGTERM"
+    assert graceful.signals == [expected] and not graceful.killed
+    hung = _Stubborn(exits=False)
+    services_module.stop_gracefully(hung, timeout=0.01)
+    assert hung.killed
 
 
 def test_removing_the_bundle_stops_its_service(services) -> None:

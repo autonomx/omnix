@@ -8,8 +8,12 @@ unpacked here instead, following the wheel format (PEP 427):
   ``app.desktop.service_boot`` puts on ``sys.path``;
 - ``<name>.data/scripts`` goes to ``<pack>/scripts`` and ``<name>.data/data``
   to ``<pack>/data`` (headers are not needed and are skipped);
-- every file must be listed in RECORD with a matching SHA-256, and no path may
-  leave the pack folder.
+- a file RECORD lists must match its SHA-256, and no path may leave the pack
+  folder. The wheel itself was checked against the lock before it got here, so
+  a file RECORD leaves out is installed (PyTorch's CUDA wheels add DLLs after
+  building RECORD, and pip accepts them too); the installed RECORD is rewritten
+  to list every installed file with its digest, as pip does, so
+  ``verify_installed`` checks all of them later.
 
 Console scripts are never generated: services start through
 ``service_boot``, never through an entry-point launcher.
@@ -20,6 +24,7 @@ import base64
 import csv
 import hashlib
 import io
+import os
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -68,15 +73,16 @@ def install_wheel(wheel: Path, pack: Path) -> InstalledWheel:
         site, scripts, data = pack / "site", pack / "scripts", pack / "data"
         data_prefix = f"{stem}.data/"
         written = 0
+        installed: list[tuple[str, str, int]] = []
         for member in names:
             _safe_parts(member)
+            if member == record_name:
+                continue  # rewritten below with every installed file
             content = archive.read(member)
-            if member != record_name and not member.endswith(".dist-info/RECORD.jws"):
-                expected = record.get(member)
-                if not expected:
-                    raise WheelError(f"{wheel.name}: {member} is not in RECORD")
-                if expected != _record_digest(content):
-                    raise WheelError(f"{wheel.name}: {member} does not match its RECORD digest")
+            digest = _record_digest(content)
+            expected = record.get(member)
+            if expected and expected != digest:
+                raise WheelError(f"{wheel.name}: {member} does not match its RECORD digest")
             if member.startswith(data_prefix):
                 scheme, _, rest = member[len(data_prefix):].partition("/")
                 if not rest:
@@ -97,9 +103,17 @@ def install_wheel(wheel: Path, pack: Path) -> InstalledWheel:
                 raise WheelError(f"{wheel.name}: {member} would leave the pack")
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
+            installed.append((Path(os.path.relpath(target, site)).as_posix(), digest, len(content)))
             written += 1
-        # The installer that put the files there, as pip records it.
-        (site / dist_info / "INSTALLER").write_text("omnix-desktop\n", encoding="utf-8")
+        # The installer that put the files there, as pip records it, and the RECORD of what it installed.
+        installer = site / dist_info / "INSTALLER"
+        installer.write_text("omnix-desktop\n", encoding="utf-8")
+        installed.append((f"{dist_info}/INSTALLER", _record_digest(installer.read_bytes()), installer.stat().st_size))
+        lines = io.StringIO()
+        writer = csv.writer(lines, lineterminator="\n")
+        writer.writerows(installed)
+        writer.writerow((f"{dist_info}/RECORD", "", ""))
+        (site / dist_info / "RECORD").write_text(lines.getvalue(), encoding="utf-8")
     return InstalledWheel(name=name, version=version, files=written)
 
 
@@ -111,9 +125,9 @@ def verify_installed(site: Path) -> list[str]:
             if not row or not row[1]:
                 continue
             relative = row[0]
-            if relative.startswith("../") or relative.split("/", 1)[0].endswith(".data"):
-                continue  # scripts and data live beside site
-            target = site.joinpath(*PurePosixPath(relative).parts)
+            # Scripts and data live beside site: ../scripts and ../data in the installed RECORD.
+            target = (site / PurePosixPath(relative)) if relative.startswith("../") else \
+                site.joinpath(*PurePosixPath(relative).parts)
             try:
                 content = target.read_bytes()
             except OSError:

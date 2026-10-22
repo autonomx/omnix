@@ -141,3 +141,12 @@ resources/data/generated_images/
 resources/data/rpg_sessions/
 src/data/rpg_sessions/
 *.zip
+
+# Desktop app (docs/DESKTOP_APP_ROADMAP_2026-10-21.md): staged runtime, download cache, shell build output.
+desktop/staging/stage/
+desktop/staging/cache/
+desktop/out/
+desktop/release/
+desktop/node_modules/
+desktop/test-results/
+desktop/staging/*.log

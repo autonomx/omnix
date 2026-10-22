@@ -23,7 +23,7 @@ def _digest(data: bytes) -> str:
 
 
 def make_wheel(folder: Path, name: str = "demo", version: str = "1.0", *, files: dict[str, bytes] | None = None,
-               tamper: str | None = None) -> Path:
+               tamper: str | None = None, unrecorded: dict[str, bytes] | None = None) -> Path:
     files = files or {f"{name}/__init__.py": b"VALUE = 1\n", f"{name}-{version}.data/scripts/tool": b"#!python\n"}
     dist = f"{name}-{version}.dist-info"
     entries = dict(files)
@@ -36,6 +36,8 @@ def make_wheel(folder: Path, name: str = "demo", version: str = "1.0", *, files:
         for member, data in entries.items():
             archive.writestr(member, b"tampered" if member == tamper else data)
         archive.writestr(f"{dist}/RECORD", record)
+        for member, data in (unrecorded or {}).items():
+            archive.writestr(member, data)
     return path
 
 
@@ -50,6 +52,18 @@ def test_a_wheel_installs_into_site_scripts_and_data(tmp_path: Path) -> None:
     assert verify_installed(pack / "site") == []
     (pack / "site" / "demo" / "__init__.py").write_bytes(b"VALUE = 2\n")
     assert verify_installed(pack / "site") == ["demo/__init__.py: changed"]
+
+
+def test_a_file_record_leaves_out_is_installed_and_still_verified(tmp_path: Path) -> None:
+    """PyTorch's CUDA wheels carry DLLs their RECORD does not list (torchvision's cudart64_12.dll)."""
+    wheel = make_wheel(tmp_path, unrecorded={"demo/cudart64_12.dll": b"dll"})
+    pack = tmp_path / "pack"
+    install_wheel(wheel, pack)
+    assert (pack / "site" / "demo" / "cudart64_12.dll").read_bytes() == b"dll"
+    assert verify_installed(pack / "site") == []
+    (pack / "site" / "demo" / "cudart64_12.dll").write_bytes(b"changed")
+    (pack / "scripts" / "tool").write_bytes(b"changed")
+    assert verify_installed(pack / "site") == ["../scripts/tool: changed", "demo/cudart64_12.dll: changed"]
 
 
 def test_a_file_that_does_not_match_record_is_refused(tmp_path: Path) -> None:
