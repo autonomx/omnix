@@ -1,0 +1,27 @@
+{
+ "pack_files_version": 1,
+ "runtime": "torch-windows-x64",
+ "platform": "windows-x64",
+ "lock": "requirements/desktop/torch.windows-x64.lock.txt",
+ "lock_sha256": "6d6082b18b20af39029c2db8f4dbbbf14f93f69f036610dcb57a036096f6082e",
+ "files": [
+  {
+   "name": "torch",
+   "version": "2.6.0+cu124",
+   "filename": "torch-2.6.0+cu124-cp311-cp311-win_amd64.whl",
+   "sha256": "6a1fb2714e9323f11edb6e8abf7aad5f79e45ad25c081cde87681a18d99c29eb",
+   "size": 2532350702,
+   "source": "index",
+   "url": "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp311-cp311-win_amd64.whl"
+  },
+  {
+   "name": "torchaudio",
+   "version": "2.6.0+cu124",
+   "filename": "torchaudio-2.6.0+cu124-cp311-cp311-win_amd64.whl",
+   "sha256": "a25e146ce66ea9a6aed39008cc2001891bdf75253af479a4c32096678b2073b3",
+   "size": 4163304,
+   "source": "index",
+   "url": "https://download-r2.pytorch.org/whl/cu124/torchaudio-2.6.0%2Bcu124-cp311-cp311-win_amd64.whl"
+  }
+ ]
+}

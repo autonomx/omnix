@@ -1,0 +1,27 @@
+{
+ "pack_files_version": 1,
+ "runtime": "torch-macos-arm64",
+ "platform": "macos-arm64",
+ "lock": "requirements/desktop/torch.macos-arm64.lock.txt",
+ "lock_sha256": "2e8ddb5b991105ae75da0611525b04a8de9d5a34ca19f936da6e29b48c9dc1a2",
+ "files": [
+  {
+   "name": "torch",
+   "version": "2.6.0",
+   "filename": "torch-2.6.0-cp311-none-macosx_11_0_arm64.whl",
+   "sha256": "94fc63b3b4bedd327af588696559f68c264440e2503cc9e6954019473d74ae21",
+   "size": 66530713,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/0b/fa/f33a4148c6fb46ca2a3f8de39c24d473822d5774d652b66ed9b1214da5f7/torch-2.6.0-cp311-none-macosx_11_0_arm64.whl"
+  },
+  {
+   "name": "torchaudio",
+   "version": "2.6.0",
+   "filename": "torchaudio-2.6.0-cp311-cp311-macosx_11_0_arm64.whl",
+   "sha256": "c12fc41241b8dfce3ccc1917f1c81a0f92f532d9917706600046f1eb21d2d765",
+   "size": 1815253,
+   "source": "index",
+   "url": "https://files.pythonhosted.org/packages/a9/30/bba293c8300245a09b7f82d3cfc04aee1950228da49c6cdd637d1145b6f5/torchaudio-2.6.0-cp311-cp311-macosx_11_0_arm64.whl"
+  }
+ ]
+}
