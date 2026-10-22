@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +73,21 @@ def test_a_model_service_gets_only_what_it_needs(tmp_path) -> None:
     assert not any(value in {"owner-pw", "notify"} for value in env.values())
     with pytest.raises(ValueError, match="service token"):
         service_environment(config, "tts", service_token="", site_dirs=sites, inherited=_inherited())
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="NVML's environment needs are Windows-specific")
+def test_the_hardware_probe_sees_the_same_gpus_in_the_gateway_environment(tmp_path) -> None:
+    """NVML fails to initialise without ``ProgramFiles``: the setup screen then called a 4090 'no NVIDIA GPU'."""
+    from app.models.hardware import nvidia_gpus
+
+    host = [gpu["name"] for gpu in nvidia_gpus()]
+    if not host:
+        pytest.skip("no NVIDIA GPU on this machine")
+    env = child_environment(_config(tmp_path), {**os.environ, **SECRETS}, owner=False)
+    env["PYTHONPATH"] = str(ROOT / "src")
+    script = "import json; from app.models.hardware import nvidia_gpus; print(json.dumps([g['name'] for g in nvidia_gpus()]))"
+    completed = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, timeout=60, check=True)
+    assert json.loads(completed.stdout) == host
 
 
 def test_service_boot_refuses_folders_outside_the_packs(tmp_path) -> None:

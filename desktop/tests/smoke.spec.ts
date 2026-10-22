@@ -35,6 +35,15 @@ function backendProcesses(dataDir: string): string[] {
   return processes().filter((row) => /python|postgres/i.test(row.command) && mentions(row, dataDir)).map((row) => row.command);
 }
 
+/** This machine's first NVIDIA GPU, as nvidia-smi names it, or null without one. */
+function hostNvidiaGpu(): string | null {
+  try {
+    return execFileSync('nvidia-smi', ['--query-gpu=name', '--format=csv,noheader'], { encoding: 'utf8' }).split('\n')[0].trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function appWindow(app: ElectronApplication, matcher: (url: string) => boolean, timeout = 300_000): Promise<Page> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -85,6 +94,9 @@ test('first run goes through the splash to the setup screen, with this computer\
   for (const bundle of ['Voice input', 'Voice output', 'Transcription', 'Image generation']) {
     await expect(main.getByRole('listitem', { name: bundle })).toBeVisible({ timeout: 60_000 });
   }
+  // The probe runs in the backend's stripped environment and still sees this machine's NVIDIA GPU.
+  const gpu = hostNvidiaGpu();
+  if (gpu) await expect(main.locator('.setup-hardware')).toContainText(gpu);
   const bridge = await main.evaluate(() => {
     const desktop = (window as unknown as { omnixDesktop?: { product?: string; frameless?: boolean; requestLoginCode?: unknown } }).omnixDesktop;
     return { product: desktop?.product, frameless: desktop?.frameless, code: typeof desktop?.requestLoginCode };

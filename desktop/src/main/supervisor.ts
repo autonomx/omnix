@@ -34,6 +34,8 @@ const SYSTEM_VARIABLES = [
   'SystemRoot', 'SYSTEMROOT', 'windir', 'SystemDrive', 'TEMP', 'TMP', 'USERPROFILE', 'USERNAME', 'LOCALAPPDATA',
   'APPDATA', 'PROGRAMDATA', 'COMPUTERNAME', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'OS', 'PATH', 'Path',
   'PATHEXT', 'HOME', 'LANG', 'LC_ALL', 'TZ',
+  // NVML (nvidia-smi, the hardware probe) fails to initialise without the Program Files folders.
+  'ProgramFiles', 'ProgramW6432', 'ProgramFiles(x86)', 'CommonProgramFiles', 'CommonProgramW6432',
   // macOS: the per-user temp folder, the account name and CoreFoundation's text encoding.
   'TMPDIR', 'USER', 'LOGNAME', '__CF_USER_TEXT_ENCODING',
   'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',

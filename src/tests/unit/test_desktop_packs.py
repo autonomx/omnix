@@ -212,6 +212,31 @@ def test_a_cancelled_install_leaves_no_pack(pack_setup) -> None:
     assert not store.folder("torch-win").exists()
 
 
+def test_a_worker_killed_while_unpacking_leaves_no_pack_and_the_rerun_completes(pack_setup, monkeypatch) -> None:
+    store, client, _ = pack_setup
+    store.install("torch-win", client=client)
+    real_install = packs.install_wheel
+    unpacked: list[Path] = []
+
+    def killed_after_one(wheel: Path, target: Path) -> None:
+        if unpacked:
+            raise KeyboardInterrupt  # the process dies part-way through the overlay's wheels
+        unpacked.append(wheel)
+        real_install(wheel, target)
+
+    monkeypatch.setattr(packs, "install_wheel", killed_after_one)
+    with pytest.raises(KeyboardInterrupt):
+        store.install("tts-win", client=client)
+    assert (store.staging / "tts-win.build").exists() and not store.installed("tts-win")
+    assert not store.folder("tts-win").exists()
+
+    # The job runs again after the restart: the half-built folder is discarded and the pack lands complete.
+    monkeypatch.setattr(packs, "install_wheel", real_install)
+    store.install("tts-win", client=client)
+    assert store.current("tts-win") and store.verify("tts-win") == []
+    assert not (store.staging / "tts-win.build").exists()
+
+
 def test_the_torch_layer_cannot_be_removed_under_an_overlay(pack_setup) -> None:
     store, client, _ = pack_setup
     store.install("torch-win", client=client)

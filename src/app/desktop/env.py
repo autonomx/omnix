@@ -32,6 +32,9 @@ SYSTEM_ALLOWLIST = (
     "SystemRoot", "SYSTEMROOT", "windir", "WINDIR", "SystemDrive", "SYSTEMDRIVE",
     "TEMP", "TMP", "USERPROFILE", "USERNAME", "LOCALAPPDATA", "APPDATA", "PROGRAMDATA", "ProgramData",
     "COMPUTERNAME", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "PATHEXT", "COMSPEC", "ComSpec",
+    # NVML (nvidia-smi, the hardware probe) fails to initialise without the Program Files folders.
+    "ProgramFiles", "PROGRAMFILES", "ProgramW6432", "PROGRAMW6432", "ProgramFiles(x86)", "CommonProgramFiles",
+    "CommonProgramW6432",
     "HOME", "LANG", "LC_ALL", "TZ",
     "TMPDIR", "USER", "LOGNAME", "__CF_USER_TEXT_ENCODING",  # macOS
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
