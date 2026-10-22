@@ -1,4 +1,4 @@
-import { applyAvatarPackToCurrentRuntime, publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
+import { applyAvatarPackToCurrentRuntime, publishCharacterAvatarRuntime, runtimeAvatarOwner } from './liveCharacterAvatarBridge';
 import type { components } from '../api/generated';
 import { unwrapAs } from '../../../api/http';
 import { api } from '../api/gateway';
@@ -86,12 +86,12 @@ export function applyCharacterAvatarPackToTrackedRuntimes(
   let runtimeToPublish: CharacterLiveCallRuntime | null = null;
   for (const tracked of trackedPlaybackRuntimes.values()) {
     for (const runtime of tracked) {
-      if (runtime.character_id !== characterId) continue;
+      if (runtimeAvatarOwner(runtime) !== characterId) continue;
       runtime.avatar_pack = avatarPack;
       if (runtime === latestTrustedPlaybackRuntime) runtimeToPublish = runtime;
     }
   }
-  if (latestTrustedPlaybackRuntime?.character_id === characterId) {
+  if (latestTrustedPlaybackRuntime && runtimeAvatarOwner(latestTrustedPlaybackRuntime) === characterId) {
     latestTrustedPlaybackRuntime.avatar_pack = avatarPack;
     runtimeToPublish = latestTrustedPlaybackRuntime;
   }

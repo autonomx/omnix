@@ -235,6 +235,8 @@ export interface components {
     schemas: {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
+        /** ActivateLive2DAvatarRequest */
+        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: core["schemas"]["AlpacaIexCredentialStatus"];
         /** AlpacaIexCredentialUpdate */
@@ -282,6 +284,11 @@ export interface components {
         CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
         /** CapabilityState */
         CapabilityState: core["schemas"]["CapabilityState"];
+        /**
+         * CharacterAvatarPack
+         * @description Durable shared-image references for one Character Mode live avatar.
+         */
+        CharacterAvatarPack: core["schemas"]["CharacterAvatarPack"];
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -622,6 +629,8 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DAvatarActionResponse */
+        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
         /** Live2DModelCatalogResponse */

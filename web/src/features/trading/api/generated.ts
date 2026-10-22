@@ -2767,6 +2767,8 @@ export interface components {
             /** Unprotected Exposure Count */
             unprotected_exposure_count: number;
         };
+        /** ActivateLive2DAvatarRequest */
+        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /**
          * AdjustmentMode
          * @enum {string}
@@ -3990,6 +3992,11 @@ export interface components {
             /** Upper */
             upper: components["schemas"]["ValueTarget-Output"] | components["schemas"]["SourceTarget-Output"];
         };
+        /**
+         * CharacterAvatarPack
+         * @description Durable shared-image references for one Character Mode live avatar.
+         */
+        CharacterAvatarPack: core["schemas"]["CharacterAvatarPack"];
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -6780,6 +6787,8 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DAvatarActionResponse */
+        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
         /** Live2DModelCatalogResponse */

@@ -12,6 +12,7 @@ import {
 } from './characterAvatarClient';
 import { Live2DModelThumbnail } from './Live2DModelThumbnail';
 import { forceRenderLive2DAvatar } from './live2dCharacterRenderer';
+import { runtimeAvatarOwner } from './liveCharacterAvatarBridge';
 import './CharacterAvatarPanel.css';
 
 const ACTIVE_GENERATION_STATES = new Set(['queued', 'generating_base', 'generating_variants']);
@@ -21,9 +22,16 @@ const MAX_AVATAR_UPLOAD_BYTES = 12 * 1024 * 1024;
 
 type AvatarEditorMode = 'generated' | 'live2d';
 
-export function CharacterAvatarPanel({ character }: { character: CharacterProfile }) {
+type CharacterAvatarPanelProps = {
+  character: Pick<CharacterProfile, 'id' | 'display_name'>;
+  /** The System Assistant's version (Chat, Characters): no stored character, so no generated pack. */
+  live2dOnly?: boolean;
+};
+
+/** A character's live avatar: a generated image pack or a Live2D model. */
+export function CharacterAvatarPanel({ character, live2dOnly = false }: CharacterAvatarPanelProps) {
   const queryClient = useQueryClient();
-  const [editorMode, setEditorMode] = useState<AvatarEditorMode>('generated');
+  const [editorMode, setEditorMode] = useState<AvatarEditorMode>(live2dOnly ? 'live2d' : 'generated');
   const [appearancePrompt, setAppearancePrompt] = useState('');
   const [style, setStyle] = useState('illustrated character portrait');
   const [outfitPrompt, setOutfitPrompt] = useState('');
@@ -84,7 +92,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
       if (live2dActivated) {
         // Use the mutation response, not the mutable runtime cache. A request
         // that started before selection may still hold the previous pack.
-        if (liveRuntime?.character_id === character.id) {
+        if (liveRuntime && runtimeAvatarOwner(liveRuntime) === character.id) {
           forceRenderLive2DAvatar({ ...liveRuntime, avatar_pack: result.avatar_pack });
         }
       }
@@ -101,7 +109,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
     mutationFn: () => characterAvatarClient.disableLive2d(character.id),
     onSuccess: (result) => {
       applyCharacterAvatarPackToTrackedRuntimes(character.id, result.avatar_pack ?? null);
-      setEditorMode('generated');
+      if (!live2dOnly) setEditorMode('generated');
       setStatus(result.avatar_pack
         ? 'The previous generated avatar has been restored.'
         : 'Live2D has been disabled. Live calls will use the voice orb until another avatar is selected.');
@@ -113,7 +121,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   });
 
   useEffect(() => {
-    setEditorMode('generated');
+    setEditorMode(live2dOnly ? 'live2d' : 'generated');
     setSourceFile(null);
     setSourceConsentConfirmed(false);
     setGenerationId(null);
@@ -121,7 +129,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
     setVisemeRequestedForGenerationId(null);
     setSelectedLive2DModelId(null);
     setStatus(null);
-  }, [character.id]);
+  }, [character.id, live2dOnly]);
 
   useEffect(() => {
     if (packQuery.data?.renderer === 'live2d') setEditorMode('live2d');
@@ -239,10 +247,10 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
 
   return <section className="character-dashboard-section character-avatar-panel" aria-labelledby={`character-avatar-${character.id}`}>
     <header className="character-section-heading">
-      <div><span>03</span><h4 id={`character-avatar-${character.id}`}>Live avatar</h4></div>
+      <div>{live2dOnly ? null : <span>03</span>}<h4 id={`character-avatar-${character.id}`}>{live2dOnly ? `${character.display_name} avatar` : 'Live avatar'}</h4></div>
     </header>
 
-    <div className="character-avatar-type-tabs" role="tablist" aria-label="Avatar type">
+    {live2dOnly ? null : <div className="character-avatar-type-tabs" role="tablist" aria-label="Avatar type">
       <button
         type="button"
         role="tab"
@@ -257,11 +265,11 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
         className={editorMode === 'live2d' ? 'is-active' : undefined}
         onClick={() => setEditorMode('live2d')}
       >Live2D avatar</button>
-    </div>
+    </div>}
 
     <div className="character-avatar-layout">
       <div className="character-avatar-preview">
-        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : isLive2D ? <Live2DPreview model={activeLive2DModel} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar pack</strong><small>Generate one, upload an image, or select Live2D.</small></div>}
+        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : isLive2D ? <Live2DPreview model={activeLive2DModel} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar</strong><small>{live2dOnly ? 'Select a Live2D avatar; until then Live Voice shows the voice orb.' : 'Generate one, upload an image, or select Live2D.'}</small></div>}
         {pack ? <div className="character-avatar-meta"><span><small>Pack version</small><strong>v{pack.version}</strong></span><span><small>Render mode</small><strong>{pack.render_mode.replace('_', ' ')}</strong></span><span><small>Renderer</small><strong>{pack.renderer}</strong></span></div> : null}
       </div>
 
@@ -326,7 +334,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
         {visemeGeneration ? <div className="character-avatar-progress"><strong>{visemeGeneration.status.replaceAll('_', ' ')}</strong><span>{generatedVisemes} precise mouth shapes ready</span>{visemeGeneration.error ? <small>{visemeGeneration.error}</small> : null}</div> : null}
       </div> : <div className="character-live2d-panel">
         <div className="character-live2d-intro">
-          <div><strong>Rigged Live2D avatars</strong><p>Select a model for character live calls. Omnix downloads the pinned runtime and model only after you accept their separate licenses, then serves everything locally.</p></div>
+          <div><strong>Rigged Live2D avatars</strong><p>Select a model for {live2dOnly ? `${character.display_name}'s` : 'character'} live calls. Omnix downloads the pinned runtime and model only after you accept their separate licenses, then serves everything locally.</p></div>
           <span>{live2dCatalogQuery.data?.runtime_installed ? 'Runtime installed' : 'Download on selection'}</span>
         </div>
 
@@ -365,7 +373,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
               {activateLive2DMutation.isPending ? 'Downloading and activating…' : selectedLive2DModel.selected ? 'Live2D avatar active' : selectedLive2DModel.installed ? 'Use this Live2D avatar' : 'Download and use Live2D avatar'}
             </button>
             {isLive2D ? <button type="button" disabled={live2dBusy} onClick={() => disableLive2DMutation.mutate()}>
-              {disableLive2DMutation.isPending ? 'Restoring…' : 'Restore previous generated avatar'}
+              {disableLive2DMutation.isPending ? 'Restoring…' : live2dOnly ? 'Turn off the avatar' : 'Restore previous generated avatar'}
             </button> : null}
           </div>
           {activateLive2DMutation.isPending ? <div className="character-live2d-download-progress" role="status" aria-live="polite">
@@ -384,7 +392,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
       </div>}
     </div>
 
-    {isLive2D ? <div className="character-live2d-sync-panel"><header><strong>Live2D lip sync</strong><span>Rig parameters active</span></header><p>Omnix maps the same timed TTS visemes used by generated avatar packs to the model’s mouth-open and mouth-form parameters. Physics, eye movement, and expressions remain model-driven while the live view stays idle.</p></div> : <div className="character-viseme-panel">
+    {live2dOnly && !isLive2D ? null : isLive2D ? <div className="character-live2d-sync-panel"><header><strong>Live2D lip sync</strong><span>Rig parameters active</span></header><p>Omnix maps the same timed TTS visemes used by generated avatar packs to the model’s mouth-open and mouth-form parameters. Physics, eye movement, and expressions remain model-driven while the live view stays idle.</p></div> : <div className="character-viseme-panel">
       <header><strong>Viseme support (9 mouth shapes)</strong><span>{pack?.render_mode === 'viseme' ? 'Precise lip sync ready' : 'Audio-envelope fallback active'}</span></header>
       <div className="character-viseme-strip">
         {VISEME_KEYS.map((viseme) => {
@@ -407,6 +415,6 @@ function Live2DPreview({ model }: { model: Live2DModelCatalogItem | null }) {
     {model ? <Live2DModelThumbnail model={model} /> : null}
     <span>Live2D</span>
     <strong>{model?.name ?? 'Rigged avatar'}</strong>
-    <small>Rendered during character live calls</small>
+    <small>Rendered during live calls</small>
   </div>;
 }

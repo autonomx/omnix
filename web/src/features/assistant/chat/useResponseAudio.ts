@@ -4,6 +4,7 @@ import { omnixApiClient } from '../../../api/client';
 import { createFetchSpeechServiceTransport, createTtsServiceClient, type AssistantWorkspaceRuntimeConfig } from '../workspace';
 import { stopAssistantPcmStream } from '../workspace';
 import type { CharacterLiveCallRuntime, LiveCallSpeechStyle } from './characterClient';
+import { NEUTRAL_SPEECH_STYLE } from './neutralLiveCallRuntime';
 import { STREAMING_TTS_RECOVERY_DELAY_SECONDS, STREAMING_TTS_SAMPLE_RATE, audioSourceToArrayBuffer, canUseDecodedAudioPlayback, getSynthesizedAudioSource, getVoiceJobAudioSource, makePlayableAudioSource, voiceJobErrorMessage, voiceProfileId, waitForAudioElementPlaying, waitForAudioElementToFinish, waitForStreamingPlaybackToFinish, type AssistantSettings, type StreamingTtsPlayback, type StreamingTtsWindow, type VoiceProfileAsset } from './chatbotWorkspaceModel';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
 import { ASSISTANT_VOICE_INTERRUPT_EVENT } from '../../../events/bus';
@@ -63,16 +64,7 @@ export function useResponseAudio({
   }
 
   function currentLiveCallSpeechStyle(): LiveCallSpeechStyle {
-    return liveCallRuntimeRef.current?.speech_style ?? {
-      speed: 1,
-      temperature: 0.6,
-      top_k: 20,
-      top_p: 0.85,
-      repetition_penalty: 1,
-      expressiveness: 'neutral',
-      emotion: 'neutral',
-      interruption_style: 'balanced',
-    };
+    return liveCallRuntimeRef.current?.speech_style ?? NEUTRAL_SPEECH_STYLE;
   }
 
   function currentLiveCallDisplayName(): string {

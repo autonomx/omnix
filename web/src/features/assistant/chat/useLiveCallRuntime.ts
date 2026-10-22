@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { characterAvatarClient } from './characterAvatarClient';
 import { characterClient, type CharacterLiveCallRuntime } from './characterClient';
+import { publishCharacterAvatarRuntime, SYSTEM_ASSISTANT_AVATAR_ID } from './liveCharacterAvatarBridge';
+import { NEUTRAL_SPEECH_STYLE, neutralSystemLiveCallRuntime } from './neutralLiveCallRuntime';
 import type { ChatSessionListEntry } from './useChatSessions';
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from '../../../events/bus';
 
@@ -12,7 +15,7 @@ type LiveCallRuntimeOptions = {
   liveVoiceActiveRef: RefObject<boolean>;
 };
 
-/** The live-call runtime (identity, voice, avatar, memory) of the selected session, preloaded in Character mode. */
+/** The live-call runtime (identity, voice, avatar, memory) of the selected session, preloaded before a call. */
 export function useLiveCallRuntime({ selectedSessionId, selectedSessionSummary, interaction, liveVoiceActiveRef }: LiveCallRuntimeOptions) {
   const [liveCallRuntime, setLiveCallRuntime] = useState<CharacterLiveCallRuntime | null>(null);
   const liveCallRuntimeRef = useRef<CharacterLiveCallRuntime | null>(null);
@@ -27,14 +30,11 @@ export function useLiveCallRuntime({ selectedSessionId, selectedSessionSummary, 
       interaction?.character_profile_version,
     ],
     queryFn: () => characterClient.liveCallRuntime(selectedSessionId ?? ''),
-    // Runtime preload includes the selected character's avatar/voice/memory.
-    // Keep it out of ordinary system chats, but make it available in
-    // Character mode so the right rail reflects the selected identity before
-    // a call starts.
+    // Runtime preload carries the identity's avatar, voice and memory, so the right rail shows the selected
+    // character (or the System Assistant's own avatar) before a call starts. In a system chat it is a light read.
     enabled: Boolean(
       selectedSessionId
-      && selectedSessionSummary?.interaction_mode === 'character'
-      && interaction?.interaction_mode === 'character',
+      && (selectedSessionSummary?.interaction_mode ?? 'system') === (interaction?.interaction_mode ?? 'system'),
     ),
   });
 
@@ -44,14 +44,32 @@ export function useLiveCallRuntime({ selectedSessionId, selectedSessionSummary, 
     setLiveCallRuntime(liveCallRuntimeQuery.data);
   }, [liveCallRuntimeQuery.data, liveVoiceActiveRef]);
 
+  // Before the first chat there is no session and so no runtime: the System Assistant's own avatar still shows, on a
+  // neutral runtime the live view alone uses (a call loads its session's runtime). The key is the avatar panel's, so
+  // choosing an avatar in Settings refreshes it.
+  const assistantPackQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'character-avatar-pack', SYSTEM_ASSISTANT_AVATAR_ID],
+    queryFn: () => characterAvatarClient.optionalPack(SYSTEM_ASSISTANT_AVATAR_ID),
+    enabled: !selectedSessionId,
+    retry: false,
+  });
+  useEffect(() => {
+    if (selectedSessionId || liveVoiceActiveRef.current) return;
+    const pack = assistantPackQuery.data ?? null;
+    const preview = pack ? { ...neutralSystemLiveCallRuntime('', null, NEUTRAL_SPEECH_STYLE), avatar_pack: pack } : null;
+    liveCallRuntimeRef.current = preview;
+    setLiveCallRuntime(preview);
+    publishCharacterAvatarRuntime(preview);
+  }, [assistantPackQuery.data, selectedSessionId, liveVoiceActiveRef]);
+
   useEffect(() => {
     const runtime = liveCallRuntimeRef.current;
-    if (!runtime) return;
+    if (!runtime || !selectedSessionId) return;
     const sameSession = runtime.session_id === selectedSessionId;
-    const sameCharacter = selectedSessionSummary?.interaction_mode === 'character'
-      && runtime.interaction_mode === 'character'
-      && runtime.character_id === selectedSessionSummary.character_id;
-    if (!sameSession || !sameCharacter) {
+    const sameIdentity = selectedSessionSummary?.interaction_mode === 'character'
+      ? runtime.interaction_mode === 'character' && runtime.character_id === selectedSessionSummary.character_id
+      : runtime.interaction_mode !== 'character';
+    if (!sameSession || !sameIdentity) {
       liveCallRuntimeRef.current = null;
       setLiveCallRuntime(null);
     }

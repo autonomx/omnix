@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.assets.content import asset_available, materialize_asset
 from app.assets import AssetRecord, AssetType, default_asset_store
+from app.conversation.contracts import SYSTEM_ASSISTANT_ID, SYSTEM_ASSISTANT_NAME
 from app.runtime.paths import resources_data_root
 from app.security.permissions import requires
 
@@ -362,7 +363,10 @@ class CharacterLive2DAvatarService:
         asset_id = _asset_id(_catalog_entry(model_id)["id"])
         avatar_service = self.avatar_service_factory()
         using = []
-        for character in default_character_service().list(include_archived=True):
+        assistant = avatar_service.optional_get(SYSTEM_ASSISTANT_ID)
+        if assistant is not None and assistant.renderer == "live2d" and assistant.rig_asset_id == asset_id:
+            using.append(SYSTEM_ASSISTANT_NAME)
+        for character in default_character_service().list(include_archived=True).characters:
             pack = avatar_service.optional_get(character.id)
             if pack is not None and pack.renderer == "live2d" and pack.rig_asset_id == asset_id:
                 using.append(character.display_name or character.id)

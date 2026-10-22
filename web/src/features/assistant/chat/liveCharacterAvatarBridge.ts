@@ -87,12 +87,20 @@ export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime 
   }
 }
 
+/** The System Assistant's avatar is kept under this id, as a character's is under its own. */
+export const SYSTEM_ASSISTANT_AVATAR_ID = 'system-assistant';
+
+/** Whose avatar a runtime shows: its character's in Character mode, the System Assistant's otherwise. */
+export function runtimeAvatarOwner(runtime: Pick<CharacterLiveCallRuntime, 'interaction_mode' | 'character_id'>): string {
+  return runtime.interaction_mode === 'character' && runtime.character_id ? runtime.character_id : SYSTEM_ASSISTANT_AVATAR_ID;
+}
+
 /** Apply a newly selected pack to the runtime currently driving the live host. */
 export function applyAvatarPackToCurrentRuntime(
   characterId: string,
   avatarPack: CharacterAvatarPack | null,
 ): boolean {
-  if (!currentRuntime || currentRuntime.character_id !== characterId) return false;
+  if (!currentRuntime || runtimeAvatarOwner(currentRuntime) !== characterId) return false;
   publishCharacterAvatarRuntime({ ...currentRuntime, avatar_pack: avatarPack });
   return true;
 }

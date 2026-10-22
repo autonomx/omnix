@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from app.assets.content import asset_available
 from app.assets import AssetRecord, AssetType, default_asset_store
+from app.conversation.contracts import SYSTEM_ASSISTANT_ID
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_repository import CharacterAvatarRepository
@@ -36,8 +37,13 @@ class CharacterAvatarService:
         self.character_service_factory = character_service_factory
         self.asset_store_factory = asset_store_factory
 
+    def _require_owner(self, character_id: str) -> None:
+        # The System Assistant is no stored character, but it has a live avatar of its own like one.
+        if character_id != SYSTEM_ASSISTANT_ID:
+            self.character_service_factory().get(character_id, include_archived=True)
+
     def get(self, character_id: str) -> CharacterAvatarPack:
-        self.character_service_factory().get(character_id, include_archived=True)
+        self._require_owner(character_id)
         pack = self.repository.get(character_id)
         if pack is None:
             raise CharacterNotFoundError(f"character avatar pack not found: {character_id}")
@@ -45,7 +51,7 @@ class CharacterAvatarService:
 
     def optional_get(self, character_id: str) -> CharacterAvatarPack | None:
         """Return a pack when present without treating normal absence as an error."""
-        self.character_service_factory().get(character_id, include_archived=True)
+        self._require_owner(character_id)
         return self.repository.get(character_id)
 
     def resolve(self, character_id: str | None) -> CharacterAvatarPack | None:
@@ -58,12 +64,12 @@ class CharacterAvatarService:
         character_id: str,
         request: UpsertCharacterAvatarPackRequest,
     ) -> CharacterAvatarPack:
-        self.character_service_factory().get(character_id, include_archived=True)
+        self._require_owner(character_id)
         self._validate_assets(request)
         return self.repository.upsert(character_id, request)
 
     def delete(self, character_id: str) -> bool:
-        self.character_service_factory().get(character_id, include_archived=True)
+        self._require_owner(character_id)
         return self.repository.delete(character_id)
 
     def _validate_assets(self, request: UpsertCharacterAvatarPackRequest) -> None:

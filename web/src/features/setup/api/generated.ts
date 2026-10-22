@@ -207,12 +207,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/characters/{character_id}/live2d-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live2D Model Catalog */
+        get: operations["live2d_model_catalog_api_characters__character_id__live2d_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/characters/{character_id}/live2d-avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Live2D Avatar */
+        post: operations["activate_live2d_avatar_api_characters__character_id__live2d_avatar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
+        /** ActivateLive2DAvatarRequest */
+        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: core["schemas"]["AlpacaIexCredentialStatus"];
         /** AlpacaIexCredentialUpdate */
@@ -260,6 +296,11 @@ export interface components {
         CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
         /** CapabilityState */
         CapabilityState: core["schemas"]["CapabilityState"];
+        /**
+         * CharacterAvatarPack
+         * @description Durable shared-image references for one Character Mode live avatar.
+         */
+        CharacterAvatarPack: core["schemas"]["CharacterAvatarPack"];
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -447,6 +488,8 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DAvatarActionResponse */
+        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
         /** Live2DModelCatalogResponse */
@@ -983,6 +1026,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Live2DModelCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    live2d_model_catalog_api_characters__character_id__live2d_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                character_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_live2d_avatar_api_characters__character_id__live2d_avatar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                character_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateLive2DAvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DAvatarActionResponse"];
                 };
             };
             /** @description Validation Error */

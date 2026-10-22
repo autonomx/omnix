@@ -1415,6 +1415,21 @@ export interface components {
              */
             kind: "standard" | "guest";
         };
+        /** ActivateLive2DAvatarRequest */
+        ActivateLive2DAvatarRequest: {
+            /**
+             * Accept Live2D Runtime Terms
+             * @default false
+             */
+            accept_live2d_runtime_terms?: boolean;
+            /**
+             * Accept Model Terms
+             * @default false
+             */
+            accept_model_terms?: boolean;
+            /** Model Id */
+            model_id: string;
+        };
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: {
             /** Api Key Editable */
@@ -1714,6 +1729,67 @@ export interface components {
             label: string;
             /** Running */
             running: boolean;
+        };
+        /**
+         * CharacterAvatarPack
+         * @description Durable shared-image references for one Character Mode live avatar.
+         */
+        CharacterAvatarPack: {
+            /** Active Background */
+            active_background: string | null;
+            /** Active Outfit */
+            active_outfit: string | null;
+            /** Background Asset Ids */
+            background_asset_ids: {
+                [key: string]: string;
+            };
+            /** Base Asset Id */
+            base_asset_id: string | null;
+            /** Blink Frames */
+            blink_frames: {
+                [key: string]: string;
+            };
+            /** Character Id */
+            character_id: string;
+            /** Created At */
+            created_at: string;
+            /** Expression Frames */
+            expression_frames: {
+                [key: string]: string;
+            };
+            /** Mouth Anchor */
+            mouth_anchor: {
+                [key: string]: number;
+            };
+            /** Mouth Frames */
+            mouth_frames: {
+                [key: string]: string;
+            };
+            /** Outfit Frames */
+            outfit_frames: {
+                [key: string]: string;
+            };
+            /**
+             * Render Mode
+             * @default audio_envelope
+             * @enum {string}
+             */
+            render_mode: "audio_envelope" | "viseme" | "static";
+            /**
+             * Renderer
+             * @default sprite
+             * @enum {string}
+             */
+            renderer: "sprite" | "live2d" | "rive";
+            /** Rig Asset Id */
+            rig_asset_id: string | null;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
         };
         /** ChatMessage */
         ChatMessage: {
@@ -3016,6 +3092,22 @@ export interface components {
              * @default true
              */
             success: boolean;
+        };
+        /** Live2DAvatarActionResponse */
+        Live2DAvatarActionResponse: {
+            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
+            /** Character Id */
+            character_id: string;
+            /**
+             * Downloaded
+             * @default false
+             */
+            downloaded: boolean;
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
         };
         /** Live2DModelCatalogItem */
         Live2DModelCatalogItem: {

@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobRecord } from '../../api/client';
 import { renderWithProviders } from '../../test/renderWithProviders';
-import { modelPacksClient, type ModelPacksStatus, type PackOption, type PackVerdict } from './api/modelPacksClient';
+import { avatarsClient, modelPacksClient, type AvatarLibrary, type ModelPacksStatus, type PackOption, type PackVerdict } from './api/modelPacksClient';
 import { ModelPacksPanel } from './ModelPacksPanel';
 
 const GB = 1e9;
@@ -88,6 +88,40 @@ describe('choosing models within a feature', () => {
     fireEvent.click(within(dialog).getByRole('checkbox'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Accept and download' }));
     await waitFor(() => expect(install).toHaveBeenCalledWith({ model_id: 'z-image-turbo', accept_terms: true }));
+  });
+
+  it('offers the assistant a Live2D avatar on first run, under its own licences, and applies it after the download', async () => {
+    vi.spyOn(modelPacksClient, 'status').mockResolvedValue(status());
+    vi.spyOn(modelPacksClient, 'install').mockResolvedValue({ id: 'job-1', status: 'queued' } as unknown as JobRecord);
+    vi.spyOn(modelPacksClient, 'job').mockResolvedValue({ id: 'job-1', status: 'queued' } as unknown as JobRecord);
+    const shizuku = { id: 'open-llm-vtuber-shizuku', name: 'Shizuku (PRO)', description: 'Classic sample.', installed: false,
+      selected: false, preview_path: '/api/character-live2d/models/open-llm-vtuber-shizuku/preview', license_summary: 'Live2D sample data.',
+      runtime_license_url: 'https://example.com/runtime', model_license_url: 'https://example.com/model' };
+    vi.spyOn(avatarsClient, 'assistantAvatars').mockResolvedValue({ models: [shizuku], runtime_installed: false } as unknown as AvatarLibrary);
+    const useForAssistant = vi.spyOn(avatarsClient, 'useForAssistant').mockResolvedValue();
+    renderWithProviders(<ModelPacksPanel mode="setup" />);
+
+    const choice = await screen.findByRole('region', { name: 'Assistant avatar' });
+    expect(within(choice).getByRole('checkbox', { name: /Assistant avatar: Shizuku/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Review licences and download' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('link', { name: 'Live2D Proprietary Software License' })).toHaveAttribute('href', 'https://example.com/runtime');
+    const accept = within(dialog).getByRole('button', { name: 'Accept and download' });
+    for (const box of within(dialog).getAllByRole('checkbox')) fireEvent.click(box);
+    expect(accept).not.toBeDisabled();
+    fireEvent.click(accept);
+    await waitFor(() => expect(useForAssistant).toHaveBeenCalledWith('open-llm-vtuber-shizuku'));
+  });
+
+  it('does not offer an avatar once the assistant has one', async () => {
+    vi.spyOn(modelPacksClient, 'status').mockResolvedValue(status());
+    vi.spyOn(avatarsClient, 'assistantAvatars').mockResolvedValue({ models: [{ id: 'open-llm-vtuber-shizuku', name: 'Shizuku (PRO)',
+      selected: true }], runtime_installed: true } as unknown as AvatarLibrary);
+    renderWithProviders(<ModelPacksPanel mode="setup" />);
+
+    await screen.findByRole('button', { name: 'Review licences and download' });
+    await waitFor(() => expect(avatarsClient.assistantAvatars).toHaveBeenCalled());
+    expect(screen.queryByRole('region', { name: 'Assistant avatar' })).toBeNull();
   });
 
   it('shows where downloads go and lets the owner choose another folder before downloading', async () => {

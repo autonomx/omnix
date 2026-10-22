@@ -317,3 +317,48 @@ def test_previews_come_through_omnix_from_their_catalog_address(tmp_path: Path) 
     assert fetched == [haru["preview_url"]]  # fetched once, then served from disk
     assert client.get("/api/character-live2d/previews/open-llm-vtuber-shizuku").status_code == 404  # not an image
     assert client.get("/api/character-live2d/previews/unknown").status_code == 404
+
+
+def test_the_system_assistant_has_a_live2d_avatar_of_its_own(tmp_path: Path, monkeypatch) -> None:
+    """No stored character is needed: the assistant's avatar is chosen, kept from removal and turned off like one."""
+    assets = SharedAssetStore(tmp_path / "assets.json")
+    model_json = json.dumps({"Version": 3, "FileReferences": {"Moc": "m.moc3"}}).encode()
+
+    def download(url: str) -> bytes:
+        if url.endswith(".js"):
+            return FAKE_RUNTIME
+        if url.endswith(".model3.json"):
+            return model_json
+        return b"MOC3"
+
+    characters = CharacterRepository(tmp_path / "characters.sqlite3")
+    characters.create(CreateCharacterRequest(id="maya", display_name="Maya", personality_prompt="Be warm."))
+    character_service = CharacterService(characters, asset_store_factory=lambda: assets)
+    avatar_service = CharacterAvatarService(CharacterAvatarRepository(tmp_path / "characters.sqlite3"),
+                                            character_service_factory=lambda: character_service,
+                                            asset_store_factory=lambda: assets)
+    service = CharacterLive2DAvatarService(avatar_service_factory=lambda: avatar_service,
+                                           asset_store_factory=lambda: assets, data_root=tmp_path / "live2d",
+                                           download_bytes=download)
+    monkeypatch.setattr("app.platform.characters.service.default_character_service", lambda: character_service)
+    app = FastAPI()
+    register_character_live2d_avatar_routes(app, service_factory=lambda: service)
+    client = TestClient(app)
+    model_id = "open-llm-vtuber-shizuku"
+
+    activated = client.post("/api/characters/system-assistant/live2d-avatar", json={
+        "model_id": model_id, "accept_live2d_runtime_terms": True, "accept_model_terms": True})
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["avatar_pack"]["renderer"] == "live2d" and activated.json()["downloaded"]
+    catalog = client.get("/api/characters/system-assistant/live2d-models").json()
+    assert [item["id"] for item in catalog["models"] if item["selected"]] == [model_id]
+
+    terms = {"model_id": model_id, "accept_live2d_runtime_terms": True, "accept_model_terms": True}
+    assert client.post("/api/characters/maya/live2d-avatar", json=terms).status_code == 200
+    assert service.characters_using(model_id) == ["System Assistant", "Maya"]
+    refused = client.delete(f"/api/character-live2d/models/{model_id}")
+    assert refused.status_code == 409 and "avatar of System Assistant" in refused.json()["detail"]
+
+    disabled = client.post("/api/characters/system-assistant/live2d-avatar/disable").json()
+    assert disabled["avatar_pack"] is None
+    assert service.characters_using(model_id) == ["Maya"]

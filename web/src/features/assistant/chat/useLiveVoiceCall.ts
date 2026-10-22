@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetSta
 import type { UseFormGetValues, UseFormSetValue } from 'react-hook-form';
 import { omnixApiClient } from '../../../api/client';
 import { liveCallPresentationStore, liveVoiceTranscriptStore, type AssistantWorkspaceRuntimeConfig } from '../workspace';
-import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
+import { characterClient, type CharacterLiveCallRuntime } from './characterClient';
+import { neutralSystemLiveCallRuntime } from './neutralLiveCallRuntime';
 import { CALL_TIMER_TICK_MS, LIVE_VOICE_AUTO_SEND_DELAY_MS, createPersonalityPrompt, dedicatedLiveVoiceControllerInstalled, liveVoiceSubmissionKey, type AssistantSettings, type ChatMessage, type ChatbotFormValues, type UtilityPanel } from './chatbotWorkspaceModel';
 import { useBrowserVoiceInput } from './useBrowserVoiceInput';
 import type { useResponseAudio } from './useResponseAudio';
@@ -291,36 +292,5 @@ export function useLiveVoiceCall({
     clearVoiceTranscript,
     sendVoiceTranscript,
     submitVoiceTranscriptContent,
-  };
-}
-
-/** The runtime of a new system session whose runtime endpoint is unavailable: no character, memory or avatar. */
-function neutralSystemLiveCallRuntime(sessionId: string, voiceAssetId: string | null, speechStyle: LiveCallSpeechStyle): CharacterLiveCallRuntime {
-  return {
-    session_id: sessionId,
-    interaction_mode: 'system',
-    display_name: 'System Assistant',
-    character_id: null,
-    character_profile_version: null,
-    effective_identity_hash: null,
-    voice_asset_id: voiceAssetId,
-    voice_speaker_id: null,
-    avatar_pack: null,
-    greeting: '',
-    speech_style: speechStyle,
-    read_memory: false,
-    write_memory: false,
-    shared_memory_access: 'none',
-    memory_snapshot_id: null,
-    preload: {
-      profile_loaded: false,
-      voice_resolved: Boolean(voiceAssetId),
-      voice_error: null,
-      avatar_pack_loaded: false,
-      memory_snapshot_loaded: false,
-      memory_record_count: 0,
-      preload_ms: 0,
-      resolved_at: new Date().toISOString(),
-    },
   };
 }

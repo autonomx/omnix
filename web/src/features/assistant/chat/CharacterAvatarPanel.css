@@ -430,12 +430,17 @@
     border-radius: 999px;
   }
 
-  .character-live2d-model-card {
+  /* Scoped to the panel: the chat views' rule for solid action buttons (.assistant-view-panel button) must not
+     restyle these selectable cards. */
+  .character-avatar-panel .character-live2d-model-card {
     align-items: stretch;
     background: color-mix(in srgb, var(--bg-slate-150-2) 68%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
     border-radius: 0.7rem;
+    color: var(--omnix-text);
     display: grid;
+    font-weight: inherit;
+    justify-self: stretch;
     gap: 0.65rem;
     grid-template-columns: 7.2rem minmax(0, 1fr);
     height: var(--character-live2d-card-height);

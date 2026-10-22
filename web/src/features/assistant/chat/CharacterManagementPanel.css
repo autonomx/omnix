@@ -7,6 +7,13 @@
     padding: clamp(1rem, 2vw, 1.5rem);
   }
 
+  /* The System Assistant's avatar card above the characters' card: one row of the view, which scrolls. */
+  .assistant-characters-stack {
+    display: grid;
+    gap: 1.15rem;
+    min-width: 0;
+  }
+
   .assistant-view-panel[aria-label='Characters view'] > header {
     align-items: center;
     display: grid;
