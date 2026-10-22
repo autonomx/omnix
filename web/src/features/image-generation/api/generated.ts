@@ -278,6 +278,10 @@ export interface components {
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
         CancelState: core["schemas"]["CancelState"];
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
+        /** CapabilityState */
+        CapabilityState: core["schemas"]["CapabilityState"];
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -380,6 +384,8 @@ export interface components {
          * @description Sidecar reachability and the runtime configuration that reaches it.
          */
         HermesStatusResponse: core["schemas"]["HermesStatusResponse"];
+        /** HubTokenWrite */
+        HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: core["schemas"]["IbkrSettingsPayload"];
         /** IbkrSettingsStatus */
@@ -607,6 +613,11 @@ export interface components {
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: core["schemas"]["ModelPacksStatus"];
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: core["schemas"]["ModelResidencyDiagnostics"];
         /** ModelResidencyRecord */
@@ -620,6 +631,19 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** PackModelLicence */
+        PackModelLicence: core["schemas"]["PackModelLicence"];
+        /** PackModelStatus */
+        PackModelStatus: core["schemas"]["PackModelStatus"];
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
+        /** PackTarget */
+        PackTarget: core["schemas"]["PackTarget"];
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: core["schemas"]["PackVerdict"];
         /** PasswordChangeRequest */
         PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
         /** PasswordChangeResponse */
@@ -726,6 +750,10 @@ export interface components {
         RuntimeDiagnostics: core["schemas"]["RuntimeDiagnostics"];
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: core["schemas"]["RuntimeStatusPayload"];
+        /** SelectionRequest */
+        SelectionRequest: core["schemas"]["SelectionRequest"];
+        /** SelectionSize */
+        SelectionSize: core["schemas"]["SelectionSize"];
         /** SendChatMessageRequest */
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
@@ -746,6 +774,10 @@ export interface components {
         SettingsProfileSaveRequest: core["schemas"]["SettingsProfileSaveRequest"];
         /** SettingsSaveResponse */
         SettingsSaveResponse: core["schemas"]["SettingsSaveResponse"];
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
+        /** SpeechModelStatus */
+        SpeechModelStatus: core["schemas"]["SpeechModelStatus"];
         /** StateHashRequest */
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */

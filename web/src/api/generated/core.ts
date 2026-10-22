@@ -1695,6 +1695,26 @@ export interface components {
             /** Requested At */
             requested_at: string | null;
         };
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: {
+            /** Capabilities */
+            capabilities: {
+                [key: string]: components["schemas"]["CapabilityState"];
+            };
+            /** Desktop */
+            desktop: boolean;
+        };
+        /** CapabilityState */
+        CapabilityState: {
+            /** Bundle */
+            bundle: string;
+            /** Installed */
+            installed: boolean;
+            /** Label */
+            label: string;
+            /** Running */
+            running: boolean;
+        };
         /** ChatMessage */
         ChatMessage: {
             /** Content */
@@ -2495,6 +2515,14 @@ export interface components {
             /** Timeout Seconds */
             timeout_seconds: number;
         };
+        /** HubTokenWrite */
+        HubTokenWrite: {
+            /**
+             * Token
+             * @default
+             */
+            token?: string;
+        };
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: {
             /** Client Id */
@@ -2961,6 +2989,34 @@ export interface components {
              */
             remember?: boolean;
         };
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: {
+            /** Bundles */
+            bundles: components["schemas"]["PackVerdict"][];
+            /** Enabled */
+            enabled: boolean;
+            /** Hardware */
+            hardware: {
+                [key: string]: unknown;
+            };
+            /** Models */
+            models: components["schemas"]["PackModelStatus"][];
+            /**
+             * Packs Folder
+             * @default
+             */
+            packs_folder: string;
+            /**
+             * Platform
+             * @default
+             */
+            platform: string;
+            /** Runtimes */
+            runtimes: components["schemas"]["PackRuntimeStatus"][];
+        };
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: {
             policy: components["schemas"]["GpuResidencyPolicy"];
@@ -3056,6 +3112,160 @@ export interface components {
             provider_id: string;
             /** Vram Hint Mb */
             vram_hint_mb: number | null;
+        };
+        /** PackModelLicence */
+        PackModelLicence: {
+            /** Commercial Use */
+            commercial_use: boolean;
+            /** Gated */
+            gated: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Output Terms
+             * @default
+             */
+            output_terms: string;
+            /** Url */
+            url: string;
+        };
+        /** PackModelStatus */
+        PackModelStatus: {
+            /**
+             * Accepted
+             * @default false
+             */
+            accepted: boolean;
+            /**
+             * Disk Bytes
+             * @default 0
+             */
+            disk_bytes: number;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Label */
+            label: string;
+            licence: components["schemas"]["PackModelLicence"];
+            /** Repo */
+            repo: string;
+            /** Revision */
+            revision: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: {
+            /** Accelerator */
+            accelerator: string;
+            /** Base */
+            base: string;
+            /** Current */
+            current: boolean;
+            /**
+             * Download Bytes
+             * @default 0
+             */
+            download_bytes: number;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /**
+             * Installed At
+             * @default
+             */
+            installed_at: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Licences */
+            licences: string[];
+            /** Platform */
+            platform: string;
+            /** Requires */
+            requires: {
+                [key: string]: string;
+            };
+        };
+        /** PackTarget */
+        PackTarget: {
+            /**
+             * Accept Terms
+             * @default false
+             */
+            accept_terms?: boolean;
+            /**
+             * Bundle Id
+             * @default
+             */
+            bundle_id?: string;
+            /**
+             * Model Id
+             * @default
+             */
+            model_id?: string;
+            /**
+             * Runtime Id
+             * @default
+             */
+            runtime_id?: string;
+        };
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: {
+            /** Action */
+            action: {
+                [key: string]: string;
+            } | null;
+            /** Bundle */
+            bundle: string;
+            /** Capability */
+            capability: string;
+            /** Description */
+            description: string;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /** Label */
+            label: string;
+            /**
+             * Model Bytes
+             * @default 0
+             */
+            model_bytes: number;
+            /** Models */
+            models: string[];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Recommended
+             * @default false
+             */
+            recommended: boolean;
+            /**
+             * Runtime Bytes
+             * @default 0
+             */
+            runtime_bytes: number;
+            /** Runtimes */
+            runtimes: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "fits" | "warn" | "unavailable";
         };
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
@@ -3710,6 +3920,20 @@ export interface components {
             status: "ready" | "degraded";
             workers: components["schemas"]["WorkerHealthPayload"];
         };
+        /** SelectionRequest */
+        SelectionRequest: {
+            /** Bundles */
+            bundles?: string[];
+        };
+        /** SelectionSize */
+        SelectionSize: {
+            /** Model Bytes */
+            model_bytes: number;
+            /** Runtime Bytes */
+            runtime_bytes: number;
+            /** Total Bytes */
+            total_bytes: number;
+        };
         /** SendChatMessageRequest */
         SendChatMessageRequest: {
             /**
@@ -3868,6 +4092,71 @@ export interface components {
              * @default true
              */
             success: boolean;
+        };
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: {
+            /** Hardware */
+            hardware: {
+                [key: string]: unknown;
+            };
+            /** Hub Token Source */
+            hub_token_source: string;
+            /** Models */
+            models: components["schemas"]["SpeechModelStatus"][];
+            /**
+             * Vram Target Gb
+             * @default 24
+             */
+            vram_target_gb: number;
+        };
+        /** SpeechModelStatus */
+        SpeechModelStatus: {
+            /** Accepted Terms */
+            accepted_terms: boolean;
+            /** Capabilities */
+            capabilities: string[];
+            /** Commercial Use */
+            commercial_use: boolean;
+            /** Disk Bytes */
+            disk_bytes: number;
+            /** Environment */
+            environment: {
+                [key: string]: unknown;
+            };
+            /** Gated */
+            gated: boolean;
+            /** Id */
+            id: string;
+            /** Installed Revision */
+            installed_revision: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Licence */
+            licence: string;
+            /** Licence Url */
+            licence_url: string;
+            /** Output Terms */
+            output_terms: string;
+            /** Repo Id */
+            repo_id: string;
+            /** Requires Acceptance */
+            requires_acceptance: boolean;
+            /** Residency */
+            residency: string;
+            /** Revision */
+            revision: string;
+            /** Service */
+            service: string;
+            /** Size Gb */
+            size_gb: number;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Vram Gb */
+            vram_gb: number;
         };
         /** StateHashRequest */
         StateHashRequest: {

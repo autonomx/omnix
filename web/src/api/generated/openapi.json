@@ -7035,6 +7035,55 @@
         "title": "CanonicalInstrument",
         "type": "object"
       },
+      "CapabilitiesResponse": {
+        "properties": {
+          "capabilities": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CapabilityState"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "desktop": {
+            "title": "Desktop",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "desktop",
+          "capabilities"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
+      "CapabilityState": {
+        "properties": {
+          "bundle": {
+            "title": "Bundle",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "bundle",
+          "label",
+          "installed",
+          "running"
+        ],
+        "title": "CapabilityState",
+        "type": "object"
+      },
       "CashPreservingShadowPortfolio": {
         "additionalProperties": false,
         "properties": {
@@ -30041,6 +30090,62 @@
         "title": "MemoryUsageResponse",
         "type": "object"
       },
+      "ModelPacksStatus": {
+        "description": "The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.",
+        "properties": {
+          "bundles": {
+            "items": {
+              "$ref": "#/components/schemas/PackVerdict"
+            },
+            "title": "Bundles",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "hardware": {
+            "additionalProperties": true,
+            "title": "Hardware",
+            "type": "object"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/PackModelStatus"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "packs_folder": {
+            "default": "",
+            "title": "Packs Folder",
+            "type": "string"
+          },
+          "platform": {
+            "default": "",
+            "title": "Platform",
+            "type": "string"
+          },
+          "runtimes": {
+            "items": {
+              "$ref": "#/components/schemas/PackRuntimeStatus"
+            },
+            "title": "Runtimes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "platform",
+          "hardware",
+          "bundles",
+          "runtimes",
+          "models",
+          "packs_folder"
+        ],
+        "title": "ModelPacksStatus",
+        "type": "object"
+      },
       "ModelRef": {
         "additionalProperties": false,
         "properties": {
@@ -31856,6 +31961,307 @@
           "arms"
         ],
         "title": "OvernightShadowConfig",
+        "type": "object"
+      },
+      "PackModelLicence": {
+        "properties": {
+          "commercial_use": {
+            "title": "Commercial Use",
+            "type": "boolean"
+          },
+          "gated": {
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "output_terms": {
+            "default": "",
+            "title": "Output Terms",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "commercial_use",
+          "gated",
+          "output_terms"
+        ],
+        "title": "PackModelLicence",
+        "type": "object"
+      },
+      "PackModelStatus": {
+        "properties": {
+          "accepted": {
+            "default": false,
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "disk_bytes": {
+            "default": 0,
+            "title": "Disk Bytes",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "licence": {
+            "$ref": "#/components/schemas/PackModelLicence"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "repo",
+          "revision",
+          "size_bytes",
+          "installed",
+          "licence",
+          "disk_bytes",
+          "accepted"
+        ],
+        "title": "PackModelStatus",
+        "type": "object"
+      },
+      "PackRuntimeStatus": {
+        "properties": {
+          "accelerator": {
+            "title": "Accelerator",
+            "type": "string"
+          },
+          "base": {
+            "title": "Base",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "download_bytes": {
+            "default": 0,
+            "title": "Download Bytes",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "installed_at": {
+            "default": "",
+            "title": "Installed At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "licences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Licences",
+            "type": "array"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "requires": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Requires",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "platform",
+          "accelerator",
+          "base",
+          "installed",
+          "current",
+          "licences",
+          "requires",
+          "installed_at",
+          "download_bytes"
+        ],
+        "title": "PackRuntimeStatus",
+        "type": "object"
+      },
+      "PackTarget": {
+        "properties": {
+          "accept_terms": {
+            "default": false,
+            "title": "Accept Terms",
+            "type": "boolean"
+          },
+          "bundle_id": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "model_id": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "runtime_id": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Runtime Id",
+            "type": "string"
+          }
+        },
+        "title": "PackTarget",
+        "type": "object"
+      },
+      "PackVerdict": {
+        "description": "One bundle on this machine: what it installs and whether it can run here.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "bundle": {
+            "title": "Bundle",
+            "type": "string"
+          },
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "installed": {
+            "default": false,
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model_bytes": {
+            "default": 0,
+            "title": "Model Bytes",
+            "type": "integer"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "runtime_bytes": {
+            "default": 0,
+            "title": "Runtime Bytes",
+            "type": "integer"
+          },
+          "runtimes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Runtimes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "fits",
+              "warn",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle",
+          "label",
+          "description",
+          "capability",
+          "status",
+          "reasons",
+          "action",
+          "models",
+          "runtimes",
+          "installed",
+          "model_bytes",
+          "runtime_bytes",
+          "recommended",
+          "note"
+        ],
+        "title": "PackVerdict",
         "type": "object"
       },
       "PairedForecastMetrics": {
@@ -54697,6 +55103,43 @@
           "sequence"
         ],
         "title": "SelectedPriceEvent",
+        "type": "object"
+      },
+      "SelectionRequest": {
+        "properties": {
+          "bundles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Bundles",
+            "type": "array"
+          }
+        },
+        "title": "SelectionRequest",
+        "type": "object"
+      },
+      "SelectionSize": {
+        "properties": {
+          "model_bytes": {
+            "title": "Model Bytes",
+            "type": "integer"
+          },
+          "runtime_bytes": {
+            "title": "Runtime Bytes",
+            "type": "integer"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_bytes",
+          "runtime_bytes",
+          "total_bytes"
+        ],
+        "title": "SelectionSize",
         "type": "object"
       },
       "SelfReviewResult": {
@@ -83209,6 +83652,201 @@
           }
         },
         "summary": "Live Voice Execution Lane Status"
+      }
+    },
+    "/api/model-packs": {
+      "get": {
+        "description": "The setup screen: this machine, what it can run, and what is installed.",
+        "operationId": "model_packs_status_api_model_packs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelPacksStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Packs Status",
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/model-packs/capabilities": {
+      "get": {
+        "operationId": "model_packs_capabilities_api_model_packs_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Packs Capabilities",
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/model-packs/install": {
+      "post": {
+        "operationId": "model_packs_install_api_model_packs_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Install",
+        "x-omnix-permission": "models:admin"
+      }
+    },
+    "/api/model-packs/remove": {
+      "post": {
+        "operationId": "model_packs_remove_api_model_packs_remove_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Remove",
+        "x-omnix-permission": "models:admin"
+      }
+    },
+    "/api/model-packs/selection": {
+      "post": {
+        "operationId": "model_packs_selection_api_model_packs_selection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectionSize"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Selection",
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/model-packs/verify": {
+      "post": {
+        "operationId": "model_packs_verify_api_model_packs_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Verify",
+        "x-omnix-permission": "models:admin"
       }
     },
     "/api/model-residency": {

@@ -21,6 +21,7 @@ installer keeps its folders.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -114,6 +115,26 @@ def check_disk(folder: Path, needed: int) -> None:
     if free < needed + DISK_MARGIN_BYTES:
         raise PackError(f"not enough disk space: {needed / 1e9:.1f} GB needed, {free / 1e9:.1f} GB free on "
                         f"{folder.anchor or folder}")
+
+
+@contextlib.contextmanager
+def _pack_lock(path: Path, cancelled: Cancelled):
+    """One install of a pack at a time, across jobs and processes; waiting honours cancellation."""
+    from filelock import FileLock, Timeout
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = FileLock(str(path))
+    while True:
+        try:
+            lock.acquire(timeout=2)
+            break
+        except Timeout:
+            if cancelled():
+                raise PackCancelled("cancelled") from None
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 # Downloads ----------------------------------------------------------------------------------------------------
@@ -223,12 +244,20 @@ class RuntimeStore:
 
     def install(self, runtime_id: str, *, progress: Progress = lambda done, total, message: None,
                 cancelled: Cancelled = lambda: False, client: Any = None) -> dict[str, Any]:
-        """Download, check and unpack one runtime pack (its base must be installed first)."""
+        """Download, check and unpack one runtime pack (its base must be installed first).
+
+        Two jobs may want the same pack (two bundles share a Torch layer): the second waits for the first's lock,
+        then finds the pack current and returns."""
         pack = self.catalog.runtime(runtime_id)
         if pack.base and not self.installed(pack.base):
             raise PackError(f"{pack.label} stands on {self.catalog.runtime(pack.base).label}; install that first")
-        if self.current(runtime_id):
-            return self.manifest(runtime_id) or {}
+        with _pack_lock(self.staging / f"{runtime_id}.lock", cancelled):
+            if self.current(runtime_id):
+                return self.manifest(runtime_id) or {}
+            return self._install(pack, progress=progress, cancelled=cancelled, client=client)
+
+    def _install(self, pack: RuntimePack, *, progress: Progress, cancelled: Cancelled, client: Any) -> dict[str, Any]:
+        runtime_id = pack.id
         listed = self.files(runtime_id)
         total = listed.download_bytes
         check_disk(self.root, int(total * (1 + UNPACK_FACTOR)))
@@ -356,11 +385,18 @@ class ModelStore:
 
     def install(self, model_id: str, *, token: str | None = None, progress: Progress = lambda d, t, m: None,
                 cancelled: Cancelled = lambda: False, fetch: Any = None) -> dict[str, Any]:
-        from app.models.downloads import ModelDownloadError, download
-
         entry = self.entry(model_id)
         if entry.licence.gated and not token:
             raise PackError(f"{entry.label} is gated: accept its terms on Hugging Face and add a token")
+        with _pack_lock(self.markers / f"{entry.id}.lock", cancelled):
+            if self.installed(entry.id):
+                return {**(self.marker(entry.id) or {}), "snapshot": str(self.snapshot(entry.id))}
+            return self._install(entry, token=token, progress=progress, cancelled=cancelled, fetch=fetch)
+
+    def _install(self, entry: ModelEntry, *, token: str | None, progress: Progress, cancelled: Cancelled,
+                 fetch: Any) -> dict[str, Any]:
+        from app.models.downloads import ModelDownloadError, download
+
         missing = sum(item.size for item in entry.files)
         check_disk(self.cache, missing)
         done = 0

@@ -3681,6 +3681,10 @@ export interface components {
             /** Venue Symbol */
             venue_symbol: string;
         };
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
+        /** CapabilityState */
+        CapabilityState: core["schemas"]["CapabilityState"];
         /** CashPreservingShadowPortfolio */
         CashPreservingShadowPortfolio: {
             /** Cash */
@@ -6429,6 +6433,8 @@ export interface components {
          * @description Sidecar reachability and the runtime configuration that reaches it.
          */
         HermesStatusResponse: core["schemas"]["HermesStatusResponse"];
+        /** HubTokenWrite */
+        HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: core["schemas"]["IbkrSettingsPayload"];
         /** IbkrSettingsStatus */
@@ -7073,6 +7079,11 @@ export interface components {
             /** Squeeze Tail Score */
             squeeze_tail_score: string;
         };
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: core["schemas"]["ModelPacksStatus"];
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: core["schemas"]["ModelResidencyDiagnostics"];
         /** ModelResidencyRecord */
@@ -7594,6 +7605,19 @@ export interface components {
              */
             strategy_version: "1.0.0";
         };
+        /** PackModelLicence */
+        PackModelLicence: core["schemas"]["PackModelLicence"];
+        /** PackModelStatus */
+        PackModelStatus: core["schemas"]["PackModelStatus"];
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
+        /** PackTarget */
+        PackTarget: core["schemas"]["PackTarget"];
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: core["schemas"]["PackVerdict"];
         /** PairedForecastMetrics */
         PairedForecastMetrics: {
             /** Mean Delta Abs Error V4 Minus V3 */
@@ -10964,6 +10988,10 @@ export interface components {
              */
             trade_condition_codes: string[];
         };
+        /** SelectionRequest */
+        SelectionRequest: core["schemas"]["SelectionRequest"];
+        /** SelectionSize */
+        SelectionSize: core["schemas"]["SelectionSize"];
         /** SendChatMessageRequest */
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
@@ -11096,6 +11124,10 @@ export interface components {
             /** Source */
             source: components["schemas"]["PriceSource"] | components["schemas"]["ChangePercentSource"] | components["schemas"]["IndicatorSource-Output"] | components["schemas"]["TrendlineSource-Output"] | components["schemas"]["ScriptSource"];
         };
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
+        /** SpeechModelStatus */
+        SpeechModelStatus: core["schemas"]["SpeechModelStatus"];
         /** StartTradingResearchInput */
         StartTradingResearchInput: {
             /**

@@ -38,6 +38,7 @@ import { VoiceScriptEditor } from './VoiceScriptEditor';
 import { SpeechModelsPanel } from './SpeechModelsPanel';
 import { useSavedScript } from './useSavedScript';
 import { useTakePlayback } from './useTakePlayback';
+import { CapabilityNotice } from '../setup';
 import './VoiceStudioWorkspace.css';
 
 const DEFAULT_SCRIPT = 'dave: hello there\nbob: how do you do\nmarry: i am doing fine\ndave: now lets get to the topic\nmarry: agreed.';
@@ -398,6 +399,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
           <div><Title order={2}>Voice Studio</Title><Text size="sm">Write, cast and render speech; design, clone and manage voices; transcribe recordings.</Text></div>
           <TtsEnginePicker />
         </header>
+        <CapabilityNotice capability="tts" purpose="Voice Studio" />
 
         <div className={tool === 'speak' ? 'voice-studio-body with-inspector' : 'voice-studio-body'}>
           <nav className="voice-tool-rail" aria-label="Voice Studio tools">

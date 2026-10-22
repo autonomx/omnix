@@ -9,6 +9,7 @@ export const imageGenerationModule = defineModule({
   icon: '▧',
   backendModules: ['image'],
   apiPrefixes: [
+    '/api/model-packs',
     '/api/image-generation', '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/workers',
     '/api/agent', '/api/prompts',
   ],

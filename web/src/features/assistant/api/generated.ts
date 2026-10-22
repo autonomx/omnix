@@ -4093,6 +4093,10 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
+        /** CapabilityState */
+        CapabilityState: core["schemas"]["CapabilityState"];
         /** CausalHypothesis */
         CausalHypothesis: {
             /** Competing Hypotheses */
@@ -6320,6 +6324,8 @@ export interface components {
          * @description Sidecar reachability and the runtime configuration that reaches it.
          */
         HermesStatusResponse: core["schemas"]["HermesStatusResponse"];
+        /** HubTokenWrite */
+        HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: core["schemas"]["IbkrSettingsPayload"];
         /** IbkrSettingsStatus */
@@ -7652,6 +7658,11 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: core["schemas"]["ModelPacksStatus"];
         /** ModelRef */
         ModelRef: {
             /** Model Id */
@@ -7777,6 +7788,19 @@ export interface components {
              */
             status: "open" | "resolved" | "abandoned" | "superseded";
         };
+        /** PackModelLicence */
+        PackModelLicence: core["schemas"]["PackModelLicence"];
+        /** PackModelStatus */
+        PackModelStatus: core["schemas"]["PackModelStatus"];
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
+        /** PackTarget */
+        PackTarget: core["schemas"]["PackTarget"];
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: core["schemas"]["PackVerdict"];
         /** PasswordChangeRequest */
         PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
         /** PasswordChangeResponse */
@@ -8396,6 +8420,10 @@ export interface components {
         RuntimeDiagnostics: core["schemas"]["RuntimeDiagnostics"];
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: core["schemas"]["RuntimeStatusPayload"];
+        /** SelectionRequest */
+        SelectionRequest: core["schemas"]["SelectionRequest"];
+        /** SelectionSize */
+        SelectionSize: core["schemas"]["SelectionSize"];
         /**
          * SelfReviewResult
          * @description Structured implementer self-review bound to one exact final state.
@@ -8580,6 +8608,10 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
+        /** SpeechModelStatus */
+        SpeechModelStatus: core["schemas"]["SpeechModelStatus"];
         /** SpeechOnsetPolicy */
         SpeechOnsetPolicy: {
             /**

@@ -39,6 +39,7 @@ import {
   selectLatestImageAsset,
 } from './imageWorkspaceModel';
 import type { components } from './api/generated';
+import { CapabilityNotice } from '../setup';
 
 const DEFAULT_IMAGE_MODEL = 'flux_klein';
 const IMAGE_MODEL_QUERY_ROOT = ['image-generation', 'model-status'] as const;
@@ -279,7 +280,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
           <ImageReadinessPanel
             readiness={readiness}
             refreshing={providersQuery.isFetching || workersQuery.isFetching || settingsQuery.isFetching || modelStatusQuery.isFetching}
-            onRefresh={() => void refreshReadiness()}
+            onRefresh={() => void refreshReadiness()} notice={<CapabilityNotice capability="image" purpose="Image generation" />}
           />
           <ImageModelControl
             status={modelStatusQuery.data}

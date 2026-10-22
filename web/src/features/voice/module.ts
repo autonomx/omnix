@@ -9,6 +9,7 @@ export const voiceModule = defineModule({
   icon: '◍',
   backendModules: ['voice'],
   apiPrefixes: [
+    '/api/model-packs',
     '/api/voice', '/api/voice-cloning', '/api/voice-library', '/api/assets', '/api/jobs', '/api/providers',
     '/api/settings', '/api/tts', '/api/agent', '/api/prompts',
   ],

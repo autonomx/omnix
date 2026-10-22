@@ -11,6 +11,7 @@ export const chatbotModule = defineModule({
   icon: '▣',
   backendModules: ['agent-runtime', 'assistant-memory', 'assistant-tools', 'character-interactions', 'characters', 'chat', 'desktop-companion', 'live-voice', 'research'],
   apiPrefixes: [
+    '/api/model-packs',
     '/api/chat', '/api/assistant', '/api/characters', '/api/character-avatar-generations',
     '/api/character-avatar-visemes', '/api/character-live2d', '/api/image-generation', '/api/live', '/api/live-chat',
     '/api/live-call', '/api/tts', '/api/voice', '/api/voice-profiles', '/api/voice-library', '/api/assets',

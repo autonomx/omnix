@@ -16,17 +16,102 @@ instead of a bare 403 or 422.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
+from app.jobs.models import JobRecord
 from app.security.permissions import requires
 
 logger = logging.getLogger(__name__)
 
 # Bundle capability -> the gateway's service endpoint that serves it.
 _SERVICE_OF_CAPABILITY = {"live_stt": "stt", "stt_batch": "stt", "tts": "tts", "image": "image"}
+
+
+class PackVerdict(BaseModel):
+    """One bundle on this machine: what it installs and whether it can run here."""
+
+    bundle: str
+    label: str
+    description: str
+    capability: str
+    status: Literal["fits", "warn", "unavailable"]
+    reasons: list[str] = Field(default_factory=list)
+    action: dict[str, str] | None = None
+    models: list[str] = Field(default_factory=list)
+    runtimes: list[str] = Field(default_factory=list)
+    installed: bool = False
+    model_bytes: int = 0
+    runtime_bytes: int = 0
+    recommended: bool = False
+    note: str = ""
+
+
+class PackRuntimeStatus(BaseModel):
+    id: str
+    label: str
+    kind: str
+    platform: str
+    accelerator: str
+    base: str
+    licences: list[str] = Field(default_factory=list)
+    requires: dict[str, str] = Field(default_factory=dict)
+    installed: bool
+    current: bool
+    installed_at: str = ""
+    download_bytes: int = 0
+
+
+class PackModelLicence(BaseModel):
+    id: str
+    url: str
+    commercial_use: bool
+    gated: bool
+    output_terms: str = ""
+
+
+class PackModelStatus(BaseModel):
+    id: str
+    label: str
+    repo: str
+    revision: str
+    size_bytes: int
+    installed: bool
+    disk_bytes: int = 0
+    licence: PackModelLicence
+    accepted: bool = False
+
+
+class ModelPacksStatus(BaseModel):
+    """The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty."""
+
+    enabled: bool
+    platform: str = ""
+    hardware: dict[str, Any] = Field(default_factory=dict)
+    bundles: list[PackVerdict] = Field(default_factory=list)
+    runtimes: list[PackRuntimeStatus] = Field(default_factory=list)
+    models: list[PackModelStatus] = Field(default_factory=list)
+    packs_folder: str = ""
+
+
+class SelectionSize(BaseModel):
+    model_bytes: int
+    runtime_bytes: int
+    total_bytes: int
+
+
+class CapabilityState(BaseModel):
+    bundle: str
+    label: str
+    installed: bool
+    running: bool
+
+
+class CapabilitiesResponse(BaseModel):
+    desktop: bool
+    capabilities: dict[str, CapabilityState]
 
 
 class PackTarget(BaseModel):
@@ -116,7 +201,7 @@ def _submit(job_type: str, target: PackTarget) -> Any:
 def register_model_pack_routes(router: APIRouter, state: Any) -> None:
     del state
 
-    @router.get("/api/model-packs", openapi_extra=requires("settings:read"))
+    @router.get("/api/model-packs", response_model=ModelPacksStatus, openapi_extra=requires("settings:read"))
     def model_packs_status() -> dict[str, Any]:
         """The setup screen: this machine, what it can run, and what is installed."""
         from app.models.packs import desktop_mode
@@ -127,7 +212,7 @@ def register_model_pack_routes(router: APIRouter, state: Any) -> None:
 
         return {"enabled": True, **setup_status()}
 
-    @router.post("/api/model-packs/selection", openapi_extra=requires("settings:read"))
+    @router.post("/api/model-packs/selection", response_model=SelectionSize, openapi_extra=requires("settings:read"))
     def model_packs_selection(request: SelectionRequest) -> dict[str, Any]:
         _require_desktop()
         from app.models import catalog as model_catalog
@@ -146,21 +231,22 @@ def register_model_pack_routes(router: APIRouter, state: Any) -> None:
         )
         return selection_size(catalog, request.bundles, platform, installed, runtimes.download_bytes)
 
-    @router.get("/api/model-packs/capabilities", openapi_extra=requires("settings:read"))
+    @router.get("/api/model-packs/capabilities", response_model=CapabilitiesResponse,
+                openapi_extra=requires("settings:read"))
     def model_packs_capabilities() -> dict[str, Any]:
         return capabilities()
 
-    @router.post("/api/model-packs/install", openapi_extra=requires("models:admin"))
+    @router.post("/api/model-packs/install", response_model=JobRecord, openapi_extra=requires("models:admin"))
     def model_packs_install(target: PackTarget) -> Any:
         _require_desktop()
         return _submit("models.install", target)
 
-    @router.post("/api/model-packs/remove", openapi_extra=requires("models:admin"))
+    @router.post("/api/model-packs/remove", response_model=JobRecord, openapi_extra=requires("models:admin"))
     def model_packs_remove(target: PackTarget) -> Any:
         _require_desktop()
         return _submit("models.remove", target)
 
-    @router.post("/api/model-packs/verify", openapi_extra=requires("models:admin"))
+    @router.post("/api/model-packs/verify", response_model=JobRecord, openapi_extra=requires("models:admin"))
     def model_packs_verify(target: PackTarget) -> Any:
         _require_desktop()
         return _submit("models.verify", target)

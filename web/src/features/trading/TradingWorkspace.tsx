@@ -24,7 +24,7 @@ import { PaperOrderNotificationsWatch } from './PaperOrderNotificationsWatch';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { TradingSessionTabs } from './TradingSessionTabs';
 import { TradingDesktopTitleBar } from './TradingDesktopTitleBar';
-import { desktopBridge } from '../../shared/desktopBridge';
+import { desktopBridge, hasFramelessWindow } from '../../shared/desktopBridge';
 import { openTradingWindow, useTradingWindowPresence } from './windowPresence';
 import { tradingApi } from './tradingApi';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
@@ -127,7 +127,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useInstalledAppCommandKeys();
   const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
-  const desktop = desktopBridge();
+  // The session tabs move into the title bar only in a frameless desktop window (MarketPulse W-4).
+  const desktop = hasFramelessWindow() ? desktopBridge() : null;
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);

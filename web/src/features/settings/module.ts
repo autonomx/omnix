@@ -27,8 +27,9 @@ export const settingsModule = defineModule({
     'PUT /api/trading/execution/providers/alpaca-iex/credentials',
   ],
   apiPrefixes: [
+    '/api/model-packs',
     '/api/settings', '/api/providers', '/api/models', '/api/runtime', '/api/assistant', '/api/hermes',
-    '/api/diagnostics', '/api/workers', '/api/trading/market-data', '/api/trading/execution/providers/alpaca-iex/credentials',
+    '/api/diagnostics', '/api/workers', '/api/jobs', '/api/trading/market-data', '/api/trading/execution/providers/alpaca-iex/credentials',
   ],
   platform: true,
   loadWorkspace: () => import('./SettingsWorkspace').then((module) => module.SettingsWorkspace),
