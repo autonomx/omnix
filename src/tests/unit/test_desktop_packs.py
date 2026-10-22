@@ -347,6 +347,33 @@ def test_an_update_replaces_the_pack_only_once_its_services_have_stopped(pack_se
     assert not list(store.runtimes.glob(".*"))
 
 
+def test_an_overlay_never_runs_on_a_torch_layer_it_was_not_built_for(pack_setup) -> None:
+    store, client, repo = pack_setup
+    store.install("torch-win", client=client)
+    store.install("tts-win", client=client)
+    assert store.runnable("tts-win") and store.current("tts-win")
+    # An app update ships a new Torch layer; the user updates it (another bundle's download).
+    listed = json.loads((repo / "torch.json").read_text())
+    listed["lock_sha256"] = "e" * 64
+    (repo / "torch.json").write_text(json.dumps(listed))
+    store.install("torch-win", client=client)
+    # The overlay's own lock is unchanged, but it was built on the old layer: it is out of date and does not run.
+    assert not store.current("tts-win") and not store.runnable("tts-win")
+    store.install("tts-win", client=client)
+    assert store.current("tts-win") and store.runnable("tts-win")
+
+
+def test_bytecode_lands_in_the_pack_even_with_a_cache_prefix(pack_setup, monkeypatch, tmp_path: Path) -> None:
+    """The job worker runs with PYTHONPYCACHEPREFIX; the pack's bytecode must still go inside the pack."""
+    import sys
+
+    store, client, _ = pack_setup
+    monkeypatch.setattr(sys, "pycache_prefix", str(tmp_path / "prefix"))
+    store.install("torch-win", client=client)
+    assert list((store.site("torch-win") / "torchlike" / "__pycache__").glob("*.pyc"))
+    assert not (tmp_path / "prefix").exists()
+
+
 def test_a_tampered_bundled_wheel_is_refused(pack_setup) -> None:
     store, client, repo = pack_setup
     store.install("torch-win", client=client)

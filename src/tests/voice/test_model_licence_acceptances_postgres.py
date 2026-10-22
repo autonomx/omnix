@@ -15,9 +15,9 @@ pytestmark = [
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 
 
-def _entry(model_id: str, revision: str = REVISION) -> SimpleNamespace:
+def _entry(model_id: str, revision: str = REVISION, licence: str = "Apache-2.0") -> SimpleNamespace:
     return SimpleNamespace(id=model_id, revision=revision,
-                           licence=SimpleNamespace(id="Apache-2.0", url="https://example.com/licence"))
+                           licence=SimpleNamespace(id=licence, url="https://example.com/licence"))
 
 
 @pytest.fixture
@@ -69,6 +69,9 @@ def test_an_acceptance_counts_in_its_workspace_and_revision_only(two_workspaces)
         # A catalog update that pins another revision needs a new acceptance.
         assert not licence_acceptances.accepted("tts-model", "f" * 40, "Apache-2.0")
         assert licence_acceptances.accepted_models() == {"tts-model": {(REVISION, "Apache-2.0")}}
+        # The catalog corrects the licence at the same revision: the new acceptance is recorded (migration 0169).
+        assert licence_acceptances.record([_entry("tts-model", licence="CC-BY-NC-4.0")]) == 1
+        assert licence_acceptances.accepted("tts-model", REVISION, "CC-BY-NC-4.0")
     finally:
         pop_tenant(token)
     token = push_tenant(second)

@@ -113,12 +113,13 @@ def _hardware_facts() -> dict[str, Any]:
 
 def _refuse_unavailable(bundle_id: str) -> None:
     """A bundle this computer cannot run (no NVIDIA GPU, an old driver, too little disk) is not queued at all."""
-    from app.models.verdicts import Installed, bundle_verdict
+    from app.models.verdicts import bundle_verdict
 
     catalog = _catalog()
     store = packs.runtime_store(catalog)
+    # What is installed already does not count toward the disk space the download needs.
     verdict = bundle_verdict(catalog.bundles[bundle_id], catalog, {"platform": _platform(), **_hardware_facts()},
-                             Installed(runtimes=frozenset(), models=frozenset()), store.download_bytes)
+                             _installed_set(catalog), store.download_bytes)
     if verdict.status == "unavailable":
         raise ModelInstallError(f"{verdict.label} cannot run on this computer: {' '.join(verdict.reasons)}")
 
@@ -370,22 +371,30 @@ def execute(job: Any, *, job_store: Any = None) -> dict[str, Any]:
             "output_refs": [{"type": "model_pack", "target": planned["id"], "installed": installed}]}
 
 
+def _installed_set(catalog: Catalog) -> Any:
+    from app.models.verdicts import Installed
+
+    platform = _platform()
+    runtime_store, model_store = packs.runtime_store(catalog), packs.model_store(catalog)
+    return Installed(
+        runtimes=frozenset(pack.id for pack in catalog.runtimes.values()
+                           if pack.platform == platform and runtime_store.current(pack.id)),
+        models=frozenset(entry.id for entry in catalog.models.values()
+                         if entry.pinned and model_store.installed(entry.id)),
+    )
+
+
 def setup_status(*, include_hardware: bool = True) -> dict[str, Any]:
     """What the setup screen and Settings → Models show: hardware, bundles with verdicts, runtimes, models."""
     from app.models.hardware import probe
-    from app.models.verdicts import Installed, verdicts
+    from app.models.verdicts import verdicts
 
     catalog = _catalog()
     platform = _platform()
     runtime_store = packs.runtime_store(catalog)
     model_store = packs.model_store(catalog)
     facts = probe(packs_folder=runtime_store.root) if include_hardware else {"platform": platform}
-    installed = Installed(
-        runtimes=frozenset(pack.id for pack in catalog.runtimes.values()
-                           if pack.platform == platform and runtime_store.current(pack.id)),
-        models=frozenset(entry.id for entry in catalog.models.values()
-                         if entry.pinned and model_store.installed(entry.id)),
-    )
+    installed = _installed_set(catalog)
     found = verdicts(catalog, facts, installed, runtime_store.download_bytes)
     model_ids = sorted({catalog.canonical_id(model_id) for bundle in catalog.bundles.values()
                         for variant in bundle.variants if variant.platform == platform for model_id in variant.models})

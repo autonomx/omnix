@@ -66,7 +66,7 @@ def test_a_model_service_gets_only_what_it_needs(tmp_path) -> None:
     assert env["OMNIX_DATABASE_URL"] == "postgresql://omnix_app:app-pw@127.0.0.1:43111/omnix"
     assert env["OMNIX_TTS_PORT"] == "43122" and env["OMNIX_LAUNCHER_KILL_PORT"] == "0"
     assert env["HF_HUB_OFFLINE"] == "1" and env["OMNIX_TTS_MODEL_DIR"].endswith("snap")
-    assert "PYTHONPYCACHEPREFIX" not in env  # it reads the bytecode compiled into its packs at install
+    assert "PYTHONPYCACHEPREFIX" not in env and env["PYTHONDONTWRITEBYTECODE"] == "1"  # it only reads bytecode
     assert env["OMNIX_DESKTOP_SITE_DIRS"].split(";" if sys.platform == "win32" else ":")[0].endswith(
         "tts-windows-x64" + ("\\" if sys.platform == "win32" else "/") + "site")
     for leaked in ("OMNIX_RUN_TOKEN_KEY", "OMNIX_MIGRATION_DATABASE_URL", "OMNIX_AGENT_DEFAULT_REPOSITORY", "PYTHONPATH"):
@@ -197,7 +197,7 @@ def services(tmp_path, monkeypatch):
                             stop_process=lambda process: process.terminate(), clock=lambda: state.now)
     installed: dict[str, Any] = {"runtimes": set(), "models": set()}
     manager.runtimes = SimpleNamespace(current=lambda rid: rid in installed["runtimes"],
-                                       installed=lambda rid: rid in installed["runtimes"], updating=lambda rid: False,
+                                       runnable=lambda rid: rid in installed["runtimes"],
                                        site=lambda rid: config.packs / "runtimes" / rid / "site")
     manager.models = SimpleNamespace(installed=lambda mid: mid in installed["models"],
                                      snapshot=lambda mid: config.packs / "models" / mid)
@@ -321,7 +321,7 @@ def test_removing_the_bundle_stops_its_service(services) -> None:
 def test_plans_use_the_measured_requirement(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
     config = _config(tmp_path)
-    runtimes = SimpleNamespace(current=lambda rid: True, installed=lambda rid: True, updating=lambda rid: False,
+    runtimes = SimpleNamespace(current=lambda rid: True, runnable=lambda rid: True,
                                site=lambda rid: config.packs / rid)
     models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
     found = plans(config, CATALOG, runtimes, models)
@@ -347,7 +347,7 @@ def test_a_service_shared_by_two_bundles_needs_the_other_bundles_models_too(tmp_
         "models": {name: {"repo": f"org/{name}", "revision": REVISION, "service": "stt",
                           "files": {"m": {"sha256": "a" * 64, "size": 2 * 2**30}}} for name in ("live", "batch")},
     })
-    runtimes = SimpleNamespace(current=lambda rid: True, installed=lambda rid: True, updating=lambda rid: False,
+    runtimes = SimpleNamespace(current=lambda rid: True, runnable=lambda rid: True,
                                site=lambda rid: config.packs / rid)
     models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
     found = plans(config, catalog, runtimes, models)
@@ -384,8 +384,8 @@ def test_an_out_of_date_pack_keeps_running_until_its_update_replaces_it(tmp_path
     monkeypatch.setattr(model_catalog, "current_platform", lambda: "windows-x64")
     config = _config(tmp_path)
     updating: set[str] = set()
-    runtimes = SimpleNamespace(current=lambda rid: False, installed=lambda rid: True,
-                               updating=lambda rid: rid in updating, site=lambda rid: config.packs / rid)
+    runtimes = SimpleNamespace(current=lambda rid: False, runnable=lambda rid: rid not in updating,
+                               site=lambda rid: config.packs / rid)
     models = SimpleNamespace(installed=lambda mid: True, snapshot=lambda mid: config.packs / "m" / mid)
     assert "tts" in plans(config, CATALOG, runtimes, models)  # an app update shipped a newer lock
     updating.add("torch-win")  # the new Torch layer is unpacked and about to replace the old one
@@ -432,3 +432,25 @@ def test_a_service_still_loading_its_models_is_not_healthy_yet(monkeypatch) -> N
 
     monkeypatch.setattr(services_module.urllib.request, "urlopen", urlopen)
     assert [services_module._healthy(47911) for _ in range(3)] == [False, True, True]
+
+
+def test_a_service_that_never_gets_ready_stops_holding_the_others_back(services, monkeypatch) -> None:
+    from app.desktop import services as services_module
+
+    manager, state = services
+    two = {name: services_module.ServicePlan(name, name, f"{name}-win", [], [f"{name}-bundle"], needed_bytes=2**30)
+           for name in ("tts", "stt")}
+    monkeypatch.setattr(services_module, "plans", lambda *args, **kwargs: two)
+    state.healthy = False  # TTS lives on with its model failed to load ("ok": false)
+    manager.reconcile()
+    assert [command[-1] for command, _, _ in state.launched] == ["tts"] and manager.states["stt"].state == "waiting"
+    monkeypatch.setattr(services_module, "LOAD_LIMIT_SECONDS", 0.0)
+    manager.reconcile()
+    assert [command[-1] for command, _, _ in state.launched] == ["tts", "stt"]
+
+
+def test_the_image_service_preloads_so_its_memory_is_checked_before_it_loads(tmp_path) -> None:
+    config = _config(tmp_path)
+    sites = [config.packs / "runtimes" / "image-windows-x64" / "site"]
+    env = service_environment(config, "image", service_token="svc-token", site_dirs=sites, inherited=_inherited())
+    assert env["OMNIX_IMAGE_PRELOAD"] == "1" and env["OMNIX_IMAGE_PORT"] == "43123"

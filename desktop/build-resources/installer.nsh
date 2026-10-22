@@ -8,7 +8,7 @@
       ClearErrors
       FileOpen $0 "$LOCALAPPDATA\OmnixDesktop\packs-location.txt" r
       ${ifNot} ${Errors}
-        FileRead $0 $1
+        FileReadUTF16LE $0 $1
         FileClose $0
         StrCpy $2 $1 "" -11
         ${if} $2 == "\OmnixPacks"

@@ -26,6 +26,7 @@ import hashlib
 import json
 import logging
 import shutil
+import sys
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -126,11 +127,23 @@ def _compile_bytecode(site: Path, *, final: Path) -> None:
 
     A service's first run otherwise compiles every module it imports, and on Windows a speech service whose first
     run did so stopped accepting connections (its first live call never connected; every later start worked). The
-    paths in tracebacks name the folder the pack is renamed to (``final``), not the staging folder."""
-    import compileall
+    paths in tracebacks name the folder the pack is renamed to (``final``), not the staging folder.
 
-    if site.is_dir():
-        compileall.compile_dir(str(site), ddir=str(final), quiet=2, workers=1)
+    Each file's output is named explicitly: ``compileall`` would follow the job worker's ``PYTHONPYCACHEPREFIX`` and
+    write into the shared cache folder, where no service looks."""
+    import py_compile
+
+    if not site.is_dir():
+        return
+    tag = sys.implementation.cache_tag
+    for source in site.rglob("*.py"):
+        relative = source.relative_to(site)
+        target = source.parent / "__pycache__" / f"{source.stem}.{tag}.pyc"
+        try:
+            py_compile.compile(str(source), cfile=str(target), dfile=str(final / relative), doraise=True,
+                               invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
+        except (py_compile.PyCompileError, OSError, ValueError):
+            continue  # a file that does not compile (a template, Python 2 code) is compiled, or not, on import
 
 
 def check_disk(folder: Path, needed: int) -> None:
@@ -280,9 +293,26 @@ class RuntimeStore:
                     logger.info("Could not delete %s yet", leftover)
 
     def current(self, runtime_id: str) -> bool:
-        """Installed from the file list this build ships (an app update can change it)."""
+        """Installed from the file list this build ships (an app update can change it), on the base it ships."""
         manifest = self.manifest(runtime_id)
-        return manifest is not None and manifest.get("lock_sha256") == self.files(runtime_id).lock_sha256
+        if manifest is None or manifest.get("lock_sha256") != self.files(runtime_id).lock_sha256:
+            return False
+        base = self.catalog.runtime(runtime_id).base
+        return not base or manifest.get("base_lock_sha256") == self.files(base).lock_sha256
+
+    def runnable(self, runtime_id: str) -> bool:
+        """Installed, not being replaced, and (an overlay) built for the base that is installed now.
+
+        An out-of-date pack keeps running until its update is installed, but an overlay never runs on a Torch layer
+        it was not built for: torchvision and NeMo are bound to the Torch they were locked with."""
+        manifest = self.manifest(runtime_id)
+        if manifest is None or self.updating(runtime_id):
+            return False
+        base = self.catalog.runtime(runtime_id).base
+        if not base:
+            return True
+        installed_base = self.manifest(base)
+        return installed_base is not None and manifest.get("base_lock_sha256") == installed_base.get("lock_sha256")
 
     def download_bytes(self, runtime_id: str) -> int:
         return self.files(runtime_id).download_bytes
@@ -355,6 +385,8 @@ class RuntimeStore:
             "runtime": pack.id,
             "platform": pack.platform,
             "base": pack.base,
+            # The base this overlay was built on: an overlay never runs on another (``runnable``).
+            "base_lock_sha256": (self.manifest(pack.base) or {}).get("lock_sha256", "") if pack.base else "",
             "lock": listed.lock,
             "lock_sha256": listed.lock_sha256,
             "wheels": [{"filename": item.filename, "sha256": item.sha256} for item in listed.files],
@@ -527,11 +559,12 @@ class ModelStore:
 
     def remove(self, model_id: str) -> None:
         entry = self.entry(model_id)
-        (self.markers / f"{entry.id}.json").unlink(missing_ok=True)
         others = [item for item in self.catalog.models.values()
                   if item.id != entry.id and item.repo == entry.repo and self.installed(item.id)]
         if not others:
             _remove_tree(self.cache / ("models--" + entry.repo.replace("/", "--")))
+        # Last: a removal that failed part-way still shows as installed, so its retry finishes it.
+        (self.markers / f"{entry.id}.json").unlink(missing_ok=True)
 
 
 # The installed set --------------------------------------------------------------------------------------------

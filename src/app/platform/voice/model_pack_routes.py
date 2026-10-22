@@ -186,7 +186,7 @@ def capabilities() -> dict[str, Any]:
             else:
                 runtimes, models = packs.runtime_store(catalog), packs.model_store(catalog)
                 installed = all(models.installed(model_id) for model_id in variant.models) and all(
-                    runtimes.installed(pack.id) for pack in catalog.runtime_closure(variant.runtimes))
+                    runtimes.runnable(pack.id) for pack in catalog.runtime_closure(variant.runtimes))
         found[bundle.capability] = {"bundle": bundle.id, "label": bundle.label, "installed": installed,
                                     "running": answers.get(service, False)}
     return {"desktop": packs.desktop_mode(), "capabilities": found}

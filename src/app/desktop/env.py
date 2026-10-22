@@ -240,9 +240,10 @@ def service_environment(config: LaunchConfig, service: str, *, service_token: st
         raise ValueError("a model service needs the service token")
     env = _system(source, config)
     env.update(_common(config))
-    # A service reads the bytecode its packs were installed with (``__pycache__`` inside the pack), never compiling
-    # into the shared cache folder on its first run (see packs._compile_bytecode).
+    # A service only reads bytecode: its packs' was compiled at install (packs._compile_bytecode), the app's and the
+    # standard library's at staging. A service compiling on its first run stopped accepting connections on Windows.
     env.pop("PYTHONPYCACHEPREFIX", None)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     port = str(config.port(service))
     env.update({
         "OMNIX_SERVICE_TOKEN": service_token,
@@ -264,7 +265,10 @@ def service_environment(config: LaunchConfig, service: str, *, service_token: st
         if sys.platform == "darwin":
             env["OMNIX_TTS_DEVICE"] = "mps"
     elif service == "image":
+        # Preloaded at start, so the supervisor's memory check and one-at-a-time loading cover FLUX's 18 GB (the
+        # service answers only once it is loaded); loading on the first request would bypass both.
         env.update({"OMNIX_IMAGE_PORT": port, "OMNIX_IMAGE_ENABLED": "1", "OMNIX_IMAGE_SERVICE_MODE": "1",
+                    "OMNIX_IMAGE_PRELOAD": "1",
                     "OMNIX_IMAGE_URL": ""})
     else:
         raise ValueError(f"unknown model service {service!r}")

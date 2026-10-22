@@ -49,6 +49,9 @@ HEADROOM_BASE_BYTES = 2 * 2**30
 # A started service's memory is reserved for this long (or until it is healthy, if later): its commit charge
 # grows while it loads, so the next service's headroom check must not count that memory as free.
 SETTLE_SECONDS = 90.0
+# A service still not ready after this long (its model failed to load, but the process lives on) no longer holds the
+# others back; its memory, if any, shows in the commit figure by then.
+LOAD_LIMIT_SECONDS = 600.0
 
 
 @dataclass
@@ -131,8 +134,8 @@ def plans(config: LaunchConfig, catalog: Catalog, runtimes: RuntimeStore, models
         if not all(models.installed(model_id) for model_id in variant.models):
             continue
         # An installed pack runs even when an app update shipped a newer one (the user downloads it when they
-        # choose); it stops only while that newer version replaces it.
-        if not all(runtimes.installed(pack.id) and not runtimes.updating(pack.id) for pack in closure):
+        # choose); it stops while that newer version replaces it, and an overlay never runs on another Torch layer.
+        if not all(runtimes.runnable(pack.id) for pack in closure):
             continue
         service_pack = next(pack for pack in reversed(closure) if pack.service)
         service = service_pack.service
@@ -228,10 +231,10 @@ class ModelServices:
         return "|".join([plan.runtime, *map(str, plan.site_dirs), str(plan.model_dir or ""), *sorted(plan.bundles)])
 
     def _loading(self) -> list[_Running]:
-        """Services still loading: started, and not yet both healthy and settled."""
+        """Services still loading: started less than LOAD_LIMIT_SECONDS ago, and not yet both healthy and settled."""
         now = time.monotonic()
-        return [item for name, item in self.running.items()
-                if self.states.get(name, ServiceState()).state == "starting" or now - item.started < SETTLE_SECONDS]
+        return [item for name, item in self.running.items() if now - item.started < LOAD_LIMIT_SECONDS
+                and (self.states.get(name, ServiceState()).state == "starting" or now - item.started < SETTLE_SECONDS)]
 
     def _start(self, plan: ServicePlan, restarts: int = 0) -> None:
         port = self.config.port(plan.service)

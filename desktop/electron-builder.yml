@@ -17,7 +17,9 @@ extraResources:
     to: runtime
     filter:
       - "**/*"
-      - "!**/__pycache__/**"
+      # The model services' bytecode ships (app source, standard library); the gateway's packages compile into its
+      # own cache folder.
+      - "!python/**/site-packages/**/__pycache__/**"
       - "!size-report.json"
   # The publisher's Google OAuth Desktop client, when the build has one.
   - from: config

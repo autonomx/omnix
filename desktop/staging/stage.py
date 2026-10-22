@@ -159,6 +159,17 @@ def _safe_extract_tar(archive: Path, destination: Path, strip: str) -> None:
                     target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def compile_bytecode(target_platform: str, folder: Path, *, skip: str | None = None) -> None:
+    """Ships ``folder``'s bytecode, compiled by the staged interpreter: model services never write bytecode (they run
+    with PYTHONDONTWRITEBYTECODE, and on macOS the install folder is a signed bundle), so what they import must be
+    compiled already. Unchecked-hash bytecode stays valid whatever timestamps the installer gives the files."""
+    interpreter, _, _ = python_paths(target_platform)
+    command = [str(interpreter), "-I", "-m", "compileall", "-q", "-j", "0", "--invalidation-mode", "unchecked-hash"]
+    if skip:
+        command += ["-x", skip]
+    subprocess.run([*command, str(folder)], check=True)
+
+
 def python_paths(target_platform: str) -> tuple[Path, Path, Path]:
     """(interpreter, site-packages, import-roots file) of the staged Python."""
     python_dir = STAGE / "python"
@@ -183,6 +194,9 @@ def stage_python(target_platform: str) -> None:
                     "--disable-pip-version-check", "--no-cache-dir", "-r", str(lock)], check=True)
     # Written last: on Windows a ._pth file isolates the interpreter, which changes pip's own imports.
     roots.write_text(WINDOWS_PTH if target_platform == "windows-x64" else MACOS_PTH, encoding="utf-8", newline="\n")
+    # The standard library the model services import; the gateway's site-packages compile on its own first run.
+    stdlib = interpreter.parent / "Lib" if target_platform == "windows-x64" else interpreter.parent.parent / "lib" / "python3.11"
+    compile_bytecode(target_platform, stdlib, skip="site-packages")
     print(f"python staged: {PINS['python']['version']} ({target_platform})")
 
 
@@ -310,6 +324,7 @@ def stage_app(target_platform: str) -> None:
             raise StageError(f"{relative} is tracked but missing from the working tree")
         (app_dir / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, app_dir / relative)
+    compile_bytecode(target_platform, app_dir / "src")
     index = ROOT / "resources" / "voice_clones" / "voice_clones.json"
     if index.is_file():
         voices = json.loads(index.read_text(encoding="utf-8"))
@@ -349,8 +364,10 @@ def _size(path: Path) -> int:
 
 def check(target_platform: str) -> None:
     interpreter, _, _ = python_paths(target_platform)
-    longest = max((path for path in STAGE.rglob("*") if "__pycache__" not in path.parts),
-                  key=lambda path: len(str(path.relative_to(STAGE))))
+    # The app's and the standard library's bytecode ship too, so their paths count; site-packages' does not ship.
+    shipped = (path for path in STAGE.rglob("*")
+               if not ("__pycache__" in path.parts and "site-packages" in path.parts))
+    longest = max(shipped, key=lambda path: len(str(path.relative_to(STAGE))))
     if len(str(longest.relative_to(STAGE))) > MAX_RELATIVE_PATH:
         raise StageError(f"{longest.relative_to(STAGE)} is longer than {MAX_RELATIVE_PATH} characters")
     script = (

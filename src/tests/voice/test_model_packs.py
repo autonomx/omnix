@@ -169,6 +169,18 @@ def test_a_bundle_this_computer_cannot_run_is_not_queued(desktop) -> None:
     assert desktop.recorded == []  # nothing was accepted either
 
 
+def test_the_disk_check_counts_only_what_is_still_to_download(desktop) -> None:
+    desktop.facts = {**desktop.facts, "disk": {"free_bytes": 10}}
+    token = _as("owner")
+    try:
+        with pytest.raises(ModelInstallError, match="Not enough disk space"):
+            model_packs.check_submission("models.install", {"bundle_id": "voice-output", "accept_terms": True})
+        desktop.models.have.add("tts-model")  # an update of the runtime only: the model is on disk already
+        model_packs.check_submission("models.install", {"bundle_id": "voice-output", "accept_terms": True})
+    finally:
+        pop_tenant(token)
+
+
 def test_a_model_without_a_desktop_runtime_is_refused(desktop) -> None:
     token = _as("owner")
     try:

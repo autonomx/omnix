@@ -37,7 +37,7 @@ def record(models: Iterable[Any]) -> int:
             work.connection.execute(
                 "INSERT INTO omnix_model_licence_acceptances "
                 "(workspace_id, user_id, model_id, revision, licence_id, licence_url) VALUES (%s, %s, %s, %s, %s, %s) "
-                "ON CONFLICT (workspace_id, model_id, revision, user_id) DO NOTHING",
+                "ON CONFLICT (workspace_id, model_id, revision, licence_id, user_id) DO NOTHING",
                 row,
             )
         work.commit()

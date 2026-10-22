@@ -858,9 +858,12 @@ driver 617.42). The Mac items need the owner's Mac. Signing and the release feed
 
 ### Sizes (DT-3.4)
 
-- **Staged runtime:** 519 MiB. That is python 280, PostgreSQL 68, ffmpeg (LGPL, BtbN 8.1.3) 128, app 36 and web 7.
-- **Unsigned NSIS installer:** 236.8 MiB, and 838.5 MiB installed. MarketPulse's reduced mirror is 161 MB and
-  571 MB.
+- **Staged runtime:** 557 MiB. That is python 287, PostgreSQL 68, ffmpeg (LGPL, BtbN 8.1.3) 128, app 68 (36 of
+  source, the rest its shipped bytecode) and web 7; the gateway's site-packages bytecode is staged but not shipped.
+- **Unsigned NSIS installer:** 253.2 MiB, and 882.4 MiB installed (236.8 and 838.5 before the app and standard
+  library shipped their bytecode). MarketPulse's reduced mirror is 161 MB and 571 MB.
+- **Pack install time:** compiling a pack's bytecode at install adds about two minutes to the Torch layer and the
+  overlays (6.2 min for voice input and output, downloads included, against 4.2 before).
 - **Start time:** the first start (initdb plus every migration) reaches the setup screen in about 25 s, and a later
   start reaches chat in about 15 s.
 
@@ -870,11 +873,11 @@ driver 617.42). The Mac items need the owner's Mac. Signing and the release feed
 |-------|--------|-------|
 | 0 | Windows: passed. Mac: open | Results above. |
 | 1 | Passed, one item dropped | Voice Studio's list is unchanged apart from the pins. Catalog, lock, download, resume and tamper tests pass. The DT-1.1 migration of Voice Studio's folder installs into the Hugging Face cache was not built (see Deviations). |
-| 2 | Passed | Members and guests are refused at submission, through the routes and `/api/jobs` alike. The runtimes the submitter may change are written into the stored job, so an admin's job never installs or removes a runtime when it runs, even after an app update or a removal changed what it would touch. A bundle the verdicts call unavailable is refused at submission. The acceptance table's RLS and per-revision tests ran on the scratch PostgreSQL. A worker killed mid-unpack leaves no pack, and the job's retry after an expired lease completes it. |
-| 3 | Passed on this PC | Clean-account check pending on a second machine. Covered on this PC: the headless supervisor from a fresh data folder, on ports and sandbox names of its own; the service boot isolation test; busy ports reported, never killed; graceful stop, then restarts after 30, 60 and 120 s; models load one at a time, with a loading service's memory reserved. The gateway cannot import Torch: its staged lock pins none, which a test checks. Not tested: STT decoding a non-WAV upload and an audiobook export with the bundled ffmpeg (only the environment is asserted). |
+| 2 | Passed | Members and guests are refused at submission, through the routes and `/api/jobs` alike. The runtimes the submitter may change are written into the stored job, so an admin's job never installs or removes a runtime when it runs, even after an app update or a removal changed what it would touch. A bundle the verdicts call unavailable is refused at submission. An acceptance is per model, revision and licence (migration 0169 widened 0168's key); its RLS and acceptance tests ran on the scratch PostgreSQL. A worker killed mid-unpack leaves no pack, and the job's retry after an expired lease completes it. |
+| 3 | Passed on this PC | Clean-account check pending on a second machine. Covered on this PC: the headless supervisor from a fresh data folder, on ports and sandbox names of its own; the service boot isolation test; busy ports reported, never killed; graceful stop, then restarts after 30, 60 and 120 s; models load one at a time (a service not ready after 10 minutes stops holding the others), with a loading service's memory reserved, and the image service preloads so FLUX is checked too. The gateway cannot import Torch: its staged lock pins none, which a test checks. Not tested: STT decoding a non-WAV upload and an audiobook export with the bundled ffmpeg (only the environment is asserted). |
 | 4 | Passed | The 10-test Electron smoke suite covers splash, setup screen, first password, mic audio-only, links, the model pack API, crash reload, tray, clean quit and the installer's `--quit`. 12 shell unit tests also pass. |
-| 5 | REALMODELS_RESULT | Vitest covers verdicts, presets, bundles and licence gating. GPU items are greyed with the reason when there is no NVIDIA GPU. `desktop/tests/realmodels.spec.ts` runs the gate in Electron. |
-| 6 | Built, not released | The NSIS installer builds unsigned. A runtime update keeps the old pack running; the supervisor stops its services only while the new one replaces it (tested in the pack store and the planner). Signing (DT-6.2) is wired for Azure Artifact Signing or a certificate, and needs Q-5. The updater reads a public feed (Q-4). The clean-machine install and upgrade checks follow signing. |
+| 5 | Passed on this PC (2026-10-22) | `desktop/tests/realmodels.spec.ts` on a fresh data folder: the setup screen's recommended preset (narrowed to voice input and output, so FLUX is not loaded beside them) downloads the runtimes (2.9 GB), installs the bundles and starts both services in 6.2 min; a speech job completes through the TTS service; a live call in chat hears Chromium's fake microphone, ends the utterance and sends the transcript to chat in 13 s. The run found and fixed four bugs: the hardware probe's lost NVML environment, chat's firewall blocking `/api/stt`, first-run bytecode compilation breaking the speech service, and health counted before the models loaded. Vitest covers verdicts, presets, bundles, licence gating and the member view; GPU items are greyed with the reason without an NVIDIA GPU. |
+| 6 | Built, not released | The NSIS installer builds unsigned. A runtime update keeps the old pack running; the supervisor stops its services only while the new one replaces it (tested in the pack store and the planner). An overlay records the Torch layer it was built on and never runs on another: after a layer update, the other bundles show an update and their services wait for it. Signing (DT-6.2) is wired for Azure Artifact Signing or a certificate, and needs Q-5. The updater reads a public feed (Q-4). The clean-machine install and upgrade checks follow signing. |
 | 7 | Not applicable yet | It waits for first-release feedback. |
 | 8 | Built, not verified | Covered: macOS staging, Keychain, process groups (each service in its own session, signalled as a group) and a parent watch that stops a service whose supervisor died (Windows uses the Job Object), the Parakeet-MLX service with energy end-of-utterance (protocol tests on Windows), Qwen3-TTS on `mps`, the entitlements and usage text. Mac runs are needed for DT-0.2, DT-0.3 and the Phase 8 gate. |
 | 9 | Later | — |
@@ -883,7 +886,16 @@ driver 617.42). The Mac items need the owner's Mac. Signing and the release feed
 
 - **Wheel installer.** Packs install through our own wheel installer (`app/models/wheels.py`), not PyPA
   `installer`, because PyTorch's wheels list files their RECORD omits. The installer accepts unlisted files, hashes
-  everything it writes and rewrites RECORD, so the verify job checks every file.
+  everything it writes and rewrites RECORD, so the verify job checks every file a wheel installed. The bytecode
+  Omnix compiles into a pack at install is not in RECORD and is not verified.
+- **Bytecode is compiled ahead.** Packs are compiled at install, and the app source and standard library at
+  staging (shipped, unchecked-hash); model services run with `PYTHONDONTWRITEBYTECODE` and without the shared
+  cache prefix. On Windows a speech service that compiled its imports on its first run stopped accepting
+  connections (the first live call after the setup screen never connected; a restarted service worked; deleting
+  only the bytecode cache reproduced it). The mechanism inside the event loop is not understood; the first run no
+  longer compiles anything.
+- **Live voice reaches the speech proxy.** Chat's view API firewall did not list `/api/stt`, so the authority probe
+  and the live socket were refused in the browser (also on `main`); chat now lists it.
 - **Pytorch download host.** The pytorch index serves wheels from `download-r2.pytorch.org`, so that host is on the
   download allow-list.
 - **Licence migration number.** The acceptance migration is `0168` in the voice feature folder, because 0166 and

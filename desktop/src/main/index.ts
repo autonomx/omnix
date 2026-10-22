@@ -308,7 +308,8 @@ async function main(): Promise<void> {
   // The uninstaller reads the moved folder from this plain file (it cannot parse desktop.json) to offer removing it.
   const usePacksFolder = (target: string) => {
     settings = store.update((saved) => Object.assign(saved, { packsDir: target }));
-    writeFileSync(join(paths.data, 'packs-location.txt'), target, 'utf8');
+    // UTF-16LE: NSIS's FileReadUTF16LE reads any path; FileRead would use the ANSI code page.
+    writeFileSync(join(paths.data, 'packs-location.txt'), Buffer.from(target, 'utf16le'));
   };
   ipcMain.handle('ox:choose-packs-folder', async (event) => {
     if (!fromApp(event) || !(await ownerSignedIn())) return null;
@@ -331,13 +332,18 @@ async function main(): Promise<void> {
     sendStatus({ kind: 'step', message: 'Moving your downloaded models…' });
     splash = windows.shellPage('splash');
     let leftBehind = '';
+    let renamed = false;  // the packs are at the target now: never delete it
+    let copying = false;  // the target is this attempt's partial copy: deleting it loses nothing
     try {
       if (existsSync(current)) {
         try {
           renameSync(current, target);
+          renamed = true;
         } catch {
           // Another drive: copy, and use the copy as soon as it is complete.
+          copying = true;
           cpSync(current, target, { recursive: true, errorOnExist: true });
+          copying = false;
           usePacksFolder(target);
           try {
             rmSync(current, { recursive: true, force: true });
@@ -348,9 +354,16 @@ async function main(): Promise<void> {
       }
       usePacksFolder(target);
     } catch (error) {
-      // The copy failed part-way: it is removed, so the same folder can be chosen again, and Omnix carries on with
-      // the models where they were.
-      if (settings.packsDir !== target) rmSync(target, { recursive: true, force: true });
+      // A copy that failed part-way is removed, so the same folder can be chosen again; a rename whose setting could
+      // not be saved is moved back. Either way Omnix carries on with the models where they were.
+      if (copying) rmSync(target, { recursive: true, force: true });
+      else if (renamed && settings.packsDir !== target) {
+        try {
+          renameSync(target, current);
+        } catch {
+          // Left where it is; the error below names the folder.
+        }
+      }
       startBackend();
       await dialog.showMessageBox({ type: 'error', title: 'Omnix', message: 'The models could not be moved.',
         detail: error instanceof Error ? error.message : String(error) });
