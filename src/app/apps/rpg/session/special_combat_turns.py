@@ -279,20 +279,26 @@ def _apply_deterministic_travel_resolution(
 
             # Continue through existing narration/persistence path with this resolved result.
 
-        elif travel_result.get("reason") == "unknown_or_unreachable_destination":
+        elif travel_result.get("reason") in {
+            "unknown_or_unreachable_destination", "already_here", "destination_not_adjacent",
+        }:
             available_routes = _safe_list(travel_result.get("available_routes"))
             route_labels = [
                 route.get("to_name") or route.get("to_location")
                 for route in available_routes[:4]
                 if route.get("to_name") or route.get("to_location")
             ]
+            refusal = {
+                "already_here": f"You are already in {travel_result.get('named_location_name')}. ",
+                "destination_not_adjacent": f"No road leads straight from here to {travel_result.get('named_location_name')}. ",
+            }.get(str(travel_result.get("reason")), "No known route matches that destination. ")
 
             resolved_result.update({
                 "ok": False,
                 "action_type": "travel",
                 "semantic_action_type": "travel",
                 "summary": (
-                    "No known route matches that destination. "
+                    refusal
                     + (
                         "Available routes: " + ", ".join(str(label) for label in route_labels)
                         if route_labels

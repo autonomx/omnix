@@ -102,6 +102,20 @@ def _normalize_text(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+# Words of route labels and place names that say nothing about where a route goes ("travel to X").
+_ROUTE_FILLER_WORDS = frozenset({"a", "an", "and", "at", "go", "in", "of", "on", "the", "to", "travel"})
+
+
+def _named_location(normalized: str, graph: "TravelGraph") -> str:
+    """The place the input names in full (the longest such name), or ""."""
+    found, length = "", 0
+    for location_id in graph.locations:
+        name = _normalize_text(graph.location_name(location_id))
+        if len(name) > length and re.search(rf"(?<![\w:-]){re.escape(name)}(?![\w:-])", normalized):
+            found, length = location_id, len(name)
+    return found
+
+
 def _state_flags(state: Mapping[str, Any]) -> set[str]:
     flags: set[str] = set()
     raw_flags = state.get("flags")
@@ -244,17 +258,26 @@ def travel_graph_for_state(state: Mapping[str, Any]) -> TravelGraph:
                 aliases=list(location.get("aliases") or []),
                 kind="published_location",
             )
+    linked: set[tuple[str, str]] = set()
     for route in world_model.get("routes") or ():
         if not isinstance(route, Mapping):
             continue
         origin, target = str(route.get("from") or ""), str(route.get("to") or "")
-        if origin in graph.locations and target in graph.locations:
+        if origin not in graph.locations or target not in graph.locations:
+            continue
+        # A route runs both ways; each way is named by where it leads (a reversed edge would keep the
+        # other end's name as its alias, so "go to Starfall Village" in the village led back out of it).
+        for start, end in ((origin, target), (target, origin)):
+            if (start, end) in linked:
+                continue
+            linked.add((start, end))
             graph.add_edge(
-                origin,
-                target,
-                label=f"travel to {graph.location_name(target)}",
-                aliases=[graph.location_name(target).lower()],
+                start,
+                end,
+                label=f"travel to {graph.location_name(end)}",
+                aliases=[graph.location_name(end).lower()],
                 travel_time_ticks=_travel_ticks(str(route.get("travel_time") or "")),
+                bidirectional=False,
             )
     return graph
 
@@ -323,6 +346,7 @@ def resolve_travel_destination(
         }
 
     candidates: List[Tuple[int, TravelEdge]] = []
+    words = set(normalized.split())
 
     for edge in graph.outgoing(current):
         if not _edge_is_available(edge, state):
@@ -347,7 +371,7 @@ def resolve_travel_destination(
                 score += 100
             elif name in normalized:
                 score += 50
-            elif any(part and part in normalized for part in name.split()):
+            elif any(part in words for part in name.split() if part not in _ROUTE_FILLER_WORDS):
                 score += 8
 
         if edge.direction and re.search(rf"\b{re.escape(edge.direction.lower())}\b", normalized):
@@ -356,7 +380,8 @@ def resolve_travel_destination(
         if score > 0:
             candidates.append((score, edge))
 
-    if not candidates:
+    named = _named_location(normalized, graph)
+    if not candidates and not named:
         return {
             "ok": False,
             "reason": "unknown_or_unreachable_destination",
@@ -366,7 +391,19 @@ def resolve_travel_destination(
         }
 
     candidates.sort(key=lambda item: item[0], reverse=True)
-    score, edge = candidates[0]
+    score, edge = candidates[0] if candidates else (0, None)
+    if edge is None or (score < 50 and named and named != edge.to_location):
+        # The player named a place in full that no route from here reaches (or the place they are in); a
+        # route sharing one of its words ("Starfall Grove" for "Starfall Village") is not where they meant.
+        return {
+            "ok": False,
+            "reason": "already_here" if named == current else "destination_not_adjacent",
+            "current_location": current,
+            "current_location_name": graph.location_name(current),
+            "named_location": named,
+            "named_location_name": graph.location_name(named),
+            "available_routes": list_available_routes(state=state, graph=graph),
+        }
 
     return {
         "ok": True,
