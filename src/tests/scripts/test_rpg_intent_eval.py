@@ -1,0 +1,113 @@
+"""RQ-0.4: the intent corpus keeps its shape and the evaluation's own rules hold (no database, no model)."""
+from __future__ import annotations
+
+from collections import Counter
+import importlib.util
+import json
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
+spec = importlib.util.spec_from_file_location("omnix_rpg_intent_eval_tests_target", ROOT / "scripts/rpg_intent_eval.py")
+intent = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(intent)
+CATALOG = json.loads((intent.CORPUS / "catalog.json").read_text(encoding="utf-8"))
+
+
+def test_held_out_set_is_frozen_and_the_harness_refuses_a_changed_one(monkeypatch, tmp_path):
+    intent.require_frozen_held_out()
+    changed = tmp_path / "held_out.jsonl"
+    changed.write_bytes(intent.HELD_OUT.read_bytes() + b"\n")
+    monkeypatch.setattr(intent, "HELD_OUT", changed)
+    with pytest.raises(SystemExit, match="frozen held-out set changed"):
+        intent.require_frozen_held_out()
+
+
+def test_corpus_sizes_mix_and_labels():
+    dev, held = intent.load_items("dev"), intent.load_items("held_out")
+    assert (len(dev), len(held)) == (800, 1200)
+    assert sum(not item["stateful"] for item in held) >= 800
+    assert sum(item["target_entity"] is not None for item in held) >= 700
+    rows = dev + held
+    assert len({item["id"] for item in rows}) == 2000
+    families = set(CATALOG["families"])
+    for item in rows:
+        world = CATALOG["worlds"][item["world"]]
+        assert item["action_family"] in families
+        assert item["scene"] in world["scenes"]
+        assert item["target_entity"] is None or item["target_entity"] in world["entities"]
+        assert item["labelled_by"] == "model" and item["review"] == "pending_owner_spot_check"
+    counts = Counter(item["world"] for item in rows)
+    assert min(counts.values()) >= 600
+    tags = Counter(tag for item in rows for tag in item["tags"])
+    for tag in ("typo", "multi_step", "question", "negation", "hypothetical", "trap:use", "trap:rest", "trap:hit",
+                "trap:rent"):
+        assert tags[tag] >= 5, tag
+
+
+def test_catalog_resolves_ids_alias_ids_and_names():
+    aurelia = intent.Catalog(CATALOG["worlds"]["aurelia"])
+    assert aurelia.resolve("npc:liora-fen") == "npc:liora-fen"
+    assert aurelia.resolve("guide where rhea is") == "npc:liora-fen"
+    assert aurelia.resolve("healing_potion") == "npc:brindle-gearwing:healing-potion"
+    assert aurelia.resolve("Lantern Bread") == "item:lantern-bread"
+    assert aurelia.resolve("swordsmanship") == "skill:swordsmanship"
+    assert aurelia.resolve("") is None and aurelia.resolve("a teapot") is None
+    starter = intent.Catalog(CATALOG["worlds"]["starter"])
+    assert starter.resolve("loc_tavern") == "location:rusty_flagon"
+    assert starter.resolve("npc_guard_captain") == "npc:Aldric"
+
+
+def _session(**player):
+    base = {"location_id": "here", "currency": {"silver": 10}, "inventory_state": {"items": [
+        {"item_id": "bread", "qty": 2}, {"item_id": "dagger", "qty": 1}]}, "skills": {"stealth": {"level": 0, "xp": 0}},
+        "resources": {"hp": {"current": 100}}, "party_state": {"companions": []}}
+    base.update(player)
+    return {"simulation_state": {"player_state": base, "quest_state": {"quests": []}, "survival": {"fatigue": 5}},
+            "runtime_state": {}}
+
+
+@pytest.mark.parametrize("after,family,target", [
+    ({"location_id": "there"}, "move", "there"),
+    ({"currency": {"silver": 7}, "inventory_state": {"items": [{"item_id": "bread", "qty": 2},
+                                                                {"item_id": "dagger", "qty": 1},
+                                                                {"item_id": "potion", "qty": 1}]}}, "buy", "potion"),
+    ({"currency": {"silver": 12}, "inventory_state": {"items": [{"item_id": "bread", "qty": 2}]}}, "sell", "dagger"),
+    ({"inventory_state": {"items": [{"item_id": "bread", "qty": 1}, {"item_id": "dagger", "qty": 1}]}}, "drop", "bread"),
+    ({"skills": {"stealth": {"level": 0, "xp": 10}}}, "practice", "skill:stealth"),
+    ({"party_state": {"companions": [{"id": "npc:liora-fen"}]}}, "party", "npc:liora-fen"),
+])
+def test_material_changes_decide_the_observed_family(after, family, target):
+    before, later = _session(), _session(**after)
+    found = intent.changes(intent.material_state(before), intent.material_state(later))
+    observed = intent.observed_reading(found, {"family": "talk", "target_ref": None}, later)
+    assert (observed["family"], observed["target_ref"]) == (family, target)
+
+
+def test_time_and_needs_drifting_are_not_material():
+    before = _session()
+    later = _session()
+    later["simulation_state"]["survival"] = {"fatigue": 9, "hunger": 4}
+    assert intent.changes(intent.material_state(before), intent.material_state(later)) == []
+    assert intent.observed_reading([], {"family": "wait", "target_ref": None}, later) is None
+
+
+def test_metrics_have_their_own_denominators():
+    items = [
+        {"id": "a", "action_family": "buy", "target_entity": "x", "stateful": True},
+        {"id": "b", "action_family": "ask", "target_entity": None, "stateful": False},
+        {"id": "c", "action_family": "talk", "target_entity": "y", "stateful": False},
+    ]
+    records = {
+        "a": {"prediction": {"family": "buy", "stateful": False}, "correct": {"family": True, "target": True}, "static": {"gate": True}},
+        "b": {"prediction": {"family": "talk", "stateful": True}, "correct": {"family": False, "target": None}, "static": {"gate": False}},
+        "c": {"prediction": {"family": "talk", "stateful": False}, "correct": {"family": True, "target": False}, "static": {"gate": False}},
+    }
+    result = intent.metrics(items, records)
+    assert result["action_family_accuracy"]["n"] == 3 and result["action_family_accuracy"]["successes"] == 2
+    assert result["target_entity_accuracy"]["n"] == 2 and result["target_entity_accuracy"]["successes"] == 1
+    assert result["false_stateful_rate"]["n"] == 2 and result["false_stateful_rate"]["successes"] == 1
+    assert result["missed_stateful_rate"]["successes"] == 1
+    assert 0 < result["false_stateful_rate"]["wilson_lower"] < 0.5 < result["false_stateful_rate"]["wilson_upper"]

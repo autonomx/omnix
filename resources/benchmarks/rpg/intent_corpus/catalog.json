@@ -1,0 +1,1293 @@
+{
+ "families": [
+  "look",
+  "inspect",
+  "move",
+  "talk",
+  "ask",
+  "decline",
+  "buy",
+  "sell",
+  "attack",
+  "flee",
+  "defend",
+  "take",
+  "drop",
+  "give",
+  "use_item",
+  "equip",
+  "unequip",
+  "manipulate",
+  "rest",
+  "wait",
+  "quest",
+  "practice",
+  "party",
+  "status",
+  "clarify"
+ ],
+ "format_version": "rpg-intent-catalog-v1",
+ "worlds": {
+  "aurelia": {
+   "entities": {
+    "creature:echo-wolf": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "echo wolf",
+      "the echo wolf",
+      "the wolf"
+     ]
+    },
+    "creature:glass-wight": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "glass wight",
+      "the glass wight"
+     ]
+    },
+    "creature:rootbound-knight": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "rootbound knight",
+      "the rootbound knight"
+     ]
+    },
+    "creature:sky-manta": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "sky manta",
+      "the sky manta"
+     ]
+    },
+    "iron_dagger": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "iron dagger",
+      "dagger",
+      "knife"
+     ]
+    },
+    "item:ashen-oathblade": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Ashen Oathblade",
+      "oathblade"
+     ]
+    },
+    "item:gateborn-compass": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Gateborn Compass",
+      "compass"
+     ]
+    },
+    "item:lantern-bread": {
+     "alias_ids": [
+      "lantern_bread"
+     ],
+     "kind": "item",
+     "names": [
+      "lantern bread",
+      "bread"
+     ]
+    },
+    "item:moonroot-key": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Moonroot Key"
+     ]
+    },
+    "item:wayfarer-sigil": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Wayfarer Sigil",
+      "sigil"
+     ]
+    },
+    "location:aurelia:arrival-grove": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Starfall Grove",
+      "the grove",
+      "the arrival grove"
+     ]
+    },
+    "location:aurelia:cinderhold": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Cinderhold"
+     ]
+    },
+    "location:aurelia:hollow-meridian": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "the Hollow Meridian"
+     ]
+    },
+    "location:aurelia:moonroot-ruins": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Moonroot Ruins",
+      "the ruins"
+     ]
+    },
+    "location:aurelia:skybridge-pass": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Skybridge Pass",
+      "the pass",
+      "the mountain pass"
+     ]
+    },
+    "location:aurelia:starfall-village": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Starfall Village",
+      "the village"
+     ]
+    },
+    "location:aurelia:valecourt": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Valecourt",
+      "the capital"
+     ]
+    },
+    "location:aurelia:wayfarer-guild": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "the Wayfarers' Guild",
+      "the guild",
+      "the guild hall"
+     ]
+    },
+    "npc:archon-malrec": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Malrec",
+      "Archon Malrec",
+      "the Archon"
+     ]
+    },
+    "npc:brindle-gearwing": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Brindle",
+      "Brindle Gearwing",
+      "the mechanic",
+      "the relic merchant"
+     ]
+    },
+    "npc:brindle-gearwing:healing-potion": {
+     "alias_ids": [
+      "healing_potion"
+     ],
+     "kind": "offer",
+     "names": [
+      "a healing potion",
+      "a potion",
+      "the healing potion"
+     ]
+    },
+    "npc:brindle-gearwing:lantern-bread": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a loaf of lantern bread",
+      "some lantern bread"
+     ]
+    },
+    "npc:brindle-gearwing:repair": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a gear repair",
+      "repairs for my gear"
+     ]
+    },
+    "npc:captain-rhea-sunward": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Captain Rhea",
+      "Rhea",
+      "Captain Sunward",
+      "the guard captain"
+     ]
+    },
+    "npc:elyra-moonroot": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Elyra",
+      "Elyra Moonroot",
+      "the archivist"
+     ]
+    },
+    "npc:liora-fen": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Liora",
+      "Liora Fen",
+      "the guide",
+      "my guide"
+     ]
+    },
+    "npc:miri-kestrel": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Miri",
+      "Miri Kestrel",
+      "the registrar"
+     ]
+    },
+    "npc:miri-kestrel:information": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "the local news",
+      "news"
+     ]
+    },
+    "npc:naia-of-the-open-hand": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Naia",
+      "Naia of the Open Hand",
+      "the saint of the Road Between"
+     ]
+    },
+    "npc:orik-stonewake": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Orik",
+      "Orik Stonewake",
+      "the innkeeper",
+      "Master Stonewake"
+     ]
+    },
+    "npc:orik-stonewake:drink": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a drink",
+      "something to drink"
+     ]
+    },
+    "npc:orik-stonewake:meal": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a hot meal",
+      "a meal",
+      "supper"
+     ]
+    },
+    "npc:orik-stonewake:night": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a room",
+      "a room for the night",
+      "a bed for the night",
+      "lodging",
+      "a night's lodging"
+     ]
+    },
+    "npc:seraphine-valecourt": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Seraphine",
+      "Princess Seraphine",
+      "the princess"
+     ]
+    },
+    "npc:vael-ardyn": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Vael",
+      "Vael Ardyn",
+      "the demon general"
+     ]
+    },
+    "quest:first-night-in-aurelia": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "First Night in Aurelia"
+     ]
+    },
+    "quest:hollow-meridian": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "The Hollow Meridian quest"
+     ]
+    },
+    "quest:voices-in-the-phone": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "Voices in the Phone"
+     ]
+    },
+    "skill:archery": {
+     "alias_ids": [
+      "archery"
+     ],
+     "kind": "skill",
+     "names": [
+      "archery"
+     ]
+    },
+    "skill:defense": {
+     "alias_ids": [
+      "defense"
+     ],
+     "kind": "skill",
+     "names": [
+      "defense"
+     ]
+    },
+    "skill:firearms": {
+     "alias_ids": [
+      "firearms"
+     ],
+     "kind": "skill",
+     "names": [
+      "firearms"
+     ]
+    },
+    "skill:hacking": {
+     "alias_ids": [
+      "hacking"
+     ],
+     "kind": "skill",
+     "names": [
+      "hacking"
+     ]
+    },
+    "skill:intimidation": {
+     "alias_ids": [
+      "intimidation"
+     ],
+     "kind": "skill",
+     "names": [
+      "intimidation"
+     ]
+    },
+    "skill:investigation": {
+     "alias_ids": [
+      "investigation"
+     ],
+     "kind": "skill",
+     "names": [
+      "investigation"
+     ]
+    },
+    "skill:magic": {
+     "alias_ids": [
+      "magic"
+     ],
+     "kind": "skill",
+     "names": [
+      "magic"
+     ]
+    },
+    "skill:persuasion": {
+     "alias_ids": [
+      "persuasion"
+     ],
+     "kind": "skill",
+     "names": [
+      "persuasion"
+     ]
+    },
+    "skill:stealth": {
+     "alias_ids": [
+      "stealth"
+     ],
+     "kind": "skill",
+     "names": [
+      "stealth"
+     ]
+    },
+    "skill:swordsmanship": {
+     "alias_ids": [
+      "swordsmanship"
+     ],
+     "kind": "skill",
+     "names": [
+      "swordsmanship"
+     ]
+    },
+    "travel_cloak": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "travel cloak",
+      "cloak"
+     ]
+    }
+   },
+   "scenes": {
+    "grove": {
+     "buyer": "",
+     "creatures": [
+      "creature:echo-wolf",
+      "creature:rootbound-knight"
+     ],
+     "exits": [
+      "location:aurelia:starfall-village"
+     ],
+     "location_id": "location:aurelia:arrival-grove",
+     "offers": [],
+     "outdoor": true,
+     "present": [
+      "npc:liora-fen"
+     ],
+     "setup": []
+    },
+    "guild": {
+     "buyer": "",
+     "creatures": [],
+     "exits": [
+      "location:aurelia:starfall-village"
+     ],
+     "location_id": "location:aurelia:wayfarer-guild",
+     "offers": [
+      "npc:miri-kestrel:information"
+     ],
+     "outdoor": false,
+     "present": [
+      "npc:miri-kestrel",
+      "npc:seraphine-valecourt"
+     ],
+     "setup": [
+      "go to Starfall Village",
+      "go to the Wayfarers' Guild"
+     ]
+    },
+    "village": {
+     "buyer": "npc:brindle-gearwing",
+     "creatures": [],
+     "exits": [
+      "location:aurelia:arrival-grove",
+      "location:aurelia:wayfarer-guild",
+      "location:aurelia:skybridge-pass"
+     ],
+     "location_id": "location:aurelia:starfall-village",
+     "offers": [
+      "npc:orik-stonewake:night",
+      "npc:orik-stonewake:meal",
+      "npc:orik-stonewake:drink",
+      "npc:brindle-gearwing:lantern-bread",
+      "npc:brindle-gearwing:healing-potion",
+      "npc:brindle-gearwing:repair"
+     ],
+     "outdoor": false,
+     "present": [
+      "npc:orik-stonewake",
+      "npc:brindle-gearwing",
+      "npc:captain-rhea-sunward"
+     ],
+     "setup": [
+      "go to Starfall Village"
+     ]
+    }
+   }
+  },
+  "starter": {
+   "entities": {
+    "bran_drink_ale": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a mug of ale",
+      "an ale",
+      "a pint of ale"
+     ]
+    },
+    "bran_lodging_common_cot": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a cot in the common room",
+      "the common room cot",
+      "a cot"
+     ]
+    },
+    "bran_lodging_private_room": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a private room",
+      "the private room"
+     ]
+    },
+    "bran_meal_stew": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a bowl of stew",
+      "the hot stew",
+      "some stew"
+     ]
+    },
+    "bran_paid_rumor": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a rumor",
+      "the local rumor"
+     ]
+    },
+    "creature:bandit": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "bandit",
+      "the bandit"
+     ]
+    },
+    "creature:wolf": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "wolf",
+      "the wolf"
+     ]
+    },
+    "elara_basic_repair": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a gear repair",
+      "a basic repair"
+     ]
+    },
+    "elara_rope": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "some rope",
+      "a coil of rope",
+      "rope"
+     ]
+    },
+    "elara_torch": {
+     "alias_ids": [],
+     "kind": "offer",
+     "names": [
+      "a torch",
+      "a new torch"
+     ]
+    },
+    "iron_dagger": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "iron dagger",
+      "dagger",
+      "knife"
+     ]
+    },
+    "location:market": {
+     "alias_ids": [
+      "loc_market"
+     ],
+     "kind": "place",
+     "names": [
+      "the market",
+      "Market Square",
+      "the market square"
+     ]
+    },
+    "location:nearby_wilderness": {
+     "alias_ids": [
+      "loc_forest"
+     ],
+     "kind": "place",
+     "names": [
+      "the wilderness",
+      "the wilds"
+     ]
+    },
+    "location:old_mill": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "the Old Mill",
+      "the old mill"
+     ]
+    },
+    "location:old_road": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "the Old Road",
+      "the old road"
+     ]
+    },
+    "location:rusty_flagon": {
+     "alias_ids": [
+      "loc_tavern",
+      "rusty_flagon_tavern"
+     ],
+     "kind": "place",
+     "names": [
+      "the Rusty Flagon",
+      "the tavern",
+      "the inn"
+     ]
+    },
+    "npc:Aldric": {
+     "alias_ids": [
+      "npc_guard_captain",
+      "npc:GuardCaptain"
+     ],
+     "kind": "person",
+     "names": [
+      "Captain Aldric",
+      "Aldric",
+      "the guard captain"
+     ]
+    },
+    "npc:Bran": {
+     "alias_ids": [
+      "npc_innkeeper"
+     ],
+     "kind": "person",
+     "names": [
+      "Bran",
+      "the innkeeper",
+      "the barkeep",
+      "the bartender"
+     ]
+    },
+    "npc:Elara": {
+     "alias_ids": [
+      "npc_merchant"
+     ],
+     "kind": "person",
+     "names": [
+      "Elara",
+      "Elara the Merchant",
+      "the merchant",
+      "the trader"
+     ]
+    },
+    "npc:Mira": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Mira",
+      "the server",
+      "the serving girl"
+     ]
+    },
+    "skill:archery": {
+     "alias_ids": [
+      "archery"
+     ],
+     "kind": "skill",
+     "names": [
+      "archery"
+     ]
+    },
+    "skill:defense": {
+     "alias_ids": [
+      "defense"
+     ],
+     "kind": "skill",
+     "names": [
+      "defense"
+     ]
+    },
+    "skill:firearms": {
+     "alias_ids": [
+      "firearms"
+     ],
+     "kind": "skill",
+     "names": [
+      "firearms"
+     ]
+    },
+    "skill:hacking": {
+     "alias_ids": [
+      "hacking"
+     ],
+     "kind": "skill",
+     "names": [
+      "hacking"
+     ]
+    },
+    "skill:intimidation": {
+     "alias_ids": [
+      "intimidation"
+     ],
+     "kind": "skill",
+     "names": [
+      "intimidation"
+     ]
+    },
+    "skill:investigation": {
+     "alias_ids": [
+      "investigation"
+     ],
+     "kind": "skill",
+     "names": [
+      "investigation"
+     ]
+    },
+    "skill:magic": {
+     "alias_ids": [
+      "magic"
+     ],
+     "kind": "skill",
+     "names": [
+      "magic"
+     ]
+    },
+    "skill:persuasion": {
+     "alias_ids": [
+      "persuasion"
+     ],
+     "kind": "skill",
+     "names": [
+      "persuasion"
+     ]
+    },
+    "skill:stealth": {
+     "alias_ids": [
+      "stealth"
+     ],
+     "kind": "skill",
+     "names": [
+      "stealth"
+     ]
+    },
+    "skill:swordsmanship": {
+     "alias_ids": [
+      "swordsmanship"
+     ],
+     "kind": "skill",
+     "names": [
+      "swordsmanship"
+     ]
+    },
+    "tavern_rumor": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "the rumor at the Rusty Flagon",
+      "Rumor at the Rusty Flagon"
+     ]
+    },
+    "torch": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "torch"
+     ]
+    },
+    "trail_rations": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "trail rations",
+      "rations",
+      "a ration"
+     ]
+    },
+    "travel_cloak": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "travel cloak",
+      "cloak"
+     ]
+    }
+   },
+   "scenes": {
+    "market": {
+     "buyer": "npc:Elara",
+     "creatures": [],
+     "exits": [
+      "location:rusty_flagon",
+      "location:old_road"
+     ],
+     "location_id": "location:market",
+     "offers": [
+      "elara_torch",
+      "elara_rope",
+      "elara_basic_repair"
+     ],
+     "outdoor": true,
+     "present": [
+      "npc:Elara"
+     ],
+     "setup": [
+      "go outside"
+     ]
+    },
+    "tavern": {
+     "buyer": "",
+     "creatures": [],
+     "exits": [
+      "location:market",
+      "location:old_road"
+     ],
+     "location_id": "location:rusty_flagon",
+     "offers": [
+      "bran_lodging_common_cot",
+      "bran_lodging_private_room",
+      "bran_meal_stew",
+      "bran_drink_ale",
+      "bran_paid_rumor"
+     ],
+     "outdoor": false,
+     "present": [
+      "npc:Bran",
+      "npc:Mira"
+     ],
+     "setup": []
+    }
+   }
+  },
+  "vesper-9": {
+   "entities": {
+    "ent:actors:brother-static": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Brother Static"
+     ]
+    },
+    "ent:actors:ilya-sorn": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Ilya",
+      "Ilya Sorn"
+     ]
+    },
+    "ent:actors:juno-rask": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Juno",
+      "Juno Rask",
+      "the union leader"
+     ]
+    },
+    "ent:actors:mara-vey": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Mara",
+      "Mara Vey",
+      "the courier"
+     ]
+    },
+    "ent:actors:nadi-vale": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Inspector Vale",
+      "Nadi Vale",
+      "Inspector Nadi Vale",
+      "the inspector"
+     ]
+    },
+    "ent:actors:oren-pike": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Oren",
+      "Oren Pike",
+      "the fixer"
+     ]
+    },
+    "ent:actors:selene-kade": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Dr. Kade",
+      "Selene Kade",
+      "Dr. Selene Kade",
+      "the doctor"
+     ]
+    },
+    "ent:actors:tamsin-rho": {
+     "alias_ids": [],
+     "kind": "person",
+     "names": [
+      "Tamsin",
+      "Tamsin Rho"
+     ]
+    },
+    "ent:equipment_vehicles:coilwire-blade": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "coilwire monoblade",
+      "monoblade"
+     ]
+    },
+    "ent:equipment_vehicles:hush-drone": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Hush drone",
+      "recon drone"
+     ]
+    },
+    "ent:equipment_vehicles:identity-wafer": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "ghost identity wafer",
+      "identity wafer"
+     ]
+    },
+    "ent:equipment_vehicles:kestrel-m12": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Kestrel M-12",
+      "smartpistol",
+      "Kestrel M-12 Smartpistol"
+     ]
+    },
+    "ent:equipment_vehicles:memory-coldcase": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "mnemonic coldcase",
+      "coldcase"
+     ]
+    },
+    "ent:equipment_vehicles:rainrunner-bike": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Rainrunner bike",
+      "courier bike"
+     ]
+    },
+    "ent:equipment_vehicles:tidebreaker-exosuit": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Tidebreaker exosuit",
+      "exosuit"
+     ]
+    },
+    "ent:equipment_vehicles:veiljack-deck": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "Veiljack deck",
+      "field deck",
+      "Veiljack Field Deck"
+     ]
+    },
+    "ent:groups:helix-meridian": {
+     "alias_ids": [],
+     "kind": "group",
+     "names": [
+      "Helix Meridian",
+      "Helix"
+     ]
+    },
+    "ent:groups:kestrel-dynamics": {
+     "alias_ids": [],
+     "kind": "group",
+     "names": [
+      "Kestrel Dynamics",
+      "Kestrel"
+     ]
+    },
+    "ent:groups:red-knives-union": {
+     "alias_ids": [],
+     "kind": "group",
+     "names": [
+      "the Red Knives",
+      "the Red Knives Union",
+      "the union"
+     ]
+    },
+    "ent:networks:the-veil": {
+     "alias_ids": [],
+     "kind": "group",
+     "names": [
+      "the Veil"
+     ]
+    },
+    "ent:places:black-rain-station": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Black Rain Station",
+      "the station"
+     ]
+    },
+    "ent:places:halcyon-memory-clinic": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Halcyon Memory Clinic",
+      "the memory clinic",
+      "the clinic"
+     ]
+    },
+    "ent:places:meridian-stack-77": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Meridian Stack 77",
+      "Stack 77"
+     ]
+    },
+    "ent:places:null-chapel": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "the Null Chapel",
+      "the chapel"
+     ]
+    },
+    "ent:places:saint-voltage-market": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Saint Voltage Night Market",
+      "the night market",
+      "Saint Voltage"
+     ]
+    },
+    "ent:places:tidebreak-docks": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "Tidebreak Docks",
+      "the docks"
+     ]
+    },
+    "ent:places:undertone": {
+     "alias_ids": [],
+     "kind": "place",
+     "names": [
+      "the Undertone",
+      "the club"
+     ]
+    },
+    "ent:quests:borrowed-face": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "Borrowed Face"
+     ]
+    },
+    "ent:quests:city-beneath-tide": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "The City Beneath the Tide"
+     ]
+    },
+    "ent:quests:strikebreaker-protocol": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "Strikebreaker Protocol"
+     ]
+    },
+    "ent:threats:cerberus-squad": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "Cerberus squad",
+      "the Kestrel Cerberus Squad"
+     ]
+    },
+    "ent:threats:debt-collectors": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "debt collectors",
+      "the licensed debt collectors"
+     ]
+    },
+    "ent:threats:glass-wasps": {
+     "alias_ids": [],
+     "kind": "creature",
+     "names": [
+      "glass wasps"
+     ]
+    },
+    "iron_dagger": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "iron dagger",
+      "dagger",
+      "knife"
+     ]
+    },
+    "quest:opening:black-rain-rising": {
+     "alias_ids": [],
+     "kind": "quest",
+     "names": [
+      "Black Rain Rising"
+     ]
+    },
+    "skill:archery": {
+     "alias_ids": [
+      "archery"
+     ],
+     "kind": "skill",
+     "names": [
+      "archery"
+     ]
+    },
+    "skill:defense": {
+     "alias_ids": [
+      "defense"
+     ],
+     "kind": "skill",
+     "names": [
+      "defense"
+     ]
+    },
+    "skill:firearms": {
+     "alias_ids": [
+      "firearms"
+     ],
+     "kind": "skill",
+     "names": [
+      "firearms"
+     ]
+    },
+    "skill:hacking": {
+     "alias_ids": [
+      "hacking"
+     ],
+     "kind": "skill",
+     "names": [
+      "hacking"
+     ]
+    },
+    "skill:intimidation": {
+     "alias_ids": [
+      "intimidation"
+     ],
+     "kind": "skill",
+     "names": [
+      "intimidation"
+     ]
+    },
+    "skill:investigation": {
+     "alias_ids": [
+      "investigation"
+     ],
+     "kind": "skill",
+     "names": [
+      "investigation"
+     ]
+    },
+    "skill:magic": {
+     "alias_ids": [
+      "magic"
+     ],
+     "kind": "skill",
+     "names": [
+      "magic"
+     ]
+    },
+    "skill:persuasion": {
+     "alias_ids": [
+      "persuasion"
+     ],
+     "kind": "skill",
+     "names": [
+      "persuasion"
+     ]
+    },
+    "skill:stealth": {
+     "alias_ids": [
+      "stealth"
+     ],
+     "kind": "skill",
+     "names": [
+      "stealth"
+     ]
+    },
+    "skill:swordsmanship": {
+     "alias_ids": [
+      "swordsmanship"
+     ],
+     "kind": "skill",
+     "names": [
+      "swordsmanship"
+     ]
+    },
+    "travel_cloak": {
+     "alias_ids": [],
+     "kind": "item",
+     "names": [
+      "travel cloak",
+      "cloak"
+     ]
+    }
+   },
+   "scenes": {
+    "docks": {
+     "buyer": "",
+     "creatures": [],
+     "exits": [
+      "ent:places:saint-voltage-market",
+      "ent:places:black-rain-station",
+      "ent:places:halcyon-memory-clinic",
+      "ent:places:undertone"
+     ],
+     "location_id": "ent:places:tidebreak-docks",
+     "offers": [],
+     "outdoor": true,
+     "present": [
+      "ent:actors:juno-rask",
+      "ent:actors:nadi-vale",
+      "ent:actors:selene-kade"
+     ],
+     "setup": []
+    }
+   }
+  }
+ }
+}
