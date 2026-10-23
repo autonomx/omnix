@@ -1021,3 +1021,4 @@ Implementation runs on branch `rpg-production` in two lanes (§5): lane A in wor
 | RQ-2.0 | done | 1990047be4 | `world_play_sections`: economy.providers, routines, knowledge, pressures, bestiary stats/behaviour/loot; authored economy played as written; authorship recorded; release findings block launch; tests 6/6 |
 | RQ-4.2 | done (every-turn tick waits on RQ-1.4) | c5eab7c98c | published launches install a clock from authored pressures or derived road dangers; fixed the causal tick overwriting the turn (7f579fbf61); PG published-world play green |
 | RQ-5.0 | done | 919ee62e13 | `docs/rpg/design/`: template, balance bands, rubric, notes for RQ-5.1–5.7 |
+| RQ-7.4 | done | 79f60caa2d | the "legacy" wizard was the character step of the one flow: renamed `RpgCampaignCharacterStep`, dead starter-town branches removed, neutral hero defaults; web 256/256, typecheck |
