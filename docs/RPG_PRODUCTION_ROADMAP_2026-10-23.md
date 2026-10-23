@@ -1010,3 +1010,5 @@ Implementation runs on branch `rpg-production` in two lanes (§5): lane A in wor
 | Package | Status | Commit | Evidence |
 |---------|--------|--------|----------|
 | RQ-0.9 | done (scratch); operator run pending owner permission | 44bb59d9e9 | `scripts/rpg_replay_audit.py`; 4 tests pass; scratch audit in `docs/measurements/rpg-replay-audit-scratch-2026-10-23.json`: no snapshot at creation (turns 1–19 unverifiable), new campaigns 1.7 MB from duplicated bootstrap/genesis snapshots |
+| RQ-1.7 | done (desktop upgrade test lands with v6 in RQ-1.1) | cc477cbe22 | newer documents and save packages refused (503 `rpg_campaign_requires_newer_omnix`); migration 0170 `pinned` + `document_version`; retention skips pinned; `pin_current_state`; unit + PG tests pass |
+| RQ-8.7 | done | 352e2dbdef | bundle assets lose `trusted_svg`/`curated-svg` markers on import (stored-XSS fix); SVG responses get a sandbox CSP; limits reviewed |
