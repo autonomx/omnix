@@ -478,7 +478,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     metadata?.updated_at,
     latestTimeline?.time,
   );
-  const turnCount = firstNumber(session.turn_count, session.turns, session.current_turn, metadata?.turn_count, state?.turn_count);
+  const turnCount = firstNumber(session.turn_count, session.turns, session.current_turn, manifest?.turn_count, metadata?.turn_count, state?.turn_count);
   const checkpointLabel = firstString(session.checkpoint_id, session.checkpoint, session.checkpoint_path, session.storage_path, payload?.checkpoint_id) ?? 'Checkpoint indexed';
   const title = firstString(session.title, session.name, session.label, manifest?.title, session.session_id, session.id, manifest?.session_id, manifest?.id) ?? id;
   const location = firstString(
@@ -508,7 +508,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     location,
     summary,
     updatedAt: compactTimestamp(updatedRaw) ?? 'Updated time unknown',
-    turnLabel: typeof turnCount === 'number' ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'No turns yet',
+    turnLabel: typeof turnCount === 'number' && turnCount > 0 ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'No turns yet',
     checkpointLabel,
     sortRank: timestampRank(updatedRaw),
     source: 'live',

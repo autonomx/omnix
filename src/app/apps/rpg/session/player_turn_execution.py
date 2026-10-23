@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from app.apps.rpg.session.public_state_bridge import merge_authoritative_session_state
+from app.apps.rpg.session.public_state_bridge import count_player_turn, merge_authoritative_session_state
 
 # RPG session runtime responsibility module.
 from app.apps.rpg.session.turn_perf_trace import (
@@ -135,6 +135,8 @@ def apply_turn(
             return_keys=sorted(list({"ok": False, "error": "session_not_found"}.keys()))[:80],
         )
         return {"ok": False, "error": "session_not_found"}
+    # A turn that ends early (a companion accepting) saves this session, so it counts the turn too.
+    session = count_player_turn(session)
 
     simulation_state = copy.deepcopy(_safe_dict(session.get("simulation_state")))
     tick = int(_safe_dict(session.get("runtime_state")).get("tick", 0) or 0)

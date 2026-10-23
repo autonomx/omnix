@@ -95,15 +95,14 @@ def _prepare_turn_action_context(ctx) -> bool:
     # IMPORTANT: keep the old apply_turn authoritative pipeline intact.
     # This function should be the previous apply_turn() minus the live
     # narration-generation block, not a redesign of the turn engine.
-    ctx.session = _copy_dict(ctx.session)
+    # The quest log and wallet may still live only in the public state; the requests below read the simulation.
+    # The turn is counted here too (before the manifest is taken): this stage's session is the one the turn saves.
+    ctx.session = count_player_turn(hydrate_simulation_player(_copy_dict(ctx.session)))
     ctx.manifest = _safe_dict(ctx.session.get("manifest"))
     ctx.runtime_state = _copy_dict(ctx.session.get("runtime_state"))
     ctx.setup = apply_adventure_defaults(
         _copy_dict(ctx.session.get("setup_payload"))
     )
-    # The quest log and wallet may still live only in the public state; the requests below read the simulation.
-    # The turn is counted here too: this stage's session is the one the turn saves.
-    ctx.session = count_player_turn(hydrate_simulation_player(ctx.session))
     ctx.simulation_state = _ensure_simulation_state(
         _safe_dict(ctx.session.get("simulation_state"))
     )

@@ -15,6 +15,18 @@ describe('rpg UI state', () => {
     expect(state.worldStateRows.map((row) => row.label)).toContain('Hazards');
   });
 
+  it('reads a listed campaign turn count from its manifest, and shows none for a fresh one', () => {
+    const state = createRpgWorkspaceState({
+      inventory: {
+        sessions: [
+          { manifest: { session_id: 'session:played', title: 'Played', updated_at: '2026-06-16T00:00:00Z', turn_count: 4 } },
+          { manifest: { session_id: 'session:fresh', title: 'Fresh', updated_at: '2026-06-15T00:00:00Z', turn_count: 0 } },
+        ],
+      },
+    });
+    expect(state.sessionSummaries.map((summary) => summary.turnLabel)).toEqual(['Turn 4', 'No turns yet']);
+  });
+
   it('normalizes live RPG sessions, jobs, assets, and reports for the workspace', () => {
     const inventory = {
       sessions: [

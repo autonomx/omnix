@@ -197,7 +197,7 @@ def test_published_world_campaign_plays_in_its_world(tmp_path, monkeypatch) -> N
         assert arrived["title"] == "Wren — Starfall Village"
         assert arrived["environment_snapshot"]["display"]["region"] == "Starfall March"
         # Every turn counts, the dialogue turn too; the hero keeps their name and their experience meter.
-        assert arrived["turn_count"] == 3
+        assert arrived["turn_count"] == 3 and stored["manifest"]["turn_count"] == 3
         assert stored["simulation_state"]["player_state"]["name"] == "Wren"
         assert arrived["player"]["xp"]["max"] == stored["simulation_state"]["player_state"]["xp_to_next"]
 
@@ -293,10 +293,18 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
     job_store.install_default_job_store_factory(lambda: jobs)
     model = _ScriptedModel()
     monkeypatch.setattr(provider_service, "get_provider", lambda *args, **kwargs: model)
+    told: list[str] = []
+
+    def narrate(payload):
+        # What the narrator is told for each turn: the evidence its beats may use.
+        told.append(" ".join(str(record.get("content") or "") for beat in payload.get("beats") or ()
+                             for record in beat.get("approved_evidence") or ()))
+        return _scripted_narrative(payload)
+
     monkeypatch.setattr(
         narrative_service,
         "_production_writer",
-        lambda: StructuredNarrativeWriter(_scripted_narrative, provider="scripted", model="scripted"),
+        lambda: StructuredNarrativeWriter(narrate, provider="scripted", model="scripted"),
     )
     try:
         session_id = _launch_aurelia(tmp_path, monkeypatch)
@@ -324,6 +332,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         turn("I ask Liora Fen to join my party as a companion.")
         party = stored()["simulation_state"]["player_state"]["party_state"]["companions"]
         assert [companion["npc_id"] for companion in party] == ["npc:liora-fen"]
+        assert public()["turn_count"] == 1  # the companion's turn ends early, and still counts
 
         # Taking on a quest makes it active.
         assert quests()["Voices in the Phone"]["status"] == "available"
@@ -352,5 +361,10 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         turn("I buy a meal from Orik Stonewake.")
         assert copper(public()["player"]["currency"]) < copper(purse)
         assert stored()["simulation_state"]["survival"]["hunger"] < hungry["hunger"]
+        assert public()["turn_count"] == 6
+        # The narrator is told what the turns did, so it cannot invent otherwise.
+        assert any("You take on the quest Voices in the Phone" in text for text in told)
+        assert any("Your practice earns 10 experience in swordsmanship" in text for text in told)
+        assert "for A hot meal" in told[-1] and "It eases your hunger." in told[-1]
     finally:
         job_store.reset_default_job_store_factory_for_tests()
