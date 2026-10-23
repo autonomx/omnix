@@ -138,12 +138,6 @@ def _sync_survival_state(
     player_state["climate_survival"] = copy.deepcopy(climate_survival)
     simulation_state["player_state"] = player_state
     session["simulation_state"] = simulation_state
-
-    setup_payload = _safe_dict(session.get("setup_payload"))
-    metadata = _safe_dict(setup_payload.get("metadata"))
-    metadata["simulation_state"] = simulation_state
-    setup_payload["metadata"] = metadata
-    session["setup_payload"] = setup_payload
     return session
 
 

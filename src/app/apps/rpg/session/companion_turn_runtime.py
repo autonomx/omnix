@@ -193,12 +193,6 @@ def _sync_session_simulation_state_for_early_return(
 
     session["simulation_state"] = simulation_state
 
-    setup_payload = _safe_dict(session.get("setup_payload"))
-    metadata = _safe_dict(setup_payload.get("metadata"))
-    metadata["simulation_state"] = simulation_state
-    setup_payload["metadata"] = metadata
-    session["setup_payload"] = setup_payload
-
     # Best-effort save. Lazy import avoids module-level circular imports.
     try:
         from app.apps.rpg.session.service import save_session

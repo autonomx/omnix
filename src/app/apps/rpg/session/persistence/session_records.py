@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from typing import Any
 
 from app.persistence.database import PostgresDatabase, default_database
@@ -12,6 +13,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import register_repository_specs
 from app.runtime.pagination import MAX_PAGE_SIZE
 
+logger = logging.getLogger(__name__)
 
 def _database() -> PostgresDatabase:
     return default_database()
@@ -65,9 +67,15 @@ def save_session_to_postgres(
     del compact
     if session_save_deferred():
         return session
+    from app.apps.rpg.session.campaign_state import split_creation_artifacts, stored_setup_payload
+
     database = _database()
     context = _context(database)
     campaign_id = _campaign_id(session)
+    # What the campaign's creation produced is stored once, outside the document (RQ-1.1).
+    session, artifacts = split_creation_artifacts(session)
+    if isinstance(session.get("setup_payload"), dict):
+        session["setup_payload"] = stored_setup_payload(session["setup_payload"])
     revision = _revision(session)
     digest = state_hash(session)
     manifest = raw_manifest if isinstance(raw_manifest := session.get("manifest"), dict) else {}
@@ -119,7 +127,12 @@ def save_session_to_postgres(
                     f"current {existing['revision']}"
                 )
             if revision == existing["revision"] and digest == existing["state_hash"]:
-                work.rollback()
+                if not artifacts:
+                    work.rollback()
+                    return existing["state"]
+                for kind, document in sorted(artifacts.items()):
+                    work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
+                work.commit()
                 return existing["state"]
             if revision == existing["revision"] and digest != existing["state_hash"]:
                 _refuse_rewrite_inside_turn(campaign_id, revision)
@@ -158,6 +171,8 @@ def save_session_to_postgres(
             )
             if cursor.rowcount != 1:
                 raise RevisionConflict(f"RPG session changed while saving: {campaign_id}")
+        for kind, document in sorted(artifacts.items()):
+            work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
         work.commit()
     return session
 
@@ -188,10 +203,22 @@ def load_session_from_postgres(session_id: str) -> dict[str, Any] | None:
         work.rollback()
     if campaign is None:
         return None
-    from app.apps.rpg.session.campaign_state import upcast_if_outdated
+    from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION, schema_version, upcast_if_outdated
 
-    # A campaign stored before the current schema loads upcast (WP-5.6).
-    return upcast_if_outdated(dict(campaign["state"]))
+    state = dict(campaign["state"])
+    if schema_version(state) < CURRENT_SCHEMA_VERSION:
+        # Stored before the current document version: opening it upgrades it once, as a system turn with a
+        # pinned backup (RQ-1.1). Should that fail, the campaign still loads, upcast in memory (WP-5.6).
+        from app.apps.rpg.session.persistence.campaign_upgrade import upgrade_campaign_document
+
+        try:
+            upgraded = upgrade_campaign_document(session_id, database=database)
+        except Exception:
+            logger.exception("rpg_campaign_document_upgrade_failed campaign=%s", session_id)
+            upgraded = None
+        if upgraded is not None:
+            return upgraded["state"]
+    return upcast_if_outdated(state)
 
 
 def load_launch_gate_source_from_postgres(session_id: str) -> dict[str, Any] | None:

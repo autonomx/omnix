@@ -40,7 +40,9 @@ def test_the_forge_loads_and_saves_through_the_given_store() -> None:
 
     assert sessions.calls == [("load", "campaign:1"), ("save", True)]
     assert result["session"]["saved"] is True
-    assert result["game"]["compiled_genesis_snapshot"] == compiled
+    # One copy, which saving moves out of the document into the campaign's artifacts (RQ-1.1).
+    assert result["session"]["setup_payload"]["compiled_genesis"] == compiled
+    assert "compiled_genesis_snapshot" not in result["game"]
 
 
 def test_an_unpersisted_attachment_never_touches_the_store() -> None:

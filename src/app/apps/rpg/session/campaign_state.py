@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 
 class NewerCampaignDocumentError(DependencyUnavailable):
@@ -86,10 +86,158 @@ def _to_v4_ambient_runtime(document: dict[str, Any]) -> dict[str, Any]:
     return document
 
 
+# What a campaign's creation produced and no turn reads, by kind, at every place v5 kept a copy (RQ-1.1). A v6
+# document keeps none of them: the upgrade stores each once, outside the document (omnix_rpg_campaign_artifacts).
+CREATION_ARTIFACT_PATHS: dict[str, tuple[tuple[str, str], ...]] = {
+    "compiled_genesis": (
+        ("setup_payload", "compiled_genesis"),
+        ("state", "compiled_genesis_snapshot"),
+        ("runtime_state", "compiled_genesis_snapshot"),
+    ),
+    "bootstrap_snapshot": (
+        ("setup_payload", "bootstrap_snapshot"),
+        ("state", "bootstrap_snapshot"),
+        ("runtime_state", "bootstrap_snapshot"),
+    ),
+}
+_DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
+
+
+def creation_artifacts(document: Any) -> dict[str, dict[str, Any]]:
+    """The creation artifacts a document carries, one per kind (the first copy found)."""
+    found: dict[str, dict[str, Any]] = {}
+    for kind, paths in CREATION_ARTIFACT_PATHS.items():
+        for section, key in paths:
+            value = _safe_dict(_safe_dict(document).get(section)).get(key)
+            if isinstance(value, dict) and value:
+                found[kind] = value
+                break
+    return found
+
+
+def split_creation_artifacts(document: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """The document without its creation artifacts, and the artifacts (stored once, outside it)."""
+    artifacts = creation_artifacts(document)
+    for paths in CREATION_ARTIFACT_PATHS.values():
+        for section, key in paths:
+            holder = document.get(section)
+            if isinstance(holder, dict) and key in holder:
+                document[section] = {name: value for name, value in holder.items() if name != key}
+    return document, artifacts
+
+
+def _copper(purse: Any) -> int | None:
+    if not isinstance(purse, dict):
+        return None
+    try:
+        return int(purse.get("gold") or 0) * 100 + int(purse.get("silver") or 0) * 10 + int(purse.get("copper") or 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _quantity(item: dict[str, Any]) -> int:
+    try:
+        return int(item.get("quantity", item.get("qty", 1)) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def merge_inventories(document: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Make the sheet's inventory and every purse agree with the simulation's store; the differences found.
+
+    The simulation's store (``player_state.inventory_state``) wins (owner decision Q-2). The purse it keeps
+    is the one the turns write and the play screen shows, ``player_state.currency``; the store's own copy
+    and the sheet's follow it. Before the first turn there is no store yet and nothing is merged.
+    """
+    simulation = _safe_dict(document.get("simulation_state"))
+    player_state = _safe_dict(simulation.get("player_state"))
+    store = _safe_dict(player_state.get("inventory_state"))
+    if not isinstance(store.get("items"), list):
+        return document, []
+    state = _safe_dict(document.get("state"))
+    sheet = _safe_dict(state.get("player"))
+    diffs: list[dict[str, Any]] = []
+
+    sheet_items = [item for item in sheet.get("inventory") or () if isinstance(item, dict)]
+    by_id = {str(item.get("item_id") or item.get("id") or item.get("name") or ""): item for item in sheet_items}
+    projected = []
+    for item in store["items"]:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("item_id") or item.get("id") or item.get("name") or "")
+        previous = by_id.pop(key, None)
+        quantity = _quantity(item)
+        if previous is None:
+            diffs.append({"field": "inventory", "item": str(item.get("name") or key), "sheet": 0, "simulation": quantity})
+        elif _quantity(previous) != quantity:
+            diffs.append({"field": "inventory", "item": str(item.get("name") or key),
+                          "sheet": _quantity(previous), "simulation": quantity})
+        public = dict(previous or {})
+        public.update({name: value for name, value in item.items() if name != "qty"})
+        public.setdefault("id", key)
+        public.setdefault("type", item.get("category"))
+        public["quantity"] = quantity
+        projected.append(public)
+    for key, item in by_id.items():
+        diffs.append({"field": "inventory", "item": str(item.get("name") or key), "sheet": _quantity(item), "simulation": 0})
+    if sheet or projected:
+        sheet["inventory"] = projected
+
+    purse = player_state.get("currency") if isinstance(player_state.get("currency"), dict) else store.get("currency")
+    if isinstance(purse, dict):
+        for name, holder in (("simulation_store", store), ("sheet", sheet), ("simulation", player_state)):
+            if _copper(holder.get("currency")) != _copper(purse):
+                diffs.append({"field": "purse", "copy": name, "was": _copper(holder.get("currency")), "now": _copper(purse)})
+            holder["currency"] = dict(purse)
+
+    player_state["inventory_state"] = store
+    simulation["player_state"] = player_state
+    document["simulation_state"] = simulation
+    if sheet:
+        state["player"] = sheet
+        document["state"] = state
+    return document, diffs
+
+
+def stored_setup_payload(setup: Any) -> dict[str, Any]:
+    """The setup as a v6 document keeps it: without the copy of the simulation the world step is handed."""
+    stored = dict(setup) if isinstance(setup, dict) else {}
+    metadata = stored.get("metadata")
+    if isinstance(metadata, dict) and "simulation_state" in metadata:
+        stored["metadata"] = {key: value for key, value in metadata.items() if key != "simulation_state"}
+    return stored
+
+
+def _to_v6_sections(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 6 (RQ-1.1): one inventory, no copies of creation artifacts, every campaign bound to a world.
+
+    - The sheet's inventory and every purse are made to agree with the simulation's store
+      (``merge_inventories``).
+    - The simulation's copy inside ``setup_payload.metadata`` (refreshed before each world step and saved with
+      the session) is dropped: the step is handed the current simulation each time.
+    - The compiled genesis and bootstrap snapshot leave the document where it is stored, not here: saving
+      and the upgrade turn store each once outside it (``split_creation_artifacts``), so an upcast in memory
+      loses nothing.
+    - A campaign with no published world is bound to the starter town or the demo (``state.world_binding``),
+      until those become bundled worlds (RQ-2.8).
+    """
+    document, _ = merge_inventories(document)
+    document["setup_payload"] = stored_setup_payload(document.get("setup_payload"))
+    state = _safe_dict(document.get("state"))
+    binding = _safe_dict(state.get("world_binding"))
+    if not binding.get("world_id") and not binding.get("kind"):
+        manifest = _safe_dict(document.get("manifest"))
+        demo = _DEMO_PRESET_ID in (manifest.get("created_from_preset"), manifest.get("source_template_id"))
+        state["world_binding"] = {"kind": "demo" if demo else "starter"}
+        document["state"] = state
+    return document
+
+
 # (target version, upcaster), in order. Version 5 marks the interaction
 # timeline, which the normalization below keeps for every version.
 UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = (
     (4, _to_v4_ambient_runtime),
+    (6, _to_v6_sections),
 )
 
 
@@ -132,6 +280,17 @@ def upcast_campaign_document(document: Any) -> dict[str, Any]:
     return upcast
 
 
+def load_campaign_save_package(package: Any) -> dict[str, Any] | None:
+    """The campaign document a save package carries (format 8), in the current shape; None when it has none.
+
+    A document newer than this Omnix is refused (``NewerCampaignDocumentError``, RQ-1.7).
+    """
+    from app.apps.rpg.foundation.persistence.package_loader import campaign_document_from_package
+
+    document = campaign_document_from_package(_safe_dict(package))
+    return upcast_campaign_document(document) if document is not None else None
+
+
 def upcast_if_outdated(document: dict[str, Any]) -> dict[str, Any]:
     """A stored document upcast only when it predates the current version; current documents load as stored.
 
@@ -146,12 +305,18 @@ def upcast_if_outdated(document: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "CREATION_ARTIFACT_PATHS",
     "CURRENT_SCHEMA_VERSION",
     "CampaignManifest",
     "CampaignState",
     "NewerCampaignDocumentError",
     "UPCASTERS",
+    "creation_artifacts",
+    "load_campaign_save_package",
+    "merge_inventories",
     "schema_version",
+    "split_creation_artifacts",
+    "stored_setup_payload",
     "upcast_campaign_document",
     "upcast_if_outdated",
 ]

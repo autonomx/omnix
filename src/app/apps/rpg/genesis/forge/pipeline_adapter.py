@@ -62,17 +62,14 @@ def attach_compiled_genesis_to_session(
     runtime_state = _safe_dict(session.get("runtime_state"))
     setup_payload = _safe_dict(session.get("setup_payload"))
     manifest = _safe_dict(session.get("manifest"))
-    state["compiled_genesis_snapshot"] = dict(compiled)
-    state["bootstrap_snapshot"] = dict(bootstrap)
     state["active_goals"] = list(bootstrap.get("active_goals") or [])
     state["decision_biases"] = dict(bootstrap.get("decision_biases") or {})
     state["world_traits"] = list(bootstrap.get("world_traits") or [])
     metadata["compiler_version"] = compiled.get("compiler_version")
     state["metadata"] = metadata
+    # One copy each, which saving moves out of the document into the campaign's artifacts (RQ-1.1).
     setup_payload["compiled_genesis"] = dict(compiled)
     setup_payload["bootstrap_snapshot"] = dict(bootstrap)
-    runtime_state["compiled_genesis_snapshot"] = dict(compiled)
-    runtime_state["bootstrap_snapshot"] = dict(bootstrap)
     manifest["compiler_version"] = compiled.get("compiler_version")
     session.update(
         {

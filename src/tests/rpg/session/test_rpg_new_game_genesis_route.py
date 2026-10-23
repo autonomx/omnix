@@ -20,6 +20,16 @@ requires_postgres = pytest.mark.skipif(
 )
 
 
+def _campaign_artifacts(session_id: str) -> dict[str, dict]:
+    from app.persistence.unit_of_work import unit_of_work
+    from app.security.tenant_context import current_tenant
+
+    with unit_of_work() as work:
+        artifacts = work.rpg.get_campaign_artifacts(current_tenant(), session_id)
+        work.rollback()
+    return artifacts
+
+
 def _wizard_payload() -> dict[str, object]:
     initial_stats = {
         "strength": 18,
@@ -187,11 +197,16 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
 
     assert state["contract_version"] == "rpg_genesis_v2"
     assert state["genesis_snapshot"]["identity"]["origin"] == "frontier_village"
-    assert state["compiled_genesis_snapshot"]["compiled_stats"]["strength"] == 18
-    assert state["bootstrap_snapshot"]["active_goals"]
-    assert isinstance(setup_payload["bootstrap_snapshot"]["decision_biases"], dict)
+    # The compiled genesis and bootstrap snapshot are kept once, outside the campaign document (RQ-1.1).
+    artifacts = _campaign_artifacts(session_id)
+    for section in (state, setup_payload, runtime_state):
+        assert "compiled_genesis_snapshot" not in section and "bootstrap_snapshot" not in section
+    assert "compiled_genesis" not in setup_payload
+    assert artifacts["compiled_genesis"]["compiled_stats"]["strength"] == 18
+    assert artifacts["bootstrap_snapshot"]["active_goals"]
+    assert isinstance(artifacts["bootstrap_snapshot"]["decision_biases"], dict)
     assert setup_payload["genesis"]["drivers"]["values"] == ["agency", "loyalty"]
-    assert setup_payload["compiled_genesis"]["compiled_feature_flags"]["companions"] is True
+    assert artifacts["compiled_genesis"]["compiled_feature_flags"]["companions"] is True
 
     assert metadata["seed"] == 0
     assert loaded["simulation_state"]["seed"] == 0

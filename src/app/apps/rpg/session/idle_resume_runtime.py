@@ -71,6 +71,7 @@ from typing import (
 )
 
 from .idle_time import recorded_idle_tick_time
+from app.apps.rpg.session.campaign_state import stored_setup_payload
 from app.runtime.clock import utc_now as _runtime_utc_now
 from typing import cast
 
@@ -526,7 +527,7 @@ def _apply_idle_tick_to_session(
     session["runtime_state"] = runtime_state
 
     session["simulation_state"] = simulation_state
-    session["setup_payload"] = next_setup
+    session["setup_payload"] = stored_setup_payload(next_setup)
     session["runtime_state"] = runtime_state
 
     manifest = _safe_dict(session.get("manifest"))

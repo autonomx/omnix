@@ -12,6 +12,11 @@ For every campaign it reports:
   unbroken, and each result is checked against the turn's ``state_hash_after``. Verification restarts at the
   next snapshot after a gap. ``verified_turns`` counts turns whose replayed state matched;
 - whether a replay reached the campaign's current revision and matched its stored hash;
+- document versions (RQ-1.1): each turn's and snapshot's ``document_version``; a replayed state is compared
+  only with a hash recorded at the same document version (a turn row's ``state_hash_after`` is of its own
+  version's document), and ``verified_turns_by_document_version`` counts each version's verified turns. The
+  upgrade turn (``system`` document upgrade) carries the patch from one version to the next, so a replay
+  continues across the boundary, and the pinned snapshots on both sides verify it;
 - the document's size per section (canonical JSON bytes), and the size of NPC-related sections, for the v6
   ``npcs`` budget (roadmap §4.2, F2).
 
@@ -22,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 import os
 import sys
 from datetime import date
@@ -31,7 +37,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from app.apps.rpg.foundation.persistence.rpg_repository import canonical_json, state_hash  # noqa: E402
+from app.apps.rpg.foundation.persistence.rpg_repository import (  # noqa: E402
+    canonical_json,
+    document_version,
+    state_hash,
+)
 from app.apps.rpg.foundation.persistence.state_delta import apply_state_delta  # noqa: E402
 
 TOP_SECTIONS = 15
@@ -86,6 +96,8 @@ def audit_campaign(
     bad_snapshots: list[int] = []
     verified_turns: set[int] = set()
     mismatched_turns: list[int] = []
+    version_mismatches: list[int] = []
+    by_version: dict[str, set[int]] = defaultdict(set)
     reached_current = False
     current_matches = False
     for snapshot in snapshots:
@@ -103,11 +115,16 @@ def audit_campaign(
                 break
             state = apply_state_delta(state, list(turn["state_delta"]))
             digest = state_hash(state)
+            recorded = turn.get("document_version")
+            if recorded is not None and document_version(state) != recorded:
+                version_mismatches.append(at + 1)  # the patch did not produce a document of the turn's version
+                break
             if digest != turn["state_hash_after"]:
                 mismatched_turns.append(at + 1)
                 break
             at += 1
             verified_turns.add(at)
+            by_version[str(recorded if recorded is not None else "unrecorded")].add(at)
         if at == revision:
             reached_current = True
             current_matches = digest == campaign["state_hash"]
@@ -125,6 +142,15 @@ def audit_campaign(
         "snapshots_failing_hash": bad_snapshots,
         "verified_turns": len(verified_turns),
         "mismatched_turns": sorted(set(mismatched_turns)),
+        "document_version_mismatches": sorted(set(version_mismatches)),
+        "verified_turns_by_document_version": {version: len(revisions) for version, revisions in sorted(by_version.items())},
+        "document_version_boundaries": [
+            int(current["resulting_revision"])
+            for previous, current in zip(turns, turns[1:])
+            if current.get("document_version") is not None
+            and current["document_version"] != previous.get("document_version")
+        ],
+        "pinned_snapshots": [int(snapshot["revision"]) for snapshot in snapshots if snapshot.get("pinned")],
         "replay_reaches_current": reached_current,
         "replay_matches_current": current_matches,
         "first_missing_turn_rows": missing_turn_rows[:20],
@@ -166,17 +192,18 @@ def _load(connection: Any, campaign_ids: list[str]) -> list[dict[str, Any]]:
                 "state_delta": row[1],
                 "state_hash_before": row[2],
                 "state_hash_after": row[3],
+                "document_version": row[4],
             }
             for row in connection.execute(
-                "SELECT resulting_revision, state_delta_jsonb, state_hash_before, state_hash_after "
+                "SELECT resulting_revision, state_delta_jsonb, state_hash_before, state_hash_after, document_version "
                 "FROM omnix_rpg_turns WHERE campaign_id = %s ORDER BY sequence",
                 (campaign_id,),
             ).fetchall()
         ]
         snapshots = [
-            {"revision": row[0], "state": row[1], "state_hash": row[2]}
+            {"revision": row[0], "state": row[1], "state_hash": row[2], "pinned": row[3], "document_version": row[4]}
             for row in connection.execute(
-                "SELECT revision, snapshot_jsonb, state_hash FROM omnix_rpg_snapshots "
+                "SELECT revision, snapshot_jsonb, state_hash, pinned, document_version FROM omnix_rpg_snapshots "
                 "WHERE campaign_id = %s ORDER BY revision",
                 (campaign_id,),
             ).fetchall()

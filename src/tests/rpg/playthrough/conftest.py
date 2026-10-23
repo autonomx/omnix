@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.rpg.playthrough.campaigns import Playthrough, launch_aurelia, launch_vesper, new_starter_game
+from tests.rpg.playthrough.campaigns import Playthrough, launch_aurelia, launch_vesper, new_genesis_game, new_starter_game
 from tests.rpg.playthrough.scripted_model import ScriptedRoleModel, scripted_model_installed
 
 
@@ -16,7 +16,8 @@ def model(monkeypatch) -> ScriptedRoleModel:
 
 @pytest.fixture
 def launch(model, tmp_path, monkeypatch):
-    """Start a campaign in a world ("aurelia", "vesper" or "starter") and return its playthrough."""
+    """Start a campaign ("aurelia", "vesper", "starter", or "genesis": a wizard-made new game) and return its
+    playthrough."""
 
     def start(world: str) -> Playthrough:
         if world == "aurelia":
@@ -25,6 +26,8 @@ def launch(model, tmp_path, monkeypatch):
             session_id, _ = launch_vesper(tmp_path, monkeypatch)
         elif world == "starter":
             session_id = new_starter_game(seed=7)
+        elif world == "genesis":
+            session_id = new_genesis_game()
         else:
             raise ValueError(world)
         play = Playthrough(session_id)

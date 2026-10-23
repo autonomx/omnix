@@ -25,6 +25,19 @@ def state_hash(state: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json(state).encode("utf-8")).hexdigest()
 
 
+def document_version(state: Any) -> int | None:
+    """The campaign document's version (``manifest.schema_version``), as turn rows and snapshots record it."""
+    manifest = state.get("manifest") if isinstance(state, dict) else None
+    value = manifest.get("schema_version") if isinstance(manifest, dict) else None
+    try:
+        return int(value) if value is not None and not isinstance(value, bool) else None
+    except (TypeError, ValueError):
+        return None
+
+
+_document_version_of = document_version  # for the methods whose parameter of that name shadows it
+
+
 def _campaign(row: Any) -> dict[str, Any]:
     return {
         "id": str(row[0]),
@@ -372,10 +385,10 @@ class PostgresRpgRepository:
                 expected_revision, resulting_revision, command_jsonb,
                 canonical_effects_jsonb, state_hash_before, state_hash_after,
                 engine_version, schema_version, interaction_id, compact_response,
-                state_delta_jsonb
+                state_delta_jsonb, document_version
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
-                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb
+                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s
             ) RETURNING {_TURN_COLUMNS}
             """,
             (
@@ -395,6 +408,7 @@ class PostgresRpgRepository:
                 interaction_id,
                 encoded_response.decode("utf-8"),
                 canonical_json(_turn_delta(campaign["state"], next_state)),
+                document_version(next_state),
             ),
         ).fetchone()
         turn = _turn(row)
@@ -484,6 +498,8 @@ class PostgresRpgRepository:
         A ``pinned`` snapshot is never deleted by retention (RQ-1.7).
         """
         encoded = encoded_state if encoded_state is not None else canonical_json(state)
+        if document_version is None:
+            document_version = _document_version_of(state)
         if hashlib.sha256(encoded.encode("utf-8")).hexdigest() != state_hash_value:
             raise StateHashConflict("snapshot state hash does not match snapshot state")
         row = self.connection.execute(
@@ -558,6 +574,8 @@ class PostgresRpgRepository:
         if row is None:
             return None
         revision = int(row[0])
+        if document_version is None:
+            document_version = _document_version_of(dict(row[1]))
         existing = self.connection.execute(
             """
             UPDATE omnix_rpg_snapshots
@@ -583,3 +601,38 @@ class PostgresRpgRepository:
         )
         return {"id": snapshot["id"], "campaign_id": campaign_id, "revision": revision, "created": True}
 
+
+    def put_campaign_artifact(
+        self,
+        context: TenantContext,
+        *,
+        campaign_id: str,
+        kind: str,
+        document: dict[str, Any],
+    ) -> str:
+        """Keep what the campaign's creation produced and no turn reads, once (RQ-1.1); the content hash.
+
+        Writing the same content again is a no-op; different content replaces the kind's document.
+        """
+        encoded = canonical_json(document)
+        digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        self.connection.execute(
+            """
+            INSERT INTO omnix_rpg_campaign_artifacts (workspace_id, campaign_id, kind, document_jsonb, content_hash)
+            VALUES (%s, %s, %s, %s::jsonb, %s)
+            ON CONFLICT (workspace_id, campaign_id, kind) DO UPDATE
+               SET document_jsonb = EXCLUDED.document_jsonb, content_hash = EXCLUDED.content_hash
+             WHERE omnix_rpg_campaign_artifacts.content_hash <> EXCLUDED.content_hash
+            """,
+            (context.workspace_id, campaign_id, kind, encoded, digest),
+        )
+        return digest
+
+    def get_campaign_artifacts(self, context: TenantContext, campaign_id: str) -> dict[str, dict[str, Any]]:
+        """The campaign's creation artifacts by kind."""
+        rows = self.connection.execute(
+            "SELECT kind, document_jsonb FROM omnix_rpg_campaign_artifacts "
+            "WHERE workspace_id = %s AND campaign_id = %s ORDER BY kind",
+            (context.workspace_id, campaign_id),
+        ).fetchall()
+        return {str(row[0]): dict(row[1]) for row in rows}

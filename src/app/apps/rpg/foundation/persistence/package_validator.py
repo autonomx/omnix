@@ -25,4 +25,12 @@ def validate_save_package(package: Dict[str, Any]) -> List[Dict[str, str]]:
     if not isinstance(state.get("simulation_state"), dict):
         errors.append({"field": "state.simulation_state", "error": "missing or invalid simulation_state"})
 
+    campaign = package.get("campaign")
+    if campaign is not None:
+        document = _safe_dict(campaign).get("document") if isinstance(campaign, dict) else None
+        if not isinstance(campaign, dict) or (document is not None and not isinstance(document, dict)):
+            errors.append({"field": "campaign", "error": "invalid campaign document"})
+        elif isinstance(document, dict) and not isinstance(document.get("manifest"), dict):
+            errors.append({"field": "campaign.document.manifest", "error": "missing campaign manifest"})
+
     return errors

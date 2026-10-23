@@ -114,6 +114,22 @@ def new_starter_game(seed: int = 7) -> str:
     return str(create_new_game_session(RpgNewGameRequest(seed=seed))["session_id"])
 
 
+def new_genesis_game() -> str:
+    """A new game made through the creation wizard's genesis contract (the World Forge path, forge disabled)."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+    from tests.rpg.session.test_rpg_new_game_genesis_route import _wizard_payload
+    from tests.support.routers import include_router_registrar
+
+    app = FastAPI()
+    include_router_registrar(app, register_rpg_session_routes)
+    response = TestClient(app, base_url="http://127.0.0.1").post("/api/rpg/new-game", json=_wizard_payload())
+    assert response.status_code == 200, response.text[:300]
+    return str(response.json()["session_id"])
+
+
 def copper(purse: dict[str, Any] | None) -> int:
     purse = purse or {}
     return int(purse.get("gold") or 0) * 100 + int(purse.get("silver") or 0) * 10 + int(purse.get("copper") or 0)

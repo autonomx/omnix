@@ -33,6 +33,7 @@ from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
 import time as _time
+from app.apps.rpg.session.campaign_state import stored_setup_payload
 from app.apps.rpg.rules.survival_tick_runtime import apply_survival_runtime_tick
 from app.apps.rpg.session.player_requests import describe_player_events
 from app.apps.rpg.session.narration_runtime import (
@@ -160,7 +161,7 @@ def _finish_scene_and_persist_turn_state(ctx) -> bool:
     )
     ctx.session["simulation_state"] = ctx.after_state
     ctx.session["runtime_state"] = ctx.runtime_state
-    ctx.session["setup_payload"] = ctx.next_setup
+    ctx.session["setup_payload"] = stored_setup_payload(ctx.next_setup)
     ctx.manifest["updated_at"] = _utc_now_iso()
     ctx.session["manifest"] = ctx.manifest
     ctx._t_pre_save = _time.monotonic()
