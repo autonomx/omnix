@@ -72,6 +72,8 @@ interface SkillProgressionPreview {
   label: string;
   rank: number;
   xp: number;
+  /** XP the skill needs for its next rank. */
+  threshold: number;
   source: string;
 }
 
@@ -610,7 +612,7 @@ function SkillsPanel({ disabled, onSelectCommand, skills }: { disabled: boolean;
       {skills.length ? (
         <ul className="rpg-skill-list">
           {skills.map((skill) => {
-            const threshold = skillRankThreshold(skill.rank);
+            const threshold = skill.threshold;
             const percent = Math.min(100, Math.round((skill.xp / threshold) * 100));
             return (
               <li className="rpg-skill-row" key={skill.id}>
@@ -1012,12 +1014,29 @@ function buildCategoryPreview(rawCategory: unknown, index: number, abilities: Ab
   };
 }
 
+/** The character sheet's skills (practice and use level them toward `xp_to_next`), then the capabilities abilities train. */
 function buildSkillProgression(state: Record<string, unknown>): SkillProgressionPreview[] {
-  const skills = recordValue(state.skill_progression) ?? {};
-  return Object.entries(skills).map(([id, rawSkill]) => {
+  const sheetSkills = Object.entries(recordValue(recordValue(state.player)?.skills) ?? {}).map(([id, rawSkill]) => {
     const skill = recordValue(rawSkill) ?? {};
-    return { id, label: titleCase(id), rank: firstNumber(skill.rank) ?? 1, xp: firstNumber(skill.xp) ?? 0, source: firstString(skill.last_source) ?? '' };
+    const rank = firstNumber(skill.level, skill.rank) ?? 0;
+    return {
+      id,
+      label: titleCase(id),
+      rank,
+      xp: firstNumber(skill.xp) ?? 0,
+      threshold: firstNumber(skill.xp_to_next) ?? skillRankThreshold(rank),
+      source: firstString(skill.last_source) ?? '',
+    };
   });
+  const listed = new Set(sheetSkills.map((skill) => skill.id));
+  const abilitySkills = Object.entries(recordValue(state.skill_progression) ?? {})
+    .filter(([id]) => !listed.has(id))
+    .map(([id, rawSkill]) => {
+      const skill = recordValue(rawSkill) ?? {};
+      const rank = firstNumber(skill.rank) ?? 1;
+      return { id, label: titleCase(id), rank, xp: firstNumber(skill.xp) ?? 0, threshold: skillRankThreshold(rank), source: firstString(skill.last_source) ?? '' };
+    });
+  return [...sheetSkills, ...abilitySkills];
 }
 
 function buildActiveEffects(state: Record<string, unknown>, abilityState: Record<string, unknown> | undefined): EffectPreview[] {

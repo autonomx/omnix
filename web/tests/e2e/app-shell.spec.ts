@@ -852,7 +852,7 @@ test('rpg module queues a replay-preserving shared turn job', async ({ page }) =
   await expect(page.getByRole('main').getByRole('heading', { name: 'RPG', level: 2 })).toBeVisible();
   await page.locator('select[name="sessionId"]').selectOption('rpg-session-1');
   await page.getByLabel('Command').fill('Look around the tavern.');
-  await page.getByRole('button', { name: 'Queue RPG turn' }).click();
+  await page.getByRole('button', { name: 'Submit RPG turn' }).click();
 
   await expect(page.getByText('RPG turn job queued: job:rpg')).toBeVisible();
 });

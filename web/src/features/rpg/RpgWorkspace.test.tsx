@@ -267,10 +267,10 @@ describe('RpgWorkspace', () => {
     await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     expect(await screen.findByText('RPG turn job queued: job:rpg')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeEnabled();
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
@@ -319,7 +319,7 @@ describe('RpgWorkspace', () => {
 
     vi.useFakeTimers();
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     await vi.waitFor(() => {
       expect(screen.getByText('Queueing RPG turn job…')).toBeInTheDocument();
@@ -394,7 +394,7 @@ describe('RpgWorkspace', () => {
     await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
@@ -457,7 +457,7 @@ describe('RpgWorkspace', () => {
     const previousResponse = await within(conversation).findByText('Bran nods at the ledger.');
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     const pendingCommand = await within(conversation).findByText('Ask Bran how business is going.');
     expect(previousResponse.compareDocumentPosition(pendingCommand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -503,7 +503,7 @@ describe('RpgWorkspace', () => {
     renderRpg();
     await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran how business is going.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     expect(await screen.findByText('Ask Bran how business is going.')).toBeInTheDocument();
     expect(await screen.findByText(/Business is steady enough tonight/)).toBeInTheDocument();
@@ -549,7 +549,7 @@ describe('RpgWorkspace', () => {
     renderRpg();
     await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Listen to the hearth-side conversation' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     const conversation = screen.getByLabelText('Conversation');
     expect(await within(conversation).findByText('Listen to the hearth-side conversation')).toBeInTheDocument();
@@ -594,7 +594,7 @@ describe('RpgWorkspace', () => {
     renderRpg();
     await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Ask Bran about business.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'RPG turn failed: Progression state is invalid',

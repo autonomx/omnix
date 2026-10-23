@@ -13,7 +13,7 @@ describe('RpgStoryScene', () => {
         recentEvents={previewRecentEvents}
         selectedSessionSummary={previewSessionSummary}
       >
-        <button type="button">Queue RPG turn</button>
+        <button type="button">Submit RPG turn</button>
       </RpgStoryScene>
     );
 
@@ -26,8 +26,8 @@ describe('RpgStoryScene', () => {
     expect(screen.getByText('Omnix (Narrator)')).toBeInTheDocument();
     expect(screen.getByLabelText('Conversation')).toHaveClass('rpg-dialogue-stack');
     expect(screen.getByText('You arrived at Glimmerdeep Pass.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeInTheDocument();
-    const childControls = screen.getByRole('button', { name: 'Queue RPG turn' });
+    expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeInTheDocument();
+    const childControls = screen.getByRole('button', { name: 'Submit RPG turn' });
     const recentEventsToggle = screen.getByRole('button', { name: 'Recent events' });
     expect(childControls.compareDocumentPosition(recentEventsToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -56,7 +56,7 @@ describe('RpgStoryScene', () => {
         selectedSessionSummary={{ ...previewSessionSummary, id: 'live-session', source: 'live' }}
         storyMessages={storyMessages}
       >
-        <button type="button">Queue RPG turn</button>
+        <button type="button">Submit RPG turn</button>
       </RpgStoryScene>
     );
 

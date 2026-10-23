@@ -14,6 +14,7 @@ import {
   refreshPathsForChangedDomains,
   resetRpgTurnUiStoreForTests,
   storyMessageIdentity,
+  turnFailureMessage,
 } from './rpgTurnUiStore';
 import { pipelineFetch } from '../../api/fetchPipeline';
 
@@ -177,6 +178,32 @@ describe('rpgTurnUiStore', () => {
 
     expect(response.status).toBe(404);
     expect(getRpgTurnUiEntries('session:bran')).toEqual([]);
+  });
+
+  it("shows the game's question or reason when a turn is refused, not a status code", async () => {
+    const fetchImpl = vi.fn(async () => new Response(
+      JSON.stringify({ detail: { ok: false, error: 'dialogue_target_unresolved', clarification: 'Who are you speaking to?' } }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    ));
+    installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
+
+    await pipelineFetch('/api/rpg/sessions/session%3Abran/turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'Talk to him' }),
+    });
+
+    const failed = getRpgTurnUiEntries('session:bran').find((entry) => entry.tone !== 'player');
+    expect(failed?.status).toBe('failed');
+    expect(failed?.text).toBe('Who are you speaking to?');
+  });
+
+  it("turns a refused turn's error code into words", async () => {
+    const json = (detail: unknown, status = 400) => new Response(JSON.stringify({ detail }), { status });
+    expect(await turnFailureMessage(json({ error: 'target_not_found' }))).toBe('There is no one or nothing by that name here.');
+    expect(await turnFailureMessage(json({ error: 'odd_case' }))).toBe('The turn could not be resolved: odd case.');
+    expect(await turnFailureMessage(json({ message: 'The road is closed.' }))).toBe('The road is closed.');
+    expect(await turnFailureMessage(new Response('oops', { status: 500 }))).toBe('Turn failed (500).');
   });
 
   it('does not request heavy query refreshes for explicit conversation-only turns', () => {

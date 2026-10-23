@@ -43,7 +43,7 @@ describe('RpgActionComposer', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Session' })).toHaveTextContent('Preview campaign — preview-session');
     expect(screen.getByRole('textbox', { name: 'Command' })).toHaveAttribute('aria-invalid', 'false');
 

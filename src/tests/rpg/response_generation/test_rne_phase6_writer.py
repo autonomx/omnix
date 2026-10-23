@@ -113,3 +113,32 @@ def test_deterministic_writer_fits_long_evidence_into_the_word_budget() -> None:
     assert all(block.text for block in result.blocks)
     report = NarrativeValidator().validate(request, plan, evidence, result.blocks)
     assert "word_budget_exceeded" not in {issue.code for issue in report.issues}
+
+
+def test_deterministic_writer_never_has_a_character_recite_their_dossier() -> None:
+    from app.apps.rpg.narration.narrative_engine import AuthorityClass, EvidenceRecord, VisibilityClass
+
+    request = _request()
+    evidence = (
+        EvidenceRecord(
+            evidence_id="runtime:npc:bran:profile",
+            content="Bran. Keeps the Flagon since the war. Gruff but fair. Speaks in short sentences.",
+            authority=AuthorityClass.OBJECTIVE_CANON,
+            visibility=VisibilityClass.NARRATOR_ONLY,
+            known_by=("npc:bran",),
+            entity_refs=("npc:bran",),
+        ),
+        EvidenceRecord(
+            evidence_id="canon:character:bran",
+            content="Name: Bran\nRole: innkeeper of the Rusty Flagon",
+            authority=AuthorityClass.OBJECTIVE_CANON,
+            visibility=VisibilityClass.PUBLIC,
+            entity_refs=("npc:bran",),
+        ),
+    )
+    plan = DeterministicBeatPlanner().plan(request, evidence)
+    result = DeterministicNarrativeWriter().write(request, plan, evidence)
+
+    spoken = [block.text for block in result.blocks if block.speaker_id]
+    assert spoken
+    assert not any("Keeps the Flagon" in text or "Name:" in text for text in spoken)

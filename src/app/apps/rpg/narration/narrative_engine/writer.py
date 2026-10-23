@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from .authority import AuthorityClass, BeatKind, BeatPurpose
+from .authority import AuthorityClass, BeatKind, BeatPurpose, VisibilityClass
 from .contracts import (
     ClaimAssertion,
     EvidenceRecord,
@@ -305,10 +305,21 @@ class StructuredNarrativeWriter:
         )
 
 
+_FIELD_LINE = re.compile(r"^\s*[A-Za-z][\w ]{0,30}:\s")
+
+
+def _speakable(record: EvidenceRecord) -> bool:
+    """Whether a character could say this aloud: not narrator-only notes, their own profile, or a field-by-field
+    canon page ("Name: ...", "Role: ...")."""
+    if record.visibility is VisibilityClass.NARRATOR_ONLY or record.evidence_id.endswith(":profile"):
+        return False
+    return not _FIELD_LINE.match(record.content)
+
+
 def _evidence_text(beat: NarrativeBeat, evidence: Mapping[str, EvidenceRecord], word_limit: int = 0) -> str:
     for ref in beat.evidence_refs:
         record = evidence.get(ref)
-        if record and record.content.strip():
+        if record and record.content.strip() and (not beat.speaker_id or _speakable(record)):
             return _within_words(record.content.strip(), word_limit)
     return ""
 

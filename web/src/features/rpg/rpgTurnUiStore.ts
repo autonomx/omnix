@@ -255,6 +255,33 @@ export function refreshPathsForChangedDomains(sessionId: string, changedDomains:
   return [...paths];
 }
 
+const TURN_FAILURE_MESSAGES: Record<string, string> = {
+  dialogue_target_unresolved: 'Who are you speaking to?',
+  target_not_found: 'There is no one or nothing by that name here.',
+  insufficient_funds: 'You cannot afford that.',
+  campaign_launch_blocked: 'This campaign is not ready to play yet.',
+};
+
+/** What the player reads when the turn is refused: the game's own question or reason, never a bare status code. */
+export async function turnFailureMessage(response: Response): Promise<string> {
+  let detail: Record<string, unknown> = {};
+  try {
+    const body = (await response.json()) as Record<string, unknown> | null;
+    const raw = body && typeof body === 'object' ? body.detail : undefined;
+    if (raw && typeof raw === 'object') detail = raw as Record<string, unknown>;
+    else if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  } catch {
+    // Not JSON: fall through to the status.
+  }
+  for (const key of ['clarification', 'message'] as const) {
+    const value = detail[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  const code = typeof detail.error === 'string' ? detail.error : '';
+  if (code) return TURN_FAILURE_MESSAGES[code] ?? `The turn could not be resolved: ${code.replaceAll('_', ' ')}.`;
+  return `Turn failed (${response.status}).`;
+}
+
 /** Returns a function that removes it. `fetchImpl` replaces the rest of the pipeline (tests). */
 export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () => void {
   if (removeTurnMiddleware || typeof globalThis.fetch !== 'function') return () => undefined;
@@ -284,7 +311,7 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
           if (response.status === 404 || response.status === 405) {
             discardRpgTurnUiSubmission(sessionId, submissionId);
           } else {
-            failRpgTurnUiSubmission(sessionId, submissionId, `Turn failed (${response.status}).`);
+            failRpgTurnUiSubmission(sessionId, submissionId, await turnFailureMessage(response.clone()));
           }
           return response;
         }
