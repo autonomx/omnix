@@ -38,19 +38,21 @@ def _delete_snapshots(connection: Any, retention_days: int, batch_size: int) -> 
     """Snapshots outside each campaign's newest 20 and not at a 100th revision (WP-5.2).
 
     ``retention_days`` is a grace period: a snapshot is kept at least that long.
-    Blob-backed snapshots are left to their asset's lifecycle.
+    Blob-backed snapshots are left to their asset's lifecycle, and pinned ones
+    (a pre-upgrade backup, an upcast boundary: RQ-1.7) are never deleted.
     """
     return int(connection.execute(
         """
         DELETE FROM omnix_rpg_snapshots
          WHERE id IN (
              SELECT id
-               FROM (SELECT id, revision, created_at, blob_asset_id,
+               FROM (SELECT id, revision, created_at, blob_asset_id, pinned,
                             row_number() OVER (PARTITION BY campaign_id ORDER BY revision DESC) AS newest
                        FROM omnix_rpg_snapshots) AS ranked
               WHERE newest > %s
                 AND revision %% %s <> 0
                 AND blob_asset_id IS NULL
+                AND NOT pinned
                 AND created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
               ORDER BY created_at, id
               LIMIT %s

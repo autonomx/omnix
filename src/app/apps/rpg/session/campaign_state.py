@@ -18,8 +18,23 @@ from typing import Any, Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
+from app.errors import DependencyUnavailable
 
 CURRENT_SCHEMA_VERSION = 5
+
+
+class NewerCampaignDocumentError(DependencyUnavailable):
+    """The campaign was saved by a newer Omnix; this one refuses to load it rather than misread it (RQ-1.7)."""
+
+    code = "rpg_campaign_requires_newer_omnix"
+
+    def __init__(self, version: int) -> None:
+        super().__init__(
+            f"This campaign was saved by a newer version of Omnix (campaign format {version}; "
+            f"this version reads up to {CURRENT_SCHEMA_VERSION}).",
+            hint="Update Omnix to open this campaign.",
+        )
+        self.version = version
 
 
 class CampaignManifest(BaseModel):
@@ -97,24 +112,35 @@ def _normalize(document: dict[str, Any]) -> dict[str, Any]:
 
 
 def upcast_campaign_document(document: Any) -> dict[str, Any]:
-    """``document`` in the current shape, envelope validated (``pydantic.ValidationError`` if it cannot be)."""
+    """``document`` in the current shape, envelope validated (``pydantic.ValidationError`` if it cannot be).
+
+    A document newer than this code raises ``NewerCampaignDocumentError``.
+    """
     upcast = _safe_dict(document)
     version = schema_version(upcast)
+    if version > CURRENT_SCHEMA_VERSION:
+        raise NewerCampaignDocumentError(version)
     for target, upcaster in UPCASTERS:
         if version < target:
             upcast = upcaster(upcast)
             version = target
     upcast = _normalize(upcast)
     manifest = _safe_dict(upcast.get("manifest"))
-    manifest["schema_version"] = max(version, CURRENT_SCHEMA_VERSION)
+    manifest["schema_version"] = CURRENT_SCHEMA_VERSION
     upcast["manifest"] = manifest
     CampaignState.model_validate(upcast)
     return upcast
 
 
 def upcast_if_outdated(document: dict[str, Any]) -> dict[str, Any]:
-    """A stored document upcast only when it predates the current version; current documents load as stored."""
-    if schema_version(document) >= CURRENT_SCHEMA_VERSION:
+    """A stored document upcast only when it predates the current version; current documents load as stored.
+
+    A newer document is refused (``NewerCampaignDocumentError``), never read as stored.
+    """
+    version = schema_version(document)
+    if version > CURRENT_SCHEMA_VERSION:
+        raise NewerCampaignDocumentError(version)
+    if version == CURRENT_SCHEMA_VERSION:
         return document
     return upcast_campaign_document(document)
 
@@ -123,6 +149,7 @@ __all__ = [
     "CURRENT_SCHEMA_VERSION",
     "CampaignManifest",
     "CampaignState",
+    "NewerCampaignDocumentError",
     "UPCASTERS",
     "schema_version",
     "upcast_campaign_document",

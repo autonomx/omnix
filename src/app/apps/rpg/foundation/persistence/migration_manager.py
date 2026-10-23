@@ -23,6 +23,12 @@ def _safe_int(v: Any, default: int = 1) -> int:
 def migrate_package_to_current(package: Dict[str, Any]) -> Dict[str, Any]:
     package = dict(package or {})
     version = _safe_int(package.get("schema_version"), 1)
+    if version > CURRENT_RPG_SCHEMA_VERSION:
+        # A package from a newer Omnix is refused, never imported as if it were current (RQ-1.7).
+        raise ValueError(
+            f"save package version {version} is newer than this Omnix supports ({CURRENT_RPG_SCHEMA_VERSION}); "
+            "update Omnix to import it"
+        )
 
     while version < CURRENT_RPG_SCHEMA_VERSION:
         prev_version = version

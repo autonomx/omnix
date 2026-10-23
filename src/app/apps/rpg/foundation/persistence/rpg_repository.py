@@ -476,8 +476,13 @@ class PostgresRpgRepository:
         engine_version: str,
         schema_version: str,
         encoded_state: str | None = None,
+        pinned: bool = False,
+        document_version: int | None = None,
     ) -> dict[str, Any]:
-        """``encoded_state``, when given, is ``canonical_json(state)`` already computed by the caller."""
+        """``encoded_state``, when given, is ``canonical_json(state)`` already computed by the caller.
+
+        A ``pinned`` snapshot is never deleted by retention (RQ-1.7).
+        """
         encoded = encoded_state if encoded_state is not None else canonical_json(state)
         if hashlib.sha256(encoded.encode("utf-8")).hexdigest() != state_hash_value:
             raise StateHashConflict("snapshot state hash does not match snapshot state")
@@ -485,8 +490,8 @@ class PostgresRpgRepository:
             """
             INSERT INTO omnix_rpg_snapshots (
                 id, workspace_id, campaign_id, revision, snapshot_jsonb,
-                state_hash, engine_version, schema_version
-            ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+                state_hash, engine_version, schema_version, pinned, document_version
+            ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s)
             RETURNING id, campaign_id, revision, snapshot_jsonb, state_hash,
                       engine_version, schema_version, created_at
             """,
@@ -499,6 +504,8 @@ class PostgresRpgRepository:
                 state_hash_value,
                 engine_version,
                 schema_version,
+                pinned,
+                document_version,
             ),
         ).fetchone()
         return {
@@ -511,4 +518,52 @@ class PostgresRpgRepository:
             "schema_version": str(row[6]),
             "created_at": row[7].isoformat(),
         }
+
+    def pin_current_state(
+        self,
+        context: TenantContext,
+        *,
+        campaign_id: str,
+        document_version: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Pin the campaign's current state as the snapshot at its revision (the pre-upgrade backup, RQ-1.7).
+
+        A snapshot already at that revision is pinned in place. None when the campaign does not exist.
+        """
+        row = self.connection.execute(
+            """
+            SELECT revision, state_jsonb, state_hash, engine_version, schema_version
+              FROM omnix_rpg_campaigns
+             WHERE id = %s AND workspace_id = %s
+             FOR UPDATE
+            """,
+            (campaign_id, context.workspace_id),
+        ).fetchone()
+        if row is None:
+            return None
+        revision = int(row[0])
+        existing = self.connection.execute(
+            """
+            UPDATE omnix_rpg_snapshots
+               SET pinned = true, document_version = COALESCE(document_version, %s)
+             WHERE workspace_id = %s AND campaign_id = %s AND revision = %s
+            RETURNING id
+            """,
+            (document_version, context.workspace_id, campaign_id, revision),
+        ).fetchone()
+        if existing is not None:
+            return {"id": str(existing[0]), "campaign_id": campaign_id, "revision": revision, "created": False}
+        snapshot = self.create_snapshot(
+            context,
+            campaign_id=campaign_id,
+            snapshot_id=f"snapshot:{campaign_id}:{revision}",
+            revision=revision,
+            state=dict(row[1]),
+            state_hash_value=str(row[2]),
+            engine_version=str(row[3]),
+            schema_version=str(row[4]),
+            pinned=True,
+            document_version=document_version,
+        )
+        return {"id": snapshot["id"], "campaign_id": campaign_id, "revision": revision, "created": True}
 

@@ -248,3 +248,20 @@ def test_rpg_snapshots_keep_the_newest_twenty_and_every_hundredth_revision(datab
         with _admin() as admin:
             for campaign_id in (long_game, short_game, recent_game):
                 admin.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))
+
+
+def test_pinned_rpg_snapshots_are_never_deleted(database) -> None:
+    with _admin() as admin:
+        campaign_id = _campaign_with_snapshots(admin, range(1, 61), days_ago=3)
+        # A pre-upgrade backup and an upcast boundary (RQ-1.7), both outside the newest 20.
+        admin.execute(
+            "UPDATE omnix_rpg_snapshots SET pinned = true WHERE campaign_id = %s AND revision IN (7, 8)",
+            (campaign_id,),
+        )
+    try:
+        RetentionWorker(database, batch_size=50).run_once()
+        with _admin() as admin:
+            assert _snapshot_revisions(admin, campaign_id) == [7, 8, *range(41, 61)]
+    finally:
+        with _admin() as admin:
+            admin.execute("DELETE FROM omnix_rpg_campaigns WHERE id = %s", (campaign_id,))
