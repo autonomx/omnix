@@ -1,0 +1,178 @@
+"""The closed vocabulary of campaign state changes (RQ-1.2, roadmap §4.1).
+
+A resolver decides what happens and says it as ``StateChange`` values; the reducer (``reducer.py``) is the only
+code that applies them. Every change is a frozen model with a ``type`` tag, so a turn's changes serialize,
+replay, and appear in ``TurnOutcome.applied_changes`` as they are. The vocabulary is closed: a mechanic that
+needs a new kind of change adds it here, with its reduction, and nowhere else.
+"""
+from __future__ import annotations
+
+from typing import Annotated, Any, Literal, get_args
+
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
+
+class _Change(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class PurseChanged(_Change):
+    """Coin gained (positive) or spent (negative), in copper."""
+
+    type: Literal["purse_changed"] = "purse_changed"
+    delta_copper: int
+    reason: str = ""
+
+
+class ItemAdded(_Change):
+    """Stacks into the pack: onto the stack with the same item id, else a new stack."""
+
+    type: Literal["item_added"] = "item_added"
+    item_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    quantity: int = Field(default=1, ge=1)
+    category: str = ""
+    fields: dict[str, Any] = Field(default_factory=dict)
+
+
+class ItemRemoved(_Change):
+    """Taken from the pack's stack (used, sold, given); the stack goes when it is empty."""
+
+    type: Literal["item_removed"] = "item_removed"
+    item_id: str = Field(min_length=1)
+    quantity: int = Field(default=1, ge=1)
+
+
+class ItemDropped(_Change):
+    """From the pack to the ground where the hero stands."""
+
+    type: Literal["item_dropped"] = "item_dropped"
+    item_id: str = Field(min_length=1)
+    quantity: int = Field(default=1, ge=1)
+    location_id: str = Field(min_length=1)
+
+
+class ItemPickedUp(_Change):
+    """From the ground back into the pack, onto its own stack."""
+
+    type: Literal["item_picked_up"] = "item_picked_up"
+    item_id: str = Field(min_length=1)
+    quantity: int = Field(default=1, ge=1)
+    location_id: str = Field(min_length=1)
+
+
+class ItemEquipped(_Change):
+    type: Literal["item_equipped"] = "item_equipped"
+    slot: str = Field(min_length=1)
+    item_id: str = Field(min_length=1)
+
+
+class ItemUnequipped(_Change):
+    type: Literal["item_unequipped"] = "item_unequipped"
+    slot: str = Field(min_length=1)
+
+
+class HpChanged(_Change):
+    """The hero's health, kept between 0 and its maximum."""
+
+    type: Literal["hp_changed"] = "hp_changed"
+    delta: int
+
+
+class ExperienceGained(_Change):
+    type: Literal["experience_gained"] = "experience_gained"
+    amount: int = Field(ge=0)
+
+
+class SkillProgressed(_Change):
+    """A skill's progress as the rules computed it (level-ups are the rules' decision, not the reducer's)."""
+
+    type: Literal["skill_progressed"] = "skill_progressed"
+    skill_id: str = Field(min_length=1)
+    level: int = Field(ge=0)
+    xp: int = Field(ge=0)
+    xp_to_next: int = Field(ge=1)
+
+
+class LocationChanged(_Change):
+    type: Literal["location_changed"] = "location_changed"
+    location_id: str = Field(min_length=1)
+    location_name: str = ""
+
+
+class PresenceChanged(_Change):
+    """Who is present where the hero is."""
+
+    type: Literal["presence_changed"] = "presence_changed"
+    location_id: str = Field(min_length=1)
+    present_npc_ids: tuple[str, ...] = ()
+
+
+class TimeAdvanced(_Change):
+    type: Literal["time_advanced"] = "time_advanced"
+    ticks: int = Field(default=1, ge=0)
+
+
+class TurnCounted(_Change):
+    type: Literal["turn_counted"] = "turn_counted"
+    turn_count: int = Field(ge=0)
+
+
+class NeedsChanged(_Change):
+    """Hunger, thirst and fatigue, each kept at zero or above."""
+
+    type: Literal["needs_changed"] = "needs_changed"
+    hunger: int = 0
+    thirst: int = 0
+    fatigue: int = 0
+
+
+class QuestStatusChanged(_Change):
+    type: Literal["quest_status_changed"] = "quest_status_changed"
+    quest_id: str = Field(min_length=1)
+    status: Literal["available", "active", "completed", "failed"]
+
+
+class QuestPlaceReached(_Change):
+    type: Literal["quest_place_reached"] = "quest_place_reached"
+    quest_id: str = Field(min_length=1)
+    location_id: str = Field(min_length=1)
+
+
+class CompanionJoined(_Change):
+    type: Literal["companion_joined"] = "companion_joined"
+    npc_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    role: str = "companion"
+
+
+class CompanionLeft(_Change):
+    type: Literal["companion_left"] = "companion_left"
+    npc_id: str = Field(min_length=1)
+
+
+class CombatantHpChanged(_Change):
+    type: Literal["combatant_hp_changed"] = "combatant_hp_changed"
+    actor_id: str = Field(min_length=1)
+    delta: int
+
+
+class CombatEnded(_Change):
+    type: Literal["combat_ended"] = "combat_ended"
+    outcome: Literal["victory", "defeat", "fled", "ended"] = "ended"
+
+
+StateChange = Annotated[
+    PurseChanged | ItemAdded | ItemRemoved | ItemDropped | ItemPickedUp | ItemEquipped | ItemUnequipped
+    | HpChanged | ExperienceGained | SkillProgressed | LocationChanged | PresenceChanged | TimeAdvanced
+    | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
+    | CombatantHpChanged | CombatEnded,
+    Field(discriminator="type"),
+]
+STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])
+CHANGE_TYPES: tuple[str, ...] = tuple(model.model_fields["type"].default for model in get_args(get_args(StateChange)[0]))
+
+
+def parse_changes(values: Any) -> list[StateChange]:
+    """Changes from their serialized form (``pydantic.ValidationError`` for an unknown type)."""
+    return STATE_CHANGES.validate_python(values)
