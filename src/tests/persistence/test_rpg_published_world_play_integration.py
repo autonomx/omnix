@@ -448,5 +448,12 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert not (stored()["runtime_state"].get("combat_state") or {}).get("active")
         # The combat rules decide a blow at a creature and the narrator alone tells it: no other model call.
         assert model.calls[calls:] == [], model.calls[calls:]
+        # The world's clock runs from the first turn: Aurelia's creatures make its roads a growing danger (RQ-4.2).
+        clock = stored()["simulation_state"]["causal_world_runtime"]
+        # Not every turn ticks it yet: fast dialogue and fallback answers skip the advance until RQ-1.4 makes the
+        # world tick a step of every turn.
+        assert clock["last_tick"] >= 1
+        assert {row["pressure_id"] for row in clock["pressure_plan"]["pressures"]} >= {"pressure:roads:starfall-march"}
+        assert len(clock["events"]) >= clock["last_tick"]
     finally:
         job_store.reset_default_job_store_factory_for_tests()

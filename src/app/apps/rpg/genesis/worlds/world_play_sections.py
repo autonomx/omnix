@@ -127,7 +127,8 @@ class WorldPressure(_Section):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=600)
     region_id: str = Field(min_length=1)
-    dimension: str = Field(default="stability", min_length=1, max_length=60)
+    # The region dimension it bears on (the causal runtime's region dimensions).
+    dimension: Literal["political_stability", "trade_access", "resource_access", "population_index"] = "political_stability"
     severity: float = Field(default=40.0, ge=0, le=100)
     trend: Literal["escalating", "contained", "volatile", "stable"] = "escalating"
     escalation_threshold: float = Field(default=75.0, ge=0, le=100)

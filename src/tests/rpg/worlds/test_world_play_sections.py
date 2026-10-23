@@ -71,7 +71,7 @@ _KNOWLEDGE = [
 ]
 _PRESSURES = [
     {"pressure_id": "pressure:wolves", "name": "Echo wolves on the road", "region_id": "region:vale",
-     "dimension": "safety", "severity": 55, "trend": "escalating",
+     "dimension": "trade_access", "severity": 55, "trend": "escalating",
      "levers": [{"action": "defeat:monster:echo-wolf", "effect": "lower", "amount": 10}]}
 ]
 
@@ -172,3 +172,29 @@ def test_a_release_with_a_broken_play_section_is_not_launch_ready() -> None:
 
     assert certified.certification["launch_ready"] is False
     assert "play_section_unknown_person:routines:npc:nobody" in certified.certification["missing_requirements"]
+
+
+def test_a_world_with_creatures_starts_with_a_ticking_clock_and_its_own_pressures_win() -> None:
+    from app.apps.rpg.genesis.worlds.published_pressures import pressure_planning, published_causal_runtime
+    from app.apps.rpg.world.causal_runtime import advance_causal_runtime
+
+    derived, source = pressure_planning(_canon())
+    assert source == "derived"
+    [road] = derived["pressure_plan"]["pressures"]
+    assert road["pressure_id"] == "pressure:roads:vale" and road["severity"] == 40.0
+    assert road["levers"] == [{"action": "defeat:monster:echo-wolf", "effect": "lower", "amount": 8.0}]
+
+    authored, source = pressure_planning(_canon(pressures=_PRESSURES))
+    assert source == "authored"
+    assert [row["pressure_id"] for row in authored["pressure_plan"]["pressures"]] == ["pressure:wolves"]
+
+    runtime = published_causal_runtime(_canon(pressures=_PRESSURES))
+    for tick in range(1, 11):
+        runtime, _events = advance_causal_runtime(runtime, tick=tick)
+    cells = runtime["state"]["cells"]
+    assert cells["pressure:wolves"]["values"]["pressure_severity"] > 55  # escalating
+    assert cells["region:vale"]["values"]["trade_access"] < 45  # and the roads suffer for it
+
+    no_creatures = _canon()
+    no_creatures["bestiary"] = []
+    assert published_causal_runtime(no_creatures) == {}

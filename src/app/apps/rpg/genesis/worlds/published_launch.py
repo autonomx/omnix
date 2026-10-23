@@ -331,6 +331,12 @@ def _apply_published_opening_state(
     mechanics = bestiary_mechanics(revision)
     if mechanics:
         simulation["campaign_mechanics"] = {**_record(simulation.get("campaign_mechanics")), **mechanics}
+    # The world's clock: its pressures (or the danger of its creatures) tick from the first turn (RQ-4.2).
+    from .published_pressures import published_causal_runtime
+
+    causal_runtime = published_causal_runtime(_record(getattr(revision, "canon", None)))
+    if causal_runtime:
+        simulation["causal_world_runtime"] = causal_runtime
     session["simulation_state"] = simulation
 
 
