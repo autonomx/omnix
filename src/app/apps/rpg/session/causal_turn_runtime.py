@@ -133,6 +133,15 @@ def _attach_session_state(
     return result
 
 
+def _turn_session(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The session a turn's result carries (top level, or its nested result), if it has one."""
+    for source in (payload, _dict(payload.get("result"))):
+        session = source.get("session")
+        if isinstance(session, Mapping) and isinstance(session.get("simulation_state"), Mapping):
+            return session
+    return None
+
+
 def advance_causal_runtime_for_turn(
     session_id: str,
     payload: Mapping[str, Any],
@@ -145,7 +154,10 @@ def advance_causal_runtime_for_turn(
     result = dict(payload)
     if result.get("success") is False or result.get("ok") is False:
         return result
-    session_raw = loader(session_id)
+    # Advance the session this turn produced. Inside a turn every load returns the turn-start session
+    # (saves are deferred to the commit), so reloading here and saving it would undo the turn's changes:
+    # its travel, its party, its purchases.
+    session_raw = _turn_session(result) or loader(session_id)
     if not isinstance(session_raw, Mapping):
         return result
     session = copy_state(dict(session_raw))
