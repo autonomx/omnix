@@ -292,7 +292,10 @@ def archive_session_in_postgres(session_id: str) -> dict[str, Any]:
             """,
             (session_id, context.workspace_id),
         ).fetchone()
-    return {"ok": row is not None, "session": dict(row[0]) if row is not None else None}
+    if row is None:
+        # Absent, or another workspace's: either way this caller has no such campaign.
+        return {"ok": False, "error": "session_not_found", "session": None}
+    return {"ok": True, "session": dict(row[0])}
 
 
 def append_interaction_event_postgres(
