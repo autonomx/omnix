@@ -115,6 +115,7 @@ def _prepare_assets(
         )
         if descriptor.source_job_id:
             compat["world_bundle_source_job_id"] = descriptor.source_job_id
+        _drop_trust_markers(metadata, compat)
         created.append(
             AssetRecord(
                 id=target_id,
@@ -129,6 +130,19 @@ def _prepare_assets(
             )
         )
     return created, reused, asset_map
+
+
+def _drop_trust_markers(metadata: dict[str, Any], compat: dict[str, Any]) -> None:
+    """A bundle's own asset is never trusted, whatever its descriptor claims (RQ-8.7).
+
+    The image route serves an SVG inline only when its record is marked trusted; a
+    community bundle could otherwise mark its own SVG trusted and run script on the
+    app's origin. Curated map-pack SVGs a bundle references are reused from the
+    store (same id and checksum) and keep their own record.
+    """
+    metadata.pop("trusted_svg", None)
+    if str(compat.get("source") or "").strip() == "curated-svg":
+        compat.pop("source", None)
 
 
 def _register_assets(store: SharedAssetStore, assets: Iterable[AssetRecord]) -> list[str]:
