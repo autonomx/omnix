@@ -1,0 +1,287 @@
+{
+  "turns": [
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "look around",
+      "told": "Starfall Grove. You act: look around Starfall Grove\nRegion: Starfall March\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Starfall Grove (location)\nRegion Id: region:starfall-march\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Starfall Grove. You act: look around Starfall Grove\nRegion: Starfall March\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Starfall Grove (location)\nRegion Id: region:starfall-march\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "dialogue|npc:liora-fen|Welcome, traveler."
+      ],
+      "step": "I greet Liora Fen and ask her where I am",
+      "told": "",
+      "visible": "Liora Fen: \"Welcome, traveler.\""
+    },
+    {
+      "blocks": [
+        "narration||You take in your surroundings.",
+        "dialogue|npc:liora-fen|Direct answer: You take in your surroundings.",
+        "narration||Lore reveal: You take in your surroundings.",
+        "dialogue|npc:liora_fen|Continuation: You take in your surroundings."
+      ],
+      "step": "I ask Liora Fen to join my party as a companion.",
+      "told": "Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties Liora Fen was encountered at Starfall Grove. Liora Fen was encountered at Starfall Grove. liora_fen (npc)\nAppearance: Their clothing, posture, and working gear reflect their place in the surrounding community.\nPersonality: ordinary, cautious\nSpeech Style: neutral\nRole: Local NPC\nLocation Id: location:aurelia:arrival-grove\nDescription: liora_fen is a Local NPC first encountered at Starfall Grove. Their visible manner is ordinary, cautious.\nBackstory: Liora Fen has established ties to the people and routines around Aurelia:Arrival Grove.\nGoals: Protect their livelihood and standing in the community.\nMotives: Respond to immediate pressures without exposing private knowledge.\nRelationships: player: unknown\nCurrent Situation: Currently encountered at Aurelia:Arrival Grove. Liora Fen\nLiora Fen is a person currently encountered in the campaign, with a public identity grounded in the surrounding community. Liora Fen was encountered at Starfall Grove. Liora Fen was encountered at Starfall Grove. liora_fen (npc)\nAppearance: Their clothing, posture, and working gear reflect their place in the surrounding community.\nPersonality: ordinary, cautious\nSpeech Style: neutral\nRole: Local NPC\nLocation Id: location:aurelia:arrival-grove\nDescription: liora_fen is a Local NPC first encountered at Starfall Grove. Their visible manner is ordinary, cautious.\nBackstory: Liora Fen has established ties to the people and routines around Aurelia:Arrival Grove.\nGoals: Protect their livelihood and standing in the community.\nMotives: Respond to immediate pressures without exposing private knowledge.\nRelationships: player: unknown\nCurrent Situation: Currently encountered at Aurelia:Arrival Grove. Liora Fen\nLiora Fen is a person currently encountered in the campaign, with a public identity grounded in the surrounding community.",
+      "visible": "You take in your surroundings.\n\nLore reveal: You take in your surroundings.\n\nLiora Fen: \"Direct answer: You take in your surroundings.\"\n\nLiora Fen: \"Continuation: You take in your surroundings.\""
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I accept the quest Voices in the Phone.",
+      "told": "You take on the quest Voices in the Phone: Repair the protagonist's phone and identify the voice calling from Earth. You take on the quest Voices in the Phone: Repair the protagonist's phone and identify the voice calling from Earth.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "Practice swordsmanship with a careful training drill.",
+      "told": "Your practice earns 10 experience in swordsmanship. Your practice earns 10 experience in swordsmanship.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "narration||You take in your surroundings.",
+        "action||Resolved action: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "go to Starfall Village",
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached.",
+      "visible": "You take in your surroundings.\n\nResolved action: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "look around",
+      "told": "Starfall Village. You act: look around Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Brindle Gearwing\nId: npc:brindle-gearwing\nName: Brindle Gearwing\nRole: relic mechanic and merchant\nGoals:\n• build a working radio to Earth\n• earn a guild rank\n• pay off goblin patent collectors\nSpecies: kobold\nBiography: Brindle turns broken Earth electronics into aether tools. His proudest invention is a kettle that predicts rain and insults nobles.\nPersonality:\n• excitable\n• inventive\n• cowardly in combat\n• loyal under pressure\nSpeech Style: technical babble, delighted squeaks, dramatic product names Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments Starfall Village. You act: look around Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Brindle Gearwing\nId: npc:brindle-gearwing\nName: Brindle Gearwing\nRole: relic mechanic and merchant\nGoals:\n• build a working radio to Earth\n• earn a guild rank\n• pay off goblin patent collectors\nSpecies: kobold\nBiography: Brindle turns broken Earth electronics into aether tools. His proudest invention is a kettle that predicts rain and insults nobles.\nPersonality:\n• excitable\n• inventive\n• cowardly in combat\n• loyal under pressure\nSpeech Style: technical babble, delighted squeaks, dramatic product names Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "dialogue|npc:orik-stonewake|Welcome, traveler."
+      ],
+      "step": "I ask Orik Stonewake what he thinks of the newcomers.",
+      "told": "",
+      "visible": "Orik Stonewake: \"Welcome, traveler.\""
+    },
+    {
+      "blocks": [
+        "result||You take in your surroundings.",
+        "result||Consequence: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I ask Brindle Gearwing what a Healing Potion costs.",
+      "told": "Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver). Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver). Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver).",
+      "visible": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "result||You take in your surroundings.",
+        "result||Consequence: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I buy a Healing Potion from Brindle Gearwing.",
+      "told": "You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete. You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete. You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.",
+      "visible": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I sell my Iron Dagger to Brindle Gearwing.",
+      "told": "You sell the Iron Dagger to Brindle Gearwing for 5 copper. You sell the Iron Dagger to Brindle Gearwing for 5 copper.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I drop one Lantern Bread on the ground.",
+      "told": "You put down the Lantern Bread; it lies here now. You put down the Lantern Bread; it lies here now.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "narration||You take in your surroundings.",
+        "action||Resolved action: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "go to Wayfarers' Guild",
+      "told": "Wayfarers' Guild. Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade. Quest complete: First Night in Aurelia. You receive 20 silver, Wayfarer Sigil. Quest complete: First Night in Aurelia. You receive 20 silver, Wayfarer Sigil.",
+      "visible": "You take in your surroundings.\n\nResolved action: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "look around",
+      "told": "Wayfarers' Guild. You act: look around Wayfarers' Guild\nRegion: Starfall March\nDescription: Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Miri Kestrel\nId: npc:miri-kestrel\nName: Miri Kestrel\nRole: Wayfarers' Guild registrar\nGoals:\n• professionalize the guild\n• open a cross-world museum\n• keep Seraphine out of paperwork disasters\nSpecies: halfling\nBiography: Miri maintains the Earthborn Registry and can estimate a newcomer's affinity from the objects that crossed with them.\nPersonality:\n• cheerful\n• mercantile\n• hyper-competent\n• collector of Earth snacks\nSpeech Style: rapid lists, friendly bargaining, calls everyone dear traveler Wayfarers' Guild. You act: look around Wayfarers' Guild\nRegion: Starfall March\nDescription: Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Miri Kestrel\nId: npc:miri-kestrel\nName: Miri Kestrel\nRole: Wayfarers' Guild registrar\nGoals:\n• professionalize the guild\n• open a cross-world museum\n• keep Seraphine out of paperwork disasters\nSpecies: halfling\nBiography: Miri maintains the Earthborn Registry and can estimate a newcomer's affinity from the objects that crossed with them.\nPersonality:\n• cheerful\n• mercantile\n• hyper-competent\n• collector of Earth snacks\nSpeech Style: rapid lists, friendly bargaining, calls everyone dear traveler",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "narration||You take in your surroundings.",
+        "action||Resolved action: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "go to Starfall Village",
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Lantern Bread was encountered at Starfall Village. Lantern Bread was encountered at Starfall Village. Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments Lantern Bread was encountered at Starfall Village. Lantern Bread was encountered at Starfall Village. Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments",
+      "visible": "You take in your surroundings.\n\nResolved action: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I pick up the Lantern Bread.",
+      "told": "You pick up the Lantern Bread and stow it in your pack. You pick up the Lantern Bread and stow it in your pack.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "result||You take in your surroundings.",
+        "result||Consequence: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I buy a meal from Orik Stonewake.",
+      "told": "You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger. You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger. You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.",
+      "visible": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I rent a room for the night from Orik Stonewake.",
+      "told": "You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete. You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I go to my room and sleep for the night.",
+      "told": "You use A night's lodging and rest for 23 hours. The reserved service is consumed. You use A night's lodging and rest for 23 hours. The reserved service is consumed.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "wait",
+      "told": "Starfall Village. You act: wait Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Brindle Gearwing\nId: npc:brindle-gearwing\nName: Brindle Gearwing\nRole: relic mechanic and merchant\nGoals:\n• build a working radio to Earth\n• earn a guild rank\n• pay off goblin patent collectors\nSpecies: kobold\nBiography: Brindle turns broken Earth electronics into aether tools. His proudest invention is a kettle that predicts rain and insults nobles.\nPersonality:\n• excitable\n• inventive\n• cowardly in combat\n• loyal under pressure\nSpeech Style: technical babble, delighted squeaks, dramatic product names Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments Starfall Village. You act: wait Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Brindle Gearwing\nId: npc:brindle-gearwing\nName: Brindle Gearwing\nRole: relic mechanic and merchant\nGoals:\n• build a working radio to Earth\n• earn a guild rank\n• pay off goblin patent collectors\nSpecies: kobold\nBiography: Brindle turns broken Earth electronics into aether tools. His proudest invention is a kettle that predicts rain and insults nobles.\nPersonality:\n• excitable\n• inventive\n• cowardly in combat\n• loyal under pressure\nSpeech Style: technical babble, delighted squeaks, dramatic product names Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "result||Consequence: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I attack the Echo Wolf.",
+      "told": "The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora-fen misses the Echo Wolf. The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora-fen misses the Echo Wolf. The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora-fen misses the Echo Wolf.",
+      "visible": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+    },
+    {
+      "step": "tactical_move [4, 3]"
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "result||Consequence: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I attack the Echo Wolf.",
+      "told": "You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora-fen misses the Echo Wolf. You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora-fen misses the Echo Wolf. You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora-fen misses the Echo Wolf.",
+      "visible": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "result||Consequence: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I attack the Echo Wolf.",
+      "told": "You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora-fen misses the Echo Wolf. You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora-fen misses the Echo Wolf. You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora-fen misses the Echo Wolf.",
+      "visible": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "result||Consequence: You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I flee from the Echo Wolf.",
+      "told": "You break away from the Echo Wolf and escape; the fight is over. You break away from the Echo Wolf and escape; the fight is over. You break away from the Echo Wolf and escape; the fight is over.",
+      "visible": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "I drink the Healing Potion.",
+      "told": "Orik Stonewake offers: A drink (8 copper). Orik Stonewake offers: A drink (8 copper).",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "Check my quests",
+      "told": "Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian. Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "go to Skybridge Pass",
+      "told": "Skybridge Pass\nRegion: Cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. Skybridge Pass (location)\nRegion Id: region:cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. Skybridge Pass\nRegion: Cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. Skybridge Pass (location)\nRegion Id: region:cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. Skybridge Pass\nRegion: Cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. Skybridge Pass (location)\nRegion Id: region:cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. Skybridge Pass\nRegion: Cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. Skybridge Pass (location)\nRegion Id: region:cloudspine\nDescription: Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "go to Starfall Village",
+      "told": "Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Orik Stonewake\nId: npc:orik-stonewake\nName: Orik Stonewake\nRole: innkeeper, retired portal mason\nGoals:\n• protect Starfall Village\n• recover his daughter's memory from Moonroot\n• teach honest craft\nSpecies: dwarf\nBiography: Orik helped seal Moonroot after the Memory Plague. His inn, the Lantern Below, gives new arrivals one free night and one hard truth.\nPersonality:\n• gruff\n• generous\n• nostalgic\n• superstitious about mirrors\nSpeech Style: plainspoken proverbs and stoneworking metaphors Starfall Village\nRegion: Starfall March\nDescription: Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. Captain Rhea Sunward\nId: npc:captain-rhea-sunward\nName: Captain Rhea Sunward\nRole: village guard captain\nGoals:\n• fortify Skybridge Pass\n• expose a traitor in the guard\n• write a terrible adventure novel\nSpecies: human\nBiography: Rhea survived an Echo Beast attack as a child and now trains villagers to resist mind-affecting magic.\nPersonality:\n• direct\n• suspicious\n• fair\n• secretly romantic\nSpeech Style: command voice, clipped questions, awkward compliments Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Orik Stonewake\nId: npc:orik-stonewake\nName: Orik Stonewake\nRole: innkeeper, retired portal mason\nGoals:\n• protect Starfall Village\n• recover his daughter's memory from Moonroot\n• teach honest craft\nSpecies: dwarf\nBiography: Orik helped seal Moonroot after the Memory Plague. His inn, the Lantern Below, gives new arrivals one free night and one hard truth.\nPersonality:\n• gruff\n• generous\n• nostalgic\n• superstitious about mirrors\nSpeech Style: plainspoken proverbs and stoneworking metaphors",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "go to Starfall Grove",
+      "told": "Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Liora Fen (npc)\nPersonality: wry, protective, curious about Earth slang, afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRole: guide and first companion\nDescription: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nBackstory: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nGoals: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties\nMotives: find her missing foster mother, keep new arrivals alive, prove foxkin can lead mixed parties",
+      "visible": "You take in your surroundings."
+    },
+    {
+      "blocks": [
+        "action||You take in your surroundings.",
+        "choice||Offered choice: You take in your surroundings."
+      ],
+      "step": "wait",
+      "told": "Starfall Grove. You act: wait Starfall Grove\nRegion: Starfall March\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Starfall Grove (location)\nRegion Id: region:starfall-march\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Starfall Grove. You act: wait Starfall Grove\nRegion: Starfall March\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Starfall Grove (location)\nRegion Id: region:starfall-march\nDescription: Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.",
+      "visible": "You take in your surroundings."
+    }
+  ]
+}
