@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { checkResultMessage, type UpdateAction, type UpdateState } from './updateStatus';
 
-const RELEASES_URL = 'https://github.com/autonomx/omnix-desktop/releases/latest';
+const RELEASES_URL = 'https://github.com/autonomx/omnix/releases/latest';
 const CHECK_INTERVAL_MS = 6 * 60 * 60_000;
 
 /**

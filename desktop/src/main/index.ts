@@ -492,7 +492,7 @@ async function main(): Promise<void> {
   }
 }
 
-const RELEASES_URL = 'https://github.com/autonomx/omnix-desktop/releases';
+const RELEASES_URL = 'https://github.com/autonomx/omnix/releases';
 
 /** The time in a snapshot's name (pgdata-20261017T183955Z), as the error page shows it. */
 function snapshotTime(snapshot: string): string {

@@ -75,11 +75,11 @@ dmg:
   sign: false
   title: Omnix
 publish:
-  # Releases of autonomx/omnix-desktop (DT-6.3; roadmap §7 Q-4). The repository must be public: the updater reads
-  # releases without a token, and none may ship inside the app.
+  # Releases of autonomx/omnix (DT-6.3; roadmap §7 Q-4), the public repository itself: the updater reads releases
+  # without a token, and none may ship inside the app.
   provider: github
   owner: autonomx
-  repo: omnix-desktop
+  repo: omnix
   releaseType: release
 electronFuses:
   runAsNode: false
