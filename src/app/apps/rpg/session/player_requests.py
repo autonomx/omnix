@@ -10,6 +10,7 @@ import re
 from copy import deepcopy
 from typing import Any, Iterable, Mapping
 
+from app.apps.rpg.rules.economy.currency import apply_currency_delta
 from app.apps.rpg.rules.player.player_progression_state import award_skill_xp, resolve_skill_level_ups
 
 PRACTICE_SKILL_XP = 10
@@ -169,7 +170,131 @@ def describe_player_events(events: Iterable[Mapping[str, Any]]) -> list[str]:
             lines.append(f"Quest complete: {title}." + (f" You receive {', '.join(rewards)}." if rewards else ""))
         elif kind == "status_report":
             lines.extend(str(line) for line in event.get("lines") or ())
+        elif kind == "item_sold":
+            copper = int(event.get("copper") or 0)
+            coins = _purse_text(apply_currency_delta({}, {"copper": copper}))
+            lines.append(f"You sell the {event.get('item')} to {event.get('buyer')} for {coins}.")
+        elif kind == "item_dropped":
+            quantity = int(event.get("qty") or 1)
+            lines.append(f"You put down {quantity} {event.get('item')}; it lies here now." if quantity > 1
+                         else f"You put down the {event.get('item')}; it lies here now.")
+        elif kind == "item_picked_up":
+            lines.append(f"You pick up the {event.get('item')} and stow it in your pack.")
+        elif kind == "pick_up_refused":
+            lines.append("Nothing by that name lies here to pick up.")
+        elif kind == "sale_refused":
+            lines.append({
+                "not_carried": "You carry nothing by that name to sell.",
+                "no_buyer_here": f"No one here trades in goods to buy the {event.get('item')}.",
+                "keepsake": f"{event.get('buyer')} will not buy the {event.get('item')}: it was earned, not bought.",
+            }.get(str(event.get("reason")), "The sale does not happen."))
     return lines
+
+
+_SELL = re.compile(r"\bsell(?:s|ing)?\b")
+# What a shop pays for goods it does not trade in itself (a token sum; a shop's own goods fetch half its price).
+UNTRADED_GOODS_PRICE = {"copper": 5}
+
+
+def _copper(price: Mapping[str, Any]) -> int:
+    return int(price.get("gold") or 0) * 100 + int(price.get("silver") or 0) * 10 + int(price.get("copper") or 0)
+
+
+def sell_requested_item(simulation_state: dict[str, Any], player_input: str) -> dict[str, Any]:
+    """Sell one of something the player carries to a shopkeeper who is present, in a world with its own people."""
+    text = str(player_input or "").lower()
+    world = _dict(simulation_state.get("world_model"))
+    if not _SELL.search(text) or not world:
+        return {}
+    player_state = _dict(simulation_state.get("player_state"))
+    location_id = str(player_state.get("location_id") or "")
+    shops = [
+        _dict(provider) for provider in _dict(world.get("providers")).values()
+        if "shop_goods" in (_dict(provider).get("service_kinds") or ()) and _dict(provider).get("location_id") == location_id
+    ]
+    named = [shop for shop in shops if str(shop.get("provider_name") or "").lower() in text]
+    shop = (named or shops)[0] if len(named or shops) == 1 else None
+    inventory = _dict(player_state.get("inventory_state"))
+    items = [_dict(item) for item in inventory.get("items") or ()]
+    carried = sorted((item for item in items if str(item.get("name") or "").lower() in text),
+                     key=lambda item: len(str(item.get("name") or "")), reverse=True)
+    if not carried:
+        return {"kind": "sale_refused", "reason": "not_carried"}
+    item = carried[0]
+    name = str(item.get("name"))
+    if shop is None:
+        return {"kind": "sale_refused", "item": name, "reason": "no_buyer_here"}
+    rewards = {str(reward) for quest in _quests(simulation_state) for reward in quest.get("rewards") or ()}
+    if str(item.get("item_id") or "") in rewards:
+        return {"kind": "sale_refused", "item": name, "buyer": shop.get("provider_name"), "reason": "keepsake"}
+    offers = [_dict(offer) for offer in _dict(world.get("offers")).get(str(shop.get("provider_id"))) or ()]
+    own = next((offer for offer in offers if str(offer.get("label") or "").lower() == name.lower()), {})
+    paid = max(1, _copper(_dict(own.get("price"))) // 2) if own else _copper(UNTRADED_GOODS_PRICE)
+    quantity = int(item.get("qty") or item.get("quantity") or 1)
+    remaining = [row for row in items if row is not item]
+    if quantity > 1:
+        remaining.insert(items.index(item), {**item, "qty": quantity - 1})
+    purse = apply_currency_delta(_dict(inventory.get("currency") or player_state.get("currency")), {"copper": paid})
+    inventory["items"] = remaining
+    inventory["currency"] = purse
+    player_state["inventory_state"] = inventory
+    player_state["currency"] = deepcopy(purse)
+    simulation_state["player_state"] = player_state
+    return {"kind": "item_sold", "item": name, "buyer": shop.get("provider_name"), "copper": paid}
+
+
+_DROP = re.compile(r"\b(drop|drops|dropped|put down|set down|leave behind|discard|throw away)\b")
+_PICK_UP = re.compile(r"\b(pick(?:s|ed)?\s+(?:\w+\s+){0,4}?up|pick up|take|grab|collect|gather)\b")
+
+
+def _named(rows: list[dict[str, Any]], text: str) -> dict[str, Any] | None:
+    """The row whose name the player says (the longest such name)."""
+    named = [row for row in rows if str(row.get("name") or "").lower() and str(row.get("name")).lower() in text]
+    return max(named, key=lambda row: len(str(row.get("name")))) if named else None
+
+
+def drop_requested_item(simulation_state: dict[str, Any], player_input: str) -> dict[str, Any]:
+    """Put something the player carries on the ground where they stand (one, or all with "all")."""
+    from app.apps.rpg.session.inventory_runtime import drop_item_action
+
+    text = str(player_input or "").lower()
+    if not _DROP.search(text):
+        return {}
+    player_state = _dict(simulation_state.get("player_state"))
+    item = _named([_dict(row) for row in _dict(player_state.get("inventory_state")).get("items") or ()], text)
+    if item is None:
+        return {}  # "drop by the guild" drops nothing: the rest of the turn reads it
+    carried = int(item.get("qty") or item.get("quantity") or 1)
+    quantity = carried if re.search(r"\ball\b", text) else 1
+    location_id = str(player_state.get("location_id") or simulation_state.get("current_location_id") or "")
+    result = drop_item_action(simulation_state, {"item_id": item.get("item_id"), "qty": quantity}, location_id=location_id)
+    simulation_state.update(_dict(result.get("simulation_state")))
+    return {"kind": "item_dropped", "item": item.get("name"), "qty": quantity}
+
+
+def pick_up_requested_item(simulation_state: dict[str, Any], player_input: str) -> dict[str, Any]:
+    """Take something lying where the player stands into their pack."""
+    from app.apps.rpg.rules.items.inventory_state import add_inventory_items
+    from app.apps.rpg.rules.items.world_items import list_scene_items, pickup_world_item
+
+    text = str(player_input or "").lower()
+    if not _PICK_UP.search(text):
+        return {}
+    player_state = _dict(simulation_state.get("player_state"))
+    location_id = str(player_state.get("location_id") or simulation_state.get("current_location_id") or "")
+    item = _named(list_scene_items(simulation_state, location_id), text)
+    if item is None:
+        # "Take" also takes on quests and takes a seat; only "pick up" is plainly about something on the ground.
+        return {"kind": "pick_up_refused", "reason": "not_here"} if "pick" in text else {}
+    result = pickup_world_item(simulation_state, str(item.get("instance_id") or ""))
+    simulation_state.update(_dict(result.get("simulation_state")))
+    # Back in the pack it joins its own stack: where it lay is no longer part of it.
+    picked = {key: value for key, value in _dict(result.get("picked_up_item")).items()
+              if key not in {"instance_id", "location_id", "_degraded"}}
+    player_state = _dict(simulation_state.get("player_state"))
+    player_state["inventory_state"] = add_inventory_items(_dict(player_state.get("inventory_state")), [picked])
+    simulation_state["player_state"] = player_state
+    return {"kind": "item_picked_up", "item": item.get("name"), "qty": int(item.get("qty") or 1)}
 
 
 def _reward_currency(simulation_state: dict[str, Any], rewards: list[str]) -> dict[str, int]:
@@ -181,8 +306,8 @@ def _reward_currency(simulation_state: dict[str, Any], rewards: list[str]) -> di
         return gained
     player_state = _dict(simulation_state.get("player_state"))
     inventory = _dict(player_state.get("inventory_state"))
-    purse = {**{"gold": 0, "silver": 0, "copper": 0}, **_dict(inventory.get("currency") or player_state.get("currency"))}
-    purse = {coin: int(purse.get(coin) or 0) + gained[coin] for coin in ("gold", "silver", "copper")}
+    # Added as purchases spend: coins carry over (20 silver is 2 gold), so every purse reads the same way.
+    purse = apply_currency_delta(_dict(inventory.get("currency") or player_state.get("currency")), gained)
     inventory["currency"] = purse
     player_state["currency"] = deepcopy(purse)
     player_state["inventory_state"] = inventory
@@ -259,6 +384,9 @@ def apply_player_requests(simulation_state: dict[str, Any], player_input: str) -
         accept_requested_quest(simulation_state, player_input),
         practise_requested_skill(simulation_state, player_input),
         report_requested_status(simulation_state, player_input),
+        sell_requested_item(simulation_state, player_input),
+        drop_requested_item(simulation_state, player_input),
+        pick_up_requested_item(simulation_state, player_input),
     ) if event]
 
 
@@ -268,7 +396,10 @@ __all__ = [
     "advance_quests_on_arrival",
     "apply_player_requests",
     "describe_player_events",
+    "drop_requested_item",
     "has_player_requests",
+    "pick_up_requested_item",
     "practise_requested_skill",
     "report_requested_status",
+    "sell_requested_item",
 ]

@@ -703,6 +703,9 @@ def resolve_service_intent(  # type: ignore[no-redef]  # wraps the definition ab
     )
 
 
+_SELLING = re.compile(r"\bsell(?:s|ing)?\b")
+
+
 def resolve_service_turn(  # type: ignore[no-redef]  # wraps the definition above
     *,
     player_input: str,
@@ -714,6 +717,9 @@ def resolve_service_turn(  # type: ignore[no-redef]  # wraps the definition abov
     text = _safe_str(player_input)
     if _n11619_is_document_service_false_positive_text(text):
         return _n11619_not_service_precision_result(text)
+    if _SELLING.search(text.lower()) and _safe_dict(_safe_dict(simulation_state).get("world_model")):
+        # Selling to a world's shopkeeper is the player's request (session.player_requests), not a purchase.
+        return _not_service_result("player_sale", player_input=text)
     return _N11619_PREVIOUS_RESOLVE_SERVICE_TURN(
         player_input=player_input,
         action=action,

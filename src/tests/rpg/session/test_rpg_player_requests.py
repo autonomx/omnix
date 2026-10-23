@@ -76,7 +76,7 @@ def test_reaching_the_last_place_completes_the_quest_and_pays_it() -> None:
     events = advance_quests_on_arrival(state, "location:lamp")
     assert events[0]["kind"] == "quest_completed" and events[0]["items"] == ["Sea Shard"]
     assert _quest(state, "quest:tide")["status"] == "completed"
-    assert state["player_state"]["currency"]["silver"] == 22
+    assert state["player_state"]["currency"] == {"gold": 2, "silver": 2, "copper": 0}  # 2 silver and 20 more, carried over
     assert [item["name"] for item in state["player_state"]["inventory_state"]["items"]] == ["Sea Shard"]
     assert advance_quests_on_arrival(state, "location:lamp") == []  # paid once
 
@@ -181,3 +181,62 @@ def test_when_someone_answers_the_narrator_still_tells_what_the_turn_did() -> No
     plan = DeterministicBeatPlanner().plan(request, (profile, outcome))
     narrator = plan.beats[0]
     assert narrator.speaker_id is None and "runtime:turn:outcome" in narrator.evidence_refs
+
+
+def _shop_world_state() -> dict:
+    state = _state()
+    state["player_state"]["location_id"] = "location:market"
+    state["player_state"]["inventory_state"]["items"] = [
+        {"item_id": "item:dagger", "name": "Iron Dagger", "qty": 1},
+        {"item_id": "item:bread", "name": "Lantern Bread", "qty": 2, "category": "food"},
+        {"item_id": "item:shard", "name": "Sea Shard", "qty": 1},
+    ]
+    state["world_model"] = {
+        "items": [],
+        "providers": {"npc:brin": {"provider_id": "npc:brin", "provider_name": "Brin Gear", "location_id": "location:market",
+                                    "service_kinds": ["shop_goods"]}},
+        "offers": {"npc:brin": [{"label": "Lantern Bread", "price": {"copper": 8}}]},
+    }
+    return state
+
+
+def test_a_shopkeeper_buys_what_the_player_carries() -> None:
+    state = _shop_world_state()
+    # Goods the shop trades in fetch half its price; other goods a token sum.
+    assert apply_player_requests(state, "I sell a Lantern Bread to Brin Gear")[0] == {
+        "kind": "item_sold", "item": "Lantern Bread", "buyer": "Brin Gear", "copper": 4}
+    sold = apply_player_requests(state, "I sell my Iron Dagger")[0]
+    assert sold["copper"] == 5
+    player = state["player_state"]
+    assert [(item["name"], item["qty"]) for item in player["inventory_state"]["items"]] == [("Lantern Bread", 1), ("Sea Shard", 1)]
+    assert player["currency"] == player["inventory_state"]["currency"] == {"gold": 0, "silver": 2, "copper": 9}
+    assert describe_player_events([sold]) == ["You sell the Iron Dagger to Brin Gear for 5 copper."]
+
+
+def test_some_sales_do_not_happen() -> None:
+    state = _shop_world_state()
+    # A quest's reward is a keepsake; what the player does not carry cannot be sold; nobody buys elsewhere.
+    assert apply_player_requests(state, "I sell the Sea Shard")[0]["reason"] == "keepsake"
+    assert apply_player_requests(state, "I sell my Moon Lantern")[0]["reason"] == "not_carried"
+    state["player_state"]["location_id"] = "location:road"
+    assert apply_player_requests(state, "I sell my Iron Dagger")[0]["reason"] == "no_buyer_here"
+    assert len(state["player_state"]["inventory_state"]["items"]) == 3
+
+
+def test_what_is_put_down_lies_there_until_picked_up() -> None:
+    state = _shop_world_state()
+    dropped = apply_player_requests(state, "I drop one Lantern Bread on the ground")
+    assert dropped == [{"kind": "item_dropped", "item": "Lantern Bread", "qty": 1}]
+    assert ("Lantern Bread", 1) in [(item["name"], item["qty"]) for item in state["player_state"]["inventory_state"]["items"]]
+    assert [item["name"] for item in state["world_items"]["by_location"]["location:market"]] == ["Lantern Bread"]
+    # Elsewhere it is not there to take.
+    state["player_state"]["location_id"] = "location:road"
+    assert apply_player_requests(state, "I pick up the Lantern Bread") == [{"kind": "pick_up_refused", "reason": "not_here"}]
+    state["player_state"]["location_id"] = "location:market"
+    assert apply_player_requests(state, "I pick up the Lantern Bread")[0]["kind"] == "item_picked_up"
+    assert ("Lantern Bread", 2) in [(item["name"], item["qty"]) for item in state["player_state"]["inventory_state"]["items"]]
+    assert state["world_items"]["by_location"]["location:market"] == []
+    assert describe_player_events(dropped) == ["You put down the Lantern Bread; it lies here now."]
+    # Other meanings of the words do nothing here.
+    assert apply_player_requests(state, "I drop by the guild hall") == []
+    assert apply_player_requests(state, "I take on the quest of the Drowned Bell")[0]["kind"] == "quest_accepted"

@@ -488,17 +488,19 @@ def _service_outcome_lines(resolved: dict[str, Any], visible: dict[str, Any]) ->
         eased = {"meal": "hunger", "drink": "thirst", "lodging": "fatigue"}.get(_clean(service_result.get("service_kind")))
         if eased:
             lines.append(f"It eases your {eased}.")
-    if purchase.get("blocked"):
+    offers = [_safe_dict(offer) for offer in _safe_list(service_result.get("offers"))]
+    # Asked for something general ("supplies") among several offers: what is on offer, to choose from.
+    unspecified = _clean(service_result.get("status")) == "purchase_offer_not_found" and len(offers) > 1
+    if purchase.get("blocked") and not unspecified:
         reason = _clean(purchase.get("blocked_reason")).replace("_", " ")
         lines.append(f"The purchase from {provider} does not go through: {reason or 'it is refused'}.")
-    offers = [_safe_dict(offer) for offer in _safe_list(service_result.get("offers"))]
     if not lines and offers:
         listed = ", ".join(
             f"{_clean(offer.get('label'))} ({format_currency(_safe_dict(offer.get('price')))})"
             for offer in offers if _clean(offer.get("label"))
         )
         if listed:
-            lines.append(f"{provider} offers: {listed}.")
+            lines.append(f"{provider} offers: {listed}." + (" Nothing is sold until you name one." if unspecified else ""))
     return [line for line in lines if line]
 
 

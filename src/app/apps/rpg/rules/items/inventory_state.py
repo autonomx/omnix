@@ -95,6 +95,9 @@ def ensure_inventory_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
     return player_state
 
 
+_STACKABLE_KINDS = frozenset({"food", "drink", "consumable", "potion", "supply", "ammo", "material"})
+
+
 def _merge_stack(items: List[Dict[str, Any]], incoming: Dict[str, Any], capacity: int) -> List[Dict[str, Any]]:
     """Merge *incoming* into *items*, stacking if possible, respecting *capacity*."""
     incoming = _normalize_stack(incoming)
@@ -102,7 +105,9 @@ def _merge_stack(items: List[Dict[str, Any]], incoming: Dict[str, Any], capacity
         return items
 
     item_def = get_item_definition(cast(Any, incoming.get("item_id")))
-    if item_def.get("stackable"):
+    # A world's own goods are not in the starter catalog: its food, drink and supplies stack by their kind.
+    kind = _safe_str(incoming.get("category") or incoming.get("type")).lower()
+    if item_def.get("stackable") or kind in _STACKABLE_KINDS:
         for idx, existing in enumerate(items):
             if _safe_str(existing.get("item_id")) == incoming["item_id"]:
                 merged = dict(existing)

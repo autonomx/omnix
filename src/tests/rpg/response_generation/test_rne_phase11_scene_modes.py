@@ -40,7 +40,7 @@ def test_observation_publishes_one_grounded_canonical_answer() -> None:
     assert "Old Quarry" in result["narration"]
 
 
-def test_travel_requires_scene_establishment_and_resolved_consequence() -> None:
+def test_travel_establishes_the_new_scene_and_the_resolved_action() -> None:
     result = _base_result("travel")
     result["location_changed"] = True
     result["canonical_effects"] = {"location": {"from": "old_road", "to": "old_quarry"}}
@@ -50,9 +50,9 @@ def test_travel_requires_scene_establishment_and_resolved_consequence() -> None:
         player_input="Travel to the quarry.",
     )
     purposes = [block["purpose"] for block in result["canonical_narrative_response"]["blocks"]]
-    assert purposes[:2] == ["scene_establishment", "meaningful_environmental_change"]
-    assert "resolved_action" in purposes
-    assert "consequence" in purposes
+    # The arrival is told once: the scene it establishes is the change and the consequence.
+    assert purposes[:2] == ["scene_establishment", "resolved_action"]
+    assert "meaningful_environmental_change" not in purposes and "consequence" not in purposes
     assert result["canonical_narrative_response"]["validation"]["passed"] is True
 
 

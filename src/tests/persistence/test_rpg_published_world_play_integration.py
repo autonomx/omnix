@@ -379,6 +379,35 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert any("You take on the quest Voices in the Phone" in text for text in told)
         assert any("Your practice earns 10 experience in swordsmanship" in text for text in told)
         assert "for A hot meal" in told[-1] and "It eases your hunger." in told[-1]
+        # A shop sells this world's goods: the item is in the pack and every copy of the purse agrees, on later
+        # turns too. Asking for something general names what is on offer and sells nothing.
+        turn("I buy a Healing Potion from Brindle Gearwing.")
+        purse = public()["player"]["currency"]
+        turn("I buy supplies from Brindle Gearwing.")
+        assert "Brindle Gearwing offers:" in told[-1] and "Healing Potion" in told[-1], told[-1]
+        state = stored()["simulation_state"]["player_state"]
+        assert public()["player"]["currency"] == purse == state["currency"] == state["inventory_state"]["currency"]
+        assert "Healing Potion" in [item["name"] for item in state["inventory_state"]["items"]]
+        assert "Healing Potion" in [item["name"] for item in public()["player"]["inventory"]]
+
+        # A shopkeeper buys what the player carries, and the narrator is told the price.
+        before = copper(public()["player"]["currency"])
+        turn("I sell my Iron Dagger to Brindle Gearwing.")
+        assert "You sell the Iron Dagger to Brindle Gearwing for 5 copper." in told[-1], told[-1]
+        assert copper(public()["player"]["currency"]) == before + 5
+        assert "Iron Dagger" not in [item["name"] for item in public()["player"]["inventory"]]
+
+        # What is put down lies where it was dropped, and picking it up returns it to its own stack.
+        def bread() -> list:
+            return [item["quantity"] for item in public()["player"]["inventory"] if item["name"] == "Lantern Bread"]
+
+        carried = bread()
+        turn("I drop one Lantern Bread on the ground.")
+        assert bread() == [carried[0] - 1] or (carried == [1] and bread() == [])
+        assert "You put down the Lantern Bread" in told[-1]
+        turn("I pick up the Lantern Bread.")
+        assert bread() == carried
+
         # Every one of these commands is understood by the game itself: none asked the model what it meant.
         assert "semantic_intent" not in model.calls and "dialogue" not in model.calls, model.calls
     finally:

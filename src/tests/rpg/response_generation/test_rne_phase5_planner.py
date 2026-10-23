@@ -73,9 +73,9 @@ def test_scene_change_beats_precede_current_turn_dialogue() -> None:
         metadata={"response_mode": "dialogue"},
     )
     plan = DeterministicBeatPlanner().plan(request, bran_fixture_evidence())
-    assert [beat.purpose for beat in plan.beats[:4]] == [
+    # Establishing the new scene tells what changed; no second environmental beat repeats it.
+    assert [beat.purpose for beat in plan.beats[:3]] == [
         BeatPurpose.SCENE_ESTABLISHMENT,
-        BeatPurpose.ENVIRONMENTAL_CHANGE,
         BeatPurpose.PHYSICAL_REACTION,
         BeatPurpose.DIRECT_ANSWER,
     ]

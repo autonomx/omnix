@@ -214,11 +214,17 @@ def apply_merchant_interaction(
             action=action,
         )
 
-    merchant_id = _safe_str(
-        action.get("merchant_id")
-        or action.get("secondary_target_id")
-        or "npc:Elara"
-    )
+    named_merchant = _safe_str(action.get("merchant_id") or action.get("secondary_target_id"))
+    if not named_merchant and _safe_dict(simulation_state.get("world_model")):
+        # A session with its own world sells through its own people's offers (the service runtime); the
+        # starter town's merchant is not in it.
+        return _result(
+            resolved=False,
+            changed_state=False,
+            reason="no_merchant_named_in_this_world",
+            action=action,
+        )
+    merchant_id = named_merchant or "npc:Elara"
     merchant = ensure_merchant_state(simulation_state, merchant_id)
     if not merchant:
         return _result(

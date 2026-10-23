@@ -119,8 +119,10 @@ def _append_scene_beats(
     purposes: list[BeatPurpose] = []
     for change in request.scene_changes:
         if change.kind in {"new_game", "location_changed", "region_changed", "changed_return_visit"}:
+            # Establishing the new scene already tells what changed: a second beat would repeat it.
             purposes.append(BeatPurpose.SCENE_ESTABLISHMENT)
-        purposes.append(BeatPurpose.ENVIRONMENTAL_CHANGE)
+        else:
+            purposes.append(BeatPurpose.ENVIRONMENTAL_CHANGE)
     narrator_ids = {record.evidence_id for record in narrator_evidence}
     for purpose in dict.fromkeys(purposes):
         explicit = tuple(
@@ -273,7 +275,11 @@ def _action_beats(
             evidence_scope="player",
         )
     )
-    if mode in {"combat", "transaction", "failure", "travel"} or request.significance is not NarrativeSignificance.ROUTINE:
+    established = any(beat.purpose is BeatPurpose.SCENE_ESTABLISHMENT for beat in beats)
+    if (
+        mode in {"combat", "transaction", "failure", "travel"} or request.significance is not NarrativeSignificance.ROUTINE
+    ) and not (mode == "travel" and established):
+        # An arrival's consequence is the place itself, which its scene beat establishes.
         beats.append(
             _beat(
                 len(beats) + 1,
