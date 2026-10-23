@@ -2,13 +2,13 @@
   .rpg-starter-bubble-panel {
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 16%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-indigo-170) 70%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 70%, transparent);
     padding: 0.8rem 0.9rem;
   }
 
   .rpg-starter-bubble-panel summary {
     cursor: pointer;
-    color: var(--c-slate-980);
+    color: var(--fg-slate-980);
   }
 
   .rpg-starter-bubble-panel summary > span {
@@ -44,8 +44,8 @@
     width: 100%;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-slate-150-2) 88%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 88%, transparent);
+    color: var(--fg-neutral-1000);
     padding: 0.55rem 0.7rem;
   }
 
@@ -60,8 +60,8 @@
   .rpg-starter-bubble-materialization-list button {
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-indigo-170) 82%, transparent);
-    color: color-mix(in srgb, var(--c-neutral-960) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 82%, transparent);
+    color: color-mix(in srgb, var(--fg-neutral-960) 90%, transparent);
     cursor: pointer;
     padding: 0.55rem 0.8rem;
   }
@@ -112,7 +112,7 @@
     overflow: auto;
     margin: 0;
     border-radius: 0.55rem;
-    background: var(--mantine-color-dark-9, var(--c-neutral-180));
+    background: var(--mantine-color-dark-9, var(--bg-neutral-180));
     padding: 0.75rem;
     white-space: pre-wrap;
   }

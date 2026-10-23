@@ -95,3 +95,50 @@ def test_deterministic_writer_produces_canonical_blocks_without_legacy_payloads(
     assert result.blocks[0].text.startswith("Bran pauses")
     assert result.blocks[1].speaker_id == "npc:bran"
     assert result.source == "deterministic_writer"
+
+
+def test_deterministic_writer_fits_long_evidence_into_the_word_budget() -> None:
+    """A long lore page or dossier is cut at sentence ends: the fallback never overruns its budget."""
+    from dataclasses import replace
+
+    from app.apps.rpg.narration.narrative_engine.validation import NarrativeValidator
+
+    request = _request()
+    long_page = " ".join(f"Sentence {index} tells the road's long history in some detail." for index in range(80))
+    evidence = tuple(replace(record, content=long_page) for record in bran_fixture_evidence())
+    plan = DeterministicBeatPlanner().plan(request, evidence)
+    result = DeterministicNarrativeWriter().write(request, plan, evidence)
+
+    assert sum(len(block.text.split()) for block in result.blocks) <= plan.word_budget[1]
+    assert all(block.text for block in result.blocks)
+    report = NarrativeValidator().validate(request, plan, evidence, result.blocks)
+    assert "word_budget_exceeded" not in {issue.code for issue in report.issues}
+
+
+def test_deterministic_writer_never_has_a_character_recite_their_dossier() -> None:
+    from app.apps.rpg.narration.narrative_engine import AuthorityClass, EvidenceRecord, VisibilityClass
+
+    request = _request()
+    evidence = (
+        EvidenceRecord(
+            evidence_id="runtime:npc:bran:profile",
+            content="Bran. Keeps the Flagon since the war. Gruff but fair. Speaks in short sentences.",
+            authority=AuthorityClass.OBJECTIVE_CANON,
+            visibility=VisibilityClass.NARRATOR_ONLY,
+            known_by=("npc:bran",),
+            entity_refs=("npc:bran",),
+        ),
+        EvidenceRecord(
+            evidence_id="canon:character:bran",
+            content="Name: Bran\nRole: innkeeper of the Rusty Flagon",
+            authority=AuthorityClass.OBJECTIVE_CANON,
+            visibility=VisibilityClass.PUBLIC,
+            entity_refs=("npc:bran",),
+        ),
+    )
+    plan = DeterministicBeatPlanner().plan(request, evidence)
+    result = DeterministicNarrativeWriter().write(request, plan, evidence)
+
+    spoken = [block.text for block in result.blocks if block.speaker_id]
+    assert spoken
+    assert not any("Keeps the Flagon" in text or "Name:" in text for text in spoken)

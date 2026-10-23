@@ -39,6 +39,7 @@ from app.apps.rpg.rules.combat.abilities import (
 from app.apps.rpg.rules.combat.encounters import (
     build_encounter_from_preset as build_encounter_from_preset,
 )
+from app.apps.rpg.session.player_requests import advance_quests_on_arrival
 from app.apps.rpg.world.travel_graph import (
     apply_travel_result_to_state as apply_travel_result_to_state, build_travel_state_delta as build_travel_state_delta, build_travel_world_event as build_travel_world_event,
     list_available_routes as list_available_routes, resolve_travel_destination as resolve_travel_destination,
@@ -231,6 +232,9 @@ def _apply_deterministic_travel_resolution(
                 state=after_action_state,
                 travel_result=travel_result,
             )
+            quest_events = advance_quests_on_arrival(after_action_state, str(travel_result.get("to_location") or ""))
+            if quest_events:
+                resolved_result["quest_events"] = quest_events
 
             state_delta = build_travel_state_delta(travel_result)
             world_event = build_travel_world_event(travel_result)

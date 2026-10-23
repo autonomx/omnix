@@ -1,0 +1,313 @@
+/* The local map's tactical grid (RpgTacticalGrid). Terrain keeps one set of map colours in every theme and
+   appearance, like a printed map; the panels around it use the theme. */
+@layer features {
+  .rpg-grid {
+    --rpg-grid-token-ink: var(--c-neutral-1000);
+    display: grid;
+    gap: 0.85rem;
+    min-width: 0;
+  }
+
+  .rpg-grid-status {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+  }
+
+  .rpg-grid-status small {
+    color: var(--omnix-muted-text);
+    flex-basis: 100%;
+  }
+
+  .rpg-grid-mode {
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    color: var(--omnix-muted-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.6rem;
+    text-transform: uppercase;
+  }
+
+  .rpg-grid-mode-combat {
+    border-color: color-mix(in srgb, var(--c-red-560) 60%, transparent);
+    color: var(--c-red-560);
+  }
+
+  .rpg-grid-layout {
+    align-items: start;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
+  }
+
+  .rpg-grid-board-frame {
+    background: color-mix(in srgb, var(--c-slate-450) 22%, transparent);
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.75rem;
+    min-width: 0;
+    padding: 0.6rem;
+  }
+
+  .rpg-grid-board {
+    display: block;
+    height: auto;
+    max-height: 64vh;
+    width: 100%;
+  }
+
+  .rpg-grid-board:focus-visible {
+    border-radius: 0.4rem;
+    outline: 2px solid var(--omnix-cyan);
+    outline-offset: 3px;
+  }
+
+  .rpg-grid-cell {
+    cursor: pointer;
+  }
+
+  .rpg-grid-terrain {
+    stroke: color-mix(in srgb, var(--c-neutral-0) 22%, transparent);
+    stroke-width: 1;
+  }
+
+  .rpg-grid-terrain-grass { fill: var(--c-green-650); }
+  .rpg-grid-terrain-road { fill: var(--c-amber-620); }
+  .rpg-grid-terrain-forest { fill: var(--c-teal-470); }
+  .rpg-grid-terrain-water { fill: var(--c-blue-580); }
+  .rpg-grid-terrain-wall { fill: var(--c-slate-450); }
+  .rpg-grid-terrain-floor { fill: var(--c-slate-630); }
+  .rpg-grid-terrain-door { fill: var(--c-amber-480); }
+  .rpg-grid-terrain-moss { fill: var(--c-teal-520-2); }
+  .rpg-grid-terrain-furniture { fill: var(--c-amber-450); }
+  .rpg-grid-terrain-void { fill: var(--c-violet-460); }
+  .rpg-grid-terrain-unknown { stroke: color-mix(in srgb, var(--c-slate-450) 30%, transparent); }
+
+  .rpg-grid-hatch {
+    stroke: color-mix(in srgb, var(--c-slate-450) 35%, transparent);
+    stroke-width: 3;
+  }
+
+  .rpg-grid-remembered {
+    fill: color-mix(in srgb, var(--c-neutral-0) 38%, transparent);
+    pointer-events: none;
+  }
+
+  .rpg-grid-zone {
+    fill: color-mix(in srgb, var(--c-amber-670) 14%, transparent);
+    pointer-events: none;
+  }
+
+  .rpg-grid-reachable {
+    fill: color-mix(in srgb, var(--c-cyan-660) 34%, transparent);
+    pointer-events: none;
+    stroke: var(--c-cyan-660);
+    stroke-width: 2;
+  }
+
+  .rpg-grid-selected {
+    fill: none;
+    pointer-events: none;
+    stroke: var(--c-amber-670);
+    stroke-width: 3;
+  }
+
+  .rpg-grid-portal {
+    fill: var(--rpg-grid-token-ink);
+    font-size: 22px;
+    font-weight: 700;
+    pointer-events: none;
+    text-anchor: middle;
+  }
+
+  .rpg-grid-token {
+    cursor: pointer;
+  }
+
+  .rpg-grid-token-disc {
+    stroke: var(--rpg-grid-token-ink);
+    stroke-width: 3;
+  }
+
+  .rpg-grid-token-player .rpg-grid-token-disc,
+  .rpg-grid-roster-dot.rpg-grid-token-player { fill: var(--accent-indigo-500); background: var(--accent-indigo-500); }
+  .rpg-grid-token-hostile .rpg-grid-token-disc,
+  .rpg-grid-roster-dot.rpg-grid-token-hostile { fill: var(--c-red-560); background: var(--c-red-560); }
+  .rpg-grid-token-other .rpg-grid-token-disc,
+  .rpg-grid-roster-dot.rpg-grid-token-other { fill: var(--c-slate-550); background: var(--c-slate-550); }
+
+  .rpg-grid-token-label {
+    fill: var(--rpg-grid-token-ink);
+    font-size: 17px;
+    font-weight: 800;
+    pointer-events: none;
+    text-anchor: middle;
+  }
+
+  .rpg-grid-side {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .rpg-grid-card {
+    background: var(--omnix-panel-bg);
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.7rem;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .rpg-grid-card h4 {
+    font-size: 0.95rem;
+    margin: 0;
+  }
+
+  .rpg-grid-card dl {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+  }
+
+  .rpg-grid-card dl div {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+
+  .rpg-grid-card dt {
+    color: var(--omnix-muted-text);
+    font-size: 0.8rem;
+  }
+
+  .rpg-grid-card dd {
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  .rpg-grid-hint,
+  .rpg-grid-message {
+    color: var(--omnix-muted-text);
+    font-size: 0.82rem;
+    margin: 0;
+  }
+
+  .rpg-grid-action {
+    background: var(--omnix-control-bg);
+    border: 1px solid var(--omnix-strong-border);
+    border-radius: 0.55rem;
+    color: var(--omnix-control-text);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    min-height: 2.3rem;
+  }
+
+  .rpg-grid-action-danger {
+    border-color: color-mix(in srgb, var(--c-red-560) 60%, transparent);
+    color: var(--c-red-560);
+  }
+
+  .rpg-grid-roster,
+  .rpg-grid-legend ul {
+    display: grid;
+    gap: 0.3rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .rpg-grid-roster button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 0.45rem;
+    color: var(--omnix-text);
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    gap: 0.55rem;
+    padding: 0.2rem 0.3rem;
+    text-align: left;
+    width: 100%;
+  }
+
+  .rpg-grid-roster button:hover {
+    background: var(--omnix-soft-bg);
+  }
+
+  .rpg-grid-roster-dot {
+    align-items: center;
+    border-radius: 999px;
+    color: var(--rpg-grid-token-ink);
+    display: inline-flex;
+    flex: none;
+    font-size: 0.7rem;
+    font-weight: 800;
+    height: 1.6rem;
+    justify-content: center;
+    width: 1.6rem;
+  }
+
+  .rpg-grid-legend li {
+    align-items: center;
+    display: flex;
+    font-size: 0.8rem;
+    gap: 0.5rem;
+  }
+
+  .rpg-grid-swatch {
+    border-radius: 0.25rem;
+    display: inline-block;
+    flex: none;
+    height: 0.9rem;
+    width: 0.9rem;
+  }
+
+  .rpg-grid-swatch.rpg-grid-terrain-grass { background: var(--c-green-650); }
+  .rpg-grid-swatch.rpg-grid-terrain-road { background: var(--c-amber-620); }
+  .rpg-grid-swatch.rpg-grid-terrain-forest { background: var(--c-teal-470); }
+  .rpg-grid-swatch.rpg-grid-terrain-water { background: var(--c-blue-580); }
+  .rpg-grid-swatch.rpg-grid-terrain-wall { background: var(--c-slate-450); }
+  .rpg-grid-swatch.rpg-grid-terrain-floor { background: var(--c-slate-630); }
+  .rpg-grid-swatch.rpg-grid-terrain-door { background: var(--c-amber-480); }
+  .rpg-grid-swatch.rpg-grid-terrain-moss { background: var(--c-teal-520-2); }
+  .rpg-grid-swatch.rpg-grid-terrain-furniture { background: var(--c-amber-450); }
+  .rpg-grid-swatch.rpg-grid-terrain-void { background: var(--c-violet-460); }
+  .rpg-grid-swatch-remembered { background: color-mix(in srgb, var(--c-green-650) 55%, var(--c-slate-450)); }
+  .rpg-grid-swatch-unknown { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--c-slate-450) 35%, transparent) 0 2px, transparent 2px 6px); }
+
+  .rpg-grid-portal-key {
+    font-weight: 800;
+    text-align: center;
+    width: 0.9rem;
+  }
+
+  .rpg-grid-empty {
+    color: var(--omnix-muted-text);
+    padding: 1rem;
+  }
+
+  /* The world rail's card: the grid itself, without the artwork card's decorative shine. */
+  .rpg-map-preview-has-grid::before,
+  .rpg-map-preview-has-grid::after {
+    content: none;
+  }
+
+  .rpg-grid-compact .rpg-grid-board {
+    max-height: 14rem;
+  }
+
+  .rpg-grid-compact .rpg-grid-cell,
+  .rpg-grid-compact .rpg-grid-token {
+    cursor: default;
+  }
+
+  @media (max-width: 900px) {
+    .rpg-grid-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+}

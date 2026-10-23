@@ -12,6 +12,7 @@ import { buildSttInputPayload, buildSttStages, type SttJobFormValues } from './s
 import { TRANSCRIPT_LANGUAGES, transcriptLanguage } from '../voice';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
+import { CapabilityNotice } from '../setup';
 
 export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -77,6 +78,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
         </div>
         <code>{module.route}</code>
       </div>
+      <CapabilityNotice capability="stt_batch" purpose="Transcription" />
 
       <p className="workspace-summary">{module.summary}</p>
       <GatewayErrorNotice label="Speech-to-text data" errors={[providersQuery.error, jobsQuery.error, assetsQuery.error]} />

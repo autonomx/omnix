@@ -10,7 +10,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.providers.base import BaseProvider, ChatMessage
+from app.providers.base import BaseProvider, ChatMessage, ChatResponse
 from app.providers.registry import get_provider
 from app.providers.structured import (
     StructuredCapabilities,
@@ -19,6 +19,11 @@ from app.providers.structured import (
     StructuredRetryBudget,
 )
 from app.apps.rpg.narration.narrative_engine import DeterministicNarrativeWriter, NarrativeWriter
+from app.apps.rpg.narration.narration_drafts import (
+    draft_text_from_partial_json,
+    narration_draft_active,
+    publish_narration_draft,
+)
 from app.apps.rpg.narration.narrative_engine.contracts import EvidenceRecord, TurnPresentationRequest
 from app.apps.rpg.narration.narrative_engine.planner import NarrativePlan
 from app.apps.rpg.narration.narrative_engine.writer import (
@@ -92,7 +97,42 @@ class _ConfiguredProviderView:
         self.config = getattr(provider, "config", None)
 
     def chat_completion(self, *args: Any, **kwargs: Any) -> Any:
-        return self._provider.chat_completion(*args, **kwargs)
+        if kwargs.get("stream") or not narration_draft_active() or not self._streams_drafts():
+            return self._provider.chat_completion(*args, **kwargs)
+        return self._drafted_completion(*args, **kwargs)
+
+    def _streams_drafts(self) -> bool:
+        # Its streamed chunks join to exactly the answer a plain call returns (the final chunk carries the
+        # structured answer; text deltas otherwise), so streaming it changes nothing but when prose is seen.
+        return str(getattr(self._provider, "provider_name", "")) == "claude_cli"
+
+    def _drafted_completion(self, *args: Any, **kwargs: Any) -> ChatResponse:
+        """The same answer as a plain call, streamed so the play screen shows the prose as it is written."""
+        text_parts: list[str] = []
+        structured: list[str] = []
+        final: ChatResponse | None = None
+        published = 0.0
+        for chunk in self._provider.chat_completion(*args, **{**kwargs, "stream": True}):
+            if chunk.finish_reason is not None:
+                final = chunk
+                continue
+            raw = chunk.raw_response if isinstance(chunk.raw_response, dict) else {}
+            if raw.get("structured_delta"):
+                structured.append(str(raw["structured_delta"]))
+            elif chunk.content:
+                text_parts.append(chunk.content)
+            if monotonic() - published >= 0.25:
+                publish_narration_draft(draft_text_from_partial_json("".join(structured) or "".join(text_parts)))
+                published = monotonic()
+        content = "".join(text_parts) or (final.content if final is not None else "")
+        publish_narration_draft(draft_text_from_partial_json(content))
+        return ChatResponse(
+            content=content,
+            model=final.model if final is not None else "",
+            usage=final.usage if final is not None else None,
+            finish_reason=final.finish_reason if final is not None else "stop",
+            raw_response=final.raw_response if final is not None else None,
+        )
 
     def get_structured_capabilities(self, *args: Any, **kwargs: Any):
         method = getattr(self._provider, "get_structured_capabilities", None)

@@ -24,6 +24,7 @@ environment()["OMNIX_IMAGE_SERVICE_MODE"] = "1"
 from app.platform.image.config import get_active_image_provider_name, is_image_generation_enabled
 from app.platform.image.downloads import download_image_model, get_image_local_model_status
 from app.platform.image.lifecycle import (
+    ImageLoadBudgetError,
     get_image_provider_cache_status,
     is_image_provider_loaded,
     load_image_provider,
@@ -244,6 +245,9 @@ def configure_device_permits() -> None:
     )
 
 
+_PRELOAD_FAILED = False
+
+
 @app.on_event("startup")
 async def startup_load_provider():
     if not is_image_generation_enabled():
@@ -261,6 +265,10 @@ async def startup_load_provider():
         _LOG.info('[IMAGE SERVICE] Image provider preload complete: %s', result)
     except Exception as exc:
         _LOG.warning('[IMAGE SERVICE] Image provider preload failed: %s', repr(exc))
+        # Not ready: the desktop supervisor counts a service ready only when /health says so, and its memory check
+        # covered the preload, not a load on the first request.
+        global _PRELOAD_FAILED
+        _PRELOAD_FAILED = True
 
     if not _truthy(environment().get("OMNIX_IMAGE_WARMUP", "0")):
         return
@@ -291,8 +299,8 @@ async def startup_load_provider():
 def health():
     model = image_model_status()
     return {
-        "ok": True,
-        "status": "ready",
+        "ok": not _PRELOAD_FAILED,
+        "status": "preload_failed" if _PRELOAD_FAILED else "ready",
         "service": "image",
         "enabled": is_image_generation_enabled(),
         "provider_mode": environment().get("OMNIX_IMAGE_SERVICE_MODE", ""),
@@ -405,7 +413,12 @@ async def provider_load(request: Request, request_body: ProviderLoadRequestBody)
             raise HTTPException(status_code=503, detail="model_unavailable")
         if not is_image_provider_loaded(provider):
             await run_in_threadpool(unload_all_image_providers)
-            result = await run_in_threadpool(load_image_provider, provider)
+            try:
+                result = await run_in_threadpool(load_image_provider, provider)
+            except ImageLoadBudgetError as exc:
+                # Answered, not failed: error bodies are replaced with codes, and this reason is the user's to act on.
+                return {"ok": False, "provider": provider, "error": exc.user_message,
+                        "status": image_model_status(provider)}
         else:
             result = {"ok": True, "provider": provider, "loaded": True, "already_loaded": True}
         if result.get("ok") is False:

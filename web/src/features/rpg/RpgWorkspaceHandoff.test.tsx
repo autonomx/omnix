@@ -286,7 +286,7 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(screen.getAllByText('Elara awakens beneath the broken gate.').length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'I survey the broken gate.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
     await waitFor(() => {
       const turnCall = fetchMock.mock.calls.find(([input, init]) => (
         requestPath(input) === '/api/rpg/sessions/rpg-created-1/turn' && init?.method === 'POST'

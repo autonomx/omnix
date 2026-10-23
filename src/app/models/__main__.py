@@ -34,8 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "pin":
             catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
-            catalog["models"].update(pin(args.id, args.repo, args.service, args.include, revision=args.revision))
-            catalog["models"] = dict(sorted(catalog["models"].items()))
+            # A re-pin keeps the model's licence, label and the rest; only the commit and files change.
+            for model_id, pinned in pin(args.id, args.repo, args.service, args.include, revision=args.revision).items():
+                catalog["models"][model_id] = {**catalog["models"].get(model_id, {}), **pinned}
             CATALOG_PATH.write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
             return 0
         catalog = load_catalog()

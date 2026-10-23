@@ -21,6 +21,7 @@ from app.security.run_tokens import TOKEN_ENVIRONMENT_KEY as RUN_TOKEN_ENVIRONME
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from urllib.parse import urlsplit, urlunsplit
@@ -44,6 +45,30 @@ RELAY_CONTAINER = "omnix-agent-broker-relay"
 RELAY_VERSION = "v2"
 SANDBOX_HOME = "/tmp/home"
 _DOCKER_TIMEOUT_SECONDS = 30
+_DOCKER_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
+
+
+def _docker_name(variable: str, default: str) -> str:
+    """A Docker object name from the environment (desktop roadmap DT-3.5), or the default.
+
+    A second Omnix on the same machine (the desktop app beside a developer
+    checkout) names its own network and relay, so neither replaces the other's.
+    Only the names change: the network stays internal and the relay forwards
+    the same agent-runtime routes."""
+    value = (environment().get(variable) or "").strip()
+    if not value:
+        return default
+    if not _DOCKER_NAME.match(value):
+        raise AgentIsolationError(f"{variable} is not a valid Docker name")
+    return value
+
+
+def sandbox_network_name() -> str:
+    return _docker_name("OMNIX_AGENT_SANDBOX_NETWORK", SANDBOX_NETWORK)
+
+
+def relay_container_name() -> str:
+    return _docker_name("OMNIX_AGENT_RELAY_CONTAINER", RELAY_CONTAINER)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +141,7 @@ def relay_signature(routes: list[tuple[int, str]]) -> str:
 def _through_relay(url: str) -> str:
     parts = urlsplit(url)
     port = parts.port or (443 if parts.scheme == "https" else 80)
-    return urlunsplit((parts.scheme, f"{RELAY_CONTAINER}:{port}", parts.path, parts.query, parts.fragment))
+    return urlunsplit((parts.scheme, f"{relay_container_name()}:{port}", parts.path, parts.query, parts.fragment))
 
 
 class DockerStrongIsolation:
@@ -135,7 +160,8 @@ class DockerStrongIsolation:
         # An operator-managed network replaces the managed one (the operator
         # then guarantees it reaches only the broker).
         self.operator_network = network or environment().get("OMNIX_AGENT_DOCKER_NETWORK")
-        self.network = self.operator_network or SANDBOX_NETWORK
+        self.network = self.operator_network or sandbox_network_name()
+        self.relay = relay_container_name()
         self.limits = limits or IsolationLimits(
             memory=environment().get("OMNIX_AGENT_DOCKER_MEMORY", "4g"),
             cpus=environment().get("OMNIX_AGENT_DOCKER_CPUS", "2"),
@@ -169,20 +195,20 @@ class DockerStrongIsolation:
         if self.operator_network:
             return
         assert self.docker is not None
-        if _docker(self.docker, "network", "inspect", SANDBOX_NETWORK).returncode != 0:
-            created = _docker(self.docker, "network", "create", "--internal", SANDBOX_NETWORK)
+        if _docker(self.docker, "network", "inspect", self.network).returncode != 0:
+            created = _docker(self.docker, "network", "create", "--internal", self.network)
             if created.returncode != 0 and "already exists" not in created.stderr:
                 raise AgentIsolationError(f"could not create the agent sandbox network: {created.stderr.strip()}")
         routes = _relay_routes(urls)
         signature = relay_signature(routes)
         current = _docker(self.docker, "inspect", "--format",
-                          '{{index .Config.Labels "omnix.relay.routes"}}|{{.State.Running}}', RELAY_CONTAINER)
+                          '{{index .Config.Labels "omnix.relay.routes"}}|{{.State.Running}}', self.relay)
         if current.returncode == 0 and current.stdout.strip() == f"{signature}|true":
             return
-        _docker(self.docker, "rm", "-f", RELAY_CONTAINER)
+        _docker(self.docker, "rm", "-f", self.relay)
         extension_dir = Path(__file__).resolve().parent
         started = _docker(
-            self.docker, "run", "-d", "--name", RELAY_CONTAINER,
+            self.docker, "run", "-d", "--name", self.relay,
             "--label", f"omnix.relay.routes={signature}",
             "--restart", "unless-stopped",
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
@@ -194,7 +220,7 @@ class DockerStrongIsolation:
         )
         if started.returncode != 0:
             raise AgentIsolationError(f"could not start the agent sandbox relay: {started.stderr.strip()}")
-        connected = _docker(self.docker, "network", "connect", SANDBOX_NETWORK, RELAY_CONTAINER)
+        connected = _docker(self.docker, "network", "connect", self.network, self.relay)
         if connected.returncode != 0 and "already exists" not in connected.stderr:
             raise AgentIsolationError(f"could not attach the relay to the sandbox network: {connected.stderr.strip()}")
 

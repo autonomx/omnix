@@ -66,9 +66,9 @@ class ModelMissing(HelperUnavailable):
 
 
 def models_root() -> Path:
-    from app.runtime.paths import resources_root
+    from app.runtime.paths import resources_models_root
 
-    return resources_root() / "models" / "audio"
+    return resources_models_root() / "audio"
 
 
 # --- Audio helpers ---------------------------------------------------------------------------------

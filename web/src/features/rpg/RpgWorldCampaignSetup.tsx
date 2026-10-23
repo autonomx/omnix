@@ -340,7 +340,6 @@ export function RpgWorldCampaignSetup({
                 <label><input type="checkbox" checked={companionsEnabled} onChange={(event) => setCompanionsEnabled(event.currentTarget.checked)} /><span>Companions enabled</span></label>
                 <label><input type="checkbox" checked={permadeath} onChange={(event) => setPermadeath(event.currentTarget.checked)} /><span>Permadeath</span></label>
               </div>
-
               <h4>Runtime features</h4>
               <div className="rpg-campaign-feature-grid">
                 {(Object.keys(features) as Array<keyof typeof features>).map((feature) => (
@@ -359,11 +358,30 @@ export function RpgWorldCampaignSetup({
                   <div><dt>Certification</dt><dd>{launchReady ? 'Launch ready' : text((certification.missing_requirements as unknown[] | undefined)?.join(', '), 'Not ready')}</dd></div>
                 </dl>
               </section>
-              <button type="submit" disabled={!launchReady || launch.isPending}>{launch.isPending ? 'Launching…' : 'Launch Campaign'}</button>
+              <LaunchButton error={launch.error} pending={launch.isPending} ready={launchReady} />
             </form>
           )}
         </main>
       </div>
     </section>
   );
+}
+
+/** The launch button, with why a launch was refused beside it (the setup's feedback line may be out of view). */
+function LaunchButton({ error, pending, ready }: { error: unknown; pending: boolean; ready: boolean }) {
+  return (
+    <>
+      <button type="submit" disabled={!ready || pending}>{pending ? 'Launching…' : 'Launch Campaign'}</button>
+      {error ? <p className="rpg-authoring-feedback" role="alert">{launchErrorText(error)}</p> : null}
+    </>
+  );
+}
+
+/** Why a launch was refused, in words. */
+function launchErrorText(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('world_revision_authorship_untrusted')) {
+    return 'This world was made in another Omnix. Review and adopt it first: in Worlds, choose Review & adopt on its card.';
+  }
+  return message || 'Campaign could not be launched.';
 }

@@ -18,6 +18,7 @@ import { formatCallDuration, formatClockTime, voiceCaptureLabel, type ChatMessag
 import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { Live2DZoomControl } from './Live2DZoomControl';
+import { CapabilityNotice } from '../../setup';
 import { LiveCallVisual } from './LiveCallVisual';
 
 type ChatLiveVoiceCardProps = {
@@ -106,6 +107,8 @@ export function ChatLiveVoiceCard({
         <i aria-hidden="true"><b /></i>
       </div>
       <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
+      <CapabilityNotice capability="live_stt" purpose="Live voice" />
+      <CapabilityNotice capability="tts" purpose="Spoken replies" />
       <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={onClear}>Clear</button><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={onToggleCall}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><SendVoiceTextButton control={control} draft={liveDraftText} pending={sendPending} onSend={onSendVoiceText} /></div>
       <div className="assistant-voice-transcript" ref={voiceTranscriptRef} role="region" aria-label="Live voice transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={onClear}>Clear</button></div>{transcriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{chatMessageText(message)}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!transcriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
       <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => onAutoSpeakChange(event.currentTarget.checked)} /> Auto-speak assistant replies</label>

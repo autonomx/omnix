@@ -45,7 +45,7 @@
   .rpg-map-light-night,
   .rpg-map-light-dark,
   .rpg-map-light-moonlight {
-    fill: color-mix(in srgb, var(--c-indigo-260-2) 24%, transparent);
+    fill: color-mix(in srgb, var(--accent-indigo-260-2) 24%, transparent);
   }
 
   .rpg-map-light-dusk,

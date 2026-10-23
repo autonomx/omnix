@@ -51,3 +51,27 @@ def runtime_narration_follows_context(enabled: bool = True) -> Iterator[None]:
         yield
     finally:
         _RUNTIME_NARRATION_FOLLOWS.reset(token)
+
+
+# The foreground turn route presents every turn through the narrative engine
+# (``present_authoritative_turn``), which writes the prose the player reads. A
+# model-written runtime narration would be replaced by it, so under this context
+# the runtime narration is the deterministic payload: it still names the
+# speaker and carries the dialogue state, without a model call.
+_CANONICAL_PRESENTATION_FOLLOWS: ContextVar[bool] = ContextVar(
+    "RPG_CANONICAL_PRESENTATION_FOLLOWS",
+    default=False,
+)
+
+
+def canonical_presentation_follows() -> bool:
+    return bool(_CANONICAL_PRESENTATION_FOLLOWS.get())
+
+
+@contextmanager
+def canonical_presentation_follows_context(enabled: bool = True) -> Iterator[None]:
+    token = _CANONICAL_PRESENTATION_FOLLOWS.set(bool(enabled))
+    try:
+        yield
+    finally:
+        _CANONICAL_PRESENTATION_FOLLOWS.reset(token)

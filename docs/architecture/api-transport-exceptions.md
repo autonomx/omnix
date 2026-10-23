@@ -53,6 +53,7 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/platform/agent_runtime/preview_api.py` | GET | `/api/agent-runs/{run_id}/workspace-preview/{asset_path}` | Allowlisted preview file bytes or HTML source text |
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/runtime/{filename}` | Runtime script or binary bytes |
 | `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/assets/{asset_id}/{asset_path}` | Live2D model asset bytes |
+| `src/app/platform/characters/live2d_avatar.py` | GET | `/api/character-live2d/previews/{model_id}` | Avatar preview image bytes |
 | `src/app/platform/voice/live_voice_cue_asset_routes.py` | GET | `/api/voice/cues/{voice_id}/{cue_id}/{variant_id}.wav` | WAV audio bytes |
 | `src/app/platform/voice/voice_studio_routes.py` | DELETE | `/api/voice/scripts/{script_id}` | 204 No Content |
 | `src/app/platform/voice/voice_studio_routes.py` | POST | `/api/voice/takes/{take_id}/pin` | 204 No Content |
@@ -61,6 +62,7 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/platform/image/routes/assets.py` | GET | `/api/assets/{asset_id}/file` | Allowlisted image bytes |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_map_editor_routes.py` | POST | `/api/rpg/map-editor/export` | Validated JSON document download |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_world_bundle_routes.py` | GET | `/api/rpg/worlds/{world_id}/export` | ZIP archive bytes |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_world_sharing_routes.py` | GET | `/api/rpg/world-catalog/{entry_id}/cover` | Community world cover image bytes |
 | `src/app/composition/gateway/kernel_routes/__init__.py` | GET | `/metrics` | Prometheus text exposition |
 | `src/app/apps/trading/strategy_api.py` | DELETE | `/api/trading/strategies/{strategy_id}` | 204 No Content |
 | `src/app/apps/trading/alerts_notify_api.py` | DELETE | `/api/trading/notifications/email` | 204 No Content |

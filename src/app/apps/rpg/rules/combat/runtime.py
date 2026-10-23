@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from app.apps.rpg.rules.combat.runtime_attacks import resolve_combat_attack
+from app.apps.rpg.rules.combat.runtime_attacks import (
+    resolve_combat_attack,
+    resolve_combat_flee,
+    resolve_turns_until_player,
+)
 from app.apps.rpg.rules.combat.runtime_core import get_combat_state, is_combat_active
 from app.apps.rpg.rules.combat.runtime_start import start_combat_encounter
 from app.apps.rpg.rules.combat.runtime_turns import (
@@ -15,6 +19,8 @@ __all__ = [
     "get_combat_state",
     "is_combat_active",
     "resolve_combat_attack",
+    "resolve_combat_flee",
+    "resolve_turns_until_player",
     "start_combat_encounter",
     "validate_combat_turn",
 ]

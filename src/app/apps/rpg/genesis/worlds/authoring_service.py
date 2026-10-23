@@ -26,6 +26,7 @@ from .authoring_presentations import (
 from .generation_jobs import WORLD_TOPIC_JOB_TYPE
 from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
+from .world_bundle import RESERVED_WORLD_METADATA_KEYS
 
 _ENTITY_KEYS = (
     "entities",
@@ -749,10 +750,13 @@ def update_world_metadata(
                 "world_draft_revision_conflict:"
                 f"expected={expected_draft_revision}:current={current_revision}"
             )
-        metadata = {
-            **_record(world.get("metadata")),
-            **_record(changes.get("metadata")),
+        # Where a shared world came from, and its adoption, are written only by import and adoption.
+        requested = {
+            key: value
+            for key, value in _record(changes.get("metadata")).items()
+            if key not in RESERVED_WORLD_METADATA_KEYS
         }
+        metadata = {**_record(world.get("metadata")), **requested}
         values = {
             "title": _text(changes.get("title"), _text(world.get("title"))),
             "description": _text(

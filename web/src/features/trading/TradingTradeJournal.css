@@ -2,7 +2,7 @@
   .trading-trade-journal {
     --tj-line: color-mix(in srgb, var(--c-blue-710) 18%, transparent);
     --tj-line-soft: color-mix(in srgb, var(--c-blue-710) 10%, transparent);
-    --tj-card: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    --tj-card: color-mix(in srgb, var(--accent-indigo-190) 72%, transparent);
     --tj-text: var(--c-neutral-960);
     --tj-muted: var(--c-slate-680);
     --tj-blue: var(--c-blue-630);

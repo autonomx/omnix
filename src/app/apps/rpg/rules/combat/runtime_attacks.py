@@ -113,6 +113,85 @@ def resolve_combat_attack(
     }
 
 
+def resolve_combat_flee(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str = "player",
+    tick: int = 0,
+) -> Dict[str, Any]:
+    """Break away from the fight: d20 plus the hero's quickness against 8 plus the quickest foe's."""
+    combat_state = get_combat_state(simulation_state)
+    if combat_state.get("active") is not True:
+        return {"resolved": False, "changed_state": False, "reason": "combat_not_active", "source": SOURCE}
+    actor_id = safe_str(actor_id or "player")
+    gate = gate_combat_action(simulation_state, actor_id=actor_id, action_kind="flee")
+    if gate.get("resolved") is not True:
+        return gate
+
+    hero = participant(combat_state, actor_id)
+    foes = [participant(combat_state, foe_id) for foe_id in living_enemy_ids(combat_state)]
+    roll = deterministic_roll(combat_seed(combat_state, "flee", actor_id), 1, 20)
+    total = roll + safe_int(hero.get("initiative_bonus"), 0)
+    bar = 8 + max([safe_int(foe.get("initiative_bonus"), 0) for foe in foes] or [0])
+    escaped = total >= bar
+    combat_state.setdefault("combat_log", []).append({
+        "kind": "flee",
+        "round": safe_int(combat_state.get("round"), 1),
+        "actor_id": actor_id,
+        "roll": roll,
+        "total": total,
+        "needed": bar,
+        "escaped": escaped,
+        "tick": int(tick or 0),
+    })
+    if escaped:
+        combat_state["active"] = False
+        combat_state["ended_reason"] = "party_fled"
+        simulation_state["combat_state"] = combat_state
+    else:
+        advance_combat_turn(simulation_state, tick=tick)
+    return {
+        "resolved": True,
+        "changed_state": True,
+        "reason": "combat_fled" if escaped else "combat_flee_failed",
+        "actor_id": actor_id,
+        "escaped": escaped,
+        "foe_ids": living_enemy_ids(combat_state),
+        "combat_state": deepcopy(get_combat_state(simulation_state)),
+        "tick": int(tick or 0),
+        "source": SOURCE,
+    }
+
+
+def resolve_turns_until_player(
+    simulation_state: Dict[str, Any],
+    *,
+    player_id: str = "player",
+    session_id: str = "",
+    tick: int = 0,
+) -> list[Dict[str, Any]]:
+    """Everyone whose turn comes before the player's acts now: a creature strikes the party, a companion strikes back."""
+    results: list[Dict[str, Any]] = []
+    order = safe_list(get_combat_state(simulation_state).get("initiative_order"))
+    for _ in range(2 * len(order)):
+        combat_state = get_combat_state(simulation_state)
+        actor_id = safe_str(combat_state.get("current_actor_id")) or ""
+        if combat_state.get("active") is not True or not actor_id or actor_id == player_id:
+            break
+        actor = participant(combat_state, actor_id)
+        stunned = safe_str(combat_state.pop("pending_skip_turn_actor_id", "")) == actor_id
+        standing = safe_str(actor.get("status") or "active") == "active" and safe_int(actor.get("hp"), 0) > 0
+        if stunned or not standing or not default_target_for_actor(combat_state, actor_id):
+            advance_combat_turn(simulation_state, tick=tick)
+            continue
+        result = resolve_combat_attack(simulation_state, actor_id=actor_id, session_id=session_id, tick=tick)
+        if result.get("resolved") is not True:
+            advance_combat_turn(simulation_state, tick=tick)
+            continue
+        results.append(result)
+    return results
+
+
 def _roll_attack(
     simulation_state: Dict[str, Any],
     combat_state: Dict[str, Any],
@@ -227,12 +306,25 @@ def _finish_attack(
     if defeated and not living_party_ids(combat_state):
         combat_state["active"] = False
         combat_state["ended_reason"] = "party_side_defeated"
+        _left_for_dead(simulation_state, combat_state)
         simulation_state["combat_state"] = combat_state
         return combat_state, True, {}, ""
 
     advance = advance_combat_turn(simulation_state, tick=tick)
     combat_state = safe_dict(simulation_state.get("combat_state"))
     return combat_state, False, {}, safe_str(advance.get("current_actor_id"))
+
+
+def _left_for_dead(simulation_state: Dict[str, Any], combat_state: Dict[str, Any]) -> None:
+    """A lost fight is not the end: the hero comes to, badly hurt (a tenth of their strength), the foe gone."""
+    hero = participant(combat_state, "player")
+    if not hero:
+        return
+    hp = max(1, safe_int(hero.get("max_hp"), 20) // 10)
+    hero["hp"] = hp
+    hero["status"] = "active"
+    combat_state["revived"] = {"actor_id": "player", "hp": hp, "max_hp": safe_int(hero.get("max_hp"), 20)}
+    sync_participant_hp_to_actor_state(simulation_state, actor_id="player", hp=hp, status="wounded")
 
 
 def _combat_log_entry(

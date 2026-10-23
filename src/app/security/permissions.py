@@ -85,6 +85,9 @@ _KERNEL_CATALOG: dict[str, str] = {
     "image:read": "Image workspace (read)",
     "image:generate": "Generate images",
     "image:models:admin": "Image model management",
+    "models:admin": "Install and remove models; accept their licences",
+    # Runtime packs are executable code (desktop roadmap §4.5): owners only, never the admin role.
+    "models:runtimes:admin": "Install and remove runtime packs",
     "settings:read": "Settings (read)",
     "settings:write": "Settings (write)",
     "admin:diagnostics": "Diagnostics",
@@ -121,7 +124,7 @@ _module_catalog, _module_defaults, _MODULE_MEMBER = _declared_module_permissions
 # Every permission: the kernel catalog above and the ones modules declare (PA-4.2).
 CATALOG: Mapping[str, str] = MappingProxyType({**_KERNEL_CATALOG, **_module_catalog})
 
-_ADMIN_EXCLUDED = frozenset({"workspace:transfer", "secrets:export", "internal:service"})
+_ADMIN_EXCLUDED = frozenset({"workspace:transfer", "secrets:export", "internal:service", "models:runtimes:admin"})
 _MEMBER = frozenset({
     "chat:read", "chat:write", "characters:read", "characters:write",
     "memory:read", "memory:write", "assets:read", "assets:write", "assets:delete",
@@ -225,6 +228,14 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/assistant/tools/proposals/{proposal_id}/approve"): "tools:approve",
     ("POST", "/api/hermes/approve"): "tools:approve",
     ("POST", "/api/hermes/rpg/approved-flow"): "tools:approve",
+    # Community worlds: downloading, adopting and sharing a world are authoring, not play.
+    ("POST", "/api/rpg/world-catalog/{entry_id}/install"): "rpg:author",
+    ("POST", "/api/rpg/worlds/{world_id}/adopt"): "rpg:author",
+    ("POST", "/api/rpg/worlds/{world_id}/share"): "rpg:author",
+    ("PUT", "/api/rpg/world-sharing/github/token"): "rpg:author",
+    ("POST", "/api/rpg/world-sharing/github/device"): "rpg:author",
+    ("POST", "/api/rpg/world-sharing/github/device/{flow_id}/poll"): "rpg:author",
+    ("DELETE", "/api/rpg/world-sharing/github"): "rpg:author",
     # Credentials and connections.
     ("POST", "/api/assistant/tools/connect/{tool_id}/oauth-client"): "tools:connections:admin",
     # Enabling tools and loosening their approval policy is the workspace

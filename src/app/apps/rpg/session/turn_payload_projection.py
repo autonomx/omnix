@@ -619,6 +619,10 @@ def _apply_phase4_session_travel_command(
 ) -> dict[str, Any]:
     from app.apps.rpg.world.locations import apply_runtime_travel_command, resolve_travel_command
 
+    if _safe_dict(simulation_state.get("world_model")).get("locations"):
+        # A session with its own world (a published one) travels along that world's routes in the turn itself;
+        # this command path knows only the starter town's graph.
+        return {}
     turn_index = _phase4_session_travel_turn_index(runtime_state, simulation_state)
     current_location_id = _phase4_session_travel_current_location(simulation_state)
     command_probe = resolve_travel_command(player_input, current_location_id=current_location_id or "location:rusty_flagon")

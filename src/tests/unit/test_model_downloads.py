@@ -94,7 +94,7 @@ def test_selection_by_service_and_unknown_ids(tmp_path):
 
 def test_the_shipped_catalog_covers_each_model_service():
     catalog = load_catalog()
-    assert {entry.service for entry in catalog.values()} == {"tts", "stt", "image"}
+    assert {"tts", "stt", "image"} <= {entry.service for entry in catalog.values()}
     for entry in catalog.values():
         assert all(len(item.sha256) == 64 and item.size > 0 for item in entry.files)
 

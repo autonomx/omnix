@@ -10,7 +10,7 @@
 
   .chat-identity-mode-toggle {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 76%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 76%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-720) 20%, transparent);
     border-radius: 0.72rem;
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
@@ -24,7 +24,7 @@
     background: transparent;
     border: 0;
     border-radius: 0.55rem;
-    color: color-mix(in srgb, var(--c-indigo-920) 74%, transparent);
+    color: color-mix(in srgb, var(--fg-indigo-920) 74%, transparent);
     font-size: 0.82rem;
     font-weight: 800;
     min-height: 1.95rem;
@@ -33,7 +33,7 @@
   }
 
   .chat-identity-mode-toggle button.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 96%, transparent), color-mix(in srgb, var(--c-sky-750) 94%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 96%, transparent), color-mix(in srgb, var(--c-sky-750) 94%, transparent));
     box-shadow: 0 0.35rem 0.95rem color-mix(in srgb, var(--c-blue-540) 28%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 18%, transparent);
     color: var(--c-neutral-1000);
   }
@@ -51,11 +51,11 @@
 
   .chat-identity-context-select {
     align-items: center;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-blue-310) 90%, transparent), color-mix(in srgb, var(--c-indigo-210) 92%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-blue-310) 90%, transparent), color-mix(in srgb, var(--bg-indigo-210) 92%, transparent));
     border: 1px solid color-mix(in srgb, var(--c-blue-710-2) 28%, transparent);
     border-radius: 0.66rem;
     box-shadow: 0 0.35rem 1rem color-mix(in srgb, var(--c-neutral-0) 18%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 6%, transparent);
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     display: inline-flex;
     flex: 0 1 13.5rem;
     gap: 0.42rem;
@@ -70,17 +70,17 @@
   }
 
   .chat-identity-context-select > span:first-child {
-    color: var(--c-sky-830);
+    color: var(--fg-sky-830);
     flex: 0 0 auto;
     font-size: 0.9rem;
   }
 
   .chat-identity-context-select.character > span:first-child {
-    color: var(--c-teal-860);
+    color: var(--fg-teal-860);
   }
 
   .chat-identity-context-label {
-    color: color-mix(in srgb, var(--c-slate-950) 72%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-950) 72%, transparent);
     flex: 0 0 auto;
     font-size: 0.72rem;
     font-weight: 850;
@@ -91,10 +91,10 @@
   .chat-identity-context-select select {
     appearance: none;
     background:
-      linear-gradient(45deg, transparent 50%, var(--c-indigo-920) 50%) right 0.45rem center / 0.38rem 0.38rem no-repeat,
+      linear-gradient(45deg, transparent 50%, var(--accent-indigo-920) 50%) right 0.45rem center / 0.38rem 0.38rem no-repeat,
       transparent;
     border: 0;
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     cursor: pointer;
     flex: 1 1 auto;
     font-size: 0.83rem;
@@ -113,8 +113,8 @@
   }
 
   .chat-identity-context-select option {
-    background: var(--c-indigo-210);
-    color: var(--c-slate-970-2);
+    background: var(--bg-indigo-210);
+    color: var(--fg-slate-970-2);
   }
 
   .chat-identity-settings-button {

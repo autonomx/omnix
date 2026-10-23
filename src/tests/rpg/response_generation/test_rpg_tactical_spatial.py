@@ -235,3 +235,45 @@ def test_tactical_routes_are_documented() -> None:
     app = FastAPI()
     include_router_registrar(app, register_rpg_tactical_spatial_routes)
     assert paths <= app.openapi()["paths"].keys()
+
+
+def test_tactical_turn_summary_tells_the_map_whose_turn_and_who_is_hostile() -> None:
+    """The player's map reads this to offer moves and attacks; the commands still check everything."""
+    from app.apps.rpg.world.tactical_spatial import tactical_turn_summary
+
+    assert tactical_turn_summary({}, "player:s1") == {"combat_active": False}
+    state = {"combat_state": {
+        "active": True, "phase": "active", "combat_id": "c1", "round": 2,
+        "turn_order": ["player:s1", "wolf:1"], "turn_index": 0,
+        "participants": {
+            "player:s1": {"team": "party", "movement_budget": 40},
+            "ally:liora": {"team": "ally"},
+            "wolf:1": {"team": "enemy"},
+        },
+    }}
+    summary = tactical_turn_summary(state, "player:s1")
+    assert summary == {
+        "combat_active": True, "round": 2, "current_actor_id": "player:s1", "your_turn": True,
+        "movement_remaining": 40, "actions_remaining": 1, "hostile_actor_ids": ["wolf:1"],
+    }
+    assert tactical_turn_summary(state, "wolf:1")["your_turn"] is False
+
+
+def test_observer_responses_name_the_campaign_revision_and_tactical_turn() -> None:
+    from app.apps.rpg.world.map_observer_service import _campaign_turn
+
+    class Rpg:
+        def __init__(self, campaign):
+            self.campaign = campaign
+
+        def get_campaign(self, _context, campaign_id):
+            return self.campaign if campaign_id == "s1" else None
+
+    class Work:
+        def __init__(self, campaign):
+            self.rpg = Rpg(campaign)
+
+    assert _campaign_turn(Work({"revision": 7, "state": {}}), None, "s1", "player:s1") == {
+        "campaign_revision": 7, "tactical": {"combat_active": False}}
+    assert _campaign_turn(Work(None), None, "s1", "player:s1") == {
+        "campaign_revision": None, "tactical": {"combat_active": False}}

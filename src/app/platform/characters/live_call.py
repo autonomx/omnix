@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.conversation.contracts import ChatSession
+from app.conversation.contracts import SYSTEM_ASSISTANT_ID, ChatSession
 from app.providers.voice_debug import voice_debug_log
 
 from .avatar_models import CharacterAvatarPack
@@ -142,6 +142,9 @@ def resolve_live_call_runtime(
     if interaction.interaction_mode == "character":
         character = character_service.resolve_snapshot(interaction.character_id or "")
         avatar_pack = avatar_service_factory().resolve(interaction.character_id)
+    else:
+        # The System Assistant has a live avatar of its own (Chat, Characters; the first-run setup).
+        avatar_pack = avatar_service_factory().resolve(SYSTEM_ASSISTANT_ID)
 
     # The character profile's governed voice is authoritative for live calls,
     # even when an older session still carries a previous voice override.

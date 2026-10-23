@@ -235,6 +235,8 @@ export interface components {
     schemas: {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
+        /** ActivateLive2DAvatarRequest */
+        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: core["schemas"]["AlpacaIexCredentialStatus"];
         /** AlpacaIexCredentialUpdate */
@@ -278,6 +280,15 @@ export interface components {
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
         CancelState: core["schemas"]["CancelState"];
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
+        /** CapabilityState */
+        CapabilityState: core["schemas"]["CapabilityState"];
+        /**
+         * CharacterAvatarPack
+         * @description Durable shared-image references for one Character Mode live avatar.
+         */
+        CharacterAvatarPack: core["schemas"]["CharacterAvatarPack"];
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -336,6 +347,15 @@ export interface components {
         CreateChatSessionRequest: core["schemas"]["CreateChatSessionRequest"];
         /** CreateJobRequest */
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
+        /** DefaultChoice */
+        DefaultChoice: core["schemas"]["DefaultChoice"];
+        /** DefaultModels */
+        DefaultModels: core["schemas"]["DefaultModels"];
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: core["schemas"]["DefaultSlot"];
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DesktopGoogleHandoffRequest */
@@ -380,6 +400,8 @@ export interface components {
          * @description Sidecar reachability and the runtime configuration that reaches it.
          */
         HermesStatusResponse: core["schemas"]["HermesStatusResponse"];
+        /** HubTokenWrite */
+        HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: core["schemas"]["IbkrSettingsPayload"];
         /** IbkrSettingsStatus */
@@ -553,6 +575,8 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -605,8 +629,19 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DAvatarActionResponse */
+        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
+        /** Live2DModelCatalogItem */
+        Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
+        /** Live2DModelCatalogResponse */
+        Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: core["schemas"]["ModelPacksStatus"];
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: core["schemas"]["ModelResidencyDiagnostics"];
         /** ModelResidencyRecord */
@@ -620,6 +655,26 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** PackModelLicence */
+        PackModelLicence: core["schemas"]["PackModelLicence"];
+        /** PackModelStatus */
+        PackModelStatus: core["schemas"]["PackModelStatus"];
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: core["schemas"]["PackOption"];
+        /** PackOptionLicence */
+        PackOptionLicence: core["schemas"]["PackOptionLicence"];
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
+        /** PackTarget */
+        PackTarget: core["schemas"]["PackTarget"];
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: core["schemas"]["PackVerdict"];
         /** PasswordChangeRequest */
         PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
         /** PasswordChangeResponse */
@@ -726,10 +781,16 @@ export interface components {
         RuntimeDiagnostics: core["schemas"]["RuntimeDiagnostics"];
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: core["schemas"]["RuntimeStatusPayload"];
+        /** SelectionRequest */
+        SelectionRequest: core["schemas"]["SelectionRequest"];
+        /** SelectionSize */
+        SelectionSize: core["schemas"]["SelectionSize"];
         /** SendChatMessageRequest */
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
         SendChatMessageResponse: core["schemas"]["SendChatMessageResponse"];
+        /** SetDefaultModels */
+        SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SettingsPatch */
         SettingsPatch: core["schemas"]["SettingsPatch"];
         /** SettingsPayload */
@@ -746,6 +807,10 @@ export interface components {
         SettingsProfileSaveRequest: core["schemas"]["SettingsProfileSaveRequest"];
         /** SettingsSaveResponse */
         SettingsSaveResponse: core["schemas"]["SettingsSaveResponse"];
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
+        /** SpeechModelStatus */
+        SpeechModelStatus: core["schemas"]["SpeechModelStatus"];
         /** StateHashRequest */
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */

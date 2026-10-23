@@ -5,55 +5,28 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.models import catalog as _catalog
+from app.models.catalog import ModelEntry, ModelFile
+
 logger = logging.getLogger(__name__)
 
-CATALOG_PATH = Path(__file__).with_name("catalog.json")
-_REVISION_LENGTH = 40
+CATALOG_PATH = _catalog.CATALOG_PATH
 
 
 class ModelDownloadError(RuntimeError):
     pass
 
 
-@dataclass(frozen=True)
-class ModelFile:
-    path: str
-    sha256: str
-    size: int
-
-
-@dataclass(frozen=True)
-class ModelEntry:
-    id: str
-    repo: str
-    revision: str
-    service: str
-    files: tuple[ModelFile, ...]
-
-    @property
-    def size(self) -> int:
-        return sum(item.size for item in self.files)
-
-
 def load_catalog(path: Path = CATALOG_PATH) -> dict[str, ModelEntry]:
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    catalog: dict[str, ModelEntry] = {}
-    for model_id, entry in raw["models"].items():
-        revision = str(entry["revision"])
-        if len(revision) != _REVISION_LENGTH or any(char not in "0123456789abcdef" for char in revision):
-            raise ModelDownloadError(f"{model_id}: revision must be a full commit hash")
-        files = tuple(
-            ModelFile(path=name, sha256=str(item["sha256"]), size=int(item["size"]))
-            for name, item in sorted(entry["files"].items())
-        )
-        if not files:
-            raise ModelDownloadError(f"{model_id}: no files listed")
-        catalog[model_id] = ModelEntry(model_id, str(entry["repo"]), revision, str(entry["service"]), files)
-    return catalog
+    """The pinned models (Hugging Face files with digests), by id; package-sourced models are left out."""
+    try:
+        catalog = _catalog.parse_catalog(json.loads(path.read_text(encoding="utf-8")))
+    except _catalog.CatalogError as exc:
+        raise ModelDownloadError(str(exc)) from exc
+    return {model_id: entry for model_id, entry in catalog.models.items() if entry.pinned}
 
 
 def sha256_file(path: Path) -> str:
@@ -78,6 +51,24 @@ def _repo_cache(root: Path, repo: str) -> Path:
 
 def _snapshot_file(root: Path, entry: ModelEntry, item: ModelFile) -> Path:
     return _repo_cache(root, entry.repo) / "snapshots" / entry.revision / item.path
+
+
+def snapshot_dir(entry: ModelEntry, *, cache_dir: str | Path | None = None) -> Path:
+    """Where the pinned snapshot lives in the cache (whether or not it is there)."""
+    return _repo_cache(cache_root(cache_dir), entry.repo) / "snapshots" / entry.revision
+
+
+def is_present(entry: ModelEntry, *, cache_dir: str | Path | None = None) -> bool:
+    """Every pinned file is in the cache at its catalogued size: a cheap check, not a hash check."""
+    root = cache_root(cache_dir)
+    for item in entry.files:
+        target = _snapshot_file(root, entry, item)
+        try:
+            if target.stat().st_size != item.size:
+                return False
+        except OSError:
+            return False
+    return True
 
 
 def verify(entry: ModelEntry, *, cache_dir: str | Path | None = None) -> list[str]:
@@ -105,19 +96,28 @@ def _hub_fetch(**kwargs: Any) -> str:
     return str(hf_hub_download(**kwargs))
 
 
-def download(entry: ModelEntry, *, cache_dir: str | Path | None = None, fetch: Fetch = _hub_fetch) -> Path:
-    """Fetch the pinned files, refusing any whose digest differs; returns the snapshot directory."""
+def download(entry: ModelEntry, *, cache_dir: str | Path | None = None, fetch: Fetch = _hub_fetch,
+             token: str | None = None, on_file: Callable[[ModelFile], None] | None = None) -> Path:
+    """Fetch the pinned files, refusing any whose digest differs; returns the snapshot directory.
+
+    ``token`` is the Hugging Face token for gated repositories; ``on_file`` is called after each file is verified."""
     root = cache_root(cache_dir)
     for item in entry.files:
         target = _snapshot_file(root, entry, item)
         if target.is_file() and sha256_file(target) == item.sha256:
+            if on_file is not None:
+                on_file(item)
             continue
-        fetched = Path(fetch(repo_id=entry.repo, filename=item.path, revision=entry.revision, cache_dir=str(root)))
+        extra = {"token": token} if token else {}
+        fetched = Path(fetch(repo_id=entry.repo, filename=item.path, revision=entry.revision, cache_dir=str(root),
+                             **extra))
         actual = sha256_file(fetched)
         if actual != item.sha256:
             _discard(fetched)
             raise ModelDownloadError(f"{entry.id}: {item.path} has SHA-256 {actual}, expected {item.sha256}")
         logger.info("verified %s %s", entry.id, item.path)
+        if on_file is not None:
+            on_file(item)
     # Services load by repository id; offline, the cache resolves "main" through this ref.
     ref = _repo_cache(root, entry.repo) / "refs" / "main"
     ref.parent.mkdir(parents=True, exist_ok=True)
@@ -167,3 +167,9 @@ def pin(model_id: str, repo: str, service: str, include: list[str], *, revision:
             local = Path(hf_hub_download(repo_id=repo, filename=name, revision=info.sha))
             files[name] = {"sha256": sha256_file(local), "size": local.stat().st_size}
     return {model_id: {"repo": repo, "revision": info.sha, "service": service, "files": files}}
+
+
+__all__ = [
+    "CATALOG_PATH", "ModelDownloadError", "ModelEntry", "ModelFile", "cache_root", "download", "is_present",
+    "load_catalog", "pin", "select", "sha256_file", "snapshot_dir", "verify",
+]

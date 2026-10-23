@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from app.apps.rpg.rules.economy.currency import (
@@ -184,6 +185,9 @@ def _detect_kind(text_l: str) -> str:
         "pay for",
         "i pay",
         "rent the",
+        # "Rent a room", "book a bed": renting and booking are buying.
+        "rent ",
+        "book ",
         "take the",
         "i'll take",
         "ill take",
@@ -223,11 +227,15 @@ def _offer_matches_purchase_text(offer: Dict[str, Any], text_l: str) -> bool:
     return bool(description and description in text_l)
 
 
-def _catalog_service_kind_from_text(provider_id: str, text_l: str) -> str:
+def _catalog_service_kind_from_text(
+    provider_id: str,
+    text_l: str,
+    simulation_state: Dict[str, Any] | None = None,
+) -> str:
     """Infer a service family from registered offer identity, never from price prose."""
     matching_kinds = {
         _safe_str(offer.get("service_kind"))
-        for offer in get_provider_offers(provider_id)
+        for offer in get_provider_offers(provider_id, "", simulation_state)
         if _offer_matches_purchase_text(_safe_dict(offer), text_l)
     }
     matching_kinds.discard("")
@@ -302,13 +310,14 @@ def resolve_service_intent(
         or action.get("provider_id")
         or action.get("target_id")
     )
-    provider = get_service_provider(structured_provider_id) if structured_provider_id else None
+    provider = get_service_provider(structured_provider_id, simulation_state) if structured_provider_id else None
     if not provider:
-        provider = find_provider_by_text(text_l)
+        provider = find_provider_by_text(text_l, simulation_state)
     if not service_kind and provider:
         service_kind = _catalog_service_kind_from_text(
             _safe_str(provider.get("provider_id")),
             text_l,
+            simulation_state,
         )
     if not service_kind and _detect_kind(text_l) == "service_purchase" and prior_service.get("matched"):
         service_kind = _safe_str(prior_service.get("service_kind"))
@@ -328,13 +337,13 @@ def resolve_service_intent(
             active = _safe_dict(active)
             if active.get("status") != "active" or _safe_str(active.get("service_kind")) != service_kind:
                 continue
-            provider = get_service_provider(_safe_str(active.get("provider_id")))
+            provider = get_service_provider(_safe_str(active.get("provider_id")), simulation_state)
             if provider:
                 break
     if not provider:
-        provider = find_provider_by_text(text_l)
+        provider = find_provider_by_text(text_l, simulation_state)
     if not provider and prior_service.get("provider_id"):
-        provider = get_service_provider(_safe_str(prior_service.get("provider_id")))
+        provider = get_service_provider(_safe_str(prior_service.get("provider_id")), simulation_state)
     if not provider:
         return {
             "matched": False,
@@ -443,17 +452,17 @@ def resolve_service_turn(
     provider_id = _safe_str(intent.get("provider_id"))
     service_kind = _safe_str(intent.get("service_kind"))
     kind = _safe_str(intent.get("kind"))
-    provider = get_service_provider(provider_id)
+    provider = get_service_provider(provider_id, simulation_state)
     offers = filter_available_offers(
         simulation_state,
-        get_provider_offers(provider_id, service_kind),
+        get_provider_offers(provider_id, service_kind, simulation_state),
         provider=provider,
     )
     offers = _filter_offers_for_current_location(offers, simulation_state)
 
     # If all offers were removed by location filtering, the service is not available here.
     if not offers and provider_id and has_explicit_location(simulation_state):
-        all_provider_offers = get_provider_offers(provider_id, service_kind)
+        all_provider_offers = get_provider_offers(provider_id, service_kind, simulation_state)
         if all_provider_offers:
             # The provider has offers but none are available at the current location.
             return {
@@ -537,6 +546,20 @@ def resolve_service_turn(
             ]
             if len(price_matches) == 1:
                 selected = price_matches[0]
+        if not selected:
+            # A distinctive word of one offer's name ("potion" for a Healing Potion), or the only offer of the kind
+            # asked for ("a meal" when the house serves one meal).
+            words = set(re.findall(r"[a-z]+", text_l))
+            word_matches = [
+                _safe_dict(offer)
+                for offer in offers
+                if {word for word in re.findall(r"[a-z]+", _safe_str(_safe_dict(offer).get("label")).lower()) if len(word) > 3}
+                & words
+            ]
+            if len(word_matches) == 1:
+                selected = word_matches[0]
+            elif len(offers) == 1:
+                selected = _safe_dict(offers[0])
 
         if selected:
             price = normalize_currency(selected.get("price"))
@@ -683,6 +706,9 @@ def resolve_service_intent(  # type: ignore[no-redef]  # wraps the definition ab
     )
 
 
+_SELLING = re.compile(r"\bsell(?:s|ing)?\b")
+
+
 def resolve_service_turn(  # type: ignore[no-redef]  # wraps the definition above
     *,
     player_input: str,
@@ -694,6 +720,9 @@ def resolve_service_turn(  # type: ignore[no-redef]  # wraps the definition abov
     text = _safe_str(player_input)
     if _n11619_is_document_service_false_positive_text(text):
         return _n11619_not_service_precision_result(text)
+    if _SELLING.search(text.lower()) and _safe_dict(_safe_dict(simulation_state).get("world_model")):
+        # Selling to a world's shopkeeper is the player's request (session.player_requests), not a purchase.
+        return _not_service_result("player_sale", player_input=text)
     return _N11619_PREVIOUS_RESOLVE_SERVICE_TURN(
         player_input=player_input,
         action=action,

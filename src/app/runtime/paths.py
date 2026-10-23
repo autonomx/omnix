@@ -49,7 +49,9 @@ def resources_logs_root() -> Path:
 
 
 def resources_models_root() -> Path:
-    path = resources_root() / "models"
+    """Model weights: ``resources/models``, or ``OMNIX_MODELS_DIR`` for an install whose program folder is read-only."""
+    configured = environment().get("OMNIX_MODELS_DIR", "").strip()
+    path = Path(configured) if configured else resources_root() / "models"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

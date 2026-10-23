@@ -63,6 +63,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls hf hub cache for models.",
+    "feature": "models",
+    "name": "HF_HUB_CACHE",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls hf token for image.",
     "feature": "image",
@@ -1113,6 +1120,13 @@
     "type": "string"
   },
   {
+    "default": "5301",
+    "description": "Controls image port for desktop.",
+    "feature": "desktop",
+    "name": "OMNIX_IMAGE_PORT",
+    "type": "integer"
+  },
+  {
     "default": "0",
     "description": "Controls image preload for launcher, tooling.",
     "feature": "launcher, tooling",
@@ -1470,6 +1484,20 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls models dir for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_MODELS_DIR",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls model load commit bytes for image.",
+    "feature": "image",
+    "name": "OMNIX_MODEL_LOAD_COMMIT_BYTES",
+    "type": "string"
+  },
+  {
     "default": "13",
     "description": "Controls nemotron final right context for providers.",
     "feature": "providers",
@@ -1573,6 +1601,13 @@
     "feature": "observability",
     "name": "OMNIX_OTEL_ENABLED",
     "type": "boolean"
+  },
+  {
+    "default": "",
+    "description": "Controls packs dir for models.",
+    "feature": "models",
+    "name": "OMNIX_PACKS_DIR",
+    "type": "string"
   },
   {
     "default": null,
@@ -2332,6 +2367,13 @@
   },
   {
     "default": null,
+    "description": "Controls tts device for providers.",
+    "feature": "providers",
+    "name": "OMNIX_TTS_DEVICE",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls tts model dir for launcher.",
     "feature": "launcher",
     "name": "OMNIX_TTS_MODEL_DIR",
@@ -2350,6 +2392,13 @@
     "feature": "voice",
     "name": "OMNIX_TTS_STARTUP_WARMUP",
     "type": "string"
+  },
+  {
+    "default": "120",
+    "description": "Controls tts switch drain seconds for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_TTS_SWITCH_DRAIN_SECONDS",
+    "type": "integer"
   },
   {
     "default": "8",

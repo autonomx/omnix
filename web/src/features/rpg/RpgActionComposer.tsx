@@ -712,7 +712,7 @@ export function RpgActionComposer({
           <textarea rows={1} aria-invalid={hasCommandError} placeholder="What do you want to do?" {...commandRegistration} />
         </label>
         <Button
-          aria-label={isPending ? 'Queueing RPG turn' : 'Queue RPG turn'}
+          aria-label={isPending ? 'Queueing RPG turn' : 'Submit RPG turn'}
           className="rpg-submit-button"
           type="submit"
           disabled={isPending || isLaunching}

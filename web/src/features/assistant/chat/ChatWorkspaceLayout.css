@@ -16,10 +16,10 @@
   .assistant-composer-controls label,
   .assistant-composer-chip {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 82%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 82%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.65rem;
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     display: flex;
     gap: 0.45rem;
     min-height: 3.1rem;
@@ -41,7 +41,7 @@
   .assistant-composer-controls button.assistant-composer-chip:focus-visible,
   .assistant-composer-controls a.assistant-composer-chip:hover,
   .assistant-composer-controls a.assistant-composer-chip:focus-visible {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-sky-800) 13%, transparent), color-mix(in srgb, var(--c-indigo-600) 18%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-sky-800) 13%, transparent), color-mix(in srgb, var(--accent-indigo-600) 18%, transparent));
     border-color: color-mix(in srgb, var(--c-sky-800) 28%, transparent);
     outline: none;
   }
@@ -83,13 +83,13 @@
   }
 
   .assistant-message-input > span {
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     font-size: 0.85rem;
   }
 
   .assistant-message-input textarea {
-    background: color-mix(in srgb, var(--c-slate-150-2) 94%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-indigo-600) 46%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 94%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-600) 46%, transparent);
     border-radius: 0.85rem;
     color: var(--omnix-text);
     min-height: 6.6rem;
@@ -114,15 +114,21 @@
   }
 
   .assistant-mic-button {
-    background: color-mix(in srgb, var(--c-neutral-1000) 5%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 5%, transparent);
     border: 1px solid var(--omnix-border);
     color: var(--omnix-text);
     height: 2.7rem;
     width: 2.7rem;
   }
 
+  /* Push-to-talk dictation (PushToTalkButton.css), beside the microphone: its surface and height. */
+  .assistant-composer-actions .voice-ptt-button {
+    background: color-mix(in srgb, var(--wash-neutral-1000) 5%, transparent);
+    min-height: 2.7rem;
+  }
+
   .assistant-send-button {
-    background: linear-gradient(135deg, var(--c-indigo-500), var(--c-indigo-600));
+    background: linear-gradient(135deg, var(--accent-indigo-500), var(--accent-indigo-600));
     color: var(--c-neutral-1000);
     font-weight: 800;
     min-height: 2.7rem;
@@ -145,7 +151,7 @@
   }
 
   .assistant-inline-status [role='alert'] {
-    color: var(--c-red-890);
+    color: var(--fg-red-890);
   }
 
   .assistant-chat-side {
@@ -188,7 +194,7 @@
 
   .assistant-voice-orb::before,
   .assistant-voice-orb::after {
-    background: repeating-linear-gradient(90deg, transparent 0 0.5rem, color-mix(in srgb, var(--c-indigo-920) 90%, transparent) 0.5rem 0.65rem, transparent 0.65rem 0.95rem);
+    background: repeating-linear-gradient(90deg, transparent 0 0.5rem, color-mix(in srgb, var(--accent-indigo-920) 90%, transparent) 0.5rem 0.65rem, transparent 0.65rem 0.95rem);
     content: "";
     height: 3rem;
     opacity: 0.75;
@@ -204,7 +210,7 @@
 
   .assistant-voice-orb span {
     align-items: center;
-    background: linear-gradient(var(--c-indigo-210), var(--c-indigo-210)) padding-box, conic-gradient(var(--omnix-cyan), var(--omnix-purple), var(--omnix-cyan)) border-box;
+    background: linear-gradient(var(--bg-indigo-210), var(--bg-indigo-210)) padding-box, conic-gradient(var(--omnix-cyan), var(--omnix-purple), var(--omnix-cyan)) border-box;
     border: 0.35rem solid transparent;
     border-radius: 999px;
     display: inline-flex;
@@ -216,7 +222,7 @@
   }
 
   .assistant-voice-orb span::after {
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     content: "o";
     font-size: 2rem;
   }
@@ -228,7 +234,7 @@
   }
 
   .assistant-voice-controls button {
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.55rem;
     color: var(--omnix-text);
@@ -254,8 +260,8 @@
   }
 
   .assistant-voice-transcript p {
-    border-left: 2px solid var(--c-indigo-600);
-    color: var(--c-indigo-920);
+    border-left: 2px solid var(--accent-indigo-600);
+    color: var(--fg-indigo-920);
     display: grid;
     gap: 0.25rem;
     margin: 0;
@@ -289,16 +295,19 @@
     padding: 0;
   }
 
+  /* The chat list, the chat, and the Live Voice rail; a minimized panel sets its width to 3.75rem. */
   .assistant-chat-layout {
+    --assistant-chat-list-width: minmax(14rem, 16.5rem);
+    --assistant-chat-rail-width: minmax(21rem, 25rem);
     display: grid;
     gap: 0.75rem;
-    grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) minmax(21rem, 25rem);
+    grid-template-columns: var(--assistant-chat-list-width) minmax(0, 1fr) var(--assistant-chat-rail-width);
     height: calc(100vh - 6.25rem);
     min-height: 44rem;
   }
 
   .assistant-chat-sidebar {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-210) 94%, transparent), color-mix(in srgb, var(--c-slate-150-2) 96%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-210) 94%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 96%, transparent));
     border: 1px solid var(--omnix-border);
     border-radius: 0.95rem;
     display: grid;
@@ -328,8 +337,8 @@
   .assistant-chat-main,
   .assistant-live-card {
     background:
-      radial-gradient(circle at 24% 0%, color-mix(in srgb, var(--c-indigo-600) 12%, transparent), transparent 28rem),
-      linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-210) 94%, transparent), color-mix(in srgb, var(--c-slate-150-2) 98%, transparent));
+      radial-gradient(circle at 24% 0%, color-mix(in srgb, var(--accent-indigo-600) 12%, transparent), transparent 28rem),
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-210) 94%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 98%, transparent));
     border: 1px solid var(--omnix-border);
     border-radius: 0.95rem;
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 3.5%, transparent), 0 1.4rem 4rem color-mix(in srgb, var(--c-neutral-0) 24%, transparent);
@@ -366,10 +375,10 @@
   .assistant-chat-header-actions button,
   .assistant-message-actions button {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 82%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 82%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.55rem;
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     display: inline-flex;
     font-size: 0.86rem;
     justify-content: center;
@@ -417,7 +426,7 @@
   .assistant-chat-avatar {
     align-self: start;
     background:
-      radial-gradient(circle at center, color-mix(in srgb, var(--c-indigo-600) 95%, transparent) 0 30%, transparent 31%),
+      radial-gradient(circle at center, color-mix(in srgb, var(--accent-indigo-600) 95%, transparent) 0 30%, transparent 31%),
       conic-gradient(from 120deg, var(--omnix-cyan), var(--omnix-purple), var(--omnix-cyan));
     border: 1px solid color-mix(in srgb, var(--c-sky-800) 40%, transparent);
     border-radius: 999px;
@@ -427,7 +436,7 @@
   }
 
   .assistant-chat-bubble {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     display: grid;
     gap: 0.45rem;
     min-width: 0;
@@ -453,7 +462,7 @@
 
   .assistant-chat-bubble > p,
   .assistant-message-content {
-    background: color-mix(in srgb, var(--c-blue-230) 88%, transparent);
+    background: color-mix(in srgb, var(--bg-blue-230) 88%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 22%, transparent);
     border-radius: 0.8rem;
     line-height: 1.5;
@@ -505,13 +514,13 @@
 
   .assistant-message-content blockquote {
     border-left: 3px solid var(--omnix-cyan);
-    color: var(--c-indigo-900);
+    color: var(--fg-indigo-900);
     margin: 0 0 0.85rem;
     padding-left: 0.85rem;
   }
 
   .assistant-message-content pre {
-    background: color-mix(in srgb, var(--c-slate-150-2) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 72%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
     border-radius: 0.55rem;
     margin: 0 0 0.85rem;
@@ -520,7 +529,7 @@
   }
 
   .assistant-message-content code {
-    background: color-mix(in srgb, var(--c-slate-150-2) 42%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 42%, transparent);
     border-radius: 0.25rem;
     font-size: 0.9em;
     padding: 0.1rem 0.25rem;
@@ -529,7 +538,7 @@
   .assistant-message-content pre code { background: transparent; padding: 0;
   }
 
-  .assistant-message-content a { color: var(--c-sky-870); text-decoration: underline;
+  .assistant-message-content a { color: var(--fg-sky-870); text-decoration: underline;
   }
 
   /* Tones shared by Markdown alerts and generative UI blocks (ChatGenerativeUi.css). */
@@ -623,7 +632,7 @@
   }
 
   .assistant-research-citation {
-    color: var(--c-sky-830);
+    color: var(--fg-sky-830);
     font-size: 0.78em;
     font-weight: 800;
     margin-left: 0.18rem;
@@ -637,8 +646,8 @@
   }
 
   .assistant-chat-message.user .assistant-chat-bubble {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-360) 98%, transparent), color-mix(in srgb, var(--c-indigo-290) 98%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 35%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-indigo-360) 98%, transparent), color-mix(in srgb, var(--bg-indigo-290) 98%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 35%, transparent);
     border-radius: 0.85rem;
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 5%, transparent);
     gap: 0.2rem;
@@ -681,10 +690,10 @@
   }
 
   .assistant-suggestion-row button {
-    background: color-mix(in srgb, var(--c-indigo-190) 74%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 74%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 999px;
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     cursor: pointer;
     min-height: 2.4rem;
     padding: 0 1rem;
@@ -692,13 +701,13 @@
 
   .assistant-suggestion-row button:hover,
   .assistant-suggestion-row button:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 22%, transparent);
-    border-color: color-mix(in srgb, var(--c-violet-660) 35%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 35%, transparent);
     outline: none;
   }
 
   .assistant-composer {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-slate-150-2) 16%, transparent), color-mix(in srgb, var(--c-slate-150-2) 55%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-150-2) 16%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 55%, transparent));
     border-top: 0;
     gap: 0.65rem;
     padding: 0.7rem 1rem 0.65rem;
@@ -732,7 +741,7 @@
   }
 
   .assistant-message-input textarea {
-    border-color: color-mix(in srgb, var(--c-indigo-600) 52%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 52%, transparent);
     min-height: 6rem;
     padding: 1rem 7.2rem 1rem 1rem;
   }
@@ -749,7 +758,7 @@
 
   .assistant-mode-switch {
     align-self: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 78%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.65rem;
     display: grid;
@@ -770,7 +779,7 @@
   }
 
   .assistant-mode-switch button.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 46%, transparent), color-mix(in srgb, var(--c-indigo-440) 62%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 46%, transparent), color-mix(in srgb, var(--accent-indigo-440) 62%, transparent));
     color: var(--omnix-text);
     font-weight: 750;
   }
@@ -821,7 +830,7 @@
 
   .assistant-live-state {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 82%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 82%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.65rem;
     color: var(--omnix-cyan);
@@ -834,7 +843,7 @@
 
   .assistant-live2d-motion-control {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 82%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 82%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.65rem;
     display: flex;
@@ -869,7 +878,7 @@
 
   .assistant-voice-orb::before,
   .assistant-voice-orb::after {
-    background: repeating-linear-gradient(90deg, transparent 0 0.55rem, color-mix(in srgb, var(--c-indigo-920) 74%, transparent) 0.55rem 0.72rem, transparent 0.72rem 1.05rem);
+    background: repeating-linear-gradient(90deg, transparent 0 0.55rem, color-mix(in srgb, var(--accent-indigo-920) 74%, transparent) 0.55rem 0.72rem, transparent 0.72rem 1.05rem);
     height: 4.6rem;
     width: 6.6rem;
   }
@@ -922,7 +931,7 @@
   .assistant-audio-devices button {
     background: transparent;
     border: 0;
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     cursor: pointer;
   }
 
@@ -967,7 +976,7 @@
   }
 
   .assistant-audio-devices strong {
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     font-size: 0.9rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -983,10 +992,10 @@
 
   .assistant-voice-status {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-190) 82%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 82%, transparent);
     border: 1px solid var(--omnix-border);
     border-radius: 0.65rem;
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     display: flex;
     justify-content: space-between;
     min-height: 2.85rem;
@@ -997,22 +1006,27 @@
     color: var(--omnix-cyan);
   }
 
+  /*
+   * Narrower windows keep the Live Voice rail on the right with slimmer side panels (below 1180px useChatLayout
+   * folds the chat list to its icons). Only a phone-sized window stacks the panels.
+   */
   @media (max-width: 1500px) {
-    .assistant-chat-layout { grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); height: auto;
-    }
-
-    .assistant-chat-main { min-height: 44rem;
-    }
-
-    .assistant-chat-side { grid-column: 1 / -1; grid-template-columns: 1fr;
-    }
-
-    .assistant-live-card { height: auto; min-height: 32rem;
+    .assistant-chat-layout {
+      --assistant-chat-list-width: minmax(13rem, 15rem);
+      --assistant-chat-rail-width: minmax(19rem, 22rem);
     }
   }
 
   @media (max-width: 1180px) {
-    .assistant-chat-layout { grid-template-columns: 1fr; height: auto;
+    .assistant-chat-layout { --assistant-chat-rail-width: minmax(18rem, 20rem);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .workspace-card.assistant-chat-page { margin: 1rem 0.75rem;
+    }
+
+    .assistant-chat-layout { grid-template-columns: 1fr; height: auto; min-height: 0;
     }
 
     .assistant-chat-sidebar { min-height: 38rem;
@@ -1021,18 +1035,10 @@
     .assistant-chat-main { min-height: 44rem;
     }
 
-    .assistant-chat-side { grid-template-columns: 1fr;
+    .assistant-chat-side { grid-column: 1 / -1; grid-template-columns: 1fr;
     }
 
     .assistant-live-card { height: auto; min-height: 44rem;
-    }
-  }
-
-  @media (max-width: 900px) {
-    .workspace-card.assistant-chat-page { margin: 1rem 0.75rem;
-    }
-
-    .assistant-chat-layout { min-height: 0;
     }
 
     .assistant-chat-header {

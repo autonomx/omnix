@@ -49,6 +49,14 @@ describe('view API scope', () => {
     expect(isApiAllowedForView('/api/agent-runs/workspace-picker', 'trading')).toBe(false);
   });
 
+  it("lets chat's live voice reach the gateway's speech proxy", () => {
+    // The authority probe, the live socket and the batch fallback (the call failed with authority_http_403).
+    for (const path of ['/api/stt/authorityz', '/api/stt/ws/transcribe', '/api/stt/transcribe']) {
+      expect(isApiAllowedForView(path, 'chatbot')).toBe(true);
+    }
+    expect(isApiAllowedForView('/api/stt/authorityz', 'trading')).toBe(false);
+  });
+
   it('blocks off-view network calls without invoking the browser fetch', async () => {
     window.history.replaceState({}, '', '/trading');
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));

@@ -30,14 +30,14 @@
 
   .live-chat-page-header p,
   .live-chat-card p {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
     margin: 0;
   }
 
   .live-chat-status,
   .live-chat-profile-source {
-    background: color-mix(in srgb, var(--c-indigo-540) 16%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-indigo-600) 42%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-540) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-600) 42%, transparent);
     border-radius: 999px;
     font-size: 0.78rem;
     font-weight: 700;
@@ -51,14 +51,14 @@
   }
 
   .live-chat-card {
-    background: color-mix(in srgb, var(--c-indigo-190) 54%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 24%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 54%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 24%, transparent);
     border-radius: 14px;
     padding: 1rem;
   }
 
   .live-chat-card button {
-    background: linear-gradient(135deg, var(--c-indigo-540), var(--c-indigo-600));
+    background: linear-gradient(135deg, var(--accent-indigo-540), var(--accent-indigo-600));
     border: 0;
     border-radius: 10px;
     color: var(--c-neutral-1000);
@@ -73,12 +73,12 @@
   }
 
   .live-chat-card button.live-chat-secondary-action {
-    background: color-mix(in srgb, var(--c-violet-570) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 34%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-570) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 34%, transparent);
   }
 
   .live-chat-mode-profiles {
-    border-bottom: 1px solid color-mix(in srgb, var(--c-violet-570) 18%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-violet-570) 18%, transparent);
     margin-top: 1rem;
     padding-bottom: 1rem;
   }
@@ -98,7 +98,7 @@
 
   .live-chat-mode-profile-heading span,
   .live-chat-mode-profile-heading small {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
     font-size: 0.8rem;
   }
 
@@ -111,8 +111,8 @@
 
   .live-chat-card button.live-chat-mode-profile {
     align-items: flex-start;
-    background: color-mix(in srgb, var(--c-slate-150-2) 72%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 28%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 28%, transparent);
     display: grid;
     gap: 0.35rem;
     min-height: 5.4rem;
@@ -121,13 +121,13 @@
   }
 
   .live-chat-card button.live-chat-mode-profile[aria-pressed='true'] {
-    background: color-mix(in srgb, var(--c-indigo-540) 20%, transparent);
-    border-color: var(--c-indigo-600);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-indigo-600) 24%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-540) 20%, transparent);
+    border-color: var(--accent-indigo-600);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-indigo-600) 24%, transparent);
   }
 
   .live-chat-mode-profile span {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
     font-size: 0.75rem;
     font-weight: 500;
     line-height: 1.35;
@@ -146,7 +146,7 @@
   }
 
   .live-chat-control-grid label > span {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
     font-size: 0.82rem;
     font-weight: 700;
   }
@@ -155,8 +155,8 @@
   .live-chat-control-grid input[type='text'],
   .live-chat-control-grid input[type='number'],
   .live-chat-control-grid input:not([type]) {
-    background: color-mix(in srgb, var(--c-slate-150-2) 86%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 34%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 34%, transparent);
     border-radius: 10px;
     color: inherit;
     min-height: 2.8rem;
@@ -164,7 +164,7 @@
   }
 
   .live-chat-control-grid input[type='range'] {
-    accent-color: var(--c-indigo-600);
+    accent-color: var(--accent-indigo-600);
     min-height: 2.8rem;
     width: 100%;
   }
@@ -190,7 +190,7 @@
   }
 
   .live-chat-profile-actions small {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
   }
 
   .live-chat-metrics {
@@ -201,14 +201,14 @@
   }
 
   .live-chat-metrics > div {
-    background: color-mix(in srgb, var(--c-slate-150-2) 60%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 18%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 60%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 18%, transparent);
     border-radius: 10px;
     padding: 0.8rem;
   }
 
   .live-chat-metrics dt {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
     font-size: 0.72rem;
     font-weight: 800;
     text-transform: uppercase;
@@ -232,8 +232,8 @@
 
   .live-chat-pronunciation-list > div {
     align-items: center;
-    background: color-mix(in srgb, var(--c-slate-150-2) 54%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 18%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 54%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 18%, transparent);
     border-radius: 10px;
     display: flex;
     justify-content: space-between;
@@ -246,7 +246,7 @@
   }
 
   .live-chat-pronunciation-list small {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
   }
 
   .live-chat-evaluation-grid {
@@ -257,8 +257,8 @@
   }
 
   .live-chat-evaluation-grid article {
-    background: color-mix(in srgb, var(--c-slate-150-2) 62%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-570) 18%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 62%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-570) 18%, transparent);
     border-radius: 11px;
     display: grid;
     gap: 0.28rem;
@@ -268,7 +268,7 @@
 
   .live-chat-evaluation-grid article > span,
   .live-chat-evaluation-grid article > small {
-    color: var(--omnix-text-muted, var(--c-indigo-780));
+    color: var(--omnix-text-muted, var(--fg-indigo-780));
     font-size: 0.74rem;
   }
 
@@ -290,7 +290,7 @@
   }
 
   .live-chat-evaluation-survey input[type='range'] {
-    accent-color: var(--c-indigo-600);
+    accent-color: var(--accent-indigo-600);
     width: 100%;
   }
 

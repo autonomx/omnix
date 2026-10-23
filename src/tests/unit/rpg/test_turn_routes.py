@@ -37,6 +37,11 @@ def test_turn_for_missing_session_is_rejected_before_any_turn_is_applied(monkeyp
 
     calls = _record_apply_turn(monkeypatch)
     monkeypatch.setattr(service, "load_session", lambda session_id: None)
+    # On PostgreSQL the launch gate reads its projection instead (WP-5.6).
+    monkeypatch.setattr(
+        "app.apps.rpg.session.persistence.session_records.load_launch_gate_source_from_postgres",
+        lambda session_id: None,
+    )
 
     response = _turn_client().post("/api/rpg/sessions/rpg_missing/turn", json={"command": "look around"})
 

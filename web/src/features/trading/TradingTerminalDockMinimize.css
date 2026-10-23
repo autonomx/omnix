@@ -25,7 +25,7 @@
     border-radius: 6px;
     background: color-mix(in srgb, var(--c-teal-740) 10%, transparent);
     padding: 7px 8px;
-    color: var(--c-teal-860);
+    color: var(--fg-teal-860);
     font-size: 9px;
     line-height: 1.3;
     box-shadow: 0 5px 18px color-mix(in srgb, var(--c-neutral-0) 18%, transparent);
@@ -56,16 +56,16 @@
   }
 
   .trading-dock-main > nav button[aria-selected="true"] {
-    background: var(--c-neutral-290);
+    background: var(--bg-neutral-290);
     box-shadow: none;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
   }
 
   .trading-dock-main > nav .trading-dock-download {
     min-width: 28px;
     margin-left: 2px;
     padding: 0 7px;
-    color: var(--c-slate-790);
+    color: var(--fg-slate-790);
     font-size: 17px;
   }
 
@@ -96,13 +96,13 @@
     border-radius: 5px;
     background: transparent;
     padding: 7px 5px;
-    color: var(--c-slate-820);
+    color: var(--fg-slate-820);
     font-size: 10px;
   }
 
   .trading-order-history-filters button[aria-selected="true"] {
     background: color-mix(in srgb, var(--c-blue-660) 12%, transparent);
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     font-weight: 700;
   }
 
@@ -112,7 +112,7 @@
   }
 
   .trading-order-history-table code {
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 9px;
   }
 }
@@ -120,7 +120,7 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   .trading-dock-toggle {
-    color: var(--c-slate-740);
+    color: var(--fg-slate-740);
     font-size: 9px;
   }
 }

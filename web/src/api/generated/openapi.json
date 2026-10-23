@@ -7035,6 +7035,55 @@
         "title": "CanonicalInstrument",
         "type": "object"
       },
+      "CapabilitiesResponse": {
+        "properties": {
+          "capabilities": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CapabilityState"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "desktop": {
+            "title": "Desktop",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "desktop",
+          "capabilities"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
+      "CapabilityState": {
+        "properties": {
+          "bundle": {
+            "title": "Bundle",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "bundle",
+          "label",
+          "installed",
+          "running"
+        ],
+        "title": "CapabilityState",
+        "type": "object"
+      },
       "CashPreservingShadowPortfolio": {
         "additionalProperties": false,
         "properties": {
@@ -12188,6 +12237,63 @@
           "max_pages"
         ],
         "title": "DeepResearchPlanUpdateRequest",
+        "type": "object"
+      },
+      "DefaultChoice": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "label"
+        ],
+        "title": "DefaultChoice",
+        "type": "object"
+      },
+      "DefaultModels": {
+        "properties": {
+          "image": {
+            "$ref": "#/components/schemas/DefaultSlot"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/DefaultSlot"
+          }
+        },
+        "required": [
+          "voice",
+          "image"
+        ],
+        "title": "DefaultModels",
+        "type": "object"
+      },
+      "DefaultSlot": {
+        "description": "The downloaded models that can be this default, and the current one ('' when none of them is).",
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/DefaultChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "current": {
+            "default": "",
+            "title": "Current",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choices",
+          "current"
+        ],
+        "title": "DefaultSlot",
         "type": "object"
       },
       "DeleteCharacterAvatarPackResponse": {
@@ -24745,6 +24851,23 @@
         "title": "IndicatorValuesResponse",
         "type": "object"
       },
+      "InstallLive2DModelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "accept_live2d_runtime_terms": {
+            "default": false,
+            "title": "Accept Live2D Runtime Terms",
+            "type": "boolean"
+          },
+          "accept_model_terms": {
+            "default": false,
+            "title": "Accept Model Terms",
+            "type": "boolean"
+          }
+        },
+        "title": "InstallLive2DModelRequest",
+        "type": "object"
+      },
       "InstrumentSearchResponse": {
         "properties": {
           "instruments": {
@@ -25994,6 +26117,11 @@
             "title": "Name",
             "type": "string"
           },
+          "preview_path": {
+            "default": "",
+            "title": "Preview Path",
+            "type": "string"
+          },
           "preview_url": {
             "title": "Preview Url",
             "type": "string"
@@ -26032,13 +26160,19 @@
           "runtime_license_url",
           "license_summary",
           "installed",
-          "selected"
+          "selected",
+          "preview_path"
         ],
         "title": "Live2DModelCatalogItem",
         "type": "object"
       },
       "Live2DModelCatalogResponse": {
         "properties": {
+          "can_manage": {
+            "default": false,
+            "title": "Can Manage",
+            "type": "boolean"
+          },
           "models": {
             "items": {
               "$ref": "#/components/schemas/Live2DModelCatalogItem"
@@ -26054,7 +26188,8 @@
         },
         "required": [
           "models",
-          "runtime_installed"
+          "runtime_installed",
+          "can_manage"
         ],
         "title": "Live2DModelCatalogResponse",
         "type": "object"
@@ -30041,6 +30176,78 @@
         "title": "MemoryUsageResponse",
         "type": "object"
       },
+      "ModelPacksStatus": {
+        "description": "The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.",
+        "properties": {
+          "bundles": {
+            "items": {
+              "$ref": "#/components/schemas/PackVerdict"
+            },
+            "title": "Bundles",
+            "type": "array"
+          },
+          "can_manage": {
+            "default": false,
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "can_manage_runtimes": {
+            "default": false,
+            "title": "Can Manage Runtimes",
+            "type": "boolean"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/DefaultModels"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "hardware": {
+            "additionalProperties": true,
+            "title": "Hardware",
+            "type": "object"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/PackModelStatus"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "packs_folder": {
+            "default": "",
+            "title": "Packs Folder",
+            "type": "string"
+          },
+          "platform": {
+            "default": "",
+            "title": "Platform",
+            "type": "string"
+          },
+          "runtimes": {
+            "items": {
+              "$ref": "#/components/schemas/PackRuntimeStatus"
+            },
+            "title": "Runtimes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "platform",
+          "hardware",
+          "bundles",
+          "runtimes",
+          "models",
+          "packs_folder",
+          "defaults",
+          "can_manage",
+          "can_manage_runtimes"
+        ],
+        "title": "ModelPacksStatus",
+        "type": "object"
+      },
       "ModelRef": {
         "additionalProperties": false,
         "properties": {
@@ -31856,6 +32063,437 @@
           "arms"
         ],
         "title": "OvernightShadowConfig",
+        "type": "object"
+      },
+      "PackModelLicence": {
+        "properties": {
+          "commercial_use": {
+            "title": "Commercial Use",
+            "type": "boolean"
+          },
+          "gated": {
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "output_terms": {
+            "default": "",
+            "title": "Output Terms",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "commercial_use",
+          "gated",
+          "output_terms"
+        ],
+        "title": "PackModelLicence",
+        "type": "object"
+      },
+      "PackModelStatus": {
+        "properties": {
+          "accepted": {
+            "default": false,
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "disk_bytes": {
+            "default": 0,
+            "title": "Disk Bytes",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "licence": {
+            "$ref": "#/components/schemas/PackModelLicence"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "repo",
+          "revision",
+          "size_bytes",
+          "installed",
+          "licence",
+          "disk_bytes",
+          "accepted"
+        ],
+        "title": "PackModelStatus",
+        "type": "object"
+      },
+      "PackOption": {
+        "description": "A model the user may add to a bundle, with its own verdict on this machine.",
+        "properties": {
+          "default": {
+            "default": false,
+            "title": "Default",
+            "type": "boolean"
+          },
+          "installed": {
+            "default": false,
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "licence": {
+            "$ref": "#/components/schemas/PackOptionLicence"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_bytes": {
+            "default": 0,
+            "title": "Model Bytes",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "runtime_bytes": {
+            "default": 0,
+            "title": "Runtime Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "fits",
+              "warn",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "label",
+          "status",
+          "licence",
+          "default",
+          "installed",
+          "model_bytes",
+          "runtime_bytes",
+          "reasons",
+          "note"
+        ],
+        "title": "PackOption",
+        "type": "object"
+      },
+      "PackOptionLicence": {
+        "properties": {
+          "commercial_use": {
+            "default": true,
+            "title": "Commercial Use",
+            "type": "boolean"
+          },
+          "gated": {
+            "default": false,
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "commercial_use",
+          "gated"
+        ],
+        "title": "PackOptionLicence",
+        "type": "object"
+      },
+      "PackRuntimeStatus": {
+        "properties": {
+          "accelerator": {
+            "title": "Accelerator",
+            "type": "string"
+          },
+          "base": {
+            "title": "Base",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "download_bytes": {
+            "default": 0,
+            "title": "Download Bytes",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "installed_at": {
+            "default": "",
+            "title": "Installed At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "licences": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Licences",
+            "type": "array"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "requires": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Requires",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "platform",
+          "accelerator",
+          "base",
+          "installed",
+          "current",
+          "licences",
+          "requires",
+          "installed_at",
+          "download_bytes"
+        ],
+        "title": "PackRuntimeStatus",
+        "type": "object"
+      },
+      "PackTarget": {
+        "properties": {
+          "accept_terms": {
+            "default": false,
+            "title": "Accept Terms",
+            "type": "boolean"
+          },
+          "bundle_id": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "model_id": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "runtime_id": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Runtime Id",
+            "type": "string"
+          }
+        },
+        "title": "PackTarget",
+        "type": "object"
+      },
+      "PackVerdict": {
+        "description": "One bundle on this machine: what it installs and whether it can run here.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "bundle": {
+            "title": "Bundle",
+            "type": "string"
+          },
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "installed": {
+            "default": false,
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "min_options": {
+            "default": 0,
+            "title": "Min Options",
+            "type": "integer"
+          },
+          "model_bytes": {
+            "default": 0,
+            "title": "Model Bytes",
+            "type": "integer"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PackOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "runtime_bytes": {
+            "default": 0,
+            "title": "Runtime Bytes",
+            "type": "integer"
+          },
+          "runtimes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Runtimes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "fits",
+              "warn",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle",
+          "label",
+          "description",
+          "capability",
+          "status",
+          "reasons",
+          "action",
+          "models",
+          "runtimes",
+          "installed",
+          "model_bytes",
+          "runtime_bytes",
+          "recommended",
+          "note",
+          "options",
+          "min_options"
+        ],
+        "title": "PackVerdict",
         "type": "object"
       },
       "PairedForecastMetrics": {
@@ -45057,6 +45695,54 @@
         "title": "RpgGeometryPatchResponse",
         "type": "object"
       },
+      "RpgGitHubDeviceSignInResponse": {
+        "properties": {
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "flow_id",
+          "user_code",
+          "verification_uri",
+          "interval"
+        ],
+        "title": "RpgGitHubDeviceSignInResponse",
+        "type": "object"
+      },
+      "RpgGitHubTokenRequestBody": {
+        "properties": {
+          "token": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "RpgGitHubTokenRequestBody",
+        "type": "object"
+      },
       "RpgGridPerformanceProfileRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -46980,6 +47666,17 @@
       "RpgObserveMapResponse": {
         "description": "``reused`` (status ``current``) when the observer already knew this map state.",
         "properties": {
+          "campaign_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Revision"
+          },
           "event": {
             "anyOf": [
               {
@@ -47017,6 +47714,11 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "tactical": {
+            "additionalProperties": true,
+            "title": "Tactical",
+            "type": "object"
           }
         },
         "required": [
@@ -47025,7 +47727,9 @@
           "reused",
           "knowledge",
           "projection",
-          "event"
+          "event",
+          "campaign_revision",
+          "tactical"
         ],
         "title": "RpgObserveMapResponse",
         "type": "object"
@@ -47033,6 +47737,17 @@
       "RpgObserverProjectionResponse": {
         "description": "``stale`` when the map changed after the observer last looked.",
         "properties": {
+          "campaign_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Revision"
+          },
           "knowledge": {
             "additionalProperties": true,
             "title": "Knowledge",
@@ -47058,6 +47773,11 @@
           "stale": {
             "title": "Stale",
             "type": "boolean"
+          },
+          "tactical": {
+            "additionalProperties": true,
+            "title": "Tactical",
+            "type": "object"
           }
         },
         "required": [
@@ -47065,7 +47785,9 @@
           "stale",
           "knowledge",
           "projection",
-          "recent_events"
+          "recent_events",
+          "campaign_revision",
+          "tactical"
         ],
         "title": "RpgObserverProjectionResponse",
         "type": "object"
@@ -48208,6 +48930,56 @@
         "title": "RpgSessionMutationResponse",
         "type": "object"
       },
+      "RpgSharedWorldStateResponse": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "adoption": {
+            "additionalProperties": true,
+            "title": "Adoption",
+            "type": "object"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "catalog": {
+            "additionalProperties": true,
+            "title": "Catalog",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "shared": {
+            "title": "Shared",
+            "type": "boolean"
+          },
+          "source_world_id": {
+            "title": "Source World Id",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "shared",
+          "bundle_sha256",
+          "source_world_id",
+          "catalog",
+          "adopted",
+          "adoption"
+        ],
+        "title": "RpgSharedWorldStateResponse",
+        "type": "object"
+      },
       "RpgSpatialClock": {
         "properties": {
           "aggregate_metrics": {
@@ -49099,6 +49871,30 @@
         "title": "RpgTacticalResponse",
         "type": "object"
       },
+      "RpgTurnDraftResponse": {
+        "description": "The narration written so far for a turn still running (display only; the turn's answer replaces it).",
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "done",
+          "found"
+        ],
+        "title": "RpgTurnDraftResponse",
+        "type": "object"
+      },
       "RpgTurnResponse": {
         "additionalProperties": true,
         "properties": {
@@ -49685,6 +50481,75 @@
         "title": "RpgUpdateWorldTopicRequestBody",
         "type": "object"
       },
+      "RpgWorldAdoptRequestBody": {
+        "properties": {
+          "bundle_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_sha256"
+        ],
+        "title": "RpgWorldAdoptRequestBody",
+        "type": "object"
+      },
+      "RpgWorldAdoptionResponse": {
+        "properties": {
+          "adoption": {
+            "additionalProperties": true,
+            "title": "Adoption",
+            "type": "object"
+          },
+          "launch_ready": {
+            "title": "Launch Ready",
+            "type": "boolean"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "openings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Openings",
+            "type": "array"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "adopted",
+            "title": "Status",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          },
+          "world_release": {
+            "title": "World Release",
+            "type": "integer"
+          },
+          "world_revision": {
+            "title": "World Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "reused",
+          "world_id",
+          "adoption"
+        ],
+        "title": "RpgWorldAdoptionResponse",
+        "type": "object"
+      },
       "RpgWorldAuthorshipAuditResponse": {
         "properties": {
           "audited_at": {
@@ -49901,7 +50766,8 @@
               "generating",
               "ready",
               "not_required",
-              "recovery_required"
+              "recovery_required",
+              "adoption_required"
             ],
             "title": "Status",
             "type": "string"
@@ -49990,6 +50856,179 @@
           "binding"
         ],
         "title": "RpgWorldCampaignSummary",
+        "type": "object"
+      },
+      "RpgWorldCatalogEntry": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "bundle": {
+            "additionalProperties": true,
+            "title": "Bundle",
+            "type": "object"
+          },
+          "genre": {
+            "title": "Genre",
+            "type": "string"
+          },
+          "has_cover": {
+            "title": "Has Cover",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RpgWorldCatalogInstalled"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "title": "Published At",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "title": "Tone",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "title",
+          "summary",
+          "genre",
+          "tone",
+          "author",
+          "published_at",
+          "bundle",
+          "has_cover",
+          "installed"
+        ],
+        "title": "RpgWorldCatalogEntry",
+        "type": "object"
+      },
+      "RpgWorldCatalogInstallResponse": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "installed",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "reused",
+          "world_id",
+          "version",
+          "bundle_sha256",
+          "adopted"
+        ],
+        "title": "RpgWorldCatalogInstallResponse",
+        "type": "object"
+      },
+      "RpgWorldCatalogInstalled": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "world_id",
+          "version",
+          "bundle_sha256",
+          "adopted"
+        ],
+        "title": "RpgWorldCatalogInstalled",
+        "type": "object"
+      },
+      "RpgWorldCatalogResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "worlds": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldCatalogEntry"
+            },
+            "title": "Worlds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "repo",
+          "updated_at",
+          "worlds"
+        ],
+        "title": "RpgWorldCatalogResponse",
         "type": "object"
       },
       "RpgWorldDeletionBlocker": {
@@ -52749,6 +53788,110 @@
         "title": "RpgWorldSaveTopicRequestBody",
         "type": "object"
       },
+      "RpgWorldShareRequestBody": {
+        "properties": {
+          "summary": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "title": "RpgWorldShareRequestBody",
+        "type": "object"
+      },
+      "RpgWorldShareResponse": {
+        "properties": {
+          "bundle_bytes": {
+            "title": "Bundle Bytes",
+            "type": "integer"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "catalog_id": {
+            "title": "Catalog Id",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "pull_request_url": {
+            "title": "Pull Request Url",
+            "type": "string"
+          },
+          "status": {
+            "const": "submitted",
+            "title": "Status",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "world_id",
+          "catalog_id",
+          "pull_request_url",
+          "bundle_sha256",
+          "bundle_bytes"
+        ],
+        "title": "RpgWorldShareResponse",
+        "type": "object"
+      },
+      "RpgWorldSharingStatusResponse": {
+        "properties": {
+          "catalog_repo": {
+            "title": "Catalog Repo",
+            "type": "string"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "device_sign_in": {
+            "title": "Device Sign In",
+            "type": "boolean"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "connected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "connected",
+          "login",
+          "device_sign_in",
+          "catalog_repo"
+        ],
+        "title": "RpgWorldSharingStatusResponse",
+        "type": "object"
+      },
       "RpgWorldStartGenerationRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -54699,6 +55842,53 @@
         "title": "SelectedPriceEvent",
         "type": "object"
       },
+      "SelectionRequest": {
+        "properties": {
+          "bundles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Bundles",
+            "type": "array"
+          },
+          "options": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Options",
+            "type": "object"
+          }
+        },
+        "title": "SelectionRequest",
+        "type": "object"
+      },
+      "SelectionSize": {
+        "properties": {
+          "model_bytes": {
+            "title": "Model Bytes",
+            "type": "integer"
+          },
+          "runtime_bytes": {
+            "title": "Runtime Bytes",
+            "type": "integer"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_bytes",
+          "runtime_bytes",
+          "total_bytes"
+        ],
+        "title": "SelectionSize",
+        "type": "object"
+      },
       "SelfReviewResult": {
         "additionalProperties": false,
         "description": "Structured implementer self-review bound to one exact final state.",
@@ -55090,6 +56280,24 @@
           "policy"
         ],
         "title": "SetAutoDirect",
+        "type": "object"
+      },
+      "SetDefaultModels": {
+        "properties": {
+          "image": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Image",
+            "type": "string"
+          },
+          "voice": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Voice",
+            "type": "string"
+          }
+        },
+        "title": "SetDefaultModels",
         "type": "object"
       },
       "SetDocumentOverride": {
@@ -76959,6 +78167,167 @@
         ]
       }
     },
+    "/api/character-live2d/models": {
+      "get": {
+        "description": "The avatars Omnix can download, for the setup screen and Settings, Models.",
+        "operationId": "live2d_model_library_api_character_live2d_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Live2DModelCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live2D Model Library",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/character-live2d/models/{model_id}": {
+      "delete": {
+        "operationId": "remove_live2d_model_api_character_live2d_models__model_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Live2DModelCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Live2D Model",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "models:admin"
+      },
+      "post": {
+        "operationId": "install_live2d_model_api_character_live2d_models__model_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallLive2DModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Live2DModelCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Live2D Model",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "models:admin"
+      }
+    },
+    "/api/character-live2d/previews/{model_id}": {
+      "get": {
+        "operationId": "live2d_model_preview_api_character_live2d_previews__model_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/*": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The avatar's preview image."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live2D Model Preview",
+        "tags": [
+          "characters"
+        ],
+        "x-omnix-permission": "settings:read"
+      }
+    },
     "/api/character-live2d/runtime/{filename}": {
       "get": {
         "operationId": "live2d_runtime_file_api_character_live2d_runtime__filename__get",
@@ -83211,6 +84580,241 @@
         "summary": "Live Voice Execution Lane Status"
       }
     },
+    "/api/model-packs": {
+      "get": {
+        "description": "The setup screen: this machine, what it can run, and what is installed.",
+        "operationId": "model_packs_status_api_model_packs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelPacksStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Packs Status",
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/model-packs/capabilities": {
+      "get": {
+        "operationId": "model_packs_capabilities_api_model_packs_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Packs Capabilities",
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/model-packs/defaults": {
+      "post": {
+        "description": "Makes downloaded models Omnix's default voice engine and image model.",
+        "operationId": "model_packs_set_defaults_api_model_packs_defaults_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDefaultModels"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultModels"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Set Defaults",
+        "x-omnix-permission": "settings:write"
+      }
+    },
+    "/api/model-packs/install": {
+      "post": {
+        "operationId": "model_packs_install_api_model_packs_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Install",
+        "x-omnix-permission": "models:admin"
+      }
+    },
+    "/api/model-packs/remove": {
+      "post": {
+        "operationId": "model_packs_remove_api_model_packs_remove_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Remove",
+        "x-omnix-permission": "models:admin"
+      }
+    },
+    "/api/model-packs/selection": {
+      "post": {
+        "operationId": "model_packs_selection_api_model_packs_selection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectionSize"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Selection",
+        "x-omnix-permission": "settings:read"
+      }
+    },
+    "/api/model-packs/verify": {
+      "post": {
+        "operationId": "model_packs_verify_api_model_packs_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Packs Verify",
+        "x-omnix-permission": "models:admin"
+      }
+    },
     "/api/model-residency": {
       "get": {
         "operationId": "model_residency_api_model_residency_get",
@@ -86964,6 +88568,170 @@
         ]
       }
     },
+    "/api/rpg/sessions/{session_id}/turn-draft": {
+      "get": {
+        "description": "The narration so far of the caller's own turn in progress, named by its submission id.",
+        "operationId": "rpg_turn_draft_api_rpg_sessions__session_id__turn_draft_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgTurnDraftResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Turn Draft Api Rpg Sessions  Session Id  Turn Draft Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Turn Draft",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/world-catalog": {
+      "get": {
+        "operationId": "rpg_world_catalog_api_rpg_world_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldCatalogResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Catalog Api Rpg World Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Catalog",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-catalog/{entry_id}/cover": {
+      "get": {
+        "operationId": "rpg_world_catalog_cover_api_rpg_world_catalog__entry_id__cover_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/webp": {}
+            },
+            "description": "The catalog world's cover image."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Catalog Cover",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-catalog/{entry_id}/install": {
+      "post": {
+        "operationId": "rpg_world_catalog_install_api_rpg_world_catalog__entry_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldCatalogInstallResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Catalog Install Api Rpg World Catalog  Entry Id  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Catalog Install",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
     "/api/rpg/world-generation/diagnostics": {
       "get": {
         "operationId": "rpg_world_generation_diagnostics_api_rpg_world_generation_diagnostics_get",
@@ -87527,6 +89295,165 @@
         "summary": "Rpg World Library"
       }
     },
+    "/api/rpg/world-sharing/github": {
+      "delete": {
+        "operationId": "rpg_world_sharing_github_disconnect_api_rpg_world_sharing_github_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Disconnect Api Rpg World Sharing Github Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Sharing Github Disconnect",
+        "tags": [
+          "rpg-world"
+        ]
+      },
+      "get": {
+        "operationId": "rpg_world_sharing_github_api_rpg_world_sharing_github_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Api Rpg World Sharing Github Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Sharing Github",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-sharing/github/device": {
+      "post": {
+        "operationId": "rpg_world_sharing_github_device_api_rpg_world_sharing_github_device_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgGitHubDeviceSignInResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Device Api Rpg World Sharing Github Device Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Sharing Github Device",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-sharing/github/device/{flow_id}/poll": {
+      "post": {
+        "operationId": "rpg_world_sharing_github_device_poll_api_rpg_world_sharing_github_device__flow_id__poll_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "flow_id",
+            "required": true,
+            "schema": {
+              "title": "Flow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Device Poll Api Rpg World Sharing Github Device  Flow Id  Poll Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Sharing Github Device Poll",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-sharing/github/token": {
+      "put": {
+        "operationId": "rpg_world_sharing_github_token_api_rpg_world_sharing_github_token_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgGitHubTokenRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Token Api Rpg World Sharing Github Token Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Sharing Github Token",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
     "/api/rpg/worlds": {
       "get": {
         "operationId": "rpg_list_worlds_api_rpg_worlds_get",
@@ -87784,6 +89711,61 @@
           }
         },
         "summary": "Rpg Update World Metadata",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/adopt": {
+      "post": {
+        "operationId": "rpg_world_adopt_api_rpg_worlds__world_id__adopt_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgWorldAdoptRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldAdoptionResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Adopt Api Rpg Worlds  World Id  Adopt Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Adopt",
         "tags": [
           "rpg-world"
         ]
@@ -89440,6 +91422,106 @@
           }
         },
         "summary": "Rpg Publish World Release",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/share": {
+      "post": {
+        "operationId": "rpg_world_share_api_rpg_worlds__world_id__share_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgWorldShareRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldShareResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Share Api Rpg Worlds  World Id  Share Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Share",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/shared": {
+      "get": {
+        "operationId": "rpg_world_shared_state_api_rpg_worlds__world_id__shared_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgSharedWorldStateResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Shared State Api Rpg Worlds  World Id  Shared Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Shared State",
         "tags": [
           "rpg-world"
         ]

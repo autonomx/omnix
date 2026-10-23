@@ -583,7 +583,7 @@ def _simulation_state_stub(seed: int) -> dict[str, Any]:
         "turn_index": 0,
         "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
         "memory_state": {"actor_memory": {}, "world_memory": {"rumors": []}},
-        "survival": {"enabled": False, "events": []},
+        "survival": {"enabled": True, "events": []},
     }
 
 

@@ -1,14 +1,19 @@
 import { Button } from '@mantine/core';
+import type { ReactNode } from 'react';
 import type { ImageReadiness } from './imageReadinessModel';
 
 interface ImageReadinessPanelProps {
   readiness: ImageReadiness;
   refreshing: boolean;
   onRefresh: () => void;
+  /** Shown above the status: in the desktop app, the offer to download the image model when it is missing. */
+  notice?: ReactNode;
 }
 
-export function ImageReadinessPanel({ readiness, refreshing, onRefresh }: ImageReadinessPanelProps) {
+export function ImageReadinessPanel({ readiness, refreshing, onRefresh, notice }: ImageReadinessPanelProps) {
   return (
+    <>
+    {notice}
     <div className="image-readiness-inline" role="status" aria-live="polite">
       <span className={`image-readiness-dot ${readiness.canGenerate ? 'ready' : 'degraded'}`} aria-hidden="true" />
       <strong>{readiness.title}</strong>
@@ -19,5 +24,6 @@ export function ImageReadinessPanel({ readiness, refreshing, onRefresh }: ImageR
         <Button loading={refreshing} onClick={onRefresh} size="compact-xs" variant="subtle">Refresh</Button>
       </div>
     </div>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { assetsModule, diagnosticsModule, jobsModule, modelsModule, providersMod
 import { podcastModule } from '../features/podcast/module';
 import { rpgModule } from '../features/rpg/module';
 import { settingsModule } from '../features/settings/module';
+import { setupModule } from '../features/setup/module';
 import { storytellerModule } from '../features/storyteller/module';
 import { sttModule } from '../features/stt/module';
 import { tradingModule } from '../features/trading/module';
@@ -34,6 +35,7 @@ export const moduleManifests = [
   assetsModule,
   reportsModule,
   settingsModule,
+  setupModule,
   diagnosticsModule,
   dubbingModule,
 ] as const;

@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import logging
 
-from app.apps.rpg.session.public_state_bridge import merge_authoritative_session_state
+from app.apps.rpg.session.public_state_bridge import (
+    carry_stage_changes,
+    count_player_turn,
+    hydrate_simulation_player,
+    merge_authoritative_session_state,
+    project_authoritative_player,
+)
+from app.apps.rpg.rules.survival_tick_runtime import apply_survival_runtime_tick
+from app.apps.rpg.rules.combat.exchange_lines import describe_combat_exchange
 
 # RPG session runtime responsibility module.
 from app.apps.rpg.session.turn_perf_trace import (
@@ -14,7 +22,7 @@ from app.apps.rpg.session.session_runtime_store import (
 )
 import copy
 from app.apps.rpg.session.state_normalization import (
-    _safe_dict as _safe_dict, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_str as _safe_str,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
     _sync_session_if_companion_runtime_mutated as _sync_session_if_companion_runtime_mutated,
@@ -86,6 +94,7 @@ from app.apps.rpg.session.combat_action_reconciliation import (
     _reconcile_invalid_companion_command as _reconcile_invalid_companion_command,
 )
 from app.apps.rpg.session.deferred_narration_guard import (
+    canonical_presentation_follows,
     runtime_narration_follows_context,
     suppress_provider_runtime_narration as suppress_provider_runtime_narration,
 )
@@ -135,8 +144,12 @@ def apply_turn(
             return_keys=sorted(list({"ok": False, "error": "session_not_found"}.keys()))[:80],
         )
         return {"ok": False, "error": "session_not_found"}
+    # A turn that ends early (a companion accepting) saves this session, so it counts the turn too; the
+    # character sheet's gear and wallet are hydrated as the authoritative stage hydrates them.
+    session = count_player_turn(hydrate_simulation_player(session))
 
     simulation_state = copy.deepcopy(_safe_dict(session.get("simulation_state")))
+    turn_start_simulation = copy.deepcopy(simulation_state)
     tick = int(_safe_dict(session.get("runtime_state")).get("tick", 0) or 0)
     companion_acceptance_precheck = _try_resolve_pending_companion_offer_at_turn_start(
         simulation_state,
@@ -288,6 +301,16 @@ def apply_turn(
             "party_composition_effects": copy.deepcopy(party_composition_result),
             "session": session,
         }
+        # Time passes on this turn too: needs rise, saved with it (this path skips the turn's finalization).
+        survival_tick = apply_survival_runtime_tick(
+            authoritative_result={},
+            session={"simulation_state": simulation_state, "runtime_state": _safe_dict(session.get("runtime_state"))},
+            turn_contract={},
+            result_payload={"turn_id": f"turn:{tick}:companion_acceptance", "tick": tick, "player_input": player_input},
+            resolved_result=resolved_result,
+        )
+        simulation_state["survival"] = _safe_dict(survival_tick["session"]["simulation_state"]).get("survival")
+        session["runtime_state"] = survival_tick["session"]["runtime_state"]
         session = _sync_session_simulation_state_for_early_return(
             session,
             simulation_state,
@@ -346,7 +369,7 @@ def apply_turn(
             companion_acceptance_precheck.get("companion_dialogue_result")
         )
         companion_line = _safe_str(companion_dialogue_result.get("line"))
-        npc_name = _safe_str(companion_dialogue_result.get("npc_name") or acceptance.get("name") or "Bran")
+        npc_name = _safe_str(companion_dialogue_result.get("npc_name") or acceptance.get("name") or "Your new companion")
         if acceptance.get("accepted") and companion_line:
             companion_narration = f"{npc_name} joins your party and falls in beside you."
             companion_npc = {"speaker": npc_name, "line": companion_line}
@@ -537,8 +560,9 @@ def apply_turn(
     )
 
     # J13-J15: Combat narration must run in the active service-scenario path,
-    # before fallback "Result: ..." narration is finalized.
-    if combat_contract_requires_llm(combat_result):
+    # before fallback "Result: ..." narration is finalized; the narrative engine, when it presents the
+    # turn, narrates the blows itself (told them as outcome lines), so no separate combat call is made.
+    if combat_contract_requires_llm(combat_result) and not canonical_presentation_follows():
         general_interaction_result = _apply_combat_narration_if_needed(
             general_interaction_result,
             combat_result=combat_result,
@@ -589,8 +613,9 @@ def apply_turn(
     _stage_started = __import__("time").perf_counter()
     record_turn_perf_trace_stack("runtime_core_before_apply_turn_authoritative")
     # The runtime narration stage below calls the provider for this turn, so the
-    # authoritative chain need not narrate it too (WP-8.6: one narration call).
-    runtime_narration_will_follow = (
+    # authoritative chain need not narrate it too (WP-8.6: one narration call);
+    # nor need it when the narrative engine presents the turn.
+    runtime_narration_will_follow = canonical_presentation_follows() or (
         not suppress_provider_runtime_narration() and get_runtime_llm_provider() is not None
     )
     with runtime_narration_follows_context(runtime_narration_will_follow):
@@ -670,14 +695,26 @@ def apply_turn(
         or companion_auto_equip_result.get("changed_state") is True
         or combat_result.get("changed_state") is True
         or combat_loot_result.get("changed_state") is True
+        or _safe_dict(general_interaction_result.get("vulnerability_result")).get("applied") is True
     ):
+        # The authoritative stage resolved the rest of this turn on its own copy: keep what it did, add what
+        # this stage changed, and show the result on the character sheet.
+        session["simulation_state"] = carry_stage_changes(
+            turn_start_simulation, simulation_state, _safe_dict(session.get("simulation_state"))
+        )
         session = _sync_session_simulation_state_for_early_return(
-            session,
-            simulation_state,
+            project_authoritative_player(session),
+            session["simulation_state"],
             reason="general_item_interaction",
         )
 
     final_result["session"] = session
+    # The blows the combat runtime struck this turn, stated for the narration.
+    exchange_lines = describe_combat_exchange(combat_result)
+    if exchange_lines:
+        presented = final_result["resolved_result"] = _safe_dict(final_result.get("resolved_result"))
+        presented["outcome_lines"] = [*(presented.get("outcome_lines") or ()), *exchange_lines]
+        presented.setdefault("response_mode", "combat")
 
     # Advance campaign journal after the deterministic turn result exists.
     # Important: not every apply_turn path assigns a local named
@@ -790,6 +827,12 @@ def apply_turn(
         player_input,
     )
     final_result = _reconcile_combat_victory_rewards_and_loot(final_result)
+    if exchange_lines:
+        presented = _safe_dict(final_result.get("resolved_result"))
+        earned = _safe_int(_safe_dict(final_result.get("reward_result") or presented.get("reward_result")).get("xp"), 0)
+        if earned > 0:
+            presented["outcome_lines"] = [*(presented.get("outcome_lines") or ()), f"You gain {earned} experience."]
+            final_result["resolved_result"] = presented
     final_result = _reconcile_combat_world_consequences(final_result)
     final_result = _reconcile_combat_recovery_action(final_result, player_input)
     final_result = _reconcile_condition_tick_for_manual_current_actor(final_result, player_input)
@@ -854,6 +897,10 @@ def apply_turn(
         )
         if suppressed:
             record_narration_trace("get_runtime_llm_provider_return_none_due_to_suppression")
+            runtime_provider = None
+        elif canonical_presentation_follows():
+            # The narrative engine writes this turn's prose; a model draft here would be discarded.
+            record_narration_trace("runtime_provider_skipped_for_canonical_presentation")
             runtime_provider = None
         else:
             runtime_provider = get_runtime_llm_provider()

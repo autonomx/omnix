@@ -13,8 +13,8 @@
 
   .rpg-ability-summary {
     align-items: center;
-    background: color-mix(in srgb, var(--c-slate-130) 34%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 34%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
     border-radius: 0.75rem;
     display: grid;
     gap: 0.18rem;
@@ -23,17 +23,17 @@
   }
 
   .rpg-ability-summary strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .rpg-ability-summary span,
   .rpg-ability-summary small {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
   }
 
   .rpg-loadout-detail {
-    background: color-mix(in srgb, var(--c-slate-130) 42%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 14%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 14%, transparent);
     border-radius: 0.75rem;
     display: grid;
     gap: 0.5rem;
@@ -46,11 +46,11 @@
   }
 
   .rpg-loadout-detail strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .rpg-loadout-detail span {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
     line-height: 1.45;
   }
 
@@ -65,13 +65,13 @@
   .rpg-loadout-row-button,
   .rpg-ability-node,
   .rpg-hotbar-slot-row button {
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
-    color: var(--c-slate-970-2);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 18%, transparent);
+    color: var(--fg-slate-970-2);
     cursor: pointer;
   }
 
   .rpg-mini-button {
-    background: color-mix(in srgb, var(--c-violet-540) 14%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-540) 14%, transparent);
     border-radius: 0.62rem;
     min-height: 2.25rem;
     padding: 0.45rem 0.55rem;
@@ -79,7 +79,7 @@
 
   .rpg-loadout-row-button {
     align-items: center;
-    background: color-mix(in srgb, var(--c-slate-130) 42%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
     border-radius: 0.68rem;
     display: grid;
     gap: 0.62rem;
@@ -96,11 +96,11 @@
   }
 
   .rpg-loadout-row-button strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .rpg-loadout-row-button span:not(.rpg-icon-tile) {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
   }
 
   .rpg-ability-tree-layout {
@@ -116,8 +116,8 @@
   }
 
   .rpg-ability-category {
-    background: color-mix(in srgb, var(--c-slate-130) 30%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 10%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 30%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 10%, transparent);
     border-radius: 0.85rem;
     display: grid;
     gap: 0.6rem;
@@ -130,11 +130,11 @@
   }
 
   .rpg-ability-category header strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .rpg-ability-category header span {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
     font-size: 0.82rem;
   }
 
@@ -145,7 +145,7 @@
 
   .rpg-ability-node {
     align-items: center;
-    background: color-mix(in srgb, var(--c-slate-130) 42%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
     border-radius: 0.72rem;
     display: grid;
     gap: 0.62rem;
@@ -162,12 +162,12 @@
   }
 
   .rpg-ability-node strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .rpg-ability-node span:not(.rpg-icon-tile),
   .rpg-ability-node small {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
   }
 
   .rpg-ability-node-available {
@@ -189,7 +189,7 @@
 
   .rpg-hotbar-slot-row > button:first-child {
     align-items: center;
-    background: color-mix(in srgb, var(--c-slate-130) 42%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 42%, transparent);
     border-radius: 0.72rem;
     display: grid;
     gap: 0.35rem;
@@ -201,11 +201,11 @@
 
   .rpg-hotbar-slot-row > button:first-child small,
   .rpg-hotbar-slot-row > button:first-child span {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
   }
 
   .rpg-hotbar-slot-row > button:first-child strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -218,8 +218,8 @@
   }
 
   .rpg-coverage-summary-card {
-    background: color-mix(in srgb, var(--c-slate-130) 36%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 14%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 36%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 14%, transparent);
     border-radius: 0.85rem;
     display: grid;
     gap: 0.65rem;
@@ -228,7 +228,7 @@
 
   .rpg-coverage-summary-card small,
   .rpg-coverage-score span {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
   }
 
   .rpg-coverage-score {
@@ -239,20 +239,20 @@
   }
 
   .rpg-coverage-score strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     font-size: 1.65rem;
   }
 
   .rpg-coverage-meter {
-    background: color-mix(in srgb, var(--c-violet-660) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
     border-radius: 999px;
     height: 0.65rem;
     overflow: hidden;
   }
 
   .rpg-coverage-meter span {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--c-sky-830) 78%, transparent), color-mix(in srgb, var(--c-violet-660) 78%, transparent));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--c-sky-830) 78%, transparent), color-mix(in srgb, var(--accent-violet-660) 78%, transparent));
     display: block;
     height: 100%;
   }
@@ -264,8 +264,8 @@
   }
 
   .rpg-coverage-dimension {
-    background: color-mix(in srgb, var(--c-slate-130) 32%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-130) 32%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
     border-radius: 0.72rem;
     display: grid;
     gap: 0.18rem;
@@ -273,11 +273,11 @@
   }
 
   .rpg-coverage-dimension strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
   }
 
   .rpg-coverage-dimension span {
-    color: var(--c-slate-730);
+    color: var(--fg-slate-730);
     font-size: 0.82rem;
   }
 
@@ -294,25 +294,25 @@
   .rpg-loadout-row-button[aria-pressed="true"],
   .rpg-ability-node[aria-pressed="true"],
   .rpg-hotbar-slot-row button[aria-pressed="true"] {
-    background: color-mix(in srgb, var(--c-violet-540) 22%, transparent);
-    border-color: color-mix(in srgb, var(--c-violet-660) 48%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-indigo-900) 8%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-540) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 48%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-indigo-900) 8%, transparent);
   }
 
   .rpg-mini-button:hover,
   .rpg-loadout-row-button:hover,
   .rpg-ability-node:hover,
   .rpg-hotbar-slot-row button:hover {
-    background: color-mix(in srgb, var(--c-violet-540) 18%, transparent);
-    border-color: color-mix(in srgb, var(--c-violet-660) 42%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 42%, transparent);
   }
 
   .rpg-mini-button:focus-visible,
   .rpg-loadout-row-button:focus-visible,
   .rpg-ability-node:focus-visible,
   .rpg-hotbar-slot-row button:focus-visible {
-    border-color: color-mix(in srgb, var(--c-violet-660) 72%, transparent);
-    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--c-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 72%, transparent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--accent-violet-540) 18%, transparent);
     outline: none;
   }
 
@@ -335,5 +335,87 @@
     .rpg-coverage-grid {
       grid-template-columns: 1fr;
     }
+  }
+}
+
+/* Skills: one row each, with the XP toward the next rank. */
+@layer features {
+  .rpg-skill-panel {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .rpg-skill-list {
+    display: grid;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .rpg-skill-row {
+    align-items: center;
+    background: var(--omnix-soft-bg);
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.65rem;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: 2.2rem minmax(0, 1fr) auto;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .rpg-skill-rank {
+    align-items: center;
+    background: color-mix(in srgb, var(--accent-indigo-500) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-500) 40%, transparent);
+    border-radius: 0.55rem;
+    display: inline-flex;
+    font-weight: 800;
+    height: 2.2rem;
+    justify-content: center;
+  }
+
+  .rpg-skill-copy {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .rpg-skill-copy small {
+    color: var(--omnix-muted-text);
+    font-size: 0.76rem;
+  }
+
+  .rpg-skill-progress {
+    background: color-mix(in srgb, var(--omnix-text) 10%, transparent);
+    border-radius: 999px;
+    height: 0.4rem;
+    overflow: hidden;
+  }
+
+  .rpg-skill-progress span {
+    background: linear-gradient(90deg, var(--accent-indigo-500), var(--c-sky-640));
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+  }
+
+  .rpg-skill-empty {
+    background: var(--omnix-soft-bg);
+    border: 1px dashed var(--omnix-border);
+    border-radius: 0.65rem;
+    display: grid;
+    gap: 0.35rem;
+    justify-items: start;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .rpg-skill-empty span {
+    color: var(--omnix-muted-text);
+    font-size: 0.85rem;
+  }
+
+  .rpg-skill-review {
+    justify-self: start;
   }
 }

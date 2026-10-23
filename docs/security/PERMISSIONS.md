@@ -55,6 +55,8 @@ role to permission list; `owner` cannot be changed).
 | `memory:admin` | Memory management | yes | yes |  |  |  |  |  |  |  |
 | `memory:read` | Memory items and settings (read) | yes | yes |  |  | yes | yes |  |  | yes |
 | `memory:write` | Memory items (write) | yes | yes |  |  | yes | yes |  |  |  |
+| `models:admin` | Install and remove models; accept their licences | yes | yes |  |  |  |  |  |  |  |
+| `models:runtimes:admin` | Install and remove runtime packs | yes |  |  |  |  |  |  |  |  |
 | `research:read` | Research (read) | yes | yes |  |  | yes | yes |  |  | yes |
 | `research:run` | Run research | yes | yes |  |  |  | yes |  |  |  |
 | `rpg:admin` | RPG administration | yes | yes |  |  |  |  |  |  |  |
@@ -161,6 +163,13 @@ role to permission list; `owner` cannot be changed).
 | POST | `/api/image-generation/model/unload` | `image:models:admin` |
 | POST | `/api/image-generation/service/start` | `image:models:admin` |
 | POST | `/api/jobs/{job_id}/cancel` | `jobs:cancel` |
+| POST | `/api/rpg/world-catalog/{entry_id}/install` | `rpg:author` |
+| DELETE | `/api/rpg/world-sharing/github` | `rpg:author` |
+| POST | `/api/rpg/world-sharing/github/device` | `rpg:author` |
+| POST | `/api/rpg/world-sharing/github/device/{flow_id}/poll` | `rpg:author` |
+| PUT | `/api/rpg/world-sharing/github/token` | `rpg:author` |
+| POST | `/api/rpg/worlds/{world_id}/adopt` | `rpg:author` |
+| POST | `/api/rpg/worlds/{world_id}/share` | `rpg:author` |
 | PUT | `/api/trading/execution/providers/alpaca-iex/credentials` | `trading:control` |
 | PUT | `/api/trading/market-data/providers/coinmarketcap/credentials` | `trading:control` |
 | PUT | `/api/trading/market-data/providers/ibkr/web-api/credentials` | `trading:control` |

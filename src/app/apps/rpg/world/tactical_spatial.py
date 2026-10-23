@@ -457,6 +457,36 @@ def footprint_distance(left: GridActorPlacement, right: GridActorPlacement) -> i
     )
 
 
+def tactical_turn_summary(
+    simulation_state: dict[str, Any],
+    actor_id: str,
+    policy: TacticalSpatialPolicy | None = None,
+) -> dict[str, Any]:
+    """What a player's map needs to offer tactical moves and attacks: read-only, for display.
+
+    The commands themselves still check the turn, budgets and hostility (``resolve_tactical_move``,
+    ``resolve_tactical_attack``)."""
+
+    combat_state = normalize_combat_state(simulation_state.get("combat_state"))
+    if not combat_is_active(combat_state):
+        return {"combat_active": False}
+    rules = policy or TacticalSpatialPolicy()
+    round_state = _ensure_round_state(combat_state, rules)
+    current_actor_id = get_current_actor_id(combat_state)
+    participants = dict(combat_state.get("participants") or {})
+    return {
+        "combat_active": True,
+        "round": int(round_state["round"]),
+        "current_actor_id": current_actor_id,
+        "your_turn": current_actor_id == actor_id,
+        "movement_remaining": int(dict(round_state["movement_remaining"]).get(actor_id, 0)),
+        "actions_remaining": int(dict(round_state["actions_remaining"]).get(actor_id, 0)),
+        "hostile_actor_ids": sorted(
+            other for other in participants if other != actor_id and _hostile(combat_state, actor_id, other)
+        ),
+    }
+
+
 def _require_actor_turn(
     simulation_state: dict[str, Any],
     actor_id: str,

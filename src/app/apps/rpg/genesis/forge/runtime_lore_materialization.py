@@ -180,6 +180,9 @@ class SceneLoreTarget:
         }
 
 
+DETERMINISTIC_GENERATOR = "deterministic_fallback"
+
+
 def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-") or "unknown"
 
@@ -393,6 +396,10 @@ def scene_lore_entity_is_rich(entity: Mapping[str, Any]) -> bool:
 
     if not _text(entity.get("name") or entity.get("title")):
         return False
+    # A published world's own people and places are written by its author; generating a dossier over them
+    # costs a model call per newcomer and can contradict the canon.
+    if _text(entity.get("canon_source")) == "published_world":
+        return True
     kind = _text(entity.get("kind")).casefold()
     if kind == "npc":
         dossier = _mapping(entity.get("dossier"))
@@ -761,6 +768,7 @@ def _generate_bundle(
             location_name=_text(_mapping(_mapping(bible.get("entities")).get(target.location_id)).get("name")),
         )
     )
+    fallback["generator"] = DETERMINISTIC_GENERATOR
     if gateway is None or gateway is False:
         return fallback
     prompt = (
@@ -830,6 +838,8 @@ def _merge_bundle(
     entity_status = deepcopy(_mapping(discovery.get("entities")))
     created_entities: list[str] = []
     created_documents: list[str] = []
+    # A provisional bundle is the built-in dossier a turn used while the full one is written after it.
+    marks = {"provisional": True} if bundle.get("provisional") else {}
 
     for index, raw in enumerate(bundle.get("entities") or (), start=1):
         if not isinstance(raw, Mapping):
@@ -850,6 +860,7 @@ def _merge_bundle(
                     **_mapping(row.get("provenance")),
                     "source": "runtime_scene_materialization_v1",
                     "source_target_id": source_target.entity_id,
+                    **marks,
                 },
             }
         )
@@ -919,6 +930,7 @@ def _merge_bundle(
                     **_mapping(row.get("provenance")),
                     "source": "runtime_scene_materialization_v1",
                     "source_target_id": source_target.entity_id,
+                    **marks,
                 },
             }
         )
@@ -948,6 +960,8 @@ def _merge_bundle(
                 "canon_revision": revision,
             }
         )
+        if marks:
+            row["provenance"] = {"source_target_id": source_target.entity_id, **marks}
         facts.append(row)
         fact_ids.add(fact_id)
 
@@ -970,6 +984,8 @@ def _merge_bundle(
                 "canon_revision": revision,
             }
         )
+        if marks:
+            row["provenance"] = {"source_target_id": source_target.entity_id, **marks}
         relationships.append(row)
         relationship_ids.add(relationship_id)
 
@@ -992,6 +1008,136 @@ def _merge_bundle(
     return created_entities, created_documents
 
 
+def _count_canon(bible: dict[str, Any], revision: int) -> None:
+    bible["canon_revision"] = revision
+    manifest = deepcopy(_mapping(bible.get("manifest")))
+    manifest.update(
+        {
+            "document_count": len(_rows(bible.get("documents"))),
+            "entity_count": len(_mapping(bible.get("entities"))),
+            "fact_count": len(_rows(bible.get("facts"))),
+            "relationship_count": len(_rows(bible.get("relationships"))),
+        }
+    )
+    bible["manifest"] = manifest
+
+
+def _provisional_for(row: Mapping[str, Any], target_id: str) -> bool:
+    provenance = _mapping(row.get("provenance"))
+    return provenance.get("provisional") is True and _text(provenance.get("source_target_id")) == target_id
+
+
+def _drop_provisional(bible: dict[str, Any], target_id: str) -> None:
+    """Remove the built-in dossier a turn merged for ``target_id``: its entities, pages, facts and relationships."""
+    bible["entities"] = {
+        entity_id: entity
+        for entity_id, entity in _mapping(bible.get("entities")).items()
+        if not _provisional_for(_mapping(entity), target_id)
+    }
+    dropped = {_text(row.get("document_id")) for row in _rows(bible.get("documents")) if _provisional_for(row, target_id)}
+    for key in ("documents", "facts", "relationships"):
+        bible[key] = [row for row in _rows(bible.get(key)) if not _provisional_for(row, target_id)]
+    discovery = deepcopy(_mapping(bible.get("discovery_state")))
+    pages = {page: status for page, status in _mapping(discovery.get("pages")).items() if page not in dropped}
+    if discovery:
+        discovery["pages"] = pages
+        bible["discovery_state"] = discovery
+
+
+def _bound_to_target(bundle: Mapping[str, Any], target: SceneLoreTarget) -> dict[str, Any]:
+    """The model's dossier for ``target`` under the target's own id: a same-named entity under another id would
+    be a second copy of the same person, place or thing."""
+    bound = deepcopy(dict(bundle))
+    name = target.name.casefold()
+    renamed: set[str] = set()
+    for row in bound.get("entities") or ():
+        if not isinstance(row, dict):
+            continue
+        entity_id = _text(row.get("id") or row.get("entity_id"))
+        if entity_id != target.entity_id and _text(row.get("name")).casefold() == name:
+            renamed.add(entity_id)
+            row["id"] = target.entity_id
+            row.pop("entity_id", None)
+    for row in bound.get("documents") or ():
+        if isinstance(row, dict) and renamed:
+            for key in ("entity_refs", "entity_ids"):
+                if isinstance(row.get(key), list):
+                    row[key] = [target.entity_id if _text(ref) in renamed else ref for ref in row[key]]
+            if _text(row.get("entity_id")) in renamed:
+                row["entity_id"] = target.entity_id
+    return bound
+
+
+def enrich_provisional_scene_lore(
+    bible: Mapping[str, Any],
+    targets: Sequence[Mapping[str, Any]],
+    *,
+    campaign_id: str,
+    canon_revision: int | None = None,
+    llm_gateway: Any | None = None,
+    pregenerated: Mapping[str, Mapping[str, Any]] | None = None,
+    generated: dict[str, Mapping[str, Any]] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Replace the provisional dossiers a turn used with full, model-written ones.
+
+    A target whose entity is no longer provisional (already enriched, or written
+    in full meanwhile) is skipped, and so is one the model did not answer for:
+    its built-in dossier stays. ``pregenerated``/``generated`` work as in
+    ``materialize_scene_lore``.
+    """
+
+    candidate = deepcopy(dict(bible))
+    revision = int(canon_revision or int(candidate.get("canon_revision") or 0) + 1)
+    enriched: list[str] = []
+    for raw in targets:
+        target = SceneLoreTarget(**{field: _text(_mapping(raw).get(field)) for field in ("entity_id", "kind", "name", "location_id")})
+        if not target.entity_id:
+            continue
+        has_provisional = any(
+            _provisional_for(_mapping(entity), target.entity_id)
+            for entity in _mapping(candidate.get("entities")).values()
+        )
+        if not has_provisional:
+            continue
+        bundle = (pregenerated or {}).get(target.entity_id)
+        if bundle is None:
+            bundle = _generate_bundle(candidate, campaign_id, target, llm_gateway=llm_gateway)
+        if generated is not None:
+            generated[target.entity_id] = bundle
+        if bundle.get("generator") == DETERMINISTIC_GENERATOR:
+            continue
+        if ":" in target.entity_id:
+            bundle = _bound_to_target(bundle, target)
+        _drop_provisional(candidate, target.entity_id)
+        entity_ids, _ = _merge_bundle(candidate, bundle, revision=revision, source_target=target)
+        enriched.extend(entity_ids)
+    if enriched:
+        _count_canon(candidate, revision)
+    return candidate, {
+        "changed": bool(enriched),
+        "enriched_entity_ids": list(dict.fromkeys(enriched)),
+        "canon_revision": revision if enriched else int(candidate.get("canon_revision") or 0),
+    }
+
+
+def known_scene_entity(entities: Mapping[str, Any], target: SceneLoreTarget) -> tuple[str, dict[str, Any]]:
+    """The canon entity a target names: by id, or, for a bare name ("Liora Fen"), the one entity of that name."""
+    existing = _mapping(entities.get(target.entity_id))
+    if existing or ":" in target.entity_id:
+        return target.entity_id, existing
+    wanted = (target.name or target.entity_id).casefold()
+    named = [
+        (str(entity_id), _mapping(entity))
+        for entity_id, entity in entities.items()
+        if _text(_mapping(entity).get("name") or _mapping(entity).get("title")).casefold() == wanted
+    ]
+    # Several of that name (a model-written copy beside the author's): the author's is the one meant.
+    authored = [row for row in named if _text(row[1].get("canon_source")) == "published_world"]
+    if len(authored) == 1:
+        return authored[0]
+    return named[0] if len(named) == 1 else (target.entity_id, existing)
+
+
 def materialize_scene_lore(
     bible: Mapping[str, Any],
     session: Mapping[str, Any],
@@ -1003,12 +1149,15 @@ def materialize_scene_lore(
     llm_gateway: Any | None = None,
     pregenerated: Mapping[str, Mapping[str, Any]] | None = None,
     generated: dict[str, Mapping[str, Any]] | None = None,
+    deferred: list[SceneLoreTarget] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Generate and merge missing current-scene canon once.
 
     ``generated`` collects each target's bundle; ``pregenerated`` supplies bundles
     produced earlier, so a caller can generate outside its row locks and merge
-    under them (WP-8.6).
+    under them (WP-8.6). With ``deferred``, a missing target gets the built-in
+    dossier, marked provisional, and is listed there for
+    ``enrich_provisional_scene_lore`` to write in full after the turn.
     """
 
     candidate = deepcopy(dict(bible))
@@ -1025,15 +1174,18 @@ def materialize_scene_lore(
         explicit_entity_ids=explicit_entity_ids,
     )
     for target in targets:
-        existing = _mapping(_mapping(candidate.get("entities")).get(target.entity_id))
+        entity_id, existing = known_scene_entity(_mapping(candidate.get("entities")), target)
         documented = _document_for_entity(
             _rows(candidate.get("documents")),
-            target.entity_id,
+            entity_id,
         )
         if _rich_entity(existing) and documented:
             continue
         bundle = (pregenerated or {}).get(target.entity_id)
-        if bundle is None:
+        if bundle is None and deferred is not None:
+            bundle = {**_generate_bundle(candidate, campaign_id, target, llm_gateway=False), "provisional": True}
+            deferred.append(target)
+        elif bundle is None:
             bundle = _generate_bundle(
                 candidate,
                 campaign_id,
@@ -1052,17 +1204,7 @@ def materialize_scene_lore(
         created_documents.extend(document_ids)
     changed = bool(created_entities or created_documents)
     if changed:
-        candidate["canon_revision"] = revision
-        manifest = deepcopy(_mapping(candidate.get("manifest")))
-        manifest.update(
-            {
-                "document_count": len(_rows(candidate.get("documents"))),
-                "entity_count": len(_mapping(candidate.get("entities"))),
-                "fact_count": len(_rows(candidate.get("facts"))),
-                "relationship_count": len(_rows(candidate.get("relationships"))),
-            }
-        )
-        candidate["manifest"] = manifest
+        _count_canon(candidate, revision)
     return candidate, {
         "changed": changed,
         "targets": [target.as_dict() for target in targets],

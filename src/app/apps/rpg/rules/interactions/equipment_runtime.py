@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from app.apps.rpg.rules.interactions.item_catalog import get_item_definition, infer_definition_id_from_name
 from app.apps.rpg.rules.interactions.item_model import (
     normalize_item_instance,
     recalculate_inventory_derived_fields,
@@ -64,6 +65,18 @@ def _find_item(items, item_id: str) -> Dict[str, Any]:
     return {}
 
 
+def _item_equipment(item: Dict[str, Any]) -> Dict[str, Any]:
+    """An item's equipment block; a world's own weapon fights as the kind its name ends in ("Iron Dagger": a dagger)."""
+    equipment = _safe_dict(item.get("equipment"))
+    if _safe_dict(equipment.get("stats")):
+        return equipment
+    for word in reversed(_safe_str(item.get("name")).casefold().split()):
+        kind = _safe_dict(get_item_definition(infer_definition_id_from_name(word)).get("equipment"))
+        if _safe_dict(kind.get("stats")):
+            return kind
+    return equipment
+
+
 def _item_tags(item: Dict[str, Any]) -> set:
     return {_safe_str(tag) for tag in _safe_list(item.get("tags")) if _safe_str(tag)}
 
@@ -74,7 +87,11 @@ def project_equipment_stats(
     actor_id: str = "player",
 ) -> Dict[str, Any]:
     inv = _inventory_for_actor(simulation_state, actor_id)
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
+    carried = _safe_list(inv.get("items"))
+    if not carried and actor_id in {"", "player"}:
+        # The hero's pack is the inventory_state; what is no longer carried no longer counts.
+        carried = _safe_list(_safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory_state")).get("items"))
+    items = [normalize_item_instance(_safe_dict(item)) for item in carried]
     equipment = _safe_dict(inv.get("equipment"))
 
     stats = deepcopy(DEFAULT_STATS)
@@ -85,7 +102,7 @@ def project_equipment_stats(
         if not item:
             continue
 
-        item_equipment = _safe_dict(item.get("equipment"))
+        item_equipment = _item_equipment(item)
         item_stats = _safe_dict(item_equipment.get("stats"))
         for key, value in item_stats.items():
             stats[key] = _safe_int(stats.get(key), 0) + _safe_int(value, 0)

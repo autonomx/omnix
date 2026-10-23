@@ -1,11 +1,11 @@
 @layer features {
   :root {
-    --omnix-theme-gradient: linear-gradient(135deg, var(--c-indigo-540) 0%, var(--c-blue-580) 58%, var(--c-sky-800) 100%);
-    --omnix-theme-gradient-hover: linear-gradient(135deg, var(--c-indigo-600) 0%, var(--c-blue-650) 58%, var(--c-sky-800) 100%);
-    --omnix-theme-soft: color-mix(in srgb, var(--c-indigo-540) 15%, transparent);
-    --omnix-theme-soft-strong: color-mix(in srgb, var(--c-indigo-540) 28%, transparent);
-    --omnix-theme-line: color-mix(in srgb, var(--c-indigo-540) 34%, transparent);
-    --omnix-theme-shadow: color-mix(in srgb, var(--c-violet-390) 22%, transparent);
+    --omnix-theme-gradient: linear-gradient(135deg, var(--accent-indigo-540) 0%, var(--c-blue-580) 58%, var(--c-sky-800) 100%);
+    --omnix-theme-gradient-hover: linear-gradient(135deg, var(--accent-indigo-600) 0%, var(--c-blue-650) 58%, var(--c-sky-800) 100%);
+    --omnix-theme-soft: color-mix(in srgb, var(--accent-indigo-540) 15%, transparent);
+    --omnix-theme-soft-strong: color-mix(in srgb, var(--accent-indigo-540) 28%, transparent);
+    --omnix-theme-line: color-mix(in srgb, var(--accent-indigo-540) 34%, transparent);
+    --omnix-theme-shadow: color-mix(in srgb, var(--accent-violet-390) 22%, transparent);
     --omnix-theme-on-accent: var(--c-neutral-1000);
     --omnix-theme-gloss: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 38%, transparent), 0 0.7rem 1.6rem var(--omnix-theme-shadow);
   }
@@ -251,7 +251,7 @@
     background: var(--omnix-panel-solid);
     border: 1px solid var(--omnix-strong-border);
     border-radius: 0.9rem;
-    box-shadow: 0 1.2rem 3rem color-mix(in srgb, var(--c-slate-150-2) 26%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 18%, transparent);
+    box-shadow: 0 1.2rem 3rem color-mix(in srgb, var(--accent-slate-150-2) 26%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 18%, transparent);
     display: grid;
     gap: 0.35rem;
     min-width: 19rem;
@@ -312,7 +312,7 @@
   .settings-theme-copy { align-self: center; display: grid; gap: 0.25rem; }
   .settings-theme-copy small { color: var(--omnix-muted); line-height: 1.35; }
   .settings-theme-check { align-items: center; align-self: center; background: transparent; border: 1px solid var(--omnix-border); border-radius: 999px; color: transparent; display: inline-flex; height: 1.45rem; justify-content: center; width: 1.45rem; }
-  .settings-theme-card.active .settings-theme-check { background: var(--omnix-theme-gradient); border-color: transparent; color: var(--c-neutral-1000); }
+  .settings-theme-card.active .settings-theme-check { background: var(--omnix-theme-gradient); border-color: transparent; color: var(--fg-neutral-1000); }
 
   @media (max-width: 78rem) {
     .omnix-theme-picker-label { display: none; }
@@ -464,7 +464,7 @@
 
   :root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-header,
   :root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-composer {
-    background: linear-gradient(180deg, var(--omnix-soft-bg), color-mix(in srgb, var(--c-neutral-0) 16%, transparent));
+    background: linear-gradient(180deg, var(--omnix-soft-bg), color-mix(in srgb, var(--bg-neutral-0) 16%, transparent));
     border-color: var(--omnix-border);
   }
 
@@ -682,7 +682,7 @@
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .workspace-card.assistant-chat-page {
     background:
       radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--c-indigo-780) 10%, transparent), transparent 26rem),
-      linear-gradient(180deg, color-mix(in srgb, var(--c-slate-190) 88%, transparent), color-mix(in srgb, var(--c-neutral-160) 94%, transparent));
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-190) 88%, transparent), color-mix(in srgb, var(--bg-neutral-160) 94%, transparent));
   }
 
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-sidebar,
@@ -694,7 +694,7 @@
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-workspace-activity {
     background:
       radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--c-blue-710) 14%, transparent), transparent 24rem),
-      linear-gradient(180deg, color-mix(in srgb, var(--c-slate-240) 94%, transparent), color-mix(in srgb, var(--c-neutral-160) 98%, transparent));
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-240) 94%, transparent), color-mix(in srgb, var(--bg-neutral-160) 98%, transparent));
     border-color: color-mix(in srgb, var(--c-slate-790) 22%, transparent);
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--c-neutral-960) 8%, transparent),
@@ -715,14 +715,14 @@
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-connection-panel,
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-tool-action-row,
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list div {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-slate-260-2) 78%, transparent), color-mix(in srgb, var(--c-slate-190) 84%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-260-2) 78%, transparent), color-mix(in srgb, var(--bg-slate-190) 84%, transparent));
     border-color: color-mix(in srgb, var(--c-slate-790) 20%, transparent);
     color: var(--omnix-text);
   }
 
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-header,
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-composer {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-220) 58%, transparent), color-mix(in srgb, var(--c-neutral-160) 78%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-neutral-220) 58%, transparent), color-mix(in srgb, var(--bg-neutral-160) 78%, transparent));
     border-color: color-mix(in srgb, var(--c-slate-790) 18%, transparent);
   }
 
@@ -734,7 +734,7 @@
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list select,
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list textarea,
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-settings-list input {
-    background: color-mix(in srgb, var(--c-slate-170-2) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 90%, transparent);
     border-color: color-mix(in srgb, var(--c-slate-790) 22%, transparent);
     color: var(--omnix-text);
   }
@@ -750,7 +750,7 @@
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button[aria-expanded='true'],
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:hover,
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:focus-visible {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-blue-490) 48%, transparent), color-mix(in srgb, var(--c-slate-260-2) 64%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-blue-490) 48%, transparent), color-mix(in srgb, var(--bg-slate-260-2) 64%, transparent));
     border-color: color-mix(in srgb, var(--c-slate-820) 28%, transparent);
     color: var(--omnix-text);
   }
@@ -764,7 +764,7 @@
 
   :root[data-omnix-theme='graphite'][data-omnix-appearance='dark'] .assistant-voice-core {
     background:
-      linear-gradient(var(--c-slate-170-2), var(--c-slate-170-2)) padding-box,
+      linear-gradient(var(--bg-slate-170-2), var(--bg-slate-170-2)) padding-box,
       conic-gradient(from 0deg, var(--c-slate-930), var(--c-sky-760), var(--c-slate-630), var(--c-slate-820), var(--c-slate-930)) border-box;
     box-shadow:
       0 0 0 0.58rem color-mix(in srgb, var(--c-slate-790) 12%, transparent),
@@ -780,7 +780,7 @@
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .workspace-card.assistant-chat-page {
     background:
       radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--c-teal-740) 13%, transparent), transparent 26rem),
-      linear-gradient(180deg, color-mix(in srgb, var(--c-slate-170) 86%, transparent), color-mix(in srgb, var(--c-slate-150) 92%, transparent));
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-170) 86%, transparent), color-mix(in srgb, var(--bg-slate-150) 92%, transparent));
   }
 
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-sidebar,
@@ -792,7 +792,7 @@
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-workspace-activity {
     background:
       radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--c-teal-740) 16%, transparent), transparent 24rem),
-      linear-gradient(180deg, color-mix(in srgb, var(--c-teal-260) 94%, transparent), color-mix(in srgb, var(--c-slate-170) 98%, transparent));
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-teal-260) 94%, transparent), color-mix(in srgb, var(--bg-slate-170) 98%, transparent));
     border-color: color-mix(in srgb, var(--c-teal-740) 24%, transparent);
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--c-teal-930) 8%, transparent),
@@ -813,14 +813,14 @@
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-connection-panel,
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-tool-action-row,
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list div {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-teal-260) 78%, transparent), color-mix(in srgb, var(--c-slate-190-2) 82%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-teal-260) 78%, transparent), color-mix(in srgb, var(--bg-slate-190-2) 82%, transparent));
     border-color: color-mix(in srgb, var(--c-teal-740) 22%, transparent);
     color: var(--omnix-text);
   }
 
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-header,
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-composer {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-slate-240-2) 58%, transparent), color-mix(in srgb, var(--c-slate-170) 76%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-240-2) 58%, transparent), color-mix(in srgb, var(--bg-slate-170) 76%, transparent));
     border-color: color-mix(in srgb, var(--c-teal-740) 18%, transparent);
   }
 
@@ -832,7 +832,7 @@
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list select,
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list textarea,
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-settings-list input {
-    background: color-mix(in srgb, var(--c-slate-190-2) 88%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-190-2) 88%, transparent);
     border-color: color-mix(in srgb, var(--c-teal-740) 24%, transparent);
     color: var(--omnix-text);
   }
@@ -848,7 +848,7 @@
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-chat-main .assistant-message-actions button[aria-expanded='true'],
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:hover,
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-side-panel-toggle button:focus-visible {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-teal-600) 36%, transparent), color-mix(in srgb, var(--c-teal-380) 54%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-teal-600) 36%, transparent), color-mix(in srgb, var(--bg-teal-380) 54%, transparent));
     border-color: color-mix(in srgb, var(--c-green-790-2) 35%, transparent);
     color: var(--omnix-text);
   }
@@ -862,7 +862,7 @@
 
   :root[data-omnix-theme='evergreen'][data-omnix-appearance='dark'] .assistant-voice-core {
     background:
-      linear-gradient(var(--c-slate-190-2), var(--c-slate-190-2)) padding-box,
+      linear-gradient(var(--bg-slate-190-2), var(--bg-slate-190-2)) padding-box,
       conic-gradient(from 0deg, var(--c-green-790-2), var(--c-cyan-810), var(--c-teal-600), var(--c-green-900), var(--c-green-790-2)) border-box;
     box-shadow:
       0 0 0 0.58rem color-mix(in srgb, var(--c-green-790-2) 12%, transparent),

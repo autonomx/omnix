@@ -447,3 +447,170 @@ def test_fallback_lore_names_the_place_not_its_id() -> None:
     assert named["relationships"][0]["content"] == "Bran was encountered at The Rusty Flagon Tavern."
     assert _name_from_id("location:loc-tavern") == "Tavern"
     assert _name_from_id("location:grayhaven") == "Grayhaven"
+
+
+_HELIX_BUNDLE = """{
+  "entities": [{
+    "id": "npc:helix", "kind": "npc", "name": "Helix",
+    "description": "Helix supervises salvage traffic through Tidebreak Docks.",
+    "appearance": "A lean dock supervisor in an oil-dark coat.",
+    "personality": "Controlled and observant.",
+    "backstory": "Helix survived the Seawall Collapse.",
+    "speech_style": "Short practical sentences.",
+    "goals": ["Keep the tide gates operating"], "motives": ["Prevent another disaster"]
+  }],
+  "documents": [{"title": "Helix of the Docks", "topic_id": "npcs",
+                 "full_text": "Helix supervises salvage traffic.", "entity_refs": ["npc:helix"]}],
+  "facts": [], "relationships": []
+}"""
+
+
+def test_a_turn_defers_a_newcomers_dossier_and_the_job_writes_it_in_full() -> None:
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import enrich_provisional_scene_lore
+
+    class Gateway:
+        calls = 0
+
+        def generate(self, *_args, **_kwargs):
+            self.calls += 1
+            return _HELIX_BUNDLE
+
+    session = _new_town_session()
+    session["state"]["current_location"] = {}
+    gateway = Gateway()
+    deferred: list = []
+    # The turn: no model call, a built-in dossier marked provisional, the target listed for later.
+    bible, report = materialize_scene_lore(
+        {"entities": {}, "documents": []}, session, {"scene": {"present_npc_ids": ["npc:helix"]}},
+        campaign_id="campaign:new-town", llm_gateway=gateway, deferred=deferred,
+    )
+    assert gateway.calls == 0 and report["changed"] is True
+    assert [target.entity_id for target in deferred] == ["npc:helix"]
+    assert bible["entities"]["npc:helix"]["provenance"]["provisional"] is True
+    assert scene_lore_entity_is_rich(bible["entities"]["npc:helix"])
+
+    # After the turn: the model's dossier replaces the built-in one, pages and all.
+    enriched, enrichment = enrich_provisional_scene_lore(
+        bible, [target.as_dict() for target in deferred], campaign_id="campaign:new-town", llm_gateway=gateway,
+    )
+    helix = enriched["entities"]["npc:helix"]
+    assert gateway.calls == 1 and enrichment["enriched_entity_ids"] == ["npc:helix"]
+    assert helix["backstory"] == "Helix survived the Seawall Collapse."
+    assert "provisional" not in helix["provenance"]
+    assert not any(row.get("provenance", {}).get("provisional") for row in enriched["documents"])
+    assert any(row["title"] == "Helix of the Docks" for row in enriched["documents"])
+    # Once written, a repeat does nothing.
+    _, again = enrich_provisional_scene_lore(
+        enriched, [target.as_dict() for target in deferred], campaign_id="campaign:new-town", llm_gateway=gateway,
+    )
+    assert again["changed"] is False and gateway.calls == 1
+
+
+def test_enrichment_keeps_the_built_in_dossier_when_the_model_does_not_answer() -> None:
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import enrich_provisional_scene_lore
+
+    class Silent:
+        def generate(self, *_args, **_kwargs):
+            raise TimeoutError("no answer")
+
+    session = _new_town_session()
+    session["state"]["current_location"] = {}
+    deferred: list = []
+    bible, _ = materialize_scene_lore(
+        {"entities": {}, "documents": []}, session, {"scene": {"present_npc_ids": ["npc:helix"]}},
+        campaign_id="campaign:new-town", llm_gateway=False, deferred=deferred,
+    )
+    kept, report = enrich_provisional_scene_lore(
+        bible, [target.as_dict() for target in deferred], campaign_id="campaign:new-town", llm_gateway=Silent(),
+    )
+    assert report["changed"] is False
+    assert kept["entities"]["npc:helix"] == bible["entities"]["npc:helix"]
+
+
+def test_a_turn_queues_the_newcomers_dossier_and_the_job_stores_it(monkeypatch) -> None:
+    import os
+    import uuid
+
+    if not os.environ.get("OMNIX_TEST_DATABASE_URL"):
+        pytest.skip("OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+    from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+    from app.apps.rpg.foundation import llm_app_gateway
+    from app.apps.rpg.genesis.forge import runtime_lore_store
+
+    bootstrap_postgresql_runtime()
+
+    class Gateway:
+        calls = 0
+
+        def generate(self, *_args, **_kwargs):
+            self.calls += 1
+            return _HELIX_BUNDLE
+
+    gateway = Gateway()
+    queued: list = []
+    monkeypatch.setattr(llm_app_gateway, "build_app_llm_gateway", lambda *a, **k: gateway)
+    monkeypatch.setattr(runtime_lore_store, "_enqueue_scene_lore_enrichment",
+                        lambda campaign_id, targets: queued.append((campaign_id, [t.as_dict() for t in targets])))
+    monkeypatch.setattr(runtime_lore_store, "_save_portable_projection", lambda value, **_kwargs: value)
+    campaign_id = f"campaign:defer-{uuid.uuid4().hex[:12]}"
+    session = _new_town_session()
+    session["manifest"] = {"id": campaign_id, "session_id": campaign_id}
+    session["state"]["current_location"] = {}
+
+    # The app's own model (no gateway passed): the turn does not wait for it.
+    _, report = ensure_turn_scene_lore(
+        campaign_id, session, {"scene": {"present_npc_ids": ["npc:helix"]}}, sessions=SESSION_CAMPAIGN_SESSIONS,
+    )
+    assert report["mode"] == "postgresql_authority" and gateway.calls == 0
+    assert queued == [(campaign_id, [{"entity_id": "npc:helix", "kind": "npc", "name": "Helix", "location_id": ""}])]
+
+    enrichment = runtime_lore_store.enrich_scene_lore(campaign_id, queued[0][1], llm_gateway=gateway)
+    assert enrichment["enriched_entity_ids"] == ["npc:helix"] and gateway.calls == 1
+    with unit_of_work() as work:
+        stored = work.campaign_bibles.get(current_tenant(), campaign_id)
+        work.rollback()
+    assert stored["document"]["entities"]["npc:helix"]["backstory"] == "Helix survived the Seawall Collapse."
+
+
+def test_an_authored_character_stays_authored_in_a_campaigns_own_copy() -> None:
+    from app.apps.rpg.genesis.forge.campaign_lore_store import _merge_published_world_canon
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import SceneLoreTarget, known_scene_entity
+
+    world = {"entities": {"npc:seraphine": {"kind": "npc", "name": "Princess Seraphine", "canon_source": "published_world"}}}
+    # The campaign stored the character before authorship was recorded, and a model later wrote a same-named copy.
+    campaign = {"entities": {
+        "npc:seraphine": {"kind": "npc", "name": "Princess Seraphine", "description": "Campaign notes."},
+        "npc:princess-seraphine": {"kind": "npc", "name": "Princess Seraphine", "description": "A model's copy."},
+    }}
+    merged = _merge_published_world_canon(world, campaign, campaign_id="campaign:x")
+    seraphine = merged["entities"]["npc:seraphine"]
+    assert seraphine["canon_source"] == "published_world" and seraphine["description"] == "Campaign notes."
+    assert scene_lore_entity_is_rich(seraphine)
+    # A bare name meets the author's entity, not the copy.
+    target = SceneLoreTarget(entity_id="Princess Seraphine", kind="entity", name="Princess Seraphine")
+    assert known_scene_entity(merged["entities"], target)[0] == "npc:seraphine"
+
+
+def test_a_written_dossier_keeps_its_targets_id() -> None:
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import enrich_provisional_scene_lore
+
+    class Gateway:
+        def generate(self, *_args, **_kwargs):
+            # The model names the same person under its own id.
+            return _HELIX_BUNDLE.replace('"npc:helix"', '"npc:helix-the-supervisor"')
+
+    session = _new_town_session()
+    session["state"]["current_location"] = {}
+    deferred: list = []
+    bible, _ = materialize_scene_lore(
+        {"entities": {}, "documents": []}, session, {"scene": {"present_npc_ids": ["npc:helix"]}},
+        campaign_id="campaign:new-town", llm_gateway=False, deferred=deferred,
+    )
+    enriched, _ = enrich_provisional_scene_lore(
+        bible, [target.as_dict() for target in deferred], campaign_id="campaign:new-town", llm_gateway=Gateway(),
+    )
+    assert "npc:helix-the-supervisor" not in enriched["entities"]
+    assert enriched["entities"]["npc:helix"]["backstory"] == "Helix survived the Seawall Collapse."
+    assert any("npc:helix" in row.get("entity_refs", []) and row["title"] == "Helix of the Docks" for row in enriched["documents"])

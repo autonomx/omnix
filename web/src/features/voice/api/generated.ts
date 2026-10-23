@@ -21,6 +21,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/model-packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model Packs Status
+         * @description The setup screen: this machine, what it can run, and what is installed.
+         */
+        get: operations["model_packs_status_api_model_packs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-packs/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Model Packs Capabilities */
+        get: operations["model_packs_capabilities_api_model_packs_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-packs/defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Model Packs Set Defaults
+         * @description Makes downloaded models Omnix's default voice engine and image model.
+         */
+        post: operations["model_packs_set_defaults_api_model_packs_defaults_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-packs/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Model Packs Install */
+        post: operations["model_packs_install_api_model_packs_install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-packs/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Model Packs Remove */
+        post: operations["model_packs_remove_api_model_packs_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-packs/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Model Packs Selection */
+        post: operations["model_packs_selection_api_model_packs_selection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-packs/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Model Packs Verify */
+        post: operations["model_packs_verify_api_model_packs_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stt/authorityz": {
         parameters: {
             query?: never;
@@ -761,6 +886,8 @@ export interface components {
     schemas: {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
+        /** ActivateLive2DAvatarRequest */
+        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: core["schemas"]["AlpacaIexCredentialStatus"];
         /** AlpacaIexCredentialUpdate */
@@ -909,6 +1036,15 @@ export interface components {
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
         CancelState: core["schemas"]["CancelState"];
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
+        /** CapabilityState */
+        CapabilityState: core["schemas"]["CapabilityState"];
+        /**
+         * CharacterAvatarPack
+         * @description Durable shared-image references for one Character Mode live avatar.
+         */
+        CharacterAvatarPack: core["schemas"]["CharacterAvatarPack"];
         /** ChatMessage */
         ChatMessage: core["schemas"]["ChatMessage"];
         /** ChatSession */
@@ -1018,6 +1154,15 @@ export interface components {
         CreateChatSessionRequest: core["schemas"]["CreateChatSessionRequest"];
         /** CreateJobRequest */
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
+        /** DefaultChoice */
+        DefaultChoice: core["schemas"]["DefaultChoice"];
+        /** DefaultModels */
+        DefaultModels: core["schemas"]["DefaultModels"];
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: core["schemas"]["DefaultSlot"];
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DesignRequest */
@@ -1099,13 +1244,7 @@ export interface components {
          */
         HermesStatusResponse: core["schemas"]["HermesStatusResponse"];
         /** HubTokenWrite */
-        HubTokenWrite: {
-            /**
-             * Token
-             * @default
-             */
-            token?: string;
-        };
+        HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: core["schemas"]["IbkrSettingsPayload"];
         /** IbkrSettingsStatus */
@@ -1126,6 +1265,8 @@ export interface components {
          * @description What the IBKR Web API connection has saved: never a secret, only whether it is there.
          */
         IbkrWebApiStatus: core["schemas"]["IbkrWebApiStatus"];
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -1188,8 +1329,19 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /** Live2DAvatarActionResponse */
+        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
+        /** Live2DModelCatalogItem */
+        Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
+        /** Live2DModelCatalogResponse */
+        Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: core["schemas"]["ModelPacksStatus"];
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: core["schemas"]["ModelResidencyDiagnostics"];
         /** ModelResidencyRecord */
@@ -1203,6 +1355,26 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** PackModelLicence */
+        PackModelLicence: core["schemas"]["PackModelLicence"];
+        /** PackModelStatus */
+        PackModelStatus: core["schemas"]["PackModelStatus"];
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: core["schemas"]["PackOption"];
+        /** PackOptionLicence */
+        PackOptionLicence: core["schemas"]["PackOptionLicence"];
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
+        /** PackTarget */
+        PackTarget: core["schemas"]["PackTarget"];
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: core["schemas"]["PackVerdict"];
         /** PasswordChangeRequest */
         PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
         /** PasswordChangeResponse */
@@ -1396,10 +1568,16 @@ export interface components {
             /** Provider Id */
             provider_id: string;
         };
+        /** SelectionRequest */
+        SelectionRequest: core["schemas"]["SelectionRequest"];
+        /** SelectionSize */
+        SelectionSize: core["schemas"]["SelectionSize"];
         /** SendChatMessageRequest */
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
         SendChatMessageResponse: core["schemas"]["SendChatMessageResponse"];
+        /** SetDefaultModels */
+        SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SettingsPatch */
         SettingsPatch: core["schemas"]["SettingsPatch"];
         /** SettingsPayload */
@@ -1469,70 +1647,9 @@ export interface components {
             start: number;
         };
         /** SpeechModelListResponse */
-        SpeechModelListResponse: {
-            /** Hardware */
-            hardware: {
-                [key: string]: unknown;
-            };
-            /** Hub Token Source */
-            hub_token_source: string;
-            /** Models */
-            models: components["schemas"]["SpeechModelStatus"][];
-            /**
-             * Vram Target Gb
-             * @default 24
-             */
-            vram_target_gb: number;
-        };
+        SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
         /** SpeechModelStatus */
-        SpeechModelStatus: {
-            /** Accepted Terms */
-            accepted_terms: boolean;
-            /** Capabilities */
-            capabilities: string[];
-            /** Commercial Use */
-            commercial_use: boolean;
-            /** Disk Bytes */
-            disk_bytes: number;
-            /** Environment */
-            environment: {
-                [key: string]: unknown;
-            };
-            /** Gated */
-            gated: boolean;
-            /** Id */
-            id: string;
-            /** Installed Revision */
-            installed_revision: string;
-            /** Kind */
-            kind: string;
-            /** Label */
-            label: string;
-            /** Licence */
-            licence: string;
-            /** Licence Url */
-            licence_url: string;
-            /** Output Terms */
-            output_terms: string;
-            /** Repo Id */
-            repo_id: string;
-            /** Requires Acceptance */
-            requires_acceptance: boolean;
-            /** Residency */
-            residency: string;
-            /** Revision */
-            revision: string;
-            /** Service */
-            service: string;
-            /** Size Gb */
-            size_gb: number;
-            /** Source */
-            source: string;
-            /** Status */
-            status: string;
-            /** Vram Gb */
-            vram_gb: number;
-        };
+        SpeechModelStatus: core["schemas"]["SpeechModelStatus"];
         /** StateHashRequest */
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
@@ -1882,6 +1999,211 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_packs_status_api_model_packs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelPacksStatus"];
+                };
+            };
+        };
+    };
+    model_packs_capabilities_api_model_packs_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilitiesResponse"];
+                };
+            };
+        };
+    };
+    model_packs_set_defaults_api_model_packs_defaults_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDefaultModels"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultModels"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_packs_install_api_model_packs_install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackTarget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_packs_remove_api_model_packs_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackTarget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_packs_selection_api_model_packs_selection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelectionSize"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_packs_verify_api_model_packs_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackTarget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRecord"];
                 };
             };
             /** @description Validation Error */

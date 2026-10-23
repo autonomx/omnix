@@ -285,6 +285,11 @@ def _merge_published_world_canon(
 
     entities = deepcopy(_mapping(world_canon.get("entities")))
     entities.update(deepcopy(_mapping(current.get("entities"))))
+    # Who wrote an entity is a fact of the world: a campaign's own copy of it stays authored.
+    for entity_id, world_entity in _mapping(world_canon.get("entities")).items():
+        source = _mapping(world_entity).get("canon_source")
+        if source and isinstance(entities.get(entity_id), Mapping):
+            entities[entity_id] = {**entities[entity_id], "canon_source": source}
     merged["entities"] = entities
 
     discovery = deepcopy(_mapping(world_canon.get("discovery_state")))
@@ -573,6 +578,7 @@ def load_campaign_lore(
                         world_canon,
                         campaign_id=campaign_id,
                         canon_revision=int(binding.get("world_revision") or 1),
+                        topology=_mapping(revision_document.get("topology")),
                     )
                     bible = _merge_published_world_canon(
                         world_canon,
@@ -1000,6 +1006,7 @@ def regenerate_campaign_lore_document(
                     world_canon,
                     campaign_id=campaign_id,
                     canon_revision=int(binding.get("world_revision") or 1),
+                    topology=_mapping(revision_document.get("topology")),
                 )
                 canonical_source = next(
                     (

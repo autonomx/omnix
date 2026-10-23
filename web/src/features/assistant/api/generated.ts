@@ -1273,6 +1273,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/character-live2d/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live2D Model Library
+         * @description The avatars Omnix can download, for the setup screen and Settings, Models.
+         */
+        get: operations["live2d_model_library_api_character_live2d_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/character-live2d/models/{model_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install Live2D Model */
+        post: operations["install_live2d_model_api_character_live2d_models__model_id__post"];
+        /** Remove Live2D Model */
+        delete: operations["remove_live2d_model_api_character_live2d_models__model_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/character-live2d/previews/{model_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live2D Model Preview */
+        get: operations["live2d_model_preview_api_character_live2d_previews__model_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/character-live2d/runtime/{filename}": {
         parameters: {
             query?: never;
@@ -2726,20 +2781,7 @@ export interface components {
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
         /** ActivateLive2DAvatarRequest */
-        ActivateLive2DAvatarRequest: {
-            /**
-             * Accept Live2D Runtime Terms
-             * @default false
-             */
-            accept_live2d_runtime_terms?: boolean;
-            /**
-             * Accept Model Terms
-             * @default false
-             */
-            accept_model_terms?: boolean;
-            /** Model Id */
-            model_id: string;
-        };
+        ActivateLive2DAvatarRequest: core["schemas"]["ActivateLive2DAvatarRequest"];
         /** ActivityField */
         ActivityField: {
             /**
@@ -4093,6 +4135,10 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: core["schemas"]["CapabilitiesResponse"];
+        /** CapabilityState */
+        CapabilityState: core["schemas"]["CapabilityState"];
         /** CausalHypothesis */
         CausalHypothesis: {
             /** Competing Hypotheses */
@@ -4162,63 +4208,7 @@ export interface components {
          * CharacterAvatarPack
          * @description Durable shared-image references for one Character Mode live avatar.
          */
-        CharacterAvatarPack: {
-            /** Active Background */
-            active_background: string | null;
-            /** Active Outfit */
-            active_outfit: string | null;
-            /** Background Asset Ids */
-            background_asset_ids: {
-                [key: string]: string;
-            };
-            /** Base Asset Id */
-            base_asset_id: string | null;
-            /** Blink Frames */
-            blink_frames: {
-                [key: string]: string;
-            };
-            /** Character Id */
-            character_id: string;
-            /** Created At */
-            created_at: string;
-            /** Expression Frames */
-            expression_frames: {
-                [key: string]: string;
-            };
-            /** Mouth Anchor */
-            mouth_anchor: {
-                [key: string]: number;
-            };
-            /** Mouth Frames */
-            mouth_frames: {
-                [key: string]: string;
-            };
-            /** Outfit Frames */
-            outfit_frames: {
-                [key: string]: string;
-            };
-            /**
-             * Render Mode
-             * @default audio_envelope
-             * @enum {string}
-             */
-            render_mode: "audio_envelope" | "viseme" | "static";
-            /**
-             * Renderer
-             * @default sprite
-             * @enum {string}
-             */
-            renderer: "sprite" | "live2d" | "rive";
-            /** Rig Asset Id */
-            rig_asset_id: string | null;
-            /** Updated At */
-            updated_at: string;
-            /**
-             * Version
-             * @default 1
-             */
-            version: number;
-        };
+        CharacterAvatarPack: core["schemas"]["CharacterAvatarPack"];
         /**
          * CharacterDataActionRequest
          * @description All destructive choices are independent and require typed confirmation.
@@ -5006,6 +4996,15 @@ export interface components {
             /** Max Pages */
             max_pages: number;
         };
+        /** DefaultChoice */
+        DefaultChoice: core["schemas"]["DefaultChoice"];
+        /** DefaultModels */
+        DefaultModels: core["schemas"]["DefaultModels"];
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: core["schemas"]["DefaultSlot"];
         /** DeleteCharacterAvatarPackResponse */
         DeleteCharacterAvatarPackResponse: {
             /** Character Id */
@@ -6320,6 +6319,8 @@ export interface components {
          * @description Sidecar reachability and the runtime configuration that reaches it.
          */
         HermesStatusResponse: core["schemas"]["HermesStatusResponse"];
+        /** HubTokenWrite */
+        HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: core["schemas"]["IbkrSettingsPayload"];
         /** IbkrSettingsStatus */
@@ -6361,6 +6362,8 @@ export interface components {
             /** Validations */
             validations?: components["schemas"]["PlanValidationIntent"][];
         };
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: core["schemas"]["InstallLive2DModelRequest"];
         /** InviteCheckResponse */
         InviteCheckResponse: core["schemas"]["InviteCheckResponse"];
         /** InviteListResponse */
@@ -6414,64 +6417,11 @@ export interface components {
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
         /** Live2DAvatarActionResponse */
-        Live2DAvatarActionResponse: {
-            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
-            /** Character Id */
-            character_id: string;
-            /**
-             * Downloaded
-             * @default false
-             */
-            downloaded: boolean;
-            /**
-             * Ok
-             * @default true
-             */
-            ok: boolean;
-        };
+        Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
-        Live2DModelCatalogItem: {
-            /** Description */
-            description: string;
-            /** Id */
-            id: string;
-            /**
-             * Installed
-             * @default false
-             */
-            installed: boolean;
-            /** License Summary */
-            license_summary: string;
-            /** Model License Url */
-            model_license_url: string;
-            /** Name */
-            name: string;
-            /** Preview Url */
-            preview_url: string;
-            /** Repository */
-            repository: string;
-            /** Revision */
-            revision: string;
-            /** Runtime License Url */
-            runtime_license_url: string;
-            /**
-             * Selected
-             * @default false
-             */
-            selected: boolean;
-            /** Source Url */
-            source_url: string;
-        };
+        Live2DModelCatalogItem: core["schemas"]["Live2DModelCatalogItem"];
         /** Live2DModelCatalogResponse */
-        Live2DModelCatalogResponse: {
-            /** Models */
-            models: components["schemas"]["Live2DModelCatalogItem"][];
-            /**
-             * Runtime Installed
-             * @default false
-             */
-            runtime_installed: boolean;
-        };
+        Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LiveCallPreloadState */
         LiveCallPreloadState: {
             /**
@@ -7652,6 +7602,11 @@ export interface components {
             /** Session Id */
             session_id: string;
         };
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: core["schemas"]["ModelPacksStatus"];
         /** ModelRef */
         ModelRef: {
             /** Model Id */
@@ -7777,6 +7732,26 @@ export interface components {
              */
             status: "open" | "resolved" | "abandoned" | "superseded";
         };
+        /** PackModelLicence */
+        PackModelLicence: core["schemas"]["PackModelLicence"];
+        /** PackModelStatus */
+        PackModelStatus: core["schemas"]["PackModelStatus"];
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: core["schemas"]["PackOption"];
+        /** PackOptionLicence */
+        PackOptionLicence: core["schemas"]["PackOptionLicence"];
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: core["schemas"]["PackRuntimeStatus"];
+        /** PackTarget */
+        PackTarget: core["schemas"]["PackTarget"];
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: core["schemas"]["PackVerdict"];
         /** PasswordChangeRequest */
         PasswordChangeRequest: core["schemas"]["PasswordChangeRequest"];
         /** PasswordChangeResponse */
@@ -8396,6 +8371,10 @@ export interface components {
         RuntimeDiagnostics: core["schemas"]["RuntimeDiagnostics"];
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: core["schemas"]["RuntimeStatusPayload"];
+        /** SelectionRequest */
+        SelectionRequest: core["schemas"]["SelectionRequest"];
+        /** SelectionSize */
+        SelectionSize: core["schemas"]["SelectionSize"];
         /**
          * SelfReviewResult
          * @description Structured implementer self-review bound to one exact final state.
@@ -8471,6 +8450,8 @@ export interface components {
              */
             write_memory: boolean;
         };
+        /** SetDefaultModels */
+        SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SetSessionInteractionRequest */
         SetSessionInteractionRequest: {
             /** Character Id */
@@ -8580,6 +8561,10 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
+        /** SpeechModelStatus */
+        SpeechModelStatus: core["schemas"]["SpeechModelStatus"];
         /** SpeechOnsetPolicy */
         SpeechOnsetPolicy: {
             /**
@@ -12502,6 +12487,123 @@ export interface operations {
                     };
                     "application/octet-stream": string;
                     "audio/*": string;
+                    "image/*": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    live2d_model_library_api_character_live2d_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
+                };
+            };
+        };
+    };
+    install_live2d_model_api_character_live2d_models__model_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallLive2DModelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_live2d_model_api_character_live2d_models__model_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Live2DModelCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    live2d_model_preview_api_character_live2d_previews__model_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The avatar's preview image. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "image/*": string;
                 };
             };

@@ -99,7 +99,7 @@ function liveAbilitySession() {
     ok: true,
     session: {
       state: {
-        player: { level: 2 },
+        player: { level: 2, skills: { stealth: { level: 1, xp: 10, xp_to_next: 50 } } },
         skill_progression: {
           swordsmanship: { rank: 2, xp: 35, last_source: 'training' },
         },
@@ -269,6 +269,9 @@ describe('RpgLoadoutTabs', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Skills' }));
     expect(await screen.findByText('Swordsmanship')).toBeInTheDocument();
+    // The character sheet's skills show too, measured against their own next level.
+    expect(screen.getByText('Stealth')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Stealth progress to rank 2' })).toHaveAttribute('aria-valuemax', '50');
     fireEvent.click(screen.getByRole('button', { name: 'Practice Swordsmanship' }));
     expect(onSelectCommand).toHaveBeenLastCalledWith('Practice Swordsmanship with a careful training drill and record any skill progress.');
 

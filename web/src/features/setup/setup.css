@@ -1,0 +1,291 @@
+/* The desktop app's setup screen and Settings, Models (desktop roadmap §4.5). */
+@layer features {
+  .setup-workspace {
+    display: grid;
+    gap: 1.25rem;
+    max-width: 58rem;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+    color: var(--omnix-text);
+  }
+
+  .setup-workspace h1 {
+    margin: 0;
+    font-size: 1.6rem;
+  }
+
+  .setup-step {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--omnix-strong-border);
+    border-radius: 0.75rem;
+    background: var(--omnix-panel-bg);
+  }
+
+  .setup-panel {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .setup-settings-title {
+    margin: 0 0 0.25rem;
+    font-size: 1.1rem;
+  }
+
+  .setup-hardware {
+    margin: 0;
+    color: var(--omnix-muted-text);
+    font-size: 0.85rem;
+  }
+
+  .setup-bundles,
+  .setup-licences,
+  .setup-runtime-list {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .setup-bundle {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.65rem;
+    background: var(--omnix-panel-bg);
+  }
+
+  .setup-bundle-models {
+    margin: 0;
+    padding-left: 1.1rem;
+    font-size: 0.8rem;
+    color: var(--omnix-text);
+  }
+
+  .setup-bundle-options {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--omnix-border) 35%, transparent);
+  }
+
+  .setup-bundle-options ul {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .setup-defaults {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .setup-defaults h3 {
+    margin: 0;
+  }
+
+  .setup-default {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .setup-default span {
+    min-width: 11rem;
+  }
+
+  .setup-avatars {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .setup-avatar {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+    border: 1px solid var(--omnix-border);
+    border-radius: 0.65rem;
+    background: var(--omnix-panel-bg);
+  }
+
+  .setup-avatar-preview {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background: var(--omnix-border);
+  }
+
+  .setup-avatar-body {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .setup-bundle-unavailable {
+    opacity: 0.72;
+  }
+
+  .setup-bundle-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .setup-bundle-details {
+    display: grid;
+    gap: 0.25rem;
+    padding-left: 1.85rem;
+  }
+
+  .setup-bundle-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .setup-chip {
+    flex: none;
+    padding: 0.1rem 0.55rem;
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .setup-chip-fits,
+  .setup-chip-installed {
+    border-color: color-mix(in srgb, var(--omnix-success) 55%, transparent);
+    color: var(--omnix-success);
+  }
+
+  .setup-chip-warn {
+    border-color: var(--omnix-strong-border);
+    color: var(--omnix-purple);
+  }
+
+  .setup-chip-unavailable {
+    color: var(--omnix-muted-text);
+  }
+
+  .setup-muted {
+    color: var(--omnix-muted-text);
+  }
+
+  .setup-reason {
+    color: var(--omnix-purple);
+  }
+
+  .setup-action-link {
+    color: var(--omnix-cyan);
+    font-size: 0.8rem;
+  }
+
+  .setup-progress {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) auto auto;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .setup-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .setup-assistant-avatar {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.9rem;
+  }
+
+  .setup-assistant-avatar .setup-bundle-details {
+    padding-left: 0;
+  }
+
+  .setup-assistant-avatar-preview {
+    width: 5.5rem;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 0.5rem;
+    background: var(--omnix-soft-bg);
+  }
+
+  .setup-download-folder {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--omnix-muted-text);
+  }
+
+  .setup-download-folder code {
+    overflow-wrap: anywhere;
+  }
+
+  .setup-message {
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.5rem;
+    background: var(--omnix-soft-bg);
+    font-size: 0.85rem;
+  }
+
+  .setup-chat-note {
+    color: var(--omnix-muted-text);
+  }
+
+  .setup-installed {
+    display: grid;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--omnix-border);
+  }
+
+  .setup-installed h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .setup-runtime-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .setup-capability-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    border: 1px dashed var(--omnix-strong-border);
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 40rem) {
+    .setup-bundle-details {
+      padding-left: 0;
+    }
+
+    .setup-progress {
+      grid-template-columns: 1fr;
+    }
+  }
+}

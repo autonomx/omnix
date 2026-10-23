@@ -1,10 +1,11 @@
 """``models.install`` and ``models.remove``: fetch or delete a catalogued speech model's weights.
 
-Downloads come from the Hugging Face hub, pinned to the commit the requested
-revision resolves to, and resume after an interruption (the hub keeps partial
-files beside the target and re-checks each file's hash). A model whose terms
-need acceptance installs only when the request accepts them; the acceptance,
-licence and commit are written to ``.omnix-model.json`` in the model folder.
+Downloads come from the Hugging Face hub at the commit model catalog v2 pins,
+resume after an interruption (the hub keeps partial files beside the target),
+and every pinned file is checked against its catalogued SHA-256 before the
+install counts. A model installs only when the request accepts its terms
+(roadmap D-4); the acceptance, licence and commit are written to
+``.omnix-model.json`` in the model folder.
 
 Weights land under ``resources/models/<kind>/<repository name>``, the layout
 the TTS and STT services already read. Environments are not installed here.
@@ -27,13 +28,13 @@ class ModelInstallError(ValueError):
 
 
 def models_root() -> Path:
-    from app.runtime.paths import resources_root
+    from app.runtime.paths import resources_models_root
 
-    return resources_root() / "models"
+    return resources_models_root()
 
 
 def model_dir(model: SpeechModel) -> Path:
-    return models_root() / model.kind / model.repo_id.split("/")[-1]
+    return models_root() / model.kind / (model.folder or model.repo_id.split("/")[-1])
 
 
 def _marker(model: SpeechModel) -> dict[str, Any] | None:
@@ -56,12 +57,18 @@ def _folder_bytes(folder: Path) -> int:
     return total
 
 
-def service_environment(service: str) -> dict[str, Any]:
+def service_environment(service: str, model_id: str = "") -> dict[str, Any]:
     """The model service's Python environment: whether it exists, and how to set it up when it does not.
 
     The install job downloads weights only; environments come from each service's
-    hashed lock file (``src/services/<service>/<service>.lock.txt``).
+    hashed lock file (``src/services/<service>/<service>.lock.txt``). In the
+    desktop app the environment is the model's runtime pack, ready when its
+    manifest is current (desktop roadmap §4.5); the setup screen installs it.
     """
+    from app.models import packs
+
+    if packs.desktop_mode():
+        return _pack_environment(model_id)
     from app.config.launcher import load_launcher_config
     from app.runtime.paths import repo_root
 
@@ -78,8 +85,47 @@ def service_environment(service: str) -> dict[str, Any]:
     return {"name": name, "ready": python.is_file(), "setup": setup}
 
 
+def _pack_environment(model_id: str) -> dict[str, Any]:
+    from app.models import catalog as model_catalog
+    from app.models import packs
+
+    catalog = model_catalog.load()
+    try:
+        runtime_ids = catalog.runtimes_for_model(model_id, model_catalog.current_platform()) if model_id else []
+    except KeyError:
+        runtime_ids = []
+    if not runtime_ids:
+        return {"name": "", "ready": False, "setup": "", "available": False}
+    store = packs.runtime_store(catalog)
+    closure = [pack.id for pack in catalog.runtime_closure(runtime_ids)]
+    missing = [catalog.runtime(item).label for item in closure if not store.current(item)]
+    return {"name": catalog.runtime(runtime_ids[0]).label, "ready": not missing, "available": True,
+            "setup": "" if not missing else "Install it from Settings, Models: " + ", ".join(missing)}
+
+
+def _pack_status(model: SpeechModel) -> dict[str, Any]:
+    from app.models import packs
+
+    store = packs.model_store()
+    installed = model.source == "huggingface" and store.installed(model.id)
+    marker = store.marker(model.id) if installed else None
+    status = "package" if model.source == "package" else "installed" if installed else "missing"
+    return {
+        **model.as_dict(),
+        "status": status,
+        "installed_revision": (marker or {}).get("commit", ""),
+        "accepted_terms": installed,
+        "disk_bytes": store.disk_bytes(model.id) if installed else 0,
+        "environment": service_environment(model.service, model.id),
+    }
+
+
 def model_status(model: SpeechModel) -> dict[str, Any]:
     """Whether the weights are present, where they came from, and their disk use."""
+    from app.models import packs
+
+    if packs.desktop_mode():
+        return _pack_status(model)
     folder = model_dir(model)
     marker = _marker(model)
     present = folder.is_dir() and any(entry.name != MARKER for entry in folder.iterdir()) if folder.exists() else False
@@ -90,7 +136,8 @@ def model_status(model: SpeechModel) -> dict[str, Any]:
         **model.as_dict(),
         "status": status,
         "installed_revision": (marker or {}).get("commit", ""),
-        "accepted_terms": bool((marker or {}).get("accepted_terms")),
+        # Accepted for the installed revision only: an update to a new revision asks again (roadmap R-8).
+        "accepted_terms": bool((marker or {}).get("accepted_terms")) and (marker or {}).get("commit") == model.revision,
         "disk_bytes": _folder_bytes(folder) if present else 0,
         "environment": service_environment(model.service),
     }
@@ -112,7 +159,8 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
     if model.source != "huggingface":
         raise ModelInstallError(f"{model.label} is downloaded by its own package on first use, not installed here")
     if model.requires_acceptance and not accept_terms:
-        reason = "is gated" if model.gated else f"is licensed {model.licence} (not for commercial use)"
+        reason = "is gated" if model.gated else f"is licensed {model.licence}" + (
+            "" if model.commercial_use else " (not for commercial use)")
         raise ModelInstallError(f"{model.label} {reason}; accept its terms to install it")
     token = _hub_token()
     if model.gated and not token:
@@ -122,10 +170,11 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
 
     folder = model_dir(model)
     folder.mkdir(parents=True, exist_ok=True)
-    # Pin the commit first, so a resumed or repeated install fetches exactly the same files.
-    commit = hub.HfApi().model_info(model.repo_id, revision=model.revision, token=token).sha
+    # The catalog pins the commit, so a resumed or repeated install fetches exactly the same files.
+    commit = model.revision
     hub.snapshot_download(repo_id=model.repo_id, revision=commit, local_dir=str(folder), token=token,
                           allow_patterns=list(model.files) or None)
+    _check_digests(model, folder)
     marker = {
         "model_id": model.id,
         "repo_id": model.repo_id,
@@ -137,6 +186,32 @@ def install_model(model_id: str, *, accept_terms: bool = False, hub: Any = None)
     }
     (folder / MARKER).write_text(json.dumps(marker, indent=2) + "\n", encoding="utf-8")
     return model_status(model)
+
+
+def _require_recorded_acceptance(model: SpeechModel) -> None:
+    """With PostgreSQL, the job also needs the acceptance the submission recorded (roadmap D-4)."""
+    from . import licence_acceptances
+
+    if model.requires_acceptance and licence_acceptances.available() and not licence_acceptances.accepted(
+            model.id, model.revision, model.licence):
+        raise ModelInstallError(f"{model.label}'s licence ({model.licence}) has not been accepted for this revision; "
+                                "accept it and install again")
+
+
+def _check_digests(model: SpeechModel, folder: Path) -> None:
+    """Every pinned file is in the folder with its catalogued SHA-256; anything else fails the install."""
+    from app.models.catalog import load
+    from app.models.downloads import sha256_file
+
+    entry = load().model(model.id)
+    for item in entry.files:
+        target = folder / item.path
+        if not target.is_file():
+            raise ModelInstallError(f"{model.label}: {item.path} did not download")
+        actual = sha256_file(target)
+        if actual != item.sha256:
+            target.unlink(missing_ok=True)
+            raise ModelInstallError(f"{model.label}: {item.path} has SHA-256 {actual}, expected {item.sha256}")
 
 
 def remove_model(model_id: str) -> dict[str, Any]:
@@ -151,8 +226,16 @@ def remove_model(model_id: str) -> dict[str, Any]:
     return model_status(model)
 
 
-def execute_model_job(job: Any) -> dict[str, Any]:
+def execute_model_job(job: Any, *, job_store: Any = None) -> dict[str, Any]:
+    from app.models import packs
+
     payload = job.input_payload or {}
+    if packs.desktop_mode():
+        from .model_packs import execute
+
+        return execute(job, job_store=job_store)
+    if payload.get("bundle_id") or payload.get("runtime_id"):
+        raise ModelInstallError("bundles and runtime packs are installed by the desktop app")
     model_id = str(payload.get("model_id") or "").strip()
     if not model_id:
         raise ModelInstallError("model_id is required")
@@ -160,7 +243,10 @@ def execute_model_job(job: Any) -> dict[str, Any]:
         speech_model(model_id)
     except KeyError as exc:
         raise ModelInstallError(str(exc)) from exc
+    if job.type == "models.verify":
+        raise ModelInstallError("verifying models is a desktop app tool")
     if job.type == "models.install":
+        _require_recorded_acceptance(speech_model(model_id))
         status = install_model(model_id, accept_terms=bool(payload.get("accept_terms")))
         verb = "Installed"
     else:

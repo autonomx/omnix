@@ -2,7 +2,7 @@
   .trading-symbol-intelligence {
     --si-line: color-mix(in srgb, var(--c-blue-710) 18%, transparent);
     --si-line-soft: color-mix(in srgb, var(--c-blue-710) 10%, transparent);
-    --si-card: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    --si-card: color-mix(in srgb, var(--accent-indigo-190) 72%, transparent);
     --si-text: var(--c-neutral-960);
     --si-muted: var(--c-slate-680);
     --si-blue: var(--c-blue-630);

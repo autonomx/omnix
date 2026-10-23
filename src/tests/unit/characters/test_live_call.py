@@ -373,3 +373,24 @@ def test_speech_style_is_bounded_and_deterministic() -> None:
     assert style.top_p == 1.0
     assert style.repetition_penalty == 0.5
     assert len(style.expressiveness) == 80
+
+
+def test_system_live_call_runtime_carries_the_assistants_own_avatar(tmp_path: Path, monkeypatch) -> None:
+    """The System Assistant has a Live2D avatar of its own (Chat, Characters), like a character's."""
+    from app.platform.characters.avatar_models import CharacterAvatarPack
+
+    _configure(tmp_path, monkeypatch)
+    session = default_chat_store().create_session(CreateChatSessionRequest(title="System call"))
+    pack = CharacterAvatarPack(character_id="system-assistant", renderer="live2d", render_mode="viseme",
+                               rig_asset_id="live2d-model:open-llm-vtuber-shizuku",
+                               created_at="2026-10-22T00:00:00+00:00", updated_at="2026-10-22T00:00:00+00:00")
+
+    class Avatars:
+        def resolve(self, character_id: str | None) -> CharacterAvatarPack | None:
+            return pack if character_id == "system-assistant" else None
+
+    runtime = resolve_live_call_runtime(session, avatar_service_factory=lambda: Avatars())
+
+    assert runtime.interaction_mode == "system"
+    assert runtime.avatar_pack == pack
+    assert runtime.preload.avatar_pack_loaded is True

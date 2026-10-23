@@ -6,7 +6,7 @@
     padding: 1rem;
     border: 1px solid var(--mantine-color-dark-4, var(--c-neutral-350));
     border-radius: 1rem;
-    background: color-mix(in srgb, var(--mantine-color-dark-8, var(--c-neutral-200)) 88%, transparent);
+    background: color-mix(in srgb, var(--mantine-color-dark-8, var(--bg-neutral-200)) 88%, transparent);
   }
 
   .voice-session-evaluation > header,
@@ -37,7 +37,7 @@
     padding: 0.85rem;
     border: 1px solid var(--mantine-color-dark-4, var(--c-neutral-350));
     border-radius: 0.75rem;
-    background: color-mix(in srgb, var(--mantine-color-dark-7, var(--c-neutral-250)) 92%, transparent);
+    background: color-mix(in srgb, var(--mantine-color-dark-7, var(--bg-neutral-250)) 92%, transparent);
   }
 
   .voice-session-gate {
@@ -46,7 +46,7 @@
   }
 
   .voice-session-gate [role="alert"] {
-    color: var(--mantine-color-red-4, var(--c-red-770));
+    color: var(--mantine-color-red-4, var(--fg-red-770));
   }
 
   .voice-session-summary-grid span,

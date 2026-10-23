@@ -14,6 +14,15 @@ from .progressive_materialization_job_service import (
     schedule_campaign_predictive_materialization,
 )
 from .published_canon_projection import project_published_canon
+from .published_world_setup import (
+    bestiary_mechanics,
+    companion_candidates,
+    creator_setup,
+    location_label,
+    opening_kit,
+    opening_quests,
+    session_world_model,
+)
 from .semantic_validation import (
     initialize_starting_map_snapshot,
     validate_scenario_against_release,
@@ -47,6 +56,7 @@ def _attach_published_canon(
     canon: Mapping[str, Any],
     *,
     campaign_id: str,
+    topology: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Attach immutable world canon as the new campaign's initial Bible."""
 
@@ -54,6 +64,7 @@ def _attach_published_canon(
         canon,
         campaign_id=campaign_id,
         canon_revision=int(canon.get("canon_revision") or 1),
+        topology=topology,
     )
     revision = int(bible.get("canon_revision") or 1)
     digest = campaign_bible_hash(bible)
@@ -103,87 +114,133 @@ def _attach_published_canon(
     return session, bible, digest
 
 
+def _resources_from_kit(resources: Mapping[str, Any], kit: Mapping[str, Any]) -> dict[str, Any]:
+    """The player's HP and mana from the opening's health and aether, when the opening sets them."""
+    result = deepcopy(dict(resources))
+    for key, value in (("hp", int(kit.get("health") or 0)), ("mana", int(kit.get("aether") or 0))):
+        if value > 0:
+            result[key] = {"max": value, "current": value}
+    return result
+
+
+def _opening_environment(
+    session: Mapping[str, Any],
+    *,
+    location_id: str,
+    location: Mapping[str, Any],
+    location_name: str,
+    epoch: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A live environment (weather, calendar, light) for the opening's own place and region."""
+    from app.apps.rpg.session.environment import DEFAULT_REGION_ID, build_initial_environment_seed_state
+
+    state = _record(session.get("state"))
+    metadata = _record(state.get("metadata"))
+    seeded = build_initial_environment_seed_state(
+        campaign_seed=int(metadata.get("seed") or 0),
+        campaign_contract={"location_id": location_id},
+        location_id=location_id,
+        location={"time_label": epoch, "location": location_name, "weather": "clear"},
+    )
+    region_id = str(location.get("region_id") or DEFAULT_REGION_ID)
+    environment = {
+        **seeded["environment"],
+        "region_id": region_id,
+        "region_name": str(location.get("region_name") or ""),
+    }
+    for event in environment.get("active_events") or ():
+        if isinstance(event, dict):
+            event["region_id"] = region_id
+    context = {
+        **seeded["scene_environment_context"],
+        "region_id": region_id,
+        "location_id": location_id,
+        "location_label": location_name,
+    }
+    return environment, context
+
+
 def _apply_published_opening_state(
     session: dict[str, Any],
     *,
-    canon: Mapping[str, Any],
+    revision: Any,
     scenario: Any,
+    world: Mapping[str, Any],
+    present_at_start: tuple[str, ...],
 ) -> None:
-    """Replace new-game demo defaults with the selected published opening."""
+    """Replace the new-game bootstrap with the published world: its place, people, kit, quests and weather."""
 
     location_id = str(scenario.starting_location_id)
-    entities = _record(canon.get("entities"))
-    location = _record(entities.get(location_id))
-    location_name = str(location.get("name") or location_id)
-    description = str(
-        location.get("description")
-        or location.get("short_summary")
-        or f"You arrive at {location_name}."
-    )
-    epoch = str(scenario.starting_epoch or "Day 1")
+    world_model = session_world_model(revision, scenario, present_at_start=present_at_start)
+    locations = _record(world_model.get("locations"))
+    location = _record(locations.get(location_id))
+    location_name = location_label(revision, location_id)
+    description = str(location.get("description") or f"You arrive at {location_name}.")
+    epoch = str(scenario.starting_epoch or "Day 1, 08:00")
     state = _record(session.get("state"))
     player = _record(state.get("player"))
+    kit = opening_kit(
+        revision,
+        scenario,
+        equipment=[_record(item) for item in player.get("equipment") or ()],
+        inventory=[_record(item) for item in player.get("inventory") or ()],
+    )
+    player.update(
+        {
+            "inventory": kit["inventory"],
+            "currency": kit["currency"],
+            "resources": _resources_from_kit(_record(player.get("resources")), kit),
+            "location_id": location_id,
+        }
+    )
+    if kit["knowledge"]:
+        player["knowledge"] = kit["knowledge"]
+    present = [_record(npc) for npc in location.get("present_npcs") or ()]
+    exits = sorted(
+        str(_record(locations.get(target)).get("name") or target)
+        for target in _record(location.get("exits")).values()
+    )
+    quick_actions = [f"Look around {location_name}"]
+    quick_actions += [f"Talk to {npc['name']}" for npc in present[:2]]
+    quick_actions += [f"Travel to {name}" for name in exits[:1]]
+    quick_actions.append("Check my quests")
+    arrival = {
+        "turn": 0,
+        "time": epoch,
+        "title": f"Arrived at {location_name}",
+        "detail": description,
+        "kind": "published_opening",
+    }
+    environment, scene_context = _opening_environment(
+        session, location_id=location_id, location=location, location_name=location_name, epoch=epoch
+    )
     state.update(
         {
             "title": f"{player.get('name') or 'Player'} — {location_name}",
+            "player": player,
             "location": location_name,
             "current_location": location_name,
             "current_location_id": location_id,
             "current_location_name": location_name,
             "summary": description,
-            "quests": [],
+            "quests": opening_quests(revision, scenario),
             "relationships": [],
             "party": [],
-            "quick_actions": [
-                f"Survey {location_name}",
-                "Follow the immediate lead",
-                "Talk to someone nearby",
-                "Check local routes",
-            ],
-            "timeline": [
-                {
-                    "turn": 0,
-                    "time": epoch,
-                    "title": f"Arrived at {location_name}",
-                    "detail": description,
-                    "kind": "published_opening",
-                }
-            ],
-            "journal": {
-                "entries": [
-                    {
-                        "turn": 0,
-                        "time": epoch,
-                        "title": f"Arrived at {location_name}",
-                        "detail": description,
-                        "kind": "published_opening",
-                    }
-                ]
-            },
+            "quick_actions": quick_actions,
+            "timeline": [arrival],
+            "journal": {"entries": [arrival]},
+            "scene": {**_record(state.get("scene")), "environment_context": scene_context},
         }
     )
+    state.pop("environment_snapshot", None)
     state["world"] = {
         **_record(state.get("world")),
         "time": epoch,
-        "weather": "Unknown",
-        "temperature": None,
-        "region": str(location.get("region") or location.get("district") or "Vesper-9"),
+        "region": str(location.get("region_name") or ""),
+        "environment": environment,
         "current_location_id": location_id,
         "current_location_name": location_name,
     }
-    environment_snapshot = {
-        "schema_version": "rpg_published_opening_environment_v1",
-        "region_id": str(location.get("region") or location.get("district") or "vesper-9"),
-        "time_label": epoch,
-        "weather": {"condition": "Unknown"},
-        "context": {"location_label": location_name, "label": location_name},
-        "display": {
-            "day_time": epoch,
-            "weather": "Unknown",
-            "context": location_name,
-        },
-    }
-    state["environment_snapshot"] = environment_snapshot
     state["narrative_affordances"] = {
         **_record(state.get("narrative_affordances")),
         "opening_story": {
@@ -191,6 +248,7 @@ def _apply_published_opening_state(
             "summary": description,
             "source": "published_scenario",
         },
+        "suggested_actions": quick_actions,
     }
     metadata = _record(state.get("metadata"))
     state["metadata"] = {
@@ -198,16 +256,53 @@ def _apply_published_opening_state(
         "starting_location_id": location_id,
         "starting_location_name": location_name,
         "opening_source": "published_scenario",
+        "opening_hook": "published_opening",
     }
     session["state"] = state
+    setup = creator_setup(revision, scenario, world_model, world)
+    first_quest = _record((state.get("quests") or [{}])[0])
+    setup["opening"] = {
+        "location_id": location_id,
+        "location_name": location_name,
+        "scene_frame": description,
+        "immediate_problem": str(first_quest.get("hook") or first_quest.get("objective") or ""),
+        "player_involvement_reason": str(first_quest.get("objective") or ""),
+        "present_npc_ids": list(setup["starting_npc_ids"]),
+        "first_choices": quick_actions,
+    }
+    # The turn engine reads its world from the creator setup each turn; without the world's own setup it fills in
+    # its built-in starter town.
+    session["setup_payload"] = {**_record(session.get("setup_payload")), **setup}
+    # Who is here from the very first turn: the world's people, and the opening scene with those present.
+    present_ids = [str(npc.get("id")) for npc in present]
     runtime = _record(session.get("runtime_state"))
     runtime.update(
-        {"current_location_id": location_id, "current_location_name": location_name}
+        {
+            "current_location_id": location_id,
+            "current_location_name": location_name,
+            "current_scene": {
+                "scene_id": f"scene:{location_id}:opening",
+                "location_id": location_id,
+                "location_name": location_name,
+                "summary": description,
+                "present_npc_ids": present_ids,
+            },
+        }
     )
     session["runtime_state"] = runtime
     simulation = _record(session.get("simulation_state"))
+    player_state = _record(simulation.get("player_state"))
+    player_state["location_id"] = location_id
     simulation.update(
         {
+            "world_model": world_model,
+            "npc_index": {
+                str(npc_id): {**_record(npc), "npc_id": str(npc_id)}
+                for npc_id, npc in _record(world_model.get("npcs")).items()
+            },
+            "present_npc_state": {"location_id": location_id, "present_npc_ids": present_ids},
+            "player_state": player_state,
+            "location_id": location_id,
             "current_location_id": location_id,
             "location_name": location_name,
             "travel_state": {
@@ -221,8 +316,22 @@ def _apply_published_opening_state(
             },
         }
     )
+    from app.apps.rpg.world.npc_evolution_state import apply_npc_evolution_event
+
+    for npc_id, trust in companion_candidates(world_model).items():
+        apply_npc_evolution_event(
+            simulation,
+            npc_id=npc_id,
+            event_id=f"published_world:{npc_id}:companion",
+            kind="published_companion",
+            party_join_eligibility={"eligible": True, "requires_player_trust": trust, "reason": "published_companion"},
+            tick=0,
+        )
+    # The world's creatures fight as themselves, not as the starter town's bandits.
+    mechanics = bestiary_mechanics(revision)
+    if mechanics:
+        simulation["campaign_mechanics"] = {**_record(simulation.get("campaign_mechanics")), **mechanics}
     session["simulation_state"] = simulation
-    session["environment_snapshot"] = environment_snapshot
 
 
 def launch_published_scenario(
@@ -328,7 +437,15 @@ def launch_published_scenario(
         definition=starting_definition,
     )
 
-    _apply_published_opening_state(session, canon=canon, scenario=scenario)
+    _apply_published_opening_state(
+        session,
+        revision=revision,
+        scenario=scenario,
+        world=world,
+        present_at_start=tuple(
+            actor.actor_id for actor in starting_snapshot.actors if actor.actor_id != protagonist_actor_id
+        ),
+    )
 
     state = _record(session.get("state"))
     manifest = _record(session.get("manifest"))
@@ -377,6 +494,7 @@ def launch_published_scenario(
         session,
         canon,
         campaign_id=session_id,
+        topology=revision.topology,
     )
     state = _record(session.get("state"))
     manifest = _record(session.get("manifest"))

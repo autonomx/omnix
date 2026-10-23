@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { rpgSessionClient } from './api/rpgSessionClient';
 import { RpgMapDialog } from './RpgMapDialog';
+import { RpgTacticalGrid } from './RpgTacticalGrid';
 import type {
   RpgCheckpointSummaryPreview,
   RpgEncounterPreview,
@@ -81,7 +82,11 @@ export function RpgWorldRail({
   const activeMapId = currentMapId?.trim() || queriedMapId;
   const visibleJobCards = jobCards.slice(0, 3);
   const visibleAssets = rpgAssets.slice(0, 3);
-  const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && activeMapId);
+  // A session launched from a published world stands on a local map with a tactical grid.
+  const mapInstanceId = typeof stateRecord.current_map_instance_id === 'string' ? stateRecord.current_map_instance_id.trim() : '';
+  const playerActorId = mapInstanceId ? `player:${selectedSessionSummary.id}` : '';
+  const heroName = heroNameFrom(stateRecord);
+  const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && (activeMapId || mapInstanceId));
   const [isMapOpen, setIsMapOpen] = useState(false);
 
   return (
@@ -91,16 +96,18 @@ export function RpgWorldRail({
           <div className="rpg-section-heading">
             <p className="eyebrow">World & location</p>
           </div>
-          <div role="img" className={isPreview ? 'rpg-map-preview rpg-map-preview-has-image' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
+          <div role="img" className={isPreview ? 'rpg-map-preview rpg-map-preview-has-image' : mapInstanceId ? 'rpg-map-preview rpg-map-preview-has-grid' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
             {isPreview ? (
               <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
+            ) : mapInstanceId ? (
+              <RpgTacticalGrid compact heroName={heroName} mapInstanceId={mapInstanceId} playerActorId={playerActorId} />
             ) : (
-              <span className="rpg-live-visual-label">{activeMapId ? 'Live map ready' : 'Live map unavailable'}</span>
+              <span className="rpg-live-visual-label">{activeMapId ? 'Region map ready' : 'No map for this place yet'}</span>
             )}
-            <span className="rpg-map-pin" aria-hidden="true" />
+            {isPreview || !mapInstanceId ? <span className="rpg-map-pin" aria-hidden="true" /> : null}
           </div>
           <strong>{selectedSessionSummary.location}</strong>
-          {isPreview ? <small>Preview artwork</small> : <small>{activeMapId || 'Canonical map state is not available.'}</small>}
+          {isPreview ? <small>Preview artwork</small> : <small>{mapInstanceId ? 'Local map: what your character has seen' : activeMapId ? 'Region map' : 'Maps appear when the world provides them.'}</small>}
           <button className="rpg-secondary-button" disabled={!canOpenLiveMap} onClick={() => setIsMapOpen(true)} type="button">
             Open interactive map
           </button>
@@ -190,10 +197,13 @@ export function RpgWorldRail({
           ))}
         </section>
       </aside>
-      {canOpenLiveMap && activeMapId ? (
+      {canOpenLiveMap ? (
         <RpgMapDialog
+          heroName={heroName}
           locationLabel={selectedSessionSummary.location}
           mapId={activeMapId}
+          mapInstanceId={mapInstanceId}
+          playerActorId={playerActorId}
           onClose={() => setIsMapOpen(false)}
           open={isMapOpen}
           sessionId={selectedSessionSummary.id}
@@ -201,6 +211,14 @@ export function RpgWorldRail({
       ) : null}
     </>
   );
+}
+
+function heroNameFrom(state: Record<string, unknown>): string {
+  for (const key of ['player', 'hero', 'character']) {
+    const name = recordValue(state[key]).name;
+    if (typeof name === 'string' && name.trim()) return name.trim();
+  }
+  return 'You';
 }
 
 function recordValue(value: unknown): Record<string, unknown> {

@@ -11,6 +11,17 @@ from app.platform.image.providers.registry import get_image_provider_definition
 from app.runtime.paths import MODELS_DIR
 from app.settings.access import load_settings, save_settings
 
+# Image providers whose model the desktop app installs from model catalog v2 (app/models/catalog.json).
+_CATALOG_MODELS = {"flux_klein": "flux2-klein-4b", "z_image_turbo": "z-image-turbo", "krea2_turbo": "krea-2-turbo"}
+
+
+def catalog_model_for(provider_name: str, config: Dict[str, Any] | None = None) -> str | None:
+    """The catalog model a provider loads: FLUX.2 klein's ``base`` variant is its own model."""
+    provider_name = _safe_str(provider_name).strip().lower()
+    if provider_name == "flux_klein" and _safe_str((config or {}).get("variant")).strip().lower() == "base":
+        return "flux2-klein-base-4b"
+    return _CATALOG_MODELS.get(provider_name)
+
 
 def _safe_str(value: Any) -> str:
     if value is None:
@@ -112,6 +123,13 @@ def normalize_image_model_local_dir(
 
 def resolve_image_local_dir_from_settings(settings: Dict[str, Any], provider_name: str) -> str:
     provider_name = _safe_str(provider_name).strip().lower()
+    from app.models.local import installed_snapshot
+
+    # The desktop app installs the catalog's pinned model; a folder named in settings does not apply there.
+    catalog_model = _CATALOG_MODELS.get(provider_name)
+    snapshot = installed_snapshot(catalog_model) if catalog_model else None
+    if snapshot is not None:
+        return os.path.normpath(str(snapshot))
     settings = _safe_dict(settings)
     image_cfg = _safe_dict(settings.get("image"))
     provider_cfg = _safe_dict(image_cfg.get(provider_name))

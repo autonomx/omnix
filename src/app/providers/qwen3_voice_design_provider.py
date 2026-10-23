@@ -35,9 +35,14 @@ class VoiceDesignUnavailable(RuntimeError):
 
 
 def voice_design_model_dir() -> Path:
-    from app.runtime.paths import resources_root
+    from app.models.local import installed_snapshot
+    from app.runtime.paths import resources_models_root
 
-    return resources_root() / "models" / "tts" / VOICE_DESIGN_MODEL_DIR
+    # The desktop app installs the catalog's pinned weights; Voice Studio's folder applies outside it.
+    snapshot = installed_snapshot("qwen3-tts-1.7b-voicedesign")
+    if snapshot is not None:
+        return snapshot
+    return resources_models_root() / "tts" / VOICE_DESIGN_MODEL_DIR
 
 
 def seeded(seed: int | None) -> None:
@@ -137,6 +142,11 @@ def design_model_revision() -> str:
     """The installed checkpoint's pinned commit (from the Models install marker), or ''."""
     import json
 
+    from app.models.local import installed_snapshot
+
+    snapshot = installed_snapshot("qwen3-tts-1.7b-voicedesign")
+    if snapshot is not None:
+        return snapshot.name  # the desktop app's pinned snapshot is named by its commit
     marker = voice_design_model_dir() / ".omnix-model.json"
     try:
         return str(json.loads(marker.read_text(encoding="utf-8")).get("commit") or "")

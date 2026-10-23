@@ -63,6 +63,18 @@ def _scene(result: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+def _world_place(result: Mapping[str, Any], scene: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The world model's entry for the place the player is in (the scene's, or the player's location)."""
+    session = _mapping(result.get("session"))
+    simulation = _mapping(result.get("simulation_state") or session.get("simulation_state"))
+    locations = _mapping(_mapping(simulation.get("world_model")).get("locations"))
+    location_id = _first_text(
+        scene.get("location_id"),
+        _mapping(simulation.get("player_state")).get("location_id"),
+    )
+    return _mapping(locations.get(location_id))
+
+
 def _speaker(result: Mapping[str, Any]) -> tuple[str | None, str]:
     npc = _mapping(result.get("npc"))
     visible = _mapping(result.get("visible_response"))
@@ -85,6 +97,11 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
     scene = _scene(result)
     location = _first_text(scene.get("location_name"), scene.get("name"), scene.get("title"))
     summary = _first_text(scene.get("summary"), scene.get("description"))
+    if not summary or summary == location:
+        # A session with its own world describes each place; the scene of a turn that just arrived may not yet.
+        place = _world_place(result, scene)
+        location = location or _first_text(place.get("name"))
+        summary = _first_text(place.get("description"))
     if location or summary:
         records.append(
             EvidenceRecord(
@@ -110,6 +127,30 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
                 visibility=VisibilityClass.PLAYER_KNOWN,
                 source_revision=int(result.get("state_revision") or 0),
                 claim_refs=tuple(str(key) for key in sorted(effects)),
+            )
+        )
+    # What the turn's mechanics did (a quest taken on, practice, a status asked for), stated by the runtime.
+    resolved = next(
+        (
+            candidate
+            for candidate in (
+                _mapping(result.get("resolved_result")),
+                _mapping(_mapping(result.get("result")).get("resolved_result")),
+                _mapping(_mapping(result.get("authoritative")).get("resolved_result")),
+            )
+            if candidate.get("outcome_lines")
+        ),
+        {},
+    )
+    outcome_lines = [str(line) for line in resolved.get("outcome_lines") or () if str(line).strip()]
+    if outcome_lines:
+        records.append(
+            EvidenceRecord(
+                evidence_id="runtime:turn:outcome",
+                content=" ".join(outcome_lines),
+                authority=AuthorityClass.CONFIRMED_TURN,
+                visibility=VisibilityClass.PLAYER_KNOWN,
+                source_revision=int(result.get("state_revision") or 0),
             )
         )
     speaker_id, speaker_name = _speaker(result)

@@ -268,7 +268,9 @@ def build_non_stateful_dialogue_result(
         semantic_advisory=semantic_advisory,
         service_matched=service_matched,
     )
-    if not selected.get("consumable"):
+    # A matched service (a room, a meal, a purchase) is resolved by the runtime even when the player addresses its
+    # provider ("I ask Bran for a room"): forcing it into dialogue would talk about the room and never rent it.
+    if not selected.get("consumable") and not service_matched:
         for source, advisory in (("semantic_advisory", _d(semantic_advisory)), ("action_advisory", _d(action_advisory))):
             if _safe_direct_intent(advisory):
                 selected = {

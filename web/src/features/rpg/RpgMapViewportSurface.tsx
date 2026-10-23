@@ -74,7 +74,8 @@ export function RpgMapViewportSurface({
   const objectStates = new Map((overlay.object_states ?? []).map((state) => [state.object_id, state]));
   const activeObject = definition.objects.find((item) => item.id === activeObjectId) ?? null;
   const activeDynamicState = activeObject ? objectStates.get(activeObject.id) : undefined;
-  const backgroundUrl = rpgMapAssetUrl(definition.background?.asset_id);
+  const [backgroundFailed, setBackgroundFailed] = useState(false);
+  const backgroundUrl = backgroundFailed ? null : rpgMapAssetUrl(definition.background?.asset_id);
 
   useEffect(() => {
     setViewport(viewportCache.get(definition.map_id) ?? fitRpgMapViewport());
@@ -224,6 +225,7 @@ export function RpgMapViewportSurface({
                 data-map-asset-id={definition.background.asset_id}
                 height={definition.background.destination_bounds.height}
                 href={backgroundUrl}
+                onError={() => setBackgroundFailed(true)}
                 preserveAspectRatio="none"
                 width={definition.background.destination_bounds.width}
                 x={definition.background.destination_bounds.x}

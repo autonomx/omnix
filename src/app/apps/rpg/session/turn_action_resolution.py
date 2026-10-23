@@ -30,6 +30,8 @@ from app.apps.rpg.session.state_normalization import (
 from app.apps.rpg.session.combat_intent import (
     _force_active_combat_utility_action as _force_active_combat_utility_action,
 )
+from app.apps.rpg.session.player_requests import apply_player_requests
+from app.apps.rpg.session.public_state_bridge import count_player_turn, hydrate_simulation_player
 from app.apps.rpg.session.special_combat_turns import (
     _maybe_resolve_combat_ability_turn as _maybe_resolve_combat_ability_turn, _maybe_start_manual_encounter as _maybe_start_manual_encounter,
 )
@@ -93,7 +95,9 @@ def _prepare_turn_action_context(ctx) -> bool:
     # IMPORTANT: keep the old apply_turn authoritative pipeline intact.
     # This function should be the previous apply_turn() minus the live
     # narration-generation block, not a redesign of the turn engine.
-    ctx.session = _copy_dict(ctx.session)
+    # The quest log and wallet may still live only in the public state; the requests below read the simulation.
+    # The turn is counted here too (before the manifest is taken): this stage's session is the one the turn saves.
+    ctx.session = count_player_turn(hydrate_simulation_player(_copy_dict(ctx.session)))
     ctx.manifest = _safe_dict(ctx.session.get("manifest"))
     ctx.runtime_state = _copy_dict(ctx.session.get("runtime_state"))
     ctx.setup = apply_adventure_defaults(
@@ -101,6 +105,10 @@ def _prepare_turn_action_context(ctx) -> bool:
     )
     ctx.simulation_state = _ensure_simulation_state(
         _safe_dict(ctx.session.get("simulation_state"))
+    )
+    # Taking on a quest or practising a skill changes the player's own state, saved with the turn.
+    ctx.runtime_state["player_request_events"] = apply_player_requests(
+        ctx.simulation_state, _safe_str(ctx.player_input)
     )
     ctx.player_actor_id = "player"
     ctx.current_tick = _safe_int(ctx.runtime_state.get("tick"), 0)

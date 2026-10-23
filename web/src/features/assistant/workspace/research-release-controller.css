@@ -9,10 +9,10 @@
 
   .assistant-research-fallback {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-210) 86%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-210) 86%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 20%, transparent);
     border-radius: 999px;
-    color: color-mix(in srgb, var(--c-slate-930) 84%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 84%, transparent);
     display: inline-flex;
     flex: 0 0 auto;
     font-size: 0.72rem;
@@ -24,14 +24,14 @@
   }
 
   .assistant-research-fallback input {
-    accent-color: var(--c-indigo-600);
+    accent-color: var(--accent-indigo-600);
     height: 0.9rem;
     margin: 0;
     width: 0.9rem;
   }
 
   .assistant-research-release-status {
-    color: color-mix(in srgb, var(--c-slate-870) 76%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 76%, transparent);
     display: block;
     flex: 1 1 12rem;
     font-size: 0.68rem;
@@ -69,7 +69,7 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   :root[data-omnix-appearance='light'] .assistant-research-fallback {
-    background: color-mix(in srgb, var(--c-slate-970-2) 74%, transparent);
+    background: color-mix(in srgb, var(--accent-slate-970-2) 74%, transparent);
     border-color: color-mix(in srgb, var(--c-blue-560) 20%, transparent);
     color: var(--omnix-text, var(--c-blue-310));
   }

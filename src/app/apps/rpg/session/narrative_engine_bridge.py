@@ -45,6 +45,8 @@ _MODE_ALIASES = {
     "sell": "transaction",
     "fight": "combat",
     "attack": "combat",
+    "attack_melee": "combat",
+    "attack_ranged": "combat",
     "combat_action": "combat",
     "quest_complete": "major_beat",
     "quest_reward": "major_beat",
@@ -76,6 +78,9 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+_PLACEHOLDER_SPEAKER_ID = "npc:npc"
+
+
 def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
     npc = _mapping(result.get("npc"))
     visible = _mapping(result.get("visible_response"))
@@ -96,6 +101,9 @@ def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
         raw_id = f"npc:{raw_id.casefold().replace(' ', '_')}"
     if not raw_id:
         raw_id = f"npc:{name.casefold().replace(' ', '_')}"
+    if raw_id == _PLACEHOLDER_SPEAKER_ID:
+        # A placeholder ("NPC") names no one: a turn without a real speaker is not a conversation.
+        return "", ""
     return raw_id, name
 
 
@@ -284,7 +292,7 @@ def _request(
     dialogue_quality_context: Mapping[str, Any] | None = None,
 ) -> TurnPresentationRequest:
     speaker_id, _ = _npc_identity(result)
-    has_speaker = bool(target_actor_id or _text(_mapping(result.get("npc")).get("speaker")))
+    has_speaker = bool(target_actor_id or speaker_id)
     interaction_token = _text(result.get("interaction_id"))
     turn_token = (
         interaction_token
@@ -682,9 +690,10 @@ def canonicalize_resolved_turn_result(
         grounding_metadata=grounding.metadata,
         profile=_profile(result, PresentationProfile.IMMERSIVE),
         significance=_resolved_significance(result, mode),
+        # A fight is the hero against the foe: someone standing by is not answering the player.
         target_actor_id=(
             speaker_id
-            if _text(_mapping(result.get("npc")).get("speaker"))
+            if _text(_mapping(result.get("npc")).get("speaker")) and mode != "combat"
             else None
         ),
     )

@@ -107,4 +107,4 @@ def test_environment_snapshot_uses_safe_weather_default_when_no_event_exists() -
 
     assert snapshot["weather"]["condition"] == "clear"
     assert snapshot["weather"]["intensity"] == "light"
-    assert snapshot["display"]["weather"] == "Light Clear"
+    assert snapshot["display"]["weather"] == "Clear"

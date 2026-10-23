@@ -9,6 +9,7 @@ export const sttModule = defineModule({
   icon: '⌁',
   backendModules: [],
   apiPrefixes: [
+    '/api/model-packs',
     '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/voice', '/api/tts', '/api/agent',
     '/api/prompts',
   ],

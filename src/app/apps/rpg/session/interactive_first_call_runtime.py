@@ -15,11 +15,15 @@ from app.apps.rpg.session.semantic_action_intelligence import get_semantic_actio
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
 from app.apps.rpg.session.dialogue_fallbacks import repair_dialogue_fallback
-from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
+from app.apps.rpg.session.public_state_bridge import count_player_turn, hydrate_simulation_player
 from app.apps.rpg.rules.semantic_interaction import attach_semantic_interaction
 from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
 from app.apps.rpg.session.companion_turn_runtime import _build_turn_id
 from app.apps.rpg.session.service_runtime import service_action_from_result
+from app.apps.rpg.world.companion_acceptance import requested_companion
+from app.apps.rpg.session.player_requests import has_player_requests
+from app.apps.rpg.session.ambient_tick_runtime import is_ambient_tick_command
+from app.apps.rpg.world.travel_graph import resolve_travel_destination
 from app.apps.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
 from app.apps.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
 from app.apps.rpg.foundation.safe_values import copy_state
@@ -195,6 +199,47 @@ def _stateful_runtime_performance_override(
     if narration_mode in {"deferred", "deterministic", "disabled"}:
         merged["enable_live_narration_llm"] = False
     return merged
+
+
+# Commands the runtime resolves from their words alone: asking a model what they mean adds a call and nothing else.
+_PLAIN_OBSERVE_COMMANDS = {"wait", "look", "look around", "listen", "observe", "keep watch"}
+
+
+def _runtime_understood_command(simulation_state: dict[str, Any], player_input: str, *, service_matched: bool) -> str:
+    """Why the intent model can be skipped for this command, or "" when it is needed."""
+    text = _s(player_input).strip().lower().rstrip(".!")
+    if service_matched:
+        return "runtime_request"
+    if is_ambient_tick_command(text) or text in _PLAIN_OBSERVE_COMMANDS:
+        return "observe"
+    try:
+        if resolve_travel_destination(player_input=_s(player_input), state=simulation_state).get("ok"):
+            return "travel"
+        if _combat_command(simulation_state, _s(player_input)):
+            return "combat"
+    except Exception:
+        logger.debug("suppressed error in %s", "_runtime_understood_command", exc_info=True)
+    return ""
+
+
+def _combat_command(simulation_state: dict[str, Any], player_input: str) -> bool:
+    """A blow or a flight in a fight under way, or a blow at one of the world's creatures: the combat rules resolve it.
+
+    (Raising a hand against a person is left to the intent model, which reads what it means.)
+    """
+    from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition
+    from app.apps.rpg.rules.combat.runtime import is_combat_active
+    from app.apps.rpg.rules.interactions.semantic_actions import resolve_semantic_action_v2, semantic_action_kind
+
+    action = resolve_semantic_action_v2(player_input=player_input, actor_id="player")
+    kind = semantic_action_kind(action) if action.get("resolved") else ""
+    if kind == "flee":
+        return is_combat_active(simulation_state)
+    if kind != "attack":
+        return False
+    return is_combat_active(simulation_state) or campaign_creature_definition(
+        simulation_state, _s(action.get("target_ref"))
+    ) is not None
 
 
 def _fast_direct_action(player_input: str, performance_override: dict[str, Any] | None) -> dict[str, Any]:
@@ -794,7 +839,7 @@ def _apply_turn_core(
         timing["manual_turn_ms"] = _ms_since(manual_start)
         return {"ok": False, "error": "session_not_found", "manual_turn_stage_timing": timing}
 
-    session = hydrate_simulation_player(session)
+    session = count_player_turn(hydrate_simulation_player(session))
     simulation_state = _d(session.get("simulation_state"))
     runtime_state = _d(session.get("runtime_state"))
     candidate_action = _d(action)
@@ -850,30 +895,41 @@ def _apply_turn_core(
     except Exception:
         service_match = {}
     service_matched = bool(_d(service_match).get("matched"))
+    # Asking someone to join the party changes the party: the runtime resolves it, not a dialogue reply.
+    if not service_matched and requested_companion(simulation_state, _s(player_input)):
+        service_matched = True
+    # Taking on a quest or practising a skill changes the player's own state: the runtime resolves it.
+    if not service_matched and has_player_requests(simulation_state, _s(player_input)):
+        service_matched = True
 
     action_advisory: dict[str, Any] = {}
     semantic_advisory: dict[str, Any] = {}
     llm_start = perf_counter()
-    try:
-        gateway = build_app_llm_gateway()
-        semantic_advisory = build_compact_dialogue_advisory(
-            llm_gateway=gateway,
-            player_input=_s(player_input),
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=candidate_action,
-            public_state=_d(session.get("state")),
-        )
-        if not semantic_advisory and not service_matched:
-            semantic_advisory = get_semantic_action_advisory(
-            llm_gateway=gateway,
-            player_input=_s(player_input),
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=candidate_action,
+    understood = _runtime_understood_command(simulation_state, _s(player_input), service_matched=service_matched)
+    if understood:
+        runtime_state["first_call_intent_skipped"] = understood
+        session["runtime_state"] = runtime_state
+    else:
+        try:
+            gateway = build_app_llm_gateway()
+            semantic_advisory = build_compact_dialogue_advisory(
+                llm_gateway=gateway,
+                player_input=_s(player_input),
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                candidate_action=candidate_action,
+                public_state=_d(session.get("state")),
             )
-    except Exception as exc:
-        runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
+            if not semantic_advisory and not service_matched:
+                semantic_advisory = get_semantic_action_advisory(
+                llm_gateway=gateway,
+                player_input=_s(player_input),
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                candidate_action=candidate_action,
+                )
+        except Exception as exc:
+            runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
     timing["pre_runtime_intent_llm_ms"] = _ms_since(llm_start)
 
     validation_start = perf_counter()

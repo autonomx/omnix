@@ -528,6 +528,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const invalidateRpgWorkspaceQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
+      // The loadout's skills, abilities and effects change with story turns too.
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'ability-tree-session'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-suggestions'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-route-decision'] }),
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'hermes-turn-readout'] }),

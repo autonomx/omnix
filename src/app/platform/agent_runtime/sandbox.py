@@ -20,7 +20,6 @@ from pathlib import Path
 
 from .isolation import (
     DEFAULT_SANDBOX_IMAGE,
-    RELAY_CONTAINER,
     SANDBOX_NETWORK,
     AgentIsolationError,
     DockerStrongIsolation,
@@ -69,7 +68,7 @@ def status() -> dict[str, Any]:
         report["reason"] = str(exc)
     if isolation.docker:
         relay = _run(isolation.docker, "inspect", "--format",
-                     '{{.State.Running}} {{index .Config.Labels "omnix.relay.routes"}}', RELAY_CONTAINER, timeout=30)
+                     '{{.State.Running}} {{index .Config.Labels "omnix.relay.routes"}}', isolation.relay, timeout=30)
         report["relay"] = relay.stdout.strip() if relay.returncode == 0 else "absent"
     return report
 
@@ -91,7 +90,7 @@ def check_egress(gateway_url: str, outside: str) -> dict[str, Any]:
     relay_port = int(gateway_url.split("://", 1)[1].split("/", 1)[0].rpartition(":")[2] or 80)
     result: dict[str, Any] = {
         "network": isolation.network,
-        "relay": probe(isolation.docker, isolation.image, isolation.network, RELAY_CONTAINER, relay_port),
+        "relay": probe(isolation.docker, isolation.image, isolation.network, isolation.relay, relay_port),
         "outside": probe(isolation.docker, isolation.image, isolation.network, outside_host, int(outside_port)),
     }
     result["egress_blocked"] = result["outside"] == "closed"

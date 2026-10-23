@@ -55,8 +55,13 @@ def _response_mode(request: TurnPresentationRequest) -> str:
         "inspect": "observation",
         "move": "travel",
         "service": "transaction",
+        "service_purchase": "transaction",
+        "service_inquiry": "transaction",
         "shop": "transaction",
         "fight": "combat",
+        "attack": "combat",
+        "attack_melee": "combat",
+        "attack_ranged": "combat",
     }
     return aliases.get(resolved, resolved)
 
@@ -117,8 +122,10 @@ def _append_scene_beats(
     purposes: list[BeatPurpose] = []
     for change in request.scene_changes:
         if change.kind in {"new_game", "location_changed", "region_changed", "changed_return_visit"}:
+            # Establishing the new scene already tells what changed: a second beat would repeat it.
             purposes.append(BeatPurpose.SCENE_ESTABLISHMENT)
-        purposes.append(BeatPurpose.ENVIRONMENTAL_CHANGE)
+        else:
+            purposes.append(BeatPurpose.ENVIRONMENTAL_CHANGE)
     narrator_ids = {record.evidence_id for record in narrator_evidence}
     for purpose in dict.fromkeys(purposes):
         explicit = tuple(
@@ -159,7 +166,11 @@ def _dialogue_beats(
             if str(value or "").strip()
         )
     )
-    narrator_refs = _evidence_ids(narrator_evidence, *speakers)
+    # What the turn did (a purchase, a quest taken on) is narrated even when someone answers.
+    confirmed = tuple(
+        record.evidence_id for record in narrator_evidence if record.authority is AuthorityClass.CONFIRMED_TURN
+    )
+    narrator_refs = tuple(dict.fromkeys((*confirmed, *_evidence_ids(narrator_evidence, *speakers))))
     beats.append(
         _beat(
             len(beats) + 1,
@@ -267,7 +278,11 @@ def _action_beats(
             evidence_scope="player",
         )
     )
-    if mode in {"combat", "transaction", "failure", "travel"} or request.significance is not NarrativeSignificance.ROUTINE:
+    established = any(beat.purpose is BeatPurpose.SCENE_ESTABLISHMENT for beat in beats)
+    if (
+        mode in {"combat", "transaction", "failure", "travel"} or request.significance is not NarrativeSignificance.ROUTINE
+    ) and not (mode == "travel" and established):
+        # An arrival's consequence is the place itself, which its scene beat establishes.
         beats.append(
             _beat(
                 len(beats) + 1,

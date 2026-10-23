@@ -5,7 +5,7 @@
   }
 
   .character-avatar-type-tabs {
-    background: color-mix(in srgb, var(--c-slate-150-2) 58%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 58%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
     border-radius: 0.65rem;
     display: grid;
@@ -22,9 +22,9 @@
   }
 
   .character-avatar-type-tabs button.is-active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 22%, transparent), color-mix(in srgb, var(--c-blue-580) 18%, transparent));
-    border-color: color-mix(in srgb, var(--c-violet-660) 32%, transparent);
-    color: var(--c-neutral-960);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent-indigo-600) 22%, transparent), color-mix(in srgb, var(--c-blue-580) 18%, transparent));
+    border-color: color-mix(in srgb, var(--accent-violet-660) 32%, transparent);
+    color: var(--fg-neutral-960);
   }
 
   .character-avatar-layout {
@@ -35,7 +35,7 @@
 
   .character-avatar-preview {
     align-self: start;
-    background: color-mix(in srgb, var(--c-slate-150-2) 58%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 58%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 16%, transparent);
     border-radius: 0.75rem;
     overflow: hidden;
@@ -64,12 +64,12 @@
   }
 
   .character-avatar-empty > span {
-    color: var(--c-violet-710);
+    color: var(--fg-violet-710);
     font-size: 1.6rem;
   }
 
   .character-avatar-empty strong {
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     font-size: 0.8rem;
   }
 
@@ -79,7 +79,7 @@
 
   .character-live2d-preview {
     align-content: end;
-    background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--c-indigo-600) 34%, transparent), color-mix(in srgb, var(--c-slate-150-2) 96%, transparent));
+    background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--accent-indigo-600) 34%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 96%, transparent));
     display: grid;
     gap: 0.2rem;
     overflow: hidden;
@@ -88,7 +88,7 @@
   }
 
   .character-live2d-preview::after {
-    background: linear-gradient(transparent, color-mix(in srgb, var(--c-slate-130) 92%, transparent));
+    background: linear-gradient(transparent, color-mix(in srgb, var(--bg-slate-130) 92%, transparent));
     content: '';
     inset: 35% 0 0;
     position: absolute;
@@ -115,7 +115,7 @@
   }
 
   .character-live2d-preview span {
-    color: var(--c-indigo-750);
+    color: var(--fg-indigo-750);
     font-size: 0.6rem;
     font-weight: 800;
     letter-spacing: 0.12em;
@@ -123,12 +123,12 @@
   }
 
   .character-live2d-preview strong {
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     font-size: 0.8rem;
   }
 
   .character-live2d-preview small {
-    color: var(--c-slate-740);
+    color: var(--fg-slate-740);
     font-size: 0.6rem;
   }
 
@@ -152,7 +152,7 @@
   }
 
   .character-avatar-meta strong {
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
     font-size: 0.65rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -167,7 +167,7 @@
   }
 
   .character-avatar-form label {
-    color: var(--c-indigo-780);
+    color: var(--fg-indigo-780);
     display: grid;
     font-size: 0.72rem;
     font-weight: 700;
@@ -187,8 +187,8 @@
 
   .character-avatar-mode-notice {
     align-items: start;
-    background: color-mix(in srgb, var(--c-indigo-600) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 0.65rem;
     display: grid;
     gap: 0.2rem;
@@ -196,20 +196,20 @@
   }
 
   .character-avatar-mode-notice strong {
-    color: var(--c-violet-920);
+    color: var(--fg-violet-920);
     font-size: 0.72rem;
   }
 
   .character-avatar-mode-notice span {
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 0.64rem;
     line-height: 1.4;
   }
 
   .character-avatar-upload-card {
     align-items: start;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-violet-390) 22%, transparent), color-mix(in srgb, var(--c-indigo-190) 76%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 25%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-violet-390) 22%, transparent), color-mix(in srgb, var(--bg-indigo-190) 76%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 25%, transparent);
     border-radius: 0.75rem;
     display: grid;
     gap: 0.75rem;
@@ -220,10 +220,10 @@
   .character-avatar-upload-preview {
     align-items: center;
     aspect-ratio: 1 / 1;
-    background: color-mix(in srgb, var(--c-blue-130) 72%, transparent);
-    border: 1px dashed color-mix(in srgb, var(--c-violet-660) 40%, transparent);
+    background: color-mix(in srgb, var(--bg-blue-130) 72%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--accent-violet-660) 40%, transparent);
     border-radius: 0.65rem;
-    color: var(--c-violet-710);
+    color: var(--fg-violet-710);
     display: flex;
     justify-content: center;
     overflow: hidden;
@@ -246,12 +246,12 @@
   }
 
   .character-avatar-upload-copy > strong {
-    color: var(--c-neutral-960);
+    color: var(--fg-neutral-960);
     font-size: 0.78rem;
   }
 
   .character-avatar-upload-copy > p {
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 0.7rem;
     line-height: 1.45;
     margin: 0;
@@ -270,10 +270,10 @@
   }
 
   .character-avatar-upload-picker span {
-    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 34%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 34%, transparent);
     border-radius: 0.5rem;
-    color: var(--c-indigo-900);
+    color: var(--fg-indigo-900);
     cursor: pointer;
     padding: 0.42rem 0.65rem;
   }
@@ -302,7 +302,7 @@
   }
 
   .character-avatar-upload-consent input {
-    accent-color: var(--c-indigo-600);
+    accent-color: var(--accent-indigo-600);
     margin-top: 0.1rem;
   }
 
@@ -324,10 +324,10 @@
   .character-avatar-progress,
   .character-avatar-status {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-490) 10%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-490) 10%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 12%, transparent);
     border-radius: 0.6rem;
-    color: var(--c-slate-740);
+    color: var(--fg-slate-740);
     display: flex;
     flex-wrap: wrap;
     font-size: 0.68rem;
@@ -337,18 +337,18 @@
   }
 
   .character-avatar-progress strong {
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
   }
 
   .character-avatar-progress small {
-    color: var(--c-red-810);
+    color: var(--fg-red-810);
     flex-basis: 100%;
   }
 
   .character-live2d-intro {
     align-items: start;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-violet-390) 20%, transparent), color-mix(in srgb, var(--c-indigo-190) 82%, transparent));
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-violet-390) 20%, transparent), color-mix(in srgb, var(--bg-indigo-190) 82%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 0.7rem;
     display: flex;
     gap: 0.8rem;
@@ -362,7 +362,7 @@
   }
 
   .character-live2d-intro strong {
-    color: var(--c-slate-940);
+    color: var(--fg-slate-940);
     font-size: 0.76rem;
   }
 
@@ -375,24 +375,24 @@
   }
 
   .character-live2d-intro > span {
-    background: color-mix(in srgb, var(--c-indigo-600) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
     border-radius: 999px;
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     flex: 0 0 auto;
     font-size: 0.58rem;
     padding: 0.28rem 0.5rem;
   }
 
   .character-live2d-loading {
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 0.68rem;
     padding: 0.75rem;
     text-align: center;
   }
 
   .character-live2d-loading.is-error {
-    color: var(--c-red-810);
+    color: var(--fg-red-810);
   }
 
   .character-live2d-model-grid {
@@ -405,14 +405,14 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 0.35rem;
-    scrollbar-color: color-mix(in srgb, var(--c-violet-660) 58%, transparent) color-mix(in srgb, var(--c-slate-150-2) 52%, transparent);
+    scrollbar-color: color-mix(in srgb, var(--accent-violet-660) 58%, transparent) color-mix(in srgb, var(--accent-slate-150-2) 52%, transparent);
     scrollbar-gutter: stable;
     scrollbar-width: thin;
   }
 
   .character-live2d-model-grid:focus-visible {
     border-radius: 0.7rem;
-    outline: 2px solid color-mix(in srgb, var(--c-violet-660) 72%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--accent-violet-660) 72%, transparent);
     outline-offset: 0.2rem;
   }
 
@@ -421,21 +421,26 @@
   }
 
   .character-live2d-model-grid::-webkit-scrollbar-track {
-    background: color-mix(in srgb, var(--c-slate-150-2) 52%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 52%, transparent);
     border-radius: 999px;
   }
 
   .character-live2d-model-grid::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--c-violet-660) 58%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-660) 58%, transparent);
     border-radius: 999px;
   }
 
-  .character-live2d-model-card {
+  /* Scoped to the panel: the chat views' rule for solid action buttons (.assistant-view-panel button) must not
+     restyle these selectable cards. */
+  .character-avatar-panel .character-live2d-model-card {
     align-items: stretch;
-    background: color-mix(in srgb, var(--c-slate-150-2) 68%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 68%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
     border-radius: 0.7rem;
+    color: var(--omnix-text);
     display: grid;
+    font-weight: inherit;
+    justify-self: stretch;
     gap: 0.65rem;
     grid-template-columns: 7.2rem minmax(0, 1fr);
     height: var(--character-live2d-card-height);
@@ -447,11 +452,11 @@
 
   .character-live2d-model-card:hover,
   .character-live2d-model-card.is-selected {
-    border-color: color-mix(in srgb, var(--c-violet-660) 42%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 42%, transparent);
   }
 
   .character-live2d-model-card.is-selected {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-indigo-600) 20%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-indigo-600) 20%, transparent);
   }
 
   .character-live2d-model-card.is-active {
@@ -459,7 +464,7 @@
   }
 
   .character-live2d-model-visual {
-    background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--c-indigo-600) 36%, transparent), color-mix(in srgb, var(--c-slate-150-2) 98%, transparent));
+    background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--accent-indigo-600) 36%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 98%, transparent));
     display: block;
     min-height: 8rem;
     overflow: hidden;
@@ -503,7 +508,7 @@
 
   .character-live2d-model-thumbnail.is-unavailable::after {
     align-items: center;
-    color: var(--c-indigo-750);
+    color: var(--fg-indigo-750);
     content: 'Download to preview';
     display: flex;
     font-size: 0.58rem;
@@ -516,11 +521,11 @@
   }
 
   .character-live2d-model-visual i {
-    background: color-mix(in srgb, var(--c-slate-150-2) 78%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-810) 28%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-810) 28%, transparent);
     border-radius: 999px;
     bottom: 0.45rem;
-    color: var(--c-indigo-900);
+    color: var(--fg-indigo-900);
     font-size: 0.52rem;
     font-style: normal;
     font-weight: 800;
@@ -540,7 +545,7 @@
   }
 
   .character-live2d-model-copy strong {
-    color: var(--c-slate-940);
+    color: var(--fg-slate-940);
     font-size: 0.73rem;
   }
 
@@ -551,7 +556,7 @@
   }
 
   .character-live2d-model-copy em {
-    color: var(--c-indigo-750);
+    color: var(--fg-indigo-750);
     font-size: 0.57rem;
     font-style: normal;
     font-weight: 800;
@@ -559,7 +564,7 @@
   }
 
   .character-live2d-model-card.is-active .character-live2d-model-copy em {
-    color: var(--c-teal-860);
+    color: var(--fg-teal-860);
   }
 
   .character-live2d-model-card:disabled {
@@ -568,7 +573,7 @@
   }
 
   .character-live2d-license-card {
-    background: color-mix(in srgb, var(--c-slate-150-2) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 72%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 16%, transparent);
     border-radius: 0.7rem;
     display: grid;
@@ -577,7 +582,7 @@
   }
 
   .character-live2d-license-card > strong {
-    color: var(--c-slate-940);
+    color: var(--fg-slate-940);
     font-size: 0.74rem;
   }
 
@@ -595,7 +600,7 @@
 
   .character-live2d-license-card > label {
     align-items: start;
-    color: var(--c-indigo-780);
+    color: var(--fg-indigo-780);
     display: flex;
     font-size: 0.63rem;
     gap: 0.45rem;
@@ -603,17 +608,17 @@
   }
 
   .character-live2d-license-card input {
-    accent-color: var(--c-indigo-600);
+    accent-color: var(--accent-indigo-600);
     margin-top: 0.12rem;
   }
 
   .character-live2d-license-card a {
-    color: var(--c-indigo-750);
+    color: var(--fg-indigo-750);
   }
 
   .character-live2d-download-progress {
     align-items: center;
-    color: var(--c-indigo-780);
+    color: var(--fg-indigo-780);
     display: grid;
     font-size: 0.63rem;
     gap: 0.4rem;
@@ -630,7 +635,7 @@
 
   .character-live2d-download-progress-bar span {
     animation: character-live2d-download-progress 1.35s ease-in-out infinite;
-    background: linear-gradient(90deg, var(--c-indigo-540), var(--c-violet-710), var(--c-indigo-540));
+    background: linear-gradient(90deg, var(--accent-indigo-540), var(--accent-violet-710), var(--accent-indigo-540));
     border-radius: inherit;
     height: 100%;
     left: -40%;
@@ -658,7 +663,7 @@
 
   .character-viseme-panel,
   .character-live2d-sync-panel {
-    background: color-mix(in srgb, var(--c-slate-150-2) 50%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 50%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 12%, transparent);
     border-radius: 0.7rem;
     padding: 0.65rem;
@@ -674,7 +679,7 @@
 
   .character-viseme-panel > header strong,
   .character-live2d-sync-panel > header strong {
-    color: var(--c-indigo-920);
+    color: var(--fg-indigo-920);
     font-size: 0.72rem;
   }
 
@@ -685,7 +690,7 @@
   }
 
   .character-live2d-sync-panel > header span {
-    color: var(--c-teal-860);
+    color: var(--fg-teal-860);
   }
 
   .character-viseme-strip {
@@ -696,7 +701,7 @@
   }
 
   .character-viseme-strip > span {
-    background: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-190) 72%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 10%, transparent);
     border-radius: 0.45rem;
     display: grid;
@@ -708,7 +713,7 @@
   }
 
   .character-viseme-strip > span.ready {
-    border-color: color-mix(in srgb, var(--c-indigo-600) 30%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 30%, transparent);
   }
 
   .character-viseme-strip img,
@@ -722,12 +727,12 @@
 
   .character-viseme-strip i {
     background:
-      radial-gradient(ellipse at 50% 58%, color-mix(in srgb, var(--c-red-810) 75%, transparent) 0 15%, color-mix(in srgb, var(--c-red-340) 84%, transparent) 17% 31%, transparent 33%),
-      linear-gradient(135deg, color-mix(in srgb, var(--c-violet-470) 24%, transparent), color-mix(in srgb, var(--c-blue-240-2) 62%, transparent));
+      radial-gradient(ellipse at 50% 58%, color-mix(in srgb, var(--c-red-810) 75%, transparent) 0 15%, color-mix(in srgb, var(--bg-red-340) 84%, transparent) 17% 31%, transparent 33%),
+      linear-gradient(135deg, color-mix(in srgb, var(--accent-violet-470) 24%, transparent), color-mix(in srgb, var(--bg-blue-240-2) 62%, transparent));
   }
 
   .character-viseme-strip small {
-    color: var(--c-slate-740);
+    color: var(--fg-slate-740);
     font-size: 0.54rem;
     overflow: hidden;
     text-overflow: ellipsis;

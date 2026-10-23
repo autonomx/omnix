@@ -5,6 +5,7 @@ Implements the BaseTTSProvider interface for the faster-qwen3-tts library
 with CUDA graph acceleration for real-time voice cloning.
 """
 from app.config.env import env_str as _env_str
+from app.config.env import environment
 
 import base64
 import logging
@@ -405,7 +406,9 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         resolved_model_name = _resolve_qwen3_model_name(self._model_config)
         self._model_config["model_name"] = resolved_model_name
 
-        self.device = self._model_config.get("device", "cuda")
+        # The desktop app on a Mac names the device for the service (Metal); settings name it elsewhere.
+        forced_device = (environment().get("OMNIX_TTS_DEVICE") or "").strip()
+        self.device = forced_device or self._model_config.get("device", "cuda")
         self.dtype = self._model_config.get("dtype", "bfloat16")
         self.max_seq_len = self._model_config.get("max_seq_len", 2048)
 

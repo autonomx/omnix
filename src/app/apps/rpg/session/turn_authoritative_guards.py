@@ -13,6 +13,7 @@ from app.apps.rpg.narration.response_generation.strict_pipeline import StrictRpg
 from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
 from app.apps.rpg.rules.economy.currency import format_currency
 from app.apps.rpg.session.public_state_bridge import (
+    count_player_turn,
     hydrate_simulation_player,
     project_authoritative_player,
 )
@@ -23,6 +24,7 @@ from app.apps.rpg.session.service_runtime import (
 
 from app.apps.rpg.session.state_normalization import (
     _safe_dict as _safe_dict,
+    _safe_list as _safe_list,
 )
 from app.apps.rpg.session.session_runtime_store import (
     load_runtime_session as load_runtime_session,
@@ -356,10 +358,12 @@ def _apply_turn_authoritative(
         session_id=session_id,
         service_result=service_result,
     ):
+        # The turn-start session again (saves are deferred to the commit): this turn is counted on it too.
         latest_session = hydrate_simulation_player(
             copy_state(_safe_dict(load_runtime_session(session_id)))
         )
         if latest_session:
+            latest_session = count_player_turn(latest_session)
             authoritative = service_authoritative_result(
                 _safe_dict(latest_session.get("simulation_state")),
                 guarded_action,
@@ -426,6 +430,10 @@ def _patch_service_postcondition_payload(
     simulation = deepcopy(_safe_dict(authoritative.get("simulation_state")))
     resolved = deepcopy(_safe_dict(authoritative.get("result")))
     visible = _grounded_service_visible_response(resolved)
+    # The narrator tells what the service did (a purchase, what is on offer), not a guess about the provider.
+    outcome_lines = _service_outcome_lines(resolved, visible)
+    if outcome_lines:
+        resolved["outcome_lines"] = [*(resolved.get("outcome_lines") or ()), *outcome_lines]
     patched["simulation_state"] = simulation
     patched["session"] = deepcopy(session)
     patched["resolved_result"] = deepcopy(resolved)
@@ -468,6 +476,32 @@ def _patch_service_postcondition_payload(
         resolved["deterministic_fallback_narration"] = visible["narration"]
     patched["result"] = nested
     return patched
+
+
+def _service_outcome_lines(resolved: dict[str, Any], visible: dict[str, Any]) -> list[str]:
+    service_result = _safe_dict(resolved.get("service_result"))
+    provider = _clean(service_result.get("provider_name")) or "The provider"
+    lines = [_clean(visible.get("narration"))] if visible else []
+    purchase = _safe_dict(service_result.get("purchase"))
+    relief = _safe_dict(_safe_dict(purchase.get("applied_effects")).get("survival_relief"))
+    if relief.get("ok"):
+        eased = {"meal": "hunger", "drink": "thirst"}.get(_clean(service_result.get("service_kind")))
+        if eased:
+            lines.append(f"It eases your {eased}.")
+    offers = [_safe_dict(offer) for offer in _safe_list(service_result.get("offers"))]
+    # Asked for something general ("supplies") among several offers: what is on offer, to choose from.
+    unspecified = _clean(service_result.get("status")) == "purchase_offer_not_found" and len(offers) > 1
+    if purchase.get("blocked") and not unspecified:
+        reason = _clean(purchase.get("blocked_reason")).replace("_", " ")
+        lines.append(f"The purchase from {provider} does not go through: {reason or 'it is refused'}.")
+    if not lines and offers:
+        listed = ", ".join(
+            f"{_clean(offer.get('label'))} ({format_currency(_safe_dict(offer.get('price')))})"
+            for offer in offers if _clean(offer.get("label"))
+        )
+        if listed:
+            lines.append(f"{provider} offers: {listed}." + (" Nothing is sold until you name one." if unspecified else ""))
+    return [line for line in lines if line]
 
 
 def _grounded_service_visible_response(resolved: dict[str, Any]) -> dict[str, Any]:

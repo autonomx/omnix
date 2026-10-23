@@ -163,6 +163,22 @@ export function completeRpgTurnUiSubmission(input: CompleteSubmissionInput): str
   return input.payload.state?.changed_domains || [];
 }
 
+/** The narration written so far for a turn still running, shown in place of its pending line. */
+export function draftRpgTurnUiSubmission(sessionId: string, submissionId: string, text: string): void {
+  const draft = text.trim();
+  if (!draft) return;
+  const current = getRpgTurnUiEntries(sessionId);
+  let changed = false;
+  const next = current.map((entry) => {
+    if (entry.submissionId !== submissionId || entry.tone === 'player' || entry.status !== 'pending' || entry.text === draft) {
+      return entry;
+    }
+    changed = true;
+    return { ...entry, text: draft };
+  });
+  if (changed) setSessionEntries(sessionId, next);
+}
+
 export function failRpgTurnUiSubmission(
   sessionId: string,
   submissionId: string,
@@ -255,6 +271,33 @@ export function refreshPathsForChangedDomains(sessionId: string, changedDomains:
   return [...paths];
 }
 
+const TURN_FAILURE_MESSAGES: Record<string, string> = {
+  dialogue_target_unresolved: 'Who are you speaking to?',
+  target_not_found: 'There is no one or nothing by that name here.',
+  insufficient_funds: 'You cannot afford that.',
+  campaign_launch_blocked: 'This campaign is not ready to play yet.',
+};
+
+/** What the player reads when the turn is refused: the game's own question or reason, never a bare status code. */
+export async function turnFailureMessage(response: Response): Promise<string> {
+  let detail: Record<string, unknown> = {};
+  try {
+    const body = (await response.json()) as Record<string, unknown> | null;
+    const raw = body && typeof body === 'object' ? body.detail : undefined;
+    if (raw && typeof raw === 'object') detail = raw as Record<string, unknown>;
+    else if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  } catch {
+    // Not JSON: fall through to the status.
+  }
+  for (const key of ['clarification', 'message'] as const) {
+    const value = detail[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  const code = typeof detail.error === 'string' ? detail.error : '';
+  if (code) return TURN_FAILURE_MESSAGES[code] ?? `The turn could not be resolved: ${code.replaceAll('_', ' ')}.`;
+  return `Turn failed (${response.status}).`;
+}
+
 /** Returns a function that removes it. `fetchImpl` replaces the rest of the pipeline (tests). */
 export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () => void {
   if (removeTurnMiddleware || typeof globalThis.fetch !== 'function') return () => undefined;
@@ -277,14 +320,18 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
       headers.set('X-Omnix-Rpg-Client-Started', new Date().toISOString());
       beginRpgTurnDiagnostics(sessionId, submissionId, requestStartedMs);
       beginRpgTurnUiSubmission({ sessionId, submissionId, command });
+      const draftPolling = { active: true };
+      void pollTurnDraft(originalFetch, sessionId, submissionId, draftPolling);
       try {
-        const response = await originalFetch(input, { ...init, headers });
+        const response = await originalFetch(input, { ...init, headers }).finally(() => {
+          draftPolling.active = false;
+        });
         const headersReceivedMs = nowRpgClientMs();
         if (!response.ok) {
           if (response.status === 404 || response.status === 405) {
             discardRpgTurnUiSubmission(sessionId, submissionId);
           } else {
-            failRpgTurnUiSubmission(sessionId, submissionId, `Turn failed (${response.status}).`);
+            failRpgTurnUiSubmission(sessionId, submissionId, await turnFailureMessage(response.clone()));
           }
           return response;
         }
@@ -435,6 +482,32 @@ function commandFromBody(body: BodyInit | null | undefined): string {
     // Non-JSON bodies are passed through without affecting the request.
   }
   return 'Continue the adventure.';
+}
+
+const TURN_DRAFT_POLL_MS = 500;
+
+/** Show the narration as the model writes it, until the turn's answer arrives (it replaces the draft). */
+async function pollTurnDraft(
+  fetchImpl: typeof fetch,
+  sessionId: string,
+  submissionId: string,
+  polling: { active: boolean },
+): Promise<void> {
+  const url = `/api/rpg/sessions/${encodeURIComponent(sessionId)}/turn-draft?submission_id=${encodeURIComponent(submissionId)}`;
+  while (polling.active) {
+    await new Promise((resolve) => setTimeout(resolve, TURN_DRAFT_POLL_MS));
+    if (!polling.active) return;
+    try {
+      const response = await fetchImpl(url);
+      if (!response.ok) return;
+      const draft = (await response.json()) as { text?: unknown; done?: unknown };
+      if (!polling.active) return;
+      if (typeof draft.text === 'string') draftRpgTurnUiSubmission(sessionId, submissionId, draft.text);
+      if (draft.done === true) return;
+    } catch {
+      return; // A draft is a convenience: the turn's answer still arrives.
+    }
+  }
 }
 
 async function parseTurnResponse(

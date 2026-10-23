@@ -6,7 +6,7 @@
     box-sizing: border-box;
     height: 15px;
     padding: 0 3px;
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
     font-size: 10px;
     font-variant-numeric: tabular-nums;
     line-height: 15px;
@@ -38,7 +38,7 @@
   }
 
   .trading-go-to-date-popover > small[role='status'] {
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
   }
 
   /* Market status and delayed-data badges beside the symbol. */
@@ -57,7 +57,7 @@
     padding: 1px 5px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 25%, transparent);
     border-radius: 9px;
-    color: var(--c-slate-740);
+    color: var(--fg-slate-740);
     font-size: 9px;
     white-space: nowrap;
   }
@@ -76,7 +76,7 @@
 
   .trading-data-delay {
     border-color: color-mix(in srgb, var(--c-amber-770) 45%, transparent);
-    color: var(--c-amber-770);
+    color: var(--fg-amber-770);
   }
 
   /* Chart settings additions. */
@@ -103,7 +103,7 @@
   }
 
   .trading-chart-templates > strong {
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
     font-size: 9px;
     text-transform: uppercase;
   }

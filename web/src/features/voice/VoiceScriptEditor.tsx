@@ -52,7 +52,7 @@ const theme = EditorView.theme({
   '&': { minHeight: '14rem', fontSize: '13px', backgroundColor: 'transparent' },
   '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace', lineHeight: '1.7' },
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'color-mix(in srgb, currentColor 45%, transparent)' },
-  '.voice-script-speaker': { color: 'var(--c-indigo-600)', fontWeight: '700' },
+  '.voice-script-speaker': { color: 'var(--accent-indigo-600)', fontWeight: '700' },
   '.voice-script-pause': { color: 'var(--c-amber-770)', fontStyle: 'italic' },
 });
 

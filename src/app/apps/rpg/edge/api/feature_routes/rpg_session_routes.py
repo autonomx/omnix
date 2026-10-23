@@ -43,6 +43,7 @@ from app.apps.rpg.edge.api.web_contracts import (
     RpgPresetListResponse,
     RpgSessionListResponse,
     RpgSessionMutationResponse,
+    RpgTurnDraftResponse,
 )
 from app.apps.rpg.edge.api.route_contracts import (
     RpgAbilityCoverageResponse,
@@ -134,18 +135,15 @@ def _ability_coverage_payload(state: dict[str, Any]) -> dict[str, Any]:
 def _environment_snapshot_from_state(
     state: dict[str, Any],
 ) -> dict[str, Any] | None:
-    # A published scenario supplies its own canonical opening environment.  Do
-    # not derive a replacement from the new-game template that was used only to
-    # bootstrap the player sheet (for example, Rusty Flagon Tavern).
-    published_world = state.get("published_world")
-    published_snapshot = state.get("environment_snapshot")
+    # Campaigns launched from a published world before it had a live environment kept a fixed opening snapshot;
+    # their `world.environment` still belongs to the new-game template (the Rusty Flagon Tavern), so keep it.
+    legacy_snapshot = state.get("environment_snapshot")
     if (
-        isinstance(published_world, dict)
-        and isinstance(published_snapshot, dict)
-        and published_snapshot.get("schema_version")
-        == "rpg_published_opening_environment_v1"
+        isinstance(state.get("published_world"), dict)
+        and isinstance(legacy_snapshot, dict)
+        and legacy_snapshot.get("schema_version") == "rpg_published_opening_environment_v1"
     ):
-        return dict(published_snapshot)
+        return dict(legacy_snapshot)
     world_value = state.get("world")
     world = world_value if isinstance(world_value, dict) else {}
     environment_value = world.get("environment")
@@ -387,6 +385,17 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             command=command,
             request=http_request,
         )
+
+    @router.get(
+        "/api/rpg/sessions/{session_id}/turn-draft",
+        tags=["rpg-session"],
+        responses=documented(RpgTurnDraftResponse),
+    )
+    def rpg_turn_draft(session_id: str, submission_id: str = Query(min_length=1, max_length=200)) -> dict[str, Any]:
+        """The narration so far of the caller's own turn in progress, named by its submission id."""
+        from app.apps.rpg.narration.narration_drafts import read_narration_draft
+
+        return read_narration_draft(session_id, submission_id)
 
     @router.post(
         "/api/rpg/local-qualification/dialogue-fixture",

@@ -51,7 +51,7 @@
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-tool-drawer > header .trading-tool-drawer-actions button:hover {
     border-color: color-mix(in srgb, var(--c-blue-630) 62%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-510);
   }
 
@@ -166,7 +166,7 @@
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategies-panel > aside > button:hover {
     border-color: color-mix(in srgb, var(--c-blue-630) 42%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategies-panel > aside > button.active {
@@ -192,7 +192,7 @@
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-notice,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-causality-note {
     border-color: color-mix(in srgb, var(--c-blue-630) 24%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-460);
   }
 
@@ -206,12 +206,12 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .llm-research-bar {
-    border-color: color-mix(in srgb, var(--c-indigo-500) 24%, transparent);
-    background: var(--c-slate-970-2);
+    border-color: color-mix(in srgb, var(--accent-indigo-500) 24%, transparent);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .llm-research-bar strong {
-    color: var(--c-violet-470);
+    color: var(--accent-violet-470);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .candidate-table-wrap,
@@ -244,7 +244,7 @@
   :root[data-omnix-appearance='light'] .trading-workspace .universe-json-editor textarea,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-event-list pre {
     border-color: var(--trading-light-line);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-390);
   }
 

@@ -46,7 +46,14 @@ def campaign_creature_definition(
         }
         if wanted.casefold() in names or wanted_slug in names:
             return definition
-    return None
+    # "the echo wolf with my dagger": the creature the words name (the longest name, as whole words).
+    words = f" {' '.join(re.findall(r'[a-z0-9]+', wanted.casefold()))} "
+    named = [
+        _mapping(raw)
+        for raw in creatures.values()
+        if _slug(_text(_mapping(raw).get("name"))) and f" {_slug(_text(_mapping(raw).get('name'))).replace('-', ' ')} " in words
+    ]
+    return max(named, key=lambda row: len(_text(row.get("name")))) if named else None
 
 
 def instantiate_campaign_creature(

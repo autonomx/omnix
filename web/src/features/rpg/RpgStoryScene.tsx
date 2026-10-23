@@ -68,12 +68,12 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
             <span>{selectedSessionSummary.updatedAt}</span>
           </div>
         </div>
-        <div role="img"
-          className={isPreview ? 'rpg-scene-art rpg-scene-art-has-image' : 'rpg-scene-art'}
-          aria-label={isPreview ? `${selectedSessionSummary.location} scene preview` : `${selectedSessionSummary.location} scene`}
-        >
-          {isPreview ? <img src={SCENE_ART_SRC} alt="" aria-hidden="true" /> : <span className="rpg-live-visual-label">Live scene</span>}
-        </div>
+        {/* Live sessions have no scene art yet: no empty placeholder box. */}
+        {isPreview ? (
+          <div role="img" className="rpg-scene-art rpg-scene-art-has-image" aria-label={`${selectedSessionSummary.location} scene preview`}>
+            <img src={SCENE_ART_SRC} alt="" aria-hidden="true" />
+          </div>
+        ) : null}
       </div>
       <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
       <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">

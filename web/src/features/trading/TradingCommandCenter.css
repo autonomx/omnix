@@ -58,7 +58,7 @@
   .command-center-status-dot.state-degraded { background: var(--c-amber-770); }
   .command-center-status-dot.state-blocked { background: var(--pd-red); }
   .command-center-overall.state-healthy { border-color: color-mix(in srgb, var(--c-teal-700) 35%, transparent); color: var(--pd-green); }
-  .command-center-overall.state-degraded { border-color: color-mix(in srgb, var(--c-amber-770) 40%, transparent); color: var(--c-amber-770); }
+  .command-center-overall.state-degraded { border-color: color-mix(in srgb, var(--c-amber-770) 40%, transparent); color: var(--fg-amber-770); }
   .command-center-overall.state-blocked { border-color: color-mix(in srgb, var(--c-red-640) 40%, transparent); color: var(--pd-red); }
 
   .command-center-grid {

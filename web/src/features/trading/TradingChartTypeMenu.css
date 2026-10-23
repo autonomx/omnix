@@ -38,9 +38,9 @@
     padding: 8px 0;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 30%, transparent);
     border-radius: 8px;
-    background: var(--c-indigo-190);
+    background: var(--bg-indigo-190);
     box-shadow: 0 16px 40px color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
   }
 
   .trading-chart-type-group {
@@ -61,8 +61,8 @@
   }
 
   .trading-chart-type-row.selected {
-    background: var(--c-neutral-320);
-    color: var(--c-neutral-1000);
+    background: var(--bg-neutral-320);
+    color: var(--fg-neutral-1000);
   }
 
   .trading-chart-type-option {
@@ -88,7 +88,7 @@
   }
 
   .trading-chart-type-row.selected .trading-chart-type-favorite {
-    color: var(--c-neutral-1000);
+    color: var(--fg-neutral-1000);
   }
 
   @media(max-width:700px) {
@@ -119,15 +119,15 @@
     display: grid;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 18%, transparent);
     border-radius: 5px;
-    background: var(--c-indigo-190);
+    background: var(--bg-indigo-190);
     padding: 0;
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
   }
 
   .trading-chart-type-trigger:hover,
   .trading-chart-type-trigger[aria-expanded='true'] {
     border-color: color-mix(in srgb, var(--c-blue-630) 70%, transparent);
-    background: var(--c-blue-230);
+    background: var(--bg-blue-230);
   }
 
   .trading-chart-type-option {
@@ -146,7 +146,7 @@
   }
 
   .trading-chart-type-row.selected .trading-chart-type-option:hover {
-    background: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 8%, transparent);
   }
 
   .trading-chart-type-favorite {
@@ -155,19 +155,19 @@
     border-radius: 6px;
     background: transparent;
     padding: 0;
-    color: var(--c-slate-770);
+    color: var(--fg-slate-770);
     font-size: 25px;
     font-weight: 400;
   }
 
   .trading-chart-type-favorite:hover {
     background: color-mix(in srgb, var(--c-blue-630) 12%, transparent);
-    color: var(--c-amber-770);
+    color: var(--fg-amber-770);
   }
 
   .trading-chart-type-row.selected .trading-chart-type-favorite:hover {
-    background: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
-    color: var(--c-yellow-910-3);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 8%, transparent);
+    color: var(--fg-yellow-910-3);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-type-favorite {

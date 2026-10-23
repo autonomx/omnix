@@ -7,6 +7,8 @@ from app.apps.rpg.session.state_normalization import (
 from app.apps.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug as get_pending_companion_offer_debug, hydrate_companion_acceptance_from_pending_offers as hydrate_companion_acceptance_from_pending_offers,
     resolve_pending_companion_offer_response as resolve_pending_companion_offer_response,
+    record_companion_join_offer as record_companion_join_offer,
+    requested_companion as requested_companion,
 )
 import copy
 from app.apps.rpg.genesis.profiles.character_cards import (
@@ -282,6 +284,21 @@ def _try_resolve_pending_companion_offer_at_turn_start(
     """
     simulation_state = _safe_dict(simulation_state)
 
+    # The player asking a present person to come along is that person's offer, accepted in the same breath.
+    requested = requested_companion(simulation_state, player_input)
+    pending_offers = _safe_dict(_safe_dict(simulation_state.get("companion_acceptance_state")).get("pending_offers"))
+    if requested and requested["npc_id"] not in pending_offers:
+        record_companion_join_offer(
+            simulation_state,
+            npc_id=requested["npc_id"],
+            join_intent={
+                "offered": True,
+                "reason": "player_invited",
+                "party_join_eligibility_result": {"name": requested["name"], "current_role": requested["role"]},
+            },
+            tick=tick,
+        )
+
     companion_debug = get_pending_companion_offer_debug(
         simulation_state,
         player_input=player_input,
@@ -334,8 +351,11 @@ def _try_resolve_pending_companion_offer_at_turn_start(
 
     npc_id = _safe_str(acceptance_result.get("npc_id"))
     eligibility = _safe_dict(acceptance_result.get("party_join_eligibility_result"))
+    offer_eligibility = _safe_dict(_safe_dict(acceptance_result.get("offer")).get("party_join_eligibility_result"))
     npc_name = (
-        _safe_str(eligibility.get("name"))
+        _safe_str(_safe_dict(_safe_dict(simulation_state.get("npc_index")).get(npc_id)).get("name"))
+        or _safe_str(offer_eligibility.get("name"))
+        or _safe_str(eligibility.get("name"))
         or npc_id.replace("npc:", "")
         or "Companion"
     )

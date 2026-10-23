@@ -3,12 +3,12 @@
   .rpg-authoring-editor {
     --rpg-gold: var(--c-yellow-770);
     --rpg-gold-soft: color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
-    --rpg-panel: color-mix(in srgb, var(--c-slate-150-2) 88%, transparent);
-    --rpg-panel-strong: color-mix(in srgb, var(--c-slate-150-2) 96%, transparent);
+    --rpg-panel: color-mix(in srgb, var(--accent-slate-150-2) 88%, transparent);
+    --rpg-panel-strong: color-mix(in srgb, var(--accent-slate-150-2) 96%, transparent);
     --rpg-border: color-mix(in srgb, var(--c-yellow-770) 22%, transparent);
     background:
-      radial-gradient(circle at 16% 90%, color-mix(in srgb, var(--c-violet-390) 30%, transparent), transparent 34%),
-      linear-gradient(145deg, color-mix(in srgb, var(--c-indigo-170) 98%, transparent), color-mix(in srgb, var(--c-blue-130) 98%, transparent));
+      radial-gradient(circle at 16% 90%, color-mix(in srgb, var(--bg-violet-390) 30%, transparent), transparent 34%),
+      linear-gradient(145deg, color-mix(in srgb, var(--bg-indigo-170) 98%, transparent), color-mix(in srgb, var(--bg-blue-130) 98%, transparent));
   }
 
   .rpg-authoring-editor-header {
@@ -18,7 +18,7 @@
     padding: 0.85rem 1rem;
     border: 1px solid var(--rpg-border);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--c-slate-150-2) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 90%, transparent);
     backdrop-filter: blur(16px);
   }
 
@@ -42,7 +42,7 @@
   }
 
   .rpg-authoring-editor-layout nav h4 {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     font-size: 0.71rem;
     letter-spacing: 0.14em;
   }
@@ -60,7 +60,7 @@
 
   .rpg-authoring-editor-layout nav button.is-active {
     border-color: color-mix(in srgb, var(--c-yellow-770) 42%, transparent);
-    background: linear-gradient(90deg, color-mix(in srgb, var(--c-indigo-430) 56%, transparent), color-mix(in srgb, var(--c-indigo-260) 46%, transparent));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--accent-indigo-430) 56%, transparent), color-mix(in srgb, var(--bg-indigo-260) 46%, transparent));
     box-shadow: inset 3px 0 0 var(--rpg-gold);
   }
 
@@ -77,7 +77,7 @@
     overflow: visible;
     border-color: var(--rpg-border);
     border-radius: 20px;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-170) 96%, transparent), color-mix(in srgb, var(--c-slate-150-2) 90%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-170) 96%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 90%, transparent));
     box-shadow: 0 22px 70px color-mix(in srgb, var(--c-neutral-0) 24%, transparent);
   }
 
@@ -109,7 +109,7 @@
     padding: 0.75rem;
     border: 1px solid var(--rpg-border);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--c-slate-150-2) 92%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 92%, transparent);
     backdrop-filter: blur(14px);
   }
 
@@ -117,10 +117,10 @@
   .rpg-authoring-collection-toolbar select {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--c-indigo-750) 24%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-indigo-750) 24%, transparent);
     border-radius: 11px;
-    background: color-mix(in srgb, var(--c-blue-130) 78%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-blue-130) 78%, transparent);
+    color: var(--fg-neutral-1000);
     padding: 0.78rem 0.85rem;
   }
 
@@ -132,7 +132,7 @@
   .rpg-authoring-entity-grid article {
     border-color: color-mix(in srgb, var(--c-yellow-770) 26%, transparent);
     border-radius: 18px;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-170) 98%, transparent), color-mix(in srgb, var(--c-slate-150-2) 98%, transparent));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-indigo-170) 98%, transparent), color-mix(in srgb, var(--bg-slate-150-2) 98%, transparent));
     box-shadow: 0 15px 34px color-mix(in srgb, var(--c-neutral-0) 23%, transparent);
     transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   }
@@ -163,7 +163,7 @@
   }
 
   .rpg-authoring-card-highlights > div {
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 10%, transparent);
   }
 
   /* Lore is intentionally one readable vertical stream. */
@@ -188,9 +188,9 @@
     border: 1px solid var(--rpg-border);
     border-radius: 18px;
     background:
-      linear-gradient(180deg, transparent, color-mix(in srgb, var(--c-blue-130) 90%, transparent)),
-      radial-gradient(circle at 58% 22%, color-mix(in srgb, var(--c-indigo-600) 55%, transparent), transparent 34%),
-      linear-gradient(125deg, var(--c-blue-240), var(--c-violet-240) 55%, var(--c-slate-170-2));
+      linear-gradient(180deg, transparent, color-mix(in srgb, var(--bg-blue-130) 90%, transparent)),
+      radial-gradient(circle at 58% 22%, color-mix(in srgb, var(--accent-indigo-600) 55%, transparent), transparent 34%),
+      linear-gradient(125deg, var(--bg-blue-240), var(--bg-violet-240) 55%, var(--bg-slate-170-2));
     overflow: hidden;
   }
 
@@ -208,7 +208,7 @@
     padding: 1.1rem 1.15rem;
     border-color: color-mix(in srgb, var(--c-yellow-770) 18%, transparent);
     border-radius: 16px;
-    background: color-mix(in srgb, var(--c-indigo-170) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 80%, transparent);
   }
 
   .rpg-authoring-document-block h3 {
@@ -235,9 +235,9 @@
 
   .rpg-authoring-record-card {
     padding: 0.85rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 15%, transparent);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--c-blue-130) 46%, transparent);
+    background: color-mix(in srgb, var(--bg-blue-130) 46%, transparent);
   }
 
   .rpg-authoring-record-card header {
@@ -261,14 +261,14 @@
   }
 
   .rpg-authoring-document-toc strong {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
   .rpg-authoring-document-toc a {
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
     font-size: 0.78rem;
     line-height: 1.35;
     text-decoration: none;
@@ -276,7 +276,7 @@
   }
 
   .rpg-authoring-document-toc a:hover {
-    color: var(--c-yellow-910-2);
+    color: var(--fg-yellow-910-2);
   }
 
   /* History and calendar pages become explicit vertical timelines. */
@@ -292,7 +292,7 @@
     bottom: 1.5rem;
     left: 0.75rem;
     width: 1px;
-    background: linear-gradient(var(--rpg-gold), color-mix(in srgb, var(--c-violet-710) 22%, transparent));
+    background: linear-gradient(var(--rpg-gold), color-mix(in srgb, var(--accent-violet-710) 22%, transparent));
   }
 
   .rpg-authoring-document-shell.is-chronicle .rpg-authoring-document-block {
@@ -308,7 +308,7 @@
     height: 0.72rem;
     border: 2px solid var(--rpg-gold);
     border-radius: 50%;
-    background: var(--c-indigo-170);
+    background: var(--bg-indigo-170);
     box-shadow: 0 0 0 5px color-mix(in srgb, var(--c-yellow-770) 8%, transparent);
   }
 
@@ -317,7 +317,7 @@
     align-items: stretch;
     justify-content: flex-end;
     padding: 0;
-    background: color-mix(in srgb, var(--c-slate-100) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-100) 78%, transparent);
   }
 
   .rpg-authoring-entity-detail {
@@ -325,7 +325,7 @@
     max-height: 100vh;
     border-radius: 0;
     border-left: 1px solid color-mix(in srgb, var(--c-yellow-770) 34%, transparent);
-    background: linear-gradient(180deg, var(--c-indigo-170), var(--c-slate-150-2));
+    background: linear-gradient(180deg, var(--bg-indigo-170), var(--bg-slate-150-2));
   }
 
   .rpg-authoring-entity-detail-header {
@@ -333,7 +333,7 @@
     top: 0;
     z-index: 4;
     padding: 1rem 1.2rem;
-    background: color-mix(in srgb, var(--c-slate-150-2) 92%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 92%, transparent);
     backdrop-filter: blur(15px);
   }
 
@@ -394,7 +394,7 @@
 @layer overrides {
   .rpg-authoring-page-heading .eyebrow,
   .rpg-authoring-card-eyebrow {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
   }
 
   .rpg-authoring-entity-card-copy {

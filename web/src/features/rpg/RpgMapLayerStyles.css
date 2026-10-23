@@ -11,7 +11,7 @@
   }
 
   .rpg-map-layer-controls legend {
-    color: var(--mantine-color-dimmed, var(--c-neutral-730));
+    color: var(--mantine-color-dimmed, var(--fg-neutral-730));
     float: left;
     font-size: 0.72rem;
     margin-right: 0.25rem;
@@ -20,7 +20,7 @@
 
   .rpg-map-layer-controls label {
     align-items: center;
-    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    background: color-mix(in srgb, var(--wash-neutral-1000) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
     border-radius: 999px;
     cursor: pointer;
@@ -58,7 +58,7 @@
   }
 
   .rpg-map-route-locked {
-    stroke: var(--c-violet-460);
+    stroke: var(--accent-violet-460);
     stroke-dasharray: 35 28;
   }
 
@@ -116,7 +116,7 @@
   }
 
   .rpg-map-marker-event path {
-    fill: var(--c-violet-570);
+    fill: var(--accent-violet-570);
   }
 
   .rpg-map-marker-npc circle {

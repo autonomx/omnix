@@ -9,25 +9,25 @@
     border-radius: 999px;
     background: color-mix(in srgb, var(--c-blue-660) 10%, transparent);
     padding: 6px 9px;
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 11px;
   }
 
   .trading-header-actions .workspace-saved {
     background: color-mix(in srgb, var(--c-teal-740) 12%, transparent);
-    color: var(--c-teal-860);
+    color: var(--fg-teal-860);
   }
 
   .trading-header-actions .workspace-conflict,
   .trading-header-actions .workspace-error {
     background: color-mix(in srgb, var(--c-red-720) 12%, transparent);
-    color: var(--c-red-810);
+    color: var(--fg-red-810);
   }
 
   .trading-header-actions .workspace-draft,
   .trading-header-actions .workspace-saving {
-    background: color-mix(in srgb, var(--c-yellow-880) 10%, transparent);
-    color: var(--c-yellow-910-3);
+    background: color-mix(in srgb, var(--wash-yellow-880) 10%, transparent);
+    color: var(--fg-yellow-910-3);
   }
 
   .trading-watchlist {
@@ -61,7 +61,7 @@
 
   .trading-watchlist .trading-watchlist-controls > button {
     padding: 4px 0;
-    color: var(--c-slate-790);
+    color: var(--fg-slate-790);
     font-size: 16px;
   }
 
@@ -78,7 +78,7 @@
     width: 34px;
     height: 31px;
     padding: 0 0 5px;
-    color: var(--c-slate-790);
+    color: var(--fg-slate-790);
     font-size: 18px;
     line-height: 1;
   }
@@ -94,7 +94,7 @@
     padding: 5px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 25%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-slate-170-2) 98%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 98%, transparent);
     box-shadow: 0 10px 24px color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
   }
 
@@ -224,7 +224,7 @@
 
   .trading-watchlist-columns .trading-watchlist-sort:hover,
   .trading-watchlist-header-cell:not([aria-sort='none']) .trading-watchlist-sort {
-    color: var(--c-blue-770);
+    color: var(--fg-blue-770);
   }
 
   .trading-watchlist ul {
@@ -295,7 +295,7 @@
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 35%, transparent);
     border-radius: 50%;
     background: color-mix(in srgb, var(--c-blue-660) 15%, transparent);
-    color: var(--c-slate-930);
+    color: var(--fg-slate-930);
     font-size: 10px;
     font-weight: 700;
   }
@@ -311,9 +311,9 @@
   }
 
   .trading-watchlist-asset-icon.apple {
-    border-color: color-mix(in srgb, var(--c-slate-890) 50%, transparent);
-    background: var(--c-slate-280);
-    color: var(--c-neutral-960);
+    border-color: color-mix(in srgb, var(--accent-slate-890) 50%, transparent);
+    background: var(--bg-slate-280);
+    color: var(--fg-neutral-960);
   }
 
   .trading-watchlist-asset-icon.apple svg {
@@ -324,43 +324,43 @@
   .trading-watchlist-asset-icon.nvidia {
     border-color: color-mix(in srgb, var(--c-green-790) 45%, transparent);
     background: color-mix(in srgb, var(--c-green-790) 16%, transparent);
-    color: var(--c-green-790);
+    color: var(--fg-green-790);
   }
 
   .trading-watchlist-asset-icon.tesla {
     border-color: color-mix(in srgb, var(--c-red-640) 50%, transparent);
     background: color-mix(in srgb, var(--c-red-640) 16%, transparent);
-    color: var(--c-red-720);
+    color: var(--fg-red-720);
   }
 
   .trading-watchlist-asset-icon.spy {
     border-color: color-mix(in srgb, var(--c-blue-710-2) 50%, transparent);
     background: color-mix(in srgb, var(--c-blue-710-2) 16%, transparent);
-    color: var(--c-blue-770);
+    color: var(--fg-blue-770);
   }
 
   .trading-watchlist-asset-icon.bitcoin {
     border-color: color-mix(in srgb, var(--c-amber-770) 55%, transparent);
     background: color-mix(in srgb, var(--c-amber-770) 18%, transparent);
-    color: var(--c-amber-770);
+    color: var(--fg-amber-770);
   }
 
   .trading-watchlist-asset-icon.ethereum {
-    border-color: color-mix(in srgb, var(--c-violet-660) 50%, transparent);
-    background: color-mix(in srgb, var(--c-violet-660) 16%, transparent);
-    color: var(--c-indigo-750);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 50%, transparent);
+    background: color-mix(in srgb, var(--accent-violet-660) 16%, transparent);
+    color: var(--fg-indigo-750);
   }
 
   .trading-watchlist-asset-icon.solana {
     border-color: color-mix(in srgb, var(--c-cyan-810) 50%, transparent);
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-cyan-810) 20%, transparent), color-mix(in srgb, var(--c-violet-630) 20%, transparent));
-    color: var(--c-teal-860);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-cyan-810) 20%, transparent), color-mix(in srgb, var(--accent-violet-630) 20%, transparent));
+    color: var(--fg-teal-860);
   }
 
   .trading-watchlist-asset-icon.hyperliquid {
     border-color: color-mix(in srgb, var(--c-sky-800) 50%, transparent);
     background: color-mix(in srgb, var(--c-sky-800) 16%, transparent);
-    color: var(--c-sky-830);
+    color: var(--fg-sky-830);
   }
 
   .trading-watchlist-asset-icon.generic {
@@ -371,7 +371,7 @@
   .trading-watchlist-section-cell > button strong {
     min-width: 0;
     overflow: hidden;
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
     font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -380,14 +380,14 @@
   .trading-watchlist-price,
   .trading-watchlist-change {
     padding: 0 5px;
-    color: var(--c-slate-820);
+    color: var(--fg-slate-820);
     font-size: 10px;
     text-align: right;
     white-space: nowrap;
   }
 
   .trading-watchlist-change.neutral {
-    color: var(--c-slate-820);
+    color: var(--fg-slate-820);
   }
 
   .trading-watchlist-row-actions {
@@ -400,7 +400,7 @@
     padding: 2px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
     border-radius: 4px;
-    background: color-mix(in srgb, var(--c-slate-170-2) 96%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 96%, transparent);
     opacity: 0;
     pointer-events: none;
     transform: translateY(-50%);
@@ -495,7 +495,7 @@
 
   .trading-watchlist-flag.purple,
   .trading-watchlist-flag-swatch.purple {
-    --trading-watchlist-flag-color: var(--c-violet-660);
+    --trading-watchlist-flag-color: var(--accent-violet-660);
   }
 
   .trading-watchlist-flag {
@@ -527,7 +527,7 @@
     padding: 5px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 25%, transparent);
     border-radius: 5px;
-    background: color-mix(in srgb, var(--c-slate-170-2) 98%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 98%, transparent);
     box-shadow: 0 10px 24px color-mix(in srgb, var(--c-neutral-0) 42%, transparent);
   }
 
@@ -590,11 +590,11 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   .trading-watchlist-change.positive {
-    color: var(--c-green-790-2);
+    color: var(--fg-green-790-2);
   }
 
   .trading-watchlist-change.negative {
-    color: var(--c-red-720);
+    color: var(--fg-red-720);
   }
 
   .trading-watchlist .trading-watchlist-row-actions button {

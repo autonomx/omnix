@@ -6,7 +6,7 @@
     border: 1px solid var(--c-blue-310);
     border-left: 3px solid var(--c-blue-490);
     border-radius: 8px;
-    background: var(--c-indigo-210);
+    background: var(--bg-indigo-210);
   }
 
   .trading-automated-review[data-priority='attention'] {
@@ -30,7 +30,7 @@
   }
 
   .trading-automated-review > header strong {
-    color: var(--c-slate-950);
+    color: var(--fg-slate-950);
     font-size: 13px;
   }
 
@@ -43,7 +43,7 @@
     padding: 3px 7px;
     border: 1px solid var(--c-blue-390);
     border-radius: 999px;
-    color: var(--c-slate-740);
+    color: var(--fg-slate-740);
     font-size: 9px;
     font-weight: 800;
     letter-spacing: 0.06em;
@@ -51,12 +51,12 @@
 
   .trading-automated-review[data-priority='attention'] > header > span {
     border-color: color-mix(in srgb, var(--c-yellow-770) 45%, transparent);
-    color: var(--c-yellow-870);
+    color: var(--fg-yellow-870);
   }
 
   .trading-automated-review[data-priority='high'] > header > span {
     border-color: color-mix(in srgb, var(--c-red-720) 45%, transparent);
-    color: var(--c-red-770);
+    color: var(--fg-red-770);
   }
 
   .automated-review-boundary {
@@ -65,11 +65,11 @@
     padding: 9px 10px;
     border: 1px solid var(--c-blue-350);
     border-radius: 6px;
-    background: var(--c-blue-230);
+    background: var(--bg-blue-230);
   }
 
   .automated-review-boundary strong {
-    color: var(--c-slate-820);
+    color: var(--fg-slate-820);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -93,7 +93,7 @@
     padding: 8px 9px;
     border: 1px solid var(--c-blue-310);
     border-radius: 6px;
-    background: var(--c-indigo-190);
+    background: var(--bg-indigo-190);
   }
 
   .automated-review-findings > div > span {
@@ -103,11 +103,11 @@
   }
 
   .automated-review-findings > div[data-severity='attention'] > span {
-    color: var(--c-yellow-770);
+    color: var(--fg-yellow-770);
   }
 
   .automated-review-findings > div[data-severity='high'] > span {
-    color: var(--c-red-720);
+    color: var(--fg-red-720);
   }
 
   .automated-review-findings > div > div {
@@ -117,7 +117,7 @@
 
   .automated-review-findings strong,
   .automated-review-prompts > strong {
-    color: var(--c-slate-820);
+    color: var(--fg-slate-820);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.035em;
@@ -140,7 +140,7 @@
     gap: 5px;
     margin: 0;
     padding-left: 18px;
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 11px;
     line-height: 1.4;
   }
@@ -175,7 +175,7 @@
 
   :root[data-omnix-appearance='light'] .automated-review-boundary {
     border-color: var(--c-slate-930);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .automated-review-findings > div {

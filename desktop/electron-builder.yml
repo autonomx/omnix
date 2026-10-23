@@ -1,0 +1,90 @@
+# The Omnix desktop installers (desktop roadmap DT-6.1, DT-8.4): Windows NSIS and macOS dmg + zip.
+# Run: npm --prefix desktop run dist   (after `python desktop/staging/stage.py all`)
+# The installer carries no GPU runtime and no model: the setup screen downloads them (roadmap D-2).
+appId: com.autonomx.omnix
+productName: Omnix
+copyright: Copyright (c) 2026 Autonomx
+directories:
+  output: release
+  buildResources: build-resources
+files:
+  - out/**
+  - package.json
+  - "!out/**/*.map"
+extraResources:
+  # The staged runtime (python, postgres, ffmpeg, app, web, licenses), built by desktop/staging/stage.py.
+  - from: staging/stage
+    to: runtime
+    filter:
+      - "**/*"
+      # The model services' bytecode ships (app source, standard library); the gateway's packages compile into its
+      # own cache folder.
+      - "!python/**/site-packages/**/__pycache__/**"
+      - "!size-report.json"
+  # The publisher's Google OAuth Desktop client, when the build has one.
+  - from: config
+    to: .
+    filter:
+      - google-oauth.json
+asar: true
+compression: normal
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: brand/out/icon.ico
+  executableName: Omnix
+  # Signing comes from the environment (scripts/dist.mjs, DT-6.2); without it the build is unsigned.
+  signAndEditExecutable: true
+nsis:
+  # No spaces: GitHub renames uploaded files that have them, which would break latest.yml's link.
+  artifactName: ${productName}-Setup-${version}.${ext}
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Omnix
+  deleteAppDataOnUninstall: false
+  include: build-resources/installer.nsh
+  installerIcon: brand/out/icon.ico
+  uninstallerIcon: brand/out/icon.ico
+  license: ../LICENSE
+mac:
+  # dist.mjs builds the architecture of the staged runtime (build-info.json) and turns notarization on when Apple
+  # credentials are in the environment.
+  target:
+    - dmg
+    # electron-updater on macOS updates from the zip.
+    - zip
+  icon: brand/out/icon-1024.png
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build-resources/entitlements.mac.plist
+  entitlementsInherit: build-resources/entitlements.mac.plist
+  notarize: false
+  # MLX and the macOS wheels the runtime packs use need macOS 14 (Sonoma) or later on Apple Silicon.
+  minimumSystemVersion: "14.0"
+  extendInfo:
+    NSUserNotificationAlertStyle: alert
+    # Live voice and dictation: macOS shows this the first time Omnix uses the microphone (DT-8.4).
+    NSMicrophoneUsageDescription: Omnix uses the microphone for live voice chat and dictation.
+dmg:
+  sign: false
+  title: Omnix
+publish:
+  # Releases of autonomx/omnix (DT-6.3; roadmap §7 Q-4), the public repository itself: the updater reads releases
+  # without a token, and none may ship inside the app.
+  provider: github
+  owner: autonomx
+  repo: omnix
+  releaseType: release
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true

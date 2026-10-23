@@ -15,7 +15,7 @@
     min-width: 1.1rem;
     height: 1.1rem;
     place-items: center;
-    border: 2px solid var(--c-slate-150-2);
+    border: 2px solid var(--accent-slate-150-2);
     border-radius: 999px;
     background: var(--c-orange-580);
     color: var(--c-neutral-1000);
@@ -34,9 +34,9 @@
     overflow: auto;
     gap: 0.75rem;
     padding: 1rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-810) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-810) 28%, transparent);
     border-radius: 18px;
-    background: color-mix(in srgb, var(--c-slate-150-2) 96%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 96%, transparent);
     box-shadow: 0 24px 80px color-mix(in srgb, var(--c-neutral-0) 45%, transparent);
     backdrop-filter: blur(18px);
   }
@@ -48,7 +48,7 @@
 
   .rpg-world-command-popover label > span,
   .rpg-world-command-popover header strong {
-    color: var(--c-yellow-920-2);
+    color: var(--fg-yellow-920-2);
     font-size: 0.72rem;
     font-weight: 900;
     letter-spacing: 0.08em;
@@ -58,11 +58,11 @@
   .rpg-world-command-popover input {
     box-sizing: border-box;
     width: 100%;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 28%, transparent);
     border-radius: 11px;
     outline: none;
-    background: color-mix(in srgb, var(--c-blue-130) 82%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-blue-130) 82%, transparent);
+    color: var(--fg-neutral-1000);
     padding: 0.78rem 0.85rem;
   }
 
@@ -86,20 +86,20 @@
     padding: 0.7rem;
     border: 1px solid transparent;
     border-radius: 11px;
-    background: color-mix(in srgb, var(--c-indigo-210) 48%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-indigo-210) 48%, transparent);
+    color: var(--fg-neutral-1000);
     text-align: left;
   }
 
   .rpg-world-command-popover button:hover,
   .rpg-world-command-popover button:focus-visible {
-    border-color: color-mix(in srgb, var(--c-violet-710) 32%, transparent);
-    background: color-mix(in srgb, var(--c-violet-380) 35%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-710) 32%, transparent);
+    background: color-mix(in srgb, var(--bg-violet-380) 35%, transparent);
   }
 
   .rpg-world-command-popover button > span {
     grid-row: 1 / span 2;
-    color: var(--c-yellow-920-2);
+    color: var(--fg-yellow-920-2);
     font-size: 1.05rem;
     text-align: center;
   }
@@ -112,7 +112,7 @@
   }
 
   .rpg-world-command-popover button small {
-    color: color-mix(in srgb, var(--c-slate-870) 72%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 72%, transparent);
     font-size: 0.72rem;
   }
 
@@ -121,11 +121,11 @@
     align-items: center;
     justify-content: space-between;
     padding-bottom: 0.7rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-violet-710) 16%, transparent);
   }
 
   .rpg-world-command-popover header span {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     font-size: 0.74rem;
     font-weight: 800;
   }
@@ -140,10 +140,10 @@
     margin-left: 0.2rem;
     padding: 0;
     place-items: center;
-    border-color: color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--c-indigo-210) 64%, transparent);
-    color: var(--c-neutral-1000);
+    background: color-mix(in srgb, var(--bg-indigo-210) 64%, transparent);
+    color: var(--fg-neutral-1000);
     font-size: 1.25rem;
     line-height: 1;
     text-align: center;
@@ -151,7 +151,7 @@
 
   .rpg-world-command-popover > p {
     margin: 0;
-    color: color-mix(in srgb, var(--c-slate-870) 76%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 76%, transparent);
     font-size: 0.82rem;
     line-height: 1.5;
   }

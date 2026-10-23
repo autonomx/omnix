@@ -73,9 +73,9 @@ def test_scene_change_beats_precede_current_turn_dialogue() -> None:
         metadata={"response_mode": "dialogue"},
     )
     plan = DeterministicBeatPlanner().plan(request, bran_fixture_evidence())
-    assert [beat.purpose for beat in plan.beats[:4]] == [
+    # Establishing the new scene tells what changed; no second environmental beat repeats it.
+    assert [beat.purpose for beat in plan.beats[:3]] == [
         BeatPurpose.SCENE_ESTABLISHMENT,
-        BeatPurpose.ENVIRONMENTAL_CHANGE,
         BeatPurpose.PHYSICAL_REACTION,
         BeatPurpose.DIRECT_ANSWER,
     ]
@@ -95,3 +95,19 @@ def test_fast_routine_dialogue_remains_bounded() -> None:
     assert plan.word_budget == (25, 90)
     assert len(plan.beats) <= 3
     assert BeatPurpose.ULTIMATUM not in {beat.purpose for beat in plan.beats}
+
+
+def test_a_melee_attack_is_planned_as_combat_not_as_conversation() -> None:
+    request = TurnPresentationRequest(
+        request_id="request:wolf",
+        turn_id="turn:wolf",
+        campaign_id="campaign:wolf",
+        player_input="I attack the Echo Wolf.",
+        authoritative_outcome={"action_type": "attack_melee"},
+        significance=NarrativeSignificance.NOTABLE,
+        presentation_profile=PresentationProfile.IMMERSIVE,
+    )
+    plan = DeterministicBeatPlanner().plan(request, bran_fixture_evidence())
+    assert plan.mode == "combat"
+    assert [beat.purpose for beat in plan.beats[:2]] == [BeatPurpose.RESOLVED_ACTION, BeatPurpose.CONSEQUENCE]
+    assert all(beat.kind is not BeatKind.DIALOGUE for beat in plan.beats)

@@ -18,6 +18,7 @@ from app.apps.rpg.session.semantic_interaction_runtime import (
 )
 from app.apps.rpg.session.combat_intent import (
     _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
+    _runtime_owned as _runtime_owned,
 )
 from app.apps.rpg.session.state_normalization import (
     _ensure_simulation_state as _ensure_simulation_state, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
@@ -443,6 +444,9 @@ def _update_interactions_and_combat_fallback(ctx) -> bool:
         ctx.last_chance_candidate["combat_state"] = (
             _find_active_combat_state_deep(ctx.authoritative)
         )
+    # The general combat runtime has already resolved this turn of its own fight; it is no rescue's to redo.
+    if _runtime_owned(_safe_dict(ctx.last_chance_candidate.get("combat_state"))):
+        ctx.last_chance_candidate["combat_state"] = {}
     return False
 
 

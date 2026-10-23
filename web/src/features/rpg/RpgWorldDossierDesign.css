@@ -23,8 +23,8 @@
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 20px;
     background:
-      radial-gradient(circle at 78% 3%, color-mix(in srgb, var(--c-indigo-430) 22%, transparent), transparent 32%),
-      linear-gradient(180deg, color-mix(in srgb, var(--c-slate-150-2) 98%, transparent), color-mix(in srgb, var(--c-blue-130) 98%, transparent));
+      radial-gradient(circle at 78% 3%, color-mix(in srgb, var(--accent-indigo-430) 22%, transparent), transparent 32%),
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-slate-150-2) 98%, transparent), color-mix(in srgb, var(--bg-blue-130) 98%, transparent));
     box-shadow: 0 24px 72px color-mix(in srgb, var(--c-neutral-0) 30%, transparent);
   }
 
@@ -47,7 +47,7 @@
 
   .rpg-authoring-dossier-subtitle {
     max-width: 68ch;
-    color: color-mix(in srgb, var(--c-slate-930) 82%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 82%, transparent);
     font-size: 1.04rem;
     line-height: 1.55;
   }
@@ -59,7 +59,7 @@
     padding: 0.75rem;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 18%, transparent);
     border-radius: 18px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-220) 82%, transparent), color-mix(in srgb, var(--c-indigo-210-2) 62%, transparent));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-indigo-220) 82%, transparent), color-mix(in srgb, var(--bg-indigo-210-2) 62%, transparent));
   }
 
   .rpg-authoring-detail-backdrop.is-rich-dossier .rpg-authoring-entity-detail-art {
@@ -84,7 +84,7 @@
     padding: 1.1rem 1.25rem 1.1rem 3.2rem;
     border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 14px;
-    background: linear-gradient(90deg, color-mix(in srgb, var(--c-violet-290) 58%, transparent), color-mix(in srgb, var(--c-indigo-190) 70%, transparent));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--bg-violet-290) 58%, transparent), color-mix(in srgb, var(--bg-indigo-190) 70%, transparent));
   }
 
   .rpg-authoring-dossier-quote::before {
@@ -92,7 +92,7 @@
     position: absolute;
     top: 0.35rem;
     left: 1rem;
-    color: var(--c-yellow-770);
+    color: var(--fg-yellow-770);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 3rem;
     line-height: 1;
@@ -100,7 +100,7 @@
 
   .rpg-authoring-dossier-quote p {
     margin: 0;
-    color: var(--c-yellow-910-2);
+    color: var(--fg-yellow-910-2);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 1.06rem;
     font-style: italic;
@@ -110,7 +110,7 @@
   .rpg-authoring-dossier-quote cite {
     display: block;
     margin-top: 0.55rem;
-    color: color-mix(in srgb, var(--c-slate-930) 68%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-930) 68%, transparent);
     font-size: 0.84rem;
     font-style: normal;
   }
@@ -133,7 +133,7 @@
     margin-bottom: 0.85rem;
     padding: 1.2rem 1.25rem;
     border-color: color-mix(in srgb, var(--c-yellow-770) 15%, transparent);
-    background: color-mix(in srgb, var(--c-indigo-170) 74%, transparent);
+    background: color-mix(in srgb, var(--bg-indigo-170) 74%, transparent);
     scroll-margin-top: 1rem;
   }
 
@@ -151,13 +151,13 @@
   .rpg-authoring-dossier-facts h3::before,
   .rpg-authoring-dossier-related h3::before {
     content: '✦';
-    color: var(--c-yellow-770);
+    color: var(--fg-yellow-770);
     font-size: 0.78rem;
   }
 
   .rpg-authoring-dossier-section p {
     max-width: 82ch;
-    color: color-mix(in srgb, var(--c-neutral-960) 92%, transparent);
+    color: color-mix(in srgb, var(--fg-neutral-960) 92%, transparent);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 1.02rem;
     line-height: 1.82;
@@ -177,13 +177,13 @@
   .rpg-authoring-dossier-facts > dl > div {
     min-width: 0;
     padding: 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--c-violet-710) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-710) 14%, transparent);
     border-radius: 11px;
-    background: color-mix(in srgb, var(--c-blue-130) 50%, transparent);
+    background: color-mix(in srgb, var(--bg-blue-130) 50%, transparent);
   }
 
   .rpg-authoring-dossier-facts dt {
-    color: var(--c-yellow-770);
+    color: var(--fg-yellow-770);
     font-size: 0.69rem;
     font-weight: 800;
     letter-spacing: 0.07em;
@@ -193,7 +193,7 @@
   .rpg-authoring-dossier-facts dd {
     margin: 0.35rem 0 0;
     overflow-wrap: anywhere;
-    color: color-mix(in srgb, var(--c-neutral-1000) 94%, transparent);
+    color: color-mix(in srgb, var(--fg-neutral-1000) 94%, transparent);
     line-height: 1.4;
   }
 
@@ -208,7 +208,7 @@
 
   .rpg-authoring-dossier-toc strong {
     margin-bottom: 0.25rem;
-    color: var(--c-yellow-770);
+    color: var(--fg-yellow-770);
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -216,7 +216,7 @@
 
   .rpg-authoring-dossier-toc a {
     padding: 0.38rem 0.25rem;
-    color: color-mix(in srgb, var(--c-slate-870) 86%, transparent);
+    color: color-mix(in srgb, var(--fg-slate-870) 86%, transparent);
     font-size: 0.8rem;
     line-height: 1.35;
     text-decoration: none;
@@ -224,7 +224,7 @@
 
   .rpg-authoring-dossier-toc a:hover,
   .rpg-authoring-dossier-toc a:focus-visible {
-    color: var(--c-yellow-910-2);
+    color: var(--fg-yellow-910-2);
   }
 
   .rpg-authoring-dossier-related {

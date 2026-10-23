@@ -4,6 +4,8 @@ import {
   rpgWorldLibraryClient,
   type RpgWorldSummary,
 } from './api/rpgWorldLibraryClient';
+import { RpgCommunityWorlds } from './RpgCommunityWorlds';
+import { RpgSharedWorldAdoptDialog } from './RpgSharedWorldAdoptDialog';
 import { RpgWorldCampaignSetup } from './RpgWorldCampaignSetup';
 import { RpgWorldCard } from './RpgWorldCard';
 import {
@@ -12,6 +14,8 @@ import {
 } from './RpgWorldCompletionModels';
 import { RpgWorldDeleteDialog } from './RpgWorldDeleteDialog';
 import { RpgWorldEditorShell } from './RpgWorldEditorShell';
+import { RpgWorldShareDialog } from './RpgWorldShareDialog';
+import { sharedWorldInfo } from './rpgSharedWorld';
 import './RpgWorldAuthoringWorkspace.css';
 
 interface RpgWorldAuthoringWorkspaceProps {
@@ -34,6 +38,13 @@ function timestamp(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function sharedLabel(world: RpgWorldSummary): string | null {
+  const info = sharedWorldInfo(world);
+  if (!info.shared) return null;
+  if (!info.adopted) return 'Shared · review to play';
+  return info.author ? `Shared by @${info.author}` : 'Shared';
+}
+
 function worldState(world: RpgWorldSummary): string {
   const generation = world.generation;
   if (world.status === 'archived') return 'Archived';
@@ -49,6 +60,9 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [pendingDeleteWorld, setPendingDeleteWorld] = useState<RpgWorldSummary | null>(null);
+  const [tab, setTab] = useState<'mine' | 'community'>('mine');
+  const [reviewWorldId, setReviewWorldId] = useState('');
+  const [sharingWorld, setSharingWorld] = useState<RpgWorldSummary | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [genre, setGenre] = useState('classic_fantasy');
@@ -64,6 +78,16 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
   const openEditor = (worldId: string, replace = false, sectionId = 'overview') => {
     setView({ kind: 'editor', worldId });
     pushWorldEditorRoute({ worldId, sectionId }, replace);
+  };
+  const openCampaignSetup = (worldId: string) => {
+    pushWorldEditorRoute(null);
+    setView({ kind: 'campaignSetup', worldId });
+  };
+  // A world made elsewhere is reviewed and adopted before its openings can launch.
+  const playWorld = (world: RpgWorldSummary) => {
+    const info = sharedWorldInfo(world);
+    if (info.shared && !info.adopted) setReviewWorldId(world.id);
+    else openCampaignSetup(world.id);
   };
   const openLibrary = (replace = false) => {
     setView({ kind: 'library' });
@@ -122,12 +146,18 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
   }, [libraryQuery.data?.worlds, search, statusFilter]);
 
   if (view.kind === 'library') {
+    const reviewWorld = libraryQuery.data?.worlds.find((world) => world.id === reviewWorldId);
     return (
       <section className="rpg-authoring-library" aria-label="World library">
         <header className="rpg-authoring-heading">
           <div><p className="eyebrow">RPG authoring</p><h2>Worlds</h2><p>Create reusable worlds, then edit or play them.</p></div>
           <div><button className="rpg-secondary-button" type="button" onClick={onBack}>Back to Play</button><button type="button" onClick={() => setShowCreate(true)}>Create New World</button></div>
         </header>
+        <div className="rpg-authoring-tabs" role="tablist" aria-label="Worlds">
+          <button aria-selected={tab === 'mine'} className={tab === 'mine' ? 'is-active' : undefined} onClick={() => setTab('mine')} role="tab" type="button">My worlds</button>
+          <button aria-selected={tab === 'community'} className={tab === 'community' ? 'is-active' : undefined} onClick={() => setTab('community')} role="tab" type="button">Community</button>
+        </div>
+        {tab === 'community' ? <RpgCommunityWorlds onPlay={openCampaignSetup} onReview={(worldId) => { setTab('mine'); setReviewWorldId(worldId); }} /> : <>
         <div className="rpg-authoring-toolbar">
           <input aria-label="Search world library" placeholder="Search by title, genre, or tone…" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
           <select aria-label="Filter worlds" value={statusFilter} onChange={(event) => setStatusFilter(event.currentTarget.value)}>
@@ -145,12 +175,13 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
               <RpgWorldCard
                 key={world.id}
                 world={world}
-                facts={<><span>{worldState(world)}</span><span>{scenarioCount} opening{scenarioCount === 1 ? '' : 's'}</span><span>{campaignCount} campaign{campaignCount === 1 ? '' : 's'}</span></>}
-                actions={<><button className="rpg-secondary-button" type="button" onClick={() => openEditor(world.id)}>Edit</button><button type="button" onClick={() => { pushWorldEditorRoute(null); setView({ kind: 'campaignSetup', worldId: world.id }); }}>Play</button></>}
+                facts={<><span>{worldState(world)}</span>{sharedLabel(world) ? <span>{sharedLabel(world)}</span> : null}<span>{scenarioCount} opening{scenarioCount === 1 ? '' : 's'}</span><span>{campaignCount} campaign{campaignCount === 1 ? '' : 's'}</span></>}
+                actions={<><button className="rpg-secondary-button" type="button" onClick={() => openEditor(world.id)}>Edit</button><button type="button" onClick={() => playWorld(world)}>{sharedWorldInfo(world).shared && !sharedWorldInfo(world).adopted ? 'Review & adopt' : 'Play'}</button></>}
                 footer={(
                   <details className="rpg-world-card-more">
                     <summary>More</summary>
                     <button className="rpg-secondary-button" type="button" onClick={() => lifecycle.mutate(world)}>{world.status === 'archived' ? 'Restore' : 'Archive'}</button>
+                    {sharedWorldInfo(world).shared ? null : <button className="rpg-secondary-button" type="button" onClick={() => setSharingWorld(world)}>Share to community</button>}
                     <button className="rpg-danger-button" type="button" onClick={() => setPendingDeleteWorld(world)}>Delete world</button>
                   </details>
                 )}
@@ -159,6 +190,16 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
           })}
         </div>
         {!libraryQuery.isPending && !visibleWorlds.length ? <p>No worlds match this view.</p> : null}
+        </>}
+        {reviewWorld ? (
+          <RpgSharedWorldAdoptDialog
+            world={reviewWorld}
+            onAdopted={(worldId) => { setReviewWorldId(''); openCampaignSetup(worldId); }}
+            onCancel={() => setReviewWorldId('')}
+            onEdit={(worldId) => { setReviewWorldId(''); openEditor(worldId); }}
+          />
+        ) : null}
+        {sharingWorld ? <RpgWorldShareDialog world={sharingWorld} onClose={() => setSharingWorld(null)} /> : null}
         {showCreate ? (
           <div className="rpg-authoring-modal" role="dialog" aria-modal="true" aria-label="Create new world">
             <form onSubmit={(event) => { event.preventDefault(); createWorld.mutate(); }}>
@@ -204,7 +245,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
   return (
     <RpgWorldEditorShell
       onBack={() => openLibrary()}
-      onPlay={() => { pushWorldEditorRoute(null); setView({ kind: 'campaignSetup', worldId: view.worldId }); }}
+      onPlay={() => playWorld(world)}
       world={world}
       worldId={view.worldId}
     />

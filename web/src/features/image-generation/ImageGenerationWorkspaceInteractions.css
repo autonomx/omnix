@@ -1,7 +1,7 @@
 @layer features {
   .image-model-control {
     align-items: center;
-    background: color-mix(in srgb, var(--c-slate-170-2) 84%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 84%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-sky-610) 22%, transparent);
     border-radius: 0.8rem;
     display: grid;
@@ -17,7 +17,7 @@
   }
 
   .image-model-control.unloaded {
-    border-color: color-mix(in srgb, var(--c-indigo-600) 35%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 35%, transparent);
   }
 
   .image-model-control-copy {
@@ -32,18 +32,18 @@
   }
 
   .image-model-control-title-row strong {
-    color: var(--c-neutral-960);
+    color: var(--fg-neutral-960);
     display: block;
     font-size: 0.78rem;
   }
 
   .image-model-control-title-row p {
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     margin: 0.12rem 0 0;
   }
 
   .image-model-control-icon {
-    color: var(--c-violet-660);
+    color: var(--accent-violet-660);
     font-size: 1.1rem;
   }
 
@@ -63,7 +63,7 @@
   }
 
   .image-quality-value {
-    color: var(--c-blue-710);
+    color: var(--fg-blue-710);
     font-size: 0.62rem;
     margin-left: auto;
     white-space: nowrap;
@@ -72,7 +72,7 @@
   .image-job-footer button {
     background: transparent;
     border: 0;
-    color: var(--c-violet-710);
+    color: var(--fg-violet-710);
     cursor: pointer;
     font-size: 0.64rem;
     padding: 0;
@@ -80,7 +80,7 @@
 
   .image-job-footer button:hover,
   .image-job-footer button:focus-visible {
-    color: var(--c-violet-810);
+    color: var(--fg-violet-810);
     outline: none;
     text-decoration: underline;
   }
@@ -90,10 +90,10 @@
   }
 
   .image-clear-filters {
-    background: color-mix(in srgb, var(--c-slate-170-2) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 90%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-sky-610) 22%, transparent);
     border-radius: 0.52rem;
-    color: var(--c-slate-810);
+    color: var(--fg-slate-810);
     cursor: pointer;
     min-height: 2.45rem;
     padding: 0 0.72rem;
@@ -102,9 +102,9 @@
 
   .image-clear-filters:hover,
   .image-clear-filters:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 14%, transparent);
-    border-color: color-mix(in srgb, var(--c-indigo-600) 62%, transparent);
-    color: var(--c-slate-940);
+    background: color-mix(in srgb, var(--accent-indigo-600) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-indigo-600) 62%, transparent);
+    color: var(--fg-slate-940);
     outline: none;
   }
 
@@ -122,7 +122,7 @@
   }
 
   .image-asset-select:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--c-indigo-600) 80%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--accent-indigo-600) 80%, transparent);
     outline-offset: -2px;
   }
 
@@ -145,13 +145,13 @@
   }
 
   .image-asset-actions .mantine-Button-root {
-    color: var(--c-slate-740);
+    color: var(--fg-slate-740);
     font-size: 0.58rem;
     padding-inline: 0.38rem;
   }
 
   .image-asset-actions .mantine-Button-root:hover {
-    color: var(--c-indigo-900);
+    color: var(--fg-indigo-900);
   }
 
   .image-assets-grid.list .image-asset-card {

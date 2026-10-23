@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Dict, List
 from app.apps.rpg.foundation.safe_values import safe_list as _safe_list, safe_str as _safe_str
@@ -249,24 +250,79 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
 }
 
 
-def get_service_provider(provider_id: str) -> Dict[str, Any]:
-    provider = SERVICE_PROVIDERS.get(_safe_str(provider_id))
+def _world_services(simulation_state: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    """A session's own providers and offers (a published world's); ``None`` for the starter town's catalog."""
+    world_model = simulation_state.get("world_model") if isinstance(simulation_state, dict) else None
+    if not isinstance(world_model, dict) or not world_model.get("locations"):
+        return None
+    return {"providers": dict(world_model.get("providers") or {}), "offers": dict(world_model.get("offers") or {})}
+
+
+def service_providers(simulation_state: Dict[str, Any] | None = None) -> Dict[str, Dict[str, Any]]:
+    """Every provider the session can trade with: its world's own, or the starter town's."""
+    world = _world_services(simulation_state)
+    return deepcopy(world["providers"] if world is not None else SERVICE_PROVIDERS)
+
+
+def get_service_provider(provider_id: str, simulation_state: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    world = _world_services(simulation_state)
+    catalog = world["providers"] if world is not None else SERVICE_PROVIDERS
+    provider = catalog.get(_safe_str(provider_id))
     return deepcopy(provider) if provider else {}
 
 
-def get_provider_offers(provider_id: str, service_kind: str = "") -> List[Dict[str, Any]]:
+def get_provider_offers(
+    provider_id: str,
+    service_kind: str = "",
+    simulation_state: Dict[str, Any] | None = None,
+) -> List[Dict[str, Any]]:
     provider_id = _safe_str(provider_id)
     service_kind = _safe_str(service_kind)
+    world = _world_services(simulation_state)
+    catalog = world["offers"] if world is not None else SERVICE_OFFERS
     offers = []
-    for offer in SERVICE_OFFERS.get(provider_id, []):
+    for offer in catalog.get(provider_id, []):
         if service_kind and _safe_str(offer.get("service_kind")) != service_kind:
             continue
         offers.append(deepcopy(offer))
     return offers
 
 
-def find_provider_by_text(text: str) -> Dict[str, Any]:
+# What a request asks for, when it names no provider: a room, food, a drink, goods, a repair, news.
+_KIND_WORDS = (
+    ("lodging", ("room", "rent", "lodging", "bed", "stay", "sleep")),
+    ("meal", ("meal", "food", "stew", "bread", "ration", "rations", "provision", "provisions", "eat")),
+    ("drink", ("drink", "ale", "wine", "beer")),
+    ("shop_goods", ("shop", "buy", "sell", "sells", "merchant", "goods", "supplies", "potion")),
+    ("repair", ("repair", "fix", "mend")),
+    ("paid_information", ("rumor", "rumour", "news", "information", "register", "registry")),
+)
+
+
+def _find_world_provider(text_l: str, world: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    from app.apps.rpg.rules.location_registry import current_location_id
+
+    here = current_location_id(simulation_state)
+    providers = sorted(world["providers"].values(), key=lambda provider: provider.get("location_id") != here)
+    words = set(re.findall(r"[a-z']+", text_l))
+    for provider in providers:
+        names = [_safe_str(provider.get("provider_name")).lower()]
+        names.extend(_safe_str(alias).lower() for alias in _safe_list(provider.get("aliases")))
+        if any(name and (name in words or (" " in name and name in text_l)) for name in names):
+            return deepcopy(provider)
+    for kind, kind_words in _KIND_WORDS:
+        if words & set(kind_words):
+            for provider in providers:
+                if provider.get("location_id") == here and kind in _safe_list(provider.get("service_kinds")):
+                    return deepcopy(provider)
+    return {}
+
+
+def find_provider_by_text(text: str, simulation_state: Dict[str, Any] | None = None) -> Dict[str, Any]:
     text_l = _safe_str(text).lower()
+    world = _world_services(simulation_state)
+    if world is not None:
+        return _find_world_provider(text_l, world, simulation_state or {})
     for provider in SERVICE_PROVIDERS.values():
         aliases = [_safe_str(provider.get("provider_name")).lower()]
         aliases.extend(_safe_str(alias).lower() for alias in _safe_list(provider.get("aliases")))

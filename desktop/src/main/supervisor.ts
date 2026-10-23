@@ -1,0 +1,171 @@
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import { packsFolder, type DesktopPaths } from './paths';
+import type { DesktopSettings } from './settings';
+
+/** supervisor.log -> .1 -> .2 -> .3 once it passes 10 MB, as app.desktop.supervise rotates the backend's logs. */
+export function rotateLog(path: string, maxBytes = 10 * 2 ** 20, keep = 3): void {
+  try {
+    if (!existsSync(path) || statSync(path).size <= maxBytes) return;
+    rmSync(`${path}.${keep}`, { force: true });
+    for (let index = keep - 1; index >= 1; index -= 1) {
+      if (existsSync(`${path}.${index}`)) renameSync(`${path}.${index}`, `${path}.${index + 1}`);
+    }
+    renameSync(path, `${path}.1`);
+  } catch {
+    // A log that cannot be rotated now is rotated at the next start.
+  }
+}
+
+export type SupervisorEvent =
+  | { event: 'step'; step: string; message: string }
+  | { event: 'ready'; origin: string; first_run: boolean }
+  | { event: 'error'; step: string; message: string; log?: string | null; snapshot?: string | null }
+  | { event: 'restored'; snapshot: string }
+  | { event: 'result'; id: number; cmd: string; [key: string]: unknown }
+  | { event: 'service'; service: string; state: string; message: string; [key: string]: unknown }
+  | { event: 'stopped' };
+
+// Only what Windows Python needs is passed on; app.desktop.env builds the rest (desktop roadmap §4.2).
+const SYSTEM_VARIABLES = [
+  'SystemRoot', 'SYSTEMROOT', 'windir', 'SystemDrive', 'TEMP', 'TMP', 'USERPROFILE', 'USERNAME', 'LOCALAPPDATA',
+  'APPDATA', 'PROGRAMDATA', 'COMPUTERNAME', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'OS', 'PATH', 'Path',
+  'PATHEXT', 'HOME', 'LANG', 'LC_ALL', 'TZ',
+  // NVML (nvidia-smi, the hardware probe) fails to initialise without the Program Files folders.
+  'ProgramFiles', 'ProgramW6432', 'ProgramFiles(x86)', 'CommonProgramFiles', 'CommonProgramW6432',
+  // macOS: the per-user temp folder, the account name and CoreFoundation's text encoding.
+  'TMPDIR', 'USER', 'LOGNAME', '__CF_USER_TEXT_ENCODING',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
+];
+
+/**
+ * The backend supervisor (app.desktop.supervise) as seen from the shell: one child process, JSON events on its
+ * stdout, JSON commands on its stdin. Closing stdin (quit, or this process dying) stops the whole backend.
+ */
+export class BackendSupervisor extends EventEmitter {
+  private child: ChildProcessWithoutNullStreams | null = null;
+  private nextId = 1;
+  private readonly pending = new Map<number, (result: Record<string, unknown>) => void>();
+  ready: { origin: string; first_run: boolean } | null = null;
+
+  constructor(private readonly paths: DesktopPaths, private readonly settings: DesktopSettings,
+              private readonly secrets: Record<string, string>, private readonly googleClientId: string | null = null) {
+    super();
+  }
+
+  launchConfigPath(): string {
+    return join(this.paths.data, 'launch.json');
+  }
+
+  writeLaunchConfig(): void {
+    mkdirSync(this.paths.data, { recursive: true });
+    writeFileSync(this.launchConfigPath(), JSON.stringify({
+      install_root: this.paths.resources,
+      data_dir: this.paths.data,
+      http_port: this.settings.httpPort,
+      pg_port: this.settings.pgPort,
+      metrics_port: this.settings.metricsPort,
+      notify_port: this.settings.notifyPort,
+      // The model services' ports, chosen once: never a developer Omnix's 5101/5201/5301 (desktop roadmap §4.2).
+      service_ports: { stt: this.settings.sttPort, tts: this.settings.ttsPort, image: this.settings.imagePort },
+      postgres_bin: this.paths.postgresBin,
+      ...(this.paths.ffmpeg ? { ffmpeg: this.paths.ffmpeg } : {}),
+      packs_dir: packsFolder(this.paths, this.settings.packsDir),
+      // Google sign-in when the build carries a Desktop OAuth client (MarketPulse §4.7); its secret comes in the env.
+      ...(this.googleClientId ? { google_client_id: this.googleClientId } : {}),
+    }, null, 2), 'utf8');
+  }
+
+  /** `restoreSnapshot`: the snapshot a failed update took (from its error event), put back instead of starting. */
+  start(options: { restoreSnapshot?: string } = {}): void {
+    if (this.child) return;
+    this.ready = null;
+    this.writeLaunchConfig();
+    mkdirSync(this.paths.logs, { recursive: true });
+    const env: Record<string, string> = {};
+    for (const name of SYSTEM_VARIABLES) {
+      const value = process.env[name];
+      if (value) env[name] = value;
+    }
+    Object.assign(env, this.secrets);
+    // Bytecode caches go to the data folder, never into the install folder (a signed bundle on macOS).
+    env.PYTHONPYCACHEPREFIX = join(this.paths.data, 'pycache');
+    // macOS has no ._pth: keep the user's site-packages and the working folder off the bundled interpreter's path.
+    env.PYTHONNOUSERSITE = '1';
+    env.PYTHONSAFEPATH = '1';
+    const args = ['-m', 'app.desktop.supervise', '--config', this.launchConfigPath(),
+      ...(options.restoreSnapshot ? ['--restore-snapshot', options.restoreSnapshot] : [])];
+    const child = spawn(this.paths.python, args, {
+      cwd: this.paths.data,
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    this.child = child;
+    const logPath = join(this.paths.logs, 'supervisor.log');
+    rotateLog(logPath);
+    const stderr = createWriteStream(logPath, { flags: 'a' });
+    child.stderr.pipe(stderr);
+    createInterface({ input: child.stdout }).on('line', (line) => this.receive(line));
+    child.on('exit', (code) => {
+      this.child = null;
+      stderr.end();
+      this.emit('exit', code);
+    });
+    child.on('error', (error) => this.emit('event', { event: 'error', step: 'launch', message: error.message } satisfies SupervisorEvent));
+  }
+
+  private receive(line: string): void {
+    let event: SupervisorEvent;
+    try {
+      event = JSON.parse(line) as SupervisorEvent;
+    } catch {
+      return;
+    }
+    if (event.event === 'ready') this.ready = { origin: event.origin, first_run: event.first_run };
+    if (event.event === 'result') {
+      const resolveResult = this.pending.get(event.id);
+      this.pending.delete(event.id);
+      resolveResult?.(event);
+    }
+    this.emit('event', event);
+  }
+
+  /** Sends a command (with any payload fields) and waits for its result. */
+  command(cmd: string, timeoutMs = 60_000, payload: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    const child = this.child;
+    if (!child) return Promise.reject(new Error('the backend is not running'));
+    const id = this.nextId++;
+    return new Promise((resolvePromise, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${cmd} timed out`));
+      }, timeoutMs);
+      this.pending.set(id, (result) => {
+        clearTimeout(timer);
+        resolvePromise(result);
+      });
+      child.stdin.write(`${JSON.stringify({ ...payload, cmd, id })}\n`);
+    });
+  }
+
+  /**
+   * Closes stdin, which stops the gateway and PostgreSQL; waits up to `timeoutMs` before killing. The supervisor's own
+   * stop takes up to 20 s for the gateway and 60 s for PostgreSQL, so the shell waits longer than both.
+   */
+  stop(timeoutMs = 120_000): Promise<void> {
+    const child = this.child;
+    if (!child) return Promise.resolve();
+    return new Promise((resolvePromise) => {
+      const timer = setTimeout(() => child.kill(), timeoutMs);
+      child.once('exit', () => {
+        clearTimeout(timer);
+        resolvePromise();
+      });
+      child.stdin.end();
+    });
+  }
+}

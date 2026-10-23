@@ -1,0 +1,9 @@
+{
+  "audio_path": "default_ref.wav",
+  "profile_name": "default_ref",
+  "ref_text": "I'm confused why some people have super short timelines, yet at the same time are bullish on scaling up reinforcement learning atop LLMs. If we're actually close to a human like learner, then this whole approach of training on verifiable outcomes is doomed.",
+  "schema_version": 1,
+  "stt_provider": "parakeet",
+  "transcript_source": "stt",
+  "voice_id": "default_ref"
+}

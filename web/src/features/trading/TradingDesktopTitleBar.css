@@ -9,8 +9,8 @@
     min-height: 38px;
     padding-left: var(--trading-title-bar-controls-left);
     padding-right: var(--trading-title-bar-controls-right);
-    background-color: var(--trading-title-bar-bg, var(--c-indigo-190));
-    color: var(--trading-title-bar-fg, var(--c-slate-850));
+    background-color: var(--trading-title-bar-bg, var(--bg-indigo-190));
+    color: var(--trading-title-bar-fg, var(--fg-slate-850));
     border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
     -webkit-app-region: drag;
     app-region: drag;

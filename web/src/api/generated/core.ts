@@ -1415,6 +1415,21 @@ export interface components {
              */
             kind: "standard" | "guest";
         };
+        /** ActivateLive2DAvatarRequest */
+        ActivateLive2DAvatarRequest: {
+            /**
+             * Accept Live2D Runtime Terms
+             * @default false
+             */
+            accept_live2d_runtime_terms?: boolean;
+            /**
+             * Accept Model Terms
+             * @default false
+             */
+            accept_model_terms?: boolean;
+            /** Model Id */
+            model_id: string;
+        };
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: {
             /** Api Key Editable */
@@ -1694,6 +1709,87 @@ export interface components {
             requested: boolean;
             /** Requested At */
             requested_at: string | null;
+        };
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: {
+            /** Capabilities */
+            capabilities: {
+                [key: string]: components["schemas"]["CapabilityState"];
+            };
+            /** Desktop */
+            desktop: boolean;
+        };
+        /** CapabilityState */
+        CapabilityState: {
+            /** Bundle */
+            bundle: string;
+            /** Installed */
+            installed: boolean;
+            /** Label */
+            label: string;
+            /** Running */
+            running: boolean;
+        };
+        /**
+         * CharacterAvatarPack
+         * @description Durable shared-image references for one Character Mode live avatar.
+         */
+        CharacterAvatarPack: {
+            /** Active Background */
+            active_background: string | null;
+            /** Active Outfit */
+            active_outfit: string | null;
+            /** Background Asset Ids */
+            background_asset_ids: {
+                [key: string]: string;
+            };
+            /** Base Asset Id */
+            base_asset_id: string | null;
+            /** Blink Frames */
+            blink_frames: {
+                [key: string]: string;
+            };
+            /** Character Id */
+            character_id: string;
+            /** Created At */
+            created_at: string;
+            /** Expression Frames */
+            expression_frames: {
+                [key: string]: string;
+            };
+            /** Mouth Anchor */
+            mouth_anchor: {
+                [key: string]: number;
+            };
+            /** Mouth Frames */
+            mouth_frames: {
+                [key: string]: string;
+            };
+            /** Outfit Frames */
+            outfit_frames: {
+                [key: string]: string;
+            };
+            /**
+             * Render Mode
+             * @default audio_envelope
+             * @enum {string}
+             */
+            render_mode: "audio_envelope" | "viseme" | "static";
+            /**
+             * Renderer
+             * @default sprite
+             * @enum {string}
+             */
+            renderer: "sprite" | "live2d" | "rive";
+            /** Rig Asset Id */
+            rig_asset_id: string | null;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
         };
         /** ChatMessage */
         ChatMessage: {
@@ -2227,6 +2323,31 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** DefaultChoice */
+        DefaultChoice: {
+            /** Label */
+            label: string;
+            /** Model */
+            model: string;
+        };
+        /** DefaultModels */
+        DefaultModels: {
+            image: components["schemas"]["DefaultSlot"];
+            voice: components["schemas"]["DefaultSlot"];
+        };
+        /**
+         * DefaultSlot
+         * @description The downloaded models that can be this default, and the current one ('' when none of them is).
+         */
+        DefaultSlot: {
+            /** Choices */
+            choices: components["schemas"]["DefaultChoice"][];
+            /**
+             * Current
+             * @default
+             */
+            current: string;
+        };
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: {
             /**
@@ -2495,6 +2616,14 @@ export interface components {
             /** Timeout Seconds */
             timeout_seconds: number;
         };
+        /** HubTokenWrite */
+        HubTokenWrite: {
+            /**
+             * Token
+             * @default
+             */
+            token?: string;
+        };
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: {
             /** Client Id */
@@ -2624,6 +2753,19 @@ export interface components {
             ready: boolean;
             /** Storage */
             storage: string;
+        };
+        /** InstallLive2DModelRequest */
+        InstallLive2DModelRequest: {
+            /**
+             * Accept Live2D Runtime Terms
+             * @default false
+             */
+            accept_live2d_runtime_terms?: boolean;
+            /**
+             * Accept Model Terms
+             * @default false
+             */
+            accept_model_terms?: boolean;
         };
         /** InviteCheckResponse */
         InviteCheckResponse: {
@@ -2951,6 +3093,75 @@ export interface components {
              */
             success: boolean;
         };
+        /** Live2DAvatarActionResponse */
+        Live2DAvatarActionResponse: {
+            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
+            /** Character Id */
+            character_id: string;
+            /**
+             * Downloaded
+             * @default false
+             */
+            downloaded: boolean;
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+        };
+        /** Live2DModelCatalogItem */
+        Live2DModelCatalogItem: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /** License Summary */
+            license_summary: string;
+            /** Model License Url */
+            model_license_url: string;
+            /** Name */
+            name: string;
+            /**
+             * Preview Path
+             * @default
+             */
+            preview_path: string;
+            /** Preview Url */
+            preview_url: string;
+            /** Repository */
+            repository: string;
+            /** Revision */
+            revision: string;
+            /** Runtime License Url */
+            runtime_license_url: string;
+            /**
+             * Selected
+             * @default false
+             */
+            selected: boolean;
+            /** Source Url */
+            source_url: string;
+        };
+        /** Live2DModelCatalogResponse */
+        Live2DModelCatalogResponse: {
+            /**
+             * Can Manage
+             * @default false
+             */
+            can_manage: boolean;
+            /** Models */
+            models: components["schemas"]["Live2DModelCatalogItem"][];
+            /**
+             * Runtime Installed
+             * @default false
+             */
+            runtime_installed: boolean;
+        };
         /** LocalLoginRequest */
         LocalLoginRequest: {
             /** Credential */
@@ -2960,6 +3171,45 @@ export interface components {
              * @default false
              */
             remember?: boolean;
+        };
+        /**
+         * ModelPacksStatus
+         * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
+         */
+        ModelPacksStatus: {
+            /** Bundles */
+            bundles: components["schemas"]["PackVerdict"][];
+            /**
+             * Can Manage
+             * @default false
+             */
+            can_manage: boolean;
+            /**
+             * Can Manage Runtimes
+             * @default false
+             */
+            can_manage_runtimes: boolean;
+            defaults: components["schemas"]["DefaultModels"];
+            /** Enabled */
+            enabled: boolean;
+            /** Hardware */
+            hardware: {
+                [key: string]: unknown;
+            };
+            /** Models */
+            models: components["schemas"]["PackModelStatus"][];
+            /**
+             * Packs Folder
+             * @default
+             */
+            packs_folder: string;
+            /**
+             * Platform
+             * @default
+             */
+            platform: string;
+            /** Runtimes */
+            runtimes: components["schemas"]["PackRuntimeStatus"][];
         };
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: {
@@ -3056,6 +3306,229 @@ export interface components {
             provider_id: string;
             /** Vram Hint Mb */
             vram_hint_mb: number | null;
+        };
+        /** PackModelLicence */
+        PackModelLicence: {
+            /** Commercial Use */
+            commercial_use: boolean;
+            /** Gated */
+            gated: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Output Terms
+             * @default
+             */
+            output_terms: string;
+            /** Url */
+            url: string;
+        };
+        /** PackModelStatus */
+        PackModelStatus: {
+            /**
+             * Accepted
+             * @default false
+             */
+            accepted: boolean;
+            /**
+             * Disk Bytes
+             * @default 0
+             */
+            disk_bytes: number;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Label */
+            label: string;
+            licence: components["schemas"]["PackModelLicence"];
+            /** Repo */
+            repo: string;
+            /** Revision */
+            revision: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /**
+         * PackOption
+         * @description A model the user may add to a bundle, with its own verdict on this machine.
+         */
+        PackOption: {
+            /**
+             * Default
+             * @default false
+             */
+            default: boolean;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /** Label */
+            label: string;
+            licence: components["schemas"]["PackOptionLicence"];
+            /** Model */
+            model: string;
+            /**
+             * Model Bytes
+             * @default 0
+             */
+            model_bytes: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Runtime Bytes
+             * @default 0
+             */
+            runtime_bytes: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "fits" | "warn" | "unavailable";
+        };
+        /** PackOptionLicence */
+        PackOptionLicence: {
+            /**
+             * Commercial Use
+             * @default true
+             */
+            commercial_use: boolean;
+            /**
+             * Gated
+             * @default false
+             */
+            gated: boolean;
+            /** Id */
+            id: string;
+            /** Url */
+            url: string;
+        };
+        /** PackRuntimeStatus */
+        PackRuntimeStatus: {
+            /** Accelerator */
+            accelerator: string;
+            /** Base */
+            base: string;
+            /** Current */
+            current: boolean;
+            /**
+             * Download Bytes
+             * @default 0
+             */
+            download_bytes: number;
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /**
+             * Installed At
+             * @default
+             */
+            installed_at: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Licences */
+            licences: string[];
+            /** Platform */
+            platform: string;
+            /** Requires */
+            requires: {
+                [key: string]: string;
+            };
+        };
+        /** PackTarget */
+        PackTarget: {
+            /**
+             * Accept Terms
+             * @default false
+             */
+            accept_terms?: boolean;
+            /**
+             * Bundle Id
+             * @default
+             */
+            bundle_id?: string;
+            /**
+             * Model Id
+             * @default
+             */
+            model_id?: string;
+            /** Options */
+            options?: string[] | null;
+            /**
+             * Runtime Id
+             * @default
+             */
+            runtime_id?: string;
+        };
+        /**
+         * PackVerdict
+         * @description One bundle on this machine: what it installs and whether it can run here.
+         */
+        PackVerdict: {
+            /** Action */
+            action: {
+                [key: string]: string;
+            } | null;
+            /** Bundle */
+            bundle: string;
+            /** Capability */
+            capability: string;
+            /** Description */
+            description: string;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /** Label */
+            label: string;
+            /**
+             * Min Options
+             * @default 0
+             */
+            min_options: number;
+            /**
+             * Model Bytes
+             * @default 0
+             */
+            model_bytes: number;
+            /** Models */
+            models: string[];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Options */
+            options: components["schemas"]["PackOption"][];
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Recommended
+             * @default false
+             */
+            recommended: boolean;
+            /**
+             * Runtime Bytes
+             * @default 0
+             */
+            runtime_bytes: number;
+            /** Runtimes */
+            runtimes: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "fits" | "warn" | "unavailable";
         };
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
@@ -3710,6 +4183,24 @@ export interface components {
             status: "ready" | "degraded";
             workers: components["schemas"]["WorkerHealthPayload"];
         };
+        /** SelectionRequest */
+        SelectionRequest: {
+            /** Bundles */
+            bundles?: string[];
+            /** Options */
+            options?: {
+                [key: string]: string[];
+            };
+        };
+        /** SelectionSize */
+        SelectionSize: {
+            /** Model Bytes */
+            model_bytes: number;
+            /** Runtime Bytes */
+            runtime_bytes: number;
+            /** Total Bytes */
+            total_bytes: number;
+        };
         /** SendChatMessageRequest */
         SendChatMessageRequest: {
             /**
@@ -3760,6 +4251,19 @@ export interface components {
             job: components["schemas"]["JobRecord"];
             session: components["schemas"]["ChatSession"];
             user_message: components["schemas"]["ChatMessage"];
+        };
+        /** SetDefaultModels */
+        SetDefaultModels: {
+            /**
+             * Image
+             * @default
+             */
+            image?: string;
+            /**
+             * Voice
+             * @default
+             */
+            voice?: string;
         };
         /** SettingsPatch */
         SettingsPatch: {
@@ -3868,6 +4372,71 @@ export interface components {
              * @default true
              */
             success: boolean;
+        };
+        /** SpeechModelListResponse */
+        SpeechModelListResponse: {
+            /** Hardware */
+            hardware: {
+                [key: string]: unknown;
+            };
+            /** Hub Token Source */
+            hub_token_source: string;
+            /** Models */
+            models: components["schemas"]["SpeechModelStatus"][];
+            /**
+             * Vram Target Gb
+             * @default 24
+             */
+            vram_target_gb: number;
+        };
+        /** SpeechModelStatus */
+        SpeechModelStatus: {
+            /** Accepted Terms */
+            accepted_terms: boolean;
+            /** Capabilities */
+            capabilities: string[];
+            /** Commercial Use */
+            commercial_use: boolean;
+            /** Disk Bytes */
+            disk_bytes: number;
+            /** Environment */
+            environment: {
+                [key: string]: unknown;
+            };
+            /** Gated */
+            gated: boolean;
+            /** Id */
+            id: string;
+            /** Installed Revision */
+            installed_revision: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Licence */
+            licence: string;
+            /** Licence Url */
+            licence_url: string;
+            /** Output Terms */
+            output_terms: string;
+            /** Repo Id */
+            repo_id: string;
+            /** Requires Acceptance */
+            requires_acceptance: boolean;
+            /** Residency */
+            residency: string;
+            /** Revision */
+            revision: string;
+            /** Service */
+            service: string;
+            /** Size Gb */
+            size_gb: number;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Vram Gb */
+            vram_gb: number;
         };
         /** StateHashRequest */
         StateHashRequest: {

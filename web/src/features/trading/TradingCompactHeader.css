@@ -50,7 +50,7 @@
     margin-left: auto;
     padding: 2px 3px;
     border-left: 1px solid color-mix(in srgb, var(--c-blue-660) 16%, transparent);
-    background: color-mix(in srgb, var(--c-slate-170-2) 98%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-170-2) 98%, transparent);
     box-shadow: none;
   }
 

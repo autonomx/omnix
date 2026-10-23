@@ -6,6 +6,19 @@ Omnix brings creative work, research, automation, and operational visibility int
 
 [Open the documentation portal](docs/index.html) · [Browse the feature catalog](docs/FEATURES.md) · [Read the architecture](docs/ARCHITECTURE.md)
 
+## Download
+
+**[Download Omnix for Windows](https://github.com/autonomx/omnix/releases/latest)**: get `Omnix-Setup-<version>.exe` from the latest release and run it.
+
+- **Requirements:** Windows 10 or 11 (64-bit). Chat works on any machine with a provider API key; local voice and image models need an NVIDIA GPU with a recent driver.
+- **Nothing else to install.** The installer brings its own Python, PostgreSQL and web app, and installs for your user only (no administrator rights). It is about 250 MB: the GPU runtime and models are not inside it.
+- **First run:** sign in, then the setup screen checks your hardware and offers the GPU runtime and models with their sizes and whether each fits this machine. Nothing large downloads until you choose it, and you can come back later in Settings → Models.
+- **The installer is not code-signed yet,** so Windows SmartScreen may show "Windows protected your PC". Choose **More info**, then **Run anyway**. Check that the file came from this repository's Releases page.
+- **Updates:** Omnix checks this repository's releases, downloads a new version in the background and installs it when you quit.
+- **Your data** stays in `%LOCALAPPDATA%\OmnixDesktop` and is kept when you uninstall (Settings → Apps → Omnix).
+
+A macOS build is not published yet. To run Omnix from source instead, see [Run Omnix locally](#run-omnix-locally).
+
 ## What Omnix includes
 
 - A shared React + TypeScript + Vite browser application under `web`.

@@ -29,7 +29,7 @@
   .prospective-economic-panel p,
   .prospective-economic-fingerprints small,
   .prospective-economic-events small {
-    color: var(--omnix-text-muted, var(--c-blue-710));
+    color: var(--omnix-text-muted, var(--fg-blue-710));
   }
 
   .prospective-economic-hero .monitor-live,
@@ -45,7 +45,7 @@
 
   .prospective-economic-hero .monitor-live,
   .prospective-economic-step.done .prospective-economic-step-state {
-    color: var(--omnix-success, var(--c-green-720));
+    color: var(--omnix-success, var(--fg-green-720));
   }
 
   .prospective-economic-hero .monitor-off,
@@ -64,7 +64,7 @@
   .prospective-economic-strategy-select span,
   .prospective-economic-form-grid span {
     font-size: 11px;
-    color: var(--omnix-text-muted, var(--c-blue-710));
+    color: var(--omnix-text-muted, var(--fg-blue-710));
   }
 
   .prospective-economic-panel select,
@@ -81,7 +81,7 @@
     box-sizing: border-box;
     border: 1px solid var(--omnix-border, var(--c-blue-390));
     border-radius: 7px;
-    background: var(--omnix-surface-raised, var(--c-indigo-210));
+    background: var(--omnix-surface-raised, var(--bg-indigo-210));
     color: inherit;
     padding: 7px 8px;
   }
@@ -134,13 +134,13 @@
     padding: 8px;
     border: 1px solid var(--omnix-border, var(--c-blue-390));
     border-radius: 8px;
-    background: color-mix(in srgb, var(--omnix-surface-raised, var(--c-indigo-210)) 86%, transparent);
+    background: color-mix(in srgb, var(--omnix-surface-raised, var(--bg-indigo-210)) 86%, transparent);
   }
 
   .prospective-economic-metric span,
   .prospective-economic-metric small {
     font-size: 10px;
-    color: var(--omnix-text-muted, var(--c-blue-710));
+    color: var(--omnix-text-muted, var(--fg-blue-710));
   }
 
   .prospective-economic-metric strong {
@@ -167,7 +167,7 @@
     gap: 8px;
     align-items: center;
     padding: 9px;
-    background: color-mix(in srgb, var(--omnix-surface-raised, var(--c-indigo-210)) 70%, transparent);
+    background: color-mix(in srgb, var(--omnix-surface-raised, var(--bg-indigo-210)) 70%, transparent);
   }
 
   .prospective-economic-step-number {
@@ -256,7 +256,7 @@
 
   .prospective-economic-events article span {
     font-size: 10px;
-    color: var(--omnix-text-muted, var(--c-blue-710));
+    color: var(--omnix-text-muted, var(--fg-blue-710));
     text-transform: uppercase;
     text-align: right;
   }

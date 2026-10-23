@@ -8,6 +8,8 @@ from app.apps.rpg.rules.combat.runtime import (
     gate_combat_action,
     is_combat_active,
     resolve_combat_attack,
+    resolve_combat_flee,
+    resolve_turns_until_player,
     start_combat_encounter,
 )
 from app.apps.rpg.rules.combat.campaign_mechanics import (
@@ -106,6 +108,43 @@ def _survival_interaction_response(action: Dict[str, Any], survival_result: Dict
     }
 
 
+def _named_combatant(simulation_state: Dict[str, Any], target_ref: str) -> str:
+    """The standing combatant the player names ("the echo wolf", "wolf"), or "" for whoever is nearest."""
+    wanted = target_ref.casefold().removeprefix("the ").strip()
+    if not wanted:
+        return ""
+    participants = _safe_dict(_safe_dict(simulation_state.get("combat_state")).get("participants"))
+    for actor_id, row in participants.items():
+        name = _safe_str(_safe_dict(row).get("name")).casefold()
+        if name and (name in wanted or wanted in name or wanted == _safe_str(actor_id).casefold()):
+            return _safe_str(actor_id)
+    return ""
+
+
+def _others_take_their_turns(
+    simulation_state: Dict[str, Any],
+    result: Dict[str, Any],
+    *,
+    actor_id: str,
+    tick: int,
+    earlier_turns: list[Dict[str, Any]] | None = None,
+) -> None:
+    """After the player acts (or a fight opens), the creatures and companions whose turns follow act before the player's next."""
+    if earlier_turns:
+        result["earlier_turns"] = deepcopy(list(earlier_turns))
+    if not result.get("resolved") or not is_combat_active(simulation_state):
+        return
+    turns = resolve_turns_until_player(
+        simulation_state,
+        player_id=_safe_str(actor_id or "player"),
+        session_id=_safe_str(simulation_state.get("session_id")),
+        tick=tick,
+    )
+    if turns:
+        result["other_turns"] = deepcopy(turns)
+    result["combat_state"] = deepcopy(simulation_state.get("combat_state") or {})
+
+
 def resolve_general_interaction(
     simulation_state: Dict[str, Any],
     *,
@@ -139,6 +178,7 @@ def resolve_general_interaction(
     if kind == "attack":
         enriched_action = deepcopy(action)
 
+        earlier_turns: list[Dict[str, Any]] = []
         if not is_combat_active(simulation_state):
             target_ref = _safe_str(enriched_action.get("target_ref"))
             campaign_enemy = instantiate_campaign_creature(
@@ -156,18 +196,21 @@ def resolve_general_interaction(
                 tick=tick,
             )
         else:
-            target_ref = _safe_str(enriched_action.get("target_ref"))
-            target_id = ""
-            if "bandit" in target_ref.lower():
-                target_id = "enemy:bandit_1"
-
-            combat_result = resolve_combat_attack(
+            # Whoever still holds the turn from before (a fight left waiting) acts before the player does.
+            earlier_turns = resolve_turns_until_player(
                 simulation_state,
-                actor_id=_safe_str(enriched_action.get("actor_id") or actor_id or "player"),
-                target_id=target_id,
+                player_id=_safe_str(enriched_action.get("actor_id") or actor_id or "player"),
                 session_id=_safe_str(simulation_state.get("session_id")),
                 tick=tick,
             )
+            combat_result = resolve_combat_attack(
+                simulation_state,
+                actor_id=_safe_str(enriched_action.get("actor_id") or actor_id or "player"),
+                target_id=_named_combatant(simulation_state, _safe_str(enriched_action.get("target_ref"))),
+                session_id=_safe_str(simulation_state.get("session_id")),
+                tick=tick,
+            )
+        _others_take_their_turns(simulation_state, combat_result, actor_id=actor_id, tick=tick, earlier_turns=earlier_turns)
 
         interaction_result = {
             "resolved": bool(combat_result.get("resolved")),
@@ -185,6 +228,34 @@ def resolve_general_interaction(
             "interaction_result": deepcopy(interaction_result),
             "combat_result": deepcopy(combat_result),
             "combat_state": deepcopy(interaction_result.get("combat_state")),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    if kind == "flee" and is_combat_active(simulation_state):
+        flee_actor_id = _safe_str(action.get("actor_id") or actor_id or "player")
+        earlier_turns = resolve_turns_until_player(
+            simulation_state,
+            player_id=flee_actor_id,
+            session_id=_safe_str(simulation_state.get("session_id")),
+            tick=tick,
+        )
+        flee_result = resolve_combat_flee(simulation_state, actor_id=flee_actor_id, tick=tick)
+        _others_take_their_turns(simulation_state, flee_result, actor_id=flee_actor_id, tick=tick, earlier_turns=earlier_turns)
+        interaction_result = {
+            "resolved": bool(flee_result.get("resolved")),
+            "changed_state": bool(flee_result.get("changed_state")),
+            "reason": _safe_str(flee_result.get("reason")),
+            "semantic_action_v2": deepcopy(action),
+            "combat_result": deepcopy(flee_result),
+            "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
+            "source": "deterministic_general_interaction_runtime",
+        }
+        return {
+            "handled": bool(interaction_result["resolved"]),
+            "semantic_action_v2": deepcopy(action),
+            "interaction_result": deepcopy(interaction_result),
+            "combat_result": deepcopy(flee_result),
+            "combat_state": deepcopy(interaction_result["combat_state"]),
             "source": "deterministic_general_interaction_runtime",
         }
 
@@ -251,6 +322,7 @@ def resolve_general_interaction(
         )
         if vulnerability_result.get("applied") is True:
             turn_result = advance_combat_turn(simulation_state, tick=tick)
+            _others_take_their_turns(simulation_state, turn_result, actor_id=use_actor_id, tick=tick)
             interaction_result = {
                 "resolved": True,
                 "changed_state": True,

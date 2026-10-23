@@ -4,11 +4,7 @@
 /* Side panels. */
 @layer features {
   .assistant-chat-layout-side-minimized {
-    grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) 3.75rem;
-  }
-
-  .assistant-chat-layout-sidebar-minimized.assistant-chat-layout-side-minimized {
-    grid-template-columns: 3.75rem minmax(0, 1fr) 3.75rem;
+    --assistant-chat-rail-width: 3.75rem;
   }
 
   .assistant-chat-side-minimized {
@@ -91,7 +87,7 @@
   }
 
   .assistant-live-card > header > select[data-live-task-instruction] {
-    background: color-mix(in srgb, var(--c-slate-150-2) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-slate-150-2) 78%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 0.65rem;
     box-sizing: border-box;
@@ -105,8 +101,8 @@
   }
 
   .assistant-live-card > header > select[data-live-task-instruction]:focus-visible {
-    border-color: color-mix(in srgb, var(--c-violet-660) 72%, transparent);
-    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--c-indigo-600) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent-violet-660) 72%, transparent);
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--accent-indigo-600) 16%, transparent);
     outline: none;
   }
 
@@ -123,7 +119,7 @@
   }
 
   .assistant-live-card[data-live-voice-status='idle'] > header strong {
-    color: var(--c-indigo-780);
+    color: var(--fg-indigo-780);
   }
 
   .assistant-live-card[data-live-voice-status='idle'] > header strong::before {
@@ -132,7 +128,7 @@
   }
 
   .assistant-live-card[data-live-voice-status='disconnected'] > header strong {
-    color: var(--c-amber-830);
+    color: var(--fg-amber-830);
   }
 
   .assistant-live-card[data-live-voice-status='disconnected'] > header strong::before {
@@ -142,8 +138,8 @@
 
   .assistant-live-fullscreen-button {
     align-items: center;
-    background: color-mix(in srgb, var(--c-indigo-430) 22%, transparent);
-    border: 1px solid color-mix(in srgb, var(--c-violet-660) 55%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-430) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 55%, transparent);
     border-radius: 0.65rem;
     color: inherit;
     cursor: pointer;
@@ -158,21 +154,11 @@
 
   .assistant-live-fullscreen-button:hover,
   .assistant-live-fullscreen-button:focus-visible {
-    background: color-mix(in srgb, var(--c-indigo-600) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-indigo-600) 40%, transparent);
     outline: none;
   }
 
-  @media (max-width: 1500px) {
-    .assistant-chat-layout-side-minimized {
-      grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr) 3.75rem;
-    }
-
-    .assistant-chat-layout-side-minimized .assistant-chat-side {
-      grid-column: auto;
-    }
-  }
-
-  @media (max-width: 1180px) {
+  @media (max-width: 900px) {
     .assistant-chat-layout-side-minimized {
       grid-template-columns: minmax(0, 1fr);
     }

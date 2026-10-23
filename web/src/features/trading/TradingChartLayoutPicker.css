@@ -34,7 +34,7 @@
     padding: 8px 8px 10px;
     border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 7px;
-    background: var(--c-slate-170-2);
+    background: var(--bg-slate-170-2);
     box-shadow: 0 18px 44px color-mix(in srgb, var(--c-neutral-0) 52%, transparent), 0 0 0 1px color-mix(in srgb, var(--c-blue-630) 8%, transparent);
   }
 
@@ -51,7 +51,7 @@
   }
 
   .trading-chart-layout-menu-header strong {
-    color: var(--c-slate-910);
+    color: var(--fg-slate-910);
     font-size: 10px;
     letter-spacing: .02em;
     text-transform: none;
@@ -116,7 +116,7 @@
     align-items: center;
     justify-content: space-between;
     min-height: 24px;
-    color: var(--c-slate-870);
+    color: var(--fg-slate-870);
     font-size: 10px;
   }
 
@@ -149,9 +149,9 @@
     padding: 7px 10px;
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
     border-radius: 4px;
-    background: var(--c-neutral-270);
+    background: var(--bg-neutral-270);
     box-shadow: 0 8px 20px color-mix(in srgb, var(--c-neutral-0) 35%, transparent);
-    color: var(--c-slate-970-2);
+    color: var(--fg-slate-970-2);
     content: attr(data-tooltip);
     font-family: inherit;
     font-size: 11px;
@@ -331,7 +331,7 @@
   .trading-chart-layout-option[aria-pressed='true'] {
     border-color: color-mix(in srgb, var(--c-blue-680) 55%, transparent);
     background: color-mix(in srgb, var(--c-blue-580) 16%, transparent);
-    color: var(--c-blue-930);
+    color: var(--fg-blue-930);
   }
 
   .trading-chart-layout-sync-row .trading-chart-layout-info {
@@ -348,7 +348,7 @@
     padding: 0;
     border: 0;
     border-radius: 999px;
-    background: var(--c-slate-390);
+    background: var(--bg-slate-390);
   }
 
   .trading-chart-layout-sync-row button.active {
@@ -399,7 +399,7 @@
   :root[data-omnix-appearance='light'] .trading-chart-layout-option:hover,
   :root[data-omnix-appearance='light'] .trading-chart-layout-option[aria-pressed='true'] {
     border-color: color-mix(in srgb, var(--c-blue-630) 55%, transparent);
-    background: var(--c-slate-970-2);
+    background: var(--accent-slate-970-2);
     color: var(--c-blue-460-2);
     box-shadow: 0 2px 6px color-mix(in srgb, var(--c-blue-630) 14%, transparent);
   }

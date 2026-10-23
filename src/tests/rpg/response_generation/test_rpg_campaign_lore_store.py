@@ -189,12 +189,11 @@ def test_structured_published_canon_becomes_player_safe_lore_pages() -> None:
 
     payload = campaign_lore_payload(session)
 
-    assert payload["visible_count"] == 5
-    assert {row["category"] for row in payload["documents"]} == {
-        "World Lore",
-        "Regions",
-        "Factions",
-    }
+    assert payload["visible_count"] == 6
+    categories = {row["category"] for row in payload["documents"]}
+    assert {"World Lore", "Regions", "Factions"} <= categories
+    assert bible["entities"]["npc:guide"]["kind"] == "npc"
+    assert all("hidden spoiler" not in row["full_text"] for row in bible["documents"])
     assert [row["name"] for row in payload["dossiers"]["factions"]] == [
         "Wayfarers' Guild"
     ]

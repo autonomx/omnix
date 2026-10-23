@@ -82,6 +82,9 @@ resources/data/
 
 # Generated runtime and rehearsal artifacts
 /resources/artifacts/
+# Script output (backtests, topology tests, reports) and the Kilo Code editor's settings
+/artifacts/
+/.kilo/
 # Runtime output under resources (WP-11.6): caches, market-data evidence
 # captures, benchmark runs and voice clones users create. The approved sample
 # voices are tracked; add a new one deliberately with `git add -f`.
@@ -141,3 +144,15 @@ resources/data/generated_images/
 resources/data/rpg_sessions/
 src/data/rpg_sessions/
 *.zip
+
+# Desktop app (docs/DESKTOP_APP_ROADMAP_2026-10-21.md): staged runtime, download cache, shell build output.
+desktop/staging/stage/
+desktop/staging/cache/
+desktop/out/
+desktop/release/
+# The latest installer, copied to the repository root by npm --prefix desktop run dist.
+/Omnix-*.exe
+/Omnix-*.dmg
+desktop/node_modules/
+desktop/test-results/
+desktop/staging/*.log

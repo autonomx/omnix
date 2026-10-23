@@ -57,12 +57,22 @@ LOCATIONS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_location(location_id: str) -> Dict[str, Any]:
+def _world_locations(simulation_state: Dict[str, Any] | None) -> Dict[str, Dict[str, Any]]:
+    """The session's own places (a published world's), which replace the built-in starter town when present."""
+    world_model = _safe_dict(_safe_dict(simulation_state).get("world_model"))
+    return _safe_dict(world_model.get("locations"))
+
+
+def get_location(location_id: str, simulation_state: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    world = _world_locations(simulation_state)
+    if world:
+        return deepcopy(_safe_dict(world.get(_safe_str(location_id))))
     return deepcopy(_safe_dict(LOCATIONS.get(_safe_str(location_id))))
 
 
-def default_location_id() -> str:
-    return "loc_tavern"
+def default_location_id(simulation_state: Dict[str, Any] | None = None) -> str:
+    world_model = _safe_dict(_safe_dict(simulation_state).get("world_model"))
+    return _safe_str(world_model.get("start_location_id")) or "loc_tavern"
 
 
 def current_location_id(simulation_state: Dict[str, Any]) -> str:
@@ -75,10 +85,10 @@ def current_location_id(simulation_state: Dict[str, Any]) -> str:
         or _safe_str(simulation_state.get("current_location_id"))
     )
     if not location_id:
-        return default_location_id()
-    if location_id in LOCATIONS:
+        return default_location_id(simulation_state)
+    if location_id in (_world_locations(simulation_state) or LOCATIONS):
         return location_id
-    matched = find_location_by_name(location_id)
+    matched = find_location_by_name(location_id, simulation_state)
     return _safe_str(matched.get("location_id")) or location_id
 
 
@@ -104,12 +114,13 @@ def normalize_location_name(value: str) -> str:
     return " ".join(value.split())
 
 
-def find_location_by_name(value: str) -> Dict[str, Any]:
+def find_location_by_name(value: str, simulation_state: Dict[str, Any] | None = None) -> Dict[str, Any]:
     needle = normalize_location_name(value)
     if not needle:
         return {}
+    locations = _world_locations(simulation_state) or LOCATIONS
 
-    for location in LOCATIONS.values():
+    for location in locations.values():
         names = [
             _safe_str(location.get("location_id")),
             _safe_str(location.get("name")),
@@ -119,7 +130,7 @@ def find_location_by_name(value: str) -> Dict[str, Any]:
         if any(normalize_location_name(name) == needle for name in names):
             return deepcopy(location)
 
-    for location in LOCATIONS.values():
+    for location in locations.values():
         names = [
             _safe_str(location.get("name")),
             _safe_str(location.get("short_name")),
@@ -132,17 +143,17 @@ def find_location_by_name(value: str) -> Dict[str, Any]:
 
 
 def available_exits(simulation_state: Dict[str, Any]) -> Dict[str, str]:
-    location = get_location(current_location_id(simulation_state))
+    location = get_location(current_location_id(simulation_state), simulation_state)
     return dict(_safe_dict(location.get("exits")))
 
 
 def set_current_location(simulation_state: Dict[str, Any], location_id: str) -> Dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
-    location_id = _safe_str(location_id) or default_location_id()
-    location = get_location(location_id)
+    location_id = _safe_str(location_id) or default_location_id(simulation_state)
+    location = get_location(location_id, simulation_state)
     if not location:
-        location_id = default_location_id()
-        location = get_location(location_id)
+        location_id = default_location_id(simulation_state)
+        location = get_location(location_id, simulation_state)
 
     player_state = _safe_dict(simulation_state.get("player_state"))
     if not player_state:
@@ -154,7 +165,7 @@ def set_current_location(simulation_state: Dict[str, Any], location_id: str) -> 
     simulation_state["location_state"] = {
         "current_location_id": location_id,
         "current_location": location,
-        "available_exits": available_exits({"location_id": location_id}),
+        "available_exits": available_exits({**simulation_state, "location_id": location_id, "player_state": {}}),
     }
     simulation_state["present_npcs"] = deepcopy(_safe_list(location.get("present_npcs")))
     player_state["location_id"] = location_id
@@ -168,12 +179,12 @@ def ensure_location_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def present_npcs_for_current_location(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    location = get_location(current_location_id(simulation_state))
+    location = get_location(current_location_id(simulation_state), simulation_state)
     return deepcopy(_safe_list(location.get("present_npcs")))
 
 
 def provider_present_at_location(simulation_state: Dict[str, Any], provider_id: str = "", provider_name: str = "") -> bool:
-    location = get_location(current_location_id(simulation_state))
+    location = get_location(current_location_id(simulation_state), simulation_state)
     npcs = _safe_list(location.get("present_npcs"))
     provider_id = _safe_str(provider_id)
     provider_name = _safe_str(provider_name).lower()
@@ -187,5 +198,5 @@ def provider_present_at_location(simulation_state: Dict[str, Any], provider_id: 
 
 
 def location_allows_service(simulation_state: Dict[str, Any], service_kind: str) -> bool:
-    location = get_location(current_location_id(simulation_state))
+    location = get_location(current_location_id(simulation_state), simulation_state)
     return _safe_str(service_kind) in set(_safe_list(location.get("services")))

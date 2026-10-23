@@ -9,10 +9,10 @@
   }
 
   /*
-   * Below 1500px the chat layout grows with its content; the transcript still
+   * Below 900px the chat layout grows with its content; the transcript still
    * scrolls inside its panel so long sessions do not stretch the page.
    */
-  @media (max-width: 1500px) {
+  @media (max-width: 900px) {
     .assistant-chat-page:not(.assistant-chat-page-fullscreen) .assistant-chat-messages {
       max-height: max(24rem, calc(100vh - 12rem));
     }
