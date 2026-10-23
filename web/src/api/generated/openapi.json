@@ -45695,6 +45695,54 @@
         "title": "RpgGeometryPatchResponse",
         "type": "object"
       },
+      "RpgGitHubDeviceSignInResponse": {
+        "properties": {
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "flow_id",
+          "user_code",
+          "verification_uri",
+          "interval"
+        ],
+        "title": "RpgGitHubDeviceSignInResponse",
+        "type": "object"
+      },
+      "RpgGitHubTokenRequestBody": {
+        "properties": {
+          "token": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "RpgGitHubTokenRequestBody",
+        "type": "object"
+      },
       "RpgGridPerformanceProfileRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -48882,6 +48930,56 @@
         "title": "RpgSessionMutationResponse",
         "type": "object"
       },
+      "RpgSharedWorldStateResponse": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "adoption": {
+            "additionalProperties": true,
+            "title": "Adoption",
+            "type": "object"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "catalog": {
+            "additionalProperties": true,
+            "title": "Catalog",
+            "type": "object"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "shared": {
+            "title": "Shared",
+            "type": "boolean"
+          },
+          "source_world_id": {
+            "title": "Source World Id",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "shared",
+          "bundle_sha256",
+          "source_world_id",
+          "catalog",
+          "adopted",
+          "adoption"
+        ],
+        "title": "RpgSharedWorldStateResponse",
+        "type": "object"
+      },
       "RpgSpatialClock": {
         "properties": {
           "aggregate_metrics": {
@@ -50359,6 +50457,75 @@
         "title": "RpgUpdateWorldTopicRequestBody",
         "type": "object"
       },
+      "RpgWorldAdoptRequestBody": {
+        "properties": {
+          "bundle_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_sha256"
+        ],
+        "title": "RpgWorldAdoptRequestBody",
+        "type": "object"
+      },
+      "RpgWorldAdoptionResponse": {
+        "properties": {
+          "adoption": {
+            "additionalProperties": true,
+            "title": "Adoption",
+            "type": "object"
+          },
+          "launch_ready": {
+            "title": "Launch Ready",
+            "type": "boolean"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "openings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Openings",
+            "type": "array"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "adopted",
+            "title": "Status",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          },
+          "world_release": {
+            "title": "World Release",
+            "type": "integer"
+          },
+          "world_revision": {
+            "title": "World Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "reused",
+          "world_id",
+          "adoption"
+        ],
+        "title": "RpgWorldAdoptionResponse",
+        "type": "object"
+      },
       "RpgWorldAuthorshipAuditResponse": {
         "properties": {
           "audited_at": {
@@ -50575,7 +50742,8 @@
               "generating",
               "ready",
               "not_required",
-              "recovery_required"
+              "recovery_required",
+              "adoption_required"
             ],
             "title": "Status",
             "type": "string"
@@ -50664,6 +50832,179 @@
           "binding"
         ],
         "title": "RpgWorldCampaignSummary",
+        "type": "object"
+      },
+      "RpgWorldCatalogEntry": {
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "bundle": {
+            "additionalProperties": true,
+            "title": "Bundle",
+            "type": "object"
+          },
+          "genre": {
+            "title": "Genre",
+            "type": "string"
+          },
+          "has_cover": {
+            "title": "Has Cover",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RpgWorldCatalogInstalled"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "title": "Published At",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "title": "Tone",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "title",
+          "summary",
+          "genre",
+          "tone",
+          "author",
+          "published_at",
+          "bundle",
+          "has_cover",
+          "installed"
+        ],
+        "title": "RpgWorldCatalogEntry",
+        "type": "object"
+      },
+      "RpgWorldCatalogInstallResponse": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "status": {
+            "const": "installed",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "reused",
+          "world_id",
+          "version",
+          "bundle_sha256",
+          "adopted"
+        ],
+        "title": "RpgWorldCatalogInstallResponse",
+        "type": "object"
+      },
+      "RpgWorldCatalogInstalled": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "world_id",
+          "version",
+          "bundle_sha256",
+          "adopted"
+        ],
+        "title": "RpgWorldCatalogInstalled",
+        "type": "object"
+      },
+      "RpgWorldCatalogResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "worlds": {
+            "items": {
+              "$ref": "#/components/schemas/RpgWorldCatalogEntry"
+            },
+            "title": "Worlds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "repo",
+          "updated_at",
+          "worlds"
+        ],
+        "title": "RpgWorldCatalogResponse",
         "type": "object"
       },
       "RpgWorldDeletionBlocker": {
@@ -53421,6 +53762,110 @@
           }
         },
         "title": "RpgWorldSaveTopicRequestBody",
+        "type": "object"
+      },
+      "RpgWorldShareRequestBody": {
+        "properties": {
+          "summary": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "title": "RpgWorldShareRequestBody",
+        "type": "object"
+      },
+      "RpgWorldShareResponse": {
+        "properties": {
+          "bundle_bytes": {
+            "title": "Bundle Bytes",
+            "type": "integer"
+          },
+          "bundle_sha256": {
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "catalog_id": {
+            "title": "Catalog Id",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "pull_request_url": {
+            "title": "Pull Request Url",
+            "type": "string"
+          },
+          "status": {
+            "const": "submitted",
+            "title": "Status",
+            "type": "string"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "world_id",
+          "catalog_id",
+          "pull_request_url",
+          "bundle_sha256",
+          "bundle_bytes"
+        ],
+        "title": "RpgWorldShareResponse",
+        "type": "object"
+      },
+      "RpgWorldSharingStatusResponse": {
+        "properties": {
+          "catalog_repo": {
+            "title": "Catalog Repo",
+            "type": "string"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "device_sign_in": {
+            "title": "Device Sign In",
+            "type": "boolean"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "connected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "connected",
+          "login",
+          "device_sign_in",
+          "catalog_repo"
+        ],
+        "title": "RpgWorldSharingStatusResponse",
         "type": "object"
       },
       "RpgWorldStartGenerationRequestBody": {
@@ -88099,6 +88544,113 @@
         ]
       }
     },
+    "/api/rpg/world-catalog": {
+      "get": {
+        "operationId": "rpg_world_catalog_api_rpg_world_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldCatalogResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Catalog Api Rpg World Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Catalog",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-catalog/{entry_id}/cover": {
+      "get": {
+        "operationId": "rpg_world_catalog_cover_api_rpg_world_catalog__entry_id__cover_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/webp": {}
+            },
+            "description": "The catalog world's cover image."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Catalog Cover",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-catalog/{entry_id}/install": {
+      "post": {
+        "operationId": "rpg_world_catalog_install_api_rpg_world_catalog__entry_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldCatalogInstallResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Catalog Install Api Rpg World Catalog  Entry Id  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Catalog Install",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
     "/api/rpg/world-generation/diagnostics": {
       "get": {
         "operationId": "rpg_world_generation_diagnostics_api_rpg_world_generation_diagnostics_get",
@@ -88662,6 +89214,165 @@
         "summary": "Rpg World Library"
       }
     },
+    "/api/rpg/world-sharing/github": {
+      "delete": {
+        "operationId": "rpg_world_sharing_github_disconnect_api_rpg_world_sharing_github_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Disconnect Api Rpg World Sharing Github Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Sharing Github Disconnect",
+        "tags": [
+          "rpg-world"
+        ]
+      },
+      "get": {
+        "operationId": "rpg_world_sharing_github_api_rpg_world_sharing_github_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Api Rpg World Sharing Github Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Sharing Github",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-sharing/github/device": {
+      "post": {
+        "operationId": "rpg_world_sharing_github_device_api_rpg_world_sharing_github_device_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgGitHubDeviceSignInResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Device Api Rpg World Sharing Github Device Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          }
+        },
+        "summary": "Rpg World Sharing Github Device",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-sharing/github/device/{flow_id}/poll": {
+      "post": {
+        "operationId": "rpg_world_sharing_github_device_poll_api_rpg_world_sharing_github_device__flow_id__poll_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "flow_id",
+            "required": true,
+            "schema": {
+              "title": "Flow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Device Poll Api Rpg World Sharing Github Device  Flow Id  Poll Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Sharing Github Device Poll",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/world-sharing/github/token": {
+      "put": {
+        "operationId": "rpg_world_sharing_github_token_api_rpg_world_sharing_github_token_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgGitHubTokenRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldSharingStatusResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Sharing Github Token Api Rpg World Sharing Github Token Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Sharing Github Token",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
     "/api/rpg/worlds": {
       "get": {
         "operationId": "rpg_list_worlds_api_rpg_worlds_get",
@@ -88919,6 +89630,61 @@
           }
         },
         "summary": "Rpg Update World Metadata",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/adopt": {
+      "post": {
+        "operationId": "rpg_world_adopt_api_rpg_worlds__world_id__adopt_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgWorldAdoptRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldAdoptionResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Adopt Api Rpg Worlds  World Id  Adopt Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Adopt",
         "tags": [
           "rpg-world"
         ]
@@ -90575,6 +91341,106 @@
           }
         },
         "summary": "Rpg Publish World Release",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/share": {
+      "post": {
+        "operationId": "rpg_world_share_api_rpg_worlds__world_id__share_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgWorldShareRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgWorldShareResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Share Api Rpg Worlds  World Id  Share Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Share",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/shared": {
+      "get": {
+        "operationId": "rpg_world_shared_state_api_rpg_worlds__world_id__shared_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgSharedWorldStateResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg World Shared State Api Rpg Worlds  World Id  Shared Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg World Shared State",
         "tags": [
           "rpg-world"
         ]

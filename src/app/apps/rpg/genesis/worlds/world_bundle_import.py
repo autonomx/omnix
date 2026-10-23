@@ -428,9 +428,11 @@ def import_world_bundle(
     content: bytes,
     *,
     target_world_id: str | None = None,
+    catalog: Mapping[str, Any] | None = None,
     database: Any | None = None,
     asset_store: SharedAssetStore | None = None,
 ) -> dict[str, Any]:
+    """Import a bundle as a new world. ``catalog`` names the community catalog entry it was downloaded from."""
     parsed = parse_world_bundle_archive(content)
     target = (target_world_id or parsed.manifest.source_world_id).strip()
     if not target:
@@ -451,6 +453,7 @@ def import_world_bundle(
         existing_map_ids=existing["map"],
         existing_asset_ids={asset.id for asset in iter_assets(store)},
         existing_run_ids=existing["run"],
+        catalog=catalog,
     )
     created_assets, reused_assets, asset_map = _prepare_assets(parsed, transformed, cast(Any, store))
     installed_assets = _register_assets(cast(Any, store), created_assets)
@@ -468,28 +471,9 @@ def import_world_bundle(
         _cleanup_assets(cast(Any, store), installed_assets)
         raise
 
-    launch_preparation: dict[str, Any] = {"status": "not_required"}
-    # A portable release is immediately playable as-is. Authoring-only bundles
-    # need the same launch preparation as a newly forged world, after commit.
-    if not transformed.payload.scenario_revisions:
-        try:
-            from .launch_repair_service import prepare_opening_scenarios_for_launch
-
-            launch_preparation = prepare_opening_scenarios_for_launch(
-                target,
-                database=database,
-            )
-        except ValueError as exc:
-            if str(exc) != "world_opening_scenarios_not_found":
-                launch_preparation = {
-                    "status": "recovery_required",
-                    "error": str(exc),
-                }
-        except Exception as exc:  # Imported world is durable even if recovery is not.
-            launch_preparation = {
-                "status": "recovery_required",
-                "error": str(exc),
-            }
+    # A world made elsewhere launches, or is prepared for launch, only after someone here adopts it
+    # (world_adoption); an authoring-only bundle no longer starts World Forge on import.
+    launch_preparation: dict[str, Any] = {"status": "adoption_required"}
 
     return {
         "ok": True,

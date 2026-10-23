@@ -62,6 +62,7 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/platform/image/routes/assets.py` | GET | `/api/assets/{asset_id}/file` | Allowlisted image bytes |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_map_editor_routes.py` | POST | `/api/rpg/map-editor/export` | Validated JSON document download |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_world_bundle_routes.py` | GET | `/api/rpg/worlds/{world_id}/export` | ZIP archive bytes |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_world_sharing_routes.py` | GET | `/api/rpg/world-catalog/{entry_id}/cover` | Community world cover image bytes |
 | `src/app/composition/gateway/kernel_routes/__init__.py` | GET | `/metrics` | Prometheus text exposition |
 | `src/app/apps/trading/strategy_api.py` | DELETE | `/api/trading/strategies/{strategy_id}` | 204 No Content |
 | `src/app/apps/trading/alerts_notify_api.py` | DELETE | `/api/trading/notifications/email` | 204 No Content |

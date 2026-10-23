@@ -425,6 +425,7 @@ def transform_world_bundle(
     existing_map_ids: Iterable[str] = (),
     existing_asset_ids: Iterable[str] = (),
     existing_run_ids: Iterable[str] = (),
+    catalog: Mapping[str, Any] | None = None,
 ) -> TransformedWorldBundle:
     source_world_id = str(payload.world.get("id") or "")
     if not source_world_id or not target_world_id.strip():
@@ -542,6 +543,9 @@ def transform_world_bundle(
         target_world_id=target_world_id,
         bundle_sha256=bundle_sha256,
     )
+    if catalog:
+        # The community catalog entry the bundle was downloaded from.
+        world["metadata"]["world_bundle_import"]["catalog"] = dict(catalog)
     return TransformedWorldBundle(
         payload=WorldBundlePayload(
             world=world,

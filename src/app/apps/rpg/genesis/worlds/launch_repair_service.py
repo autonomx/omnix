@@ -27,6 +27,7 @@ from .library_service import start_world_library_generation
 from .postgres_service import create_scenario_project, publish_scenario_revision
 from .service import compile_world_release, compile_world_revision
 from .starter_bubble_service import promote_starter_bubble
+from .world_adoption import require_adopted_if_shared
 
 
 def _compile_imported_topics_publication(
@@ -327,6 +328,10 @@ def repair_world_for_launch(
 
     context = current_tenant()
     with unit_of_work(database) as work:
+        world = work.world_scenarios.get_world(context, world_id)
+        if world is None:
+            raise KeyError(f"world_not_found:{world_id}")
+        require_adopted_if_shared(world)
         scenario = next(
             (
                 row
@@ -438,6 +443,7 @@ def prepare_opening_scenarios_for_launch(
     to produce certified scenario revisions and releases.
     """
     detail = read_world_detail(world_id, database=database)
+    require_adopted_if_shared(dict(detail.get("world") or {}))
     openings: list[Mapping[str, Any]] = []
     for topic in detail.get("topics") or ():
         if str(topic.get("topic_id") or "") != "opening_scenarios":

@@ -21,6 +21,8 @@ MAX_WORLD_BUNDLE_BYTES = 512 * 1024 * 1024
 MAX_WORLD_BUNDLE_FILE_BYTES = 128 * 1024 * 1024
 MAX_WORLD_BUNDLE_ENTRIES = 2_000
 MAX_WORLD_BUNDLE_ASSETS = 1_000
+# World metadata keys that only import and adoption write; metadata edits from a client never set them.
+RESERVED_WORLD_METADATA_KEYS = frozenset({"world_bundle_import", "world_adoption"})
 
 _IMAGE_MIME_EXTENSIONS = {
     "image/gif": ".gif",

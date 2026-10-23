@@ -28,6 +28,7 @@ from .rpg_world_generation_review_routes import (
 from .rpg_world_image_routes import register_rpg_world_image_routes
 from .rpg_world_profile_routes import register_rpg_world_profile_routes
 from .rpg_world_routes import register_rpg_world_routes
+from .rpg_world_sharing_routes import register_rpg_world_sharing_routes
 
 
 def create_rpg_routes_router(context: FeatureContext) -> APIRouter:
@@ -40,6 +41,7 @@ def create_rpg_routes_router(context: FeatureContext) -> APIRouter:
         register_rpg_map_editor_routes,
         register_rpg_map_routes,
         register_rpg_world_bundle_routes,
+        register_rpg_world_sharing_routes,
         register_rpg_world_routes,
         register_rpg_world_generation_review_routes,
         register_rpg_world_deletion_routes,

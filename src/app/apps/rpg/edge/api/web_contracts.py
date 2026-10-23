@@ -29,7 +29,7 @@ class RpgWorldBundleImportResponseLaunchPreparationPrepared(TypedDict, total=Fal
 
 
 class RpgWorldBundleImportResponseLaunchPreparation(TypedDict, total=False):
-    status: NotRequired[Literal['generating', 'ready', 'not_required', 'recovery_required']]
+    status: NotRequired[Literal['generating', 'ready', 'not_required', 'recovery_required', 'adoption_required']]
     prepared: NotRequired[list[RpgWorldBundleImportResponseLaunchPreparationPrepared]]
     error: NotRequired[str]
 
@@ -1061,3 +1061,91 @@ class HermesRecentResponse(TypedDict, total=False):
     count: NotRequired[float]
     source: NotRequired[str]
 
+
+
+class RpgWorldCatalogInstalled(TypedDict, total=False):
+    world_id: Required[str]
+    version: Required[int]
+    bundle_sha256: Required[str]
+    adopted: Required[bool]
+
+
+class RpgWorldCatalogEntry(TypedDict, total=False):
+    id: Required[str]
+    version: Required[int]
+    title: Required[str]
+    summary: Required[str]
+    genre: Required[str]
+    tone: Required[str]
+    author: Required[str]
+    published_at: Required[str]
+    bundle: Required[dict[str, Any]]
+    has_cover: Required[bool]
+    installed: Required[RpgWorldCatalogInstalled | None]
+
+
+class RpgWorldCatalogResponse(TypedDict, total=False):
+    ok: Required[bool]
+    repo: Required[str]
+    updated_at: Required[str]
+    worlds: Required[list[RpgWorldCatalogEntry]]
+
+
+class RpgWorldCatalogInstallResponse(TypedDict, total=False):
+    ok: Required[bool]
+    status: Required[Literal['installed']]
+    reused: Required[bool]
+    world_id: Required[str]
+    version: Required[int]
+    bundle_sha256: Required[str]
+    adopted: Required[bool]
+
+
+class RpgSharedWorldStateResponse(TypedDict, total=False):
+    ok: Required[bool]
+    world_id: Required[str]
+    shared: Required[bool]
+    bundle_sha256: Required[str]
+    source_world_id: Required[str]
+    catalog: Required[dict[str, Any]]
+    adopted: Required[bool]
+    adoption: Required[dict[str, Any]]
+
+
+class RpgWorldAdoptionResponse(TypedDict, total=False):
+    ok: Required[bool]
+    status: Required[Literal['adopted']]
+    reused: Required[bool]
+    world_id: Required[str]
+    adoption: Required[dict[str, Any]]
+    world_revision: NotRequired[int]
+    world_release: NotRequired[int]
+    launch_ready: NotRequired[bool]
+    openings: NotRequired[list[dict[str, Any]]]
+
+
+class RpgWorldSharingStatusResponse(TypedDict, total=False):
+    ok: Required[bool]
+    connected: Required[bool]
+    login: Required[str | None]
+    device_sign_in: Required[bool]
+    catalog_repo: Required[str]
+    status: NotRequired[Literal['pending', 'connected']]
+
+
+class RpgGitHubDeviceSignInResponse(TypedDict, total=False):
+    ok: Required[bool]
+    flow_id: Required[str]
+    user_code: Required[str]
+    verification_uri: Required[str]
+    interval: Required[int]
+
+
+class RpgWorldShareResponse(TypedDict, total=False):
+    ok: Required[bool]
+    status: Required[Literal['submitted']]
+    world_id: Required[str]
+    catalog_id: Required[str]
+    pull_request_url: Required[str]
+    bundle_sha256: Required[str]
+    bundle_bytes: Required[int]

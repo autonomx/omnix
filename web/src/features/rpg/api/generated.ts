@@ -1552,6 +1552,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/world-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg World Catalog */
+        get: operations["rpg_world_catalog_api_rpg_world_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/world-catalog/{entry_id}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg World Catalog Cover */
+        get: operations["rpg_world_catalog_cover_api_rpg_world_catalog__entry_id__cover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/world-catalog/{entry_id}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg World Catalog Install */
+        post: operations["rpg_world_catalog_install_api_rpg_world_catalog__entry_id__install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/world-generation/diagnostics": {
         parameters: {
             query?: never;
@@ -1756,6 +1807,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/world-sharing/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg World Sharing Github */
+        get: operations["rpg_world_sharing_github_api_rpg_world_sharing_github_get"];
+        put?: never;
+        post?: never;
+        /** Rpg World Sharing Github Disconnect */
+        delete: operations["rpg_world_sharing_github_disconnect_api_rpg_world_sharing_github_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/world-sharing/github/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg World Sharing Github Device */
+        post: operations["rpg_world_sharing_github_device_api_rpg_world_sharing_github_device_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/world-sharing/github/device/{flow_id}/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg World Sharing Github Device Poll */
+        post: operations["rpg_world_sharing_github_device_poll_api_rpg_world_sharing_github_device__flow_id__poll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/world-sharing/github/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rpg World Sharing Github Token */
+        put: operations["rpg_world_sharing_github_token_api_rpg_world_sharing_github_token_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/worlds": {
         parameters: {
             query?: never;
@@ -1807,6 +1927,23 @@ export interface paths {
         head?: never;
         /** Rpg Update World Metadata */
         patch: operations["rpg_update_world_metadata_api_rpg_worlds__world_id__patch"];
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg World Adopt */
+        post: operations["rpg_world_adopt_api_rpg_worlds__world_id__adopt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/rpg/worlds/{world_id}/archive": {
@@ -2331,6 +2468,40 @@ export interface paths {
         put?: never;
         /** Rpg Publish World Release */
         post: operations["rpg_publish_world_release_api_rpg_worlds__world_id__revisions__world_revision__releases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg World Share */
+        post: operations["rpg_world_share_api_rpg_worlds__world_id__share_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg World Shared State */
+        get: operations["rpg_world_shared_state_api_rpg_worlds__world_id__shared_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4798,6 +4969,24 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** RpgGitHubDeviceSignInResponse */
+        RpgGitHubDeviceSignInResponse: {
+            /** Flow Id */
+            flow_id: string;
+            /** Interval */
+            interval: number;
+            /** Ok */
+            ok: boolean;
+            /** User Code */
+            user_code: string;
+            /** Verification Uri */
+            verification_uri: string;
+        };
+        /** RpgGitHubTokenRequestBody */
+        RpgGitHubTokenRequestBody: {
+            /** Token */
+            token: string;
+        };
         /** RpgGridPerformanceProfileRequestBody */
         RpgGridPerformanceProfileRequestBody: {
             /** Budget */
@@ -6247,6 +6436,29 @@ export interface components {
             /** Session Id */
             session_id?: string;
         };
+        /** RpgSharedWorldStateResponse */
+        RpgSharedWorldStateResponse: {
+            /** Adopted */
+            adopted: boolean;
+            /** Adoption */
+            adoption: {
+                [key: string]: unknown;
+            };
+            /** Bundle Sha256 */
+            bundle_sha256: string;
+            /** Catalog */
+            catalog: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+            /** Shared */
+            shared: boolean;
+            /** Source World Id */
+            source_world_id: string;
+            /** World Id */
+            world_id: string;
+        };
         /** RpgSpatialClock */
         RpgSpatialClock: {
             /** Aggregate Metrics */
@@ -6796,6 +7008,39 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RpgWorldAdoptRequestBody */
+        RpgWorldAdoptRequestBody: {
+            /** Bundle Sha256 */
+            bundle_sha256: string;
+        };
+        /** RpgWorldAdoptionResponse */
+        RpgWorldAdoptionResponse: {
+            /** Adoption */
+            adoption: {
+                [key: string]: unknown;
+            };
+            /** Launch Ready */
+            launch_ready?: boolean;
+            /** Ok */
+            ok: boolean;
+            /** Openings */
+            openings?: {
+                [key: string]: unknown;
+            }[];
+            /** Reused */
+            reused: boolean;
+            /**
+             * Status
+             * @constant
+             */
+            status: "adopted";
+            /** World Id */
+            world_id: string;
+            /** World Release */
+            world_release?: number;
+            /** World Revision */
+            world_revision?: number;
+        };
         /** RpgWorldAuthorshipAuditResponse */
         RpgWorldAuthorshipAuditResponse: {
             /** Audited At */
@@ -6885,7 +7130,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status?: "generating" | "ready" | "not_required" | "recovery_required";
+            status?: "generating" | "ready" | "not_required" | "recovery_required" | "adoption_required";
         };
         /** RpgWorldBundleImportResponseLaunchPreparationPrepared */
         RpgWorldBundleImportResponseLaunchPreparationPrepared: {
@@ -6920,6 +7165,74 @@ export interface components {
             world_release: number;
             /** World Revision */
             world_revision: number;
+        };
+        /** RpgWorldCatalogEntry */
+        RpgWorldCatalogEntry: {
+            /** Author */
+            author: string;
+            /** Bundle */
+            bundle: {
+                [key: string]: unknown;
+            };
+            /** Genre */
+            genre: string;
+            /** Has Cover */
+            has_cover: boolean;
+            /** Id */
+            id: string;
+            installed: components["schemas"]["RpgWorldCatalogInstalled"] | null;
+            /** Published At */
+            published_at: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+            /** Tone */
+            tone: string;
+            /** Version */
+            version: number;
+        };
+        /** RpgWorldCatalogInstallResponse */
+        RpgWorldCatalogInstallResponse: {
+            /** Adopted */
+            adopted: boolean;
+            /** Bundle Sha256 */
+            bundle_sha256: string;
+            /** Ok */
+            ok: boolean;
+            /** Reused */
+            reused: boolean;
+            /**
+             * Status
+             * @constant
+             */
+            status: "installed";
+            /** Version */
+            version: number;
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgWorldCatalogInstalled */
+        RpgWorldCatalogInstalled: {
+            /** Adopted */
+            adopted: boolean;
+            /** Bundle Sha256 */
+            bundle_sha256: string;
+            /** Version */
+            version: number;
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgWorldCatalogResponse */
+        RpgWorldCatalogResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Repo */
+            repo: string;
+            /** Updated At */
+            updated_at: string;
+            /** Worlds */
+            worlds: components["schemas"]["RpgWorldCatalogEntry"][];
         };
         /** RpgWorldDeletionBlocker */
         RpgWorldDeletionBlocker: {
@@ -7981,6 +8294,52 @@ export interface components {
             topic_id?: unknown;
         } & {
             [key: string]: unknown;
+        };
+        /** RpgWorldShareRequestBody */
+        RpgWorldShareRequestBody: {
+            /**
+             * Summary
+             * @default
+             */
+            summary?: string;
+        };
+        /** RpgWorldShareResponse */
+        RpgWorldShareResponse: {
+            /** Bundle Bytes */
+            bundle_bytes: number;
+            /** Bundle Sha256 */
+            bundle_sha256: string;
+            /** Catalog Id */
+            catalog_id: string;
+            /** Ok */
+            ok: boolean;
+            /** Pull Request Url */
+            pull_request_url: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "submitted";
+            /** World Id */
+            world_id: string;
+        };
+        /** RpgWorldSharingStatusResponse */
+        RpgWorldSharingStatusResponse: {
+            /** Catalog Repo */
+            catalog_repo: string;
+            /** Connected */
+            connected: boolean;
+            /** Device Sign In */
+            device_sign_in: boolean;
+            /** Login */
+            login: string | null;
+            /** Ok */
+            ok: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status?: "pending" | "connected";
         };
         /** RpgWorldStartGenerationRequestBody */
         RpgWorldStartGenerationRequestBody: {
@@ -11253,6 +11612,88 @@ export interface operations {
             };
         };
     };
+    rpg_world_catalog_api_rpg_world_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldCatalogResponse"];
+                };
+            };
+        };
+    };
+    rpg_world_catalog_cover_api_rpg_world_catalog__entry_id__cover_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The catalog world's cover image. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_world_catalog_install_api_rpg_world_catalog__entry_id__install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldCatalogInstallResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_world_generation_diagnostics_api_rpg_world_generation_diagnostics_get: {
         parameters: {
             query?: never;
@@ -11635,6 +12076,130 @@ export interface operations {
             };
         };
     };
+    rpg_world_sharing_github_api_rpg_world_sharing_github_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldSharingStatusResponse"];
+                };
+            };
+        };
+    };
+    rpg_world_sharing_github_disconnect_api_rpg_world_sharing_github_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldSharingStatusResponse"];
+                };
+            };
+        };
+    };
+    rpg_world_sharing_github_device_api_rpg_world_sharing_github_device_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgGitHubDeviceSignInResponse"];
+                };
+            };
+        };
+    };
+    rpg_world_sharing_github_device_poll_api_rpg_world_sharing_github_device__flow_id__poll_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                flow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldSharingStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_world_sharing_github_token_api_rpg_world_sharing_github_token_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgGitHubTokenRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldSharingStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_list_worlds_api_rpg_worlds_get: {
         parameters: {
             query?: {
@@ -11791,6 +12356,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgWorldResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_world_adopt_api_rpg_worlds__world_id__adopt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgWorldAdoptRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldAdoptionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12858,6 +13458,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgWorldReleaseResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_world_share_api_rpg_worlds__world_id__share_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgWorldShareRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgWorldShareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_world_shared_state_api_rpg_worlds__world_id__shared_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgSharedWorldStateResponse"];
                 };
             };
             /** @description Validation Error */

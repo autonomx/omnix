@@ -228,6 +228,14 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/api/assistant/tools/proposals/{proposal_id}/approve"): "tools:approve",
     ("POST", "/api/hermes/approve"): "tools:approve",
     ("POST", "/api/hermes/rpg/approved-flow"): "tools:approve",
+    # Community worlds: downloading, adopting and sharing a world are authoring, not play.
+    ("POST", "/api/rpg/world-catalog/{entry_id}/install"): "rpg:author",
+    ("POST", "/api/rpg/worlds/{world_id}/adopt"): "rpg:author",
+    ("POST", "/api/rpg/worlds/{world_id}/share"): "rpg:author",
+    ("PUT", "/api/rpg/world-sharing/github/token"): "rpg:author",
+    ("POST", "/api/rpg/world-sharing/github/device"): "rpg:author",
+    ("POST", "/api/rpg/world-sharing/github/device/{flow_id}/poll"): "rpg:author",
+    ("DELETE", "/api/rpg/world-sharing/github"): "rpg:author",
     # Credentials and connections.
     ("POST", "/api/assistant/tools/connect/{tool_id}/oauth-client"): "tools:connections:admin",
     # Enabling tools and loosening their approval policy is the workspace

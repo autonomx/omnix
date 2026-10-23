@@ -28,6 +28,7 @@ _DOCUMENTED_NON_JSON_RESPONSES = {
     ("POST", "/mcp/voice"),
     ("GET", "/api/audiobook/projects/{project_id}/source/download"),
     ("GET", "/api/audiobook/projects/{project_id}/cover"),
+    ("GET", "/api/rpg/world-catalog/{entry_id}/cover"),
     ("GET", "/api/audiobook/projects/{project_id}/previews/{job_id}/audio"),
     ("GET", "/api/audiobook/projects/{project_id}/chapters/{chapter_id}/audio"),
     ("GET", "/api/audiobook/projects/{project_id}/exports/{export_id}/download"),
