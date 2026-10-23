@@ -807,7 +807,7 @@ function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session:
   return environmentRowsFromValues({
     season: firstString(display?.season, calendar?.season_label, snapshot.season_label),
     dayTime: firstString(display?.day_time, calendar?.time_label, snapshot.time_label),
-    region: firstString(snapshot.region_id),
+    region: firstString(display?.region, snapshot.region_id),
     weather: firstString(display?.weather, weather?.label, weather?.condition),
     temperature: firstString(display?.temperature, snapshot.temperature_label, snapshot.temperature_c),
     wind: firstString(display?.wind, snapshot.wind),

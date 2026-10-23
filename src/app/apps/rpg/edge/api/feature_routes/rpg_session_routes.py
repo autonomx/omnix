@@ -134,18 +134,15 @@ def _ability_coverage_payload(state: dict[str, Any]) -> dict[str, Any]:
 def _environment_snapshot_from_state(
     state: dict[str, Any],
 ) -> dict[str, Any] | None:
-    # A published scenario supplies its own canonical opening environment.  Do
-    # not derive a replacement from the new-game template that was used only to
-    # bootstrap the player sheet (for example, Rusty Flagon Tavern).
-    published_world = state.get("published_world")
-    published_snapshot = state.get("environment_snapshot")
+    # Campaigns launched from a published world before it had a live environment kept a fixed opening snapshot;
+    # their `world.environment` still belongs to the new-game template (the Rusty Flagon Tavern), so keep it.
+    legacy_snapshot = state.get("environment_snapshot")
     if (
-        isinstance(published_world, dict)
-        and isinstance(published_snapshot, dict)
-        and published_snapshot.get("schema_version")
-        == "rpg_published_opening_environment_v1"
+        isinstance(state.get("published_world"), dict)
+        and isinstance(legacy_snapshot, dict)
+        and legacy_snapshot.get("schema_version") == "rpg_published_opening_environment_v1"
     ):
-        return dict(published_snapshot)
+        return dict(legacy_snapshot)
     world_value = state.get("world")
     world = world_value if isinstance(world_value, dict) else {}
     environment_value = world.get("environment")

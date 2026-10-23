@@ -1,6 +1,7 @@
 """Structured prose writing from approved beats and evidence only."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -304,20 +305,40 @@ class StructuredNarrativeWriter:
         )
 
 
-def _evidence_text(beat: NarrativeBeat, evidence: Mapping[str, EvidenceRecord]) -> str:
+def _evidence_text(beat: NarrativeBeat, evidence: Mapping[str, EvidenceRecord], word_limit: int = 0) -> str:
     for ref in beat.evidence_refs:
         record = evidence.get(ref)
         if record and record.content.strip():
-            return record.content.strip()
+            return _within_words(record.content.strip(), word_limit)
     return ""
+
+
+def _within_words(text: str, word_limit: int) -> str:
+    """Whole sentences of ``text`` up to ``word_limit`` words (always the first); a long lore page or character
+    dossier would otherwise overrun the response's word budget."""
+    if word_limit <= 0 or len(text.split()) <= word_limit:
+        return text
+    kept: list[str] = []
+    words = 0
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        count = len(sentence.split())
+        if kept and words + count > word_limit:
+            break
+        kept.append(sentence)
+        words += count
+    return " ".join(kept)
 
 
 def _deterministic_text(
     beat: NarrativeBeat,
     request: TurnPresentationRequest,
     evidence: Mapping[str, EvidenceRecord],
+    word_limit: int = 0,
 ) -> str:
-    grounded = _evidence_text(beat, evidence)
+    grounded = _evidence_text(beat, evidence, word_limit)
     target = beat.speaker_id or request.target_actor_id or "The nearby figure"
     name = target.split(":")[-1].replace("_", " ").title()
     if beat.purpose is BeatPurpose.PHYSICAL_REACTION:
@@ -357,6 +378,8 @@ class DeterministicNarrativeWriter:
         evidence: Sequence[EvidenceRecord],
     ) -> WriterResult:
         by_id = {record.evidence_id: record for record in evidence}
+        # Each beat's fair share of the plan's maximum, so the fallback always fits the budget it is checked against.
+        share = max(12, int(plan.word_budget[1]) // max(1, len(plan.beats))) if plan.word_budget[1] else 0
         blocks = tuple(
             NarrativeBlock(
                 block_id=f"block:{beat.beat_id}",
@@ -364,7 +387,7 @@ class DeterministicNarrativeWriter:
                 sequence=beat.sequence,
                 kind=beat.kind,
                 purpose=beat.purpose,
-                text=_deterministic_text(beat, request, by_id),
+                text=_deterministic_text(beat, request, by_id, share),
                 speaker_id=beat.speaker_id,
                 evidence_refs=beat.evidence_refs,
                 claim_refs=beat.required_claim_refs,

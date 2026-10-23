@@ -74,6 +74,7 @@ def _pinned_world_canon(
         canon,
         campaign_id=campaign_id,
         canon_revision=int(binding.get("world_revision") or 1),
+        topology=_mapping(document.get("topology")),
     )
 
 

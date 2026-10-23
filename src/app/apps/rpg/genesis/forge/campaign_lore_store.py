@@ -573,6 +573,7 @@ def load_campaign_lore(
                         world_canon,
                         campaign_id=campaign_id,
                         canon_revision=int(binding.get("world_revision") or 1),
+                        topology=_mapping(revision_document.get("topology")),
                     )
                     bible = _merge_published_world_canon(
                         world_canon,
@@ -1000,6 +1001,7 @@ def regenerate_campaign_lore_document(
                     world_canon,
                     campaign_id=campaign_id,
                     canon_revision=int(binding.get("world_revision") or 1),
+                    topology=_mapping(revision_document.get("topology")),
                 )
                 canonical_source = next(
                     (

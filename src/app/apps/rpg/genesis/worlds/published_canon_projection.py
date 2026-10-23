@@ -78,8 +78,12 @@ def project_published_canon(
     *,
     campaign_id: str,
     canon_revision: int,
+    topology: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return a Campaign Bible, compiling legacy structured canon when needed."""
+    """Return a Campaign Bible, compiling legacy structured canon when needed.
+
+    ``topology`` (the world revision's) names the world's places, which the canon itself may not list.
+    """
 
     bible = deepcopy(dict(canon))
     bible["campaign_id"] = campaign_id
@@ -165,6 +169,66 @@ def project_published_canon(
                     "description": _text(row.get("stance_to_earthborn")),
                     "visibility": "public",
                 }
+
+    # The world's people, places, quests and items, so narration and lore read the published entries instead
+    # of inventing new ones for them.
+    for row in _rows(bible.get("characters")):
+        entity_id = _text(row.get("id"))
+        if not entity_id:
+            continue
+        title = _text(row.get("name")) or _label(entity_id.split(":")[-1])
+        safe_row = {field: value for field, value in row.items() if field != "secrets"}
+        page = _page(document_id=f"lore:published:{_slug(entity_id)}", topic_id="characters", title=title,
+                     value=safe_row, canon_revision=revision)
+        if page is not None:
+            page["entity_refs"] = [entity_id]
+        add(page)
+        personality = row.get("personality")
+        entities[entity_id] = {
+            "kind": "npc",
+            "name": title,
+            "role": _text(row.get("role")),
+            "description": _text(row.get("biography") or row.get("description")),
+            "backstory": _text(row.get("biography")),
+            "personality": ", ".join(_text(item) for item in personality) if isinstance(personality, list) else _text(personality),
+            "goals": [_text(goal) for goal in row.get("goals") or () if _text(goal)],
+            "visibility": "public",
+        }
+    from .published_world_setup import published_locations
+
+    for place in published_locations(bible, _mapping(topology)):
+        entity_id = place["id"]
+        page = _page(document_id=f"lore:published:{_slug(entity_id)}", topic_id="locations", title=place["name"],
+                     value={"region": place["region_name"], "description": place["description"]},
+                     canon_revision=revision)
+        if page is not None:
+            page["entity_refs"] = [entity_id]
+        add(page)
+        entities[entity_id] = {
+            "kind": "location",
+            "name": place["name"],
+            "description": place["description"],
+            "region_id": place["region_id"],
+            "visibility": "public",
+        }
+    for key, kind, topic_id in (("quests", "quest", "quests"), ("items", "item", "items")):
+        for row in _rows(bible.get(key)):
+            entity_id = _text(row.get("id"))
+            if not entity_id:
+                continue
+            title = _text(row.get("title") or row.get("name")) or _label(entity_id.split(":")[-1])
+            entities[entity_id] = {
+                "kind": kind,
+                "name": title,
+                "description": _text(row.get("objective") or row.get("effect") or row.get("description")),
+                "visibility": "public",
+            }
+            if kind == "quest":
+                page = _page(document_id=f"lore:published:{_slug(entity_id)}", topic_id=topic_id, title=title,
+                             value=row, canon_revision=revision)
+                if page is not None:
+                    page["entity_refs"] = [entity_id]
+                add(page)
 
     discovery = deepcopy(_mapping(bible.get("discovery_state")))
     page_status = deepcopy(_mapping(discovery.get("pages")))

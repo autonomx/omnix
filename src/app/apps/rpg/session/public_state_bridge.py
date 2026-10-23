@@ -76,8 +76,77 @@ def project_authoritative_player(session: Dict[str, Any]) -> Dict[str, Any]:
     quest_state = _dict(simulation.get("quest_state"))
     if isinstance(quest_state.get("quests"), list):
         public_state["quests"] = deepcopy(quest_state["quests"])
+    _project_world_location(public_state, simulation)
+    _project_world_presence(session, simulation)
     session["state"] = public_state
     return session
+
+
+def _project_world_presence(session: Dict[str, Any], simulation: Dict[str, Any]) -> None:
+    """Who is here, for a session with its own world: when the player reaches another place, the people who live
+    there (and the player's companions) are present, not the people of the place they left."""
+
+    locations = _dict(_dict(simulation.get("world_model")).get("locations"))
+    player_state = _dict(simulation.get("player_state"))
+    location_id = str(player_state.get("location_id") or "")
+    location = _dict(locations.get(location_id))
+    present_state = _dict(simulation.get("present_npc_state"))
+    if not location or present_state.get("location_id") == location_id:
+        return
+    companions = [
+        str(_dict(companion).get("npc_id") or "")
+        for companion in _dict(player_state.get("party_state")).get("companions") or ()
+    ]
+    present_ids = [str(_dict(npc).get("id") or "") for npc in location.get("present_npcs") or ()]
+    present_ids = [npc_id for npc_id in dict.fromkeys(present_ids + companions) if npc_id]
+    simulation["present_npc_state"] = {**present_state, "location_id": location_id, "present_npc_ids": present_ids}
+    session["simulation_state"] = simulation
+    runtime = _dict(session.get("runtime_state"))
+    name = str(location.get("name") or location_id)
+    runtime["current_scene"] = {
+        **_dict(runtime.get("current_scene")),
+        "scene_id": f"scene:{location_id}",
+        "location_id": location_id,
+        "location_name": name,
+        "title": name,
+        "summary": str(location.get("description") or name),
+        "present_npc_ids": present_ids,
+        "actors": [str(_dict(npc).get("name") or "") for npc in location.get("present_npcs") or ()],
+    }
+    session["runtime_state"] = runtime
+
+
+def _project_world_location(public_state: Dict[str, Any], simulation: Dict[str, Any]) -> None:
+    """Where the player is, by name, for a session with its own world (a published one): travel moves the
+    simulation's player, and the place, title, scene and region the player sees follow it."""
+
+    locations = _dict(_dict(simulation.get("world_model")).get("locations"))
+    location_id = str(_dict(simulation.get("player_state")).get("location_id") or "")
+    location = _dict(locations.get(location_id))
+    if not location or public_state.get("current_location_id") == location_id:
+        return
+    name = str(location.get("name") or location_id)
+    previous = str(public_state.get("current_location_name") or public_state.get("location") or "")
+    public_state.update({"location": name, "current_location": name, "current_location_id": location_id,
+                         "current_location_name": name})
+    title = str(public_state.get("title") or "")
+    if previous and title.endswith(previous):
+        public_state["title"] = title[: len(title) - len(previous)] + name
+    world = _dict(public_state.get("world"))
+    world.update({"current_location_id": location_id, "current_location_name": name})
+    environment = _dict(world.get("environment"))
+    if environment and location.get("region_id"):
+        environment.update({"region_id": location["region_id"], "region_name": location.get("region_name") or ""})
+        world["environment"] = environment
+        world["region"] = location.get("region_name") or world.get("region")
+    public_state["world"] = world
+    scene = _dict(public_state.get("scene"))
+    context = _dict(scene.get("environment_context"))
+    if context:
+        context.update({"location_id": location_id, "location_label": name,
+                        "region_id": location.get("region_id") or context.get("region_id")})
+        scene["environment_context"] = context
+        public_state["scene"] = scene
 
 
 def synchronize_player_projections(session: Dict[str, Any]) -> Dict[str, Any]:

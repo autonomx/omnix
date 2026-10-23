@@ -70,13 +70,13 @@ def test_canonical_consumer_messages_survive_compact_response_projection() -> No
         {
             "kind": "npc_dialogue",
             "speaker_id": "npc:bran",
-            "speaker": "bran",
+            "speaker": "Bran",
             "text": "Steady enough, though the old road has been quiet.",
         }
     ]
     assert visible["plain_text"] == (
         "Bran rests the polishing rag on the counter.\n\n"
-        'bran: "Steady enough, though the old road has been quiet."'
+        'Bran: "Steady enough, though the old road has been quiet."'
     )
 
 

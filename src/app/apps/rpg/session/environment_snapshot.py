@@ -61,6 +61,7 @@ def derive_environment_snapshot(environment: dict[str, Any], scene_context: dict
         },
         "resources": resources,
         "display": {
+            "region": str(env.get("region_name") or "") or _region_label(region_id),
             "day_time": calendar["time_label"],
             "season": calendar["season_label"],
             "weather": _weather_label(condition, intensity),
@@ -72,6 +73,12 @@ def derive_environment_snapshot(environment: dict[str, Any], scene_context: dict
             "context": _context_label(exposure, scene),
         },
     }
+
+
+def _region_label(region_id: str) -> str:
+    """A region's display name from its id when the environment carries none (``market_road`` -> ``Market Road``)."""
+    tail = region_id.rsplit(":", 1)[-1]
+    return " ".join(part.capitalize() for part in tail.replace("-", "_").split("_") if part) or region_id
 
 
 def _active_weather_event(environment: dict[str, Any]) -> dict[str, Any]:
@@ -136,8 +143,15 @@ def _derive_light_level(calendar: dict[str, Any], profile: dict[str, Any], scene
     return "daylight"
 
 
+# Sky conditions have no strength to speak of: "Clear", never "Heavy Clear".
+_CONDITIONS_WITHOUT_INTENSITY = frozenset({"clear", "cloudy", "overcast", "partly_cloudy"})
+
+
 def _weather_label(condition: str, intensity: str) -> str:
-    return f"{intensity.replace('_', ' ').title()} {condition.replace('_', ' ').title()}"
+    label = condition.replace('_', ' ').title()
+    if condition in _CONDITIONS_WITHOUT_INTENSITY:
+        return label
+    return f"{intensity.replace('_', ' ').title()} {label}"
 
 
 def _context_label(exposure: str, scene: dict[str, Any]) -> str:

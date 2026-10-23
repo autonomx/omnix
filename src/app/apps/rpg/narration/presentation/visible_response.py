@@ -251,9 +251,15 @@ def _dialogue_only(line: str, speaker: str) -> str:
 
 def _display_speaker(value: str) -> str:
     speaker = _text(value).strip()
-    if speaker.casefold().startswith("npc:"):
+    from_id = False
+    while speaker.casefold().startswith("npc:"):
         speaker = speaker.split(":", 1)[1]
-    return speaker.replace("_", " ").strip()
+        from_id = True
+    speaker = speaker.replace("_", " ").strip()
+    if from_id and speaker == speaker.casefold():
+        # An id stands in for the name ("npc:orik-stonewake"): show it as a name, "Orik Stonewake".
+        speaker = " ".join(part.capitalize() for part in speaker.replace("-", " ").split())
+    return speaker
 
 
 def _quest_evidence(sources: list[dict[str, Any]]) -> dict[str, Any]:
