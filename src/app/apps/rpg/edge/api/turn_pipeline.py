@@ -161,6 +161,26 @@ def _execute_foreground_rpg_turn(
             span["enabled"] = gate.get("enabled")
             span["ready"] = gate.get("ready")
 
+        with rpg_pipeline_span("turn.budget_gate") as span:
+            from app.apps.rpg.session.turn_budget import TurnBudgetExceeded, require_turn_budget
+
+            try:
+                require_turn_budget()
+            except TurnBudgetExceeded as exc:
+                span["exceeded"] = True
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "ok": False,
+                        "error": "rpg_turn_budget_exceeded",
+                        "session_id": session_id,
+                        "message": str(exc),
+                        "limit": exc.limit,
+                        "retry_after_seconds": exc.retry_after_seconds,
+                    },
+                    headers={"Retry-After": str(exc.retry_after_seconds)},
+                ) from exc
+
         from app.apps.rpg.session import interactive_first_call_runtime
         from app.apps.rpg.foundation.llm_priority import foreground_rpg_llm_priority
         from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror

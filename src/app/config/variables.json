@@ -1023,6 +1023,13 @@
   },
   {
     "default": null,
+    "description": "Controls github world sharing client id for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_GITHUB_WORLD_SHARING_CLIENT_ID",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls google allowed domains for security.",
     "feature": "security",
     "name": "OMNIX_GOOGLE_ALLOWED_DOMAINS",
@@ -1492,9 +1499,9 @@
   },
   {
     "default": null,
-    "description": "Controls model load commit bytes for image.",
+    "description": "Controls model load commit mb for image.",
     "feature": "image",
-    "name": "OMNIX_MODEL_LOAD_COMMIT_BYTES",
+    "name": "OMNIX_MODEL_LOAD_COMMIT_MB",
     "type": "string"
   },
   {
@@ -1720,6 +1727,20 @@
     "feature": "rpg",
     "name": "OMNIX_RPG_SNAPSHOT_EVERY",
     "type": "integer"
+  },
+  {
+    "default": "600",
+    "description": "Controls rpg turns per hour for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURNS_PER_HOUR",
+    "type": "integer"
+  },
+  {
+    "default": null,
+    "description": "Controls rpg world catalog repo for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_WORLD_CATALOG_REPO",
+    "type": "string"
   },
   {
     "default": null,

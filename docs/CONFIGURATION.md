@@ -150,6 +150,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | — | kernel, observability | Controls gateway background role for kernel, observability. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
+| `OMNIX_GITHUB_WORLD_SHARING_CLIENT_ID` | string | — | rpg | Controls github world sharing client id for rpg. |
 | `OMNIX_GOOGLE_ALLOWED_DOMAINS` | list | — | security | Controls google allowed domains for security. |
 | `OMNIX_GOOGLE_CLIENT_ID` | string | — | security | Controls google client id for security. |
 | `OMNIX_GOOGLE_CLIENT_SECRET` | string | — | security | Controls google client secret for security. |
@@ -217,7 +218,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_MIGRATE_ON_START` | boolean | `false` | production.py | Controls migrate on start for production.py. |
 | `OMNIX_MIGRATION_DATABASE_URL` | string | — | kernel | Controls migration database url for kernel. |
 | `OMNIX_MODELS_DIR` | string | — | kernel | Controls models dir for kernel. |
-| `OMNIX_MODEL_LOAD_COMMIT_BYTES` | string | — | image | Controls model load commit bytes for image. |
+| `OMNIX_MODEL_LOAD_COMMIT_MB` | string | — | image | Controls model load commit mb for image. |
 | `OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT` | integer | `13` | providers | Controls nemotron final right context for providers. |
 | `OMNIX_NEMOTRON_MODEL` | string | `nvidia/nemotron-speech-streaming-en-0.6b` | providers | Controls nemotron model for providers. |
 | `OMNIX_NEMOTRON_RIGHT_CONTEXT` | integer | `1` | providers | Controls nemotron right context for providers. |
@@ -250,6 +251,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_LOG_RETENTION_DAYS` | string | — | rpg | Controls rpg log retention days for rpg. |
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
 | `OMNIX_RPG_SNAPSHOT_EVERY` | integer | `20` | rpg | Controls rpg snapshot every for rpg. |
+| `OMNIX_RPG_TURNS_PER_HOUR` | integer | `600` | rpg | Controls rpg turns per hour for rpg. |
+| `OMNIX_RPG_WORLD_CATALOG_REPO` | string | — | rpg | Controls rpg world catalog repo for rpg. |
 | `OMNIX_RUN_TOKEN_KEY` | string | — | security | Controls run token key for security. |
 | `OMNIX_S3_ACCESS_KEY_ID` | string | — | kernel | Controls s3 access key id for kernel. |
 | `OMNIX_S3_BUCKET` | string | — | kernel | Controls s3 bucket for kernel. |

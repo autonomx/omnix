@@ -519,6 +519,22 @@ class PostgresRpgRepository:
             "created_at": row[7].isoformat(),
         }
 
+    def recent_turns_by_owner(self, context: TenantContext, *, window_seconds: int) -> tuple[int, Any]:
+        """How many turns the caller's own campaigns committed in the window, and the oldest one's time."""
+        row = self.connection.execute(
+            """
+            SELECT count(*), min(turn.created_at)
+              FROM omnix_rpg_turns AS turn
+              JOIN omnix_rpg_campaigns AS campaign
+                ON campaign.id = turn.campaign_id AND campaign.workspace_id = turn.workspace_id
+             WHERE turn.workspace_id = %s
+               AND campaign.owner_user_id = %s
+               AND turn.created_at > CURRENT_TIMESTAMP - make_interval(secs => %s)
+            """,
+            (context.workspace_id, context.user_id, max(1, int(window_seconds))),
+        ).fetchone()
+        return int(row[0] or 0), row[1]
+
     def pin_current_state(
         self,
         context: TenantContext,
