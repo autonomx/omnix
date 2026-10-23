@@ -15,6 +15,7 @@ from .progressive_materialization_job_service import (
 )
 from .published_canon_projection import project_published_canon
 from .published_world_setup import (
+    bestiary_mechanics,
     companion_candidates,
     creator_setup,
     location_label,
@@ -326,6 +327,10 @@ def _apply_published_opening_state(
             party_join_eligibility={"eligible": True, "requires_player_trust": trust, "reason": "published_companion"},
             tick=0,
         )
+    # The world's creatures fight as themselves, not as the starter town's bandits.
+    mechanics = bestiary_mechanics(revision)
+    if mechanics:
+        simulation["campaign_mechanics"] = {**_record(simulation.get("campaign_mechanics")), **mechanics}
     session["simulation_state"] = simulation
 
 

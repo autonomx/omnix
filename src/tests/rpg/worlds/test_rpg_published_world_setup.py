@@ -4,6 +4,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.apps.rpg.genesis.worlds.published_world_setup import (
+    bestiary_mechanics,
     creator_setup,
     location_label,
     opening_kit,
@@ -150,3 +151,23 @@ def test_sessions_without_a_world_keep_the_starter_town() -> None:
     assert location_registry.find_location_by_name("market")["location_id"] == "loc_market"
     routes = list_available_routes(state={"current_location": "location:rusty_flagon_tavern"})
     assert routes and routes[0]["from_location"] == "location:rusty_flagon_tavern"
+
+
+def test_the_worlds_creatures_fight_as_themselves() -> None:
+    from types import SimpleNamespace
+
+    from app.apps.rpg.rules.combat.campaign_mechanics import instantiate_campaign_creature
+
+    revision = SimpleNamespace(revision=3, canon={"bestiary": [
+        {"id": "creature:echo-wolf", "name": "Echo Wolf", "threat": "low", "traits": ["mimics voices"],
+         "weakness": "bells and contradictory commands"},
+        {"id": "creature:hollow-archon", "name": "Hollow Archon", "threat": "legendary"},
+    ]})
+    mechanics = bestiary_mechanics(revision)
+    wolf = instantiate_campaign_creature({"campaign_mechanics": mechanics}, "Echo Wolf")
+    assert wolf["actor_id"] == "enemy:creature-echo-wolf:1" and wolf["name"] == "Echo Wolf"
+    assert (wolf["level"], wolf["hp"]) == (1, 10)
+    assert wolf["vulnerabilities"][0]["aliases"] == ["bells", "contradictory commands"]
+    archon = instantiate_campaign_creature({"campaign_mechanics": mechanics}, "creature:hollow-archon")
+    assert archon["level"] == 8 and archon["vulnerabilities"] == []
+    assert bestiary_mechanics(SimpleNamespace(revision=1, canon={})) == {}

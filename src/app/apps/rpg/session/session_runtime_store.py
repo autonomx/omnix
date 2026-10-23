@@ -60,6 +60,8 @@ from typing import (
 import re
 from typing import cast
 
+from app.apps.rpg.rules.combat.runtime_core import SOURCE as RUNTIME_COMBAT_SOURCE
+
 logger = logging.getLogger(__name__)
 
 
@@ -295,7 +297,8 @@ def _find_active_combat_state_deep(payload: Any, *, max_depth: int = 6) -> dict[
 
         if isinstance(value, dict):
             direct = _safe_dict(value.get("combat_state"))
-            if direct.get("active"):
+            # A fight the general combat runtime runs is resolved there, every turn of it: no rescue redoes it.
+            if direct.get("active") and _safe_str(direct.get("source")) != RUNTIME_COMBAT_SOURCE:
                 return normalize_combat_state(direct)
 
             for nested in value.values():

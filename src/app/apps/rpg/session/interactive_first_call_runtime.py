@@ -215,9 +215,31 @@ def _runtime_understood_command(simulation_state: dict[str, Any], player_input: 
     try:
         if resolve_travel_destination(player_input=_s(player_input), state=simulation_state).get("ok"):
             return "travel"
+        if _combat_command(simulation_state, _s(player_input)):
+            return "combat"
     except Exception:
         logger.debug("suppressed error in %s", "_runtime_understood_command", exc_info=True)
     return ""
+
+
+def _combat_command(simulation_state: dict[str, Any], player_input: str) -> bool:
+    """A blow or a flight in a fight under way, or a blow at one of the world's creatures: the combat rules resolve it.
+
+    (Raising a hand against a person is left to the intent model, which reads what it means.)
+    """
+    from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition
+    from app.apps.rpg.rules.combat.runtime import is_combat_active
+    from app.apps.rpg.rules.interactions.semantic_actions import resolve_semantic_action_v2, semantic_action_kind
+
+    action = resolve_semantic_action_v2(player_input=player_input, actor_id="player")
+    kind = semantic_action_kind(action) if action.get("resolved") else ""
+    if kind == "flee":
+        return is_combat_active(simulation_state)
+    if kind != "attack":
+        return False
+    return is_combat_active(simulation_state) or campaign_creature_definition(
+        simulation_state, _s(action.get("target_ref"))
+    ) is not None
 
 
 def _fast_direct_action(player_input: str, performance_override: dict[str, Any] | None) -> dict[str, Any]:

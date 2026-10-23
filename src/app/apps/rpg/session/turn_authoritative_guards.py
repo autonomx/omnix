@@ -485,7 +485,7 @@ def _service_outcome_lines(resolved: dict[str, Any], visible: dict[str, Any]) ->
     purchase = _safe_dict(service_result.get("purchase"))
     relief = _safe_dict(_safe_dict(purchase.get("applied_effects")).get("survival_relief"))
     if relief.get("ok"):
-        eased = {"meal": "hunger", "drink": "thirst", "lodging": "fatigue"}.get(_clean(service_result.get("service_kind")))
+        eased = {"meal": "hunger", "drink": "thirst"}.get(_clean(service_result.get("service_kind")))
         if eased:
             lines.append(f"It eases your {eased}.")
     offers = [_safe_dict(offer) for offer in _safe_list(service_result.get("offers"))]

@@ -163,6 +163,10 @@ def test_published_world_campaign_plays_in_its_world(tmp_path, monkeypatch) -> N
             return response.json()
 
         # The opening: Aurelia's place, region, weather, kit, purse and quests, not the starter town's.
+        from app.apps.rpg.rules.combat.campaign_mechanics import instantiate_campaign_creature
+
+        wolf = instantiate_campaign_creature(load_session_from_postgres(session_id)["simulation_state"], "Echo Wolf")
+        assert wolf and wolf["name"] == "Echo Wolf"  # its creatures fight as themselves
         opening = public()
         assert opening["current_location_name"] == "Starfall Grove"
         assert opening["title"] == "Wren — Starfall Grove"
@@ -298,8 +302,10 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
     model = _ScriptedModel()
     monkeypatch.setattr(provider_service, "get_provider", lambda *args, **kwargs: model)
     told: list[str] = []
+    beat_kinds: list[list[str]] = []
 
     def narrate(payload):
+        beat_kinds.append([str(beat.get("kind") or "") for beat in payload.get("beats") or ()])
         # What the narrator is told for each turn: the evidence its beats may use.
         told.append(" ".join(str(record.get("content") or "") for beat in payload.get("beats") or ()
                              for record in beat.get("approved_evidence") or ()))
@@ -408,7 +414,39 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         turn("I pick up the Lantern Bread.")
         assert bread() == carried
 
+        # Renting a room is a purchase; sleeping in it is resting, and it eases fatigue.
+        before = copper(public()["player"]["currency"])
+        turn("I rent a room for the night from Orik Stonewake.")
+        assert copper(public()["player"]["currency"]) == before - 50
+        tired = stored()["simulation_state"]["survival"]["fatigue"]
+        assert tired > 0  # paying for the room rests no one
+        turn("I go to my room and sleep for the night.")
+        assert stored()["simulation_state"]["survival"]["fatigue"] < tired
+        assert "rest" in told[-1] and "lodging" in told[-1], told[-1]
+
         # Every one of these commands is understood by the game itself: none asked the model what it meant.
         assert "semantic_intent" not in model.calls and "dialogue" not in model.calls, model.calls
+
+        # A fight goes blow by blow: the creature takes its turns, the narrator is told every blow, the
+        # sheet shows the wounds, and the rest of the turn (time passing) is kept.
+        hunger, calls = stored()["simulation_state"]["survival"]["hunger"], len(model.calls)
+        turn("I attack the Echo Wolf.")
+        assert "The fight begins: you against the Echo Wolf." in told[-1], told[-1]
+        combat = stored()["simulation_state"]["combat_state"]
+        assert combat["active"] is True and combat["current_actor_id"] == "player"
+        turn("I attack the Echo Wolf.")
+        assert "You hit the Echo Wolf" in told[-1] or "You miss the Echo Wolf" in told[-1], told[-1]
+        assert "dialogue" not in beat_kinds[-1], beat_kinds[-1]  # a fight is not a conversation
+        hero = stored()["simulation_state"]["combat_state"]["participants"]["player"]
+        assert public()["player"]["resources"]["hp"]["current"] == hero["hp"]
+        assert stored()["simulation_state"]["survival"]["hunger"] > hunger
+        # Fleeing is the combat rules' too: the turn is counted and the session's own combat stays out of it.
+        count = public()["turn_count"]
+        turn("I flee from the Echo Wolf.")
+        assert "You break away from the Echo Wolf" in told[-1] or "cuts you off" in told[-1], told[-1]
+        assert public()["turn_count"] == count + 1
+        assert not (stored()["runtime_state"].get("combat_state") or {}).get("active")
+        # The combat rules decide a blow at a creature and the narrator alone tells it: no other model call.
+        assert model.calls[calls:] == [], model.calls[calls:]
     finally:
         job_store.reset_default_job_store_factory_for_tests()

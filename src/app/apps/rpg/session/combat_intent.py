@@ -100,15 +100,22 @@ def _extract_active_combat_state_for_turn(
 
     resolved_result = _safe_dict(resolved_result)
     direct = _safe_dict(resolved_result.get("combat_state"))
-    if direct.get("active"):
+    if direct.get("active") and not _runtime_owned(direct):
         return normalize_combat_state(direct)
 
     interaction_result = _safe_dict(resolved_result.get("interaction_result"))
     interaction_combat = _safe_dict(_safe_dict(interaction_result.get("combat_result")).get("combat_state"))
-    if interaction_combat.get("active"):
+    if interaction_combat.get("active") and not _runtime_owned(interaction_combat):
         return normalize_combat_state(interaction_combat)
 
     return combat_state
+
+
+def _runtime_owned(combat_state: dict[str, Any]) -> bool:
+    """A fight the general combat runtime runs (a world's creatures): it resolves every turn of it itself."""
+    from app.apps.rpg.rules.combat.runtime_core import SOURCE
+
+    return _safe_str(combat_state.get("source")) == SOURCE
 
 
 def _lookup_actor_by_id(simulation_state: dict[str, Any], actor_id: str) -> dict[str, Any]:

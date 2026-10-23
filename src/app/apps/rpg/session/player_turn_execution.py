@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import logging
 
-from app.apps.rpg.session.public_state_bridge import count_player_turn, merge_authoritative_session_state
+from app.apps.rpg.session.public_state_bridge import (
+    carry_stage_changes,
+    count_player_turn,
+    hydrate_simulation_player,
+    merge_authoritative_session_state,
+    project_authoritative_player,
+)
 from app.apps.rpg.rules.survival_tick_runtime import apply_survival_runtime_tick
+from app.apps.rpg.rules.combat.exchange_lines import describe_combat_exchange
 
 # RPG session runtime responsibility module.
 from app.apps.rpg.session.turn_perf_trace import (
@@ -15,7 +22,7 @@ from app.apps.rpg.session.session_runtime_store import (
 )
 import copy
 from app.apps.rpg.session.state_normalization import (
-    _safe_dict as _safe_dict, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_str as _safe_str,
 )
 from app.apps.rpg.session.companion_turn_runtime import (
     _sync_session_if_companion_runtime_mutated as _sync_session_if_companion_runtime_mutated,
@@ -137,10 +144,12 @@ def apply_turn(
             return_keys=sorted(list({"ok": False, "error": "session_not_found"}.keys()))[:80],
         )
         return {"ok": False, "error": "session_not_found"}
-    # A turn that ends early (a companion accepting) saves this session, so it counts the turn too.
-    session = count_player_turn(session)
+    # A turn that ends early (a companion accepting) saves this session, so it counts the turn too; the
+    # character sheet's gear and wallet are hydrated as the authoritative stage hydrates them.
+    session = count_player_turn(hydrate_simulation_player(session))
 
     simulation_state = copy.deepcopy(_safe_dict(session.get("simulation_state")))
+    turn_start_simulation = copy.deepcopy(simulation_state)
     tick = int(_safe_dict(session.get("runtime_state")).get("tick", 0) or 0)
     companion_acceptance_precheck = _try_resolve_pending_companion_offer_at_turn_start(
         simulation_state,
@@ -551,8 +560,9 @@ def apply_turn(
     )
 
     # J13-J15: Combat narration must run in the active service-scenario path,
-    # before fallback "Result: ..." narration is finalized.
-    if combat_contract_requires_llm(combat_result):
+    # before fallback "Result: ..." narration is finalized; the narrative engine, when it presents the
+    # turn, narrates the blows itself (told them as outcome lines), so no separate combat call is made.
+    if combat_contract_requires_llm(combat_result) and not canonical_presentation_follows():
         general_interaction_result = _apply_combat_narration_if_needed(
             general_interaction_result,
             combat_result=combat_result,
@@ -685,14 +695,26 @@ def apply_turn(
         or companion_auto_equip_result.get("changed_state") is True
         or combat_result.get("changed_state") is True
         or combat_loot_result.get("changed_state") is True
+        or _safe_dict(general_interaction_result.get("vulnerability_result")).get("applied") is True
     ):
+        # The authoritative stage resolved the rest of this turn on its own copy: keep what it did, add what
+        # this stage changed, and show the result on the character sheet.
+        session["simulation_state"] = carry_stage_changes(
+            turn_start_simulation, simulation_state, _safe_dict(session.get("simulation_state"))
+        )
         session = _sync_session_simulation_state_for_early_return(
-            session,
-            simulation_state,
+            project_authoritative_player(session),
+            session["simulation_state"],
             reason="general_item_interaction",
         )
 
     final_result["session"] = session
+    # The blows the combat runtime struck this turn, stated for the narration.
+    exchange_lines = describe_combat_exchange(combat_result)
+    if exchange_lines:
+        presented = final_result["resolved_result"] = _safe_dict(final_result.get("resolved_result"))
+        presented["outcome_lines"] = [*(presented.get("outcome_lines") or ()), *exchange_lines]
+        presented.setdefault("response_mode", "combat")
 
     # Advance campaign journal after the deterministic turn result exists.
     # Important: not every apply_turn path assigns a local named
@@ -805,6 +827,12 @@ def apply_turn(
         player_input,
     )
     final_result = _reconcile_combat_victory_rewards_and_loot(final_result)
+    if exchange_lines:
+        presented = _safe_dict(final_result.get("resolved_result"))
+        earned = _safe_int(_safe_dict(final_result.get("reward_result") or presented.get("reward_result")).get("xp"), 0)
+        if earned > 0:
+            presented["outcome_lines"] = [*(presented.get("outcome_lines") or ()), f"You gain {earned} experience."]
+            final_result["resolved_result"] = presented
     final_result = _reconcile_combat_world_consequences(final_result)
     final_result = _reconcile_combat_recovery_action(final_result, player_input)
     final_result = _reconcile_condition_tick_for_manual_current_actor(final_result, player_input)

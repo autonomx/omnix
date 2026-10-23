@@ -59,6 +59,9 @@ def _response_mode(request: TurnPresentationRequest) -> str:
         "service_inquiry": "transaction",
         "shop": "transaction",
         "fight": "combat",
+        "attack": "combat",
+        "attack_melee": "combat",
+        "attack_ranged": "combat",
     }
     return aliases.get(resolved, resolved)
 

@@ -38,6 +38,7 @@ def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
             inventory_state["currency"] = deepcopy(player_state["currency"])
         if inventory_state:
             player_state["inventory_state"] = inventory_state
+        _hydrate_equipped_gear(player_state, public_player.get("equipment"))
 
     if player_state:
         simulation["player_state"] = player_state
@@ -209,6 +210,32 @@ def merge_authoritative_session_state(
     return project_authoritative_player(hydrate_simulation_player(base))
 
 
+def carry_stage_changes(
+    turn_start: Dict[str, Any],
+    stage: Dict[str, Any],
+    onto: Dict[str, Any],
+) -> Dict[str, Any]:
+    """``onto`` (the authoritative simulation) with what one turn stage changed from the turn's start.
+
+    A stage that resolves part of the turn on its own copy (the general interaction: a blow, loot, an item
+    used) must not replace what the authoritative stage did meanwhile, so it carries only what it changed:
+    a changed record is followed a few levels down (player_state -> resources -> hp) before it is replaced.
+    """
+    return _carry(_dict(turn_start), _dict(stage), copy_state(_dict(onto)), depth=3)
+
+
+def _carry(before: Any, stage: Any, onto: Any, *, depth: int) -> Any:
+    if depth == 0 or not (isinstance(before, dict) and isinstance(stage, dict) and isinstance(onto, dict)):
+        return deepcopy(stage)
+    merged = dict(onto)
+    for key, value in stage.items():
+        if key not in before or before[key] != value:
+            merged[key] = _carry(before.get(key), value, onto.get(key), depth=depth - 1)
+    for key in before.keys() - stage.keys():
+        merged.pop(key, None)
+    return merged
+
+
 def adopt_public_inventory(session: Dict[str, Any]) -> Dict[str, Any]:
     """Make the player sheet's inventory and purse the simulation's, after an action changed the sheet directly
     (dropping, using, equipping or crafting an item); otherwise the next projection would restore the old ones."""
@@ -229,6 +256,31 @@ def adopt_public_inventory(session: Dict[str, Any]) -> Dict[str, Any]:
     simulation["player_state"] = player_state
     session["simulation_state"] = simulation
     return session
+
+
+_SHEET_SLOTS = {"weapon": "main_hand", "main hand": "main_hand", "off hand": "off_hand", "shield": "off_hand"}
+
+
+def _hydrate_equipped_gear(player_state: Dict[str, Any], sheet_equipment: Any) -> None:
+    """The gear the character sheet lists as worn, equipped where combat looks for it (while it is still carried)."""
+    gear = _dict(player_state.get("inventory"))
+    if _dict(gear.get("equipment")) or not isinstance(sheet_equipment, list):
+        return
+    carried = {
+        str(item.get("name") or "").casefold(): item
+        for item in _dict(player_state.get("inventory_state")).get("items") or ()
+        if isinstance(item, dict) and item.get("name")
+    }
+    equipment: Dict[str, str] = {}
+    for worn in sheet_equipment:
+        item = carried.get(str(_dict(worn).get("name") or "").casefold())
+        item_id = str(_dict(item).get("item_id") or _dict(item).get("id") or "")
+        if not item_id:
+            continue
+        slot = str(_dict(worn).get("slot") or "").strip().casefold()
+        equipment[_SHEET_SLOTS.get(slot, slot.replace(" ", "_") or "main_hand")] = item_id
+    if equipment:
+        player_state["inventory"] = {**gear, "equipment": equipment}
 
 
 def _normalize_public_item(item: Dict[str, Any]) -> Dict[str, Any]:

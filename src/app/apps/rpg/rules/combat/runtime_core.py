@@ -76,12 +76,15 @@ def default_enemy_bandit() -> Dict[str, Any]:
 
 def participant_from_player(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     state = player_state(simulation_state)
+    # The hero's hit points are the ones the player sees (resources.hp); a bare hp field is the older record.
+    pool = safe_dict(safe_dict(state.get("resources")).get("hp"))
+    max_hp = safe_int(pool.get("max"), safe_int(state.get("max_hp"), 20))
     return {
         "actor_id": "player",
         "side": "party",
         "name": "You",
-        "hp": safe_int(state.get("hp"), safe_int(state.get("max_hp"), 20)),
-        "max_hp": safe_int(state.get("max_hp"), 20),
+        "hp": safe_int(pool.get("current"), safe_int(state.get("hp"), max_hp)),
+        "max_hp": max_hp,
         "armor": 0,
         "defense": 10,
         "initiative_bonus": 1,
@@ -228,6 +231,9 @@ def sync_participant_hp_to_actor_state(
     if actor_id == "player":
         state = player_state(simulation_state)
         state["hp"] = max(0, int(hp))
+        pool = safe_dict(safe_dict(state.get("resources")).get("hp"))
+        if pool:
+            pool["current"] = max(0, int(hp))
         if status:
             state["combat_status"] = status
         simulation_state["player_state"] = state

@@ -15,10 +15,10 @@ from app.apps.rpg.rules.economy.service_transactions import (
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 from app.apps.rpg.rules.survival import apply_survival_effect
 
+# A meal or a drink eases its need when bought; a room eases fatigue when slept in (the duration action).
 _SURVIVAL_RELIEF: Dict[str, Dict[str, int]] = {
     "meal": {"hunger": -35},
     "drink": {"thirst": -30},
-    "lodging": {"fatigue": -40},
 }
 
 
@@ -270,12 +270,10 @@ def apply_service_purchase_result(
     if service_kind == "paid_information":
         rumor_added = _append_paid_information_stub(state, service_result, offer, tick)
 
-    # A meal, a drink or a night's lodging eases the need it serves.
+    # A meal or a drink eases the need it serves.
     survival_relief = {}
     relief = _SURVIVAL_RELIEF.get(service_kind)
     if relief:
-        if service_kind == "lodging" and effects.get("rest_quality") == "good":
-            relief = {"fatigue": -55}
         survival_relief = apply_survival_effect(
             state, kind=f"buy_{service_kind}", effects=relief, tick=tick, source="service_purchase"
         )

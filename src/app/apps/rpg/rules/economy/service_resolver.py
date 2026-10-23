@@ -185,6 +185,9 @@ def _detect_kind(text_l: str) -> str:
         "pay for",
         "i pay",
         "rent the",
+        # "Rent a room", "book a bed": renting and booking are buying.
+        "rent ",
+        "book ",
         "take the",
         "i'll take",
         "ill take",

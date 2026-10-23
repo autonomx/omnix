@@ -340,6 +340,49 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
 _COMPANION_WORDS = (("companion", 0), ("guide", 0), ("protector", 20), ("ally", 20), ("mercenary", 20))
 
 
+# A creature's fighting numbers by the world's threat rating for it (the bestiary rates threat, not stats).
+_THREAT_STATS: dict[str, dict[str, int]] = {
+    "low": {"level": 1, "hp": 10, "defense": 10, "damage_min": 1, "damage_max": 4, "accuracy_bonus": 1, "xp_value": 25},
+    "medium": {"level": 3, "hp": 18, "defense": 12, "damage_min": 2, "damage_max": 6, "accuracy_bonus": 2, "xp_value": 60},
+    "high": {"level": 5, "hp": 28, "defense": 13, "damage_min": 3, "damage_max": 8, "accuracy_bonus": 3, "xp_value": 120},
+    "extreme": {"level": 8, "hp": 45, "defense": 15, "damage_min": 4, "damage_max": 10, "accuracy_bonus": 4, "xp_value": 250},
+}
+_THREAT_ALIASES = {"minor": "low", "moderate": "medium", "severe": "high", "boss": "extreme", "legendary": "extreme",
+                   "mythic": "extreme", "deadly": "extreme"}
+
+
+def bestiary_mechanics(revision: Any) -> dict[str, Any]:
+    """The world's creatures as combat definitions: numbers by threat, and its weakness stuns it for a turn."""
+
+    canon = _mapping(getattr(revision, "canon", None))
+    creatures: dict[str, Any] = {}
+    for row in _rows(canon.get("bestiary")):
+        creature_id = _text(row.get("id"))
+        if not creature_id:
+            continue
+        threat = _text(row.get("threat")).casefold()
+        stats = _THREAT_STATS.get(_THREAT_ALIASES.get(threat, threat), _THREAT_STATS["medium"])
+        weakness = _text(row.get("weakness"))
+        aliases = [part.strip() for part in re.split(r",|\band\b|\bor\b", weakness) if part.strip()]
+        creatures[creature_id] = {
+            "definition_id": creature_id,
+            "definition_revision": int(getattr(revision, "revision", 1) or 1),
+            "name": _text(row.get("name")) or _label_from_id(creature_id),
+            **stats,
+            "armor": 0,
+            "initiative_bonus": 1 if "fast" in " ".join(row.get("traits") or ()).casefold() else 0,
+            "morale_threshold": 35,
+            "tags": [_text(trait) for trait in row.get("traits") or () if _text(trait)],
+            "budget_cost": stats["xp_value"],
+            "vulnerabilities": (
+                [{"trigger_tag": weakness, "aliases": aliases, "condition": "stunned", "duration_turns": 1, "magnitude": 1}]
+                if weakness else []
+            ),
+            "source": "published_world_bestiary",
+        }
+    return {"creatures": creatures} if creatures else {}
+
+
 def companion_candidates(world_model: Mapping[str, Any]) -> dict[str, int]:
     """Characters who can join the party, with the trust each needs first."""
     candidates: dict[str, int] = {}
@@ -496,6 +539,7 @@ def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
 
 __all__ = [
     "WORLD_MODEL_SCHEMA",
+    "bestiary_mechanics",
     "companion_candidates",
     "creator_setup",
     "location_label",
