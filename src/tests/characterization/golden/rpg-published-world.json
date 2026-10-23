@@ -292,11 +292,17 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival"
+          ],
           "revision": 2
         }
       },
@@ -413,13 +419,15 @@
       ],
       "response": {
         "changed_domains": [
-          "conversation"
+          "conversation",
+          "time"
         ],
         "source": "compact_dialogue_provider_canonical_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "conversation"
+            "conversation",
+            "time"
           ],
           "revision": 3
         }
@@ -565,11 +573,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival",
+          "party"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival",
+            "party"
+          ],
           "revision": 4
         }
       },
@@ -736,11 +752,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival",
+          "quests"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival",
+            "quests"
+          ],
           "revision": 5
         }
       },
@@ -909,11 +933,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "player",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "player",
+            "survival"
+          ],
           "revision": 6
         }
       },
@@ -1107,11 +1139,23 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "location",
+          "npcs",
+          "survival",
+          "quests"
+        ],
         "source": "narrative_engine_scene_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "location",
+            "npcs",
+            "survival",
+            "quests"
+          ],
           "revision": 7
         }
       },
@@ -1274,11 +1318,17 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival"
+          ],
           "revision": 8
         }
       },
@@ -1399,13 +1449,15 @@
       ],
       "response": {
         "changed_domains": [
-          "conversation"
+          "conversation",
+          "time"
         ],
         "source": "compact_dialogue_provider_canonical_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "conversation"
+            "conversation",
+            "time"
           ],
           "revision": 9
         }
@@ -1539,11 +1591,15 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time"
+          ],
           "revision": 10
         }
       },
@@ -1677,11 +1733,17 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "inventory"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "inventory"
+          ],
           "revision": 11
         }
       },
@@ -1845,11 +1907,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "inventory",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "inventory",
+            "survival"
+          ],
           "revision": 12
         }
       },
@@ -2019,11 +2089,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "inventory",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "inventory",
+            "survival"
+          ],
           "revision": 13
         }
       },
@@ -2227,11 +2305,25 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "location",
+          "npcs",
+          "inventory",
+          "survival",
+          "quests"
+        ],
         "source": "narrative_engine_scene_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "location",
+            "npcs",
+            "inventory",
+            "survival",
+            "quests"
+          ],
           "revision": 14
         }
       },
@@ -2395,11 +2487,17 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival"
+          ],
           "revision": 15
         }
       },
@@ -2593,11 +2691,21 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "location",
+          "npcs",
+          "survival"
+        ],
         "source": "narrative_engine_scene_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "location",
+            "npcs",
+            "survival"
+          ],
           "revision": 16
         }
       },
@@ -2770,11 +2878,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "inventory",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "inventory",
+            "survival"
+          ],
           "revision": 17
         }
       },
@@ -2915,11 +3031,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "inventory",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "inventory",
+            "survival"
+          ],
           "revision": 18
         }
       },
@@ -3050,11 +3174,17 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "inventory"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "inventory"
+          ],
           "revision": 19
         }
       },
@@ -3186,11 +3316,17 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival"
+          ],
           "revision": 20
         }
       },
@@ -3354,11 +3490,17 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival"
+          ],
           "revision": 21
         }
       },
@@ -3540,11 +3682,21 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "player",
+          "survival",
+          "combat"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "player",
+            "survival",
+            "combat"
+          ],
           "revision": 22
         }
       },
@@ -3825,11 +3977,21 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "player",
+          "survival",
+          "combat"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "player",
+            "survival",
+            "combat"
+          ],
           "revision": 23
         }
       },
@@ -4001,11 +4163,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival",
+          "combat"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival",
+            "combat"
+          ],
           "revision": 24
         }
       },
@@ -4178,11 +4348,19 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival",
+          "combat"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival",
+            "combat"
+          ],
           "revision": 25
         }
       },
@@ -4319,11 +4497,15 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time"
+          ],
           "revision": 26
         }
       },
@@ -4483,11 +4665,17 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival"
+          ],
           "revision": 27
         }
       },
@@ -4680,11 +4868,21 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "location",
+          "npcs",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "location",
+            "npcs",
+            "survival"
+          ],
           "revision": 28
         }
       },
@@ -4878,11 +5076,21 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "location",
+          "npcs",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "location",
+            "npcs",
+            "survival"
+          ],
           "revision": 29
         }
       },
@@ -5073,11 +5281,21 @@
         "state/world"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "location",
+          "npcs",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "location",
+            "npcs",
+            "survival"
+          ],
           "revision": 30
         }
       },
@@ -5243,11 +5461,17 @@
         "state/turn_count"
       ],
       "response": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
-          "changed": false,
-          "changed_domains": [],
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival"
+          ],
           "revision": 31
         }
       },

@@ -30,7 +30,11 @@
       },
       "ok": true,
       "result": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "location",
+          "survival"
+        ],
         "llm_purpose": "canonical_dialogue_generation",
         "narration_status": "not_requested",
         "source": "narrative_engine_resolved_turn_v1"
@@ -44,8 +48,12 @@
       },
       "simulation_tick": 1,
       "state": {
-        "changed": false,
-        "changed_domains": [],
+        "changed": true,
+        "changed_domains": [
+          "time",
+          "location",
+          "survival"
+        ],
         "revision": 1
       },
       "turn_id": "turn:1",
@@ -82,7 +90,8 @@
       "ok": true,
       "result": {
         "changed_domains": [
-          "conversation"
+          "conversation",
+          "time"
         ],
         "llm_purpose": "compact_dialogue_generation",
         "narration_status": "not_requested",
@@ -99,7 +108,8 @@
       "state": {
         "changed": true,
         "changed_domains": [
-          "conversation"
+          "conversation",
+          "time"
         ],
         "revision": 2
       },
@@ -169,7 +179,9 @@
       },
       "ok": true,
       "result": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time"
+        ],
         "llm_purpose": "canonical_dialogue_generation",
         "narration_status": "not_requested",
         "source": "narrative_engine_resolved_turn_v1"
@@ -183,8 +195,10 @@
       },
       "simulation_tick": 2,
       "state": {
-        "changed": false,
-        "changed_domains": [],
+        "changed": true,
+        "changed_domains": [
+          "time"
+        ],
         "revision": 3
       },
       "turn_id": "turn:2",
@@ -301,7 +315,10 @@
       },
       "ok": true,
       "result": {
-        "changed_domains": [],
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "llm_purpose": "canonical_dialogue_generation",
         "narration_status": "not_requested",
         "source": "narrative_engine_resolved_turn_v1"
@@ -315,8 +332,11 @@
       },
       "simulation_tick": 3,
       "state": {
-        "changed": false,
-        "changed_domains": [],
+        "changed": true,
+        "changed_domains": [
+          "time",
+          "survival"
+        ],
         "revision": 5
       },
       "turn_id": "turn:3",

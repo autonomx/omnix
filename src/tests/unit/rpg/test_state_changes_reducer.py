@@ -48,7 +48,7 @@ def _document(shape: str = "aurelia") -> dict:
 
 
 def test_the_vocabulary_is_closed_and_serializes() -> None:
-    assert len(CHANGE_TYPES) == len(set(CHANGE_TYPES)) == 21
+    assert len(CHANGE_TYPES) == len(set(CHANGE_TYPES)) == 22
     changes = [PurseChanged(delta_copper=-30), ItemAdded(item_id="item:potion", name="Healing Potion")]
     assert parse_changes([change.model_dump() for change in changes]) == changes
     with pytest.raises(ValidationError):
@@ -148,3 +148,34 @@ def test_applying_the_changes_and_applying_their_patch_give_the_same_document(sh
         assert apply_state_delta(document, patch) == after, changes
         replayed, again = reduce(document, parse_changes([change.model_dump() for change in changes]))
         assert replayed == after and again == patch  # deterministic, and the changes serialize losslessly
+
+
+def _facts(document: dict) -> dict:
+    view = CampaignStateView(document)
+    return {
+        "purse": view.inventory.purse.total_copper if view.inventory.purse else None,
+        "pack": sorted((item.item_id or item.name, item.quantity) for item in view.inventory.items),
+        "ground": {place: sorted((item.item_id or item.name, item.quantity) for item in stacks)
+                   for place, stacks in view.inventory.ground.items() if stacks},
+        "hp": view.player.hp, "xp": view.player.xp,
+        "skills": {name: (skill.level, skill.xp) for name, skill in view.player.skills.items()},
+        "location": view.location.location_id, "present": view.npcs.present_npc_ids,
+        "party": [companion.npc_id for companion in view.party.companions],
+        "quests": {quest.quest_id: (quest.status, quest.visited_locations) for quest in view.quests.quests},
+        "needs": (view.survival.hunger, view.survival.thirst, view.survival.fatigue),
+        "turns": view.time.turn_count, "tick": view.time.tick,
+    }
+
+
+@pytest.mark.parametrize("shape", ["aurelia", "starter"])
+def test_the_changes_read_off_two_documents_reduce_to_the_second(shape: str) -> None:
+    """What TurnOutcome reports (RQ-1.3): changes_between(before, after), reduced onto before, gives after's facts."""
+    from app.apps.rpg.foundation.state.extract import changes_between
+
+    document = _document(shape)
+    rng = random.Random(f"rq-1.3:{shape}")
+    for _ in range(100):
+        after, _ = reduce(document, _random_changes(rng, document))
+        extracted = changes_between(document, after)
+        replayed, _ = reduce(document, extracted)
+        assert _facts(replayed) == _facts(after), extracted

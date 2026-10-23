@@ -2852,6 +2852,79 @@ export interface components {
         CoinMarketCapCredentialStatus: core["schemas"]["CoinMarketCapCredentialStatus"];
         /** CoinMarketCapCredentialUpdate */
         CoinMarketCapCredentialUpdate: core["schemas"]["CoinMarketCapCredentialUpdate"];
+        /** CombatEnded */
+        CombatEnded: {
+            /**
+             * Outcome
+             * @default ended
+             * @enum {string}
+             */
+            outcome: "victory" | "defeat" | "fled" | "ended";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combat_ended";
+        };
+        /**
+         * CombatStarted
+         * @description A fight begins, with each participant's health.
+         */
+        CombatStarted: {
+            /**
+             * Combat Id
+             * @default
+             */
+            combat_id: string;
+            /** Participants */
+            participants?: {
+                [key: string]: number;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combat_started";
+        };
+        /** CombatantHpChanged */
+        CombatantHpChanged: {
+            /** Actor Id */
+            actor_id: string;
+            /** Delta */
+            delta: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combatant_hp_changed";
+        };
+        /** CompanionJoined */
+        CompanionJoined: {
+            /** Name */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Role
+             * @default companion
+             */
+            role: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_joined";
+        };
+        /** CompanionLeft */
+        CompanionLeft: {
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_left";
+        };
         /** CompatibilityHandoffPayload */
         CompatibilityHandoffPayload: core["schemas"]["CompatibilityHandoffPayload"];
         /** CompleteJobRequest */
@@ -2894,6 +2967,16 @@ export interface components {
          * @description Live job events in this process (WP-5.4).
          */
         EventReaderDiagnostics: core["schemas"]["EventReaderDiagnostics"];
+        /** ExperienceGained */
+        ExperienceGained: {
+            /** Amount */
+            amount: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "experience_gained";
+        };
         /** ExportDefinitionRequestBody */
         ExportDefinitionRequestBody: {
             /** Context */
@@ -3692,6 +3775,19 @@ export interface components {
             /** Response */
             response?: string;
         };
+        /**
+         * HpChanged
+         * @description The hero's health, kept between 0 and its maximum.
+         */
+        HpChanged: {
+            /** Delta */
+            delta: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hp_changed";
+        };
         /** HubTokenWrite */
         HubTokenWrite: core["schemas"]["HubTokenWrite"];
         /** IbkrSettingsPayload */
@@ -3726,6 +3822,115 @@ export interface components {
         InviteResponse: core["schemas"]["InviteResponse"];
         /** InviteSummaryResponse */
         InviteSummaryResponse: core["schemas"]["InviteSummaryResponse"];
+        /**
+         * ItemAdded
+         * @description Stacks into the pack: onto the stack with the same item id, else a new stack.
+         */
+        ItemAdded: {
+            /**
+             * Category
+             * @default
+             */
+            category: string;
+            /** Fields */
+            fields?: {
+                [key: string]: unknown;
+            };
+            /** Item Id */
+            item_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_added";
+        };
+        /**
+         * ItemDropped
+         * @description From the pack to the ground where the hero stands.
+         */
+        ItemDropped: {
+            /** Item Id */
+            item_id: string;
+            /** Location Id */
+            location_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_dropped";
+        };
+        /** ItemEquipped */
+        ItemEquipped: {
+            /** Item Id */
+            item_id: string;
+            /** Slot */
+            slot: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_equipped";
+        };
+        /**
+         * ItemPickedUp
+         * @description From the ground back into the pack, onto its own stack.
+         */
+        ItemPickedUp: {
+            /** Item Id */
+            item_id: string;
+            /** Location Id */
+            location_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_picked_up";
+        };
+        /**
+         * ItemRemoved
+         * @description Taken from the pack's stack (used, sold, given); the stack goes when it is empty.
+         */
+        ItemRemoved: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_removed";
+        };
+        /** ItemUnequipped */
+        ItemUnequipped: {
+            /** Slot */
+            slot: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "item_unequipped";
+        };
         /** JobError */
         JobError: core["schemas"]["JobError"];
         /** JobError */
@@ -3777,6 +3982,21 @@ export interface components {
         Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
+        /** LocationChanged */
+        LocationChanged: {
+            /** Location Id */
+            location_id: string;
+            /**
+             * Location Name
+             * @default
+             */
+            location_name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "location_changed";
+        };
         /** LoreDiscoveryRequest */
         LoreDiscoveryRequest: {
             /** Document Id */
@@ -3903,6 +4123,18 @@ export interface components {
              */
             type: "set_object_state" | "place_actor" | "set_route_state" | "set_hazard_state";
         };
+        /** ModelCalls */
+        ModelCalls: {
+            /** By Kind */
+            by_kind?: {
+                [key: string]: number;
+            };
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
         /**
          * ModelPacksStatus
          * @description The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.
@@ -3921,6 +4153,24 @@ export interface components {
         ModelResidencyStatus: core["schemas"]["ModelResidencyStatus"];
         /** ModelSummary */
         ModelSummary: core["schemas"]["ModelSummary"];
+        /** NarrationReference */
+        NarrationReference: {
+            /**
+             * Response Id
+             * @default
+             */
+            response_id: string;
+            /**
+             * Speaker Ids
+             * @default []
+             */
+            speaker_ids: string[];
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+        };
         /** NarrativeDeliveryCancelRequest */
         NarrativeDeliveryCancelRequest: {
             /**
@@ -3930,6 +4180,32 @@ export interface components {
             reason?: string;
             /** Semantic Hash */
             semantic_hash: string;
+        };
+        /**
+         * NeedsChanged
+         * @description Hunger, thirst and fatigue, each kept at zero or above.
+         */
+        NeedsChanged: {
+            /**
+             * Fatigue
+             * @default 0
+             */
+            fatigue: number;
+            /**
+             * Hunger
+             * @default 0
+             */
+            hunger: number;
+            /**
+             * Thirst
+             * @default 0
+             */
+            thirst: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "needs_changed";
         };
         /** NpcSpatialRoutineStep */
         NpcSpatialRoutineStep: {
@@ -3991,6 +4267,45 @@ export interface components {
         PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
+        /**
+         * PresenceChanged
+         * @description Who is present where the hero is.
+         */
+        PresenceChanged: {
+            /** Location Id */
+            location_id: string;
+            /**
+             * Present Npc Ids
+             * @default []
+             */
+            present_npc_ids: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "presence_changed";
+        };
+        /**
+         * PresentationHints
+         * @description What the play screen needs to show the turn without reading the document.
+         */
+        PresentationHints: {
+            /**
+             * Changed Sections
+             * @default []
+             */
+            changed_sections: string[];
+            /**
+             * Location Name
+             * @default
+             */
+            location_name: string;
+            /**
+             * Refused
+             * @default false
+             */
+            refused: boolean;
+        };
         /** PromptRenderRequest */
         PromptRenderRequest: core["schemas"]["PromptRenderRequest"];
         /** PromptTemplate */
@@ -4032,6 +4347,51 @@ export interface components {
          *     become file names.
          */
         PublicAssetRecord: core["schemas"]["PublicAssetRecord"];
+        /**
+         * PurseChanged
+         * @description Coin gained (positive) or spent (negative), in copper.
+         */
+        PurseChanged: {
+            /** Delta Copper */
+            delta_copper: number;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "purse_changed";
+        };
+        /** QuestPlaceReached */
+        QuestPlaceReached: {
+            /** Location Id */
+            location_id: string;
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_place_reached";
+        };
+        /** QuestStatusChanged */
+        QuestStatusChanged: {
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "active" | "completed" | "failed";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_status_changed";
+        };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
         /** RegisterRequest */
@@ -6866,6 +7226,7 @@ export interface components {
             job_id?: string | null;
             /** Ok */
             ok: boolean;
+            outcome?: components["schemas"]["TurnOutcome"] | null;
             /** Response */
             response?: string | null;
             result: components["schemas"]["RpgTurnResult"];
@@ -8600,6 +8961,25 @@ export interface components {
         SettingsProfileSaveRequest: core["schemas"]["SettingsProfileSaveRequest"];
         /** SettingsSaveResponse */
         SettingsSaveResponse: core["schemas"]["SettingsSaveResponse"];
+        /**
+         * SkillProgressed
+         * @description A skill's progress as the rules computed it (level-ups are the rules' decision, not the reducer's).
+         */
+        SkillProgressed: {
+            /** Level */
+            level: number;
+            /** Skill Id */
+            skill_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "skill_progressed";
+            /** Xp */
+            xp: number;
+            /** Xp To Next */
+            xp_to_next: number;
+        };
         /** SpeechModelListResponse */
         SpeechModelListResponse: core["schemas"]["SpeechModelListResponse"];
         /** SpeechModelStatus */
@@ -8635,6 +9015,115 @@ export interface components {
              * @default 8
              */
             max_reactions_per_move?: number;
+        };
+        /** TimeAdvanced */
+        TimeAdvanced: {
+            /**
+             * Ticks
+             * @default 1
+             */
+            ticks: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "time_advanced";
+        };
+        /** TurnCounted */
+        TurnCounted: {
+            /** Turn Count */
+            turn_count: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "turn_counted";
+        };
+        /**
+         * TurnIntent
+         * @description What the turn took the player to mean, and who decided it (the game's own rules or a model).
+         */
+        TurnIntent: {
+            /**
+             * Action Type
+             * @default
+             */
+            action_type: string;
+            /**
+             * Semantic Action Type
+             * @default
+             */
+            semantic_action_type: string;
+            /**
+             * Semantic Family
+             * @default
+             */
+            semantic_family: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Target Id
+             * @default
+             */
+            target_id: string;
+        };
+        /** TurnOutcome */
+        TurnOutcome: {
+            /**
+             * Applied Changes
+             * @default []
+             */
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"])[];
+            /** Dialogue Plan */
+            dialogue_plan?: {
+                [key: string]: unknown;
+            } | null;
+            /** Document Version */
+            document_version?: number | null;
+            /**
+             * Format Version
+             * @default rpg_turn_outcome_v1
+             * @constant
+             */
+            format_version: "rpg_turn_outcome_v1";
+            intent?: components["schemas"]["TurnIntent"];
+            /**
+             * Kind
+             * @default player_text
+             * @enum {string}
+             */
+            kind: "player_text" | "structured_action" | "world_tick" | "system";
+            model_calls?: components["schemas"]["ModelCalls"];
+            narration?: components["schemas"]["NarrationReference"];
+            /** Planned Action */
+            planned_action?: string | null;
+            presentation?: components["schemas"]["PresentationHints"];
+            /** Revision */
+            revision?: number | null;
+            /**
+             * Submission Id
+             * @default
+             */
+            submission_id: string;
+            /** Timings */
+            timings?: {
+                [key: string]: number;
+            };
+            /**
+             * Turn Id
+             * @default
+             */
+            turn_id: string;
+            /**
+             * World Events
+             * @default []
+             */
+            world_events: {
+                [key: string]: unknown;
+            }[];
         };
         /** ValidateDefinitionRequestBody */
         ValidateDefinitionRequestBody: {

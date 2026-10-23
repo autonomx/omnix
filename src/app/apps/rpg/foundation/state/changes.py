@@ -151,6 +151,14 @@ class CompanionLeft(_Change):
     npc_id: str = Field(min_length=1)
 
 
+class CombatStarted(_Change):
+    """A fight begins, with each participant's health."""
+
+    type: Literal["combat_started"] = "combat_started"
+    combat_id: str = ""
+    participants: dict[str, int] = Field(default_factory=dict)
+
+
 class CombatantHpChanged(_Change):
     type: Literal["combatant_hp_changed"] = "combatant_hp_changed"
     actor_id: str = Field(min_length=1)
@@ -166,7 +174,7 @@ StateChange = Annotated[
     PurseChanged | ItemAdded | ItemRemoved | ItemDropped | ItemPickedUp | ItemEquipped | ItemUnequipped
     | HpChanged | ExperienceGained | SkillProgressed | LocationChanged | PresenceChanged | TimeAdvanced
     | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
-    | CombatantHpChanged | CombatEnded,
+    | CombatStarted | CombatantHpChanged | CombatEnded,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

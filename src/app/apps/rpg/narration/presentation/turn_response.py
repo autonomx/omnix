@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .turn_outcome import TurnOutcome
 from .turn_response_budget import enforce_turn_response_budget
 from .visible_response import build_visible_response
 
@@ -75,6 +76,26 @@ class RpgTurnResponse(_OpenContract):
     timing: dict[str, float] = Field(default_factory=dict)
     session_summary: dict[str, Any] = Field(default_factory=dict)
     canonical_narrative_response: dict[str, Any] | None = None
+    outcome: TurnOutcome | None = None
+
+
+def attach_turn_outcome(payload: dict[str, Any], outcome: TurnOutcome) -> dict[str, Any]:
+    """The response with the turn's outcome, its one result (RQ-1.3), and the transitional fields made to agree.
+
+    ``state.changed`` and the changed domains, which the play screen reads to refresh, also name the sections
+    the turn's applied changes touched (they listed only "conversation", so every other turn read as
+    unchanged).
+    """
+    payload = dict(payload)
+    payload["outcome"] = outcome.model_dump(mode="json")
+    domains = list(dict.fromkeys([*((payload.get("state") or {}).get("changed_domains") or ()),
+                                  *outcome.presentation.changed_sections]))
+    state = dict(payload.get("state") or {})
+    state.update(changed=bool(domains), changed_domains=domains)
+    payload["state"] = state
+    if isinstance(payload.get("result"), dict):
+        payload["result"] = {**payload["result"], "changed_domains": domains}
+    return payload
 
 
 def build_turn_response_v2(

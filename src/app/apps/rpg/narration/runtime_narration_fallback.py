@@ -11,7 +11,7 @@ from app.apps.rpg.narration.npc_dialogue.intelligence import (
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,
 )
-from app.providers.service import get_provider
+from app.apps.rpg.foundation.provider_access import get_provider  # RPG's route, its calls counted
 
 from .runtime_narration_common import NARRATION_FORMAT_VERSION, _norm, _safe_str
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list

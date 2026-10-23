@@ -112,6 +112,9 @@ class LLMGatewayAdapter:
 def adapt_base_provider(provider: Any) -> Any:
     """Wrap any BaseProvider with the RPG generation interface it lacks."""
 
-    if isinstance(provider, LLMGatewayAdapter) or not isinstance(provider, BaseProvider):
+    from app.apps.rpg.foundation.model_calls import CountedProvider
+
+    inner = provider._provider if isinstance(provider, CountedProvider) else provider
+    if isinstance(provider, LLMGatewayAdapter) or not isinstance(inner, BaseProvider):
         return provider
     return LLMGatewayAdapter(provider)

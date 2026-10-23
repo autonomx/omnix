@@ -30,6 +30,8 @@ export interface RpgTurnDiagnosticsSnapshot {
   };
   serverPayloadTiming?: Record<string, number>;
   serverPerformance?: Record<string, unknown>;
+  /** The model calls the turn made, from its outcome (RQ-1.3). */
+  serverModelCalls?: number;
 }
 
 interface CompleteDiagnosticsInput {
@@ -42,6 +44,8 @@ interface CompleteDiagnosticsInput {
   changedDomains?: string[];
   serverPayloadTiming?: Record<string, number>;
   serverPerformance?: Record<string, unknown>;
+  /** The model calls the turn made, from its outcome (RQ-1.3). */
+  serverModelCalls?: number;
 }
 
 const diagnosticsBySession = new Map<string, RpgTurnDiagnosticsSnapshot[]>();
@@ -89,6 +93,7 @@ export function completeRpgTurnDiagnostics(input: CompleteDiagnosticsInput): voi
     client: withDurations(milestones),
     serverPayloadTiming: input.serverPayloadTiming,
     serverPerformance: input.serverPerformance,
+    serverModelCalls: input.serverModelCalls,
   };
   setDiagnostics(input.sessionId, [
     ...current.filter((item) => item.submissionId !== input.submissionId),

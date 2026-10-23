@@ -87,11 +87,17 @@ def _launch_gate_session(session_id: str) -> dict[str, Any] | None:
 
 def _execute_with_authority_snapshot(**kwargs: Any) -> Response:
     from app.persistence.authority import authority_snapshot_scope
+    from app.apps.rpg.foundation.model_calls import counting_model_calls
     from app.apps.rpg.narration.narration_drafts import narration_draft_context
 
     # The client names its submission, so it can read the narration's draft while the turn runs.
     submission_id = str(kwargs["request"].headers.get("x-omnix-rpg-submission-id") or "").strip()
-    with authority_snapshot_scope(), narration_draft_context(str(kwargs["session_id"]), submission_id):
+    # Every model call the turn makes is counted for its outcome (RQ-1.3).
+    with (
+        authority_snapshot_scope(),
+        narration_draft_context(str(kwargs["session_id"]), submission_id),
+        counting_model_calls(),
+    ):
         return _execute_foreground_rpg_turn(**kwargs)
 
 
@@ -185,6 +191,11 @@ def _execute_foreground_rpg_turn(
         from app.apps.rpg.foundation.llm_priority import foreground_rpg_llm_priority
         from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
         from app.apps.rpg.session.deferred_narration_guard import canonical_presentation_follows_context
+
+        with rpg_pipeline_span("turn.outcome_baseline"):
+            # The document the turn starts from: TurnOutcome reports what the turn changed against it (RQ-1.3).
+            # Opening a campaign stored at an older document version upgrades it first (RQ-1.1).
+            before_document = _turn_start_document(session_id)
 
         with rpg_pipeline_span("turn.apply") as span:
             def apply_foreground_turn() -> dict[str, Any]:
@@ -441,6 +452,21 @@ def _execute_foreground_rpg_turn(
             from app.apps.rpg.narration.narrative_delivery import deferred_public_turn_payload
 
             payload = deferred_public_turn_payload(payload)
+            from app.apps.rpg.foundation.model_calls import current_model_calls
+            from app.apps.rpg.narration.presentation.turn_outcome import build_turn_outcome
+            from app.apps.rpg.narration.presentation.turn_response import attach_turn_outcome
+
+            outcome = build_turn_outcome(
+                result,
+                before=before_document,
+                after=session,
+                submission_id=submission_id,
+                model_calls=current_model_calls(),
+                timings={**(payload.get("timing") or {}), "pipeline_before_encode_ms": trace.elapsed_ms},
+            )
+            payload = attach_turn_outcome(payload, outcome)
+            span["model_calls"] = outcome.model_calls.total
+            span["applied_changes"] = len(outcome.applied_changes)
             payload_timing = (
                 raw_timing if isinstance(raw_timing := payload.get("timing"), dict) else {}
             )
@@ -461,6 +487,18 @@ def _execute_foreground_rpg_turn(
         finalized_response = finalize_rpg_trace_headers(response, trace)
         finalized_response.headers["X-Omnix-Rpg-Submission-Id"] = submission_id
         return finalized_response
+
+
+def _turn_start_document(session_id: str) -> dict[str, Any] | None:
+    from app.persistence.runtime import uses_postgresql_runtime
+
+    if uses_postgresql_runtime():
+        from app.apps.rpg.session.persistence.session_records import load_session_from_postgres
+
+        return load_session_from_postgres(session_id)
+    from app.apps.rpg.session.service import load_session
+
+    return load_session(session_id)
 
 
 def _persisted_turn_session(

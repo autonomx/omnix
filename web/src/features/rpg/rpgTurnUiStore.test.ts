@@ -123,6 +123,13 @@ describe('rpgTurnUiStore', () => {
         state: { changed: true, changed_domains: ['conversation'] },
         timing: { pipeline_before_encode_ms: 12.5 },
         performance: { attribution_percent: 98.5 },
+        outcome: {
+          format_version: 'rpg_turn_outcome_v1',
+          kind: 'player_text',
+          applied_changes: [{ type: 'turn_counted', turn_count: 2 }],
+          presentation: { changed_sections: ['time', 'npcs'] },
+          model_calls: { total: 1, by_kind: { provider: 1 } },
+        },
       }), {
         status: 200,
         headers: {
@@ -154,6 +161,8 @@ describe('rpgTurnUiStore', () => {
     expect(diagnostic.responseBytes).toBe(777);
     expect(diagnostic.serverAttributionPercent).toBe(98.5);
     expect(diagnostic.serverPayloadTiming).toEqual({ pipeline_before_encode_ms: 12.5 });
+    expect(diagnostic.changedDomains).toEqual(['conversation', 'time', 'npcs']);  // the outcome's sections too
+    expect(diagnostic.serverModelCalls).toBe(1);
     expect(diagnostic.client.requestToHeadersMs).toBeGreaterThanOrEqual(0);
     expect(diagnostic.client.headersToBodyMs).toBeGreaterThanOrEqual(0);
     expect(diagnostic.client.bodyToParseMs).toBeGreaterThanOrEqual(0);

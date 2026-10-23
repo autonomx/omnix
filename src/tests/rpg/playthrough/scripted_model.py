@@ -279,7 +279,6 @@ def scripted_model_installed(monkeypatch, model: ScriptedRoleModel | None = None
     from app.persistence.startup import bootstrap_postgresql_runtime
     from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.providers import service as provider_service
-    from app.apps.rpg.narration import runtime_narration_fallback
     from app.apps.rpg.narration.narrative_engine import service as narrative_service
     from app.apps.rpg.narration.narrative_engine.writer import StructuredNarrativeWriter
 
@@ -290,7 +289,6 @@ def scripted_model_installed(monkeypatch, model: ScriptedRoleModel | None = None
     job_store.install_default_job_store_factory(lambda: jobs)
     monkeypatch.setattr(provider_service, "get_provider", lambda *args, **kwargs: model)
     monkeypatch.setattr(provider_service, "get_routed_provider", lambda *args, **kwargs: model)
-    monkeypatch.setattr(runtime_narration_fallback, "get_provider", lambda *args, **kwargs: model)
     monkeypatch.setattr(
         narrative_service,
         "_production_writer",

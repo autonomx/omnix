@@ -7,6 +7,7 @@ from .save_schema import CURRENT_RPG_SCHEMA_VERSION
 __all__ = [
     "CURRENT_RPG_SCHEMA_VERSION",
     "migrate_package_to_current",
+    "build_campaign_save_package",
     "build_save_package",
     "load_save_package",
     "validate_save_package",

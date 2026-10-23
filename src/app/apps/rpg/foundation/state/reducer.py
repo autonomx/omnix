@@ -17,6 +17,7 @@ from typing import Any
 
 from .changes import (
     CombatantHpChanged,
+    CombatStarted,
     CombatEnded,
     CompanionJoined,
     CompanionLeft,
@@ -272,6 +273,14 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         party = dict(writer.get(_PLAYER + ("party_state",)) or {})
         companions = [dict(row) for row in party.get("companions") or () if row.get("npc_id") != change.npc_id]
         writer.set(_PLAYER + ("party_state",), {**party, "companions": companions})
+    elif isinstance(change, CombatStarted):
+        combat = writer.get(("simulation_state", "combat_state"))
+        if isinstance(combat, dict) and combat.get("active"):
+            raise ChangeRejected("a fight is already on")
+        writer.set(("simulation_state", "combat_state"), {
+            "active": True, "combat_id": change.combat_id, "round": 1, "current_actor_id": "player",
+            "participants": {actor: {"hp": hp, "max_hp": hp} for actor, hp in sorted(change.participants.items())},
+        })
     elif isinstance(change, CombatantHpChanged):
         participant = writer.get(("simulation_state", "combat_state", "participants", change.actor_id))
         if not isinstance(participant, dict):

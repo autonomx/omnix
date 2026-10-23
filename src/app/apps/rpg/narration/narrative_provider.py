@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.base import BaseProvider, ChatMessage, ChatResponse
 from app.providers.registry import get_provider
+from app.apps.rpg.foundation.model_calls import record_model_call
 from app.providers.structured import (
     StructuredCapabilities,
     StructuredContract,
@@ -323,6 +324,8 @@ class ProductionStructuredNarrativeWriter:
             )
             metadata = dict(raw.get("metadata") or {})
             attempts = max(1, int(metadata.get("provider_attempt_count") or 1))
+            for _ in range(attempts):
+                record_model_call("narrative_writer")
             remaining_calls = max(0, remaining_calls - attempts)
             total_attempts += attempts
             try:
@@ -429,7 +432,7 @@ def build_production_narrative_writer(
         from app.apps.rpg.foundation.provider_access import routed_provider, rpg_llm_route
 
         route = rpg_llm_route()
-        provider = routed_provider() if route is not None else None
+        provider = routed_provider(counted=False) if route is not None else None  # the writer counts its calls
         if route is not None and provider is not None:
             resolved = replace(resolved, provider=route[0], model=route[1])
             return ProductionStructuredNarrativeWriter(ProviderNarrativeGenerator(provider, resolved))

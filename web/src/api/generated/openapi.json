@@ -10400,6 +10400,91 @@
         "title": "CoinMarketCapCredentialUpdate",
         "type": "object"
       },
+      "CombatEnded": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "default": "ended",
+            "enum": [
+              "victory",
+              "defeat",
+              "fled",
+              "ended"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "type": {
+            "const": "combat_ended",
+            "default": "combat_ended",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "outcome"
+        ],
+        "title": "CombatEnded",
+        "type": "object"
+      },
+      "CombatStarted": {
+        "additionalProperties": false,
+        "description": "A fight begins, with each participant's health.",
+        "properties": {
+          "combat_id": {
+            "default": "",
+            "title": "Combat Id",
+            "type": "string"
+          },
+          "participants": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Participants",
+            "type": "object"
+          },
+          "type": {
+            "const": "combat_started",
+            "default": "combat_started",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "combat_id"
+        ],
+        "title": "CombatStarted",
+        "type": "object"
+      },
+      "CombatantHpChanged": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "delta": {
+            "title": "Delta",
+            "type": "integer"
+          },
+          "type": {
+            "const": "combatant_hp_changed",
+            "default": "combatant_hp_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor_id",
+          "delta",
+          "type"
+        ],
+        "title": "CombatantHpChanged",
+        "type": "object"
+      },
       "CompanionActivityState": {
         "additionalProperties": false,
         "description": "Derived, revisable state. Evidence remains authoritative outside this object.",
@@ -10626,6 +10711,62 @@
           "eligible_in_ms"
         ],
         "title": "CompanionAttentionDecision",
+        "type": "object"
+      },
+      "CompanionJoined": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "role": {
+            "default": "companion",
+            "title": "Role",
+            "type": "string"
+          },
+          "type": {
+            "const": "companion_joined",
+            "default": "companion_joined",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "name",
+          "type",
+          "role"
+        ],
+        "title": "CompanionJoined",
+        "type": "object"
+      },
+      "CompanionLeft": {
+        "additionalProperties": false,
+        "properties": {
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "companion_left",
+            "default": "companion_left",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "type"
+        ],
+        "title": "CompanionLeft",
         "type": "object"
       },
       "CompanionMemoryMetrics": {
@@ -16687,6 +16828,28 @@
           "allowed_environment_keys"
         ],
         "title": "ExecutionPolicy",
+        "type": "object"
+      },
+      "ExperienceGained": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "minimum": 0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "type": {
+            "const": "experience_gained",
+            "default": "experience_gained",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "type"
+        ],
+        "title": "ExperienceGained",
         "type": "object"
       },
       "ExportDefinitionRequestBody": {
@@ -23213,6 +23376,28 @@
         "title": "HermesTestResponseResultResult",
         "type": "object"
       },
+      "HpChanged": {
+        "additionalProperties": false,
+        "description": "The hero's health, kept between 0 and its maximum.",
+        "properties": {
+          "delta": {
+            "title": "Delta",
+            "type": "integer"
+          },
+          "type": {
+            "const": "hp_changed",
+            "default": "hp_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delta",
+          "type"
+        ],
+        "title": "HpChanged",
+        "type": "object"
+      },
       "HubTokenWrite": {
         "properties": {
           "token": {
@@ -25221,6 +25406,205 @@
           "confidence"
         ],
         "title": "IssuerIdentity",
+        "type": "object"
+      },
+      "ItemAdded": {
+        "additionalProperties": false,
+        "description": "Stacks into the pack: onto the stack with the same item id, else a new stack.",
+        "properties": {
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "type": {
+            "const": "item_added",
+            "default": "item_added",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "name",
+          "type",
+          "quantity",
+          "category"
+        ],
+        "title": "ItemAdded",
+        "type": "object"
+      },
+      "ItemDropped": {
+        "additionalProperties": false,
+        "description": "From the pack to the ground where the hero stands.",
+        "properties": {
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "type": {
+            "const": "item_dropped",
+            "default": "item_dropped",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "location_id",
+          "type",
+          "quantity"
+        ],
+        "title": "ItemDropped",
+        "type": "object"
+      },
+      "ItemEquipped": {
+        "additionalProperties": false,
+        "properties": {
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "slot": {
+            "minLength": 1,
+            "title": "Slot",
+            "type": "string"
+          },
+          "type": {
+            "const": "item_equipped",
+            "default": "item_equipped",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot",
+          "item_id",
+          "type"
+        ],
+        "title": "ItemEquipped",
+        "type": "object"
+      },
+      "ItemPickedUp": {
+        "additionalProperties": false,
+        "description": "From the ground back into the pack, onto its own stack.",
+        "properties": {
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "type": {
+            "const": "item_picked_up",
+            "default": "item_picked_up",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "location_id",
+          "type",
+          "quantity"
+        ],
+        "title": "ItemPickedUp",
+        "type": "object"
+      },
+      "ItemRemoved": {
+        "additionalProperties": false,
+        "description": "Taken from the pack's stack (used, sold, given); the stack goes when it is empty.",
+        "properties": {
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "type": {
+            "const": "item_removed",
+            "default": "item_removed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "type",
+          "quantity"
+        ],
+        "title": "ItemRemoved",
+        "type": "object"
+      },
+      "ItemUnequipped": {
+        "additionalProperties": false,
+        "properties": {
+          "slot": {
+            "minLength": 1,
+            "title": "Slot",
+            "type": "string"
+          },
+          "type": {
+            "const": "item_unequipped",
+            "default": "item_unequipped",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot",
+          "type"
+        ],
+        "title": "ItemUnequipped",
         "type": "object"
       },
       "JobError": {
@@ -28582,6 +28966,34 @@
         "title": "LocalWorkspacePickResponse",
         "type": "object"
       },
+      "LocationChanged": {
+        "additionalProperties": false,
+        "properties": {
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "location_name": {
+            "default": "",
+            "title": "Location Name",
+            "type": "string"
+          },
+          "type": {
+            "const": "location_changed",
+            "default": "location_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "type",
+          "location_name"
+        ],
+        "title": "LocationChanged",
+        "type": "object"
+      },
       "LoreDiscoveryRequest": {
         "properties": {
           "document_id": {
@@ -30176,6 +30588,28 @@
         "title": "MemoryUsageResponse",
         "type": "object"
       },
+      "ModelCalls": {
+        "additionalProperties": false,
+        "properties": {
+          "by_kind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Kind",
+            "type": "object"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total"
+        ],
+        "title": "ModelCalls",
+        "type": "object"
+      },
       "ModelPacksStatus": {
         "description": "The setup screen's data. ``enabled`` is false outside the desktop app, and the rest is then empty.",
         "properties": {
@@ -30663,6 +31097,36 @@
         "title": "MovingAverageCrossStrategy",
         "type": "object"
       },
+      "NarrationReference": {
+        "additionalProperties": false,
+        "properties": {
+          "response_id": {
+            "default": "",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "speaker_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Speaker Ids",
+            "type": "array"
+          },
+          "status": {
+            "default": "",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "status",
+          "speaker_ids"
+        ],
+        "title": "NarrationReference",
+        "type": "object"
+      },
       "NarrativeDeliveryCancelRequest": {
         "properties": {
           "reason": {
@@ -30679,6 +31143,41 @@
           "semantic_hash"
         ],
         "title": "NarrativeDeliveryCancelRequest",
+        "type": "object"
+      },
+      "NeedsChanged": {
+        "additionalProperties": false,
+        "description": "Hunger, thirst and fatigue, each kept at zero or above.",
+        "properties": {
+          "fatigue": {
+            "default": 0,
+            "title": "Fatigue",
+            "type": "integer"
+          },
+          "hunger": {
+            "default": 0,
+            "title": "Hunger",
+            "type": "integer"
+          },
+          "thirst": {
+            "default": 0,
+            "title": "Thirst",
+            "type": "integer"
+          },
+          "type": {
+            "const": "needs_changed",
+            "default": "needs_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "hunger",
+          "thirst",
+          "fatigue"
+        ],
+        "title": "NeedsChanged",
         "type": "object"
       },
       "NonverbalEligibility": {
@@ -39235,6 +39734,38 @@
         "title": "PremarketMarketStateSnapshot",
         "type": "object"
       },
+      "PresenceChanged": {
+        "additionalProperties": false,
+        "description": "Who is present where the hero is.",
+        "properties": {
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "present_npc_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Present Npc Ids",
+            "type": "array"
+          },
+          "type": {
+            "const": "presence_changed",
+            "default": "presence_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "type",
+          "present_npc_ids"
+        ],
+        "title": "PresenceChanged",
+        "type": "object"
+      },
       "PresencePolicyValues": {
         "additionalProperties": false,
         "properties": {
@@ -39373,6 +39904,37 @@
           "reason"
         ],
         "title": "PresencePolicyVersionCreate",
+        "type": "object"
+      },
+      "PresentationHints": {
+        "additionalProperties": false,
+        "description": "What the play screen needs to show the turn without reading the document.",
+        "properties": {
+          "changed_sections": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Sections",
+            "type": "array"
+          },
+          "location_name": {
+            "default": "",
+            "title": "Location Name",
+            "type": "string"
+          },
+          "refused": {
+            "default": false,
+            "title": "Refused",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed_sections",
+          "location_name",
+          "refused"
+        ],
+        "title": "PresentationHints",
         "type": "object"
       },
       "PriceSource": {
@@ -41208,6 +41770,34 @@
         "title": "PublicAssetRecord",
         "type": "object"
       },
+      "PurseChanged": {
+        "additionalProperties": false,
+        "description": "Coin gained (positive) or spent (negative), in copper.",
+        "properties": {
+          "delta_copper": {
+            "title": "Delta Copper",
+            "type": "integer"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "type": {
+            "const": "purse_changed",
+            "default": "purse_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delta_copper",
+          "type",
+          "reason"
+        ],
+        "title": "PurseChanged",
+        "type": "object"
+      },
       "PushSettingsResponse": {
         "properties": {
           "available": {
@@ -41334,6 +41924,67 @@
           "keys"
         ],
         "title": "PushSubscriptionWrite",
+        "type": "object"
+      },
+      "QuestPlaceReached": {
+        "additionalProperties": false,
+        "properties": {
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "quest_id": {
+            "minLength": 1,
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "quest_place_reached",
+            "default": "quest_place_reached",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quest_id",
+          "location_id",
+          "type"
+        ],
+        "title": "QuestPlaceReached",
+        "type": "object"
+      },
+      "QuestStatusChanged": {
+        "additionalProperties": false,
+        "properties": {
+          "quest_id": {
+            "minLength": 1,
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "active",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "const": "quest_status_changed",
+            "default": "quest_status_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quest_id",
+          "status",
+          "type"
+        ],
+        "title": "QuestStatusChanged",
         "type": "object"
       },
       "QuoteResponse": {
@@ -49956,6 +50607,16 @@
             "title": "Ok",
             "type": "boolean"
           },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TurnOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "response": {
             "anyOf": [
               {
@@ -56753,6 +57414,47 @@
         "title": "ShadowPortfolioPosition",
         "type": "object"
       },
+      "SkillProgressed": {
+        "additionalProperties": false,
+        "description": "A skill's progress as the rules computed it (level-ups are the rules' decision, not the reducer's).",
+        "properties": {
+          "level": {
+            "minimum": 0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "skill_id": {
+            "minLength": 1,
+            "title": "Skill Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "skill_progressed",
+            "default": "skill_progressed",
+            "title": "Type",
+            "type": "string"
+          },
+          "xp": {
+            "minimum": 0,
+            "title": "Xp",
+            "type": "integer"
+          },
+          "xp_to_next": {
+            "minimum": 1,
+            "title": "Xp To Next",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "skill_id",
+          "level",
+          "xp",
+          "xp_to_next",
+          "type"
+        ],
+        "title": "SkillProgressed",
+        "type": "object"
+      },
       "Snapshot": {
         "properties": {
           "created_at": {
@@ -62031,6 +62733,29 @@
         "title": "TaskRevision",
         "type": "object"
       },
+      "TimeAdvanced": {
+        "additionalProperties": false,
+        "properties": {
+          "ticks": {
+            "default": 1,
+            "minimum": 0,
+            "title": "Ticks",
+            "type": "integer"
+          },
+          "type": {
+            "const": "time_advanced",
+            "default": "time_advanced",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "ticks"
+        ],
+        "title": "TimeAdvanced",
+        "type": "object"
+      },
       "ToolCall": {
         "properties": {
           "arguments": {
@@ -66045,6 +66770,285 @@
           }
         },
         "title": "TtsStreamRequest",
+        "type": "object"
+      },
+      "TurnCounted": {
+        "additionalProperties": false,
+        "properties": {
+          "turn_count": {
+            "minimum": 0,
+            "title": "Turn Count",
+            "type": "integer"
+          },
+          "type": {
+            "const": "turn_counted",
+            "default": "turn_counted",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_count",
+          "type"
+        ],
+        "title": "TurnCounted",
+        "type": "object"
+      },
+      "TurnIntent": {
+        "additionalProperties": false,
+        "description": "What the turn took the player to mean, and who decided it (the game's own rules or a model).",
+        "properties": {
+          "action_type": {
+            "default": "",
+            "title": "Action Type",
+            "type": "string"
+          },
+          "semantic_action_type": {
+            "default": "",
+            "title": "Semantic Action Type",
+            "type": "string"
+          },
+          "semantic_family": {
+            "default": "",
+            "title": "Semantic Family",
+            "type": "string"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "target_id": {
+            "default": "",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_type",
+          "semantic_action_type",
+          "semantic_family",
+          "target_id",
+          "source"
+        ],
+        "title": "TurnIntent",
+        "type": "object"
+      },
+      "TurnOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "combat_ended": "#/components/schemas/CombatEnded",
+                  "combat_started": "#/components/schemas/CombatStarted",
+                  "combatant_hp_changed": "#/components/schemas/CombatantHpChanged",
+                  "companion_joined": "#/components/schemas/CompanionJoined",
+                  "companion_left": "#/components/schemas/CompanionLeft",
+                  "experience_gained": "#/components/schemas/ExperienceGained",
+                  "hp_changed": "#/components/schemas/HpChanged",
+                  "item_added": "#/components/schemas/ItemAdded",
+                  "item_dropped": "#/components/schemas/ItemDropped",
+                  "item_equipped": "#/components/schemas/ItemEquipped",
+                  "item_picked_up": "#/components/schemas/ItemPickedUp",
+                  "item_removed": "#/components/schemas/ItemRemoved",
+                  "item_unequipped": "#/components/schemas/ItemUnequipped",
+                  "location_changed": "#/components/schemas/LocationChanged",
+                  "needs_changed": "#/components/schemas/NeedsChanged",
+                  "presence_changed": "#/components/schemas/PresenceChanged",
+                  "purse_changed": "#/components/schemas/PurseChanged",
+                  "quest_place_reached": "#/components/schemas/QuestPlaceReached",
+                  "quest_status_changed": "#/components/schemas/QuestStatusChanged",
+                  "skill_progressed": "#/components/schemas/SkillProgressed",
+                  "time_advanced": "#/components/schemas/TimeAdvanced",
+                  "turn_counted": "#/components/schemas/TurnCounted"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PurseChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemAdded"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemDropped"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemPickedUp"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemEquipped"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemUnequipped"
+                },
+                {
+                  "$ref": "#/components/schemas/HpChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/ExperienceGained"
+                },
+                {
+                  "$ref": "#/components/schemas/SkillProgressed"
+                },
+                {
+                  "$ref": "#/components/schemas/LocationChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/PresenceChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeAdvanced"
+                },
+                {
+                  "$ref": "#/components/schemas/TurnCounted"
+                },
+                {
+                  "$ref": "#/components/schemas/NeedsChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/QuestStatusChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/QuestPlaceReached"
+                },
+                {
+                  "$ref": "#/components/schemas/CompanionJoined"
+                },
+                {
+                  "$ref": "#/components/schemas/CompanionLeft"
+                },
+                {
+                  "$ref": "#/components/schemas/CombatStarted"
+                },
+                {
+                  "$ref": "#/components/schemas/CombatantHpChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/CombatEnded"
+                }
+              ]
+            },
+            "title": "Applied Changes",
+            "type": "array"
+          },
+          "dialogue_plan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dialogue Plan"
+          },
+          "document_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Version"
+          },
+          "format_version": {
+            "const": "rpg_turn_outcome_v1",
+            "default": "rpg_turn_outcome_v1",
+            "title": "Format Version",
+            "type": "string"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/TurnIntent"
+          },
+          "kind": {
+            "default": "player_text",
+            "enum": [
+              "player_text",
+              "structured_action",
+              "world_tick",
+              "system"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "model_calls": {
+            "$ref": "#/components/schemas/ModelCalls"
+          },
+          "narration": {
+            "$ref": "#/components/schemas/NarrationReference"
+          },
+          "planned_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Action"
+          },
+          "presentation": {
+            "$ref": "#/components/schemas/PresentationHints"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "submission_id": {
+            "default": "",
+            "title": "Submission Id",
+            "type": "string"
+          },
+          "timings": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Timings",
+            "type": "object"
+          },
+          "turn_id": {
+            "default": "",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "world_events": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "World Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "format_version",
+          "kind",
+          "turn_id",
+          "submission_id",
+          "applied_changes",
+          "world_events"
+        ],
+        "title": "TurnOutcome",
         "type": "object"
       },
       "UpdateAudiobookProject": {

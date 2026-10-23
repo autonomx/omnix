@@ -290,7 +290,10 @@ class StructuredNarrativeWriter:
         plan: NarrativePlan,
         evidence: Sequence[EvidenceRecord],
     ) -> WriterResult:
+        from app.apps.rpg.foundation.model_calls import record_model_call
+
         started = perf_counter()
+        record_model_call("narrative_writer")
         raw = self._generate(writer_payload(request, plan, evidence))
         if not isinstance(raw, Mapping):
             raise ValueError("narrative provider returned a non-object response")

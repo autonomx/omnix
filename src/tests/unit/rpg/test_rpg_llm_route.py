@@ -41,7 +41,7 @@ def test_without_an_override_the_writer_uses_the_route(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_RPG_NARRATIVE_WRITER_MODE", "auto")
     provider = SimpleNamespace(provider_name="claude_cli")
     monkeypatch.setattr(provider_access, "rpg_llm_route", lambda: ("claude_cli", "haiku"))
-    monkeypatch.setattr(provider_access, "routed_provider", lambda: provider)
+    monkeypatch.setattr(provider_access, "routed_provider", lambda **_: provider)  # the writer counts its own calls
 
     writer = narrative_provider.build_production_narrative_writer()
 

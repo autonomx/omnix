@@ -1,6 +1,7 @@
  
 import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import { useEffect, useState } from 'react';
+import type { components } from './api/generated';
 import type { RpgStoryMessagePreview } from './rpgUiState';
 import {
   beginRpgTurnDiagnostics,
@@ -52,6 +53,16 @@ interface RpgTurnResponseV2 {
   };
   timing?: Record<string, number>;
   performance?: Record<string, unknown>;
+  /** The turn's one result (RQ-1.3): its changes, narration, timings and model calls. */
+  outcome?: RpgTurnOutcome | null;
+}
+
+export type RpgTurnOutcome = components['schemas']['TurnOutcome'];
+
+/** What a turn changed: the sections its outcome names, with the transitional changed domains. */
+export function rpgTurnChangedDomains(payload: Pick<RpgTurnResponseV2, 'state' | 'outcome'>): string[] {
+  const sections = payload.outcome?.presentation?.changed_sections ?? [];
+  return [...new Set([...(payload.state?.changed_domains ?? []), ...sections])];
 }
 
 interface BeginSubmissionInput {
@@ -155,12 +166,13 @@ export function completeRpgTurnUiSubmission(input: CompleteSubmissionInput): str
       traceId: input.payload.trace_id,
       responseHeaders: input.responseHeaders,
       milestones: { ...input.milestones, storeUpdatedMs: nowRpgClientMs() },
-      changedDomains: input.payload.state?.changed_domains || [],
+      changedDomains: rpgTurnChangedDomains(input.payload),
       serverPayloadTiming: input.payload.timing,
       serverPerformance: input.payload.performance,
+      serverModelCalls: input.payload.outcome?.model_calls?.total,
     });
   }
-  return input.payload.state?.changed_domains || [];
+  return rpgTurnChangedDomains(input.payload);
 }
 
 /** The narration written so far for a turn still running, shown in place of its pending line. */
@@ -265,7 +277,7 @@ export function storyMessageIdentity(message: RpgStoryMessagePreview, index: num
 export function refreshPathsForChangedDomains(sessionId: string, changedDomains: string[]): string[] {
   const domains = new Set(changedDomains);
   const paths = new Set<string>([`/api/rpg/sessions/${encodeURIComponent(sessionId)}`]);
-  if ([...domains].some((domain) => ['location', 'world', 'quests', 'journal'].includes(domain))) {
+  if ([...domains].some((domain) => ['location', 'world', 'quests', 'journal', 'npcs'].includes(domain))) {
     paths.add('/api/reports');
   }
   return [...paths];
