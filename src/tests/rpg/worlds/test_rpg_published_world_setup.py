@@ -204,3 +204,13 @@ def test_the_worlds_creatures_fight_as_themselves() -> None:
     archon = instantiate_campaign_creature({"campaign_mechanics": mechanics}, "creature:hollow-archon")
     assert archon["level"] == 8 and archon["vulnerabilities"] == []
     assert bestiary_mechanics(SimpleNamespace(revision=1, canon={})) == {}
+
+
+def test_a_worlds_person_joins_the_party_by_their_own_name() -> None:
+    """The starter biographies' stand-in for an unknown id is named by its slug ("liora-fen"); a published
+    world's person is named as the session indexes them, so the party and the fight say "Liora Fen"."""
+    from app.apps.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+
+    state = {"npc_index": {"npc:liora-fen": {"npc_id": "npc:liora-fen", "name": "Liora Fen", "role": "guide"}}}
+    assert evaluate_npc_party_join_eligibility(state, npc_id="npc:liora-fen")["name"] == "Liora Fen"
+    assert evaluate_npc_party_join_eligibility({}, npc_id="npc:liora-fen")["name"] == "liora-fen"
