@@ -1022,3 +1022,6 @@ Implementation runs on branch `rpg-production` in two lanes (§5): lane A in wor
 | RQ-4.2 | done (every-turn tick waits on RQ-1.4) | c5eab7c98c | published launches install a clock from authored pressures or derived road dangers; fixed the causal tick overwriting the turn (7f579fbf61); PG published-world play green |
 | RQ-5.0 | done | 919ee62e13 | `docs/rpg/design/`: template, balance bands, rubric, notes for RQ-5.1–5.7 |
 | RQ-7.4 | done | 79f60caa2d | the "legacy" wizard was the character step of the one flow: renamed `RpgCampaignCharacterStep`, dead starter-town branches removed, neutral hero defaults; web 256/256, typecheck |
+| RQ-0.2 | done | f240bc8f65 | Aurelia golden, 30 turns + a tactical move, role-keyed scripted model; re-recorded on the world clock (no fact changed) |
+| RQ-0.3 | done | 48d4af59ee | playthrough suite on Aurelia, Vesper-9 and the starter town: 44 pass, 20 strict xfail naming their packages; three bugs fixed (travel matching, companion names, second Vesper import) |
+| RQ-0.7 | done | 1c3b67f090 | eight tests skip without a DB; `[rpg_turn_path]` = 512 modules from coverage over the suite; 101 RPG modules never imported, 477 imported but unexecuted |
