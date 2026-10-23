@@ -20,8 +20,8 @@ WORLD_MODEL_SCHEMA = "rpg_session_world_model_v1"
 
 # NPC roles that offer a service where they are found (the location registry's service kinds).
 _ROLE_SERVICES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("innkeeper", ("lodging", "meal")),
-    ("tavern", ("lodging", "meal")),
+    ("innkeeper", ("lodging", "meal", "drink")),
+    ("tavern", ("lodging", "meal", "drink")),
     ("merchant", ("shop_goods",)),
     ("trader", ("shop_goods",)),
     ("shopkeeper", ("shop_goods",)),
@@ -164,6 +164,84 @@ def _role_services(role: str) -> list[str]:
     return services
 
 
+def _price(text: str, fallback: dict[str, int]) -> dict[str, int]:
+    """A price from the world's own wording ("5 silver/night", "8 copper"), else ``fallback``."""
+    price = {"gold": 0, "silver": 0, "copper": 0}
+    for amount, coin in re.findall(r"(\d+)\s*(gold|silver|copper)", text.casefold()):
+        price[coin] += int(amount)
+    return price if any(price.values()) else dict(fallback)
+
+
+def _typical_price(canon: Mapping[str, Any], keywords: tuple[str, ...], fallback: dict[str, int]) -> dict[str, int]:
+    prices = _mapping(_mapping(canon.get("economy")).get("typical_prices"))
+    for key, value in prices.items():
+        if any(keyword in str(key).casefold() for keyword in keywords):
+            return _price(str(value), fallback)
+    return dict(fallback)
+
+
+def _offer(provider: Mapping[str, Any], kind: str, key: str, label: str, description: str,
+           price: dict[str, int], effects: dict[str, Any], stock: int | None = None) -> dict[str, Any]:
+    offer = {
+        "offer_id": f"{provider['provider_id']}:{key}",
+        "service_kind": kind,
+        "provider_id": provider["provider_id"],
+        "provider_name": provider["provider_name"],
+        "label": label,
+        "description": description,
+        "price": price,
+        "availability_rules": {"requires_provider_present": True, "requires_location": provider["location_id"]},
+        "availability": "available",
+        "effects": effects,
+    }
+    if stock is not None:
+        offer["stock"] = stock
+    return offer
+
+
+def _service_offers(canon: Mapping[str, Any], provider: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """What a provider sells, priced from the world's economy where it says (an inn room, a meal, a potion)."""
+    offers: list[dict[str, Any]] = []
+    kinds = set(provider["service_kinds"])
+    if "lodging" in kinds:
+        offers.append(_offer(provider, "lodging", "night", "A night's lodging", "A bed for the night.",
+                             _typical_price(canon, ("inn", "room", "lodging"), {"silver": 5}),
+                             {"lodging_reserved": True, "rest_quality": "basic", "duration": "one_night"}, stock=6))
+    if "meal" in kinds:
+        offers.append(_offer(provider, "meal", "meal", "A hot meal", "A hot meal of the house.",
+                             _typical_price(canon, ("meal", "food"), {"silver": 1}), {"meal_consumed": True, "morale": 1}))
+    if "drink" in kinds:
+        offers.append(_offer(provider, "drink", "drink", "A drink", "A drink of the house.",
+                             _typical_price(canon, ("drink", "ale"), {"copper": 8}), {"drink_consumed": True}))
+    if "shop_goods" in kinds:
+        for item in _rows(canon.get("items")):
+            item_id, kind = _text(item.get("id")), _text(item.get("type")).casefold()
+            if not item_id or _text(item.get("rarity")).casefold() not in {"", "common"}:
+                continue
+            if kind not in {"food", "drink", "tool", "consumable", "potion", "supply"}:
+                continue
+            name = _text(item.get("name")) or _label_from_id(item_id)
+            price = _typical_price(canon, ("meal", "food"), {"silver": 1}) if kind == "food" else {"silver": 1}
+            offers.append(_offer(provider, "shop_goods", item_id.rsplit(":", 1)[-1], name,
+                                 _text(item.get("effect") or item.get("description")) or name, price,
+                                 {"items_added": [{"item_id": item_id, "name": name, "quantity": 1, "type": kind,
+                                                   "description": _text(item.get("effect"))}]}, stock=5))
+        potion = _mapping(_mapping(canon.get("economy")).get("typical_prices")).get("healing_potion")
+        if potion:
+            offers.append(_offer(provider, "shop_goods", "healing-potion", "Healing Potion", "Restores health.",
+                                 _price(str(potion), {"silver": 3}),
+                                 {"items_added": [{"item_id": "healing_potion", "name": "Healing Potion", "quantity": 1,
+                                                   "type": "potion", "description": "restores health"}]}, stock=3))
+    if "repair" in kinds:
+        offers.append(_offer(provider, "repair", "repair", "Gear repair", "Repair work on worn equipment.",
+                             _typical_price(canon, ("repair",), {"silver": 4}), {"repair_quality": "basic"}))
+    if "paid_information" in kinds:
+        offers.append(_offer(provider, "paid_information", "information", "Local news", "What is going on around here.",
+                             _typical_price(canon, ("information", "rumor", "contract"), {"silver": 2}),
+                             {"rumor_added": True}))
+    return offers
+
+
 def session_world_model(revision: Any, scenario: Any, *, present_at_start: Iterable[str] = ()) -> dict[str, Any]:
     """The per-session world the location registry and travel graph read for a published campaign."""
 
@@ -225,9 +303,29 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "services": services,
             "exits": exits,
         }
+    providers: dict[str, dict[str, Any]] = {}
+    for npc in npcs.values():
+        kinds = _role_services(npc["role"])
+        if kinds and npc["location_id"]:
+            name = npc["name"]
+            providers[npc["id"]] = {
+                "provider_id": npc["id"],
+                "provider_name": name,
+                "aliases": sorted({name.casefold(), name.split()[0].casefold(), npc["role"].casefold()}),
+                "location_id": npc["location_id"],
+                "service_kinds": kinds,
+            }
     return {
         "schema_version": WORLD_MODEL_SCHEMA,
         "source": "published_world",
+        "providers": providers,
+        "items": [
+            {"id": _text(item.get("id")), "name": _text(item.get("name")), "type": _text(item.get("type")),
+             "effect": _text(item.get("effect") or item.get("description"))}
+            for item in _rows(canon.get("items"))
+            if _text(item.get("id"))
+        ],
+        "offers": {provider_id: _service_offers(canon, provider) for provider_id, provider in providers.items()},
         "world_id": _text(getattr(revision, "world_id", "")),
         "world_revision": int(getattr(revision, "revision", 0) or 0),
         "start_location_id": start,
@@ -235,6 +333,22 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         "routes": routes,
         "npcs": npcs,
     }
+
+
+# Who will travel with the player when asked, from the world's own words: a "guide and first companion" at
+# once, a "reluctant protector" once trusted.
+_COMPANION_WORDS = (("companion", 0), ("guide", 0), ("protector", 20), ("ally", 20), ("mercenary", 20))
+
+
+def companion_candidates(world_model: Mapping[str, Any]) -> dict[str, int]:
+    """Characters who can join the party, with the trust each needs first."""
+    candidates: dict[str, int] = {}
+    for npc_id, npc in _mapping(world_model.get("npcs")).items():
+        role = f"{_text(_mapping(npc).get('role'))}".casefold()
+        trust = min((needed for word, needed in _COMPANION_WORDS if word in role), default=None)
+        if trust is not None:
+            candidates[str(npc_id)] = trust
+    return candidates
 
 
 def creator_setup(revision: Any, scenario: Any, world_model: Mapping[str, Any], world: Mapping[str, Any]) -> dict[str, Any]:
@@ -363,6 +477,7 @@ def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
     log: list[dict[str, Any]] = []
     for index, (quest, hook) in enumerate(ordered):
         quest_id = _text(quest.get("id"))
+        places = [_text(place) for place in quest.get("locations") or () if _text(place)]
         log.append({
             "id": quest_id,
             "quest_id": quest_id,
@@ -371,6 +486,9 @@ def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
             "objective": _text(quest.get("objective")),
             "hook": hook,
             "rewards": [_text(reward) for reward in quest.get("rewards") or () if _text(reward)],
+            "locations": places,
+            # The player starts at the opening's place, so a quest that names it has already been there.
+            "visited_locations": [start] if start in places else [],
             "source": "published_world",
         })
     return log
@@ -378,6 +496,7 @@ def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
 
 __all__ = [
     "WORLD_MODEL_SCHEMA",
+    "companion_candidates",
     "creator_setup",
     "location_label",
     "opening_kit",

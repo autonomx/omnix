@@ -112,6 +112,30 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
                 claim_refs=tuple(str(key) for key in sorted(effects)),
             )
         )
+    # What the turn's mechanics did (a quest taken on, practice, a status asked for), stated by the runtime.
+    resolved = next(
+        (
+            candidate
+            for candidate in (
+                _mapping(result.get("resolved_result")),
+                _mapping(_mapping(result.get("result")).get("resolved_result")),
+                _mapping(_mapping(result.get("authoritative")).get("resolved_result")),
+            )
+            if candidate.get("outcome_lines")
+        ),
+        {},
+    )
+    outcome_lines = [str(line) for line in resolved.get("outcome_lines") or () if str(line).strip()]
+    if outcome_lines:
+        records.append(
+            EvidenceRecord(
+                evidence_id="runtime:turn:outcome",
+                content=" ".join(outcome_lines),
+                authority=AuthorityClass.CONFIRMED_TURN,
+                visibility=VisibilityClass.PLAYER_KNOWN,
+                source_revision=int(result.get("state_revision") or 0),
+            )
+        )
     speaker_id, speaker_name = _speaker(result)
     diagnostics = _mapping(result.get("first_call_grounding_diagnostics"))
     packet = _mapping(diagnostics.get("turn_grounding_packet"))

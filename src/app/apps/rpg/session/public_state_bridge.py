@@ -26,6 +26,9 @@ def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
         for key in ("currency", "resources", "stats", "skills", "location_id"):
             if key not in player_state and public_player.get(key) is not None:
                 player_state[key] = deepcopy(public_player[key])
+        # The character's own name replaces the simulation's "Player" placeholder.
+        if public_player.get("name") and player_state.get("name") in (None, "", "Player"):
+            player_state["name"] = str(public_player["name"])
 
         public_inventory = public_player.get("inventory")
         inventory_state = _dict(player_state.get("inventory_state"))
@@ -46,6 +49,22 @@ def hydrate_simulation_player(session: Dict[str, Any]) -> Dict[str, Any]:
     return session
 
 
+def count_player_turn(session: Dict[str, Any]) -> Dict[str, Any]:
+    """Count the turn the player is taking, whichever path resolves it.
+
+    Every stage of a turn loads the session as it was when the turn began (saves are deferred to the turn's
+    commit), so each stage that counts sets the same number: counting is idempotent within a turn.
+    """
+    state = _dict(session.get("state"))
+    manifest = _dict(session.get("manifest"))
+    count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
+    state["turn_count"] = state["current_turn"] = count
+    manifest["turn_count"] = manifest["current_turn"] = count
+    session["state"] = state
+    session["manifest"] = manifest
+    return session
+
+
 def project_authoritative_player(session: Dict[str, Any]) -> Dict[str, Any]:
     """Project authoritative wallet, resources, and inventory into public state."""
 
@@ -63,6 +82,10 @@ def project_authoritative_player(session: Dict[str, Any]) -> Dict[str, Any]:
     for key in ("resources", "stats", "skills", "location_id"):
         if player_state.get(key) is not None:
             public_player[key] = deepcopy(player_state[key])
+    # The simulation counts experience toward the next level; the sheet shows it as a meter.
+    if isinstance(player_state.get("xp"), int) and not isinstance(player_state.get("xp"), bool):
+        public_player["xp"] = {"current": player_state["xp"], "max": int(player_state.get("xp_to_next") or 100)}
+        public_player["level"] = int(player_state.get("level") or 1)
     if isinstance(inventory_state.get("items"), list):
         previous = {
             str(item.get("item_id") or item.get("id") or ""): item

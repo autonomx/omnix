@@ -15,6 +15,7 @@ from .progressive_materialization_job_service import (
 )
 from .published_canon_projection import project_published_canon
 from .published_world_setup import (
+    companion_candidates,
     creator_setup,
     location_label,
     opening_kit,
@@ -314,6 +315,17 @@ def _apply_published_opening_state(
             },
         }
     )
+    from app.apps.rpg.world.npc_evolution_state import apply_npc_evolution_event
+
+    for npc_id, trust in companion_candidates(world_model).items():
+        apply_npc_evolution_event(
+            simulation,
+            npc_id=npc_id,
+            event_id=f"published_world:{npc_id}:companion",
+            kind="published_companion",
+            party_join_eligibility={"eligible": True, "requires_player_trust": trust, "reason": "published_companion"},
+            tick=0,
+        )
     session["simulation_state"] = simulation
 
 

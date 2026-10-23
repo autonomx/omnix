@@ -15,11 +15,13 @@ from app.apps.rpg.session.semantic_action_intelligence import get_semantic_actio
 from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
 from app.apps.rpg.session.dialogue_fallbacks import repair_dialogue_fallback
-from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
+from app.apps.rpg.session.public_state_bridge import count_player_turn, hydrate_simulation_player
 from app.apps.rpg.rules.semantic_interaction import attach_semantic_interaction
 from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
 from app.apps.rpg.session.companion_turn_runtime import _build_turn_id
 from app.apps.rpg.session.service_runtime import service_action_from_result
+from app.apps.rpg.world.companion_acceptance import requested_companion
+from app.apps.rpg.session.player_requests import has_player_requests
 from app.apps.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
 from app.apps.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
 from app.apps.rpg.foundation.safe_values import copy_state
@@ -794,7 +796,7 @@ def _apply_turn_core(
         timing["manual_turn_ms"] = _ms_since(manual_start)
         return {"ok": False, "error": "session_not_found", "manual_turn_stage_timing": timing}
 
-    session = hydrate_simulation_player(session)
+    session = count_player_turn(hydrate_simulation_player(session))
     simulation_state = _d(session.get("simulation_state"))
     runtime_state = _d(session.get("runtime_state"))
     candidate_action = _d(action)
@@ -850,6 +852,12 @@ def _apply_turn_core(
     except Exception:
         service_match = {}
     service_matched = bool(_d(service_match).get("matched"))
+    # Asking someone to join the party changes the party: the runtime resolves it, not a dialogue reply.
+    if not service_matched and requested_companion(simulation_state, _s(player_input)):
+        service_matched = True
+    # Taking on a quest or practising a skill changes the player's own state: the runtime resolves it.
+    if not service_matched and has_player_requests(simulation_state, _s(player_input)):
+        service_matched = True
 
     action_advisory: dict[str, Any] = {}
     semantic_advisory: dict[str, Any] = {}

@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
-from .authority import VisibilityClass
+from .authority import AuthorityClass, VisibilityClass
 from .contracts import EvidenceRecord
 
 
@@ -180,9 +180,11 @@ class EvidenceBroker:
             else:
                 excluded.append((record.evidence_id, reason))
 
+        # The turn's own confirmed result is always relevant to narrating it, whatever words it shares.
         ranked = sorted(
             eligible,
             key=lambda record: (
+                record.authority is not AuthorityClass.CONFIRMED_TURN,
                 -_score(record, query)[0],
                 -_score(record, query)[1],
                 -_score(record, query)[2],

@@ -21,8 +21,8 @@ from app.apps.rpg.rules.economy.service_registry import (
     SERVICE_KIND_DRINK,
     SERVICE_KIND_LODGING,
     SERVICE_KIND_MEAL,
-    SERVICE_PROVIDERS,
     get_provider_offers,
+    service_providers,
 )
 from app.apps.rpg.rules.location_registry import (
     has_explicit_location,
@@ -285,7 +285,7 @@ def _apply_purchase_cost(simulation_state: Dict[str, Any], purchase: Dict[str, A
 
 def _offer_available_here(simulation_state: Dict[str, Any], provider_id: str, offer: Dict[str, Any]) -> bool:
     service_kind = _safe_str(offer.get("service_kind"))
-    provider = _safe_dict(SERVICE_PROVIDERS.get(provider_id))
+    provider = _safe_dict(service_providers(simulation_state).get(provider_id))
     if not has_explicit_location(simulation_state):
         return False
     if not provider_present_at_location(
@@ -301,9 +301,9 @@ def _offer_available_here(simulation_state: Dict[str, Any], provider_id: str, of
 
 def _service_suggestion_for_kind(simulation_state: Dict[str, Any], service_kind: str) -> Dict[str, Any]:
     wallet = get_player_currency(simulation_state)
-    for provider_id, provider in SERVICE_PROVIDERS.items():
+    for provider_id, provider in service_providers(simulation_state).items():
         provider = _safe_dict(provider)
-        for offer in get_provider_offers(provider_id, service_kind):
+        for offer in get_provider_offers(provider_id, service_kind, simulation_state):
             offer = _safe_dict(offer)
             if not _offer_available_here(simulation_state, provider_id, offer):
                 continue

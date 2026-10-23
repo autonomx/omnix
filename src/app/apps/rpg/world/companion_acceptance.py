@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Dict
 
@@ -23,7 +24,18 @@ ACCEPTANCE_MARKERS = {
     "lets go",
     "travel with me",
     "fight with me",
+    "join my party",
+    "join our party",
+    "join the party",
+    "be my companion",
+    "become my companion",
 }
+
+# A player asking someone to come along, rather than answering someone's offer.
+_RECRUIT_REQUEST = re.compile(
+    r"\b(join (?:my|our|the) (?:party|group|company|team)|join (?:me|us)|come (?:along )?with (?:me|us)|"
+    r"travel with (?:me|us)|(?:be|become) (?:my|our) (?:companion|ally)|as (?:my|our|a) companion)\b"
+)
 
 REJECTION_MARKERS = {
     "no",
@@ -119,8 +131,33 @@ def hydrate_companion_acceptance_from_pending_offers(
 
 
 def _text_has_any(text: str, markers: set[str]) -> bool:
+    """Whole words only: "no" is not in "know" or "north", nor "yes" in "eyes"."""
     normalized = _safe_str(text).strip().lower()
-    return any(marker in normalized for marker in markers)
+    return any(re.search(rf"(?<![\w']){re.escape(marker)}(?![\w'])", normalized) for marker in markers)
+
+
+def requested_companion(simulation_state: Dict[str, Any], player_input: Any) -> Dict[str, Any]:
+    """The present person the player asks to join the party ("I ask Liora to join my party"), if any."""
+    text = _safe_str(player_input).strip().lower()
+    if not _RECRUIT_REQUEST.search(text):
+        return {}
+    from app.apps.rpg.rules.location_registry import present_npcs_for_current_location
+
+    simulation_state = _safe_dict(simulation_state)
+    index = _safe_dict(simulation_state.get("npc_index"))
+    present_ids = [
+        _safe_str(npc_id)
+        for npc_id in _safe_list(_safe_dict(simulation_state.get("present_npc_state")).get("present_npc_ids"))
+    ]
+    candidates = [{**_safe_dict(index.get(npc_id)), "id": npc_id} for npc_id in present_ids]
+    candidates += [_safe_dict(npc) for npc in present_npcs_for_current_location(simulation_state)]
+    for npc in candidates:
+        name = _safe_str(npc.get("name"))
+        first = name.split()[0].lower() if name else ""
+        if name and (name.lower() in text or (len(first) > 2 and re.search(rf"\b{re.escape(first)}\b", text))):
+            return {"npc_id": _safe_str(npc.get("id") or npc.get("npc_id")), "name": name,
+                    "role": _safe_str(npc.get("role"))}
+    return {}
 
 
 def player_input_accepts_companion_offer(player_input: Any) -> bool:

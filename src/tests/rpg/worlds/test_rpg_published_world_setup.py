@@ -11,6 +11,7 @@ from app.apps.rpg.genesis.worlds.published_world_setup import (
     session_world_model,
 )
 from app.apps.rpg.rules import location_registry
+from app.apps.rpg.rules.economy.service_registry import find_provider_by_text, get_provider_offers
 from app.apps.rpg.world.travel_graph import (
     apply_travel_result_to_state,
     list_available_routes,
@@ -73,7 +74,7 @@ def test_world_model_places_people_routes_and_services() -> None:
     assert [npc["name"] for npc in strand["present_npcs"]] == ["Ada Vell"]
     assert [npc["name"] for npc in lamp["present_npcs"]] == ["Bo Kett"]
     assert model["npcs"]["npc:cy"]["location_id"] == ""
-    assert lamp["services"] == ["lodging", "meal"]
+    assert lamp["services"] == ["lodging", "meal", "drink"]
     assert strand["exits"] == {"salt lamp": "location:salt-lamp"}
     assert model["locations"]["location:lighthouse"]["name"] == "Lighthouse"
     assert location_label(REVISION, "location:lighthouse") == "Lighthouse"
@@ -106,6 +107,22 @@ def test_opening_kit_and_quests() -> None:
         ("First Tide", "active"), ("The Drowned Bell", "available"),
     ]
     assert quests[1]["hook"] == "A bell rings under the waves."
+    # The player starts where the first quest begins.
+    assert quests[0]["visited_locations"] == ["location:strand"] and quests[1]["visited_locations"] == []
+
+
+def test_world_people_sell_their_services_where_they_are() -> None:
+    model = _model()
+    at_lamp = {"world_model": model, "player_state": {"location_id": "location:salt-lamp"}}
+    # By name, or by the service's kind word where the provider is.
+    assert find_provider_by_text("I ask Bo Kett for a room", at_lamp)["provider_id"] == "npc:bo"
+    assert find_provider_by_text("I ask the innkeeper for a room", at_lamp)["provider_id"] == "npc:bo"
+    assert [offer["label"] for offer in get_provider_offers("npc:bo", "meal", at_lamp)] == ["A hot meal"]
+    assert get_provider_offers("npc:bo", "meal", at_lamp)[0]["availability_rules"]["requires_location"] == "location:salt-lamp"
+    # Nobody in a published world is the starter town's innkeeper: a room is asked of the innkeeper here.
+    assert find_provider_by_text("I ask Bran for a room", at_lamp)["provider_id"] == "npc:bo"
+    at_strand = {"world_model": model, "player_state": {"location_id": "location:strand"}}
+    assert not find_provider_by_text("I ask Bran for a room", at_strand)
 
 
 def test_registry_and_travel_use_the_session_world() -> None:

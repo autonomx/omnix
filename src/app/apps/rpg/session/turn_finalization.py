@@ -33,6 +33,8 @@ from app.apps.rpg.session.state_normalization import (
     _copy_dict as _copy_dict, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
 )
 import time as _time
+from app.apps.rpg.rules.survival_tick_runtime import apply_survival_runtime_tick
+from app.apps.rpg.session.player_requests import describe_player_events
 from app.apps.rpg.session.narration_runtime import (
     assemble_turn_narration_response as assemble_turn_narration_response, build_turn_narration_request as build_turn_narration_request,
 )
@@ -75,6 +77,29 @@ def _finish_scene_and_persist_turn_state(ctx) -> bool:
     ctx.runtime_state["tick"] = int(
         ctx.after_state.get("tick", ctx.runtime_state.get("tick", 0)) or 0
     )
+    # Time passing makes the player hungrier, thirstier and more tired, saved with the turn (the response
+    # builder then sees this turn's tick as already applied).
+    survival_tick = apply_survival_runtime_tick(
+        authoritative_result={},
+        session={"simulation_state": ctx.after_state, "runtime_state": ctx.runtime_state},
+        turn_contract={},
+        result_payload={
+            "turn_id": _build_turn_id(ctx.runtime_state),
+            "tick": ctx.runtime_state["tick"],
+            "player_input": ctx.player_input,
+        },
+        resolved_result=ctx.resolved_result,
+    )
+    ctx.after_state = survival_tick["session"]["simulation_state"]
+    ctx.runtime_state = survival_tick["session"]["runtime_state"]
+    ctx.resolved_result["survival_tick_result"] = survival_tick["survival_tick_result"]
+    # What the player's requests and arrival did, stated for the narration.
+    outcome_lines = describe_player_events([
+        *(ctx.runtime_state.get("player_request_events") or ()),
+        *(ctx.resolved_result.get("quest_events") or ()),
+    ])
+    if outcome_lines:
+        ctx.resolved_result["outcome_lines"] = outcome_lines
     ctx.summary = summarize_simulation_step(ctx.step_result)
     ctx.runtime_state["last_turn_result"] = {
         "player_input": ctx.player_input,

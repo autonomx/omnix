@@ -52,6 +52,7 @@ def build_companion_join_dialogue(
         "created": True,
         "beat": beat,
         "line": line,
+        "npc_name": name,
         "source": "deterministic_companion_dialogue",
     }
 

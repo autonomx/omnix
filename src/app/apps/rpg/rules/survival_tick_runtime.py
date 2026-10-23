@@ -7,6 +7,7 @@ changed.
 """
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional
 
@@ -55,7 +56,12 @@ def _norm(value: Any) -> str:
 
 
 def _contains_any(text: str, phrases: Iterable[str]) -> bool:
-    return any(phrase in text for phrase in phrases if phrase)
+    """Whole words only ("rest" is not in "forest", "eat" is not in "great"), allowing plain suffixes."""
+    return any(
+        re.search(rf"\b{re.escape(phrase)}(?:s|es|d|ed|ing)?\b", text)
+        for phrase in phrases
+        if phrase
+    )
 
 
 def _candidate_text_values(*containers: Mapping[str, Any]) -> Iterable[str]:

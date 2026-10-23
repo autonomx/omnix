@@ -196,6 +196,10 @@ def test_published_world_campaign_plays_in_its_world(tmp_path, monkeypatch) -> N
         assert arrived["current_location_name"] == "Starfall Village"
         assert arrived["title"] == "Wren — Starfall Village"
         assert arrived["environment_snapshot"]["display"]["region"] == "Starfall March"
+        # Every turn counts, the dialogue turn too; the hero keeps their name and their experience meter.
+        assert arrived["turn_count"] == 3
+        assert stored["simulation_state"]["player_state"]["name"] == "Wren"
+        assert arrived["player"]["xp"]["max"] == stored["simulation_state"]["player_state"]["xp_to_next"]
 
         text = json.dumps(load_session_from_postgres(session_id))
         for starter in ("Rusty Flagon", "loc_tavern", "Bran the Innkeeper", "Captain Aldric", "Elara the Merchant"):
@@ -266,5 +270,87 @@ def test_item_actions_and_story_turns_share_one_inventory(tmp_path, monkeypatch)
         items, equipment = sheet()
         assert "Gateborn Compass" in {row["name"] for row in equipment}
         assert items["Gateborn Compass"] == 1
+    finally:
+        job_store.reset_default_job_store_factory_for_tests()
+
+
+def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.jobs import store as job_store
+    from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.providers import service as provider_service
+    from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+    from app.apps.rpg.narration.narrative_engine import service as narrative_service
+    from app.apps.rpg.narration.narrative_engine.writer import StructuredNarrativeWriter
+    from app.apps.rpg.session.persistence.session_records import load_session_from_postgres
+    from tests.support.routers import include_router_registrar
+
+    bootstrap_postgresql_runtime()
+    jobs = PostgresJobStoreAdapter()
+    job_store.install_default_job_store_factory(lambda: jobs)
+    model = _ScriptedModel()
+    monkeypatch.setattr(provider_service, "get_provider", lambda *args, **kwargs: model)
+    monkeypatch.setattr(
+        narrative_service,
+        "_production_writer",
+        lambda: StructuredNarrativeWriter(_scripted_narrative, provider="scripted", model="scripted"),
+    )
+    try:
+        session_id = _launch_aurelia(tmp_path, monkeypatch)
+        app = FastAPI()
+        include_router_registrar(app, register_rpg_session_routes)
+        client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+
+        def turn(command: str) -> None:
+            response = client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": command})
+            assert response.status_code == 200, response.text[:500]
+
+        def stored() -> dict:
+            return load_session_from_postgres(session_id)
+
+        def public() -> dict:
+            return client.get(f"/api/rpg/sessions/{session_id}").json()["session"]["state"]
+
+        def quests() -> dict:
+            return {quest["title"]: quest for quest in public()["quests"]}
+
+        def copper(purse: dict) -> int:
+            return int(purse.get("gold") or 0) * 100 + int(purse.get("silver") or 0) * 10 + int(purse.get("copper") or 0)
+
+        # Asking a companion to join changes the party.
+        turn("I ask Liora Fen to join my party as a companion.")
+        party = stored()["simulation_state"]["player_state"]["party_state"]["companions"]
+        assert [companion["npc_id"] for companion in party] == ["npc:liora-fen"]
+
+        # Taking on a quest makes it active.
+        assert quests()["Voices in the Phone"]["status"] == "available"
+        turn("I accept the quest Voices in the Phone.")
+        assert quests()["Voices in the Phone"]["status"] == "active"
+
+        # Practising a skill earns its experience, on the sheet too.
+        turn("Practice swordsmanship with a careful training drill.")
+        assert stored()["simulation_state"]["player_state"]["skills"]["swordsmanship"]["xp"] == 10
+        assert public()["player"]["skills"]["swordsmanship"]["xp"] == 10
+
+        # Reaching a place the quest names advances it.
+        assert quests()["First Night in Aurelia"]["visited_locations"] == ["location:aurelia:arrival-grove"]
+        turn("go to Starfall Village")
+        first_night = quests()["First Night in Aurelia"]
+        assert first_night["status"] == "active"
+        assert "location:aurelia:starfall-village" in first_night["visited_locations"]
+
+        # Time passes: needs rise.
+        turn("wait")
+        hungry = stored()["simulation_state"]["survival"]
+        assert hungry["enabled"] is True and hungry["hunger"] > 0 and hungry["thirst"] > 0
+
+        # A meal at the inn costs coin and eases hunger.
+        purse = public()["player"]["currency"]
+        turn("I buy a meal from Orik Stonewake.")
+        assert copper(public()["player"]["currency"]) < copper(purse)
+        assert stored()["simulation_state"]["survival"]["hunger"] < hungry["hunger"]
     finally:
         job_store.reset_default_job_store_factory_for_tests()

@@ -346,7 +346,7 @@ def apply_turn(
             companion_acceptance_precheck.get("companion_dialogue_result")
         )
         companion_line = _safe_str(companion_dialogue_result.get("line"))
-        npc_name = _safe_str(companion_dialogue_result.get("npc_name") or acceptance.get("name") or "Bran")
+        npc_name = _safe_str(companion_dialogue_result.get("npc_name") or acceptance.get("name") or "Your new companion")
         if acceptance.get("accepted") and companion_line:
             companion_narration = f"{npc_name} joins your party and falls in beside you."
             companion_npc = {"speaker": npc_name, "line": companion_line}
