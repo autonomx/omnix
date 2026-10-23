@@ -269,8 +269,12 @@ describe('RpgWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
-    expect(await screen.findByText('RPG turn job queued: job:rpg')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit RPG turn' })).toBeEnabled());
+    // Players never see job ids; Developer tools shows them.
+    expect(screen.queryByText(/job:rpg/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Developer tools' }));
+    expect(await screen.findByText('Turn job: job:rpg')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Developer tools' })).toBeInTheDocument();
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
@@ -322,16 +326,16 @@ describe('RpgWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit RPG turn' }));
 
     await vi.waitFor(() => {
-      expect(screen.getByText('Queueing RPG turn job…')).toBeInTheDocument();
+      expect(screen.getByText('Sending your turn…')).toBeInTheDocument();
     });
 
     await vi.advanceTimersByTimeAsync(45_000);
 
     await vi.waitFor(() => {
-      expect(screen.getByText('Still checking the RPG job queue for this turn...')).toBeInTheDocument();
+      expect(screen.getByText('Still checking on your turn…')).toBeInTheDocument();
     });
     expect(screen.queryByText(/Gateway did not acknowledge/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Queueing RPG turn' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Sending your turn' })).toBeDisabled();
   });
 
   it('recovers a timed out RPG turn queue request from the matching polled job', async () => {
@@ -599,7 +603,7 @@ describe('RpgWorkspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'RPG turn failed: Progression state is invalid',
     );
-    expect(screen.queryByText('RPG turn job queued: job:rpg-failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Turn job: job:rpg-failed')).not.toBeInTheDocument();
   });
 
   it('wires checkpoint and autoplay controls through replay-safe APIs', async () => {

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord } from '../../api/client';
 import { rpgSessionClient, type RpgLoadoutActionRequest, type RpgNewGameRequest } from './api/rpgSessionClient';
-import { getHermesRpgExecutionLedger, type HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
+import type { HermesRpgApprovedFlowResponse } from './api/hermesRpgApprovedFlowClient';
 import {
   getHermesRouteDecision,
   getHermesRpgSuggestions,
@@ -17,10 +17,8 @@ import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/Fe
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
-import { RpgHermesExecutionHistory } from './RpgHermesExecutionHistory';
 import { RpgHermesExecutionResult } from './RpgHermesExecutionResult';
 import { RpgHermesSequenceJobPanel } from './RpgHermesSequenceJobPanel';
-import { RpgHermesSequenceReviewPanel } from './RpgHermesSequenceReviewPanel';
 import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
@@ -55,6 +53,7 @@ interface PendingRpgTurnSubmission {
 
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 const RPG_SELECTED_SESSION_STORAGE_KEY = 'omnix:rpg:selected-session-id';
+const RPG_DEVELOPER_TOOLS_STORAGE_KEY = 'omnix:rpg:developer-tools';
 const RPG_TURN_QUEUE_TIMEOUT_MS = 45_000;
 const RPG_TURN_RECOVERY_WINDOW_MS = 60_000;
 
@@ -75,6 +74,30 @@ function readStoredRpgSessionId(): string {
     return window.localStorage.getItem(RPG_SELECTED_SESSION_STORAGE_KEY)?.trim() ?? '';
   } catch {
     return '';
+  }
+}
+
+function readStoredDeveloperTools(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(RPG_DEVELOPER_TOOLS_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredDeveloperTools(enabled: boolean): void {
+  try {
+    if (enabled) {
+      window.localStorage.setItem(RPG_DEVELOPER_TOOLS_STORAGE_KEY, '1');
+    } else {
+      window.localStorage.removeItem(RPG_DEVELOPER_TOOLS_STORAGE_KEY);
+    }
+  } catch {
+    // Storage can be unavailable; the choice still holds for this visit.
   }
 }
 
@@ -237,7 +260,15 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [isLiveDataExpanded, setIsLiveDataExpanded] = useState(false);
   const [campaignMenuHost, setCampaignMenuHost] = useState<HTMLElement | null>(null);
   const [latestHermesExecutionResult, setLatestHermesExecutionResult] = useState<HermesRpgApprovedFlowResponse | null>(null);
-  const [hermesAssistMode, setHermesAssistMode] = useState('review_each_step');
+  const hermesAssistMode = 'review_each_step';
+  // Hermes sequence tools and job ids are for developers; players see the story (RQ-7.1).
+  const [developerTools, setDeveloperTools] = useState(readStoredDeveloperTools);
+  const toggleDeveloperTools = () => {
+    setDeveloperTools((value) => {
+      writeStoredDeveloperTools(!value);
+      return !value;
+    });
+  };
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
     queryFn: () => rpgSessionClient.listRpgSessionSummaries(),
@@ -363,11 +394,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     mutationFn: () => checkHermesRpgSequence(hermesSequenceReviewRequest),
   });
   const hermesSequencePreview = hermesSequencePreviewModel(hermesSequenceReviewMutation.data);
-  const hermesExecutionLedgerQuery = useQuery({
-    queryKey: ['feature', 'rpg', 'hermes-execution-ledger', selectedLiveSessionId],
-    queryFn: () => getHermesRpgExecutionLedger({ limit: 10, sessionId: selectedLiveSessionId ?? undefined }),
-    enabled: Boolean(selectedLiveSessionId),
-  });
   const hermesSuggestionState = selectedLiveSessionId
     ? rpgAssistStateFromItems(
       hermesSuggestions,
@@ -803,6 +829,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           isPlayerRailCollapsed={isPlayerRailCollapsed}
           isWorldRailCollapsed={isWorldRailCollapsed}
           module={module}
+          developerTools={developerTools}
+          onToggleDeveloperTools={toggleDeveloperTools}
           onToggleLiveData={() => setIsLiveDataExpanded((value) => !value)}
           onTogglePlayerRail={() => setIsPlayerRailCollapsed((value) => !value)}
           onToggleWorldRail={() => setIsWorldRailCollapsed((value) => !value)}
@@ -871,41 +899,32 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               sessionRegistration={register('sessionId')}
               sessionSummaries={sessionSummaries}
             />
-            <FeatureValidationMessage show={Boolean(errors.command)} message="Enter a command before queueing an RPG turn." />
+            <FeatureValidationMessage show={Boolean(errors.command)} message="Type what you want to do first." />
             <FeatureValidationMessage show={submittedTurnFailed} message={submittedTurnFailureMessage} />
             <FeatureSubmitFeedback
               error={recoveredAfterQueueTimeout || isReconcilingTimedOutTurn ? null : createJobMutation.error}
-              errorPrefix="RPG turn request"
+              errorPrefix="Your turn"
               isError={createJobMutation.isError && !recoveredAfterQueueTimeout && !isReconcilingTimedOutTurn}
               isPending={createJobMutation.isPending || isReconcilingTimedOutTurn}
-              jobId={submittedTurnFailed ? undefined : submittedTurnJob?.id}
-              pendingMessage={isReconcilingTimedOutTurn ? 'Still checking the RPG job queue for this turn...' : 'Queueing RPG turn job…'}
-              successPrefix="RPG turn job queued"
+              jobId={submittedTurnFailed || !developerTools ? undefined : submittedTurnJob?.id}
+              pendingMessage={isReconcilingTimedOutTurn ? 'Still checking on your turn…' : 'Sending your turn…'}
+              successPrefix="Turn job"
             />
           </RpgStoryScene>
 
-          <RpgHermesSequenceReviewPanel
-            assistMode={hermesAssistMode}
-            error={hermesSequenceReviewMutation.error}
-            isPending={hermesSequenceReviewMutation.isPending}
-            onAssistModeChange={setHermesAssistMode}
-            onReview={() => hermesSequenceReviewMutation.mutate()}
-            onUseFirstItem={selectCommand}
-            sequence={hermesSequencePreview}
-          />
-          <RpgHermesExecutionResult result={latestHermesExecutionResult} />
-          <RpgHermesSequenceJobPanel
-            activeJob={activeHermesSequenceJob}
-            isPending={hermesSequenceJobMutation.isPending}
-            onCancel={() => hermesSequenceJobMutation.mutate('cancel')}
-            onPause={() => hermesSequenceJobMutation.mutate('pause')}
-            onResume={() => hermesSequenceJobMutation.mutate('resume')}
-            onStart={() => hermesSequenceJobMutation.mutate('start')}
-          />
-          <RpgHermesExecutionHistory
-            isLoading={hermesExecutionLedgerQuery.isPending}
-            items={hermesExecutionLedgerQuery.data?.items ?? []}
-          />
+          {developerTools ? (
+            <section className="rpg-developer-tools" aria-label="Developer tools">
+              <RpgHermesExecutionResult result={latestHermesExecutionResult} />
+              <RpgHermesSequenceJobPanel
+                activeJob={activeHermesSequenceJob}
+                isPending={hermesSequenceJobMutation.isPending}
+                onCancel={() => hermesSequenceJobMutation.mutate('cancel')}
+                onPause={() => hermesSequenceJobMutation.mutate('pause')}
+                onResume={() => hermesSequenceJobMutation.mutate('resume')}
+                onStart={() => hermesSequenceJobMutation.mutate('start')}
+              />
+            </section>
+          ) : null}
 
           <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />
 

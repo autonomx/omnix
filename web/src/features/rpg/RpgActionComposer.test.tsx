@@ -70,7 +70,7 @@ describe('RpgActionComposer', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: /Queueing/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Sending/ })).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Command' })).toHaveAttribute('aria-invalid', 'true');
   });
 

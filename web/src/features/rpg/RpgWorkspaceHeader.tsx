@@ -17,10 +17,12 @@ import './RpgPlayFocus.css';
 import './RpgWorldLibraryOverlay.css';
 
 interface RpgWorkspaceHeaderProps {
+  developerTools?: boolean;
   isLiveDataExpanded: boolean;
   isPlayerRailCollapsed: boolean;
   isWorldRailCollapsed: boolean;
   module: OmnixModuleDefinition;
+  onToggleDeveloperTools?: () => void;
   onToggleLiveData: () => void;
   onTogglePlayerRail: () => void;
   onToggleWorldRail: () => void;
@@ -34,9 +36,11 @@ const RPG_WORLD_LIBRARY_DIALOG_CLASS = 'rpg-launcher-dialog-world-library';
 
 export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
   const {
+    developerTools = false,
     isLiveDataExpanded,
     isPlayerRailCollapsed,
     isWorldRailCollapsed,
+    onToggleDeveloperTools,
     onToggleLiveData,
     onTogglePlayerRail,
     onToggleWorldRail,
@@ -173,6 +177,16 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
           >
             {isLiveDataExpanded ? 'Collapse live data' : 'Expand live data'}
           </button>
+          {onToggleDeveloperTools ? (
+            <button
+              className="rpg-secondary-button"
+              type="button"
+              aria-pressed={developerTools}
+              onClick={onToggleDeveloperTools}
+            >
+              Developer tools
+            </button>
+          ) : null}
         </div>
       </div>
 
