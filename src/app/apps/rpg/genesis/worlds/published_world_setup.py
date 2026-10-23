@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, Mapping
 
+from .world_play_sections import ProviderEconomy, ShopOffer, authorship, parse_play_sections
+
 WORLD_MODEL_SCHEMA = "rpg_session_world_model_v1"
 
 # NPC roles that offer a service where they are found (the location registry's service kinds).
@@ -242,6 +244,58 @@ def _service_offers(canon: Mapping[str, Any], provider: Mapping[str, Any]) -> li
     return offers
 
 
+_SERVICE_EFFECTS: dict[str, dict[str, Any]] = {
+    "lodging": {"lodging_reserved": True, "rest_quality": "basic", "duration": "one_night"},
+    "meal": {"meal_consumed": True, "morale": 1},
+    "drink": {"drink_consumed": True},
+    "repair": {"repair_quality": "basic"},
+    "paid_information": {"rumor_added": True},
+}
+
+
+def _authored_offer(canon: Mapping[str, Any], provider: Mapping[str, Any], offer: ShopOffer) -> dict[str, Any]:
+    effects: dict[str, Any] = dict(_SERVICE_EFFECTS.get(offer.service, {}))
+    if offer.service == "shop_goods":
+        item = next((row for row in _rows(canon.get("items")) if _text(row.get("id")) == offer.item_id), {})
+        effects = {"items_added": [{"item_id": offer.item_id, "name": offer.name, "quantity": 1,
+                                    "type": _text(item.get("type")).casefold() or "goods",
+                                    "description": _text(item.get("effect") or item.get("description"))}]}
+    priced = {"gold": offer.price.gold, "silver": offer.price.silver, "copper": offer.price.copper}
+    built = _offer(provider, offer.service, offer.offer_key, offer.name, offer.description or offer.name,
+                   priced, effects, stock=offer.stock)
+    if offer.restock_per_day:
+        built["restock_per_day"] = offer.restock_per_day
+    return built
+
+
+def _authored_providers(
+    canon: Mapping[str, Any],
+    authored: tuple[ProviderEconomy, ...],
+    npcs: Mapping[str, Mapping[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    """The world's own economy: its sellers where it puts them, with its prices, stock and buy-back terms."""
+    providers: dict[str, dict[str, Any]] = {}
+    offers: dict[str, list[dict[str, Any]]] = {}
+    for entry in authored:
+        npc = _mapping(npcs.get(entry.provider_id))
+        location_id = entry.location_id or _text(npc.get("location_id"))
+        if not npc or not location_id:
+            continue
+        name = _text(npc.get("name")) or _label_from_id(entry.provider_id)
+        provider: dict[str, Any] = {
+            "provider_id": entry.provider_id,
+            "provider_name": name,
+            "aliases": sorted({name.casefold(), name.split()[0].casefold(), _text(npc.get("role")).casefold()} - {""}),
+            "location_id": location_id,
+            "service_kinds": sorted({offer.service for offer in entry.sells}),
+        }
+        if entry.buys is not None:
+            provider["buys"] = {"item_types": list(entry.buys.item_types), "price_fraction": entry.buys.price_fraction}
+        providers[entry.provider_id] = provider
+        offers[entry.provider_id] = [_authored_offer(canon, provider, offer) for offer in entry.sells]
+    return providers, offers
+
+
 def session_world_model(revision: Any, scenario: Any, *, present_at_start: Iterable[str] = ()) -> dict[str, Any]:
     """The per-session world the location registry and travel graph read for a published campaign."""
 
@@ -272,6 +326,24 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
         if origin in by_id and target in by_id:
             routes.append({"id": _text(route.get("id")), "from": origin, "to": target,
                            "travel_time": _text(route.get("travel_time"))})
+    sections, _findings = parse_play_sections(canon)
+    providers: dict[str, dict[str, Any]] = {}
+    if sections.providers:
+        # The world wrote its economy: play it as written, not as inferred from people's roles.
+        providers, offers = _authored_providers(canon, sections.providers, npcs)
+    else:
+        for npc in npcs.values():
+            kinds = _role_services(npc["role"])
+            if kinds and npc["location_id"]:
+                name = npc["name"]
+                providers[npc["id"]] = {
+                    "provider_id": npc["id"],
+                    "provider_name": name,
+                    "aliases": sorted({name.casefold(), name.split()[0].casefold(), npc["role"].casefold()}),
+                    "location_id": npc["location_id"],
+                    "service_kinds": kinds,
+                }
+        offers = {provider_id: _service_offers(canon, provider) for provider_id, provider in providers.items()}
     world_locations: dict[str, dict[str, Any]] = {}
     for location_id, row in by_id.items():
         name = _text(row.get("name"))
@@ -281,8 +353,9 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             if npc["location_id"] == location_id
         ]
         services: list[str] = []
-        for npc in present:
-            services.extend(kind for kind in _role_services(npc["role"]) if kind not in services)
+        for provider in providers.values():
+            if provider["location_id"] == location_id:
+                services.extend(kind for kind in provider["service_kinds"] if kind not in services)
         exits: dict[str, str] = {}
         for route in routes:
             other = route["to"] if route["from"] == location_id else route["from"] if route["to"] == location_id else ""
@@ -303,18 +376,6 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "services": services,
             "exits": exits,
         }
-    providers: dict[str, dict[str, Any]] = {}
-    for npc in npcs.values():
-        kinds = _role_services(npc["role"])
-        if kinds and npc["location_id"]:
-            name = npc["name"]
-            providers[npc["id"]] = {
-                "provider_id": npc["id"],
-                "provider_name": name,
-                "aliases": sorted({name.casefold(), name.split()[0].casefold(), npc["role"].casefold()}),
-                "location_id": npc["location_id"],
-                "service_kinds": kinds,
-            }
     return {
         "schema_version": WORLD_MODEL_SCHEMA,
         "source": "published_world",
@@ -325,13 +386,18 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             for item in _rows(canon.get("items"))
             if _text(item.get("id"))
         ],
-        "offers": {provider_id: _service_offers(canon, provider) for provider_id, provider in providers.items()},
+        "offers": offers,
         "world_id": _text(getattr(revision, "world_id", "")),
         "world_revision": int(getattr(revision, "revision", 0) or 0),
         "start_location_id": start,
         "locations": world_locations,
         "routes": routes,
         "npcs": npcs,
+        # Which parts of how the world plays its author wrote, and which launch inferred (RQ-2.0).
+        "authorship": authorship(sections),
+        "routines": [routine.model_dump(mode="json") for routine in sections.routines],
+        "knowledge": [entry.model_dump(mode="json") for entry in sections.knowledge],
+        "pressures": [pressure.model_dump(mode="json") for pressure in sections.pressures],
     }
 
 
@@ -355,6 +421,7 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
     """The world's creatures as combat definitions: numbers by threat, and its weakness stuns it for a turn."""
 
     canon = _mapping(getattr(revision, "canon", None))
+    played = {entry.id: entry for entry in parse_play_sections(canon)[0].bestiary}
     creatures: dict[str, Any] = {}
     for row in _rows(canon.get("bestiary")):
         creature_id = _text(row.get("id"))
@@ -362,6 +429,9 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
             continue
         threat = _text(row.get("threat")).casefold()
         stats = _THREAT_STATS.get(_THREAT_ALIASES.get(threat, threat), _THREAT_STATS["medium"])
+        play = played.get(creature_id)
+        if play is not None and play.stats is not None:
+            stats = play.stats.model_dump()
         weakness = _text(row.get("weakness"))
         aliases = [part.strip() for part in re.split(r",|\band\b|\bor\b", weakness) if part.strip()]
         creatures[creature_id] = {
@@ -378,6 +448,8 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
                 [{"trigger_tag": weakness, "aliases": aliases, "condition": "stunned", "duration_turns": 1, "magnitude": 1}]
                 if weakness else []
             ),
+            "behaviour": play.behaviour if play is not None else "fights",
+            "loot": [drop.model_dump() for drop in play.loot] if play is not None else [],
             "source": "published_world_bestiary",
         }
     return {"creatures": creatures} if creatures else {}
