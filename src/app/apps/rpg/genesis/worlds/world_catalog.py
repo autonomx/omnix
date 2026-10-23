@@ -165,7 +165,7 @@ def _entry(index: CatalogIndex, entry_id: str) -> CatalogWorld:
     return entry
 
 
-def install_catalog_world(
+def import_catalog_world(
     entry_id: str,
     *,
     database: Any | None = None,
@@ -235,7 +235,7 @@ __all__ = [
     "CatalogWorld",
     "catalog_cover",
     "catalog_repo",
-    "install_catalog_world",
+    "import_catalog_world",
     "list_catalog",
     "load_catalog",
 ]

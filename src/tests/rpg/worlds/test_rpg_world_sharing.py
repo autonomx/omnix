@@ -63,7 +63,7 @@ def test_install_checks_the_bundle_against_the_index_and_records_the_catalog_ent
         return {"world_id": target_world_id, "bundle_sha256": hashlib.sha256(content).hexdigest()}
 
     monkeypatch.setattr(world_catalog, "import_world_bundle", fake_import)
-    result = world_catalog.install_catalog_world("aurelia", download=_downloads(index, {url: BUNDLE}))
+    result = world_catalog.import_catalog_world("aurelia", download=_downloads(index, {url: BUNDLE}))
 
     assert result["world_id"] == "world:aurelia" and result["adopted"] is False
     assert imported[0]["content"] == BUNDLE
@@ -77,7 +77,7 @@ def test_install_refuses_a_file_that_does_not_match_the_index(monkeypatch) -> No
     monkeypatch.setattr(world_catalog, "import_world_bundle", lambda *a, **k: pytest.fail("imported a bad file"))
     tampered = BUNDLE[:-1] + b"!"
     with pytest.raises(ValueError, match="world_catalog_file_digest_mismatch"):
-        world_catalog.install_catalog_world("aurelia", download=_downloads(index, {url: tampered}))
+        world_catalog.import_catalog_world("aurelia", download=_downloads(index, {url: tampered}))
 
 
 @pytest.mark.parametrize(
@@ -92,7 +92,7 @@ def test_install_downloads_only_from_the_catalog_releases(monkeypatch, url) -> N
     monkeypatch.setattr(world_catalog, "_installed", lambda _database: {})
     download = _downloads(_index(url=url))
     with pytest.raises(ValueError, match="world_catalog_file_url_untrusted"):
-        world_catalog.install_catalog_world("aurelia", download=download)
+        world_catalog.import_catalog_world("aurelia", download=download)
     assert all(seen.endswith("/main/index.json") for seen in download.seen)
 
 
@@ -100,7 +100,7 @@ def test_install_reuses_a_world_already_downloaded(monkeypatch) -> None:
     index = _index()
     installed = {"world_id": "world:aurelia", "version": 1, "bundle_sha256": index["worlds"][0]["bundle"]["sha256"], "adopted": True}
     monkeypatch.setattr(world_catalog, "_installed", lambda _database: {"aurelia": installed})
-    result = world_catalog.install_catalog_world("aurelia", download=_downloads(index))
+    result = world_catalog.import_catalog_world("aurelia", download=_downloads(index))
     assert result["reused"] is True and result["world_id"] == "world:aurelia"
 
 

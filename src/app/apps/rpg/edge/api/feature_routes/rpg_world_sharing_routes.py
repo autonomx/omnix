@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from app.persistence.unit_of_work import unit_of_work
 from app.runtime.tenant_context import current_tenant
 from app.apps.rpg.genesis.worlds.world_adoption import adopt_shared_world, shared_world_state
-from app.apps.rpg.genesis.worlds.world_catalog import catalog_cover, install_catalog_world, list_catalog
+from app.apps.rpg.genesis.worlds.world_catalog import catalog_cover, import_catalog_world, list_catalog
 from app.apps.rpg.genesis.worlds.world_sharing import (
     GitHubError,
     connect_with_token,
@@ -89,7 +89,7 @@ def register_rpg_world_sharing_routes(router: APIRouter, state) -> None:
     )
     def rpg_world_catalog_install(entry_id: str) -> dict[str, Any]:
         try:
-            return install_catalog_world(entry_id)
+            return import_catalog_world(entry_id)
         except (KeyError, ValueError) as exc:
             raise _error(exc) from exc
 
