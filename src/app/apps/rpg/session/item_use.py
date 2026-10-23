@@ -125,6 +125,24 @@ def _knowledge_affordance_ops(item: dict[str, Any], name: str) -> list[dict[str,
     return []
 
 
+_FOOD_TYPES = {"food", "meal", "ration", "snack"}
+_DRINK_TYPES = {"drink", "potion", "elixir", "tonic", "brew"}
+
+
+def _typed_consumable_ops(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Food and drink a world defines by type and effect text ("restores stamina") rather than by a known name."""
+    kind = _norm(item.get("type") or item.get("category") or item_type(item))
+    effect = _norm(f"{item.get('effect') or ''} {item.get('description') or ''}")
+    if kind not in _FOOD_TYPES | _DRINK_TYPES:
+        return []
+    if "heal" in effect or "health" in effect or "wound" in effect:
+        return [{"op": "restore_resource", "resource": "hp", "amount": 25, "consume": True}]
+    if "mana" in effect or "aether" in effect or ("magic" in effect and kind in _DRINK_TYPES):
+        return [{"op": "restore_resource", "resource": "mana", "amount": 25, "consume": True}]
+    amount = 10 if kind in _FOOD_TYPES else 15
+    return [{"op": "restore_resource", "resource": "stamina", "amount": amount, "consume": True}]
+
+
 def _legacy_fallback_ops(item: dict[str, Any]) -> list[dict[str, Any]]:
     name = _norm(display_item_name(item))
     if "health" in name or "healing" in name:
@@ -141,6 +159,9 @@ def _legacy_fallback_ops(item: dict[str, Any]) -> list[dict[str, Any]]:
         return [{"op": "equip_item", "slot": "", "consume": False}]
     if "journal" in name or "scroll" in name:
         return [{"op": "add_affordance", "bucket": "dialogue", "tag": "ask_about_written_clue", "dimension": "narrative", "consume": False}]
+    typed_ops = _typed_consumable_ops(item)
+    if typed_ops:
+        return typed_ops
     knowledge_ops = _knowledge_affordance_ops(item, name)
     if knowledge_ops:
         return knowledge_ops

@@ -64,7 +64,16 @@ def project_authoritative_player(session: Dict[str, Any]) -> Dict[str, Any]:
         if player_state.get(key) is not None:
             public_player[key] = deepcopy(player_state[key])
     if isinstance(inventory_state.get("items"), list):
-        public_player["inventory"] = [_public_item(item) for item in inventory_state["items"] if isinstance(item, dict)]
+        previous = {
+            str(item.get("item_id") or item.get("id") or ""): item
+            for item in public_player.get("inventory") or ()
+            if isinstance(item, dict)
+        }
+        public_player["inventory"] = [
+            _public_item(item, previous.get(str(item.get("item_id") or "")))
+            for item in inventory_state["items"]
+            if isinstance(item, dict)
+        ]
 
     if public_player:
         public_state["player"] = public_player
@@ -177,17 +186,52 @@ def merge_authoritative_session_state(
     return project_authoritative_player(hydrate_simulation_player(base))
 
 
+def adopt_public_inventory(session: Dict[str, Any]) -> Dict[str, Any]:
+    """Make the player sheet's inventory and purse the simulation's, after an action changed the sheet directly
+    (dropping, using, equipping or crafting an item); otherwise the next projection would restore the old ones."""
+
+    session = session if isinstance(session, dict) else {}
+    public_player = _dict(_dict(session.get("state")).get("player"))
+    simulation = _dict(session.get("simulation_state"))
+    player_state = _dict(simulation.get("player_state"))
+    inventory_state = _dict(player_state.get("inventory_state"))
+    if isinstance(public_player.get("inventory"), list):
+        inventory_state["items"] = [
+            _normalize_public_item(item) for item in public_player["inventory"] if isinstance(item, dict)
+        ]
+    if isinstance(public_player.get("currency"), dict):
+        inventory_state["currency"] = deepcopy(public_player["currency"])
+        player_state["currency"] = deepcopy(public_player["currency"])
+    player_state["inventory_state"] = inventory_state
+    simulation["player_state"] = player_state
+    session["simulation_state"] = simulation
+    return session
+
+
 def _normalize_public_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """A player-sheet item as a simulation stack: ``quantity`` is ``qty`` and ``type`` its category there."""
     normalized = deepcopy(item)
     if "item_id" not in normalized and normalized.get("id") is not None:
         normalized["item_id"] = normalized["id"]
+    if "qty" not in normalized and normalized.get("quantity") is not None:
+        normalized["qty"] = normalized["quantity"]
+    if not normalized.get("category") and normalized.get("type"):
+        normalized["category"] = normalized["type"]
     return normalized
 
 
-def _public_item(item: Dict[str, Any]) -> Dict[str, Any]:
-    projected = deepcopy(item)
+def _public_item(item: Dict[str, Any], previous: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """A simulation stack as a player-sheet item: the sheet's own fields kept, the count as ``quantity``."""
+    projected = deepcopy(previous) if isinstance(previous, dict) else {}
+    for key, value in item.items():
+        if key != "qty" and value not in ("", [], None):
+            projected[key] = deepcopy(value)
+    projected["quantity"] = int(item.get("qty") or projected.get("quantity") or 1)
+    projected.pop("qty", None)
     if "id" not in projected and projected.get("item_id") is not None:
         projected["id"] = projected["item_id"]
+    if not projected.get("type") and item.get("category"):
+        projected["type"] = item["category"]
     return projected
 
 

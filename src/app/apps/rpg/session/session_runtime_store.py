@@ -57,9 +57,19 @@ from app.apps.rpg.session.semantic_interaction_runtime import (
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
+import re
 from typing import cast
 
 logger = logging.getLogger(__name__)
+
+
+def _mentions(text: str, words: Any) -> bool:
+    """Whether ``text`` names any of ``words`` as a whole word or phrase, with a common ending ("attacks",
+    "eating"): "use" is not in "because" or "useful", nor "rent" in "current"."""
+    return any(
+        re.search(rf"(?<![\w']){re.escape(word)}(?:s|es|d|ed|ing)?(?![\w'])", text)
+        for word in words
+    )
 
 
 def derive_action_candidates(simulation_state, player_input, runtime_state=None):
@@ -81,15 +91,15 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
         or "inn" in _safe_str(_safe_dict(i).get("subtype")).lower()
         for i in active_interactions
     )
-    if any(word in text for word in inn_words) or (
-        has_active_inn_interaction and any(word in text for word in room_selection_words)
+    if _mentions(text, inn_words) or (
+        has_active_inn_interaction and _mentions(text, room_selection_words)
     ):
         tier = None
-        if "best" in text or "private" in text:
+        if _mentions(text, ("best", "private")):
             tier = "best"
-        elif "cheap" in text or "common" in text:
+        elif _mentions(text, ("cheap", "common")):
             tier = "cheap"
-        elif "standard" in text or "normal" in text:
+        elif _mentions(text, ("standard", "normal")):
             tier = "standard"
         candidates.append(
             {
@@ -103,61 +113,61 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
         return candidates
 
     # Passive observation: no XP path
-    if any(w in text for w in ["look around", "look about", "observe", "glance", "scan", "take in"]):
+    if _mentions(text, ["look around", "look about", "observe", "glance", "scan", "take in"]):
         candidates.append({"action_type": "observe", "priority": 4})
 
     # Real investigation: deliberate scrutiny
-    if any(w in text for w in ["investigate", "search", "examine", "inspect", "analyze"]):
+    if _mentions(text, ["investigate", "search", "examine", "inspect", "analyze"]):
         candidates.append({"action_type": "investigate", "priority": 6})
 
     # Unarmed combat
-    if any(w in text for w in ["punch", "kick", "headbutt", "slam"]):
+    if _mentions(text, ["punch", "kick", "headbutt", "slam"]):
         candidates.append({"action_type": "attack_unarmed", "priority": 10})
 
     # Armed / generic combat
-    if any(w in text for w in ["attack", "hit", "strike", "fight", "slash", "stab"]):
+    if _mentions(text, ["attack", "hit", "strike", "fight", "slash", "stab"]):
         candidates.append({"action_type": "attack_melee", "priority": 9})
 
-    if any(w in text for w in ["shoot", "fire", "aim"]):
+    if _mentions(text, ["shoot", "fire", "aim"]):
         candidates.append({"action_type": "attack_ranged", "priority": 10})
 
     # Defense
-    if any(w in text for w in ["block", "defend", "shield"]):
+    if _mentions(text, ["block", "defend", "shield"]):
         candidates.append({"action_type": "block", "priority": 8})
-    if any(w in text for w in ["dodge", "evade", "roll"]):
+    if _mentions(text, ["dodge", "evade", "roll"]):
         candidates.append({"action_type": "dodge", "priority": 8})
     # Social
-    if any(w in text for w in ["persuade", "convince", "talk", "negotiate"]):
+    if _mentions(text, ["persuade", "convince", "talk", "negotiate"]):
         candidates.append({"action_type": "persuade", "priority": 7, "target_id": target_id})
-    if any(w in text for w in ["threaten", "intimidate", "scare"]):
+    if _mentions(text, ["threaten", "intimidate", "scare"]):
         candidates.append({"action_type": "intimidate", "priority": 7, "target_id": target_id})
 
     # Broad open-ended social / activity lane.
     # The semantic action interpreter will determine whether this is darts,
     # singing, drinking, hugging, competing, trading, ritual, etc.
-    if any(w in text for w in [
+    if _mentions(text, [
         "play", "challenge", "invite", "join", "dance", "sing", "perform",
         "hug", "embrace", "kiss", "toast", "drink with", "buy", "trade",
         "bet", "gamble", "pray", "ritual", "compete", "contest",
     ]):
         candidates.append({"action_type": "social_activity", "priority": 8, "target_id": target_id})
     # Stealth
-    if any(w in text for w in ["sneak", "hide", "stealth"]):
+    if _mentions(text, ["sneak", "hide", "stealth"]):
         candidates.append({"action_type": "sneak", "priority": 6})
-    if any(w in text for w in ["hack", "crack", "decrypt"]):
+    if _mentions(text, ["hack", "crack", "decrypt"]):
         candidates.append({"action_type": "hack", "priority": 6})
-    if any(w in text for w in ["cast", "spell", "magic"]):
+    if _mentions(text, ["cast", "spell", "magic"]):
         candidates.append({"action_type": "cast_spell", "priority": 7})
-    if any(w in text for w in ["threat", "warn", "menace"]):
+    if _mentions(text, ["threat", "warn", "menace"]):
         candidates.append({"action_type": "threat", "priority": 7, "target_id": target_id})
     # --- Inn / room rental intent (deterministic fallback) ---
-    if any(k in text for k in ["room", "inn", "bed", "stay", "rent", "lodging"]):
+    if _mentions(text, ["room", "inn", "bed", "stay", "rent", "lodging"]):
         tier = None
-        if "best" in text or "private" in text:
+        if _mentions(text, ("best", "private")):
             tier = "best"
-        elif "cheap" in text or "common" in text:
+        elif _mentions(text, ("cheap", "common")):
             tier = "cheap"
-        elif "standard" in text or "normal" in text:
+        elif _mentions(text, ("standard", "normal")):
             tier = "standard"
 
         candidates.append({
@@ -184,7 +194,7 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
     if (
         prior_service.get("matched")
         and selects_prior_offer
-        and any(phrase in text for phrase in ("i'll take", "ill take", "i will take"))
+        and _mentions(text, ("i'll take", "ill take", "i will take"))
     ):
         candidates.append(
             {
@@ -198,11 +208,9 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
             }
         )
         return candidates
-    if "take" in text or "pick up" in text:
+    if _mentions(text, ("take", "pick up")):
         active_interactions = _safe_list((runtime_state or {}).get("active_interactions"))
-        if active_interactions and any(
-            word in text for word in ("best", "private", "cheap", "common", "standard", "normal", "one")
-        ):
+        if active_interactions and _mentions(text, ("best", "private", "cheap", "common", "standard", "normal", "one")):
             return []
         candidates.append(
             {
@@ -211,12 +219,12 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
                 "source": "keyword_pickup",
             }
         )
-    if any(w in text for w in ["equip", "wear", "wield"]):
+    if _mentions(text, ["equip", "wear", "wield"]):
         candidates.append({"action_type": "equip_item", "priority": 5})
-    if any(w in text for w in ["use", "drink", "eat", "consume", "quaff"]):
+    if _mentions(text, ["use", "drink", "eat", "consume", "quaff"]):
         candidates.append({"action_type": "use_item", "priority": 9})
 
-    if any(w in text for w in ["flee", "retreat", "escape", "withdraw", "run away"]):
+    if _mentions(text, ["flee", "retreat", "escape", "withdraw", "run away"]):
         candidates.append({"action_type": "flee", "priority": 10})
 
     if not candidates:

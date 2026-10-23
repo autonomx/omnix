@@ -18,6 +18,7 @@ from app.apps.rpg.session.ability_system import (
     upgrade_ability_rank_in_state,
 )
 from app.apps.rpg.session.crafting import craft_from_inventory
+from app.apps.rpg.session.public_state_bridge import adopt_public_inventory
 from app.apps.rpg.session.equipment import equip_item_for_player, resolve_equipment_slot
 from app.apps.rpg.session.inventory_items import (
     consume_inventory_item,
@@ -565,6 +566,8 @@ def apply_loadout_action(
         )
 
     write_ability_coverage_snapshot(state)
+    # The action changed the player sheet; the simulation takes the same inventory and purse.
+    updated = adopt_public_inventory(updated)
     saved = save_session(updated, compact=False)
     response = {
         "ok": True,

@@ -202,3 +202,69 @@ def test_published_world_campaign_plays_in_its_world(tmp_path, monkeypatch) -> N
             assert starter not in text, starter
     finally:
         job_store.reset_default_job_store_factory_for_tests()
+
+
+def test_item_actions_and_story_turns_share_one_inventory(tmp_path, monkeypatch) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.jobs import store as job_store
+    from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
+    from app.providers import service as provider_service
+    from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
+    from app.apps.rpg.narration.narrative_engine import service as narrative_service
+    from app.apps.rpg.narration.narrative_engine.writer import StructuredNarrativeWriter
+    from tests.support.routers import include_router_registrar
+
+    bootstrap_postgresql_runtime()
+    jobs = PostgresJobStoreAdapter()
+    job_store.install_default_job_store_factory(lambda: jobs)
+    model = _ScriptedModel()
+    monkeypatch.setattr(provider_service, "get_provider", lambda *args, **kwargs: model)
+    monkeypatch.setattr(
+        narrative_service,
+        "_production_writer",
+        lambda: StructuredNarrativeWriter(_scripted_narrative, provider="scripted", model="scripted"),
+    )
+    try:
+        session_id = _launch_aurelia(tmp_path, monkeypatch)
+        app = FastAPI()
+        include_router_registrar(app, register_rpg_session_routes)
+        client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+
+        def sheet() -> tuple[dict, list]:
+            player = client.get(f"/api/rpg/sessions/{session_id}").json()["session"]["state"]["player"]
+            for item in player["inventory"]:
+                assert "quantity" in item and "qty" not in item, item
+            return {item["name"]: item["quantity"] for item in player["inventory"]}, player.get("equipment") or []
+
+        def act(action: str, item: str) -> dict:
+            response = client.post(f"/api/rpg/sessions/{session_id}/loadout-action", json={"action": action, "item_name": item})
+            assert response.status_code == 200, response.text[:300]
+            return response.json()
+
+        def turn(command: str) -> None:
+            assert client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": command}).status_code == 200
+
+        assert sheet()[0]["Lantern Bread"] == 2
+        act("drop", "Lantern Bread")
+        assert sheet()[0]["Lantern Bread"] == 1
+        turn("look around")
+        # A story turn keeps what the item action did, in the player sheet's own shape.
+        items, _ = sheet()
+        assert items["Lantern Bread"] == 1 and items["Gateborn Compass"] == 1
+        used = act("use", "Lantern Bread")
+        assert used["consumed"] is True
+        assert "Lantern Bread" not in sheet()[0]
+        # "useful" is not "use": searching consumes nothing.
+        turn("Search the area for useful supplies I can pick up")
+        items, _ = sheet()
+        assert "Lantern Bread" not in items and items["Gateborn Compass"] == 1
+        act("equip", "Gateborn Compass")
+        turn("look around")
+        items, equipment = sheet()
+        assert "Gateborn Compass" in {row["name"] for row in equipment}
+        assert items["Gateborn Compass"] == 1
+    finally:
+        job_store.reset_default_job_store_factory_for_tests()
