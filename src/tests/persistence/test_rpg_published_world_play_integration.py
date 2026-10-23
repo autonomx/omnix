@@ -337,6 +337,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         party = stored()["simulation_state"]["player_state"]["party_state"]["companions"]
         assert [companion["npc_id"] for companion in party] == ["npc:liora-fen"]
         assert public()["turn_count"] == 1  # the companion's turn ends early, and still counts
+        assert stored()["simulation_state"]["survival"]["hunger"] == 1  # and time passes on it
 
         # Taking on a quest makes it active.
         assert quests()["Voices in the Phone"]["status"] == "available"
@@ -351,6 +352,9 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # Reaching a place the quest names advances it.
         assert quests()["First Night in Aurelia"]["visited_locations"] == ["location:aurelia:arrival-grove"]
         turn("go to Starfall Village")
+        # Arriving, the narrator is told what the place is like, from the world's own description of it.
+        village = stored()["simulation_state"]["world_model"]["locations"]["location:aurelia:starfall-village"]
+        assert village["description"] and village["description"] in told[-1]
         first_night = quests()["First Night in Aurelia"]
         assert first_night["status"] == "active"
         assert "location:aurelia:starfall-village" in first_night["visited_locations"]

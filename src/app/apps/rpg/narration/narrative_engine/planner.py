@@ -55,6 +55,8 @@ def _response_mode(request: TurnPresentationRequest) -> str:
         "inspect": "observation",
         "move": "travel",
         "service": "transaction",
+        "service_purchase": "transaction",
+        "service_inquiry": "transaction",
         "shop": "transaction",
         "fight": "combat",
     }

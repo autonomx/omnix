@@ -813,7 +813,11 @@ def _attach_narration_quality_and_backbone_context(
     session = _safe_dict(final_result.get("session"))
     simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))
     runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
-    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    # Annotate the turn's own resolved result: a stub holding only these notes would hide it from the presenter.
+    resolved_result = dict(
+        _safe_dict(final_result.get("resolved_result"))
+        or _safe_dict(_safe_dict(final_result.get("result")).get("resolved_result"))
+    )
 
     narration_quality_context = build_narration_quality_context(runtime_state)
     npc_backbone_decision = resolve_npc_backbone_decision(

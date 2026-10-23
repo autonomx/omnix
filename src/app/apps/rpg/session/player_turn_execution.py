@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from app.apps.rpg.session.public_state_bridge import count_player_turn, merge_authoritative_session_state
+from app.apps.rpg.rules.survival_tick_runtime import apply_survival_runtime_tick
 
 # RPG session runtime responsibility module.
 from app.apps.rpg.session.turn_perf_trace import (
@@ -291,6 +292,16 @@ def apply_turn(
             "party_composition_effects": copy.deepcopy(party_composition_result),
             "session": session,
         }
+        # Time passes on this turn too: needs rise, saved with it (this path skips the turn's finalization).
+        survival_tick = apply_survival_runtime_tick(
+            authoritative_result={},
+            session={"simulation_state": simulation_state, "runtime_state": _safe_dict(session.get("runtime_state"))},
+            turn_contract={},
+            result_payload={"turn_id": f"turn:{tick}:companion_acceptance", "tick": tick, "player_input": player_input},
+            resolved_result=resolved_result,
+        )
+        simulation_state["survival"] = _safe_dict(survival_tick["session"]["simulation_state"]).get("survival")
+        session["runtime_state"] = survival_tick["session"]["runtime_state"]
         session = _sync_session_simulation_state_for_early_return(
             session,
             simulation_state,

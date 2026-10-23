@@ -63,6 +63,18 @@ def _scene(result: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+def _world_place(result: Mapping[str, Any], scene: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The world model's entry for the place the player is in (the scene's, or the player's location)."""
+    session = _mapping(result.get("session"))
+    simulation = _mapping(result.get("simulation_state") or session.get("simulation_state"))
+    locations = _mapping(_mapping(simulation.get("world_model")).get("locations"))
+    location_id = _first_text(
+        scene.get("location_id"),
+        _mapping(simulation.get("player_state")).get("location_id"),
+    )
+    return _mapping(locations.get(location_id))
+
+
 def _speaker(result: Mapping[str, Any]) -> tuple[str | None, str]:
     npc = _mapping(result.get("npc"))
     visible = _mapping(result.get("visible_response"))
@@ -85,6 +97,11 @@ def runtime_evidence(result: Mapping[str, Any]) -> tuple[EvidenceRecord, ...]:
     scene = _scene(result)
     location = _first_text(scene.get("location_name"), scene.get("name"), scene.get("title"))
     summary = _first_text(scene.get("summary"), scene.get("description"))
+    if not summary or summary == location:
+        # A session with its own world describes each place; the scene of a turn that just arrived may not yet.
+        place = _world_place(result, scene)
+        location = location or _first_text(place.get("name"))
+        summary = _first_text(place.get("description"))
     if location or summary:
         records.append(
             EvidenceRecord(
