@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:a200a62383e016a9ec2dfc7cdb31bf0928cc4e829739b0d1a3e8d247e7647df8",
+    "document_hash": "sha256:442d54422ef0869dc14f436a5a52964c8e723c1cc22ccf2cdc149310b416abd1",
     "facts": {
       "combat": {
         "active": false,
@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:d7a32fe4099993ea6f16598331c295bb183315894939636e7e6e485ab21aa78c",
+      "document_hash": "sha256:b9e8b2f0c1c24510629cae5ea0b15660ef62ee4847cb7813afaae0828dfb9b7c",
       "facts": {
         "combat": {
           "active": false,
@@ -177,6 +177,9 @@
         "runtime_state/actor_activities",
         "runtime_state/ambient_history",
         "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/conversation_settings",
         "runtime_state/conversation_threads",
         "runtime_state/current_scene",
@@ -243,21 +246,27 @@
         "simulation_state/active_effects",
         "simulation_state/active_interactions",
         "simulation_state/active_rumors",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/consequences",
         "simulation_state/conversation_thread_state",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/environment",
         "simulation_state/event_history",
         "simulation_state/events",
+        "simulation_state/faction_reputation",
         "simulation_state/factions",
         "simulation_state/history",
         "simulation_state/incidents",
         "simulation_state/location_state",
         "simulation_state/locations",
         "simulation_state/memory_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_index",
         "simulation_state/npc_minds",
+        "simulation_state/npc_presence",
         "simulation_state/player_state",
         "simulation_state/policy_reactions",
         "simulation_state/present_npcs",
@@ -273,7 +282,9 @@
         "simulation_state/threads",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "simulation_state/world_items",
         "state/current_turn",
         "state/player",
@@ -302,7 +313,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:9ffae8df20be2542ed5937ea7037e5f83170f14e9552261b2b52f0b62469b522",
+      "document_hash": "sha256:602415112f40bd9188660392203ce8badaa5a95a167167ba1ebddc25605d333c",
       "facts": {
         "combat": {
           "active": false,
@@ -438,7 +449,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:80921ac8f923e5ec69bccd7403463d44a091905c839ed50b0250701904019fca",
+      "document_hash": "sha256:4fa06ea1dcaf8770c58caeef1a2160b47c6ad3d0712d4559ff7bdd3aef9d3784",
       "facts": {
         "combat": {
           "active": false,
@@ -524,6 +535,9 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
@@ -532,16 +546,22 @@
         "runtime_state/state_revision",
         "runtime_state/survival_tick_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/companion_acceptance_state",
         "simulation_state/companion_memory_state",
         "simulation_state/companion_presence_projection",
         "simulation_state/companion_quest_state",
         "simulation_state/conversation_thread_state",
+        "simulation_state/economy_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_reputation_state",
         "simulation_state/party_composition_effects",
         "simulation_state/player_state",
         "simulation_state/present_npc_state",
         "simulation_state/survival",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
       ],
@@ -576,7 +596,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:663a394b1a9d5fe9aacc7457932f49073f6ca11f4b9b3694297023f5f7ea7022",
+      "document_hash": "sha256:5b62be30fe5b5a204a69646a7c4b8cf9520638e968edd1262e923e1e71887299",
       "facts": {
         "combat": {
           "active": false,
@@ -663,6 +683,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -689,11 +712,15 @@
         "runtime_state/tick",
         "runtime_state/turn_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/locations",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -702,7 +729,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/quests",
         "state/turn_count"
@@ -741,7 +770,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:16643adeb1ea644aa07bd6c6ef17ab6e060b2ed8d9927f8456417add849182d6",
+      "document_hash": "sha256:175136f827f64f983c656d668366461da9e5f97a2e696faa67d3725a21700f31",
       "facts": {
         "combat": {
           "active": false,
@@ -828,6 +857,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -854,11 +886,15 @@
         "runtime_state/tick",
         "runtime_state/turn_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/locations",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -866,7 +902,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count"
@@ -909,7 +947,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:392f2f8a6981b092f2577bad8cefdc43e55c0381976720c72a2785c3a0d9edb3",
+      "document_hash": "sha256:40e9fd5575063e7d11a7fafd468ae15db48988bbefb9a6c1a51b141a8dc6087d",
       "facts": {
         "combat": {
           "active": false,
@@ -999,6 +1037,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -1025,16 +1066,20 @@
         "runtime_state/tick",
         "runtime_state/turn_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/location_id",
         "simulation_state/location_state",
         "simulation_state/locations",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -1046,8 +1091,10 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
         "simulation_state/visited_locations",
+        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -1088,7 +1135,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1a30ef1761bb78028db26bcf71db5e069e2bf4e1a5778d59f53a4b4063d7b2ce",
+      "document_hash": "sha256:02395adc0247a9a22666414071a4e3c5c55b53465b5764a7f6b130ca59df6a85",
       "facts": {
         "combat": {
           "active": false,
@@ -1178,6 +1225,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -1204,17 +1254,23 @@
         "runtime_state/turn_history",
         "runtime_state/world_consequences",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
       ],
@@ -1240,7 +1296,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:a24fc6d0dcf64744fdc1bfb06fcea3a65f308c7e92606efa40598e9bb8f05375",
+      "document_hash": "sha256:957777a15630350c6e9ea0daf7896a82edd10b03994f81a28ed5646822b37ad2",
       "facts": {
         "combat": {
           "active": false,
@@ -1368,7 +1424,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:e77e0fbe3402fbb256d923b9b75f13f57043b9d80764e1c726c94d426097a2b8",
+      "document_hash": "sha256:8615f8385e99c262d6502b83b7b6ac3bf219f841eb5ff10d49aaa3bc3b7308e5",
       "facts": {
         "combat": {
           "active": false,
@@ -1458,6 +1514,9 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -1466,11 +1525,16 @@
         "runtime_state/narration_quality",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/economy_state",
         "simulation_state/journal_state",
         "simulation_state/memory_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_emotion_state",
         "simulation_state/pending_interactions",
         "simulation_state/relationship_state",
+        "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
@@ -1502,7 +1566,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:f7e48380495c228b1513a3990edfa1fb631210c3503d8be5b1ad2bc8adac8a62",
+      "document_hash": "sha256:de65f03dd05cc641b0cbd7973c39d1a0a4df6b8cf9d656a7ee77fe981bd03468",
       "facts": {
         "combat": {
           "active": false,
@@ -1645,7 +1709,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1059bedb3101059e177ea400e6542ff4f8ef36985ee971097c772183bb11f1dd",
+      "document_hash": "sha256:33216984018102404000993e9dd79f4a51aac952b5c66eccfe283b4c1b5dc074",
       "facts": {
         "combat": {
           "active": false,
@@ -1812,7 +1876,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:8aad0f72024e7a1e1c446c9cff14ce89dea70df9da202a783ffbedb73e686371",
+      "document_hash": "sha256:ee2441860b682b2e1438246892b40a7358892b430a39e68e6338a2827fb3a324",
       "facts": {
         "combat": {
           "active": false,
@@ -1902,6 +1966,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -1929,10 +1996,14 @@
         "runtime_state/turn_history",
         "setup_payload/metadata",
         "simulation_state/active_interactions",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -1940,7 +2011,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "simulation_state/world_items",
         "state/current_turn",
         "state/player",
@@ -1994,7 +2067,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:33c7296a9eceea3d1b1a14d530fa11c75786d04bffe25295d2339b25434b56e9",
+      "document_hash": "sha256:0af6a95fb0e3912e6f4d42374b0bd8c9da72a3a3f2520a2d0b8571ccb7a91358",
       "facts": {
         "combat": {
           "active": false,
@@ -2084,6 +2157,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -2111,15 +2187,19 @@
         "runtime_state/turn_history",
         "setup_payload/metadata",
         "simulation_state/active_interactions",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/location_id",
         "simulation_state/location_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -2131,8 +2211,10 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
         "simulation_state/visited_locations",
+        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -2173,7 +2255,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3fce1abaefab754c0b2e79dd000fbf9c1297d64907f5c236ac488e30953b6b75",
+      "document_hash": "sha256:1a244f7dacc41f08e3a47b80f305f271159085ae1b532f0a8977b3d37dba5e0b",
       "facts": {
         "combat": {
           "active": false,
@@ -2263,6 +2345,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -2290,17 +2375,23 @@
         "runtime_state/world_consequences",
         "setup_payload/metadata",
         "simulation_state/active_interactions",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
       ],
@@ -2345,7 +2436,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:bdde69d7845dac18fa0843641bc1ff1e667852f63d72471c234ce50572a90ee1",
+      "document_hash": "sha256:83e2864e8c3d71aff48d167b8fd0258bc8a78d68f998766aea6c72031d356c12",
       "facts": {
         "combat": {
           "active": false,
@@ -2436,6 +2527,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -2462,15 +2556,19 @@
         "runtime_state/turn_history",
         "setup_payload/metadata",
         "simulation_state/active_interactions",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/location_id",
         "simulation_state/location_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -2481,7 +2579,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -2524,7 +2624,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:52e0eb96cfa14396521bb1d7c678d1d5e0e59078d07968bd065855a67a2a981d",
+      "document_hash": "sha256:473e8b20700e18c288dc36f4980126bafacb009c53146c91079b3a02526c8306",
       "facts": {
         "combat": {
           "active": false,
@@ -2615,6 +2715,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -2645,10 +2748,14 @@
         "runtime_state/world_consequences",
         "setup_payload/metadata",
         "simulation_state/active_interactions",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -2656,6 +2763,8 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
         "simulation_state/world_items",
         "state/current_turn",
         "state/player",
@@ -2688,7 +2797,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:2d7dd4130b30cc9210260e2e93f6b2abda9e2545f3d291acedc907c67da4ed3d",
+      "document_hash": "sha256:33e035d441bde9191d5df1d415f81ce4a93b3984195d72e181c7fa38472052af",
       "facts": {
         "combat": {
           "active": false,
@@ -2779,6 +2888,9 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -2787,12 +2899,17 @@
         "runtime_state/narration_quality",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/economy_state",
         "simulation_state/memory_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_emotion_state",
         "simulation_state/player_state",
         "simulation_state/relationship_state",
         "simulation_state/survival",
         "simulation_state/transaction_history",
+        "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
@@ -2822,7 +2939,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:be5ace0d8a45bf3f3ea2f9cf23391bef96c94d2e3c12316f541b930b9b6b56cb",
+      "document_hash": "sha256:ddb96c591094c1ff24ae5f8ce11d11bb96b8f7b8f44c7d036904201106d4cb06",
       "facts": {
         "combat": {
           "active": false,
@@ -2959,7 +3076,7 @@
           "fatigue": -15
         }
       },
-      "document_hash": "sha256:467dff4260da9e577871bdbc89cdfb7d846de4ed54b8f2f0b79270b940be3832",
+      "document_hash": "sha256:da6ee7e4ad3740e29a3e57ff61eb543c53ae819d3a522864d6c09dfcb1a8bb22",
       "facts": {
         "combat": {
           "active": false,
@@ -3097,7 +3214,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:99fe92350fe98c72e7e350cfa26e376b81b7ec4df3afbbdf0aed3a76b1c2e467",
+      "document_hash": "sha256:0a59eee38b46af3cfdd2f0693e9be5dba5570e1af3ac1bc99572ba2804d9ae5f",
       "facts": {
         "combat": {
           "active": false,
@@ -3274,7 +3391,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:73941bc3f251cfdcd3e219fbdb1ff02240d70b9ccc8e6745a1b2f7ee74fa0a56",
+      "document_hash": "sha256:beadb558fa52985c2b930225ddaaa4b67bc505945da443fe03d2cabb5ac7dbc0",
       "facts": {
         "combat": {
           "active": true,
@@ -3369,6 +3486,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -3395,12 +3515,16 @@
         "runtime_state/turn_history",
         "runtime_state/world_consequences",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
         "simulation_state/companion_presence_projection",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -3409,7 +3533,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count"
@@ -3436,7 +3562,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:73941bc3f251cfdcd3e219fbdb1ff02240d70b9ccc8e6745a1b2f7ee74fa0a56",
+      "document_hash": "sha256:beadb558fa52985c2b930225ddaaa4b67bc505945da443fe03d2cabb5ac7dbc0",
       "facts": {
         "combat": {
           "active": true,
@@ -3555,7 +3681,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:2deec57d749662576059a43f34a550bc73a3a10687e6c3928b3c74f86d65516c",
+      "document_hash": "sha256:c0c2d4341739950139c9a430ed3c08db05b6ef7440ea6e1e6573833880ad6031",
       "facts": {
         "combat": {
           "active": true,
@@ -3650,6 +3776,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -3672,11 +3801,15 @@
         "runtime_state/tick",
         "runtime_state/turn_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
         "simulation_state/companion_presence_projection",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -3685,7 +3818,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count"
@@ -3725,7 +3860,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b195a38fc3c6ff650a446debc96dd6c5bf31ddcffbe5a577ccd03f96ffb5dffb",
+      "document_hash": "sha256:06ab331b4c9aedbd6d0c3bc0bf194ed8b2333d04aaab1994acb61a962e147973",
       "facts": {
         "combat": {
           "active": true,
@@ -3820,6 +3955,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
@@ -3841,10 +3979,14 @@
         "runtime_state/tick",
         "runtime_state/turn_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -3853,7 +3995,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
       ],
@@ -3888,7 +4032,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:2877417db53985ada46d594ca10087c593540a070684271caa092e3389489b97",
+      "document_hash": "sha256:9872b10a42f822ba0a817e5b4620a62fe6da62c63ea645a498a387256d578f31",
       "facts": {
         "combat": {
           "active": false,
@@ -3983,6 +4127,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
@@ -4008,11 +4155,15 @@
         "runtime_state/turn_history",
         "runtime_state/world_consequences",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -4021,7 +4172,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
       ],
@@ -4047,7 +4200,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:11d321884a8fa00323a1a3966a266097cfe4f8fad60c9d4e73fd84f67e355257",
+      "document_hash": "sha256:896732da54d3d29b4ef8e349ec7dbc0afe1058714737d1d300cc6aac33f38636",
       "facts": {
         "combat": {
           "active": false,
@@ -4142,6 +4295,9 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -4150,10 +4306,15 @@
         "runtime_state/narration_quality",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/economy_state",
         "simulation_state/memory_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_emotion_state",
         "simulation_state/pending_interactions",
         "simulation_state/relationship_state",
+        "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
@@ -4186,7 +4347,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:869884737f7bbda86c07f9a7d097386f830c7c9b6620e0eff72c211e4765b9e4",
+      "document_hash": "sha256:25f0ddace00b85f09532f96fedce41d6d3f4a9f6a4c91a7c67f4f5b62565d98d",
       "facts": {
         "combat": {
           "active": false,
@@ -4360,7 +4521,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:23373ba8718ff7bb134c8c8339312574845edee329922bb415510bdd94d16d8b",
+      "document_hash": "sha256:1a4c72ab7635b1a319b419c141bbc455ccfc3e08c900a74552fe1b4e88296f1f",
       "facts": {
         "combat": {
           "active": false,
@@ -4452,6 +4613,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -4478,15 +4642,19 @@
         "runtime_state/tick",
         "runtime_state/turn_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/location_id",
         "simulation_state/location_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -4497,8 +4665,10 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
         "simulation_state/visited_locations",
+        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -4548,7 +4718,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:fe2cc9dde375e65a0af69cdcefa0bc24baf1024147f99d88a7201aa7c5af1dee",
+      "document_hash": "sha256:c6131a459fb55e26d7c36d69d96c5521b902a26342b227a3c206e091953889fa",
       "facts": {
         "combat": {
           "active": false,
@@ -4643,6 +4813,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -4668,15 +4841,19 @@
         "runtime_state/turn_history",
         "runtime_state/world_consequences",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/location_id",
         "simulation_state/location_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -4687,7 +4864,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -4737,7 +4916,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f4d1b42de14fddc3314ac0ac090d65e25f75f2842e8d98c20efb78b92ba4d3c3",
+      "document_hash": "sha256:7f283747873ef7b891023bdece284e9996a0ffbf115d094669ec408b674594f1",
       "facts": {
         "combat": {
           "active": false,
@@ -4829,6 +5008,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -4854,15 +5036,19 @@
         "runtime_state/tick",
         "runtime_state/turn_history",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/current_location",
         "simulation_state/current_location_id",
         "simulation_state/current_location_name",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
         "simulation_state/location_id",
         "simulation_state/location_state",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -4873,7 +5059,9 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_location",
         "state/current_location_id",
         "state/current_location_name",
@@ -4913,7 +5101,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7dfa9e516edbd1af36a45f3c6717a36c367b1942ada5ddcf6c353c0c788e08d8",
+      "document_hash": "sha256:b0f9da6b568efe60654a725856abea6f393b6091211a7d4970f2368cb3d91f8f",
       "facts": {
         "combat": {
           "active": false,
@@ -5005,6 +5193,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
@@ -5031,18 +5222,24 @@
         "runtime_state/turn_history",
         "runtime_state/world_consequences",
         "setup_payload/metadata",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
         "simulation_state/conversation_thread_state",
         "simulation_state/debug_meta",
+        "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/timeline",
+        "simulation_state/travel_state",
         "simulation_state/turn_index",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
       ],
