@@ -82,6 +82,9 @@ resources/data/
 
 # Generated runtime and rehearsal artifacts
 /resources/artifacts/
+# Script output (backtests, topology tests, reports) and the Kilo Code editor's settings
+/artifacts/
+/.kilo/
 # Runtime output under resources (WP-11.6): caches, market-data evidence
 # captures, benchmark runs and voice clones users create. The approved sample
 # voices are tracked; add a new one deliberately with `git add -f`.
