@@ -47618,6 +47618,17 @@
       "RpgObserveMapResponse": {
         "description": "``reused`` (status ``current``) when the observer already knew this map state.",
         "properties": {
+          "campaign_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Revision"
+          },
           "event": {
             "anyOf": [
               {
@@ -47655,6 +47666,11 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "tactical": {
+            "additionalProperties": true,
+            "title": "Tactical",
+            "type": "object"
           }
         },
         "required": [
@@ -47663,7 +47679,9 @@
           "reused",
           "knowledge",
           "projection",
-          "event"
+          "event",
+          "campaign_revision",
+          "tactical"
         ],
         "title": "RpgObserveMapResponse",
         "type": "object"
@@ -47671,6 +47689,17 @@
       "RpgObserverProjectionResponse": {
         "description": "``stale`` when the map changed after the observer last looked.",
         "properties": {
+          "campaign_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Revision"
+          },
           "knowledge": {
             "additionalProperties": true,
             "title": "Knowledge",
@@ -47696,6 +47725,11 @@
           "stale": {
             "title": "Stale",
             "type": "boolean"
+          },
+          "tactical": {
+            "additionalProperties": true,
+            "title": "Tactical",
+            "type": "object"
           }
         },
         "required": [
@@ -47703,7 +47737,9 @@
           "stale",
           "knowledge",
           "projection",
-          "recent_events"
+          "recent_events",
+          "campaign_revision",
+          "tactical"
         ],
         "title": "RpgObserverProjectionResponse",
         "type": "object"

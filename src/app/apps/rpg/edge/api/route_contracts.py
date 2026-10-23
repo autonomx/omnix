@@ -620,6 +620,8 @@ class RpgObserveMapResponse(TypedDict):
     knowledge: dict[str, Any]
     projection: dict[str, Any]
     event: dict[str, Any] | None
+    campaign_revision: int | None
+    tactical: dict[str, Any]
 
 
 class RpgObserverProjectionResponse(TypedDict):
@@ -630,6 +632,8 @@ class RpgObserverProjectionResponse(TypedDict):
     knowledge: dict[str, Any]
     projection: dict[str, Any]
     recent_events: list[dict[str, Any]]
+    campaign_revision: int | None
+    tactical: dict[str, Any]
 
 
 class RpgTacticalResponse(TypedDict, total=False):

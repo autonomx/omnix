@@ -8,6 +8,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from app.apps.rpg.world.map_grid_contracts import GridMapDefinition
 from app.apps.rpg.world.map_instance_runtime import CampaignMapInstanceSnapshot
+from app.apps.rpg.world.tactical_spatial import tactical_turn_summary
 from app.apps.rpg.world.map_observer_runtime import (
     ObserverMapKnowledge,
     ObserverPerceptionPolicy,
@@ -66,6 +67,17 @@ def _load_map(
     )
 
 
+def _campaign_turn(work: Any, context: Any, campaign_id: str, observer_actor_id: str) -> dict[str, Any]:
+    """The campaign revision a tactical command must name, and the observer's tactical turn (read-only)."""
+    campaign = work.rpg.get_campaign(context, campaign_id)
+    if campaign is None:
+        return {"campaign_revision": None, "tactical": {"combat_active": False}}
+    return {
+        "campaign_revision": int(campaign["revision"]),
+        "tactical": tactical_turn_summary(dict(campaign.get("state") or {}), observer_actor_id),
+    }
+
+
 def observe_campaign_map(
     map_instance_id: str,
     *,
@@ -82,6 +94,7 @@ def observe_campaign_map(
             map_instance_id,
             for_update=True,
         )
+        turn = _campaign_turn(work, context, snapshot.campaign_id, observer_actor_id)
         previous_row = work.observers.get_knowledge(
             context,
             campaign_id=snapshot.campaign_id,
@@ -110,6 +123,7 @@ def observe_campaign_map(
             work.rollback()
             return {
                 "ok": True,
+                **turn,
                 "status": "current",
                 "reused": True,
                 "knowledge": previous.model_dump(mode="json"),
@@ -137,6 +151,7 @@ def observe_campaign_map(
     stored_knowledge = _knowledge_model(stored)
     return {
         "ok": True,
+        **turn,
         "status": "observed",
         "reused": False,
         "knowledge": stored_knowledge.model_dump(mode="json"),
@@ -158,6 +173,7 @@ def load_campaign_observer_projection(
     context = current_tenant()
     with unit_of_work(database) as work:
         snapshot, definition = _load_map(work, context, map_instance_id)
+        turn = _campaign_turn(work, context, snapshot.campaign_id, observer_actor_id)
         row = work.observers.get_knowledge(
             context,
             campaign_id=snapshot.campaign_id,
@@ -179,6 +195,7 @@ def load_campaign_observer_projection(
     knowledge = _knowledge_model(row)
     return {
         "ok": True,
+        **turn,
         "stale": knowledge.observed_map_state_revision != snapshot.map_state_revision,
         "knowledge": knowledge.model_dump(mode="json"),
         "projection": project_observer_knowledge(definition, snapshot, knowledge),

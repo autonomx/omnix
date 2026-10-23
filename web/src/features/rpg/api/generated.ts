@@ -5587,6 +5587,8 @@ export interface components {
          * @description ``reused`` (status ``current``) when the observer already knew this map state.
          */
         RpgObserveMapResponse: {
+            /** Campaign Revision */
+            campaign_revision: number | null;
             /** Event */
             event: {
                 [key: string]: unknown;
@@ -5608,12 +5610,18 @@ export interface components {
              * @enum {string}
              */
             status: "observed" | "current";
+            /** Tactical */
+            tactical: {
+                [key: string]: unknown;
+            };
         };
         /**
          * RpgObserverProjectionResponse
          * @description ``stale`` when the map changed after the observer last looked.
          */
         RpgObserverProjectionResponse: {
+            /** Campaign Revision */
+            campaign_revision: number | null;
             /** Knowledge */
             knowledge: {
                 [key: string]: unknown;
@@ -5630,6 +5638,10 @@ export interface components {
             }[];
             /** Stale */
             stale: boolean;
+            /** Tactical */
+            tactical: {
+                [key: string]: unknown;
+            };
         };
         /** RpgPlayerOptions */
         RpgPlayerOptions: {
