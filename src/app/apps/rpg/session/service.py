@@ -16,7 +16,7 @@ from app.apps.rpg.session.durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
-from app.apps.rpg.session.environment import ensure_session_environment_seed_state
+from app.apps.rpg.world.environment import ensure_session_environment_seed_state
 from app.apps.rpg.session.list_summaries import list_session_summaries_from_disk
 from app.apps.rpg.session.migrations import migrate_session_payload
 from app.apps.rpg.session.published_opening_progress import (

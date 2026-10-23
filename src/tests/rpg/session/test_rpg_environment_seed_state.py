@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.apps.rpg.session import durable_store
-from app.apps.rpg.session.environment import build_initial_environment_seed_state
+from app.apps.rpg.world.environment import build_initial_environment_seed_state
 from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session, start_rpg_preset
 
 

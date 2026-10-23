@@ -16,8 +16,8 @@ from .rpg_narrative_delivery_routes import (
 from app.apps.rpg.edge.api.turn_pipeline import execute_foreground_rpg_turn
 from app.apps.rpg.narration.presentation.turn_response import RpgTurnResponse
 from app.apps.rpg.session.ability_coverage import summarize_ability_coverage
-from app.apps.rpg.session.environment_narration import build_environment_narration_contract
-from app.apps.rpg.session.environment_regions import derive_active_region_snapshot
+from app.apps.rpg.world.environment_narration import build_environment_narration_contract
+from app.apps.rpg.world.environment_regions import derive_active_region_snapshot
 from app.apps.rpg.genesis.forge.pipeline_adapter import create_new_game_from_genesis_payload
 from app.apps.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
 from app.apps.rpg.session.new_game import (

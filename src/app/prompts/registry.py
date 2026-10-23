@@ -65,7 +65,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.apps.rpg.genesis.profiles.llm_profile_drafter",
     "app.apps.rpg.genesis.profiles.profile_portraits",
     "app.apps.rpg.session.ability_detail",
-    "app.apps.rpg.session.environment_narration",
+    "app.apps.rpg.world.environment_narration",
     "app.apps.rpg.genesis.forge.campaign_lore_store",
     "app.apps.rpg.genesis.forge.runtime_lore_materialization",
     "app.apps.rpg.genesis.forge.runtime_materialization",

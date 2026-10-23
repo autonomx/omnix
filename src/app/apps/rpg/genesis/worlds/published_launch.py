@@ -132,7 +132,7 @@ def _opening_environment(
     epoch: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """A live environment (weather, calendar, light) for the opening's own place and region."""
-    from app.apps.rpg.session.environment import DEFAULT_REGION_ID, build_initial_environment_seed_state
+    from app.apps.rpg.world.environment import DEFAULT_REGION_ID, build_initial_environment_seed_state
 
     state = _record(session.get("state"))
     metadata = _record(state.get("metadata"))
