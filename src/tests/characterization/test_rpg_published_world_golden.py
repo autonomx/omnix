@@ -84,25 +84,23 @@ def _patched_sections(turn_row: dict) -> list[str]:
 
 
 def _stable_text(text: str, session_id: str, world_id: str) -> str:
-    """The run's own ids (campaign, world, submissions and jobs) as fixed placeholders.
-
-    Content hashes of the world's documents (releases, maps, the campaign bible) cover the run's world id,
-    so they are placeholders too.
-    """
+    """The run's own ids (campaign, world, submissions and jobs) as fixed placeholders."""
     text = text.replace(session_id, "SESSION").replace(world_id.split("-")[-1], "WORLD")
-    text = re.sub(r"\b[0-9a-f]{64}\b", "<sha256>", text)
     return re.sub(r"\b(submit|job|pipeline)[:-][0-9a-f]{32}\b", r"\1:ID", text)
 
 
 def _document_hash(document: dict, session_id: str, world_id: str) -> str:
     """The campaign document's hash once ids, times and durations are normalized (as the golden is).
 
-    Two parts of today's document are not reproducible and are left out: the wall-clock stage timings a
-    turn stores (``runtime_state.perf_trace``) and the random creator preview id (``preview_<hex>``).
+    Content hashes of the world's documents (releases, maps, the campaign bible) cover the run's world id, so
+    they are placeholders. Two parts of today's document are not reproducible and are left out: the
+    wall-clock stage timings a turn stores (``runtime_state.perf_trace``) and the random creator preview id
+    (``preview_<hex>``).
     """
     document = {**document, "runtime_state": {key: value for key, value in (document.get("runtime_state") or {}).items()
                                               if key != "perf_trace"}}
     text = _stable_text(json.dumps(document, sort_keys=True, ensure_ascii=False), session_id, world_id)
+    text = re.sub(r"\b[0-9a-f]{64}\b", "<sha256>", text)
     text = re.sub(r"\bpreview_[0-9a-f]{12}\b", "preview_ID", text)
     canonical = json.dumps(normalize(json.loads(text)), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     dump = os.environ.get("OMNIX_GOLDEN_DUMP_DIR")

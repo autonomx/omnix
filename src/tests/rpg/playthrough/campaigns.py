@@ -8,10 +8,32 @@ from the play screen's session route and from the stored campaign.
 from __future__ import annotations
 
 import importlib.util
+import os
 import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+import pytest
+
+POSTGRES = [
+    pytest.mark.postgres,
+    pytest.mark.skipif(
+        not os.environ.get("OMNIX_TEST_DATABASE_URL"),
+        reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
+    ),
+]
+WORLDS = ("aurelia", "vesper", "starter")
+
+
+def in_worlds(*worlds: str, **xfail: str) -> list[Any]:
+    """Parameters for a scenario played in ``worlds`` (default: all three); a world named in ``xfail`` is a
+    strict expected failure with that reason, which names the package that fixes it."""
+    return [
+        pytest.param(world, marks=pytest.mark.xfail(strict=True, reason=xfail[world])) if world in xfail else world
+        for world in (worlds or WORLDS)
+    ]
+
 
 BUNDLES = Path(__file__).resolve().parents[4] / "resources/examples/rpg/world-bundles"
 AURELIA = BUNDLES / "aurelia-echoes-beyond-the-gate"
@@ -115,11 +137,13 @@ class Playthrough:
         self.client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     # -- acting ----------------------------------------------------------------------------------------
-    def post_turn(self, command: str, **extra: Any):
-        return self.client.post(f"/api/rpg/sessions/{self.session_id}/turn", json={"command": command, **extra})
+    def post_turn(self, command: str, *, submission_id: str = ""):
+        """A turn through the turn route; the client names its submission in a header, as the play screen does."""
+        headers = {"x-omnix-rpg-submission-id": submission_id} if submission_id else {}
+        return self.client.post(f"/api/rpg/sessions/{self.session_id}/turn", json={"command": command}, headers=headers)
 
-    def turn(self, command: str, **extra: Any) -> dict[str, Any]:
-        response = self.post_turn(command, **extra)
+    def turn(self, command: str, *, submission_id: str = "") -> dict[str, Any]:
+        response = self.post_turn(command, submission_id=submission_id)
         assert response.status_code == 200, f"{command!r}: {response.status_code} {response.text[:500]}"
         return response.json()
 
@@ -190,19 +214,22 @@ class Playthrough:
         return {**instance, "map_instance_id": map_instance_id}
 
     def simulation(self) -> dict[str, Any]:
-        return self.stored()["simulation_state"]
+        return dict(self.stored().get("simulation_state") or {})
 
     def player_state(self) -> dict[str, Any]:
-        return self.simulation()["player_state"]
+        return dict(self.simulation().get("player_state") or {})  # the simulation keeps one from the first turn
 
     def purse(self) -> int:
-        """The purse in copper, as the play screen shows it; every stored copy must agree."""
-        shown = self.public()["player"]["currency"]
+        """The purse in copper, as the play screen shows it."""
+        return copper(self.public()["player"]["currency"])
+
+    def purses(self) -> dict[str, int]:
+        """Every stored copy of the purse, in copper: they must agree (the simulation's exist from the first turn)."""
         state = self.player_state()
-        for purse in (state.get("currency"), (state.get("inventory_state") or {}).get("currency")):
-            if purse is not None:  # the simulation's copies exist from the first turn on
-                assert copper(purse) == copper(shown), (purse, shown)
-        return copper(shown)
+        copies = {"sheet": self.purse(), "simulation": state.get("currency"),
+                  "simulation_inventory": (state.get("inventory_state") or {}).get("currency")}
+        return {name: value if isinstance(value, int) else copper(value)
+                for name, value in copies.items() if value is not None}
 
     def inventory(self) -> dict[str, int]:
         """What the play screen lists in the pack, by name and quantity."""

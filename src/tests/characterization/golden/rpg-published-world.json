@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:<sha256>",
+    "document_hash": "sha256:a200a62383e016a9ec2dfc7cdb31bf0928cc4e829739b0d1a3e8d247e7647df8",
     "facts": {
       "combat": {
         "active": false,
@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:d7a32fe4099993ea6f16598331c295bb183315894939636e7e6e485ab21aa78c",
       "facts": {
         "combat": {
           "active": false,
@@ -302,7 +302,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:9ffae8df20be2542ed5937ea7037e5f83170f14e9552261b2b52f0b62469b522",
       "facts": {
         "combat": {
           "active": false,
@@ -438,7 +438,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:80921ac8f923e5ec69bccd7403463d44a091905c839ed50b0250701904019fca",
       "facts": {
         "combat": {
           "active": false,
@@ -576,7 +576,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:663a394b1a9d5fe9aacc7457932f49073f6ca11f4b9b3694297023f5f7ea7022",
       "facts": {
         "combat": {
           "active": false,
@@ -741,7 +741,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:16643adeb1ea644aa07bd6c6ef17ab6e060b2ed8d9927f8456417add849182d6",
       "facts": {
         "combat": {
           "active": false,
@@ -909,7 +909,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:392f2f8a6981b092f2577bad8cefdc43e55c0381976720c72a2785c3a0d9edb3",
       "facts": {
         "combat": {
           "active": false,
@@ -1088,7 +1088,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:1a30ef1761bb78028db26bcf71db5e069e2bf4e1a5778d59f53a4b4063d7b2ce",
       "facts": {
         "combat": {
           "active": false,
@@ -1240,7 +1240,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:a24fc6d0dcf64744fdc1bfb06fcea3a65f308c7e92606efa40598e9bb8f05375",
       "facts": {
         "combat": {
           "active": false,
@@ -1368,7 +1368,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:e77e0fbe3402fbb256d923b9b75f13f57043b9d80764e1c726c94d426097a2b8",
       "facts": {
         "combat": {
           "active": false,
@@ -1502,7 +1502,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:f7e48380495c228b1513a3990edfa1fb631210c3503d8be5b1ad2bc8adac8a62",
       "facts": {
         "combat": {
           "active": false,
@@ -1645,7 +1645,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:1059bedb3101059e177ea400e6542ff4f8ef36985ee971097c772183bb11f1dd",
       "facts": {
         "combat": {
           "active": false,
@@ -1812,7 +1812,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:8aad0f72024e7a1e1c446c9cff14ce89dea70df9da202a783ffbedb73e686371",
       "facts": {
         "combat": {
           "active": false,
@@ -1994,7 +1994,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:33c7296a9eceea3d1b1a14d530fa11c75786d04bffe25295d2339b25434b56e9",
       "facts": {
         "combat": {
           "active": false,
@@ -2173,7 +2173,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:3fce1abaefab754c0b2e79dd000fbf9c1297d64907f5c236ac488e30953b6b75",
       "facts": {
         "combat": {
           "active": false,
@@ -2345,7 +2345,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:bdde69d7845dac18fa0843641bc1ff1e667852f63d72471c234ce50572a90ee1",
       "facts": {
         "combat": {
           "active": false,
@@ -2524,7 +2524,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:52e0eb96cfa14396521bb1d7c678d1d5e0e59078d07968bd065855a67a2a981d",
       "facts": {
         "combat": {
           "active": false,
@@ -2688,7 +2688,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:2d7dd4130b30cc9210260e2e93f6b2abda9e2545f3d291acedc907c67da4ed3d",
       "facts": {
         "combat": {
           "active": false,
@@ -2822,7 +2822,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:be5ace0d8a45bf3f3ea2f9cf23391bef96c94d2e3c12316f541b930b9b6b56cb",
       "facts": {
         "combat": {
           "active": false,
@@ -2959,7 +2959,7 @@
           "fatigue": -15
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:467dff4260da9e577871bdbc89cdfb7d846de4ed54b8f2f0b79270b940be3832",
       "facts": {
         "combat": {
           "active": false,
@@ -3097,7 +3097,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:99fe92350fe98c72e7e350cfa26e376b81b7ec4df3afbbdf0aed3a76b1c2e467",
       "facts": {
         "combat": {
           "active": false,
@@ -3274,7 +3274,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:73941bc3f251cfdcd3e219fbdb1ff02240d70b9ccc8e6745a1b2f7ee74fa0a56",
       "facts": {
         "combat": {
           "active": true,
@@ -3436,7 +3436,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:73941bc3f251cfdcd3e219fbdb1ff02240d70b9ccc8e6745a1b2f7ee74fa0a56",
       "facts": {
         "combat": {
           "active": true,
@@ -3555,7 +3555,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:2deec57d749662576059a43f34a550bc73a3a10687e6c3928b3c74f86d65516c",
       "facts": {
         "combat": {
           "active": true,
@@ -3725,7 +3725,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:b195a38fc3c6ff650a446debc96dd6c5bf31ddcffbe5a577ccd03f96ffb5dffb",
       "facts": {
         "combat": {
           "active": true,
@@ -3888,7 +3888,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:2877417db53985ada46d594ca10087c593540a070684271caa092e3389489b97",
       "facts": {
         "combat": {
           "active": false,
@@ -4047,7 +4047,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:11d321884a8fa00323a1a3966a266097cfe4f8fad60c9d4e73fd84f67e355257",
       "facts": {
         "combat": {
           "active": false,
@@ -4186,7 +4186,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:869884737f7bbda86c07f9a7d097386f830c7c9b6620e0eff72c211e4765b9e4",
       "facts": {
         "combat": {
           "active": false,
@@ -4360,7 +4360,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:23373ba8718ff7bb134c8c8339312574845edee329922bb415510bdd94d16d8b",
       "facts": {
         "combat": {
           "active": false,
@@ -4548,7 +4548,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:fe2cc9dde375e65a0af69cdcefa0bc24baf1024147f99d88a7201aa7c5af1dee",
       "facts": {
         "combat": {
           "active": false,
@@ -4737,7 +4737,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:f4d1b42de14fddc3314ac0ac090d65e25f75f2842e8d98c20efb78b92ba4d3c3",
       "facts": {
         "combat": {
           "active": false,
@@ -4913,7 +4913,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:<sha256>",
+      "document_hash": "sha256:7dfa9e516edbd1af36a45f3c6717a36c367b1942ada5ddcf6c353c0c788e08d8",
       "facts": {
         "combat": {
           "active": false,

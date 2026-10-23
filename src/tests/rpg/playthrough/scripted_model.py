@@ -254,9 +254,8 @@ class ScriptedRoleModel:
         blocks = []
         for beat in payload.get("beats") or ():
             text = next(
-                (str(record.get("text") or record.get("summary") or "").strip()
-                 for record in beat.get("approved_evidence") or ()
-                 if str(record.get("text") or record.get("summary") or "").strip()),
+                (line for record in beat.get("approved_evidence") or ()
+                 if (line := str(record.get("content") or record.get("text") or "").strip().split("\n")[0].strip())),
                 "",
             )
             blocks.append({"beat_id": beat["beat_id"], "sequence": beat["sequence"], "kind": beat["kind"],
@@ -285,6 +284,7 @@ def scripted_model_installed(monkeypatch, model: ScriptedRoleModel | None = None
     from app.apps.rpg.narration.narrative_engine.writer import StructuredNarrativeWriter
 
     model = model or ScriptedRoleModel()
+    monkeypatch.setenv("OMNIX_RPG_TURNS_PER_HOUR", "0")  # a playthrough plays many turns quickly (no RPG turn budget)
     bootstrap_postgresql_runtime()
     jobs = PostgresJobStoreAdapter()
     job_store.install_default_job_store_factory(lambda: jobs)
