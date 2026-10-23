@@ -330,7 +330,7 @@ const functionLengthBaseline = {
   'src/features/image-generation/ImageGenerationWorkspaceMultiModel.tsx': 288,
   'src/features/podcast/PodcastWorkspace.tsx': 303,
   'src/features/rpg/RpgActionComposer.tsx': 551,
-  'src/features/rpg/RpgCreateCampaignWizardLegacy.tsx': 443,
+  'src/features/rpg/RpgCampaignCharacterStep.tsx': 428,
   'src/features/rpg/RpgLorePanel.tsx': 373,
   'src/features/rpg/RpgWorkspace.tsx': 713,
   'src/features/rpg/RpgWorldCampaignSetup.tsx': 290,

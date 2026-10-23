@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
@@ -170,6 +170,8 @@ describe('RpgCreateCampaignWizard', () => {
     expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent(scenario.title);
     expect(screen.getByLabelText('Campaign setup summary')).not.toHaveTextContent('Rusty Flagon Tavern');
 
+    // The hero's name starts empty: the player names them.
+    fireEvent.change(within(screen.getByRole('region', { name: 'Create Campaign' })).getByLabelText('Name'), { target: { value: 'Elara' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(

@@ -189,6 +189,8 @@ describe('RpgWorkspace campaign handoff', () => {
     fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
     fireEvent.click(await screen.findByRole('button', { name: `New campaign in ${world.title}` }));
     expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
+    // The hero's name starts empty: the player names them.
+    fireEvent.change(within(screen.getByRole('region', { name: 'Create Campaign' })).getByLabelText('Name'), { target: { value: 'Elara' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
@@ -272,6 +274,8 @@ describe('RpgWorkspace campaign handoff', () => {
     fireEvent.click(screen.getByRole('button', { name: /^New Campaign/ }));
     fireEvent.click(await screen.findByRole('button', { name: `New campaign in ${world.title}` }));
     expect(await screen.findByText(`Ready: ${world.title} · ${scenario.title}`)).toBeInTheDocument();
+    // The hero's name starts empty: the player names them.
+    fireEvent.change(within(screen.getByRole('region', { name: 'Create Campaign' })).getByLabelText('Name'), { target: { value: 'Elara' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
     expect(window.localStorage.getItem('omnix:rpg:selected-session-id')).toBe('rpg-created-1');

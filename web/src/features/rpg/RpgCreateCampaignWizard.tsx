@@ -10,7 +10,7 @@ import {
   type RpgWorldSummary,
 } from './api/rpgWorldLibraryClient';
 import { loadSettingsProfile } from '../settings';
-import { RpgCreateCampaignWizard as LegacyRpgCreateCampaignWizard } from './RpgCreateCampaignWizardLegacy';
+import { RpgCampaignCharacterStep } from './RpgCampaignCharacterStep';
 import { RpgWorldCampaignCatalog } from './RpgWorldCampaignCatalog';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';
 
@@ -334,7 +334,7 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
         </p>
       </section>
       {launchReady && selectedWorld && selectedScenario ? (
-        <LegacyRpgCreateCampaignWizard
+        <RpgCampaignCharacterStep
           {...props}
           onCreateCampaign={launchExistingCampaign}
           onEnterWorld={enterExistingWorld}
