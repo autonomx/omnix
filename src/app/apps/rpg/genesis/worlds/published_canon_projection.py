@@ -6,6 +6,10 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 
+# Entities the world's author wrote: runtime lore never generates over them.
+AUTHORED_CANON = "published_world"
+
+
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
@@ -192,7 +196,10 @@ def project_published_canon(
             "backstory": _text(row.get("biography")),
             "personality": ", ".join(_text(item) for item in personality) if isinstance(personality, list) else _text(personality),
             "goals": [_text(goal) for goal in row.get("goals") or () if _text(goal)],
+            "motives": [_text(goal) for goal in row.get("goals") or () if _text(goal)],
+            "speech_style": _text(row.get("speech_style")),
             "visibility": "public",
+            "canon_source": AUTHORED_CANON,
         }
     from .published_world_setup import published_locations
 
@@ -210,6 +217,7 @@ def project_published_canon(
             "description": place["description"],
             "region_id": place["region_id"],
             "visibility": "public",
+            "canon_source": AUTHORED_CANON,
         }
     for key, kind, topic_id in (("quests", "quest", "quests"), ("items", "item", "items")):
         for row in _rows(bible.get(key)):

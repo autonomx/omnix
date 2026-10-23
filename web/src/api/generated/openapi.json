@@ -49871,6 +49871,30 @@
         "title": "RpgTacticalResponse",
         "type": "object"
       },
+      "RpgTurnDraftResponse": {
+        "description": "The narration written so far for a turn still running (display only; the turn's answer replaces it).",
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "done",
+          "found"
+        ],
+        "title": "RpgTurnDraftResponse",
+        "type": "object"
+      },
       "RpgTurnResponse": {
         "additionalProperties": true,
         "properties": {
@@ -88539,6 +88563,63 @@
           }
         },
         "summary": "Rpg Apply Turn",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/turn-draft": {
+      "get": {
+        "description": "The narration so far of the caller's own turn in progress, named by its submission id.",
+        "operationId": "rpg_turn_draft_api_rpg_sessions__session_id__turn_draft_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgTurnDraftResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Turn Draft Api Rpg Sessions  Session Id  Turn Draft Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Turn Draft",
         "tags": [
           "rpg-session"
         ]

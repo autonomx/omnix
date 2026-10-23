@@ -52,7 +52,10 @@ class _Stdin(io.StringIO):
         self.record = record
 
     def close(self):
-        self.record["prompt"] = self.getvalue()
+        # The prompt goes in as one stream-json user message.
+        message = json.loads(self.getvalue())
+        assert message["type"] == "user" and message["message"]["role"] == "user"
+        self.record["prompt"] = message["message"]["content"]
         super().close()
 
 
@@ -61,6 +64,7 @@ def provider(monkeypatch):
     _FakePopen.calls = []
     monkeypatch.setattr(module, "resolve_claude_executable", lambda _path: "claude")
     monkeypatch.setattr(module.subprocess, "Popen", _FakePopen)
+    monkeypatch.setattr(module, "_WARM_POOL", module._WarmPool())
     return module.ClaudeCliProvider(ProviderConfig(provider_type="claude_cli", extra_params={"effort": "high"}))
 
 
@@ -78,6 +82,7 @@ def test_a_call_runs_the_cli_as_a_plain_llm_with_the_omnix_system_prompt(provide
     assert command[command.index("--tools") + 1] == ""
     assert command[command.index("--setting-sources") + 1] == ""
     assert {"--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands"} <= set(command)
+    assert command[command.index("--input-format") + 1] == "stream-json"
     assert command[command.index("--effort") + 1] == "high"
     assert call["system"] == "Be terse." and call["prompt"] == "ping"
     assert not Path(call["cwd"]).exists()  # the empty working directory is removed
@@ -159,3 +164,92 @@ def test_a_json_schema_goes_to_the_cli_and_its_structured_output_is_the_answer(p
     command = _FakePopen.calls[0]["command"]
     assert json.loads(command[command.index("--json-schema") + 1]) == schema
     assert "JSON Schema" in _FakePopen.calls[0]["system"]
+
+
+class _WaitingPopen(_FakePopen):
+    """A process that keeps running until its prompt arrives, like a started ``claude -p`` waiting on stdin."""
+
+    killed: list["_WaitingPopen"] = []
+
+    def __init__(self, command, **kwargs):
+        super().__init__(command, **kwargs)
+        self.alive = True
+
+    def poll(self):
+        return None if self.alive and "prompt" not in self.record else 0
+
+    def kill(self):
+        self.alive = False
+        _WaitingPopen.killed.append(self)
+
+    def wait(self, timeout=None):
+        return 0
+
+
+@pytest.fixture
+def pooled(monkeypatch):
+    _FakePopen.calls = []
+    _WaitingPopen.killed = []
+    monkeypatch.setattr(module, "resolve_claude_executable", lambda _path: "claude")
+    monkeypatch.setattr(module.subprocess, "Popen", _WaitingPopen)
+    pool = module._WarmPool()
+    monkeypatch.setattr(module, "_WARM_POOL", pool)
+    _FakePopen.stdout_text = _events("ok")
+    return module.ClaudeCliProvider(ProviderConfig(provider_type="claude_cli")), pool
+
+
+def test_a_repeated_kind_of_call_takes_a_process_started_ahead_of_it(pooled) -> None:
+    provider, pool = pooled
+    ask = lambda text, system="Narrate.": provider.chat_completion([ChatMessage("system", system), ChatMessage("user", text)])  # noqa: E731
+
+    ask("first")
+    assert len(_FakePopen.calls) == 1  # a first call of its kind leaves nothing waiting
+    ask("second")
+    assert len(_FakePopen.calls) == 3  # the second starts the next one ahead
+    waiting = _FakePopen.calls[2]
+    assert "prompt" not in waiting
+    ask("third")
+    assert waiting["prompt"] == "third"  # the third call answered from the waiting process
+    assert len(_FakePopen.calls) == 4
+    # Another kind (another system prompt) does not take it.
+    ask("other", system="Summarize.")
+    assert _FakePopen.calls[4]["prompt"] == "other"
+    pool.close()
+    assert all(not process.alive for process in _WaitingPopen.killed)
+
+
+def test_the_pool_keeps_few_processes_and_retires_idle_ones(pooled) -> None:
+    provider, pool = pooled
+    pool.IDLE_SECONDS = 0.05
+    for system in ("A", "B", "C"):
+        for _ in range(2):
+            provider.chat_completion([ChatMessage("system", system), ChatMessage("user", "hi")])
+    assert len(pool._warm) == pool.MAX_WARM  # the oldest waiting process made room
+    assert len(_WaitingPopen.killed) == 1
+    import time
+
+    time.sleep(0.3)
+    assert pool._warm == {}  # idle ones are retired
+    assert len(_WaitingPopen.killed) == 3
+    assert all(not Path(record["cwd"]).exists() for record in _FakePopen.calls)
+
+
+def test_a_schema_call_streams_its_structured_answer_as_it_is_written(provider) -> None:
+    rows = [
+        {"type": "stream_event", "event": {"type": "content_block_delta",
+                                           "delta": {"type": "input_json_delta", "partial_json": '{"blocks": [{"te'}}},
+        {"type": "stream_event", "event": {"type": "content_block_delta",
+                                           "delta": {"type": "input_json_delta", "partial_json": 'xt": "Hi"}]}'}}},
+        {"type": "result", "is_error": False, "structured_output": {"blocks": [{"text": "Hi"}]}, "stop_reason": "end_turn"},
+    ]
+    _FakePopen.stdout_text = "\n".join(json.dumps(row) for row in rows) + "\n"
+    schema_format = {"type": "json_schema", "json_schema": {"name": "x", "schema": {"type": "object"}}}
+    chunks = list(provider.chat_completion([ChatMessage("user", "go")], stream=True, response_format=schema_format))
+
+    assert [chunk.raw_response.get("structured_delta") for chunk in chunks[:-1]] == ['{"blocks": [{"te', 'xt": "Hi"}]}']
+    assert all(chunk.content == "" for chunk in chunks[:-1])
+    assert json.loads(chunks[-1].content) == {"blocks": [{"text": "Hi"}]}
+    # A plain call still answers with the validated structured output only.
+    _FakePopen.stdout_text = "\n".join(json.dumps(row) for row in rows) + "\n"
+    answer = provider.chat_completion([ChatMessage("user", "go")], response_format=schema_format)
+    assert json.loads(answer.content) == {"blocks": [{"text": "Hi"}]}

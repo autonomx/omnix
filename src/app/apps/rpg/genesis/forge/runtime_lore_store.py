@@ -1,6 +1,7 @@
 """Persist on-demand current-scene canon before narrative retrieval."""
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -21,10 +22,15 @@ from .campaign_lore_store import (
     _text,
 )
 from .runtime_lore_materialization import (
+    SceneLoreTarget,
+    enrich_provisional_scene_lore,
+    known_scene_entity,
     materialize_scene_lore,
     scene_lore_entity_is_rich,
     scene_lore_targets,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -111,16 +117,17 @@ def _assert_materialized(
         session,
         explicit_entity_ids=explicit_entity_ids,
     )
+    entities = _mapping(bible.get("entities"))
+    # A target named only by name ("Liora Fen") is the canon entity of that name.
+    resolved = tuple(dict.fromkeys(known_scene_entity(entities, target)[0] for target in targets))
     missing = tuple(
-        target.entity_id
-        for target in targets
-        if not _has_dossier_and_document(bible, target.entity_id)
+        entity_id for entity_id in resolved if not _has_dossier_and_document(bible, entity_id)
     )
     if missing:
         raise RuntimeError(
             "runtime_scene_lore_materialization_incomplete:" + ",".join(missing)
         )
-    return tuple(target.entity_id for target in targets)
+    return resolved
 
 
 def _persist_portable_without_replacing(
@@ -149,8 +156,12 @@ def _pregenerate_scene_lore(
     *,
     explicit_entity_ids: Sequence[str],
     llm_gateway: Any | None,
+    deferred: list[SceneLoreTarget] | None = None,
 ) -> dict[str, Mapping[str, Any]]:
-    """The scene's missing-canon bundles, generated from an unlocked read of the bible."""
+    """The scene's missing-canon bundles, generated from an unlocked read of the bible.
+
+    With ``deferred``, missing targets get the built-in dossier now and are listed for the after-turn job.
+    """
     with unit_of_work(db) as work:
         stored = work.campaign_bibles.get(context, campaign_id)
         bible = deepcopy(stored["document"] if stored is not None else portable)
@@ -168,8 +179,78 @@ def _pregenerate_scene_lore(
         canon_revision=next_revision,
         llm_gateway=llm_gateway,
         generated=bundles,
+        deferred=deferred,
     )
     return bundles
+
+
+def _enqueue_scene_lore_enrichment(campaign_id: str, targets: Sequence[SceneLoreTarget]) -> None:
+    try:
+        from .scene_lore_job import enqueue_scene_lore_enrichment
+
+        enqueue_scene_lore_enrichment(campaign_id, [target.as_dict() for target in targets])
+    except Exception:
+        # The built-in dossiers stand; a later turn that meets the entity queues it again.
+        logger.warning("scene lore enrichment was not queued for %s", campaign_id, exc_info=True)
+
+
+def enrich_scene_lore(
+    campaign_id: str,
+    targets: Sequence[Mapping[str, Any]],
+    *,
+    database: Any | None = None,
+    llm_gateway: Any | None = None,
+) -> dict[str, Any]:
+    """Write the full dossiers for a turn's provisional ones (the ``rpg.scene_lore`` job).
+
+    The model calls run on an unlocked read; the locked pass merges their bundles
+    into the bible as it is then, so a turn that changed it meanwhile is kept.
+    """
+
+    db = database or default_database()
+    context = current_tenant()
+    with unit_of_work(db) as work:
+        stored = work.campaign_bibles.get(context, campaign_id)
+        if stored is None:
+            return {"changed": False, "reason": "campaign_bible_missing"}
+        bible = deepcopy(stored["document"])
+        world_canon = _pinned_world_canon(work, context, campaign_id)
+    # The published world's canon informs the dossiers, but only the campaign's own bible is written.
+    context_bible = _merge_published_world_canon(world_canon, bible, campaign_id=campaign_id) if world_canon else bible
+    bundles: dict[str, Mapping[str, Any]] = {}
+    _, preview = enrich_provisional_scene_lore(
+        context_bible, targets, campaign_id=campaign_id, llm_gateway=llm_gateway, generated=bundles,
+    )
+    if not preview.get("changed"):
+        return {"changed": False, "reason": "nothing_to_enrich"}
+    with unit_of_work(db) as work:
+        stored = work.campaign_bibles.get(context, campaign_id, for_update=True)
+        if stored is None:
+            return {"changed": False, "reason": "campaign_bible_missing"}
+        bible, report = enrich_provisional_scene_lore(
+            deepcopy(stored["document"]),
+            targets,
+            campaign_id=campaign_id,
+            canon_revision=int(stored["revision"]) + 1,
+            llm_gateway=False,
+            pregenerated=bundles,
+        )
+        if report.get("changed"):
+            stored = work.campaign_bibles.put(
+                context,
+                campaign_id=campaign_id,
+                document=bible,
+                expected_revision=int(stored["revision"]),
+                provenance={
+                    **_mapping(stored.get("provenance")),
+                    "last_source": "runtime_scene_enrichment_v1",
+                    "enriched_entity_ids": list(report.get("enriched_entity_ids") or ()),
+                },
+                consistency_report=_mapping(stored.get("consistency_report")),
+                completeness=_mapping(stored.get("completeness")),
+            )
+        work.commit()
+    return {**report, "revision": int(stored["revision"])}
 
 
 def ensure_turn_scene_lore(
@@ -212,6 +293,9 @@ def ensure_turn_scene_lore(
         # The model calls run before the campaign and bible rows are locked, so
         # other turns of this campaign do not wait on them (WP-8.6). The locked
         # pass merges those bundles into the current bible without a model call.
+        # With the app's own model, a newcomer's full dossier is written after the
+        # turn (``rpg.scene_lore``): the turn uses the built-in one meanwhile.
+        deferred: list[SceneLoreTarget] | None = [] if llm_gateway is None else None
         bundles = _pregenerate_scene_lore(
             db,
             context,
@@ -221,6 +305,7 @@ def ensure_turn_scene_lore(
             portable,
             explicit_entity_ids=explicit_entity_ids,
             llm_gateway=llm_gateway,
+            deferred=deferred,
         )
         with unit_of_work(db) as work:
             _campaign_exists(work, context, campaign_id, session)
@@ -244,7 +329,7 @@ def ensure_turn_scene_lore(
                 llm_gateway=False,
                 pregenerated=bundles,
             )
-            _assert_materialized(bible, session, result, explicit_entity_ids)
+            target_ids = _assert_materialized(bible, session, result, explicit_entity_ids)
             should_write = (
                 stored is None
                 or campaign_bible_hash(bible)
@@ -269,9 +354,7 @@ def ensure_turn_scene_lore(
                             else {}
                         ),
                         "last_source": "runtime_scene_materialization_v1",
-                        "target_entity_ids": [
-                            target.entity_id for target in targets
-                        ],
+                        "target_entity_ids": list(target_ids),
                         "created_entity_ids": list(
                             report.get("created_entity_ids") or ()
                         ),
@@ -292,6 +375,8 @@ def ensure_turn_scene_lore(
                 )
             work.commit()
         assert stored is not None
+        if deferred:
+            _enqueue_scene_lore_enrichment(campaign_id, deferred)
         hydrated = _hydrate_session(
             session,
             stored["document"],
@@ -313,7 +398,7 @@ def ensure_turn_scene_lore(
             "campaign_id": campaign_id,
             "revision": int(stored["revision"]),
             "content_hash": str(stored["content_hash"]),
-            "target_entity_ids": [target.entity_id for target in targets],
+            "target_entity_ids": list(target_ids),
         }
     except Exception as database_error:
         fallback_gateway = llm_gateway if llm_gateway is not None else False

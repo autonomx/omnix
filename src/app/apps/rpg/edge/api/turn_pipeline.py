@@ -87,8 +87,11 @@ def _launch_gate_session(session_id: str) -> dict[str, Any] | None:
 
 def _execute_with_authority_snapshot(**kwargs: Any) -> Response:
     from app.persistence.authority import authority_snapshot_scope
+    from app.apps.rpg.narration.narration_drafts import narration_draft_context
 
-    with authority_snapshot_scope():
+    # The client names its submission, so it can read the narration's draft while the turn runs.
+    submission_id = str(kwargs["request"].headers.get("x-omnix-rpg-submission-id") or "").strip()
+    with authority_snapshot_scope(), narration_draft_context(str(kwargs["session_id"]), submission_id):
         return _execute_foreground_rpg_turn(**kwargs)
 
 
@@ -161,10 +164,12 @@ def _execute_foreground_rpg_turn(
         from app.apps.rpg.session import interactive_first_call_runtime
         from app.apps.rpg.foundation.llm_priority import foreground_rpg_llm_priority
         from app.apps.rpg.session.jobs.turn_job_mirror import execute_turn_with_job_mirror
+        from app.apps.rpg.session.deferred_narration_guard import canonical_presentation_follows_context
 
         with rpg_pipeline_span("turn.apply") as span:
             def apply_foreground_turn() -> dict[str, Any]:
-                with foreground_rpg_llm_priority():
+                # The narrative engine presents this turn below (``present_authoritative_turn``).
+                with foreground_rpg_llm_priority(), canonical_presentation_follows_context():
                     return execute_turn_with_job_mirror(
                         interactive_first_call_runtime.apply_turn,
                         session_id,

@@ -159,7 +159,11 @@ def _dialogue_beats(
             if str(value or "").strip()
         )
     )
-    narrator_refs = _evidence_ids(narrator_evidence, *speakers)
+    # What the turn did (a purchase, a quest taken on) is narrated even when someone answers.
+    confirmed = tuple(
+        record.evidence_id for record in narrator_evidence if record.authority is AuthorityClass.CONFIRMED_TURN
+    )
+    narrator_refs = tuple(dict.fromkeys((*confirmed, *_evidence_ids(narrator_evidence, *speakers))))
     beats.append(
         _beat(
             len(beats) + 1,

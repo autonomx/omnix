@@ -86,6 +86,7 @@ from app.apps.rpg.session.combat_action_reconciliation import (
     _reconcile_invalid_companion_command as _reconcile_invalid_companion_command,
 )
 from app.apps.rpg.session.deferred_narration_guard import (
+    canonical_presentation_follows,
     runtime_narration_follows_context,
     suppress_provider_runtime_narration as suppress_provider_runtime_narration,
 )
@@ -591,8 +592,9 @@ def apply_turn(
     _stage_started = __import__("time").perf_counter()
     record_turn_perf_trace_stack("runtime_core_before_apply_turn_authoritative")
     # The runtime narration stage below calls the provider for this turn, so the
-    # authoritative chain need not narrate it too (WP-8.6: one narration call).
-    runtime_narration_will_follow = (
+    # authoritative chain need not narrate it too (WP-8.6: one narration call);
+    # nor need it when the narrative engine presents the turn.
+    runtime_narration_will_follow = canonical_presentation_follows() or (
         not suppress_provider_runtime_narration() and get_runtime_llm_provider() is not None
     )
     with runtime_narration_follows_context(runtime_narration_will_follow):
@@ -856,6 +858,10 @@ def apply_turn(
         )
         if suppressed:
             record_narration_trace("get_runtime_llm_provider_return_none_due_to_suppression")
+            runtime_provider = None
+        elif canonical_presentation_follows():
+            # The narrative engine writes this turn's prose; a model draft here would be discarded.
+            record_narration_trace("runtime_provider_skipped_for_canonical_presentation")
             runtime_provider = None
         else:
             runtime_provider = get_runtime_llm_provider()

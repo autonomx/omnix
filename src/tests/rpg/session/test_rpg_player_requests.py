@@ -159,3 +159,25 @@ def test_the_sheet_keeps_the_hero_name_counts_turns_and_shows_experience() -> No
     dialogue_stage, authoritative_stage = count_player_turn(turn_start()), count_player_turn(turn_start())
     assert dialogue_stage["state"]["turn_count"] == authoritative_stage["state"]["turn_count"] == 3
     assert authoritative_stage["manifest"]["turn_count"] == 3
+
+
+def test_when_someone_answers_the_narrator_still_tells_what_the_turn_did() -> None:
+    from app.apps.rpg.narration.narrative_engine import (
+        DeterministicBeatPlanner,
+        PresentationProfile,
+        TurnPresentationRequest,
+    )
+
+    outcome = EvidenceRecord(evidence_id="runtime:turn:outcome", content="You pay 8 copper to Bran for A drink.",
+                             authority=AuthorityClass.CONFIRMED_TURN, visibility=VisibilityClass.PLAYER_KNOWN)
+    profile = EvidenceRecord(evidence_id="lore:bran", content="Bran keeps the Rusty Flagon.",
+                             authority=AuthorityClass.OBJECTIVE_CANON, visibility=VisibilityClass.PUBLIC,
+                             entity_refs=("npc:bran",))
+    request = TurnPresentationRequest(
+        request_id="request:drink", turn_id="turn:3", campaign_id="campaign:test", player_input="buy a drink",
+        actor_ids=("npc:bran",), target_actor_id="npc:bran", presentation_profile=PresentationProfile.FAST,
+        metadata={"response_mode": "dialogue"},
+    )
+    plan = DeterministicBeatPlanner().plan(request, (profile, outcome))
+    narrator = plan.beats[0]
+    assert narrator.speaker_id is None and "runtime:turn:outcome" in narrator.evidence_refs

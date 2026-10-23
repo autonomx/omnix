@@ -198,6 +198,10 @@ def test_published_world_campaign_plays_in_its_world(tmp_path, monkeypatch) -> N
         assert arrived["environment_snapshot"]["display"]["region"] == "Starfall March"
         # Every turn counts, the dialogue turn too; the hero keeps their name and their experience meter.
         assert arrived["turn_count"] == 3 and stored["manifest"]["turn_count"] == 3
+        # The world's own people and places are authored: meeting them writes no new dossier. And the narrative
+        # engine writes the prose, so no model draft of the turn's narration is made only to be replaced.
+        assert "canon_dossier" not in model.calls, model.calls
+        assert "narration_candidates" not in model.calls, model.calls
         assert stored["simulation_state"]["player_state"]["name"] == "Wren"
         assert arrived["player"]["xp"]["max"] == stored["simulation_state"]["player_state"]["xp_to_next"]
 
@@ -366,5 +370,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert any("You take on the quest Voices in the Phone" in text for text in told)
         assert any("Your practice earns 10 experience in swordsmanship" in text for text in told)
         assert "for A hot meal" in told[-1] and "It eases your hunger." in told[-1]
+        # Every one of these commands is understood by the game itself: none asked the model what it meant.
+        assert "semantic_intent" not in model.calls and "dialogue" not in model.calls, model.calls
     finally:
         job_store.reset_default_job_store_factory_for_tests()

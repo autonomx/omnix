@@ -866,6 +866,14 @@ class RpgLaunchResponse(TypedDict, total=False):
     error: NotRequired[str]
 
 
+class RpgTurnDraftResponse(TypedDict, total=True):
+    """The narration written so far for a turn still running (display only; the turn's answer replaces it)."""
+
+    text: str
+    done: bool
+    found: bool
+
+
 class RpgLoadoutActionResponse(RpgLaunchResponse, total=False):
     event: NotRequired[dict[str, Any]]
 

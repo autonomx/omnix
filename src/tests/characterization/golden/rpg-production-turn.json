@@ -5,12 +5,7 @@
       "command": "look around",
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:1",
-      "model_calls": [
-        "semantic_intent",
-        "semantic_intent",
-        "narration_candidates",
-        "canon_dossier"
-      ],
+      "model_calls": [],
       "narrative": {
         "blocks": [
           {
@@ -134,25 +129,37 @@
       "interaction_id": "interaction:3",
       "model_calls": [
         "semantic_intent",
-        "semantic_intent",
-        "narration_candidates",
-        "canon_dossier"
+        "semantic_intent"
       ],
       "narrative": {
         "blocks": [
           {
-            "kind": "action",
-            "purpose": "resolved_action",
+            "kind": "narration",
+            "purpose": "physical_reaction",
             "sequence": 1,
             "speaker_id": null,
             "text": "You take in your surroundings."
           },
           {
-            "kind": "choice",
-            "purpose": "offered_choice",
+            "kind": "dialogue",
+            "purpose": "direct_answer",
             "sequence": 2,
+            "speaker_id": "npc:bran",
+            "text": "Direct answer: You take in your surroundings."
+          },
+          {
+            "kind": "narration",
+            "purpose": "lore_reveal",
+            "sequence": 3,
             "speaker_id": null,
-            "text": "Offered choice: You take in your surroundings."
+            "text": "Lore reveal: You take in your surroundings."
+          },
+          {
+            "kind": "dialogue",
+            "purpose": "continuation",
+            "sequence": 4,
+            "speaker_id": "npc:bran",
+            "text": "Continuation: You take in your surroundings."
           }
         ],
         "validation": {
@@ -183,10 +190,27 @@
       "turn_id": "turn:2",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
-        "messages": [],
-        "narration": "You take in your surroundings.",
-        "npc": {},
-        "plain_text": "You take in your surroundings."
+        "messages": [
+          {
+            "kind": "npc_dialogue",
+            "speaker": "Bran",
+            "speaker_id": "npc:bran",
+            "text": "Direct answer: You take in your surroundings."
+          },
+          {
+            "kind": "npc_dialogue",
+            "speaker": "Bran",
+            "speaker_id": "npc:bran",
+            "text": "Continuation: You take in your surroundings."
+          }
+        ],
+        "narration": "You take in your surroundings.\n\nLore reveal: You take in your surroundings.",
+        "npc": {
+          "line": "Direct answer: You take in your surroundings.",
+          "speaker": "Bran",
+          "speaker_id": "npc:bran"
+        },
+        "plain_text": "You take in your surroundings.\n\nLore reveal: You take in your surroundings.\n\nBran: \"Direct answer: You take in your surroundings.\"\n\nBran: \"Continuation: You take in your surroundings.\""
       }
     },
     {
@@ -195,9 +219,7 @@
       "interaction_id": "interaction:4",
       "model_calls": [
         "semantic_intent",
-        "semantic_intent",
-        "narration_candidates",
-        "canon_dossier"
+        "semantic_intent"
       ],
       "narrative": {
         "blocks": [
@@ -254,12 +276,7 @@
       "command": "wait",
       "contract_version": "rpg_turn_response_v2",
       "interaction_id": "interaction:5",
-      "model_calls": [
-        "semantic_intent",
-        "semantic_intent",
-        "narration_candidates",
-        "canon_dossier"
-      ],
+      "model_calls": [],
       "narrative": {
         "blocks": [
           {

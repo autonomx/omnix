@@ -5,12 +5,16 @@ credentials: authentication stays with the local Claude client (``claude``
 login or its own configuration). Each call runs one ``claude -p`` process in an
 empty working directory, with every tool, setting source, MCP server, slash
 command and session file disabled, so the model answers as a plain LLM with the
-system prompt Omnix supplies. Output arrives as ``stream-json`` events, which
-serve both streaming and single responses. A JSON Schema response format is
-passed to the CLI's own ``--json-schema`` validation as well as to the prompt.
+system prompt Omnix supplies. A call of a kind made before may take a process
+started ahead of it (``_WarmPool``), still one fresh process per call. The prompt
+goes in, and the output arrives, as ``stream-json`` events, which serve both
+streaming and single responses. A JSON Schema response format is passed to the
+CLI's own ``--json-schema`` validation as well as to the prompt.
 """
 from __future__ import annotations
 
+import atexit
+import hashlib
 import json
 import logging
 import os
@@ -21,7 +25,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from app.config.env import environment_copy as _process_environment
 
@@ -67,6 +71,99 @@ _MAX_SCHEMA_ARGUMENT = 16_000
 
 class ClaudeCliTimeout(ProviderError):
     """The Claude CLI did not finish within the request's deadline."""
+
+
+def _call_kind(executable: str, model: str, effort: str, system: str, schema: dict[str, Any] | None) -> str:
+    """Calls of one kind start the same process: the same CLI, model, effort, system prompt and schema."""
+    material = json.dumps([executable, model, effort, system, schema], sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _discard(process: subprocess.Popen[str], workdir: str) -> None:
+    if process.poll() is None:
+        process.kill()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    shutil.rmtree(workdir, ignore_errors=True)
+
+
+class _WarmPool:
+    """CLI processes started ahead of the next call of a kind already made, waiting for its prompt.
+
+    Starting ``claude`` takes about 0.6 s before it can answer; a waiting process
+    answers at once. Each call still gets a fresh process and conversation. An
+    idle process holds ~200 MB, so the pool is small: only kinds made at least
+    twice, at most ``MAX_WARM`` processes, each retired after ``IDLE_SECONDS``.
+    """
+
+    MAX_WARM = 2
+    IDLE_SECONDS = 120.0
+    MIN_USES = 2
+    _MAX_KINDS = 64
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._warm: dict[str, tuple[subprocess.Popen[str], str, float]] = {}
+        self._uses: dict[str, int] = {}
+
+    def take(self, kind: str) -> tuple[subprocess.Popen[str], str] | None:
+        with self._lock:
+            entry = self._warm.pop(kind, None)
+        if entry is None:
+            return None
+        process, workdir, _ = entry
+        if process.poll() is not None:
+            _discard(process, workdir)
+            return None
+        return process, workdir
+
+    def refill(self, kind: str, spawn: Callable[[], tuple[subprocess.Popen[str], str]]) -> None:
+        with self._lock:
+            if kind not in self._uses and len(self._uses) >= self._MAX_KINDS:
+                self._uses.clear()
+            self._uses[kind] = self._uses.get(kind, 0) + 1
+            if self._uses[kind] < self.MIN_USES or kind in self._warm:
+                return
+            evicted = []
+            while len(self._warm) >= self.MAX_WARM:
+                oldest = min(self._warm, key=lambda key: self._warm[key][2])
+                evicted.append(self._warm.pop(oldest))
+        for process, workdir, _ in evicted:
+            _discard(process, workdir)
+        try:
+            process, workdir = spawn()
+        except Exception:
+            logger.debug("a warm Claude CLI process could not start", exc_info=True)
+            return
+        with self._lock:
+            stale = self._warm.get(kind)
+            self._warm[kind] = (process, workdir, time.monotonic())
+        if stale is not None:
+            _discard(stale[0], stale[1])
+        timer = threading.Timer(self.IDLE_SECONDS, self._expire, args=(kind, process))
+        timer.daemon = True
+        timer.start()
+
+    def _expire(self, kind: str, process: subprocess.Popen[str]) -> None:
+        with self._lock:
+            entry = self._warm.get(kind)
+            if entry is None or entry[0] is not process:
+                return
+            del self._warm[kind]
+        _discard(entry[0], entry[1])
+
+    def close(self) -> None:
+        with self._lock:
+            entries = list(self._warm.values())
+            self._warm.clear()
+        for process, workdir, _ in entries:
+            _discard(process, workdir)
+
+
+_WARM_POOL = _WarmPool()
+atexit.register(_WARM_POOL.close)
 
 
 def _bundled_executable_candidates() -> list[Path]:
@@ -293,6 +390,8 @@ class ClaudeCliProvider(BaseProvider):
     def _command(self, executable: str, model: str, system_file: Path, schema: dict[str, Any] | None = None) -> list[str]:
         command = [
             executable, "-p",
+            # The prompt arrives as one stream-json message, so a pre-started process can wait for it.
+            "--input-format", "stream-json",
             "--output-format", "stream-json", "--verbose", "--include-partial-messages",
             "--model", model,
             "--system-prompt-file", str(system_file),
@@ -310,6 +409,25 @@ class ClaudeCliProvider(BaseProvider):
                 command += ["--json-schema", encoded]
         return command
 
+    def _spawn(
+        self, executable: str, model: str, system: str, schema: dict[str, Any] | None,
+    ) -> tuple[subprocess.Popen[str], str]:
+        """Start one ``claude -p`` in its own empty working directory; it waits for its prompt on stdin."""
+        workdir = tempfile.mkdtemp(prefix="omnix-claude-")
+        system_file = Path(workdir) / "system.txt"
+        system_file.write_text(system or "You are a helpful assistant.", encoding="utf-8")
+        kwargs: dict[str, Any] = {
+            "stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
+            "cwd": workdir, "env": self._environment(), "text": True, "encoding": "utf-8", "errors": "replace",
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            return subprocess.Popen(self._command(executable, model, system_file, schema), **kwargs), workdir
+        except OSError as exc:
+            shutil.rmtree(workdir, ignore_errors=True)
+            raise ConnectionError(f"Claude CLI could not start: {exc}") from exc
+
     def _run(
         self, model: str, system: str, prompt: str, *, timeout: float, owner: str | None,
         schema: dict[str, Any] | None = None,
@@ -322,21 +440,13 @@ class ClaudeCliProvider(BaseProvider):
         executable = resolve_claude_executable(self.claude_path)
         if not executable:
             raise ConnectionError(f"Claude CLI executable not found: {self.claude_path}")
-        workdir = tempfile.mkdtemp(prefix="omnix-claude-")
         key = owner or f"call:{id(threading.current_thread())}:{time.monotonic_ns()}"
+        kind = _call_kind(executable, model, self.effort, system, schema)
+        warm = _WARM_POOL.take(kind)
+        process, workdir = warm if warm is not None else self._spawn(executable, model, system, schema)
+        # The next call of this kind finds a process already started and waiting.
+        _WARM_POOL.refill(kind, lambda: self._spawn(executable, model, system, schema))
         try:
-            system_file = Path(workdir) / "system.txt"
-            system_file.write_text(system or "You are a helpful assistant.", encoding="utf-8")
-            kwargs: dict[str, Any] = {
-                "stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
-                "cwd": workdir, "env": self._environment(), "text": True, "encoding": "utf-8", "errors": "replace",
-            }
-            if os.name == "nt":
-                kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            try:
-                process = subprocess.Popen(self._command(executable, model, system_file, schema), **kwargs)
-            except OSError as exc:
-                raise ConnectionError(f"Claude CLI could not start: {exc}") from exc
             with self._processes_lock:
                 self._processes[key] = process
             timer = threading.Timer(timeout, process.kill)
@@ -350,7 +460,7 @@ class ClaudeCliProvider(BaseProvider):
             started = time.monotonic()
             try:
                 assert process.stdin is not None and process.stdout is not None
-                process.stdin.write(prompt)
+                process.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": prompt}}) + "\n")
                 process.stdin.close()
                 result: dict[str, Any] | None = None
                 resolved = model
@@ -371,6 +481,12 @@ class ClaudeCliProvider(BaseProvider):
                             if text and schema is None:
                                 streamed = True
                                 yield ChatResponse(content=text, model=model)
+                        elif inner.get("type") == "content_block_delta" and delta.get("type") == "input_json_delta":
+                            # The structured answer as it is written, for a caller showing a draft; the
+                            # final chunk still carries the whole validated answer.
+                            partial = str(delta.get("partial_json") or "")
+                            if partial and schema is not None:
+                                yield ChatResponse(content="", model=model, raw_response={"structured_delta": partial})
                     elif event.get("type") == "system" and event.get("subtype") == "init":
                         resolved = str(event.get("model") or model)
                     elif event.get("type") == "result":

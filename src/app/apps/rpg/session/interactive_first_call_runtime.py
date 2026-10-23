@@ -22,6 +22,8 @@ from app.apps.rpg.session.companion_turn_runtime import _build_turn_id
 from app.apps.rpg.session.service_runtime import service_action_from_result
 from app.apps.rpg.world.companion_acceptance import requested_companion
 from app.apps.rpg.session.player_requests import has_player_requests
+from app.apps.rpg.session.ambient_tick_runtime import is_ambient_tick_command
+from app.apps.rpg.world.travel_graph import resolve_travel_destination
 from app.apps.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
 from app.apps.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
 from app.apps.rpg.foundation.safe_values import copy_state
@@ -197,6 +199,25 @@ def _stateful_runtime_performance_override(
     if narration_mode in {"deferred", "deterministic", "disabled"}:
         merged["enable_live_narration_llm"] = False
     return merged
+
+
+# Commands the runtime resolves from their words alone: asking a model what they mean adds a call and nothing else.
+_PLAIN_OBSERVE_COMMANDS = {"wait", "look", "look around", "listen", "observe", "keep watch"}
+
+
+def _runtime_understood_command(simulation_state: dict[str, Any], player_input: str, *, service_matched: bool) -> str:
+    """Why the intent model can be skipped for this command, or "" when it is needed."""
+    text = _s(player_input).strip().lower().rstrip(".!")
+    if service_matched:
+        return "runtime_request"
+    if is_ambient_tick_command(text) or text in _PLAIN_OBSERVE_COMMANDS:
+        return "observe"
+    try:
+        if resolve_travel_destination(player_input=_s(player_input), state=simulation_state).get("ok"):
+            return "travel"
+    except Exception:
+        logger.debug("suppressed error in %s", "_runtime_understood_command", exc_info=True)
+    return ""
 
 
 def _fast_direct_action(player_input: str, performance_override: dict[str, Any] | None) -> dict[str, Any]:
@@ -862,26 +883,31 @@ def _apply_turn_core(
     action_advisory: dict[str, Any] = {}
     semantic_advisory: dict[str, Any] = {}
     llm_start = perf_counter()
-    try:
-        gateway = build_app_llm_gateway()
-        semantic_advisory = build_compact_dialogue_advisory(
-            llm_gateway=gateway,
-            player_input=_s(player_input),
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=candidate_action,
-            public_state=_d(session.get("state")),
-        )
-        if not semantic_advisory and not service_matched:
-            semantic_advisory = get_semantic_action_advisory(
-            llm_gateway=gateway,
-            player_input=_s(player_input),
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=candidate_action,
+    understood = _runtime_understood_command(simulation_state, _s(player_input), service_matched=service_matched)
+    if understood:
+        runtime_state["first_call_intent_skipped"] = understood
+        session["runtime_state"] = runtime_state
+    else:
+        try:
+            gateway = build_app_llm_gateway()
+            semantic_advisory = build_compact_dialogue_advisory(
+                llm_gateway=gateway,
+                player_input=_s(player_input),
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                candidate_action=candidate_action,
+                public_state=_d(session.get("state")),
             )
-    except Exception as exc:
-        runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
+            if not semantic_advisory and not service_matched:
+                semantic_advisory = get_semantic_action_advisory(
+                llm_gateway=gateway,
+                player_input=_s(player_input),
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                candidate_action=candidate_action,
+                )
+        except Exception as exc:
+            runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
     timing["pre_runtime_intent_llm_ms"] = _ms_since(llm_start)
 
     validation_start = perf_counter()

@@ -25,6 +25,7 @@ from app.apps.rpg.session.jobs.handlers import (
     execute_rpg_turn_job,
 )
 from app.apps.rpg.session.jobs.debug_observer import rpg_debug_job_observer
+from app.apps.rpg.genesis.forge.scene_lore_job import RpgSceneLoreJobInput, execute_scene_lore_job
 
 
 def _turn(context: JobExecutionContext, job):
@@ -37,6 +38,10 @@ def _report(context: JobExecutionContext, job):
 
 def _narration(context: JobExecutionContext, job):
     return execute_rpg_narration_job(context.job_store, job)
+
+
+def _scene_lore(context: JobExecutionContext, job):
+    return execute_scene_lore_job(context.job_store, job)
 
 
 def _rpg_submission_policy(request: CreateJobRequest) -> CreateJobRequest:
@@ -113,6 +118,15 @@ FEATURE = FeatureModule(
             type="rpg.narration",
             handler=_narration,
             input_model=RpgNarrationJobInput,
+            resource_class=ResourceClass.GPU_LLM,
+            timeout_seconds=300,
+            max_attempts=3,
+        ),
+        JobHandlerSpec(
+            # Newcomers' full dossiers, written after the turn that met them.
+            type="rpg.scene_lore",
+            handler=_scene_lore,
+            input_model=RpgSceneLoreJobInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=300,
             max_attempts=3,

@@ -1552,6 +1552,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/sessions/{session_id}/turn-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rpg Turn Draft
+         * @description The narration so far of the caller's own turn in progress, named by its submission id.
+         */
+        get: operations["rpg_turn_draft_api_rpg_sessions__session_id__turn_draft_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/world-catalog": {
         parameters: {
             query?: never;
@@ -6813,6 +6833,18 @@ export interface components {
             /** Turn Id */
             turn_id?: string;
         };
+        /**
+         * RpgTurnDraftResponse
+         * @description The narration written so far for a turn still running (display only; the turn's answer replaces it).
+         */
+        RpgTurnDraftResponse: {
+            /** Done */
+            done: boolean;
+            /** Found */
+            found: boolean;
+            /** Text */
+            text: string;
+        };
         /** RpgTurnResponse */
         RpgTurnResponse: {
             /** Canonical Narrative Response */
@@ -11599,6 +11631,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_turn_draft_api_rpg_sessions__session_id__turn_draft_get: {
+        parameters: {
+            query: {
+                submission_id: string;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgTurnDraftResponse"];
                 };
             };
             /** @description Validation Error */

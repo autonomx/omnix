@@ -198,6 +198,39 @@ describe('rpgTurnUiStore', () => {
     expect(failed?.text).toBe('Who are you speaking to?');
   });
 
+  it('shows the narration as it is written while the turn is still running', async () => {
+    let finishTurn: (response: Response) => void = () => undefined;
+    const draftUrls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/turn-draft?')) {
+        draftUrls.push(url);
+        return new Response(JSON.stringify({ text: 'The forge rings as you arrive.', done: false, found: true }), { status: 200 });
+      }
+      return new Promise<Response>((resolve) => {
+        finishTurn = resolve;
+      });
+    });
+    installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
+
+    const pending = pipelineFetch('/api/rpg/sessions/session%3Abran/turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'Go to the forge' }),
+    });
+    await vi.waitFor(() => {
+      expect(getRpgTurnUiEntries('session:bran').find((entry) => entry.tone !== 'player')?.text)
+        .toBe('The forge rings as you arrive.');
+    }, { timeout: 2000 });
+    expect(draftUrls[0]).toMatch(/\/api\/rpg\/sessions\/session%3Abran\/turn-draft\?submission_id=submit%3A/);
+
+    finishTurn(new Response('not found', { status: 404 }));
+    await pending;
+    const polls = draftUrls.length;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(draftUrls.length).toBe(polls); // polling stops with the turn's answer
+  });
+
   it("turns a refused turn's error code into words", async () => {
     const json = (detail: unknown, status = 400) => new Response(JSON.stringify({ detail }), { status });
     expect(await turnFailureMessage(json({ error: 'target_not_found' }))).toBe('There is no one or nothing by that name here.');

@@ -43,6 +43,7 @@ from app.apps.rpg.edge.api.web_contracts import (
     RpgPresetListResponse,
     RpgSessionListResponse,
     RpgSessionMutationResponse,
+    RpgTurnDraftResponse,
 )
 from app.apps.rpg.edge.api.route_contracts import (
     RpgAbilityCoverageResponse,
@@ -384,6 +385,17 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             command=command,
             request=http_request,
         )
+
+    @router.get(
+        "/api/rpg/sessions/{session_id}/turn-draft",
+        tags=["rpg-session"],
+        responses=documented(RpgTurnDraftResponse),
+    )
+    def rpg_turn_draft(session_id: str, submission_id: str = Query(min_length=1, max_length=200)) -> dict[str, Any]:
+        """The narration so far of the caller's own turn in progress, named by its submission id."""
+        from app.apps.rpg.narration.narration_drafts import read_narration_draft
+
+        return read_narration_draft(session_id, submission_id)
 
     @router.post(
         "/api/rpg/local-qualification/dialogue-fixture",
