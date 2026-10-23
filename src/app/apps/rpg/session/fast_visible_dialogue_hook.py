@@ -135,7 +135,7 @@ def _try_fast_visible_dialogue(
         semantic_advisory=semantic_advisory,
         selection=selection,
     )
-    result["turn_id"] = runtime.canonical_runtime._build_turn_id(runtime_state)
+    result["turn_id"] = runtime._build_turn_id(runtime_state)
     result["tick"] = int(runtime_state.get("tick", 0) or 0)
     result["llm_called"] = False
     result["llm_purpose"] = "fast_visible_dialogue_intent_skip"

@@ -34,7 +34,8 @@ def _default_executor(session: Any, command_text: str) -> Any:
         performance_override={
             "enable_live_narration_llm": True,
             "narration_mode": "blocking",
-            "fast_visible_dialogue": True,
+            # As the play screen's turns: addressed dialogue takes the short one-call path.
+            "fast_visible_dialogue": False,
         },
         session_override=session_data,
     )

@@ -364,12 +364,17 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         hungry = stored()["simulation_state"]["survival"]
         assert hungry["enabled"] is True and hungry["hunger"] > 0 and hungry["thirst"] > 0
 
+        # Asking someone present a question is one short model call for their line, not the full narrative writer.
+        calls, writes = len(model.calls), len(told)
+        turn("I ask Orik Stonewake what he thinks of the newcomers.")
+        assert model.calls[calls:] == ["turn_narration"] and len(told) == writes, model.calls[calls:]
+
         # A meal at the inn costs coin and eases hunger.
         purse = public()["player"]["currency"]
         turn("I buy a meal from Orik Stonewake.")
         assert copper(public()["player"]["currency"]) < copper(purse)
         assert stored()["simulation_state"]["survival"]["hunger"] < hungry["hunger"]
-        assert public()["turn_count"] == 6
+        assert public()["turn_count"] == 7
         # The narrator is told what the turns did, so it cannot invent otherwise.
         assert any("You take on the quest Voices in the Phone" in text for text in told)
         assert any("Your practice earns 10 experience in swordsmanship" in text for text in told)

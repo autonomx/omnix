@@ -178,7 +178,10 @@ def _execute_foreground_rpg_turn(
                         performance_override={
                             "enable_live_narration_llm": True,
                             "narration_mode": "blocking",
-                            "fast_visible_dialogue": True,
+                            # Addressed dialogue takes the short path (one model call writes the
+                            # line, 2-3 s); the fast visible-dialogue stage writes it through the
+                            # full narrative writer instead, about 13 s with the Claude CLI.
+                            "fast_visible_dialogue": False,
                         },
                     )
 

@@ -1044,6 +1044,30 @@ def _drop_provisional(bible: dict[str, Any], target_id: str) -> None:
         bible["discovery_state"] = discovery
 
 
+def _bound_to_target(bundle: Mapping[str, Any], target: SceneLoreTarget) -> dict[str, Any]:
+    """The model's dossier for ``target`` under the target's own id: a same-named entity under another id would
+    be a second copy of the same person, place or thing."""
+    bound = deepcopy(dict(bundle))
+    name = target.name.casefold()
+    renamed: set[str] = set()
+    for row in bound.get("entities") or ():
+        if not isinstance(row, dict):
+            continue
+        entity_id = _text(row.get("id") or row.get("entity_id"))
+        if entity_id != target.entity_id and _text(row.get("name")).casefold() == name:
+            renamed.add(entity_id)
+            row["id"] = target.entity_id
+            row.pop("entity_id", None)
+    for row in bound.get("documents") or ():
+        if isinstance(row, dict) and renamed:
+            for key in ("entity_refs", "entity_ids"):
+                if isinstance(row.get(key), list):
+                    row[key] = [target.entity_id if _text(ref) in renamed else ref for ref in row[key]]
+            if _text(row.get("entity_id")) in renamed:
+                row["entity_id"] = target.entity_id
+    return bound
+
+
 def enrich_provisional_scene_lore(
     bible: Mapping[str, Any],
     targets: Sequence[Mapping[str, Any]],
@@ -1082,6 +1106,8 @@ def enrich_provisional_scene_lore(
             generated[target.entity_id] = bundle
         if bundle.get("generator") == DETERMINISTIC_GENERATOR:
             continue
+        if ":" in target.entity_id:
+            bundle = _bound_to_target(bundle, target)
         _drop_provisional(candidate, target.entity_id)
         entity_ids, _ = _merge_bundle(candidate, bundle, revision=revision, source_target=target)
         enriched.extend(entity_ids)
@@ -1105,6 +1131,10 @@ def known_scene_entity(entities: Mapping[str, Any], target: SceneLoreTarget) -> 
         for entity_id, entity in entities.items()
         if _text(_mapping(entity).get("name") or _mapping(entity).get("title")).casefold() == wanted
     ]
+    # Several of that name (a model-written copy beside the author's): the author's is the one meant.
+    authored = [row for row in named if _text(row[1].get("canon_source")) == "published_world"]
+    if len(authored) == 1:
+        return authored[0]
     return named[0] if len(named) == 1 else (target.entity_id, existing)
 
 

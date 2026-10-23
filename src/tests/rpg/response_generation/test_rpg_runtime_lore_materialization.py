@@ -572,3 +572,45 @@ def test_a_turn_queues_the_newcomers_dossier_and_the_job_stores_it(monkeypatch) 
         stored = work.campaign_bibles.get(current_tenant(), campaign_id)
         work.rollback()
     assert stored["document"]["entities"]["npc:helix"]["backstory"] == "Helix survived the Seawall Collapse."
+
+
+def test_an_authored_character_stays_authored_in_a_campaigns_own_copy() -> None:
+    from app.apps.rpg.genesis.forge.campaign_lore_store import _merge_published_world_canon
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import SceneLoreTarget, known_scene_entity
+
+    world = {"entities": {"npc:seraphine": {"kind": "npc", "name": "Princess Seraphine", "canon_source": "published_world"}}}
+    # The campaign stored the character before authorship was recorded, and a model later wrote a same-named copy.
+    campaign = {"entities": {
+        "npc:seraphine": {"kind": "npc", "name": "Princess Seraphine", "description": "Campaign notes."},
+        "npc:princess-seraphine": {"kind": "npc", "name": "Princess Seraphine", "description": "A model's copy."},
+    }}
+    merged = _merge_published_world_canon(world, campaign, campaign_id="campaign:x")
+    seraphine = merged["entities"]["npc:seraphine"]
+    assert seraphine["canon_source"] == "published_world" and seraphine["description"] == "Campaign notes."
+    assert scene_lore_entity_is_rich(seraphine)
+    # A bare name meets the author's entity, not the copy.
+    target = SceneLoreTarget(entity_id="Princess Seraphine", kind="entity", name="Princess Seraphine")
+    assert known_scene_entity(merged["entities"], target)[0] == "npc:seraphine"
+
+
+def test_a_written_dossier_keeps_its_targets_id() -> None:
+    from app.apps.rpg.genesis.forge.runtime_lore_materialization import enrich_provisional_scene_lore
+
+    class Gateway:
+        def generate(self, *_args, **_kwargs):
+            # The model names the same person under its own id.
+            return _HELIX_BUNDLE.replace('"npc:helix"', '"npc:helix-the-supervisor"')
+
+    session = _new_town_session()
+    session["state"]["current_location"] = {}
+    deferred: list = []
+    bible, _ = materialize_scene_lore(
+        {"entities": {}, "documents": []}, session, {"scene": {"present_npc_ids": ["npc:helix"]}},
+        campaign_id="campaign:new-town", llm_gateway=False, deferred=deferred,
+    )
+    enriched, _ = enrich_provisional_scene_lore(
+        bible, [target.as_dict() for target in deferred], campaign_id="campaign:new-town", llm_gateway=Gateway(),
+    )
+    assert "npc:helix-the-supervisor" not in enriched["entities"]
+    assert enriched["entities"]["npc:helix"]["backstory"] == "Helix survived the Seawall Collapse."
+    assert any("npc:helix" in row.get("entity_refs", []) and row["title"] == "Helix of the Docks" for row in enriched["documents"])
