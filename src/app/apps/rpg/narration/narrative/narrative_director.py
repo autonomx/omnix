@@ -24,8 +24,9 @@ Design Compliance:
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, Dict, List
+
+from app.apps.rpg.foundation.core.determinism import next_turn_id
 
 from app.apps.rpg.foundation.narrative_event import NarrativeEvent
 
@@ -155,7 +156,7 @@ class NarrativeDirector:
         
         for event in world_events:
             ne = NarrativeEvent(
-                id=str(uuid.uuid4()),
+                id=next_turn_id("narrative.director.event"),
                 type=event.get("type", "unknown"),
                 description=self._extract_description(event),
                 actors=event.get("actors", []),

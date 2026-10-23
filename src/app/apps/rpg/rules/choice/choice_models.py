@@ -11,10 +11,11 @@ irreversible world mutations and belief shifts.
 
 from __future__ import annotations
 
-import time
-import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from app.apps.rpg.foundation.core.determinism import next_turn_id
+from app.runtime.clock import utc_now
 
 
 @dataclass
@@ -36,13 +37,13 @@ class PlayerChoice:
         selected_option: The option the player chose (None until resolved).
     """
 
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=lambda: next_turn_id("rpg.choice"))
     quest_id: str = ""
     stage: str = ""
     description: str = ""
     options: List[Dict[str, Any]] = field(default_factory=list)
 
-    created_at: float = field(default_factory=time.time)
+    created_at: float = field(default_factory=lambda: utc_now().timestamp())
     resolved: bool = False
     selected_option: Optional[Dict[str, Any]] = None
 
@@ -90,12 +91,12 @@ class PlayerChoice:
             New PlayerChoice instance.
         """
         choice = cls(
-            id=data.get("id", str(uuid.uuid4())),
+            id=data.get("id") or next_turn_id("rpg.choice"),
             quest_id=data.get("quest_id", ""),
             stage=data.get("stage", ""),
             description=data.get("description", ""),
             options=data.get("options", []),
-            created_at=data.get("created_at", time.time()),
+            created_at=data.get("created_at", utc_now().timestamp()),
             resolved=data.get("resolved", False),
             selected_option=data.get("selected_option"),
         )
@@ -117,7 +118,7 @@ class ConsequenceRecord:
         applied: Whether this consequence has been applied to the world.
     """
 
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=lambda: next_turn_id("rpg.choice"))
     choice_id: str = ""
     consequence_type: str = ""
     data: Dict[str, Any] = field(default_factory=dict)
@@ -154,11 +155,11 @@ class TimelineEntry:
         tags: Irreversible flags for the world state (e.g., "faction_destroyed").
     """
 
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=lambda: next_turn_id("rpg.choice"))
     choice_id: str = ""
     option_selected: Dict[str, Any] = field(default_factory=dict)
     consequences: List[Dict[str, Any]] = field(default_factory=list)
-    timestamp: float = field(default_factory=time.time)
+    timestamp: float = field(default_factory=lambda: utc_now().timestamp())
     tags: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:

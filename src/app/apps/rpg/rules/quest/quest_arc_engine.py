@@ -6,8 +6,9 @@ multi-stage quest arcs from templates based on detected events.
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, Dict
+
+from app.apps.rpg.foundation.core.determinism import next_turn_id
 
 from .quest_models import Quest, QuestObjective, QuestStage
 from .quest_templates import QUEST_ARCS
@@ -42,7 +43,7 @@ class QuestArcBuilder:
             raise KeyError(f"Unknown quest arc type: {arc_type}")
 
         arc_def = QUEST_ARCS[arc_type]
-        quest_id = str(uuid.uuid4())
+        quest_id = next_turn_id("rpg.quest.arc")
 
         quest = Quest(
             id=quest_id,

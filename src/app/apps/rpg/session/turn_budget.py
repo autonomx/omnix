@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.config.env import env_int
+from app.runtime.clock import utc_now
 
 TURNS_PER_HOUR_ENV = "OMNIX_RPG_TURNS_PER_HOUR"
 DEFAULT_TURNS_PER_HOUR = 600
@@ -64,7 +65,7 @@ def require_turn_budget(*, now: datetime | None = None) -> None:
         raise TurnBudgetExceeded(
             limit=limit,
             used=used,
-            retry_after_seconds=_retry_after(oldest, now=now or datetime.now(timezone.utc)),
+            retry_after_seconds=_retry_after(oldest, now=now or utc_now()),
         )
 
 

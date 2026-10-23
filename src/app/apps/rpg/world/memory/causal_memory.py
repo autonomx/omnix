@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
 from typing import Any, Dict, List
+
+from app.runtime.clock import utc_now
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
 
 DEFAULT_MAX_MEMORIES_PER_SUBJECT = 100
@@ -130,7 +131,7 @@ def make_causal_memory(
         "facts": facts,
         "confidence": confidence,
         "turn_index": turn_index,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": utc_now().isoformat(),
         "tags": list(tags or []),
         "visibility": dict(visibility or {}),
         "audibility": dict(audibility or {}),

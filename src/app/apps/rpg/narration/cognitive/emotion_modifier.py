@@ -52,9 +52,10 @@ Design Rules:
 from __future__ import annotations
 
 import logging
-import random
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from app.apps.rpg.foundation.core.determinism import deterministic_rng
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +96,9 @@ def inject_variance(emotions: Dict[str, float], magnitude: float = 0.05) -> Dict
         Emotional state with injected variance.
     """
     result = dict(emotions)
+    rng = deterministic_rng("cognitive.emotion_variance", {key: round(float(value), 6) for key, value in sorted(result.items())})
     for e in result:
-        result[e] = max(0.0, min(1.0, result[e] + random.uniform(-magnitude, magnitude)))
+        result[e] = max(0.0, min(1.0, result[e] + rng.uniform(-magnitude, magnitude)))
     return result
 
 # Default emotion thresholds

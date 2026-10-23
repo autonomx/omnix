@@ -32,8 +32,9 @@ Key Features:
 
 from __future__ import annotations
 
-import time
 from typing import Any, Dict, List, Optional, Set
+
+from app.runtime.clock import utc_now
 
 # [FIX #3] Story arc saturation prevention
 MAX_ACTIVE_ARCS = 3
@@ -88,7 +89,7 @@ class StoryArc:
         self.entities = entities or set()
         self.progress = max(0.0, min(1.0, progress))
         self.completed = progress >= 1.0
-        self.created_at = time.time()
+        self.created_at = utc_now().timestamp()
         self.tags = tags or []
         self.dependency = dependency
         self.priority = priority

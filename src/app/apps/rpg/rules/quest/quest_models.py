@@ -8,9 +8,10 @@ This module defines the core data structures for multi-stage narrative quests:
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from app.apps.rpg.foundation.core.determinism import next_turn_id
 
 
 @dataclass
@@ -24,7 +25,7 @@ class QuestObjective:
         completed: Whether this objective has been completed.
     """
 
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=lambda: next_turn_id("rpg.quest.record"))
     description: str = ""
     progress: float = 0.0
     completed: bool = False
@@ -114,7 +115,7 @@ class Quest:
         status: Quest status ("active", "completed", "failed").
     """
 
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = field(default_factory=lambda: next_turn_id("rpg.quest.record"))
     title: str = ""
     description: str = ""
     type: str = ""

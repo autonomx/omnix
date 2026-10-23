@@ -3,7 +3,7 @@
 TIER 18: Narrative Intelligence - Meta-AI Story Director
 """
 
-import random
+from app.apps.rpg.foundation.core.determinism import deterministic_rng
 
 
 class EventInjector:
@@ -12,25 +12,26 @@ class EventInjector:
     def inject(self, story_state, world):
         events = []
         phase = story_state.phase
+        rng = deterministic_rng("narrative.event_injector", {"phase": str(phase)})
 
         if phase == "climax":
-            if random.random() < 0.3:
+            if rng.random() < 0.3:
                 events.append({"type": "major_betrayal", "impact": 1.0})
-            if random.random() < 0.2:
+            if rng.random() < 0.2:
                 events.append({"type": "boss_appearance", "impact": 0.9})
 
         elif phase == "falling":
-            if random.random() < 0.4:
+            if rng.random() < 0.4:
                 events.append({"type": "resolution_opportunity", "impact": 0.6})
-            if random.random() < 0.3:
+            if rng.random() < 0.3:
                 events.append({"type": "loose_end", "impact": 0.4})
 
         else:  # rising
-            if random.random() < 0.3:
+            if rng.random() < 0.3:
                 events.append({"type": "complication", "impact": 0.5})
-            if random.random() < 0.2:
+            if rng.random() < 0.2:
                 events.append({"type": "foreshadowing", "impact": 0.3})
-            if random.random() < 0.15:
+            if rng.random() < 0.15:
                 events.append({"type": "minor_conflict", "impact": 0.4})
 
         return events

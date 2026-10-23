@@ -17,7 +17,9 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import secrets
 import uuid
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -135,6 +137,43 @@ def deterministic_turn_uuid(
         raise ValueError("session_id is required for deterministic RPG event IDs")
     session_namespace = uuid.uuid5(uuid.NAMESPACE_URL, session_id)
     return str(uuid.uuid5(session_namespace, f"{turn_index}:{purpose}:{counter}"))
+
+
+def deterministic_rng(purpose: str, subject: Any = None) -> random.Random:
+    """A named decision stream: the active turn's, or outside a turn one fixed by purpose and subject (RQ-4.6).
+
+    Use it wherever game or narration code would otherwise reach for module-level ``random``.
+    """
+    sub_index = stable_sub_index(subject) if subject is not None else 0
+    context = current_turn_context()
+    if context is not None and context.session_seed is not None and context.turn_index is not None:
+        return rng_for(context.session_seed, context.turn_index, purpose, sub_index)
+    material = f"outside-turn:{purpose}:{sub_index}".encode("utf-8")
+    return random.Random(int.from_bytes(hashlib.sha256(material).digest()[:8], "big"))
+
+
+_TURN_ID_COUNTERS: ContextVar[tuple[Any, dict[str, int]] | None] = ContextVar("rpg_turn_id_counters", default=None)
+
+
+def next_turn_id(purpose: str) -> str:
+    """A replay-stable id for something a turn creates: the n-th ``purpose`` id of that turn (RQ-4.6).
+
+    A turn creates its records in a deterministic order, so replaying it, which binds a new
+    turn context, yields the same ids. Outside a turn (campaign creation, tools) nothing is
+    replayed, so the id only has to be unique and is random.
+    """
+    context = current_turn_context()
+    if context is None or not context.session_id or context.turn_index is None:
+        return str(uuid.UUID(bytes=secrets.token_bytes(16), version=4))
+    current = _TURN_ID_COUNTERS.get()
+    # Counting restarts with each bound turn context (its identity, not its values: a replay is a new binding).
+    if current is None or current[0] is not context:
+        current = (context, {})
+        _TURN_ID_COUNTERS.set(current)
+    counters = current[1]
+    counter = counters.get(purpose, 0)
+    counters[purpose] = counter + 1
+    return deterministic_turn_uuid(str(context.session_id), int(context.turn_index), purpose, counter)
 
 
 @dataclass

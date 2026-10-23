@@ -29,8 +29,9 @@ Usage:
 
 from __future__ import annotations
 
-import random
 from typing import Any, Dict, List, Optional
+
+from app.apps.rpg.foundation.core.determinism import deterministic_rng
 
 
 class AgentScheduler:
@@ -85,10 +86,12 @@ class AgentScheduler:
             return []
         
         char_ids = list(characters.keys())
+        tick = (world_state or {}).get("tick") if isinstance(world_state, dict) else None
+        rng = deterministic_rng("agent.scheduler", {"tick": tick, "characters": sorted(char_ids)})
         
         # If no priority selection, use simple random
         if not self.use_priority:
-            random.shuffle(char_ids)
+            rng.shuffle(char_ids)
             selected = char_ids[:self.max_per_tick]
             self._last_selected = selected
             self._track_selection(selected)
@@ -106,7 +109,7 @@ class AgentScheduler:
         # Weight scores with some noise
         noisy_scores = []
         for cid, score in scored:
-            noise = random.uniform(0.7, 1.3)
+            noise = rng.uniform(0.7, 1.3)
             noisy_scores.append((cid, score * noise))
         
         # Sort by noisy score (descending)
