@@ -1,4 +1,4 @@
-import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
+import { useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import type {
   RpgMapDefinition,
   RpgMapObjectDefinition,
@@ -118,7 +118,9 @@ function MapObjectShape({
 }) {
   const spriteWidth = item.sprite?.width ?? 480;
   const spriteHeight = item.sprite?.height ?? 360;
-  const spriteUrl = rpgMapAssetUrl(item.sprite?.asset_id);
+  const [spriteFailed, setSpriteFailed] = useState(false);
+  // A sprite whose asset is missing leaves the vector shape below it instead of a broken image.
+  const spriteUrl = spriteFailed ? null : rpgMapAssetUrl(item.sprite?.asset_id);
   const interactive = visible && item.kind !== 'decorative' && Boolean(item.hitbox);
   const tooltipId = `rpg-map-tooltip-${safeDomId(item.id)}`;
   const status = dynamicState?.status ?? 'normal';
@@ -172,6 +174,7 @@ function MapObjectShape({
             data-map-asset-id={item.sprite?.asset_id}
             height={spriteHeight}
             href={spriteUrl}
+            onError={() => setSpriteFailed(true)}
             preserveAspectRatio="xMidYMax meet"
             width={spriteWidth}
             x={-spriteWidth / 2}

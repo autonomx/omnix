@@ -173,13 +173,16 @@
     display: grid;
     gap: 0.2rem;
     transform: translateX(-50%);
-    color: var(--fg-yellow-980);
+    /* On the atlas artwork: the same light ink in both appearances. */
+    --rpg-atlas-ink: var(--c-yellow-980);
+    --rpg-atlas-ink-muted: var(--c-slate-890);
+    color: var(--rpg-atlas-ink);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 1.75rem;
     text-align: center;
     text-shadow: 0 2px 4px var(--c-blue-130);
   }
-  .rpg-atlas-world-title small { color: var(--fg-slate-890); font-family: inherit; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .rpg-atlas-world-title small { color: var(--rpg-atlas-ink-muted); font-family: inherit; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; }
   .rpg-atlas-coordinate-readout {
     position: absolute;
     top: 0.8rem;

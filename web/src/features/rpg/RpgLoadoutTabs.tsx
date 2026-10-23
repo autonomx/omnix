@@ -13,6 +13,10 @@ import type { RpgHotbarAbilityPreview, RpgInventoryItemPreview } from './rpgUiSt
 import './RpgLoadoutTabs.css';
 
 type RpgLoadoutTab = 'inventory' | 'abilities' | 'hotbar' | 'skills' | 'traits' | 'effects' | 'coverage';
+
+/** The tabs about the character's ability tree, which show its summary above them. */
+const ABILITY_TABS: ReadonlySet<RpgLoadoutTab> = new Set(['abilities', 'skills', 'traits', 'coverage']);
+
 type AbilityStatus = 'unlocked' | 'available' | 'locked';
 
 interface RpgLoadoutTabsProps {
@@ -212,15 +216,16 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
         ))}
       </div>
 
-      <div role="group" className="rpg-ability-summary" aria-label="Ability tree summary">
-        <strong>{abilityOverview.className}</strong>
-        <span>
-          {abilityOverview.source === 'live'
-            ? `Level ${abilityOverview.playerLevel} • ${abilityOverview.abilityPoints} ability point${abilityOverview.abilityPoints === 1 ? '' : 's'} • ${coveragePercent}% dimension coverage`
-            : 'Preview ability kit'}
-        </span>
-        <small>{abilityOverview.treeId}</small>
-      </div>
+      {ABILITY_TABS.has(activeTab) ? (
+        <div role="group" className="rpg-ability-summary" aria-label="Ability tree summary" title={abilityOverview.treeId}>
+          <strong>{abilityOverview.source === 'live' ? abilityOverview.className : 'Sample loadout'}</strong>
+          <span>
+            {abilityOverview.source === 'live'
+              ? `Level ${abilityOverview.playerLevel} • ${abilityOverview.abilityPoints} ability point${abilityOverview.abilityPoints === 1 ? '' : 's'} • ${coveragePercent}% dimension coverage`
+              : 'Start or load a campaign to see your character’s own abilities.'}
+          </span>
+        </div>
+      ) : null}
 
       {activeTab === 'inventory' ? (
         <InventoryPanel
@@ -295,45 +300,51 @@ function InventoryPanel({
 }: InventoryPanelProps) {
   return (
     <div aria-labelledby="rpg-inventory-loadout-tab" className="rpg-loadout-layout rpg-item-loadout-layout" id="rpg-inventory-loadout-panel" role="tabpanel">
-      <div role="group" className="rpg-inventory-grid" aria-label="Inventory item slots">
-        {inventoryItems.map((item, index) => (
-          <button
-            aria-label={item.label}
-            aria-pressed={activeItemIndex === index}
-            className="rpg-item-slot"
-            key={`${item.label}-${index}`}
-            onClick={() => onSelectItem(index)}
-            type="button"
-          >
-            <span aria-hidden="true">{item.icon}</span>
-            <small>{item.count}</small>
-          </button>
-        ))}
+      <div className="rpg-inventory-column">
+        <div role="group" className="rpg-inventory-grid" aria-label="Inventory item slots">
+          {inventoryItems.map((item, index) => (
+            <button
+              aria-label={item.label}
+              aria-pressed={activeItemIndex === index}
+              className="rpg-item-slot"
+              key={`${item.label}-${index}`}
+              onClick={() => onSelectItem(index)}
+              type="button"
+            >
+              <span className="rpg-item-slot-icon" aria-hidden="true">{item.icon}</span>
+              <span className="rpg-item-slot-name" aria-hidden="true">{item.label}</span>
+              <small aria-hidden="true">×{item.count}</small>
+            </button>
+          ))}
+        </div>
         <button
-          className="rpg-item-slot rpg-empty-slot"
+          className="rpg-secondary-button rpg-inventory-search"
           disabled={isApplyingLoadoutAction}
           onClick={() => onSelectCommand('Search the area for useful supplies I can pick up and add to my inventory.')}
           title="Search for useful supplies through the next RPG turn."
           type="button"
           aria-label="Search for inventory supplies"
         >
-          +
+          + Search for supplies
         </button>
-        <div role="group" className="rpg-hotbar" aria-label="Ability hotbar">
-          {hotbarAbilities.map((ability) => (
-            <InventoryHotbarAbilityButton
-              ability={ability}
-              disabled={Boolean(isApplyingLoadoutAction)}
-              key={ability.key}
-              onActivate={() =>
-                selectedSessionId && onApplyLoadoutAction
-                  ? onApplyLoadoutAction({ action: 'hotbar', hotbar_slot: ability.key })
-                  : onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} when it is tactically useful.`)
-              }
-              selectedSessionId={selectedSessionId}
-            />
-          ))}
-        </div>
+        <section className="rpg-quick-slots" aria-label="Quick slots">
+          <h4>Quick slots</h4>
+          <div role="group" className="rpg-hotbar" aria-label="Ability hotbar">
+            {hotbarAbilities.map((ability) => (
+              <InventoryHotbarAbilityButton
+                ability={ability}
+                disabled={Boolean(isApplyingLoadoutAction)}
+                key={ability.key}
+                onActivate={() =>
+                  selectedSessionId && onApplyLoadoutAction
+                    ? onApplyLoadoutAction({ action: 'hotbar', hotbar_slot: ability.key })
+                    : onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} when it is tactically useful.`)
+                }
+                selectedSessionId={selectedSessionId}
+              />
+            ))}
+          </div>
+        </section>
       </div>
 
       <RpgItemPanel
@@ -587,29 +598,49 @@ function HotbarPanel({ abilityOverview, activeHotbarSlot, isApplyingLoadoutActio
   );
 }
 
+/** XP a skill needs for its next rank (ability_runtime.grant_skill_xp): its XP counts within the current rank. */
+function skillRankThreshold(rank: number): number {
+  return Math.max(25, rank * 100);
+}
+
 function SkillsPanel({ disabled, onSelectCommand, skills }: { disabled: boolean; onSelectCommand: (command: string) => void; skills: SkillProgressionPreview[] }) {
-  const rows = skills.length
-    ? skills
-    : [{ id: 'swordsmanship', label: 'Swordsmanship', rank: 1, xp: 0, source: 'starter practice' }];
+  const practice = (label: string) => onSelectCommand(`Practice ${label} with a careful training drill and record any skill progress.`);
   return (
-    <div aria-labelledby="rpg-skills-loadout-tab" className="rpg-list-stack rpg-compact-panel" id="rpg-skills-loadout-panel" role="tabpanel">
-      {rows.map((skill) => (
-        <article className="rpg-list-row" key={skill.id}>
-          <span className="rpg-icon-tile" aria-hidden="true">◆</span>
-          <div>
-            <strong>{skills.length ? skill.label : 'No skill progress yet'}</strong>
-            <span>{skills.length ? `Rank ${skill.rank} • ${skill.xp} XP${skill.source ? ` • ${skill.source}` : ''}` : 'Using abilities grants deterministic skill XP by capability.'}</span>
-            <div role="group" className="rpg-loadout-actions" aria-label={`${skill.label} skill actions`}>
-              <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Check my ${skill.label} skill rank, XP, and recent training progress.`)} type="button">
-                Check skills
-              </button>
-              <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Practice ${skill.label} with a careful training drill and record any skill progress.`)} type="button">
-                Practice {skill.label}
-              </button>
-            </div>
-          </div>
-        </article>
-      ))}
+    <div aria-labelledby="rpg-skills-loadout-tab" className="rpg-skill-panel" id="rpg-skills-loadout-panel" role="tabpanel">
+      {skills.length ? (
+        <ul className="rpg-skill-list">
+          {skills.map((skill) => {
+            const threshold = skillRankThreshold(skill.rank);
+            const percent = Math.min(100, Math.round((skill.xp / threshold) * 100));
+            return (
+              <li className="rpg-skill-row" key={skill.id}>
+                <span className="rpg-skill-rank" aria-label={`Rank ${skill.rank}`}>{skill.rank}</span>
+                <div className="rpg-skill-copy">
+                  <strong>{skill.label}</strong>
+                  <div className="rpg-skill-progress" role="progressbar" aria-label={`${skill.label} progress to rank ${skill.rank + 1}`}
+                    aria-valuemin={0} aria-valuemax={threshold} aria-valuenow={skill.xp}>
+                    <span style={{ width: `${percent}%` }} />
+                  </div>
+                  <small>{skill.xp} / {threshold} XP to rank {skill.rank + 1}{skill.source ? ` · last from ${skill.source.replaceAll('_', ' ')}` : ''}</small>
+                </div>
+                <button className="rpg-mini-button" disabled={disabled} onClick={() => practice(skill.label)} type="button" aria-label={`Practice ${skill.label}`}>
+                  Practice
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="rpg-skill-empty">
+          <strong>No skill progress yet</strong>
+          <span>Using abilities earns skill XP for the capability they train; each rank needs more practice than the last.</span>
+          <button className="rpg-mini-button" disabled={disabled} onClick={() => practice('Swordsmanship')} type="button">Practice Swordsmanship</button>
+        </div>
+      )}
+      <button className="rpg-secondary-button rpg-skill-review" disabled={disabled} type="button"
+        onClick={() => onSelectCommand('Check my skill ranks, XP, and recent training progress.')}>
+        Review my skills
+      </button>
     </div>
   );
 }

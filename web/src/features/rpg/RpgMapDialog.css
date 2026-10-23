@@ -15,6 +15,8 @@
     border: 1px solid color-mix(in srgb, var(--c-yellow-870) 22%, transparent);
     border-radius: 1.2rem;
     box-shadow: 0 2rem 6rem color-mix(in srgb, var(--c-neutral-0) 55%, transparent);
+    /* Portalled to the page body, outside the app shell that sets the text colour. */
+    color: var(--omnix-text);
     max-height: calc(100vh - 4rem);
     max-width: 92rem;
     overflow: auto;
@@ -40,7 +42,7 @@
     color: var(--mantine-color-dimmed, var(--fg-neutral-730));
   }
 
-  .rpg-map-dialog-header button {
+  .rpg-map-dialog-header .rpg-map-dialog-close {
     align-items: center;
     background: color-mix(in srgb, var(--wash-neutral-1000) 6%, transparent);
     border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 12%, transparent);
@@ -54,11 +56,38 @@
     width: 2.5rem;
   }
 
-  .rpg-map-dialog-header button:hover,
-  .rpg-map-dialog-header button:focus-visible {
+  .rpg-map-dialog-header .rpg-map-dialog-close:hover,
+  .rpg-map-dialog-header .rpg-map-dialog-close:focus-visible {
     background: color-mix(in srgb, var(--wash-neutral-1000) 12%, transparent);
     outline: 2px solid color-mix(in srgb, var(--c-yellow-870) 65%, transparent);
     outline-offset: 2px;
+  }
+
+  .rpg-map-dialog-tabs {
+    background: var(--omnix-soft-bg);
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    display: inline-flex;
+    gap: 0.2rem;
+    margin-left: auto;
+    padding: 0.2rem;
+  }
+
+  .rpg-map-dialog-tabs button {
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    color: var(--omnix-muted-text);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    padding: 0.35rem 0.9rem;
+  }
+
+  .rpg-map-dialog-tabs button.is-active {
+    background: var(--omnix-control-bg);
+    color: var(--omnix-text);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--c-neutral-0) 18%, transparent);
   }
 
   @media (max-width: 760px) {

@@ -508,7 +508,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     location,
     summary,
     updatedAt: compactTimestamp(updatedRaw) ?? 'Updated time unknown',
-    turnLabel: typeof turnCount === 'number' ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'Turn count unknown',
+    turnLabel: typeof turnCount === 'number' ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'No turns yet',
     checkpointLabel,
     sortRank: timestampRank(updatedRaw),
     source: 'live',

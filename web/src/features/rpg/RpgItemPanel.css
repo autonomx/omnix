@@ -73,7 +73,7 @@
 
   .rpg-item-detail-card dl > div {
     display: grid;
-    grid-template-columns: minmax(3.2rem, 0.25fr) 1fr;
+    grid-template-columns: 6.2rem minmax(0, 1fr);
     gap: 0.65rem;
     border: 1px solid color-mix(in srgb, var(--c-blue-710) 12%, transparent);
     border-radius: 0.65rem;
@@ -83,6 +83,7 @@
 
   .rpg-item-detail-card dt {
     font-weight: 700;
+    white-space: nowrap;
   }
 
   .rpg-item-detail-card dd {

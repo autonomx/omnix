@@ -206,6 +206,15 @@
     color: var(--omnix-text);
   }
 
+  /* Text on artwork keeps its own light ink in light mode too (a world's cover, the atlas title): the rules above and
+     below would make it dark on a dark image. */
+  :root[data-omnix-appearance='light'] .rpg-world-card-cover-copy strong,
+  :root[data-omnix-appearance='light'] .rpg-world-card-cover-copy span,
+  :root[data-omnix-appearance='light'] .rpg-atlas-world-title strong,
+  :root[data-omnix-appearance='light'] .rpg-atlas-world-title small {
+    color: inherit;
+  }
+
   :root[data-omnix-appearance='light'] p,
   :root[data-omnix-appearance='light'] li,
   :root[data-omnix-appearance='light'] small,

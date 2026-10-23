@@ -34,7 +34,7 @@
 
   .rpg-map-object-active > g .rpg-map-object-vector-fallback rect,
   .rpg-map-object:focus-visible > g .rpg-map-object-vector-fallback rect {
-    stroke: var(--fg-yellow-840);
+    stroke: var(--c-yellow-840);
     stroke-width: 28;
   }
 
@@ -46,7 +46,7 @@
   .rpg-map-object-selected .rpg-map-object-vector-fallback rect,
   .rpg-map-object-selected .rpg-map-object-vector-fallback path {
     filter: brightness(1.2);
-    stroke: var(--fg-yellow-950);
+    stroke: var(--c-yellow-950);
   }
 
   .rpg-map-object-selected .rpg-map-object-sprite {

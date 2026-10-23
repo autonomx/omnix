@@ -49,7 +49,8 @@ function darkOnlyColours(css: string): string[] {
         }
       }
       for (const [, token] of value.matchAll(TOKEN)) {
-        if (/^(color|fill|stroke|caret-color)$/.test(property) && lightness(token) > 0.7 && !accent) found.push(`${selector.trim()} { ${property}: --c-${token} }`);
+        // Text only: SVG fill and stroke are mostly artwork (maps, charts) that keeps its colours in both appearances.
+        if (/^(color|caret-color)$/.test(property) && lightness(token) > 0.7 && !accent) found.push(`${selector.trim()} { ${property}: --c-${token} }`);
       }
     }
   }

@@ -18,10 +18,10 @@
   .rpg-unified-header {
     align-items: center;
     display: flex;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.6rem 0.75rem;
     margin-bottom: 0.85rem;
     min-width: 0;
-    overflow-x: auto;
     padding: 0.6rem 0.75rem;
     border: 1px solid color-mix(in srgb, var(--accent-violet-710) 20%, transparent);
     border-radius: 14px;
@@ -39,17 +39,47 @@
   }
 
   .rpg-campaign-menu-host {
-    flex: 1 1 auto;
+    flex: 1 1 20rem;
+  }
+
+  /* The campaign launcher inside the header is part of the bar, not a second bar. */
+  .rpg-campaign-menu-host .rpg-session-launcher {
+    backdrop-filter: none;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    flex-wrap: nowrap;
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+    position: static;
+  }
+
+  .rpg-campaign-menu-host .rpg-session-launcher > button {
+    flex: none;
+  }
+
+  .rpg-campaign-menu-host .rpg-session-launcher-summary,
+  .rpg-campaign-menu-host .rpg-session-launcher-status,
+  .rpg-campaign-menu-host .rpg-session-launcher-error {
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .rpg-workspace-header-content {
-    gap: 0.65rem;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.65rem;
+    justify-content: flex-end;
     margin-left: auto;
   }
 
   .rpg-unified-header-controls {
-    flex: 0 0 auto;
+    flex-wrap: wrap;
     gap: 0.5rem;
+    justify-content: flex-end;
   }
 
   .rpg-unified-header .rpg-secondary-button {
@@ -914,6 +944,17 @@
     color: var(--fg-slate-970-2);
   }
 
+  /* An icon-sized picker: the "⌄" above stands for it, so its own text stays hidden in every theme and
+     appearance (an appearance rule that colours selects must not bring it back under the arrow). */
+  .rpg-action-composer .rpg-session-field select {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .rpg-action-composer .rpg-session-field option {
+    -webkit-text-fill-color: var(--fg-slate-970-2);
+  }
+
   .rpg-action-composer select:focus,
   .rpg-action-composer textarea:focus,
   .rpg-quick-actions button:focus-visible,
@@ -1004,6 +1045,7 @@
   }
 
   .rpg-journal-list {
+    align-content: start;
     border-right: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
     display: grid;
     gap: 0.25rem;
@@ -1050,39 +1092,83 @@
     padding-left: 1rem;
   }
 
-  .rpg-inventory-grid {
+  /* Items as named tiles; the search for supplies and the ability quick slots below them. */
+  .rpg-inventory-column {
     align-content: start;
-    align-items: stretch;
     display: grid;
-    gap: 0.45rem;
-    grid-template-columns: repeat(auto-fill, minmax(3rem, 3rem));
-    justify-content: start;
+    gap: 0.7rem;
+    min-width: 0;
   }
 
-  .rpg-item-slot,
-  .rpg-hotbar button {
+  .rpg-inventory-grid {
+    align-content: start;
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  }
+
+  .rpg-item-slot {
+    align-items: center;
     background: color-mix(in srgb, var(--bg-slate-130) 58%, transparent);
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    min-height: 3rem;
+    padding: 0.4rem 0.6rem;
+    position: relative;
+    text-align: left;
+  }
+
+  .rpg-item-slot-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .rpg-item-slot-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rpg-item-slot small {
+    color: var(--fg-slate-890);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rpg-inventory-search {
+    justify-self: start;
+  }
+
+  .rpg-quick-slots {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .rpg-quick-slots h4 {
+    color: var(--omnix-muted-text);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+
+  .rpg-hotbar button {
     aspect-ratio: 1;
+    background: color-mix(in srgb, var(--bg-slate-130) 58%, transparent);
     min-height: 3rem;
     position: relative;
   }
 
-  .rpg-item-slot span {
-    display: block;
-    font-size: 1.25rem;
-  }
-
-  .rpg-item-slot small,
   .rpg-hotbar small {
     bottom: 0.28rem;
     color: var(--fg-slate-890);
     position: absolute;
     right: 0.38rem;
-  }
-
-  .rpg-empty-slot {
-    color: var(--fg-slate-730);
-    font-size: 1.4rem;
   }
 
   .rpg-hotbar {
@@ -1091,12 +1177,10 @@
     grid-template-columns: repeat(6, minmax(2.4rem, 1fr));
   }
 
-  .rpg-inventory-grid > .rpg-hotbar {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(auto-fit, minmax(2.4rem, 2.8rem));
+  .rpg-quick-slots > .rpg-hotbar {
+    grid-template-columns: repeat(auto-fill, minmax(2.8rem, 2.8rem));
     justify-content: start;
     min-width: 0;
-    width: 100%;
   }
 
   .rpg-hotbar button span {
@@ -1331,7 +1415,7 @@
     }
 
     .rpg-inventory-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
     }
 
     .rpg-hotbar {
