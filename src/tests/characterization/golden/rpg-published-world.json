@@ -1,0 +1,5070 @@
+{
+  "opening": {
+    "document_hash": "sha256:a200a62383e016a9ec2dfc7cdb31bf0928cc4e829739b0d1a3e8d247e7647df8",
+    "facts": {
+      "combat": {
+        "active": false,
+        "participants": {}
+      },
+      "equipment": [
+        "Iron Dagger",
+        "Travel Cloak"
+      ],
+      "hp": 100,
+      "inventory": {
+        "Gateborn Compass": 1,
+        "Iron Dagger": 1,
+        "Lantern Bread": 2,
+        "Travel Cloak": 1
+      },
+      "location_id": "location:aurelia:arrival-grove",
+      "location_name": "Starfall Grove",
+      "party": [],
+      "present_npc_ids": [
+        "npc:liora-fen"
+      ],
+      "purse_copper": 160,
+      "quests": {
+        "First Night in Aurelia": "active",
+        "The Hollow Meridian": "available",
+        "Voices in the Phone": "available"
+      },
+      "skills": {},
+      "survival": {
+        "fatigue": 0,
+        "hunger": 0,
+        "thirst": 0
+      },
+      "turn_count": 0
+    }
+  },
+  "turns": [
+    {
+      "changes": {
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 0
+          }
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:d7a32fe4099993ea6f16598331c295bb183315894939636e7e6e485ab21aa78c",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "party": [],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "available"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 0
+          }
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        },
+        "turn_count": 1
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/actor_activities",
+        "runtime_state/ambient_history",
+        "runtime_state/campaign_calendar",
+        "runtime_state/conversation_settings",
+        "runtime_state/conversation_threads",
+        "runtime_state/current_scene",
+        "runtime_state/director_log",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_conversation_intervention",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/location_conditions",
+        "runtime_state/narration_quality",
+        "runtime_state/offscreen_conversation_summaries",
+        "runtime_state/opening_runtime",
+        "runtime_state/perf_trace",
+        "runtime_state/performance",
+        "runtime_state/player_journal",
+        "runtime_state/player_request_events",
+        "runtime_state/post_player_quiet_ticks",
+        "runtime_state/recent_conversation_thread_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/response_soft_truth",
+        "runtime_state/scene_beat_memory",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/story_policy",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "runtime_state/world_pressure",
+        "runtime_state/world_rumors",
+        "setup_payload/campaign_objective",
+        "setup_payload/canon_notes",
+        "setup_payload/content_balance",
+        "setup_payload/desired_content_mix",
+        "setup_payload/forbidden_content",
+        "setup_payload/genre_rules",
+        "setup_payload/hard_rules",
+        "setup_payload/lore_constraints",
+        "setup_payload/metadata",
+        "setup_payload/opening",
+        "setup_payload/opening_hook",
+        "setup_payload/pacing",
+        "setup_payload/player_role",
+        "setup_payload/response_length",
+        "setup_payload/safety",
+        "setup_payload/setup_id",
+        "setup_payload/soft_tone_rules",
+        "setup_payload/starter_conflict",
+        "setup_payload/starting_gear",
+        "setup_payload/starting_resources",
+        "setup_payload/world_behavior",
+        "simulation_state/active_effects",
+        "simulation_state/active_interactions",
+        "simulation_state/active_rumors",
+        "simulation_state/consequences",
+        "simulation_state/conversation_thread_state",
+        "simulation_state/debug_meta",
+        "simulation_state/environment",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/factions",
+        "simulation_state/history",
+        "simulation_state/incidents",
+        "simulation_state/location_state",
+        "simulation_state/locations",
+        "simulation_state/memory_state",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_index",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/policy_reactions",
+        "simulation_state/present_npcs",
+        "simulation_state/presentation_state",
+        "simulation_state/quest_state",
+        "simulation_state/response_soft_truth",
+        "simulation_state/sandbox_state",
+        "simulation_state/sandbox_summary",
+        "simulation_state/save_meta",
+        "simulation_state/social_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/threads",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "simulation_state/world_items",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 2
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 1,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 2,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "look around",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:9ffae8df20be2542ed5937ea7037e5f83170f14e9552261b2b52f0b62469b522",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "party": [],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "available"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 0
+          }
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        },
+        "turn_count": 2
+      },
+      "model_calls": [
+        "dialogue"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/conversation_thread_state",
+        "runtime_state/dialogue_focus",
+        "runtime_state/first_call_shortcuts_disabled",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/conversation_thread_state",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [
+          "conversation"
+        ],
+        "source": "compact_dialogue_provider_canonical_v1",
+        "state": {
+          "changed": true,
+          "changed_domains": [
+            "conversation"
+          ],
+          "revision": 3
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 2,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 3,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I greet Liora Fen and ask her where I am",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "party": {
+          "added": [
+            "npc:liora-fen"
+          ],
+          "removed": []
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:80921ac8f923e5ec69bccd7403463d44a091905c839ed50b0250701904019fca",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "available"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 0
+          }
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 4
+        },
+        "turn_count": 3
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "setup_payload/metadata",
+        "simulation_state/companion_acceptance_state",
+        "simulation_state/companion_memory_state",
+        "simulation_state/companion_presence_projection",
+        "simulation_state/companion_quest_state",
+        "simulation_state/conversation_thread_state",
+        "simulation_state/npc_reputation_state",
+        "simulation_state/party_composition_effects",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/survival",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 4
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 3,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 4,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I ask Liora Fen to join my party as a companion.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "quests": {
+          "Voices in the Phone": "active"
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:663a394b1a9d5fe9aacc7457932f49073f6ca11f4b9b3694297023f5f7ea7022",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 0
+          }
+        },
+        "survival": {
+          "fatigue": 3,
+          "hunger": 3,
+          "thirst": 6
+        },
+        "turn_count": 4
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/locations",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/quest_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/quests",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 5
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 4,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 5,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I accept the quest Voices in the Phone.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "skills": {
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:16643adeb1ea644aa07bd6c6ef17ab6e060b2ed8d9927f8456417add849182d6",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 4,
+          "hunger": 4,
+          "thirst": 8
+        },
+        "turn_count": 5
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/locations",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 6
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 5,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 6,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "Practice swordsmanship with a careful training drill.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "present_npc_ids": {
+          "added": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ],
+          "removed": []
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
+        }
+      },
+      "document_hash": "sha256:392f2f8a6981b092f2577bad8cefdc43e55c0381976720c72a2785c3a0d9edb3",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 6,
+          "hunger": 6,
+          "thirst": 11
+        },
+        "turn_count": 6
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/location_id",
+        "simulation_state/location_state",
+        "simulation_state/locations",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/quest_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "simulation_state/visited_locations",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_turn",
+        "state/location",
+        "state/player",
+        "state/quests",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_scene_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 7
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 6,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 7,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Starfall Village",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:1a30ef1761bb78028db26bcf71db5e069e2bf4e1a5778d59f53a4b4063d7b2ce",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 7,
+          "hunger": 7,
+          "thirst": 13
+        },
+        "turn_count": 7
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 8
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 7,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 8,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "look around",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:a24fc6d0dcf64744fdc1bfb06fcea3a65f308c7e92606efa40598e9bb8f05375",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 7,
+          "hunger": 7,
+          "thirst": 13
+        },
+        "turn_count": 8
+      },
+      "model_calls": [
+        "dialogue"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/conversation_thread_state",
+        "runtime_state/dialogue_focus",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/conversation_thread_state",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [
+          "conversation"
+        ],
+        "source": "compact_dialogue_provider_canonical_v1",
+        "state": {
+          "changed": true,
+          "changed_domains": [
+            "conversation"
+          ],
+          "revision": 9
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 8,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 9,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I ask Orik Stonewake what he thinks of the newcomers.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:e77e0fbe3402fbb256d923b9b75f13f57043b9d80764e1c726c94d426097a2b8",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 160,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 7,
+          "hunger": 7,
+          "thirst": 13
+        },
+        "turn_count": 9
+      },
+      "model_calls": [
+        "dialogue",
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/narration_quality",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/journal_state",
+        "simulation_state/memory_state",
+        "simulation_state/npc_emotion_state",
+        "simulation_state/pending_interactions",
+        "simulation_state/relationship_state",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 10
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 9,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 10,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I ask Brindle Gearwing what a Healing Potion costs.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "inventory": {
+          "Healing Potion": 1
+        },
+        "purse_copper": -30
+      },
+      "document_hash": "sha256:f7e48380495c228b1513a3990edfa1fb631210c3503d8be5b1ad2bc8adac8a62",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Iron Dagger": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 130,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 7,
+          "hunger": 7,
+          "thirst": 13
+        },
+        "turn_count": 10
+      },
+      "model_calls": [
+        "dialogue",
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/narration_quality",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/memory_state",
+        "simulation_state/npc_emotion_state",
+        "simulation_state/pending_interactions",
+        "simulation_state/player_state",
+        "simulation_state/relationship_state",
+        "simulation_state/service_offer_state",
+        "simulation_state/transaction_history",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 11
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 10,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 11,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I buy a Healing Potion from Brindle Gearwing.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "inventory": {
+          "Iron Dagger": -1
+        },
+        "purse_copper": 5,
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:1059bedb3101059e177ea400e6542ff4f8ef36985ee971097c772183bb11f1dd",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 135,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 8,
+          "hunger": 8,
+          "thirst": 15
+        },
+        "turn_count": 11
+      },
+      "model_calls": [
+        "dialogue",
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/actor_activities",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/active_interactions",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/relationship_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 12
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 11,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 12,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I sell my Iron Dagger to Brindle Gearwing.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "inventory": {
+          "Lantern Bread": -1
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:8aad0f72024e7a1e1c446c9cff14ce89dea70df9da202a783ffbedb73e686371",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 1,
+          "Travel Cloak": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 135,
+        "quests": {
+          "First Night in Aurelia": "active",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 9,
+          "hunger": 9,
+          "thirst": 17
+        },
+        "turn_count": 12
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/active_interactions",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "simulation_state/world_items",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 13
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 12,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 13,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I drop one Lantern Bread on the ground.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "inventory": {
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:wayfarer-guild",
+        "location_name": "Wayfarers' Guild",
+        "present_npc_ids": {
+          "added": [
+            "npc:miri-kestrel",
+            "npc:seraphine-valecourt"
+          ],
+          "removed": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ]
+        },
+        "purse_copper": 200,
+        "quests": {
+          "First Night in Aurelia": "completed"
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
+        }
+      },
+      "document_hash": "sha256:33c7296a9eceea3d1b1a14d530fa11c75786d04bffe25295d2339b25434b56e9",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 1,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:wayfarer-guild",
+        "location_name": "Wayfarers' Guild",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen",
+          "npc:miri-kestrel",
+          "npc:seraphine-valecourt"
+        ],
+        "purse_copper": 335,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 11,
+          "hunger": 11,
+          "thirst": 20
+        },
+        "turn_count": 13
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/active_interactions",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/location_id",
+        "simulation_state/location_state",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/quest_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "simulation_state/visited_locations",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_turn",
+        "state/location",
+        "state/player",
+        "state/quests",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_scene_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 14
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 13,
+        "location": "Wayfarers' Guild",
+        "player_level": 1,
+        "state_revision": 14,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Wayfarers' Guild",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:3fce1abaefab754c0b2e79dd000fbf9c1297d64907f5c236ac488e30953b6b75",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 1,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:wayfarer-guild",
+        "location_name": "Wayfarers' Guild",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen",
+          "npc:miri-kestrel",
+          "npc:seraphine-valecourt"
+        ],
+        "purse_copper": 335,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 12,
+          "hunger": 12,
+          "thirst": 22
+        },
+        "turn_count": 14
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/active_interactions",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 15
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 14,
+        "location": "Wayfarers' Guild",
+        "player_level": 1,
+        "state_revision": 15,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "look around",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "present_npc_ids": {
+          "added": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ],
+          "removed": [
+            "npc:miri-kestrel",
+            "npc:seraphine-valecourt"
+          ]
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
+        }
+      },
+      "document_hash": "sha256:bdde69d7845dac18fa0843641bc1ff1e667852f63d72471c234ce50572a90ee1",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 1,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 335,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 14,
+          "hunger": 14,
+          "thirst": 25
+        },
+        "turn_count": 15
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/active_interactions",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/location_id",
+        "simulation_state/location_state",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_turn",
+        "state/location",
+        "state/player",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_scene_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 16
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 15,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 16,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Starfall Village",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "inventory": {
+          "Lantern Bread": 1
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:52e0eb96cfa14396521bb1d7c678d1d5e0e59078d07968bd065855a67a2a981d",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 335,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 15,
+          "hunger": 15,
+          "thirst": 27
+        },
+        "turn_count": 16
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_reaction_state",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/npc_reaction_records",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/active_interactions",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/world_items",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 17
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 16,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 17,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I pick up the Lantern Bread.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "purse_copper": -8,
+        "survival": {
+          "hunger": -15
+        }
+      },
+      "document_hash": "sha256:2d7dd4130b30cc9210260e2e93f6b2abda9e2545f3d291acedc907c67da4ed3d",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 327,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 15,
+          "hunger": 0,
+          "thirst": 27
+        },
+        "turn_count": 17
+      },
+      "model_calls": [
+        "dialogue",
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/narration_quality",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/memory_state",
+        "simulation_state/npc_emotion_state",
+        "simulation_state/player_state",
+        "simulation_state/relationship_state",
+        "simulation_state/survival",
+        "simulation_state/transaction_history",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 18
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 17,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 18,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I buy a meal from Orik Stonewake.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "purse_copper": -50
+      },
+      "document_hash": "sha256:be5ace0d8a45bf3f3ea2f9cf23391bef96c94d2e3c12316f541b930b9b6b56cb",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 15,
+          "hunger": 0,
+          "thirst": 27
+        },
+        "turn_count": 18
+      },
+      "model_calls": [
+        "dialogue",
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/narration_quality",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/active_services",
+        "simulation_state/memory_state",
+        "simulation_state/npc_emotion_state",
+        "simulation_state/player_state",
+        "simulation_state/relationship_state",
+        "simulation_state/service_offer_state",
+        "simulation_state/transaction_history",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 19
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 18,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 19,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I rent a room for the night from Orik Stonewake.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "survival": {
+          "fatigue": -15
+        }
+      },
+      "document_hash": "sha256:467dff4260da9e577871bdbc89cdfb7d846de4ed54b8f2f0b79270b940be3832",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 0,
+          "hunger": 0,
+          "thirst": 27
+        },
+        "turn_count": 19
+      },
+      "model_calls": [
+        "dialogue",
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/campaign_calendar",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/narration_quality",
+        "runtime_state/player_journal",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/active_services",
+        "simulation_state/environment",
+        "simulation_state/memory_state",
+        "simulation_state/survival",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 20
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 19,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 20,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I go to my room and sleep for the night.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:99fe92350fe98c72e7e350cfa26e376b81b7ec4df3afbbdf0aed3a76b1c2e467",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {}
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 100,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 29
+        },
+        "turn_count": 20
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/active_interactions",
+        "simulation_state/conversation_director_state",
+        "simulation_state/conversation_thread_state",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_goal_state",
+        "simulation_state/npc_history_state",
+        "simulation_state/npc_minds",
+        "simulation_state/npc_schedule_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/rumor_propagation_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 21
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 20,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 21,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "wait",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 10,
+            "npc:liora-fen": 100,
+            "player": 96
+          }
+        },
+        "hp": -4,
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:73941bc3f251cfdcd3e219fbdb1ff02240d70b9ccc8e6745a1b2f7ee74fa0a56",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 10,
+            "npc:liora-fen": 100,
+            "player": 96
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 96,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 31
+        },
+        "turn_count": 21
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/combat_state",
+        "simulation_state/companion_presence_projection",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 22
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 21,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 22,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I attack the Echo Wolf.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:73941bc3f251cfdcd3e219fbdb1ff02240d70b9ccc8e6745a1b2f7ee74fa0a56",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 10,
+            "npc:liora-fen": 100,
+            "player": 96
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 96,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 31
+        },
+        "turn_count": 21
+      },
+      "model_calls": [],
+      "patched_sections": [],
+      "response": {
+        "actor_cell": null,
+        "detail": {
+          "error": "tactical_combat_not_active",
+          "ok": false
+        },
+        "kind": null,
+        "ok": null
+      },
+      "status": 409,
+      "step": "tactical_move [4, 3]",
+      "turn_rows": 0
+    },
+    {
+      "changes": {
+        "combat": {
+          "participants": {
+            "enemy:creature-echo-wolf:1": 9,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "hp": -3,
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:2deec57d749662576059a43f34a550bc73a3a10687e6c3928b3c74f86d65516c",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 9,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 3,
+          "hunger": 3,
+          "thirst": 33
+        },
+        "turn_count": 22
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/combat_state",
+        "simulation_state/companion_presence_projection",
+        "simulation_state/debug_meta",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/player",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 23
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 22,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 23,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I attack the Echo Wolf.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "combat": {
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:b195a38fc3c6ff650a446debc96dd6c5bf31ddcffbe5a577ccd03f96ffb5dffb",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 4,
+          "hunger": 4,
+          "thirst": 35
+        },
+        "turn_count": 23
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/combat_state",
+        "simulation_state/debug_meta",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 24
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 23,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 24,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I attack the Echo Wolf.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "combat": {
+          "active": false
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:2877417db53985ada46d594ca10087c593540a070684271caa092e3389489b97",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 5,
+          "hunger": 5,
+          "thirst": 37
+        },
+        "turn_count": 24
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/combat_state",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 25
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 24,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 25,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I flee from the Echo Wolf.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:11d321884a8fa00323a1a3966a266097cfe4f8fad60c9d4e73fd84f67e355257",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 5,
+          "hunger": 5,
+          "thirst": 37
+        },
+        "turn_count": 25
+      },
+      "model_calls": [
+        "dialogue",
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/narration_quality",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/memory_state",
+        "simulation_state/npc_emotion_state",
+        "simulation_state/pending_interactions",
+        "simulation_state/relationship_state",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 26
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 25,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 26,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I drink the Healing Potion.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:869884737f7bbda86c07f9a7d097386f830c7c9b6620e0eff72c211e4765b9e4",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 6,
+          "hunger": 6,
+          "thirst": 39
+        },
+        "turn_count": 26
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 27
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 26,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 27,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "Check my quests",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
+        "present_npc_ids": {
+          "added": [],
+          "removed": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ]
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
+        }
+      },
+      "document_hash": "sha256:23373ba8718ff7bb134c8c8339312574845edee329922bb415510bdd94d16d8b",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:skybridge-pass",
+        "location_name": "Skybridge Pass",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 8,
+          "hunger": 8,
+          "thirst": 42
+        },
+        "turn_count": 27
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/player_request_events",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/location_id",
+        "simulation_state/location_state",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "simulation_state/visited_locations",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_turn",
+        "state/location",
+        "state/player",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 28
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 27,
+        "location": "Skybridge Pass",
+        "player_level": 1,
+        "state_revision": 28,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Skybridge Pass",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "present_npc_ids": {
+          "added": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ],
+          "removed": []
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
+        }
+      },
+      "document_hash": "sha256:fe2cc9dde375e65a0af69cdcefa0bc24baf1024147f99d88a7201aa7c5af1dee",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 10,
+          "hunger": 10,
+          "thirst": 45
+        },
+        "turn_count": 28
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/location_id",
+        "simulation_state/location_state",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_turn",
+        "state/location",
+        "state/player",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 29
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 28,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 29,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Starfall Village",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "present_npc_ids": {
+          "added": [],
+          "removed": [
+            "npc:brindle-gearwing",
+            "npc:captain-rhea-sunward",
+            "npc:orik-stonewake"
+          ]
+        },
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 3
+        }
+      },
+      "document_hash": "sha256:f4d1b42de14fddc3314ac0ac090d65e25f75f2842e8d98c20efb78b92ba4d3c3",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 12,
+          "hunger": 12,
+          "thirst": 48
+        },
+        "turn_count": 29
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "setup_payload/metadata",
+        "simulation_state/current_location",
+        "simulation_state/current_location_id",
+        "simulation_state/current_location_name",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/location_id",
+        "simulation_state/location_state",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/present_npcs",
+        "simulation_state/previous_location",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_location",
+        "state/current_location_id",
+        "state/current_location_name",
+        "state/current_turn",
+        "state/location",
+        "state/player",
+        "state/scene",
+        "state/title",
+        "state/turn_count",
+        "state/world"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 30
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 29,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 30,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Starfall Grove",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:7dfa9e516edbd1af36a45f3c6717a36c367b1942ada5ddcf6c353c0c788e08d8",
+      "facts": {
+        "combat": {
+          "active": false,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 8,
+            "npc:liora-fen": 100,
+            "player": 93
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 93,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Healing Potion": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:arrival-grove",
+        "location_name": "Starfall Grove",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:liora-fen"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 13,
+          "hunger": 13,
+          "thirst": 50
+        },
+        "turn_count": 30
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "manifest/updated_at",
+        "runtime_state/current_scene",
+        "runtime_state/grounded_scene_context",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/last_player_action",
+        "runtime_state/last_player_action_context",
+        "runtime_state/last_player_turn_at",
+        "runtime_state/last_real_player_activity_at",
+        "runtime_state/last_turn_contract",
+        "runtime_state/last_turn_result",
+        "runtime_state/narration_quality",
+        "runtime_state/perf_trace",
+        "runtime_state/recent_interactions",
+        "runtime_state/recent_scene_beats",
+        "runtime_state/recent_world_event_rows",
+        "runtime_state/semantic_action_index",
+        "runtime_state/semantic_action_records",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "runtime_state/tick",
+        "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "setup_payload/metadata",
+        "simulation_state/conversation_thread_state",
+        "simulation_state/debug_meta",
+        "simulation_state/event_history",
+        "simulation_state/events",
+        "simulation_state/history",
+        "simulation_state/npc_decisions",
+        "simulation_state/npc_minds",
+        "simulation_state/step_hash",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/timeline",
+        "simulation_state/turn_index",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": false,
+          "changed_domains": [],
+          "revision": 31
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 30,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 31,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "wait",
+      "turn_rows": 1
+    }
+  ]
+}

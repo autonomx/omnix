@@ -28,6 +28,7 @@ from .postgres_service import create_scenario_project, publish_scenario_revision
 from .service import compile_world_release, compile_world_revision
 from .starter_bubble_service import promote_starter_bubble
 from .world_adoption import require_adopted_if_shared
+from .world_bundle import safe_bundle_segment
 
 
 def _compile_imported_topics_publication(
@@ -430,6 +431,20 @@ def repair_world_for_launch(
     }
 
 
+def _opening_scenario_id(
+    opening_id: str,
+    world_id: str,
+    existing_ids: set[str],
+    taken_ids: set[str],
+) -> str:
+    """The scenario id of an opening: ``scenario:<opening>``, unless another world (a second import of the
+    same bundle) holds it; then it is qualified by the world, as a bundle import qualifies its ids."""
+    base = f"scenario:{opening_id.split(':')[-1]}"
+    if base in existing_ids or base not in taken_ids:
+        return base
+    return f"scenario:{safe_bundle_segment(world_id)}:{opening_id.split(':')[-1]}"
+
+
 def prepare_opening_scenarios_for_launch(
     world_id: str,
     *,
@@ -461,6 +476,13 @@ def prepare_opening_scenarios_for_launch(
         existing_ids = {
             str(row.get("id") or "")
             for row in work.world_library.iter_scenarios(context, world_id=world_id)
+        }
+        taken_ids = {
+            str(row[0])
+            for row in work.connection.execute(
+                "SELECT id FROM omnix_rpg_scenarios WHERE workspace_id = %s",
+                (context.workspace_id,),
+            ).fetchall()
         }
         work.rollback()
 
@@ -502,7 +524,7 @@ def prepare_opening_scenarios_for_launch(
         ).strip()
         if not opening_id or not title or not starting_location_id:
             continue
-        scenario_id = f"scenario:{opening_id.split(':')[-1]}"
+        scenario_id = _opening_scenario_id(opening_id, world_id, existing_ids, taken_ids)
         if scenario_id not in existing_ids:
             create_scenario_project(
                 ScenarioProjectCreate(
