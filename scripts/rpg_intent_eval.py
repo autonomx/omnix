@@ -61,7 +61,8 @@ STATEFUL_FAMILIES = {"move", "buy", "sell", "attack", "take", "drop", "give", "u
 
 
 def held_out_digest() -> str:
-    return hashlib.sha256(HELD_OUT.read_bytes()).hexdigest()
+    """The held-out file's SHA-256, over LF line endings (a Windows checkout may write CRLF)."""
+    return hashlib.sha256(HELD_OUT.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def require_frozen_held_out() -> None:
