@@ -254,4 +254,101 @@
       grid-template-columns: 1fr;
     }
   }
+
+  /* My worlds / Community. */
+  .rpg-authoring-tabs {
+    display: inline-flex;
+    gap: 0.2rem;
+    justify-self: start;
+    width: fit-content;
+    padding: 0.2rem;
+    border: 1px solid var(--omnix-border);
+    border-radius: 999px;
+    background: var(--omnix-soft-bg);
+  }
+
+  .rpg-authoring-tabs button {
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--omnix-muted-text);
+    font: inherit;
+    font-weight: 700;
+    padding: 0.35rem 1rem;
+    cursor: pointer;
+  }
+
+  .rpg-authoring-tabs button.is-active {
+    background: var(--omnix-control-bg);
+    color: var(--omnix-text);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--c-neutral-0) 18%, transparent);
+  }
+
+  .rpg-community-worlds {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .rpg-community-intro {
+    margin: 0;
+    color: var(--omnix-muted-text);
+  }
+
+  .rpg-community-intro a,
+  .rpg-shared-world-dialog a {
+    color: var(--fg-teal-900);
+  }
+
+  .rpg-shared-world-dialog p,
+  .rpg-shared-world-dialog ul {
+    margin: 0;
+  }
+
+  .rpg-shared-world-points {
+    display: grid;
+    gap: 0.45rem;
+    padding-left: 1.2rem;
+    color: var(--omnix-muted-text);
+  }
+
+  .rpg-authoring-modal .rpg-shared-world-check {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-weight: 600;
+  }
+
+  .rpg-authoring-modal .rpg-shared-world-check input {
+    width: auto;
+  }
+
+  .rpg-share-sign-in {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .rpg-share-sign-in > button {
+    justify-self: start;
+  }
+
+  .rpg-share-help {
+    color: var(--omnix-muted-text);
+    font-size: 0.9rem;
+  }
+
+  .rpg-share-device code {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .rpg-link-button {
+    border: 0;
+    background: none;
+    color: var(--fg-teal-900);
+    font: inherit;
+    padding: 0;
+    text-decoration: underline;
+    cursor: pointer;
+  }
 }

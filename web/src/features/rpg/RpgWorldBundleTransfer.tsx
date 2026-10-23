@@ -86,7 +86,9 @@ export function RpgWorldBundleTransfer({
       setFeedback(
         `World imported: ${result.world_id} • ${result.counts.map_definitions ?? 0} maps • ${imageCount} images`,
       );
-      if (launchStatus === 'generating') {
+      if (launchStatus === 'adoption_required') {
+        setFeedback(`World imported: ${result.world_id}. In Worlds, choose Review & adopt on its card before playing it.`);
+      } else if (launchStatus === 'generating') {
         setFeedback(`World imported: ${result.world_id}. Launch preparation has started.`);
       } else if (launchStatus === 'ready') {
         setFeedback(`World imported: ${result.world_id}. Opening scenarios are ready to play.`);

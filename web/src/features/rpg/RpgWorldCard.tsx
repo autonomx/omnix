@@ -11,7 +11,7 @@ function assetImageUrl(value: unknown): string | undefined {
   return assetId ? `/api/assets/${encodeURIComponent(assetId)}/file` : undefined;
 }
 
-export function resolveWorldCoverImage(world: RpgWorldSummary): string | undefined {
+export function resolveWorldCoverImage(world: RpgWorldCardWorld): string | undefined {
   const metadata = world.metadata ?? {};
   const candidate = [
     metadata.cover_image_url,
@@ -34,12 +34,15 @@ export function displayWorldGenre(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+/** What a card shows: a world here, or a community world not yet downloaded. */
+export type RpgWorldCardWorld = Pick<RpgWorldSummary, 'id' | 'title' | 'description' | 'genre' | 'tone' | 'metadata'>;
+
 interface RpgWorldCardProps {
   actions: ReactNode;
   children?: ReactNode;
   facts?: ReactNode;
   footer?: ReactNode;
-  world: RpgWorldSummary;
+  world: RpgWorldCardWorld;
 }
 
 export function RpgWorldCard({ actions, children, facts, footer, world }: RpgWorldCardProps) {

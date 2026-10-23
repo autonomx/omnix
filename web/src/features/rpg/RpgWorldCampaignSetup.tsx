@@ -381,7 +381,7 @@ function LaunchButton({ error, pending, ready }: { error: unknown; pending: bool
 function launchErrorText(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes('world_revision_authorship_untrusted')) {
-    return 'This world was imported from a bundle, and Omnix launches only worlds generated or authored in this Omnix.';
+    return 'This world was made in another Omnix. Review and adopt it first: in Worlds, choose Review & adopt on its card.';
   }
   return message || 'Campaign could not be launched.';
 }
