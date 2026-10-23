@@ -109,6 +109,8 @@ class ScriptedModel:
             return "canon_dossier"
         if "first-call semantic intent router" in text:
             return "semantic_intent"
+        if "Omnix RPG Narrative Writer" in text:
+            return "narrative_writer"
         if "CONTEXT:" in text:
             return "turn_narration"
         return "unscripted"
@@ -196,15 +198,36 @@ class CountingProvider:
         started = time.perf_counter()
         record = {"role": self._roles.classify(text), "started": started}
         self.calls.append(record)
-        try:
-            response = self.inner.chat_completion(messages, model=model, stream=stream, **kwargs)
+
+        def note(response: Any) -> None:
             resolved = getattr(response, "model", None)
             if isinstance(resolved, str) and resolved:
                 record["model"] = resolved
                 self.resolved_models.add(resolved)
-            return response
-        finally:
+
+        def finish() -> None:
             record["ms"] = round((time.perf_counter() - started) * 1000, 1)
+
+        try:
+            response = self.inner.chat_completion(messages, model=model, stream=stream, **kwargs)
+        except Exception:
+            finish()
+            raise
+        if not stream:
+            note(response)
+            finish()
+            return response
+
+        def streamed():
+            # A streamed call lasts until its last chunk is read.
+            try:
+                for chunk in response:
+                    note(chunk)
+                    yield chunk
+            finally:
+                finish()
+
+        return streamed()
 
 
 # The live install's RPG route (settings model roles, commit 040af3192a): Claude Haiku through the Claude CLI.

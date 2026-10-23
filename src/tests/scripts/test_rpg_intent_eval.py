@@ -25,8 +25,7 @@ def test_held_out_set_is_frozen_and_the_harness_refuses_a_changed_one(monkeypatc
         intent.require_frozen_held_out()
     # A Windows checkout that writes CRLF line endings is the same frozen file.
     crlf = tmp_path / "held_out_crlf.jsonl"
-    crlf.write_bytes(intent.HELD_OUT_SHA256 and (ROOT / "resources/benchmarks/rpg/intent_corpus/held_out.jsonl")
-                     .read_bytes().replace(b"\n", b"\r\n"))
+    crlf.write_bytes((intent.CORPUS / "held_out.jsonl").read_bytes().replace(b"\n", b"\r\n"))
     monkeypatch.setattr(intent, "HELD_OUT", crlf)
     intent.require_frozen_held_out()
 
