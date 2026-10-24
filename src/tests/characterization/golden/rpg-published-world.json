@@ -3442,7 +3442,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:03d607beb58686e9efe2c1225500cf4c3fc8f501d73d8082723ad02bb056c124",
+      "document_hash": "sha256:72073217e7265418b08bbaf15ced25d32326ed2b01f178c13e1f2b120fcb4f33",
       "facts": {
         "combat": {
           "active": true,
@@ -3528,22 +3528,37 @@
           "hunger": 4,
           "thirst": 33
         },
-        "turn_count": 21
+        "turn_count": 22
       },
       "model_calls": [],
-      "patched_sections": [],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/campaign_calendar",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/player_journal",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "simulation_state/combat_state",
+        "state/current_turn",
+        "state/turn_count"
+      ],
       "response": {
-        "actor_cell": null,
-        "detail": {
-          "error": "tactical_combat_not_active",
-          "ok": false
-        },
-        "kind": null,
-        "ok": null
+        "actor_cell": [
+          4,
+          3
+        ],
+        "detail": null,
+        "kind": "tactical_move",
+        "ok": true
       },
-      "status": 409,
+      "status": 200,
       "step": "tactical_move [4, 3]",
-      "turn_rows": 0
+      "turn_rows": 1
     },
     {
       "changes": {
@@ -3560,7 +3575,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:dbd727f63d777923ed221fdc79cb14215925b378ab26976653ccb353b0f080d1",
+      "document_hash": "sha256:5fe7a1326ae63e45fb4ac7207ec2dad8b8c338d15e1eef058f077d78e70b4815",
       "facts": {
         "combat": {
           "active": true,
@@ -3646,7 +3661,7 @@
           "hunger": 5,
           "thirst": 35
         },
-        "turn_count": 22
+        "turn_count": 23
       },
       "model_calls": [
         "narration"
@@ -3698,14 +3713,14 @@
             "world",
             "narrative"
           ],
-          "revision": 23
+          "revision": 24
         }
       },
       "session_summary": {
-        "interaction_seq": 22,
+        "interaction_seq": 23,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 23,
+        "state_revision": 24,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -3728,7 +3743,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:d0b085cdc580cd22e2fc71c02c3c74f9c743d4072cba05d28a16a7773dafe912",
+      "document_hash": "sha256:100fe18d9fbe9cc1a3e6c8e113df5be47689439ac64a1975f4ff9fd8a76e569a",
       "facts": {
         "combat": {
           "active": true,
@@ -3814,7 +3829,7 @@
           "hunger": 6,
           "thirst": 37
         },
-        "turn_count": 23
+        "turn_count": 24
       },
       "model_calls": [
         "narration"
@@ -3870,14 +3885,14 @@
             "world",
             "narrative"
           ],
-          "revision": 24
+          "revision": 25
         }
       },
       "session_summary": {
-        "interaction_seq": 23,
+        "interaction_seq": 24,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 24,
+        "state_revision": 25,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -3900,7 +3915,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7f3fb934ec32e50de79dd2bc1ee12d40a1857614b6e3fae4c44de3e8ac2f36d9",
+      "document_hash": "sha256:ebfdba5ac274678faaa770dbfd529cc4def8436d340152b15674e2264deb51cc",
       "facts": {
         "combat": {
           "active": true,
@@ -3986,180 +4001,6 @@
           "hunger": 7,
           "thirst": 39
         },
-        "turn_count": 24
-      },
-      "model_calls": [
-        "narration"
-      ],
-      "patched_sections": [
-        "manifest/current_turn",
-        "manifest/turn_count",
-        "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/interaction_id_by_turn",
-        "runtime_state/interaction_lifecycles",
-        "runtime_state/interaction_seq",
-        "runtime_state/interaction_timeline",
-        "runtime_state/last_interaction",
-        "runtime_state/player_journal",
-        "runtime_state/recent_interactions",
-        "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/combat_state",
-        "simulation_state/economy_state",
-        "simulation_state/environment",
-        "simulation_state/merchant_state",
-        "simulation_state/player_state",
-        "simulation_state/survival",
-        "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
-        "state/current_turn",
-        "state/player",
-        "state/turn_count",
-        "state/world"
-      ],
-      "response": {
-        "changed_domains": [
-          "time",
-          "combat",
-          "player",
-          "survival",
-          "world",
-          "narrative"
-        ],
-        "source": "narrative_engine_resolved_turn_v1",
-        "state": {
-          "changed": true,
-          "changed_domains": [
-            "time",
-            "combat",
-            "player",
-            "survival",
-            "world",
-            "narrative"
-          ],
-          "revision": 25
-        }
-      },
-      "session_summary": {
-        "interaction_seq": 24,
-        "location": "Starfall Village",
-        "player_level": 1,
-        "state_revision": 25,
-        "title": "Wren — Starfall Grove"
-      },
-      "status": 200,
-      "step": "I flee from the Echo Wolf.",
-      "turn_rows": 1
-    },
-    {
-      "changes": {
-        "combat": {
-          "participants": {
-            "enemy:creature-echo-wolf:1": 6,
-            "npc:liora-fen": 100,
-            "player": 98
-          }
-        },
-        "hp": 6,
-        "inventory": {
-          "Healing Potion": -1
-        },
-        "survival": {
-          "fatigue": 1,
-          "hunger": 1,
-          "thirst": 2
-        }
-      },
-      "document_hash": "sha256:1b522273d80bfc5cbdec5f6d54bcd814a6b591f0c73de0ca246f590889ceb059",
-      "facts": {
-        "combat": {
-          "active": true,
-          "participants": {
-            "enemy:creature-echo-wolf:1": 6,
-            "npc:liora-fen": 100,
-            "player": 98
-          }
-        },
-        "equipment": [
-          "Iron Dagger",
-          "Travel Cloak"
-        ],
-        "hp": 98,
-        "inventory": {
-          "Gateborn Compass": 1,
-          "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
-        },
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
-        "party": [
-          "npc:liora-fen"
-        ],
-        "present_npc_ids": [
-          "npc:brindle-gearwing",
-          "npc:captain-rhea-sunward",
-          "npc:liora-fen",
-          "npc:orik-stonewake"
-        ],
-        "purse_copper": 277,
-        "quests": {
-          "First Night in Aurelia": "completed",
-          "The Hollow Meridian": "available",
-          "Voices in the Phone": "active"
-        },
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 10
-          }
-        },
-        "survival": {
-          "fatigue": 6,
-          "hunger": 8,
-          "thirst": 41
-        },
         "turn_count": 25
       },
       "model_calls": [
@@ -4199,9 +4040,8 @@
       "response": {
         "changed_domains": [
           "time",
-          "inventory",
-          "player",
           "combat",
+          "player",
           "survival",
           "world",
           "narrative"
@@ -4211,9 +4051,8 @@
           "changed": true,
           "changed_domains": [
             "time",
-            "inventory",
-            "player",
             "combat",
+            "player",
             "survival",
             "world",
             "narrative"
@@ -4229,12 +4068,29 @@
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "I drink the Healing Potion.",
+      "step": "I flee from the Echo Wolf.",
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:b9cdaf6837959830bc59ec4317820d956d19ac97ae283627811f97a757cf9b91",
+      "changes": {
+        "combat": {
+          "participants": {
+            "enemy:creature-echo-wolf:1": 6,
+            "npc:liora-fen": 100,
+            "player": 98
+          }
+        },
+        "hp": 6,
+        "inventory": {
+          "Healing Potion": -1
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:f7ad932edc28ed68cf78922cacc2f341ce1eeabfd71e7a3765966e8736244da0",
       "facts": {
         "combat": {
           "active": true,
@@ -4321,11 +4177,16 @@
         },
         "turn_count": 26
       },
-      "model_calls": [],
+      "model_calls": [
+        "narration"
+      ],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -4334,19 +4195,42 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/combat_state",
+        "simulation_state/economy_state",
+        "simulation_state/environment",
+        "simulation_state/merchant_state",
+        "simulation_state/player_state",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/player",
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
+          "inventory",
+          "player",
+          "combat",
+          "survival",
+          "world",
           "narrative"
         ],
-        "source": "rpg_turn_pipeline_v1",
+        "source": "narrative_engine_resolved_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
+            "inventory",
+            "player",
+            "combat",
+            "survival",
+            "world",
             "narrative"
           ],
           "revision": 27
@@ -4360,12 +4244,12 @@
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "Check my quests",
+      "step": "I drink the Healing Potion.",
       "turn_rows": 1
     },
     {
       "changes": {},
-      "document_hash": "sha256:d7bdec8e9ad26ec4becde824beafd5560f77ae120c1acc8c08189fad0635a292",
+      "document_hash": "sha256:9f5e0fd7f263617b0a1eb2bb3f22b02940dc7e2c5862663515f8c3998cc8ca4b",
       "facts": {
         "combat": {
           "active": true,
@@ -4456,11 +4340,13 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/campaign_calendar",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "state/current_turn",
@@ -4468,13 +4354,15 @@
       ],
       "response": {
         "changed_domains": [
-          "time"
+          "time",
+          "narrative"
         ],
         "source": "rpg_turn_pipeline_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time"
+            "time",
+            "narrative"
           ],
           "revision": 28
         }
@@ -4487,12 +4375,12 @@
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "go to Skybridge Pass",
+      "step": "Check my quests",
       "turn_rows": 1
     },
     {
       "changes": {},
-      "document_hash": "sha256:e41dd2aa2f8a145135e14f319a43bfe27644d805d5fd619c2ee399c5dcb88a0f",
+      "document_hash": "sha256:a97d9e2c636b4e793d067838dc00788b5cbc35c051eb25a3cd17d0b407943477",
       "facts": {
         "combat": {
           "active": true,
@@ -4614,12 +4502,12 @@
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "go to Starfall Village",
+      "step": "go to Skybridge Pass",
       "turn_rows": 1
     },
     {
       "changes": {},
-      "document_hash": "sha256:1b6aafe16884e20a6164c2974920af6fe0e8e84a08882771902f0bbd877a8d7c",
+      "document_hash": "sha256:957cabe7225f034475697240d1bfae4b28df547b5c7b7823b034bc704fb89914",
       "facts": {
         "combat": {
           "active": true,
@@ -4741,12 +4629,12 @@
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
-      "step": "go to Starfall Grove",
+      "step": "go to Starfall Village",
       "turn_rows": 1
     },
     {
       "changes": {},
-      "document_hash": "sha256:dd58ec7f61aa64cfffd970ac35385cb71e2d75cad57798e73953548e48e14a14",
+      "document_hash": "sha256:a4d9654c9d1848613c00bcd1cfdde132da2e45fafc2f8b69838af7f2227f8f80",
       "facts": {
         "combat": {
           "active": true,
@@ -4865,6 +4753,133 @@
         "location": "Starfall Village",
         "player_level": 1,
         "state_revision": 31,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Starfall Grove",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:b72a196be8382a8438c1ef5c5e03931fe6e83c02bdd9367f44687c6878346b52",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 6,
+            "npc:liora-fen": 100,
+            "player": 98
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 98,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 41
+        },
+        "turn_count": 31
+      },
+      "model_calls": [],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [
+          "time"
+        ],
+        "source": "rpg_turn_pipeline_v1",
+        "state": {
+          "changed": true,
+          "changed_domains": [
+            "time"
+          ],
+          "revision": 32
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 31,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 32,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,

@@ -127,6 +127,20 @@ def persist_foreground_turn(
                 f"RPG campaign {session_id} was not initialized in PostgreSQL before the turn"
             )
 
+        for map_event in result.get("map_events") or ():  # a grid move's map change (session/turn/tactical.py)
+            work.map_instances.append_event(
+                context,
+                map_instance_id=str(map_event["map_instance_id"]),
+                command_id=str(map_event["command_id"]),
+                event_id=str(map_event["event_id"]),
+                event_type=str(map_event["event_type"]),
+                event_sequence=int(map_event["event_sequence"]),
+                revision_before=int(map_event["revision_before"]),
+                revision_after=int(map_event["revision_after"]),
+                event=dict(map_event["event"]),
+                snapshot=dict(map_event["snapshot"]),
+            )
+
         stored_narrative = None
         if canonical_narrative is not None:
             stored_narrative = work.narrative_responses.save(

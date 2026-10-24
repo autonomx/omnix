@@ -129,7 +129,9 @@ def run_planned_turn(
             "planned": planned.model_dump(mode="json"),
             "intent": reading_record(reading),
             "changes": _reported(applied),
+            **({"action_result": resolution.action_result} if resolution.action_result else {}),
         },
+        **({"map_events": [resolution.map_event]} if resolution.map_event else {}),
     }
     if resolution.speech:
         # The person's line is written: the narrative engine adopts it as the turn's spoken answer.
@@ -221,6 +223,50 @@ def _load(ctx: Any) -> dict[str, Any]:
     return session
 
 
+def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
+    """A grid move or attack in a fight (``session/turn/tactical.py``): the campaign revision the player saw is its
+    only token; what the grid refuses refuses the request, with no turn taken."""
+    from app.apps.rpg.foundation.state.changes import TurnCounted
+    from app.apps.rpg.session.turn.resolution import Resolution
+    from app.apps.rpg.session.turn.tactical import grid_attack, grid_move, map_for_turn
+    from app.apps.rpg.world.tactical_spatial import TacticalSpatialError
+
+    session = _load(ctx)
+    if not session:
+        return {"ok": False, "error": "session_not_found"}
+    revision = int(_d(session.get("runtime_state")).get("state_revision") or 0)
+    if action.get("expected_campaign_revision") is not None and int(action["expected_campaign_revision"]) != revision:
+        return {"ok": False, "error": "stale_tactical_campaign_revision", "status_code": 409,
+                "message": f"expected={action['expected_campaign_revision']}:current={revision}"}
+    simulation = _d(session.get("simulation_state"))
+    state, manifest = _d(session.get("state")), _d(session.get("manifest"))
+    count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
+    try:
+        definition, snapshot = map_for_turn(_s(action.get("map_instance_id")), campaign_id=ctx.session_id)
+        if action.get("type") == "tactical_move":
+            grid = grid_move(ctx.session_id, simulation, definition, snapshot,
+                             destination=tuple(action.get("destination") or ()),  # type: ignore[arg-type]
+                             command_id=_s(action.get("command_id")) or f"grid:{count}")
+            planned = PlannedAction(mechanic="fight", ticks=0, reason="grid_move")
+        else:
+            grid = grid_attack(ctx.session_id, simulation, definition, snapshot, target_id=_s(action.get("target_id")),
+                               attack=_s(action.get("attack")) or "melee_attack", turn_key=str(count))
+            planned = PlannedAction(mechanic="fight", target_id=_s(action.get("target_id")), ticks=0,
+                                    reason="grid_attack")
+    except (KeyError, TacticalSpatialError) as exc:
+        return {"ok": False, "error": str(exc).strip("'"), "status_code": 404 if isinstance(exc, KeyError) else 409}
+    ticks = -(-grid.minutes // MINUTES_PER_TICK)
+    resolution = Resolution(
+        [TurnCounted(turn_count=count), *([TimeAdvanced(ticks=ticks, minutes=grid.minutes)] if grid.minutes else []),
+         *grid.changes],
+        grid.lines, minutes=grid.minutes, needs="standard_turn" if grid.minutes else None, told=False,
+        map_event=grid.map_event, action_result=grid.action_result)
+    reading = IntentCandidate(family="attack" if planned.reason == "grid_attack" else "move",
+                              target_id=planned.target_id or None, confidence=1.0, reason=planned.reason)
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
 def apply_planned_turn_stage(ctx: Any) -> Any:
     """The session pipeline's first stage: run the turn here when its mechanic has moved to the pipeline."""
     if not ctx.resolved and _d(ctx.action).get("turn_kind") == "world_tick":
@@ -231,6 +277,11 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
             ctx.result = run_world_tick_turn(session, request=request)
             ctx.result.setdefault("trace_id", ctx.trace_id)
             ctx.resolved = True
+        return ctx
+    if not ctx.resolved and _d(ctx.action).get("turn_kind") == "structured_action":
+        ctx.result = _structured_turn(ctx, _d(ctx.action))
+        ctx.result.setdefault("trace_id", ctx.trace_id)
+        ctx.resolved = True
         return ctx
     if ctx.resolved or ctx.action or not _s(ctx.player_input).strip():
         return ctx

@@ -331,7 +331,7 @@ def run_rpg_turn(
                 404
                 if isinstance(result, dict)
                 and result.get("error") == "session_not_found"
-                else 400
+                else int(result.get("status_code") or 400) if isinstance(result, dict) else 400
             )
             raise HTTPException(status_code=status_code, detail=result)
 

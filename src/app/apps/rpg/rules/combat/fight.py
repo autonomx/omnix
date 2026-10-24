@@ -137,7 +137,8 @@ def _penalty(conditions: Mapping[str, list[dict[str, Any]]], actor_id: str) -> i
 
 
 def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: dict[str, list[dict[str, Any]]],
-            actor_id: str, target_id: str, *, kind: str = "attack", disadvantage: bool = False) -> dict[str, Any]:
+            actor_id: str, target_id: str, *, kind: str = "attack", disadvantage: bool = False,
+            cover: int = 0) -> dict[str, Any]:
     """One blow, applied to the combat section (and a heavy one's wound to ``conditions``)."""
     numbers = _numbers(simulation, combat, actor_id)
     target = participant(combat, target_id)
@@ -146,7 +147,7 @@ def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
         roll = min(roll, deterministic_roll(combat_seed(combat, kind, actor_id, target_id, 2), 1, 20))
     penalty = _penalty(conditions, actor_id)
     total = roll + numbers["accuracy_bonus"] - numbers["encumbrance_penalty"] - penalty
-    defense = int(target.get("defense") or 10)
+    defense = int(target.get("defense") or 10) + max(0, cover)
     hit = total >= defense
     before = int(target.get("hp") or 0)
     damage = 0
@@ -341,8 +342,11 @@ def _defeat(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
 
 
 # -- the turn -----------------------------------------------------------------------------------------------------------
-def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = "", turn_key: str = "") -> FightTurn | None:
-    """One turn of a fight; ``None`` when the target is not a creature the world knows (the older path's)."""
+def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = "", turn_key: str = "",
+          cover: int = 0) -> FightTurn | None:
+    """One turn of a fight; ``None`` when the target is not a creature the world knows (the older path's).
+
+    ``cover`` is what the target's cover adds to its defence against the hero's blow (the grid's, combat.md)."""
     existing = _d(simulation.get("combat_state"))
     fighting = existing.get("active") is True
     conditions = _conditions(simulation)
@@ -363,7 +367,7 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
         _advance(combat)
     elif not ended and action == "attack":
         target_id = _named(combat, target_ref) or default_target_for_actor(combat, "player")
-        blow = _strike(simulation, combat, conditions, "player", target_id)
+        blow = _strike(simulation, combat, conditions, "player", target_id, cover=cover)
         report.update(blow, reason=report.get("reason") or ("combat_defeat_resolved" if blow["defeated"]
                                                             else "combat_attack_resolved"))
         ended = _settle(combat)

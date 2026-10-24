@@ -33,6 +33,13 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
 - **Time.** A combat turn takes a minute of in-game time and presses on needs as a standard turn; a lost fight
   takes 8 hours.
 
+- **On the grid** (the tactical routes) the fight is the same fight, seen on the map: each command is a
+  structured-action turn whose only token is the campaign revision the player saw. A move spends the hero's
+  movement for their turn (60, a fresh allowance each time the turn comes round; a square of open ground costs 10)
+  and is the map's change, committed with the turn; an attack is the fight's blow, with the target's cover adding to
+  its defence (half +2, full +5) and a blocked line of sight or a target out of reach refused. A refused grid command
+  takes no turn. Grid turns tell no narrator: their lines are the game's own.
+
 ## State it changes
 
 `CombatAdvanced` (the combat section as the turn leaves it), `HpChanged`, `CompanionHpChanged`, `ConditionsChanged`
@@ -52,5 +59,5 @@ ends the fight with parting blows; a creature the world does not know is not fou
 
 ## Out of scope (RQ-2.6 part 2)
 
-Abilities and their costs, ammunition, items used mid-fight, companion commands mid-fight, the tactical grid's moves
-and attacks (`tactical_spatial_service` as a producer of structured actions), and fighting people.
+Abilities and their costs, ammunition, companion commands mid-fight, reactions on the grid (a blow at a foe moving
+out of reach), creatures placed on the grid when a fight starts, and fighting people.

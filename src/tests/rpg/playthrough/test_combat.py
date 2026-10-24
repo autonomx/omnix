@@ -101,10 +101,7 @@ def test_fleeing_ends_the_fight_and_counts(launch, world) -> None:
     assert play.survival()["hunger"] >= hunger  # time passes in a fight too
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-2.6: the tactical routes read combat_state at the top of the campaign document while the turn engine "
-    "keeps the fight under simulation_state, and the fight's 'player' is not the map's player:<session> actor, "
-    "so a grid move mid-fight is refused with tactical_combat_not_active")))
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_tactical_move_and_attack_in_a_fight(launch, world) -> None:
     play = launch(world)
     play.turn("I attack the Echo Wolf.")

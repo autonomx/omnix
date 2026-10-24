@@ -8,7 +8,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from app.apps.rpg.world.map_grid_contracts import GridMapDefinition
 from app.apps.rpg.world.map_instance_runtime import CampaignMapInstanceSnapshot
-from app.apps.rpg.world.tactical_spatial import tactical_turn_summary
+from app.apps.rpg.world.tactical_spatial import grid_turn_summary
 from app.apps.rpg.world.map_observer_runtime import (
     ObserverMapKnowledge,
     ObserverPerceptionPolicy,
@@ -74,7 +74,8 @@ def _campaign_turn(work: Any, context: Any, campaign_id: str, observer_actor_id:
         return {"campaign_revision": None, "tactical": {"combat_active": False}}
     return {
         "campaign_revision": int(campaign["revision"]),
-        "tactical": tactical_turn_summary(dict(campaign.get("state") or {}), observer_actor_id),
+        "tactical": grid_turn_summary(dict(dict(campaign.get("state") or {}).get("simulation_state") or {}),
+                                      campaign_id, observer_actor_id),
     }
 
 

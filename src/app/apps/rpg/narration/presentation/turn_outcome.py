@@ -71,6 +71,8 @@ class TurnOutcome(_Frozen):
     applied_changes: tuple[StateChange, ...] = ()
     world_events: tuple[dict[str, Any], ...] = ()
     dialogue_plan: dict[str, Any] | None = None
+    # A structured action's own answer, besides its changes: a grid move's cell and the map's revision.
+    action_result: dict[str, Any] | None = None
     narration: NarrationReference = Field(default_factory=NarrationReference)
     presentation: PresentationHints = Field(default_factory=PresentationHints)
     timings: dict[str, float] = Field(default_factory=dict)
@@ -140,6 +142,7 @@ def build_turn_outcome(
         ),
         planned_action=str(planned["mechanic"]) if planned.get("mechanic") else None,
         applied_changes=tuple(changes),
+        action_result=dict(planned["action_result"]) if isinstance(planned.get("action_result"), Mapping) else None,
         world_events=tuple(dict(event) for event in events[:12]),
         narration=NarrationReference(
             response_id=str(canonical.get("response_id") or ""),

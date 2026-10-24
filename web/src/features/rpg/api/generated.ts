@@ -2812,6 +2812,24 @@ export interface components {
         AuthSessionResponse: core["schemas"]["AuthSessionResponse"];
         /** AuthSessionSummary */
         AuthSessionSummary: core["schemas"]["AuthSessionSummary"];
+        /**
+         * CampaignEnded
+         * @description The campaign is over (a hardcore hero fell).
+         */
+        CampaignEnded: {
+            /**
+             * Defeated By
+             * @default []
+             */
+            defeated_by: string[];
+            /** Reason */
+            reason: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "campaign_ended";
+        };
         /** CancelJobRequest */
         CancelJobRequest: core["schemas"]["CancelJobRequest"];
         /** CancelState */
@@ -2872,6 +2890,22 @@ export interface components {
         CoinMarketCapCredentialStatus: core["schemas"]["CoinMarketCapCredentialStatus"];
         /** CoinMarketCapCredentialUpdate */
         CoinMarketCapCredentialUpdate: core["schemas"]["CoinMarketCapCredentialUpdate"];
+        /**
+         * CombatAdvanced
+         * @description The fight as a turn of it leaves it: who stands at what health, the initiative order and whose turn it is,
+         *     the round, and the log of blows. The combat section is the fight rule's own (``rules/combat/fight.py``).
+         */
+        CombatAdvanced: {
+            /** Combat State */
+            combat_state?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "combat_advanced";
+        };
         /** CombatEnded */
         CombatEnded: {
             /**
@@ -2918,6 +2952,21 @@ export interface components {
              */
             type: "combatant_hp_changed";
         };
+        /**
+         * CompanionHpChanged
+         * @description A companion's health, as a fight leaves it.
+         */
+        CompanionHpChanged: {
+            /** Hp */
+            hp: number;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_hp_changed";
+        };
         /** CompanionJoined */
         CompanionJoined: {
             /** Name */
@@ -2945,10 +2994,50 @@ export interface components {
              */
             type: "companion_left";
         };
+        /**
+         * CompanionOrdered
+         * @description A standing order a companion keeps until given another: keep watch, stay here, follow.
+         */
+        CompanionOrdered: {
+            /** Npc Id */
+            npc_id: string;
+            /** Order */
+            order: string;
+            /**
+             * Stance
+             * @default
+             */
+            stance: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "companion_ordered";
+        };
         /** CompatibilityHandoffPayload */
         CompatibilityHandoffPayload: core["schemas"]["CompatibilityHandoffPayload"];
         /** CompleteJobRequest */
         CompleteJobRequest: core["schemas"]["CompleteJobRequest"];
+        /**
+         * ConditionsChanged
+         * @description An actor's lingering conditions (battered, wounded), as the rule left them: the hero or a companion.
+         */
+        ConditionsChanged: {
+            /** Actor Id */
+            actor_id: string;
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "conditions_changed";
+        };
         /**
          * CreateChatSessionRequest
          * @description Client selection; trusted identity/profile content is intentionally absent.
@@ -2965,6 +3054,19 @@ export interface components {
          * @description The downloaded models that can be this default, and the current one ('' when none of them is).
          */
         DefaultSlot: core["schemas"]["DefaultSlot"];
+        /**
+         * DefeatRecorded
+         * @description The hero lost a fight: how many they have lost.
+         */
+        DefeatRecorded: {
+            /** Defeats */
+            defeats: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "defeat_recorded";
+        };
         /** DeleteChatSessionResponse */
         DeleteChatSessionResponse: core["schemas"]["DeleteChatSessionResponse"];
         /** DesktopGoogleHandoffRequest */
@@ -2980,6 +3082,35 @@ export interface components {
         DesktopGoogleStartResponse: core["schemas"]["DesktopGoogleStartResponse"];
         /** DiagnosticsPayload */
         DiagnosticsPayload: core["schemas"]["DiagnosticsPayload"];
+        /**
+         * DialogueExchanged
+         * @description What was said between the hero and someone, kept for the conversation's continuity; they are now the one the
+         *     hero is talking to.
+         */
+        DialogueExchanged: {
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Npc Line
+             * @default
+             */
+            npc_line: string;
+            /**
+             * Player Line
+             * @default
+             */
+            player_line: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "dialogue_exchanged";
+        };
         /** EmailChangeRequest */
         EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
         /**
@@ -3997,6 +4128,21 @@ export interface components {
             type: "journal_written";
         };
         JsonValue: unknown;
+        /**
+         * KnowledgeShared
+         * @description Something a person knows, now known to the hero.
+         */
+        KnowledgeShared: {
+            /** Fact Id */
+            fact_id: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "knowledge_shared";
+        };
         /** LegacyGenerateTitleRequest */
         LegacyGenerateTitleRequest: core["schemas"]["LegacyGenerateTitleRequest"];
         /** LegacyGenerateTitleResponse */
@@ -4013,6 +4159,33 @@ export interface components {
         LegacySessionUpdateRequest: core["schemas"]["LegacySessionUpdateRequest"];
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
+        /**
+         * LevelReached
+         * @description The hero rose a level (or several): where their progression now stands.
+         */
+        LevelReached: {
+            /** Level */
+            level: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "level_reached";
+            /**
+             * Unspent Points
+             * @default 0
+             */
+            unspent_points: number;
+            /**
+             * Unspent Skill Points
+             * @default 0
+             */
+            unspent_skill_points: number;
+            /** Xp */
+            xp: number;
+            /** Xp To Next */
+            xp_to_next: number;
+        };
         /** Live2DAvatarActionResponse */
         Live2DAvatarActionResponse: core["schemas"]["Live2DAvatarActionResponse"];
         /** Live2DModelCatalogItem */
@@ -4404,6 +4577,21 @@ export interface components {
              */
             type: "purse_changed";
         };
+        /**
+         * QuestOffered
+         * @description A quest put to the hero by someone; it names who offered it.
+         */
+        QuestOffered: {
+            /** Npc Id */
+            npc_id: string;
+            /** Quest Id */
+            quest_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quest_offered";
+        };
         /** QuestPlaceReached */
         QuestPlaceReached: {
             /** Location Id */
@@ -4466,6 +4654,19 @@ export interface components {
          * @enum {string}
          */
         ResourceClass: core["schemas"]["ResourceClass"];
+        /**
+         * RestTaken
+         * @description A full rest: where the hero last rested, and so where a beaten hero wakes.
+         */
+        RestTaken: {
+            /** Location Id */
+            location_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rest_taken";
+        };
         /**
          * RetentionRunDiagnostics
          * @description The newest retention run; the error is reported by class only.
@@ -7169,8 +7370,7 @@ export interface components {
             /** Expected Campaign Revision */
             expected_campaign_revision: number;
             /** Expected Map State Revision */
-            expected_map_state_revision: number;
-            policy?: components["schemas"]["TacticalSpatialPolicy"] | null;
+            expected_map_state_revision?: number | null;
             /** Submission Id */
             submission_id: string;
             /** Target Id */
@@ -7192,8 +7392,7 @@ export interface components {
             /** Expected Campaign Revision */
             expected_campaign_revision: number;
             /** Expected Map State Revision */
-            expected_map_state_revision: number;
-            policy?: components["schemas"]["TacticalSpatialPolicy"] | null;
+            expected_map_state_revision?: number | null;
             /** Submission Id */
             submission_id: string;
         } & {
@@ -8992,6 +9191,54 @@ export interface components {
         SendChatMessageRequest: core["schemas"]["SendChatMessageRequest"];
         /** SendChatMessageResponse */
         SendChatMessageResponse: core["schemas"]["SendChatMessageResponse"];
+        /**
+         * ServiceReserved
+         * @description A service paid for and kept for later: a room for the night.
+         */
+        ServiceReserved: {
+            /**
+             * Duration
+             * @default
+             */
+            duration: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Offer Id */
+            offer_id: string;
+            /**
+             * Provider Id
+             * @default
+             */
+            provider_id: string;
+            /**
+             * Provider Name
+             * @default
+             */
+            provider_name: string;
+            /** Service Kind */
+            service_kind: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "service_reserved";
+        };
+        /**
+         * ServiceUsed
+         * @description A service paid for and kept, used now: the room slept in.
+         */
+        ServiceUsed: {
+            /** Offer Id */
+            offer_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "service_used";
+        };
         /** SetDefaultModels */
         SetDefaultModels: core["schemas"]["SetDefaultModels"];
         /** SettingsPatch */
@@ -9037,36 +9284,31 @@ export interface components {
         StateHashRequest: core["schemas"]["StateHashRequest"];
         /** StateHashResponse */
         StateHashResponse: core["schemas"]["StateHashResponse"];
-        /** TacticalSpatialPolicy */
-        TacticalSpatialPolicy: {
+        /**
+         * StockTaken
+         * @description What an offer has left after a sale.
+         */
+        StockTaken: {
+            /** Offer Id */
+            offer_id: string;
+            /** Remaining */
+            remaining: number;
             /**
-             * Default Action Budget
-             * @default 1
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            default_action_budget?: number;
-            /**
-             * Default Movement Budget
-             * @default 60
-             */
-            default_movement_budget?: number;
-            /**
-             * Full Cover Bonus
-             * @default 5
-             */
-            full_cover_bonus?: number;
-            /**
-             * Half Cover Bonus
-             * @default 2
-             */
-            half_cover_bonus?: number;
-            /**
-             * Max Reactions Per Move
-             * @default 8
-             */
-            max_reactions_per_move?: number;
+            type: "stock_taken";
         };
-        /** TimeAdvanced */
+        /**
+         * TimeAdvanced
+         * @description The turn's ticks of the campaign clock, and the in-game minutes they took (the world tick moves the clock).
+         */
         TimeAdvanced: {
+            /**
+             * Minutes
+             * @default 0
+             */
+            minutes: number;
             /**
              * Ticks
              * @default 1
@@ -9077,6 +9319,39 @@ export interface components {
              * @enum {string}
              */
             type: "time_advanced";
+        };
+        /**
+         * TradeRemembered
+         * @description A trade in the campaign's ledger, which the trader's later dialogue can recall.
+         */
+        TradeRemembered: {
+            /**
+             * Copper
+             * @default 0
+             */
+            copper: number;
+            /**
+             * Deal
+             * @enum {string}
+             */
+            deal: "bought" | "sold";
+            /** Provider Id */
+            provider_id: string;
+            /**
+             * Provider Name
+             * @default
+             */
+            provider_name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade_remembered";
+            /**
+             * What
+             * @default
+             */
+            what: string;
         };
         /** TurnCounted */
         TurnCounted: {
@@ -9121,11 +9396,15 @@ export interface components {
         };
         /** TurnOutcome */
         TurnOutcome: {
+            /** Action Result */
+            action_result?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;

@@ -34,6 +34,8 @@ class Resolution:
     needs: str | None = None  # the survival profile of the turn, or none
     told: bool = True  # told to the narrator; else the lines are the game's own, with no model call
     speech: dict[str, str] | None = None  # a person's spoken line, already written: speaker_id, speaker, line
+    map_event: dict[str, Any] | None = None  # a grid move: the map's change, committed in the turn's unit of work
+    action_result: dict[str, Any] | None = None  # a structured action's own answer (the tactical route's fields)
 
 
 def _counted(document: Mapping[str, Any]) -> TurnCounted:

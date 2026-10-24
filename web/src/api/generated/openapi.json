@@ -6798,6 +6798,38 @@
         "title": "CalibratorArtifact",
         "type": "object"
       },
+      "CampaignEnded": {
+        "additionalProperties": false,
+        "description": "The campaign is over (a hardcore hero fell).",
+        "properties": {
+          "defeated_by": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Defeated By",
+            "type": "array"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "type": {
+            "const": "campaign_ended",
+            "default": "campaign_ended",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "type",
+          "defeated_by"
+        ],
+        "title": "CampaignEnded",
+        "type": "object"
+      },
       "CancelJobRequest": {
         "properties": {
           "reason": {
@@ -10400,6 +10432,28 @@
         "title": "CoinMarketCapCredentialUpdate",
         "type": "object"
       },
+      "CombatAdvanced": {
+        "additionalProperties": false,
+        "description": "The fight as a turn of it leaves it: who stands at what health, the initiative order and whose turn it is,\nthe round, and the log of blows. The combat section is the fight rule's own (``rules/combat/fight.py``).",
+        "properties": {
+          "combat_state": {
+            "additionalProperties": true,
+            "title": "Combat State",
+            "type": "object"
+          },
+          "type": {
+            "const": "combat_advanced",
+            "default": "combat_advanced",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "CombatAdvanced",
+        "type": "object"
+      },
       "CombatEnded": {
         "additionalProperties": false,
         "properties": {
@@ -10713,6 +10767,35 @@
         "title": "CompanionAttentionDecision",
         "type": "object"
       },
+      "CompanionHpChanged": {
+        "additionalProperties": false,
+        "description": "A companion's health, as a fight leaves it.",
+        "properties": {
+          "hp": {
+            "minimum": 0,
+            "title": "Hp",
+            "type": "integer"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "companion_hp_changed",
+            "default": "companion_hp_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "hp",
+          "type"
+        ],
+        "title": "CompanionHpChanged",
+        "type": "object"
+      },
       "CompanionJoined": {
         "additionalProperties": false,
         "properties": {
@@ -10812,6 +10895,41 @@
           "diagnostics_policy"
         ],
         "title": "CompanionMemoryMetrics",
+        "type": "object"
+      },
+      "CompanionOrdered": {
+        "additionalProperties": false,
+        "description": "A standing order a companion keeps until given another: keep watch, stay here, follow.",
+        "properties": {
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "order": {
+            "minLength": 1,
+            "title": "Order",
+            "type": "string"
+          },
+          "stance": {
+            "default": "",
+            "title": "Stance",
+            "type": "string"
+          },
+          "type": {
+            "const": "companion_ordered",
+            "default": "companion_ordered",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "order",
+          "type",
+          "stance"
+        ],
+        "title": "CompanionOrdered",
         "type": "object"
       },
       "CompanyEvents": {
@@ -10965,6 +11083,39 @@
           }
         },
         "title": "CompleteJobRequest",
+        "type": "object"
+      },
+      "ConditionsChanged": {
+        "additionalProperties": false,
+        "description": "An actor's lingering conditions (battered, wounded), as the rule left them: the hero or a companion.",
+        "properties": {
+          "actor_id": {
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conditions",
+            "type": "array"
+          },
+          "type": {
+            "const": "conditions_changed",
+            "default": "conditions_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor_id",
+          "type",
+          "conditions"
+        ],
+        "title": "ConditionsChanged",
         "type": "object"
       },
       "ConfidenceRiskFactors": {
@@ -12435,6 +12586,29 @@
           "current"
         ],
         "title": "DefaultSlot",
+        "type": "object"
+      },
+      "DefeatRecorded": {
+        "additionalProperties": false,
+        "description": "The hero lost a fight: how many they have lost.",
+        "properties": {
+          "defeats": {
+            "minimum": 1,
+            "title": "Defeats",
+            "type": "integer"
+          },
+          "type": {
+            "const": "defeat_recorded",
+            "default": "defeat_recorded",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "defeats",
+          "type"
+        ],
+        "title": "DefeatRecorded",
         "type": "object"
       },
       "DeleteCharacterAvatarPackResponse": {
@@ -14855,6 +15029,47 @@
           "runtime"
         ],
         "title": "DiagnosticsPayload",
+        "type": "object"
+      },
+      "DialogueExchanged": {
+        "additionalProperties": false,
+        "description": "What was said between the hero and someone, kept for the conversation's continuity; they are now the one the\nhero is talking to.",
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "npc_line": {
+            "default": "",
+            "title": "Npc Line",
+            "type": "string"
+          },
+          "player_line": {
+            "default": "",
+            "title": "Player Line",
+            "type": "string"
+          },
+          "type": {
+            "const": "dialogue_exchanged",
+            "default": "dialogue_exchanged",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "type",
+          "name",
+          "player_line",
+          "npc_line"
+        ],
+        "title": "DialogueExchanged",
         "type": "object"
       },
       "Dictation": {
@@ -26241,6 +26456,35 @@
         "title": "KillSwitchChange",
         "type": "object"
       },
+      "KnowledgeShared": {
+        "additionalProperties": false,
+        "description": "Something a person knows, now known to the hero.",
+        "properties": {
+          "fact_id": {
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "knowledge_shared",
+            "default": "knowledge_shared",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "fact_id",
+          "type"
+        ],
+        "title": "KnowledgeShared",
+        "type": "object"
+      },
       "LegacyGenerateTitleRequest": {
         "properties": {
           "ai_response": {
@@ -26462,6 +26706,55 @@
           "success"
         ],
         "title": "LegacySuccessResponse",
+        "type": "object"
+      },
+      "LevelReached": {
+        "additionalProperties": false,
+        "description": "The hero rose a level (or several): where their progression now stands.",
+        "properties": {
+          "level": {
+            "minimum": 1,
+            "title": "Level",
+            "type": "integer"
+          },
+          "type": {
+            "const": "level_reached",
+            "default": "level_reached",
+            "title": "Type",
+            "type": "string"
+          },
+          "unspent_points": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Unspent Points",
+            "type": "integer"
+          },
+          "unspent_skill_points": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Unspent Skill Points",
+            "type": "integer"
+          },
+          "xp": {
+            "minimum": 0,
+            "title": "Xp",
+            "type": "integer"
+          },
+          "xp_to_next": {
+            "minimum": 1,
+            "title": "Xp To Next",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "xp",
+          "xp_to_next",
+          "type",
+          "unspent_points",
+          "unspent_skill_points"
+        ],
+        "title": "LevelReached",
         "type": "object"
       },
       "Live2DAvatarActionResponse": {
@@ -41953,6 +42246,35 @@
         "title": "PushSubscriptionWrite",
         "type": "object"
       },
+      "QuestOffered": {
+        "additionalProperties": false,
+        "description": "A quest put to the hero by someone; it names who offered it.",
+        "properties": {
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "quest_id": {
+            "minLength": 1,
+            "title": "Quest Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "quest_offered",
+            "default": "quest_offered",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quest_id",
+          "npc_id",
+          "type"
+        ],
+        "title": "QuestOffered",
+        "type": "object"
+      },
       "QuestPlaceReached": {
         "additionalProperties": false,
         "properties": {
@@ -43717,6 +44039,29 @@
           "resource_id"
         ],
         "title": "ResourceScope",
+        "type": "object"
+      },
+      "RestTaken": {
+        "additionalProperties": false,
+        "description": "A full rest: where the hero last rested, and so where a beaten hero wakes.",
+        "properties": {
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "rest_taken",
+            "default": "rest_taken",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "type"
+        ],
+        "title": "RestTaken",
         "type": "object"
       },
       "RetentionRunDiagnostics": {
@@ -50376,19 +50721,16 @@
             "type": "integer"
           },
           "expected_map_state_revision": {
-            "minimum": 0,
-            "title": "Expected Map State Revision",
-            "type": "integer"
-          },
-          "policy": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TacticalSpatialPolicy"
+                "minimum": 0,
+                "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Expected Map State Revision"
           },
           "submission_id": {
             "minLength": 1,
@@ -50406,8 +50748,7 @@
           "command_id",
           "actor_id",
           "target_id",
-          "expected_campaign_revision",
-          "expected_map_state_revision"
+          "expected_campaign_revision"
         ],
         "title": "RpgTacticalAttackRequestBody",
         "type": "object"
@@ -50445,19 +50786,16 @@
             "type": "integer"
           },
           "expected_map_state_revision": {
-            "minimum": 0,
-            "title": "Expected Map State Revision",
-            "type": "integer"
-          },
-          "policy": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TacticalSpatialPolicy"
+                "minimum": 0,
+                "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Expected Map State Revision"
           },
           "submission_id": {
             "minLength": 1,
@@ -50470,7 +50808,6 @@
           "command_id",
           "actor_id",
           "destination",
-          "expected_map_state_revision",
           "expected_campaign_revision"
         ],
         "title": "RpgTacticalMoveRequestBody",
@@ -56853,6 +57190,82 @@
         "title": "SendChatMessageResponse",
         "type": "object"
       },
+      "ServiceReserved": {
+        "additionalProperties": false,
+        "description": "A service paid for and kept for later: a room for the night.",
+        "properties": {
+          "duration": {
+            "default": "",
+            "title": "Duration",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "offer_id": {
+            "minLength": 1,
+            "title": "Offer Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "default": "",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "provider_name": {
+            "default": "",
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "service_kind": {
+            "minLength": 1,
+            "title": "Service Kind",
+            "type": "string"
+          },
+          "type": {
+            "const": "service_reserved",
+            "default": "service_reserved",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offer_id",
+          "service_kind",
+          "type",
+          "provider_id",
+          "provider_name",
+          "label",
+          "duration"
+        ],
+        "title": "ServiceReserved",
+        "type": "object"
+      },
+      "ServiceUsed": {
+        "additionalProperties": false,
+        "description": "A service paid for and kept, used now: the room slept in.",
+        "properties": {
+          "offer_id": {
+            "minLength": 1,
+            "title": "Offer Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "service_used",
+            "default": "service_used",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offer_id",
+          "type"
+        ],
+        "title": "ServiceUsed",
+        "type": "object"
+      },
       "SessionMemoryState": {
         "additionalProperties": false,
         "properties": {
@@ -59722,6 +60135,35 @@
         "title": "StochRsi5mTrade",
         "type": "object"
       },
+      "StockTaken": {
+        "additionalProperties": false,
+        "description": "What an offer has left after a sale.",
+        "properties": {
+          "offer_id": {
+            "minLength": 1,
+            "title": "Offer Id",
+            "type": "string"
+          },
+          "remaining": {
+            "minimum": 0,
+            "title": "Remaining",
+            "type": "integer"
+          },
+          "type": {
+            "const": "stock_taken",
+            "default": "stock_taken",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offer_id",
+          "remaining",
+          "type"
+        ],
+        "title": "StockTaken",
+        "type": "object"
+      },
       "StrategyCatalystCaptureRequest": {
         "additionalProperties": false,
         "properties": {
@@ -61824,48 +62266,6 @@
         "title": "SupplyMetrics",
         "type": "object"
       },
-      "TacticalSpatialPolicy": {
-        "additionalProperties": false,
-        "properties": {
-          "default_action_budget": {
-            "default": 1,
-            "maximum": 10,
-            "minimum": 1,
-            "title": "Default Action Budget",
-            "type": "integer"
-          },
-          "default_movement_budget": {
-            "default": 60,
-            "maximum": 10000,
-            "minimum": 1,
-            "title": "Default Movement Budget",
-            "type": "integer"
-          },
-          "full_cover_bonus": {
-            "default": 5,
-            "maximum": 20,
-            "minimum": 0,
-            "title": "Full Cover Bonus",
-            "type": "integer"
-          },
-          "half_cover_bonus": {
-            "default": 2,
-            "maximum": 20,
-            "minimum": 0,
-            "title": "Half Cover Bonus",
-            "type": "integer"
-          },
-          "max_reactions_per_move": {
-            "default": 8,
-            "maximum": 64,
-            "minimum": 0,
-            "title": "Max Reactions Per Move",
-            "type": "integer"
-          }
-        },
-        "title": "TacticalSpatialPolicy",
-        "type": "object"
-      },
       "TaskConstraint": {
         "additionalProperties": false,
         "properties": {
@@ -62776,7 +63176,14 @@
       },
       "TimeAdvanced": {
         "additionalProperties": false,
+        "description": "The turn's ticks of the campaign clock, and the in-game minutes they took (the world tick moves the clock).",
         "properties": {
+          "minutes": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Minutes",
+            "type": "integer"
+          },
           "ticks": {
             "default": 1,
             "minimum": 0,
@@ -62792,7 +63199,8 @@
         },
         "required": [
           "type",
-          "ticks"
+          "ticks",
+          "minutes"
         ],
         "title": "TimeAdvanced",
         "type": "object"
@@ -62870,6 +63278,57 @@
           "result"
         ],
         "title": "ToolResult",
+        "type": "object"
+      },
+      "TradeRemembered": {
+        "additionalProperties": false,
+        "description": "A trade in the campaign's ledger, which the trader's later dialogue can recall.",
+        "properties": {
+          "copper": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Copper",
+            "type": "integer"
+          },
+          "deal": {
+            "enum": [
+              "bought",
+              "sold"
+            ],
+            "title": "Deal",
+            "type": "string"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "provider_name": {
+            "default": "",
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "type": {
+            "const": "trade_remembered",
+            "default": "trade_remembered",
+            "title": "Type",
+            "type": "string"
+          },
+          "what": {
+            "default": "",
+            "title": "What",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "deal",
+          "type",
+          "provider_name",
+          "what",
+          "copper"
+        ],
+        "title": "TradeRemembered",
         "type": "object"
       },
       "TradingAlert": {
@@ -66878,16 +67337,35 @@
       "TurnOutcome": {
         "additionalProperties": false,
         "properties": {
+          "action_result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Result"
+          },
           "applied_changes": {
             "default": [],
             "items": {
               "discriminator": {
                 "mapping": {
+                  "campaign_ended": "#/components/schemas/CampaignEnded",
+                  "combat_advanced": "#/components/schemas/CombatAdvanced",
                   "combat_ended": "#/components/schemas/CombatEnded",
                   "combat_started": "#/components/schemas/CombatStarted",
                   "combatant_hp_changed": "#/components/schemas/CombatantHpChanged",
+                  "companion_hp_changed": "#/components/schemas/CompanionHpChanged",
                   "companion_joined": "#/components/schemas/CompanionJoined",
                   "companion_left": "#/components/schemas/CompanionLeft",
+                  "companion_ordered": "#/components/schemas/CompanionOrdered",
+                  "conditions_changed": "#/components/schemas/ConditionsChanged",
+                  "defeat_recorded": "#/components/schemas/DefeatRecorded",
+                  "dialogue_exchanged": "#/components/schemas/DialogueExchanged",
                   "experience_gained": "#/components/schemas/ExperienceGained",
                   "hp_changed": "#/components/schemas/HpChanged",
                   "item_added": "#/components/schemas/ItemAdded",
@@ -66897,14 +67375,22 @@
                   "item_removed": "#/components/schemas/ItemRemoved",
                   "item_unequipped": "#/components/schemas/ItemUnequipped",
                   "journal_written": "#/components/schemas/JournalWritten",
+                  "knowledge_shared": "#/components/schemas/KnowledgeShared",
+                  "level_reached": "#/components/schemas/LevelReached",
                   "location_changed": "#/components/schemas/LocationChanged",
                   "needs_changed": "#/components/schemas/NeedsChanged",
                   "presence_changed": "#/components/schemas/PresenceChanged",
                   "purse_changed": "#/components/schemas/PurseChanged",
+                  "quest_offered": "#/components/schemas/QuestOffered",
                   "quest_place_reached": "#/components/schemas/QuestPlaceReached",
                   "quest_status_changed": "#/components/schemas/QuestStatusChanged",
+                  "rest_taken": "#/components/schemas/RestTaken",
+                  "service_reserved": "#/components/schemas/ServiceReserved",
+                  "service_used": "#/components/schemas/ServiceUsed",
                   "skill_progressed": "#/components/schemas/SkillProgressed",
+                  "stock_taken": "#/components/schemas/StockTaken",
                   "time_advanced": "#/components/schemas/TimeAdvanced",
+                  "trade_remembered": "#/components/schemas/TradeRemembered",
                   "turn_counted": "#/components/schemas/TurnCounted",
                   "world_ticked": "#/components/schemas/WorldTicked"
                 },
@@ -66982,6 +67468,51 @@
                 },
                 {
                   "$ref": "#/components/schemas/JournalWritten"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceReserved"
+                },
+                {
+                  "$ref": "#/components/schemas/StockTaken"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeRemembered"
+                },
+                {
+                  "$ref": "#/components/schemas/ConditionsChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/RestTaken"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUsed"
+                },
+                {
+                  "$ref": "#/components/schemas/CompanionOrdered"
+                },
+                {
+                  "$ref": "#/components/schemas/DialogueExchanged"
+                },
+                {
+                  "$ref": "#/components/schemas/KnowledgeShared"
+                },
+                {
+                  "$ref": "#/components/schemas/QuestOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/CombatAdvanced"
+                },
+                {
+                  "$ref": "#/components/schemas/CompanionHpChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/LevelReached"
+                },
+                {
+                  "$ref": "#/components/schemas/DefeatRecorded"
+                },
+                {
+                  "$ref": "#/components/schemas/CampaignEnded"
                 }
               ]
             },
