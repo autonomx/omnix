@@ -58,6 +58,37 @@ def _allowed_claim_refs(request: TurnPresentationRequest) -> set[str]:
     return {str(value) for value in raw if str(value).strip()}
 
 
+# What the rules decide (RQ-3.3): an amount of coin, experience or health, a level, a thing gained or lost by name.
+# The prose may say these only as the turn's evidence (its outcome, the scene) has them.
+_AMOUNT = re.compile(r"\b(\d[\d,]*)\s+(gold|silver|copper|coins?|experience|xp|health|hit points|hp)\b", re.IGNORECASE)
+_LEVEL = re.compile(r"\blevel\s+(\d+)\b", re.IGNORECASE)
+_GAINED = re.compile(r"\b(?:receive|receives|received|gain|gains|gained|earn|earns|earned|obtain|obtained|acquire|"
+                     r"acquired|are given|is given|were given|are handed|loot|looted|lose|loses|lost)\b")
+# A thing named in a sentence that tells of a gain or loss: "a Crown of Kings", "the Wayfarer Sigil".
+_NAMED = re.compile(r"(?:\b(?:a|an|the|your|his|her|their)\s+|,\s*)((?:[A-Z][\w'-]+)(?:\s+(?:of|the|[A-Z][\w'-]+))*)")
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _unsupported_material(text: str, evidence_text: str) -> list[str]:
+    """The rules' facts the prose states and the evidence does not hold."""
+    said: list[str] = []
+    for number, unit in _AMOUNT.findall(text):
+        amount = number.replace(",", "")
+        if not re.search(rf"\b{re.escape(amount)}\s+{re.escape(unit.casefold().rstrip('s'))}", evidence_text):
+            said.append(f"{number} {unit}")
+    for level in _LEVEL.findall(text):
+        if not re.search(rf"\blevel\s+{level}\b", evidence_text):
+            said.append(f"level {level}")
+    for sentence in _SENTENCE.split(text):
+        if not _GAINED.search(sentence):
+            continue
+        for name in _NAMED.findall(sentence):
+            name = name.strip()
+            if name and name.casefold() not in evidence_text:
+                said.append(name)
+    return said
+
+
 def _word_count(blocks: Sequence[NarrativeBlock]) -> int:
     return sum(len(block.text.split()) for block in blocks)
 
@@ -123,6 +154,14 @@ class NarrativeValidator:
                 issues.append(ValidationIssue("mixed_script_corruption", f"Unexpected mixed scripts: {sorted(scripts)}", block.block_id))
             if block.kind is BeatKind.DIALOGUE and text.count('"') % 2 == 1:
                 issues.append(ValidationIssue("unbalanced_quote", "Dialogue contains an unbalanced quote.", block.block_id))
+
+        evidence_text = " ".join(" ".join(record.content.casefold().split()) for record in evidence)
+        for block in blocks:
+            invented = _unsupported_material(block.text, evidence_text)
+            if invented:
+                issues.append(ValidationIssue(
+                    "unsupported_material_claim",
+                    f"The prose states what the rules did not: {', '.join(invented)}.", block.block_id))
 
         claim_issues, claim_metadata = validate_claims(
             request,
