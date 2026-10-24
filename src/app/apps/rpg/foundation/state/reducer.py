@@ -42,6 +42,11 @@ from .changes import (
     DialogueExchanged,
     KnowledgeShared,
     QuestOffered,
+    CombatAdvanced,
+    CompanionHpChanged,
+    LevelReached,
+    DefeatRecorded,
+    CampaignEnded,
     JournalWritten,
     RestTaken,
     ServiceReserved,
@@ -303,7 +308,13 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         writer.set(_PLAYER + ("hp",), hp["current"])
         writer.set(("state", "player", "resources", "hp"), dict(hp))
     elif isinstance(change, ExperienceGained):
-        writer.set(_PLAYER + ("xp",), int(writer.get(_PLAYER + ("xp",)) or 0) + change.amount)
+        xp = int(writer.get(_PLAYER + ("xp",)) or 0) + change.amount
+        writer.set(_PLAYER + ("xp",), xp)
+        _show_progression(writer, xp=xp)
+    elif isinstance(change, LevelReached):
+        for key in ("level", "xp", "xp_to_next", "unspent_points", "unspent_skill_points"):
+            writer.set(_PLAYER + (key,), getattr(change, key))
+        _show_progression(writer, xp=change.xp, xp_to_next=change.xp_to_next, level=change.level)
     elif isinstance(change, SkillProgressed):
         skill = dict(writer.get(_PLAYER + ("skills", change.skill_id)) or {})
         skill.update(level=change.level, xp=change.xp, xp_to_next=change.xp_to_next)
@@ -461,8 +472,36 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         if not isinstance(combat, dict) or not combat.get("active"):
             raise ChangeRejected("there is no fight to end")
         writer.set(("simulation_state", "combat_state"), {**combat, "active": False, "outcome": change.outcome})
+    elif isinstance(change, CombatAdvanced):
+        writer.set(("simulation_state", "combat_state"), deepcopy(change.combat_state))
+    elif isinstance(change, CompanionHpChanged):
+        party = dict(writer.get(_PLAYER + ("party_state",)) or {})
+        companions = [dict(row) for row in party.get("companions") or () if isinstance(row, dict)]
+        if not any(row.get("npc_id") == change.npc_id for row in companions):
+            raise ChangeRejected(f"{change.npc_id} is not in the party")
+        party["companions"] = [{**row, "hp": min(change.hp, int(row.get("max_hp") or change.hp))}
+                               if row.get("npc_id") == change.npc_id else row for row in companions]
+        writer.set(_PLAYER + ("party_state",), party)
+    elif isinstance(change, DefeatRecorded):
+        writer.set(_PLAYER + ("defeats",), change.defeats)
+    elif isinstance(change, CampaignEnded):
+        writer.set(("simulation_state", "campaign_end"), {
+            "ended": True, "reason": change.reason, "defeated_by": list(change.defeated_by),
+            "tick": int(writer.get(("simulation_state", "tick")) or 0)})
     else:  # pragma: no cover - the vocabulary is closed
         raise ChangeRejected(f"unknown change {change!r}")
+
+
+def _show_progression(writer: _Writer, *, xp: int, xp_to_next: int | None = None, level: int | None = None) -> None:
+    """The play screen's sheet shows the hero's experience and level as the simulation keeps them."""
+    sheet = writer.get(("state", "player"))
+    if not isinstance(sheet, dict):
+        return
+    meter = sheet.get("xp") if isinstance(sheet.get("xp"), dict) else {}
+    writer.set(("state", "player", "xp"), {**meter, "current": xp,
+                                           "max": xp_to_next or int(meter.get("max") or 0) or 100})
+    if level is not None:
+        writer.set(("state", "player", "level"), level)
 
 
 def reduce(document: dict[str, Any], changes: list[StateChange]) -> tuple[dict[str, Any], JsonPatch]:

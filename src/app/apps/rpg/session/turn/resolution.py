@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d
 from app.apps.rpg.foundation.state.changes import StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.foundation.state.reducer import reduce
+from app.apps.rpg.rules.combat.fight import fight
 from app.apps.rpg.rules.interactions.items import drop_item, pick_up, use_item
 from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
 from app.apps.rpg.rules.rest import rest
@@ -62,9 +63,27 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
             return None
         return Resolution(trade.changes, trade.lines, minutes=trade.minutes, refused=trade.refused)
     simulation = _d(session.get("simulation_state"))
+    if mechanic == "fight" and planned.reason == "busy":
+        return Resolution([_counted(session)], ["You are in a fight: strike, break away, or use something you carry."],
+                          refused=True, told=False)
+    if mechanic == "fight":
+        turn = fight(simulation, action="flee" if planned.reason == "flee" else "attack",
+                     target_ref=planned.target_id or text, turn_key=str(_counted(session).turn_count))
+        if turn is None:
+            return None  # not a creature the world knows: the older path
+        return Resolution(_timed(session, turn.changes, turn.minutes), turn.lines, minutes=turn.minutes,
+                          refused=turn.refused, needs=None if turn.refused else "standard_turn",
+                          told=not turn.refused)
     if mechanic in {"use_item", "drop", "take"}:
         rule = {"use_item": use_item, "drop": drop_item, "take": pick_up}[mechanic]
         outcome = rule(simulation, planned.target_id, text)
+        if planned.reason == "in_fight" and not outcome.refused:
+            # The hero's turn spent on it; then everyone whose turn comes before the hero's next acts.
+            used, _ = reduce(dict(session), outcome.changes)
+            turn = fight(_d(used.get("simulation_state")), action="pass", turn_key=str(_counted(session).turn_count))
+            if turn is not None:
+                return Resolution(_timed(session, [*outcome.changes, *turn.changes], turn.minutes),
+                                  [*outcome.lines, *turn.lines], minutes=turn.minutes, needs="standard_turn")
         return Resolution(_timed(session, outcome.changes, outcome.minutes), outcome.lines, minutes=outcome.minutes,
                           refused=outcome.refused, told=not outcome.refused)
     if mechanic in {"quest", "practice", "status", "party", "order"}:

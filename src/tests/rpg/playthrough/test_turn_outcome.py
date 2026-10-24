@@ -41,8 +41,8 @@ def test_each_turn_reports_its_outcome_and_the_changes_replay_its_facts(launch) 
         "I buy a Healing Potion from Brindle Gearwing.": {"purse_changed", "item_added"},
         "I drop one Lantern Bread on the ground.": {"item_dropped"},
         "I pick up the Lantern Bread.": {"item_picked_up"},
-        "I attack the Echo Wolf.": {"combat_started", "hp_changed"},
-        "I flee from the Echo Wolf.": {"combat_ended"},
+        "I attack the Echo Wolf.": {"combat_advanced", "turn_counted"},  # the fight's section, as the turn leaves it
+        "I flee from the Echo Wolf.": {"combat_advanced", "turn_counted"},
         "I ask Orik Stonewake what he thinks of the newcomers.": {"turn_counted"},
     }
     for command, kinds in expected.items():

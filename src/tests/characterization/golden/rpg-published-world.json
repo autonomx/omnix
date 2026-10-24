@@ -3272,7 +3272,7 @@
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 10,
+            "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
             "player": 96
           }
@@ -3284,12 +3284,12 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:056195713447d37d732bad9278e76a929011db30adf7967649a3239e28989f10",
+      "document_hash": "sha256:03d607beb58686e9efe2c1225500cf4c3fc8f501d73d8082723ad02bb056c124",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 10,
+            "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
             "player": 96
           }
@@ -3378,134 +3378,53 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
-        "runtime_state/actor_activities",
-        "runtime_state/ambient_history",
         "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/conversation_settings",
-        "runtime_state/conversation_threads",
-        "runtime_state/current_scene",
-        "runtime_state/director_log",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
-        "runtime_state/last_conversation_intervention",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/location_conditions",
-        "runtime_state/narration_quality",
-        "runtime_state/offscreen_conversation_summaries",
-        "runtime_state/opening_runtime",
-        "runtime_state/perf_trace",
-        "runtime_state/performance",
         "runtime_state/player_journal",
-        "runtime_state/player_request_events",
-        "runtime_state/post_player_quiet_ticks",
-        "runtime_state/recent_conversation_thread_events",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/response_soft_truth",
-        "runtime_state/scene_beat_memory",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/story_policy",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "runtime_state/world_pressure",
-        "runtime_state/world_rumors",
-        "setup_payload/campaign_objective",
-        "setup_payload/canon_notes",
-        "setup_payload/content_balance",
-        "setup_payload/desired_content_mix",
-        "setup_payload/forbidden_content",
-        "setup_payload/genre_rules",
-        "setup_payload/hard_rules",
-        "setup_payload/lore_constraints",
-        "setup_payload/metadata",
-        "setup_payload/opening",
-        "setup_payload/opening_hook",
-        "setup_payload/pacing",
-        "setup_payload/player_role",
-        "setup_payload/response_length",
-        "setup_payload/safety",
-        "setup_payload/setup_id",
-        "setup_payload/soft_tone_rules",
-        "setup_payload/starter_conflict",
-        "setup_payload/starting_gear",
-        "setup_payload/starting_resources",
-        "setup_payload/world_behavior",
-        "simulation_state/active_effects",
-        "simulation_state/active_interactions",
-        "simulation_state/active_rumors",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/companion_presence_projection",
-        "simulation_state/consequences",
-        "simulation_state/conversation_thread_state",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/event_history",
-        "simulation_state/events",
-        "simulation_state/factions",
-        "simulation_state/history",
-        "simulation_state/incidents",
-        "simulation_state/locations",
-        "simulation_state/memory_state",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_index",
-        "simulation_state/npc_minds",
         "simulation_state/player_state",
-        "simulation_state/policy_reactions",
-        "simulation_state/present_npc_state",
-        "simulation_state/presentation_state",
-        "simulation_state/response_soft_truth",
-        "simulation_state/sandbox_state",
-        "simulation_state/sandbox_summary",
-        "simulation_state/save_meta",
-        "simulation_state/social_state",
-        "simulation_state/step_hash",
         "simulation_state/survival",
-        "simulation_state/threads",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
+          "combat",
           "player",
           "survival",
-          "combat"
+          "world",
+          "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
+            "combat",
             "player",
             "survival",
-            "combat"
+            "world",
+            "narrative"
           ],
           "revision": 22
         }
@@ -3523,12 +3442,12 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:056195713447d37d732bad9278e76a929011db30adf7967649a3239e28989f10",
+      "document_hash": "sha256:03d607beb58686e9efe2c1225500cf4c3fc8f501d73d8082723ad02bb056c124",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 10,
+            "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
             "player": 96
           }
@@ -3630,33 +3549,32 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-echo-wolf:1": 9,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 96
           }
         },
-        "hp": -3,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:980f79e35799d5bb163b3aac41b861518e4308df2eacbde4ea5fac16ab61829e",
+      "document_hash": "sha256:dbd727f63d777923ed221fdc79cb14215925b378ab26976653ccb353b0f080d1",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 9,
+            "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 96
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 93,
+        "hp": 96,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3736,71 +3654,49 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "setup_payload/metadata",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/events",
-        "simulation_state/history",
-        "simulation_state/locations",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_minds",
-        "simulation_state/player_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/player",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
-          "player",
+          "combat",
           "survival",
-          "combat"
+          "world",
+          "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
-            "player",
+            "combat",
             "survival",
-            "combat"
+            "world",
+            "narrative"
           ],
           "revision": 23
         }
@@ -3820,32 +3716,33 @@
       "changes": {
         "combat": {
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 95
           }
         },
+        "hp": -1,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ee5349150f6833e1e74a602f597997e7fe62546f3ee5b2f20930acb985edd013",
+      "document_hash": "sha256:d0b085cdc580cd22e2fc71c02c3c74f9c743d4072cba05d28a16a7773dafe912",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 95
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 93,
+        "hp": 95,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3925,67 +3822,53 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "setup_payload/metadata",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/events",
-        "simulation_state/history",
-        "simulation_state/locations",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_minds",
         "simulation_state/player_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/player",
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
+          "combat",
+          "player",
           "survival",
-          "combat"
+          "world",
+          "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
+            "combat",
+            "player",
             "survival",
-            "combat"
+            "world",
+            "narrative"
           ],
           "revision": 24
         }
@@ -4004,29 +3887,34 @@
     {
       "changes": {
         "combat": {
-          "active": false
+          "participants": {
+            "enemy:creature-echo-wolf:1": 6,
+            "npc:liora-fen": 100,
+            "player": 92
+          }
         },
+        "hp": -3,
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5507bc09dc4980d25bbf1d7e2a666e851fa3a80de87406d3c7c79b2b300e63cf",
+      "document_hash": "sha256:7f3fb934ec32e50de79dd2bc1ee12d40a1857614b6e3fae4c44de3e8ac2f36d9",
       "facts": {
         "combat": {
-          "active": false,
+          "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 92
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 93,
+        "hp": 92,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -4106,72 +3994,53 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "setup_payload/metadata",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/event_history",
-        "simulation_state/events",
-        "simulation_state/history",
-        "simulation_state/locations",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_minds",
         "simulation_state/player_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/player",
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
+          "combat",
+          "player",
           "survival",
-          "combat"
+          "world",
+          "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
+            "combat",
+            "player",
             "survival",
-            "combat"
+            "world",
+            "narrative"
           ],
           "revision": 25
         }
@@ -4189,26 +4058,38 @@
     },
     {
       "changes": {
-        "hp": 7,
+        "combat": {
+          "participants": {
+            "enemy:creature-echo-wolf:1": 6,
+            "npc:liora-fen": 100,
+            "player": 98
+          }
+        },
+        "hp": 6,
         "inventory": {
           "Healing Potion": -1
+        },
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
         }
       },
-      "document_hash": "sha256:95c0db8b643708cc85a235641d9f34c04f7a9fcd6356830e3d13b5a67c210f32",
+      "document_hash": "sha256:1b522273d80bfc5cbdec5f6d54bcd814a6b591f0c73de0ca246f590889ceb059",
       "facts": {
         "combat": {
-          "active": false,
+          "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 98
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 100,
+        "hp": 98,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4275,9 +4156,9 @@
           }
         },
         "survival": {
-          "fatigue": 5,
-          "hunger": 7,
-          "thirst": 39
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 41
         },
         "turn_count": 25
       },
@@ -4301,10 +4182,12 @@
         "runtime_state/state_revision",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
+        "simulation_state/combat_state",
         "simulation_state/economy_state",
         "simulation_state/environment",
         "simulation_state/merchant_state",
         "simulation_state/player_state",
+        "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
@@ -4318,6 +4201,8 @@
           "time",
           "inventory",
           "player",
+          "combat",
+          "survival",
           "world",
           "narrative"
         ],
@@ -4328,6 +4213,8 @@
             "time",
             "inventory",
             "player",
+            "combat",
+            "survival",
             "world",
             "narrative"
           ],
@@ -4347,21 +4234,21 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:a2c0329e4556d82bac3094311f5d22dfd97fc5a73bac371d49c964232e743de7",
+      "document_hash": "sha256:b9cdaf6837959830bc59ec4317820d956d19ac97ae283627811f97a757cf9b91",
       "facts": {
         "combat": {
-          "active": false,
+          "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 98
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 100,
+        "hp": 98,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4428,9 +4315,9 @@
           }
         },
         "survival": {
-          "fatigue": 5,
-          "hunger": 7,
-          "thirst": 39
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 41
         },
         "turn_count": 26
       },
@@ -4477,223 +4364,22 @@
       "turn_rows": 1
     },
     {
-      "changes": {
-        "location_id": "location:aurelia:skybridge-pass",
-        "location_name": "Skybridge Pass",
-        "present_npc_ids": {
-          "added": [],
-          "removed": [
-            "npc:brindle-gearwing",
-            "npc:captain-rhea-sunward",
-            "npc:orik-stonewake"
-          ]
-        },
-        "survival": {
-          "fatigue": 2,
-          "hunger": 2,
-          "thirst": 3
-        }
-      },
-      "document_hash": "sha256:8d937213204af783e925da99b23f9db131aa1c41a3164b7e81f4c670cb3b7dca",
+      "changes": {},
+      "document_hash": "sha256:d7bdec8e9ad26ec4becde824beafd5560f77ae120c1acc8c08189fad0635a292",
       "facts": {
         "combat": {
-          "active": false,
+          "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 98
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 100,
-        "inventory": {
-          "Gateborn Compass": 1,
-          "Lantern Bread": 2,
-          "Travel Cloak": 1,
-          "Wayfarer Sigil": 1
-        },
-        "location_id": "location:aurelia:skybridge-pass",
-        "location_name": "Skybridge Pass",
-        "party": [
-          "npc:liora-fen"
-        ],
-        "present_npc_ids": [
-          "npc:liora-fen"
-        ],
-        "purse_copper": 277,
-        "quests": {
-          "First Night in Aurelia": "completed",
-          "The Hollow Meridian": "available",
-          "Voices in the Phone": "active"
-        },
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 10
-          }
-        },
-        "survival": {
-          "fatigue": 7,
-          "hunger": 9,
-          "thirst": 42
-        },
-        "turn_count": 27
-      },
-      "model_calls": [
-        "narration"
-      ],
-      "patched_sections": [
-        "manifest/current_turn",
-        "manifest/turn_count",
-        "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
-        "runtime_state/interaction_id_by_turn",
-        "runtime_state/interaction_lifecycles",
-        "runtime_state/interaction_seq",
-        "runtime_state/interaction_timeline",
-        "runtime_state/last_interaction",
-        "runtime_state/player_journal",
-        "runtime_state/recent_interactions",
-        "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/current_location",
-        "simulation_state/current_location_id",
-        "simulation_state/current_location_name",
-        "simulation_state/economy_state",
-        "simulation_state/environment",
-        "simulation_state/location_id",
-        "simulation_state/location_name",
-        "simulation_state/location_state",
-        "simulation_state/merchant_state",
-        "simulation_state/player_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/present_npcs",
-        "simulation_state/previous_location",
-        "simulation_state/survival",
-        "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/visited_locations",
-        "simulation_state/world_event_state",
-        "state/current_location",
-        "state/current_location_id",
-        "state/current_location_name",
-        "state/current_turn",
-        "state/location",
-        "state/scene",
-        "state/title",
-        "state/turn_count",
-        "state/world"
-      ],
-      "response": {
-        "changed_domains": [
-          "time",
-          "location",
-          "npcs",
-          "survival",
-          "world",
-          "narrative"
-        ],
-        "source": "narrative_engine_scene_turn_v1",
-        "state": {
-          "changed": true,
-          "changed_domains": [
-            "time",
-            "location",
-            "npcs",
-            "survival",
-            "world",
-            "narrative"
-          ],
-          "revision": 28
-        }
-      },
-      "session_summary": {
-        "interaction_seq": 27,
-        "location": "Skybridge Pass",
-        "player_level": 1,
-        "state_revision": 28,
-        "title": "Wren — Starfall Grove"
-      },
-      "status": 200,
-      "step": "go to Skybridge Pass",
-      "turn_rows": 1
-    },
-    {
-      "changes": {
-        "location_id": "location:aurelia:starfall-village",
-        "location_name": "Starfall Village",
-        "present_npc_ids": {
-          "added": [
-            "npc:brindle-gearwing",
-            "npc:captain-rhea-sunward",
-            "npc:orik-stonewake"
-          ],
-          "removed": []
-        },
-        "survival": {
-          "fatigue": 2,
-          "hunger": 2,
-          "thirst": 3
-        }
-      },
-      "document_hash": "sha256:1efb16ba857f780a9cd26268cd5c6adea8fa440fae398efae755b7775bedd7db",
-      "facts": {
-        "combat": {
-          "active": false,
-          "participants": {
-            "enemy:creature-echo-wolf:1": 8,
-            "npc:liora-fen": 100,
-            "player": 93
-          }
-        },
-        "equipment": [
-          "Iron Dagger",
-          "Travel Cloak"
-        ],
-        "hp": 100,
+        "hp": 98,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4760,79 +4446,162 @@
           }
         },
         "survival": {
-          "fatigue": 9,
-          "hunger": 11,
-          "thirst": 45
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 41
         },
-        "turn_count": 28
+        "turn_count": 27
       },
-      "model_calls": [
-        "narration"
-      ],
+      "model_calls": [],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/current_location",
-        "simulation_state/current_location_id",
-        "simulation_state/current_location_name",
-        "simulation_state/economy_state",
-        "simulation_state/environment",
-        "simulation_state/location_id",
-        "simulation_state/location_name",
-        "simulation_state/location_state",
-        "simulation_state/merchant_state",
-        "simulation_state/player_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/present_npcs",
-        "simulation_state/previous_location",
-        "simulation_state/survival",
-        "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
-        "state/current_location",
-        "state/current_location_id",
-        "state/current_location_name",
         "state/current_turn",
-        "state/location",
-        "state/scene",
-        "state/title",
-        "state/turn_count",
-        "state/world"
+        "state/turn_count"
       ],
       "response": {
         "changed_domains": [
-          "time",
-          "location",
-          "npcs",
-          "survival",
-          "world",
-          "narrative"
+          "time"
         ],
-        "source": "narrative_engine_scene_turn_v1",
+        "source": "rpg_turn_pipeline_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time",
-            "location",
-            "npcs",
-            "survival",
-            "world",
-            "narrative"
+            "time"
+          ],
+          "revision": 28
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 27,
+        "location": "Starfall Village",
+        "player_level": 1,
+        "state_revision": 28,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "go to Skybridge Pass",
+      "turn_rows": 1
+    },
+    {
+      "changes": {},
+      "document_hash": "sha256:e41dd2aa2f8a145135e14f319a43bfe27644d805d5fd619c2ee399c5dcb88a0f",
+      "facts": {
+        "combat": {
+          "active": true,
+          "participants": {
+            "enemy:creature-echo-wolf:1": 6,
+            "npc:liora-fen": 100,
+            "player": 98
+          }
+        },
+        "equipment": [
+          "Iron Dagger",
+          "Travel Cloak"
+        ],
+        "hp": 98,
+        "inventory": {
+          "Gateborn Compass": 1,
+          "Lantern Bread": 2,
+          "Travel Cloak": 1,
+          "Wayfarer Sigil": 1
+        },
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
+        "party": [
+          "npc:liora-fen"
+        ],
+        "present_npc_ids": [
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
+        ],
+        "purse_copper": 277,
+        "quests": {
+          "First Night in Aurelia": "completed",
+          "The Hollow Meridian": "available",
+          "Voices in the Phone": "active"
+        },
+        "skills": {
+          "archery": {
+            "level": 0,
+            "xp": 0
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0
+          },
+          "swordsmanship": {
+            "level": 0,
+            "xp": 10
+          }
+        },
+        "survival": {
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 41
+        },
+        "turn_count": 28
+      },
+      "model_calls": [],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/interaction_id_by_turn",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/recent_interactions",
+        "runtime_state/state_revision",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [
+          "time"
+        ],
+        "source": "rpg_turn_pipeline_v1",
+        "state": {
+          "changed": true,
+          "changed_domains": [
+            "time"
           ],
           "revision": 29
         }
@@ -4849,51 +4618,38 @@
       "turn_rows": 1
     },
     {
-      "changes": {
-        "location_id": "location:aurelia:arrival-grove",
-        "location_name": "Starfall Grove",
-        "present_npc_ids": {
-          "added": [],
-          "removed": [
-            "npc:brindle-gearwing",
-            "npc:captain-rhea-sunward",
-            "npc:orik-stonewake"
-          ]
-        },
-        "survival": {
-          "fatigue": 2,
-          "hunger": 2,
-          "thirst": 3
-        }
-      },
-      "document_hash": "sha256:22fa742f53f9da1822b32e9ee9e3de5e01dc9f1f05cbdaa15745bd5098dd4d09",
+      "changes": {},
+      "document_hash": "sha256:1b6aafe16884e20a6164c2974920af6fe0e8e84a08882771902f0bbd877a8d7c",
       "facts": {
         "combat": {
-          "active": false,
+          "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 98
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 100,
+        "hp": 98,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:arrival-grove",
-        "location_name": "Starfall Grove",
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:liora-fen"
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
         ],
         "purse_copper": 277,
         "quests": {
@@ -4944,86 +4700,42 @@
           }
         },
         "survival": {
-          "fatigue": 11,
-          "hunger": 13,
-          "thirst": 48
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 41
         },
         "turn_count": 29
       },
-      "model_calls": [
-        "narration"
-      ],
+      "model_calls": [],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/current_location",
-        "simulation_state/current_location_id",
-        "simulation_state/current_location_name",
-        "simulation_state/economy_state",
-        "simulation_state/environment",
-        "simulation_state/location_id",
-        "simulation_state/location_name",
-        "simulation_state/location_state",
-        "simulation_state/merchant_state",
-        "simulation_state/player_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/present_npcs",
-        "simulation_state/previous_location",
-        "simulation_state/survival",
-        "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
-        "state/current_location",
-        "state/current_location_id",
-        "state/current_location_name",
         "state/current_turn",
-        "state/location",
-        "state/scene",
-        "state/title",
-        "state/turn_count",
-        "state/world"
+        "state/turn_count"
       ],
       "response": {
         "changed_domains": [
-          "time",
-          "location",
-          "npcs",
-          "survival",
-          "world",
-          "narrative"
+          "time"
         ],
-        "source": "narrative_engine_scene_turn_v1",
+        "source": "rpg_turn_pipeline_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time",
-            "location",
-            "npcs",
-            "survival",
-            "world",
-            "narrative"
+            "time"
           ],
           "revision": 30
         }
       },
       "session_summary": {
         "interaction_seq": 29,
-        "location": "Starfall Grove",
+        "location": "Starfall Village",
         "player_level": 1,
         "state_revision": 30,
         "title": "Wren — Starfall Grove"
@@ -5033,41 +4745,38 @@
       "turn_rows": 1
     },
     {
-      "changes": {
-        "survival": {
-          "fatigue": 1,
-          "hunger": 1,
-          "thirst": 2
-        }
-      },
-      "document_hash": "sha256:c9c44092a07fbbad0dd2777d2d0560696b28cdb3222d6be1028c38992d76201b",
+      "changes": {},
+      "document_hash": "sha256:dd58ec7f61aa64cfffd970ac35385cb71e2d75cad57798e73953548e48e14a14",
       "facts": {
         "combat": {
-          "active": false,
+          "active": true,
           "participants": {
-            "enemy:creature-echo-wolf:1": 8,
+            "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 93
+            "player": 98
           }
         },
         "equipment": [
           "Iron Dagger",
           "Travel Cloak"
         ],
-        "hp": 100,
+        "hp": 98,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
           "Travel Cloak": 1,
           "Wayfarer Sigil": 1
         },
-        "location_id": "location:aurelia:arrival-grove",
-        "location_name": "Starfall Grove",
+        "location_id": "location:aurelia:starfall-village",
+        "location_name": "Starfall Village",
         "party": [
           "npc:liora-fen"
         ],
         "present_npc_ids": [
-          "npc:liora-fen"
+          "npc:brindle-gearwing",
+          "npc:captain-rhea-sunward",
+          "npc:liora-fen",
+          "npc:orik-stonewake"
         ],
         "purse_copper": 277,
         "quests": {
@@ -5118,65 +4827,42 @@
           }
         },
         "survival": {
-          "fatigue": 12,
-          "hunger": 14,
-          "thirst": 50
+          "fatigue": 6,
+          "hunger": 8,
+          "thirst": 41
         },
         "turn_count": 30
       },
-      "model_calls": [
-        "narration"
-      ],
+      "model_calls": [],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "runtime_state/campaign_calendar",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/economy_state",
-        "simulation_state/environment",
-        "simulation_state/merchant_state",
-        "simulation_state/survival",
-        "simulation_state/tick",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count",
-        "state/world"
+        "state/turn_count"
       ],
       "response": {
         "changed_domains": [
-          "time",
-          "survival",
-          "world",
-          "narrative"
+          "time"
         ],
-        "source": "narrative_engine_resolved_turn_v1",
+        "source": "rpg_turn_pipeline_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time",
-            "survival",
-            "world",
-            "narrative"
+            "time"
           ],
           "revision": 31
         }
       },
       "session_summary": {
         "interaction_seq": 30,
-        "location": "Starfall Grove",
+        "location": "Starfall Village",
         "player_level": 1,
         "state_revision": 31,
         "title": "Wren — Starfall Grove"

@@ -209,6 +209,48 @@ class CombatEnded(_Change):
     outcome: Literal["victory", "defeat", "fled", "ended"] = "ended"
 
 
+class CombatAdvanced(_Change):
+    """The fight as a turn of it leaves it: who stands at what health, the initiative order and whose turn it is,
+    the round, and the log of blows. The combat section is the fight rule's own (``rules/combat/fight.py``)."""
+
+    type: Literal["combat_advanced"] = "combat_advanced"
+    combat_state: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompanionHpChanged(_Change):
+    """A companion's health, as a fight leaves it."""
+
+    type: Literal["companion_hp_changed"] = "companion_hp_changed"
+    npc_id: str = Field(min_length=1)
+    hp: int = Field(ge=0)
+
+
+class LevelReached(_Change):
+    """The hero rose a level (or several): where their progression now stands."""
+
+    type: Literal["level_reached"] = "level_reached"
+    level: int = Field(ge=1)
+    xp: int = Field(ge=0)
+    xp_to_next: int = Field(ge=1)
+    unspent_points: int = Field(default=0, ge=0)
+    unspent_skill_points: int = Field(default=0, ge=0)
+
+
+class DefeatRecorded(_Change):
+    """The hero lost a fight: how many they have lost."""
+
+    type: Literal["defeat_recorded"] = "defeat_recorded"
+    defeats: int = Field(ge=1)
+
+
+class CampaignEnded(_Change):
+    """The campaign is over (a hardcore hero fell)."""
+
+    type: Literal["campaign_ended"] = "campaign_ended"
+    reason: str = Field(min_length=1)
+    defeated_by: tuple[str, ...] = ()
+
+
 # What the world tick (pipeline step 6) owns: the causal runtime and the subsystems it projects onto, and its
 # bookkeeping. The tick replaces these whole until RQ-2.7 says what it changes in typed terms.
 WORLD_TICK_SECTIONS = frozenset({
@@ -308,7 +350,8 @@ StateChange = Annotated[
     | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
-    | DialogueExchanged | KnowledgeShared | QuestOffered,
+    | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
+    | DefeatRecorded | CampaignEnded,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

@@ -14,7 +14,12 @@ from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
 PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "take", "rest",
-                           "quest", "practice", "status", "party", "order", "talk"]
+                           "quest", "practice", "status", "party", "order", "talk", "fight"]
+
+
+# What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).
+_NOT_IN_A_FIGHT = frozenset({"move", "rest", "wait", "buy", "sell", "take", "drop", "give", "quest", "practice",
+                             "party", "talk", "ask", "look", "inspect"})
 
 
 class PlannedAction(BaseModel):
@@ -38,6 +43,18 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
         return PlannedAction(mechanic="clarify", ticks=0, reason=reading.reason, question=question)
     if len(reading.clauses) > 1:
         return None
+    if reading.family == "attack" and (fighting or (reading.target_kind == "creature" and reading.target_id)):
+        # A creature the world knows, or in a fight the foe in front of the hero (combat.md).
+        return PlannedAction(mechanic="fight", target_id=reading.target_id or "", ticks=0, reason="attack")
+    if reading.family == "flee" and fighting:
+        return PlannedAction(mechanic="fight", ticks=0, reason="flee")
+    if fighting and reading.family == "use_item" and reading.target_kind == "item" and reading.target_id:
+        # Something carried, used in the fight: the hero's turn, and then everyone else's (combat.md).
+        return PlannedAction(mechanic="use_item", target_id=reading.target_id, ticks=0, reason="in_fight")
+    if fighting and reading.family in _NOT_IN_A_FIGHT:
+        return PlannedAction(mechanic="fight", ticks=0, reason="busy")  # the game says no: the fight goes on
+    if fighting and reading.family != "status":
+        return None  # a move the grammar does not name; abilities and orders in a fight are RQ-2.6 part 2's
     if reading.family in {"buy", "sell"}:  # which offer, or which buyer, is the trade rule's to say
         return PlannedAction(mechanic="trade", reason=reading.family)
     if reading.confidence < SKIP_CONFIDENCE:

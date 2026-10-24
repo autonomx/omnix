@@ -183,55 +183,55 @@
     },
     {
       "blocks": [
-        "action||The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf.",
-        "result||Consequence: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf.",
-        "choice||Offered choice: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf."
+        "action||The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).",
+        "result||Consequence: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).",
+        "choice||Offered choice: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left)."
       ],
       "step": "I attack the Echo Wolf.",
-      "told": "The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf. The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf. The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf.",
-      "visible": "The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf.\n\nConsequence: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 4 (96 of 100 left). Liora Fen misses the Echo Wolf."
+      "told": "The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left). The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left). The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).",
+      "visible": "The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left).\n\nConsequence: The fight begins: you against the Echo Wolf. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen hits the Echo Wolf for 1 (9 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 2 (96 of 100 left). Liora Fen hits the Echo Wolf for 1 (8 of 10 left)."
     },
     {
       "step": "tactical_move [4, 3]"
     },
     {
       "blocks": [
-        "action||You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf.",
-        "result||Consequence: You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf.",
-        "choice||Offered choice: You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf."
+        "action||You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
+        "result||Consequence: You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
+        "choice||Offered choice: You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf."
       ],
       "step": "I attack the Echo Wolf.",
-      "told": "You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf.",
-      "visible": "You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf.\n\nConsequence: You hit the Echo Wolf for 1 (9 of 10 left). The Echo Wolf hits you for 3 (93 of 100 left). Liora Fen misses the Echo Wolf."
+      "told": "You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
+      "visible": "You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.\n\nConsequence: You hit the Echo Wolf for 1 (7 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf."
     },
     {
       "blocks": [
-        "action||You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
-        "result||Consequence: You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
-        "choice||Offered choice: You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf."
+        "action||You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).",
+        "result||Consequence: You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).",
+        "choice||Offered choice: You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left)."
       ],
       "step": "I attack the Echo Wolf.",
-      "told": "You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf. You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.",
-      "visible": "You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf.\n\nConsequence: You hit the Echo Wolf for 1 (8 of 10 left). The Echo Wolf misses you. Liora Fen misses the Echo Wolf."
+      "told": "You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left). You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).",
+      "visible": "You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left).\n\nConsequence: You miss the Echo Wolf. The Echo Wolf hits you for 1 (95 of 100 left). Liora Fen hits the Echo Wolf for 1 (6 of 10 left)."
     },
     {
       "blocks": [
-        "action||You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.",
-        "result||Consequence: You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.",
-        "choice||Offered choice: You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing."
+        "action||You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf.",
+        "result||Consequence: You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf.",
+        "choice||Offered choice: You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf."
       ],
       "step": "I flee from the Echo Wolf.",
-      "told": "You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing. You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing. You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.",
-      "visible": "You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.\n\nConsequence: You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing."
+      "told": "You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf. You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf. You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf.",
+      "visible": "You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf.\n\nConsequence: You try to break away, but the Echo Wolf cuts you off. The Echo Wolf hits you for 3 (92 of 100 left). Liora Fen misses the Echo Wolf."
     },
     {
       "blocks": [
-        "action||You drink the Healing Potion. It restores 7 health.",
-        "choice||Offered choice: You drink the Healing Potion. It restores 7 health."
+        "action||You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen misses the Echo Wolf.",
+        "choice||Offered choice: You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen misses the Echo Wolf."
       ],
       "step": "I drink the Healing Potion.",
-      "told": "You drink the Healing Potion. It restores 7 health. You drink the Healing Potion. It restores 7 health.",
-      "visible": "You drink the Healing Potion. It restores 7 health."
+      "told": "You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen misses the Echo Wolf. You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen misses the Echo Wolf.",
+      "visible": "You drink the Healing Potion. It restores 8 health. The Echo Wolf hits you for 2 (98 of 100 left). Liora Fen misses the Echo Wolf."
     },
     {
       "blocks": [
@@ -243,42 +243,35 @@
     },
     {
       "blocks": [
-        "narration||Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.",
-        "action||You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen.",
-        "choice||Offered choice: You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen."
+        "result||You are in a fight: strike, break away, or use something you carry."
       ],
       "step": "go to Skybridge Pass",
-      "told": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen. You travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen.",
-      "visible": "Skybridge Pass. Skybridge Pass, in Cloudspine: mountain monasteries and bridges above an endless cloud sea.\n\nYou travel to Skybridge Pass; the road takes 240 minutes. Here: Liora Fen."
+      "told": "",
+      "visible": "You are in a fight: strike, break away, or use something you carry."
     },
     {
       "blocks": [
-        "narration||Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.",
-        "action||You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen.",
-        "choice||Offered choice: You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen."
+        "result||You are in a fight: strike, break away, or use something you carry."
       ],
       "step": "go to Starfall Village",
-      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. You travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen.",
-      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 240 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen."
+      "told": "",
+      "visible": "You are in a fight: strike, break away, or use something you carry."
     },
     {
       "blocks": [
-        "narration||Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.",
-        "action||You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen.",
-        "choice||Offered choice: You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen."
+        "result||You are in a fight: strike, break away, or use something you carry."
       ],
       "step": "go to Starfall Grove",
-      "told": "Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen. You travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen.",
-      "visible": "Starfall Grove. Starfall Grove, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Grove; the road takes 20 minutes. Here: Liora Fen."
+      "told": "",
+      "visible": "You are in a fight: strike, break away, or use something you carry."
     },
     {
       "blocks": [
-        "action||You wait a while in Starfall Grove; time passes. Around you: Liora Fen.",
-        "choice||Offered choice: You wait a while in Starfall Grove; time passes. Around you: Liora Fen."
+        "result||You are in a fight: strike, break away, or use something you carry."
       ],
       "step": "wait",
-      "told": "You wait a while in Starfall Grove; time passes. Around you: Liora Fen. You wait a while in Starfall Grove; time passes. Around you: Liora Fen.",
-      "visible": "You wait a while in Starfall Grove; time passes. Around you: Liora Fen."
+      "told": "",
+      "visible": "You are in a fight: strike, break away, or use something you carry."
     }
   ]
 }
