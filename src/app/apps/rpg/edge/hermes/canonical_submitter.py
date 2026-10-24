@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -13,7 +14,8 @@ def _default_loader(session_id: str) -> Any:
     return load_session(session_id)
 
 
-def _default_executor(session: Any, command_text: str) -> Any:
+def _default_executor(session: Any, command_text: str, *, submission_id: str = "") -> Any:
+    """The turn as the play screen submits it (RQ-1.6): committed like any turn, its result the TurnOutcome."""
     session_data = _to_dict(session)
     manifest = _to_dict(session_data.get("manifest"))
     session_id = str(
@@ -26,18 +28,13 @@ def _default_executor(session: Any, command_text: str) -> Any:
     if not session_id:
         return {"ok": False, "error": "missing_session_id"}
 
-    from app.apps.rpg.session.interactive_first_call_runtime import apply_turn
+    from app.apps.rpg.edge.api.turn_pipeline import submit_rpg_turn
 
-    return apply_turn(
-        session_id,
-        command_text,
-        performance_override={
-            "enable_live_narration_llm": True,
-            "narration_mode": "blocking",
-            # As the play screen's turns: addressed dialogue takes the short one-call path.
-            "fast_visible_dialogue": False,
-        },
-        session_override=session_data,
+    return submit_rpg_turn(
+        session_id=session_id,
+        command=command_text,
+        submission_id=submission_id or f"hermes:{uuid.uuid4().hex}",
+        source="hermes",
     )
 
 
@@ -94,7 +91,12 @@ def hermes_rpg_canonical_submitter(
         }
 
     load = loader or _default_loader
-    execute = executor or _default_executor
+    submission_id = str(payload.get("submission_id") or "").strip()
+
+    def default_execute(session: Any, text: str) -> Any:
+        return _default_executor(session, text, submission_id=submission_id)
+
+    execute = executor or default_execute
     session = load(session_id)
     if not session:
         return {
@@ -128,6 +130,17 @@ def hermes_rpg_canonical_submitter(
     state_changed = result_data.get("state_changed")
     if not isinstance(state_changed, bool):
         state_changed = ok
+    outcome = _to_dict(result_data.get("outcome"))
+    state_changes = result_data.get("state_changes") or nested_result.get("state_changes") or {}
+    if outcome:
+        # A turn submitted like the play screen's reports its TurnOutcome (RQ-1.6): what it changed, and the
+        # narration the player sees; the hero is read as the turn left them.
+        narration = _to_dict(result_data.get("visible_response")).get("plain_text") or result_data.get("response") or narration
+        state_changed = _to_dict(result_data.get("state")).get("changed") is True
+        state_changes = {"applied_changes": list(outcome.get("applied_changes") or ())}
+        turn = outcome.get("turn_id") or turn
+        after = _to_dict(load(session_id))
+        player = _to_dict(_to_dict(after.get("simulation_state")).get("player_state")) or player
 
     response: dict[str, Any] = {
         "ok": ok,
@@ -137,11 +150,14 @@ def hermes_rpg_canonical_submitter(
         "command_text": command_text,
         "turn": turn,
         "narration": narration,
-        "state_changes": result_data.get("state_changes") or nested_result.get("state_changes") or {},
+        "state_changes": state_changes,
         "events": _events_to_dicts(events),
         "player": player,
         "state_changed": state_changed,
     }
+    if outcome:
+        response["outcome"] = outcome
+        response["submission_id"] = result_data.get("submission_id") or submission_id
     if choices:
         response["choices"] = choices
     if dice_roll:

@@ -147,3 +147,23 @@ def test_an_earlier_narration_finishing_meanwhile_moves_no_revision(launch, worl
     play.turn("wait")
     assert play.revision() == revision + 1
     assert play.stored()["runtime_state"]["narration_artifacts_by_turn"]["turn:1"]["narration"] == "Done."
+
+
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
+def test_a_hermes_command_is_a_committed_turn_and_a_retry_commits_once(launch, world) -> None:
+    """RQ-1.6: Hermes submits its approved command as the play screen submits a turn, keyed by its submission id;
+    the turn commits (it ran on a copy before and was never saved) and Hermes reads its TurnOutcome."""
+    from app.apps.rpg.edge.hermes.canonical_submitter import hermes_rpg_canonical_submitter
+
+    play = launch(world)
+    revision, turns = play.revision(), play.turn_count()
+    submission = f"hermes-{uuid.uuid4().hex}"
+    first = hermes_rpg_canonical_submitter({"session_id": play.session_id, "command_text": "wait",
+                                            "submission_id": submission})
+    assert first["ok"] is True and first["state_changed"] is True, first
+    assert play.revision() == revision + 1 and play.turn_count() == turns + 1
+    assert play.turn_rows()[-1]["submission_id"] == submission
+    assert "turn_counted" in {change["type"] for change in first["outcome"]["applied_changes"]}
+    again = hermes_rpg_canonical_submitter({"session_id": play.session_id, "command_text": "wait",
+                                            "submission_id": submission})
+    assert again["ok"] is True and play.revision() == revision + 1
