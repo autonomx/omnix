@@ -102,3 +102,24 @@ def test_a_night_camped_in_the_wild_is_a_rest(launch, world) -> None:
     play.turn("I make camp and sleep for the night.")
     assert play.survival()["fatigue"] < fatigue
     assert play.player_state().get("rest_point") == play.location()
+
+
+def test_the_world_map_is_the_worlds_own_and_its_journeys_are_turns(launch) -> None:
+    """RQ-2.8 and §3: a published world's visual map shows its own regions (never the built-in fixture maps), and a
+    journey chosen on it is a travel turn: the hero moves in the simulation too, and the clock moves."""
+    play = launch("aurelia")
+    state = play.stored()["state"]
+    map_id = state["map_state"]["current_map_id"]
+    assert map_id.startswith("region:generated:") and "northern_pass" not in map_id
+    overlay = play.client.get(f"/api/rpg/sessions/{play.session_id}/maps/{map_id}/overlay")
+    assert overlay.status_code == 200, overlay.text[:300]
+    body = overlay.json()
+    capability = next(item for item in body["overlay"]["capabilities"] if item["type"] == "travel" and item["enabled"])
+    turns = play.turn_count()
+    acted = play.client.post(f"/api/rpg/sessions/{play.session_id}/maps/{map_id}/map-actions", json={
+        "action": "travel", "target_object_id": capability["target_object_id"], "route_id": capability.get("route_id"),
+        "definition_revision": body["definition_revision"], "overlay_revision": body["overlay_revision"]})
+    assert acted.status_code == 200, acted.text[:300]
+    destination = acted.json()["action_result"]["current_location_id"]
+    assert play.location() == destination != "location:aurelia:arrival-grove"
+    assert play.turn_count() == turns + 1

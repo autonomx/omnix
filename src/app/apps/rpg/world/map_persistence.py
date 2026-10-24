@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from app.apps.rpg.world.map_projection import MAP_STATE_SCHEMA_VERSION, initial_map_session_state
-from app.apps.rpg.world.map_world_integration import integrate_canonical_world_map_state
+from app.apps.rpg.world.map_world_integration import has_world_map, integrate_canonical_world_map_state
 
 _DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
 _DEMO_STARTING_LOCATION_ID = "glimmerdeep_pass"
@@ -19,7 +19,8 @@ def ensure_session_map_state(session: dict[str, Any]) -> dict[str, Any]:
     if state is None:
         return session
 
-    if isinstance(state.get("world_graph"), dict):
+    if has_world_map(session):
+        # The campaign's own world: its visual maps follow where the hero stands (map_world_integration.py).
         return integrate_canonical_world_map_state(session)
 
     current = state.get("map_state")

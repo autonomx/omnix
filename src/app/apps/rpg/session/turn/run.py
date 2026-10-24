@@ -256,6 +256,25 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
     return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
 
 
+def _map_travel_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    """A journey chosen on the world map: the travel rule's, its lines the game's own; a road that cannot be taken
+    refuses the request, with no turn taken."""
+    from app.apps.rpg.session.turn.resolution import Resolution
+    from app.apps.rpg.session.turn.travel import resolve_travel
+
+    planned = PlannedAction(mechanic="travel", target_id=_s(action.get("location_id")), reason="map_travel")
+    travel = resolve_travel(planned, session)
+    if travel.refused:
+        return {"ok": False, "error": "map_travel_refused", "status_code": 409, "detail": " ".join(travel.lines)}
+    resolution = Resolution(travel.changes, travel.lines, minutes=travel.minutes, needs="travel", told=False,
+                            action_result={"kind": "map_travel", "current_location_id": travel.destination,
+                                           "detail": " ".join(travel.lines)})
+    reading = IntentCandidate(family="move", target_id=planned.target_id, target_kind="place", confidence=1.0,
+                              reason="map_travel")
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
 def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     """A grid move or attack in a fight (``session/turn/tactical.py``): the campaign revision the player saw is its
     only token; what the grid refuses refuses the request, with no turn taken."""
@@ -276,6 +295,8 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
     if action.get("type") == "loadout":
         return _loadout_turn(ctx, session, action, count)
+    if action.get("type") == "map_travel":
+        return _map_travel_turn(ctx, session, action)
     try:
         definition, snapshot = map_for_turn(_s(action.get("map_instance_id")), campaign_id=ctx.session_id)
         if action.get("type") == "tactical_move":

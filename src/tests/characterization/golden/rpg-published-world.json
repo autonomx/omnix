@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:439cb14d7bffcec986448fbdf5ddf4eb2f3053e17aaba6e356beca80b5bcca74",
+    "document_hash": "sha256:4d8ca342ee6db4646ff3be4c7e7def5b35f5d99bec6c929cd3dc192fe9c311a4",
     "facts": {
       "combat": {
         "active": false,
@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3f5804eba0550ffe54bb279baea87540653bfd8db4bb9b3f30c53871de609896",
+      "document_hash": "sha256:19c698292e2ef30a7740eaeabd2ad955a354976100f184ec4fff8228040fa36f",
       "facts": {
         "combat": {
           "active": false,
@@ -199,6 +199,7 @@
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
+        "state/map_state",
         "state/turn_count",
         "state/world"
       ],
@@ -240,7 +241,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:38cbc785b0920ee7043dfa2bb31adf115511edfc0e6b90b014294a29b8d2c5fa",
+      "document_hash": "sha256:0e47df76c194333bdcff23f280d0963daecab9d499fd307226ffd554c530f533",
       "facts": {
         "combat": {
           "active": false,
@@ -399,7 +400,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:067fc6646c192874a8a9955e6e5373d53d79b3a392f5ec18fcda64fe2ec958ae",
+      "document_hash": "sha256:3a1b5502ae1ebf0db1ea6f3c65be43a02dd2967f21c1c2b9b56d2a89343153a5",
       "facts": {
         "combat": {
           "active": false,
@@ -554,7 +555,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:96d1f26184e6067c6b7db0350057a2a9e59d572ba5695be5380f428256c19ed0",
+      "document_hash": "sha256:6069952fab09231d26b5574b1f620fbd9780b264d64ef5ee0dc9e3acc46dff80",
       "facts": {
         "combat": {
           "active": false,
@@ -713,7 +714,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e9c0733d6e4765b0d433cad0f4cc73f6571725b4595acccc033a16231d58ce6a",
+      "document_hash": "sha256:30671ed7cd493dd46c9b2d59d83fdb49257ae3a4c905cfb1e954e21d8c77722b",
       "facts": {
         "combat": {
           "active": false,
@@ -876,7 +877,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:4643a4e537bdae9a88edd69645a1c617ea225c565ce3a8423eb693d963799701",
+      "document_hash": "sha256:abc9e3408a233cf542c8cb58882a8834315672806983465e74a72e6c9be72915",
       "facts": {
         "combat": {
           "active": false,
@@ -1054,7 +1055,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:d91ecac7ff43c5e4b90af230bc224f19085a6ae0fe01fed0ebf7e5fe68cf4f2d",
+      "document_hash": "sha256:432324c2dbff6831ada1544bc05f52cbdbefa9d2054e3bde7f160b25c074b763",
       "facts": {
         "combat": {
           "active": false,
@@ -1165,6 +1166,8 @@
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
+        "state/map_state",
+        "state/player",
         "state/turn_count",
         "state/world"
       ],
@@ -1206,7 +1209,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:95efa0a56286868181c4af45b94a73a3eb00b1b74719725a34b80a56eb02d0da",
+      "document_hash": "sha256:a8b597e51151cef286830671b9dc0848d9d894659416fd8bbfdf057ea2fc7c70",
       "facts": {
         "combat": {
           "active": false,
@@ -1364,7 +1367,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0f082bc67fe465f1ce6521caedb2e92c2d0bd4af74681d4e96f39fe27a64ead5",
+      "document_hash": "sha256:4e393476c40fd80a142298fb7b872a1985469768c22191e4072451d95575edbd",
       "facts": {
         "combat": {
           "active": false,
@@ -1521,7 +1524,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:ff983b35540dc9655939e106308893747784cdd1a1cde8ae6c2f798dd00e0b9d",
+      "document_hash": "sha256:63ef46d1434adaa1f69f410a887acb63fe9b361fd70dc56be505c2bd7e7aa975",
       "facts": {
         "combat": {
           "active": false,
@@ -1683,7 +1686,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:e400f31e2e0dc55eb14b9351abe968252f5494fb41905e9d9223cf0edc697bb2",
+      "document_hash": "sha256:497b337c45390b171797e48dd2f22edcf69dea31ae1f419c25812101752038d7",
       "facts": {
         "combat": {
           "active": false,
@@ -1836,7 +1839,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:d55f618e032f99a3cf97130ffa8a475ba8168b09bef14b145682eccea513bbc0",
+      "document_hash": "sha256:699be01185af21ab36b21589272ec7ee95ab1ac711a05d6136fe32cdd197ccaa",
       "facts": {
         "combat": {
           "active": false,
@@ -1995,7 +1998,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:0e7f07804cd34966274f146baf95b1b751393f6afbfdf286fdfec93ce66c918a",
+      "document_hash": "sha256:4180afa139a705d62cb8827ebcfb207ef614476f196e775e01935693d51f9202",
       "facts": {
         "combat": {
           "active": false,
@@ -2175,7 +2178,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:392a49ed0f3cc499e0dbd3cefe471366f8b90bd22154166d73946ef2704f2254",
+      "document_hash": "sha256:206a9ad9f74d79344de791fe191e863d1711c808c627c6b7ac3572940919a529",
       "facts": {
         "combat": {
           "active": false,
@@ -2285,6 +2288,8 @@
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
+        "state/map_state",
+        "state/player",
         "state/turn_count",
         "state/world"
       ],
@@ -2339,7 +2344,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:23139c4a3f7fb6713b902b540f07a9c463430ae524b456a2dc9a32c23cfbac28",
+      "document_hash": "sha256:b386eaf23f9964e48623d975e587fae5183f5aff47ad9ba349a5c7f751ba2fc0",
       "facts": {
         "combat": {
           "active": false,
@@ -2510,7 +2515,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:8bd09119ae8aa493663e5a409ee8dcba6ca0a87d6f7fad49283d23b4c059d3f1",
+      "document_hash": "sha256:66bb9453ea0354ab11dfc81e9bea3e9d37e4d5e4698f661f2e9ec056dc1b7006",
       "facts": {
         "combat": {
           "active": false,
@@ -2611,6 +2616,7 @@
         "simulation_state/player_state",
         "simulation_state/world_items",
         "state/current_turn",
+        "state/map_state",
         "state/player",
         "state/turn_count"
       ],
@@ -2649,7 +2655,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:c06641fff794dcace0056682a5ed87dc7869365d42cef719440004da45b01b31",
+      "document_hash": "sha256:78c29d93748419102bb9e17476a96889cd1dfce2d7b23ddbf35b57a89379e407",
       "facts": {
         "combat": {
           "active": false,
@@ -2804,7 +2810,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:8d55c3359745cf22f0099124af8d431cbb8dfc689b39b30cd6399982e8592c10",
+      "document_hash": "sha256:ca086490fb75a16013c7a815a0580690a2a4a06ea3a6ddfdc9332d8608c5d59c",
       "facts": {
         "combat": {
           "active": false,
@@ -2961,7 +2967,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:701d69f5a4fe90915cc5678d520d3e17738d447d98052489c8136cb8d1ac7682",
+      "document_hash": "sha256:c894f267c764eb5bac41038d34c667b08f41311458bed8a3467609dd1095ebb8",
       "facts": {
         "combat": {
           "active": false,
@@ -3119,7 +3125,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b9525620760e6782d68e957c5155250698f1df609aeda9eb0200bd01c9e15e00",
+      "document_hash": "sha256:5391c7447484ee6653860927280e2880c1eaa87917fbfa7bc62e67a28e876002",
       "facts": {
         "combat": {
           "active": false,
@@ -3280,7 +3286,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:6555410c8a780fbe71f94f93df1cbe642608b10a1821be39b4dddeacc36c6c0a",
+      "document_hash": "sha256:d09f340717564b0520ad22437c84ccb9a27221638c75b93b1a8452c9bb5f1733",
       "facts": {
         "combat": {
           "active": true,
@@ -3437,7 +3443,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:a24801a29d6549ef4fa8131477ba7976169844900b4434d163a6f43bc91ba6f3",
+      "document_hash": "sha256:bfc87af39fb6e1c5bcf46d76b6b8a893ecec278236733966f305b1f01795499c",
       "facts": {
         "combat": {
           "active": true,
@@ -3569,7 +3575,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5ca5a1fd06298e9c0844150598fdb8bdc0da96d8ce68f84de9e8cc9c1fbc02d9",
+      "document_hash": "sha256:5f2893b4d20d4d0cd00a7dfaedd7a5fae7b0c870dd6454f788266e0b66b04c38",
       "facts": {
         "combat": {
           "active": true,
@@ -3736,7 +3742,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3abc52984bd27e5ce21460034f0f27e92eab0bc9abcc9ffa4c851a9d552657cb",
+      "document_hash": "sha256:0b0b4ef0183b749e4e9371692349b807c1110b1920863a3a06b82425f3061cb5",
       "facts": {
         "combat": {
           "active": true,
@@ -3907,7 +3913,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:246ec2db7f7c0e3e7c5def105f37eede0864116b2dc8f3a3a2d7bf26edd15f78",
+      "document_hash": "sha256:c5a779bc6580e14b972f3907051fc465d2064cb23458cef9c0bfa2538a940012",
       "facts": {
         "combat": {
           "active": true,
@@ -4081,7 +4087,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7be760aa3d5cc4816c4c0e7ad6342b71c15d6918a32467ae1bc134f5ffcfc29f",
+      "document_hash": "sha256:6d7cd8d7c5b597501fbb29147de872286cd8c77c63bf28e2d8194f7ca8227e8a",
       "facts": {
         "combat": {
           "active": true,
@@ -4239,7 +4245,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:31638f55d1fe1db7d4ec9aaf50bb58081be0a078c42ee85914630195a4dbfa19",
+      "document_hash": "sha256:ef84c97661fa74ed2309c6287f3cf7504dc468a7b2c3e825bd6d61ea36ff5f3a",
       "facts": {
         "combat": {
           "active": true,
@@ -4369,7 +4375,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:08260251a6a666ccb09ebe64e495b311c927d6024b6003ff3a2f875d5b332bbd",
+      "document_hash": "sha256:ff5d1eb9ef34d3bfc0a51b0391dfb8725076532e3c68bdd3c2fe26529763d7e8",
       "facts": {
         "combat": {
           "active": true,
@@ -4495,7 +4501,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:1d8994819610f9978d5c5a04c3bf9e6755d991e700239755473003b191742011",
+      "document_hash": "sha256:39ef8574f43c39588311e33ad2e3996ea1caee86441bc5da6d407fbeb540fcb1",
       "facts": {
         "combat": {
           "active": true,
@@ -4621,7 +4627,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:54e9c1676520968b2f7c00082c9847698114bc6e9d514a722ba65284120847be",
+      "document_hash": "sha256:c83822f967bcff53d251e0a2cbd43c281311abf9868b9d604ae92e3dbbd082b6",
       "facts": {
         "combat": {
           "active": true,
@@ -4747,7 +4753,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:f509fdd25f31d3f46fc6a1522701f37b48a41fb9ce7bc6f40debddae908ab80f",
+      "document_hash": "sha256:096f81e56458e431348077bff9160b2865b70100064b5205013a21ee9c3bdee2",
       "facts": {
         "combat": {
           "active": true,

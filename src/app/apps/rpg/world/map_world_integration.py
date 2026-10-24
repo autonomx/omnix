@@ -45,9 +45,43 @@ class CanonicalWorldMapModel:
     map_bindings: Mapping[str, str]
 
 
+def has_world_map(session: Mapping[str, Any]) -> bool:
+    """Whether the campaign has a world of its own to draw its visual maps from."""
+    return bool(world_graph_source(session))
+
+
+def world_graph_source(session: Mapping[str, Any]) -> dict[str, Any]:
+    """The campaign's world graph: the one a generated campaign keeps (``state.world_graph``), else its world
+    model's places and roads, where the hero stands and where they have been (a published world's)."""
+    state = _mapping(session.get("state"))
+    kept = _mapping(state.get("world_graph"))
+    if kept:
+        return dict(kept)
+    simulation = _mapping(session.get("simulation_state"))
+    world = _mapping(simulation.get("world_model"))
+    places = _mapping(world.get("locations"))
+    if not places:
+        return {}
+    here = _first_text(_mapping(simulation.get("player_state")).get("location_id"), simulation.get("location_id"))
+    return {
+        "schema_version": WORLD_GRAPH_SCHEMA_VERSION,
+        "seed": _int(simulation.get("seed"), fallback=0),
+        "locations": {key: {"name": _mapping(row).get("name"), "region_id": _mapping(row).get("region_id"),
+                            "services": list(_string_sequence(_mapping(row).get("services")))}
+                      for key, row in places.items()},
+        "routes": [route for route in _sequence(world.get("routes")) if _mapping(route).get("id")],
+        "current_location_id": here if here in places else "",
+        # Where the hero has been, and where the roads from here lead (known, as the place's exits are in play).
+        "discovered_location_ids": [place for place in (*_string_sequence(simulation.get("visited_locations")),
+                                                        *_mapping(_mapping(places.get(here)).get("exits")).values())
+                                    if place in places],
+        "source": "world_model",
+    }
+
+
 def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapModel | None:
     state = _mapping(session.get("state"))
-    raw = _mapping(state.get("world_graph"))
+    raw = world_graph_source(session)
     if not raw:
         return None
     version = _int(raw.get("schema_version"), fallback=-1)
@@ -57,7 +91,7 @@ def canonical_world_map_model(session: Mapping[str, Any]) -> CanonicalWorldMapMo
     locations = _locations(raw.get("locations"))
     routes = _routes(raw.get("routes"))
     graph = RpgRegionGraph(locations={item.id: item for item in locations}, routes=routes)
-    current_location_id = _first_text(
+    current_location_id = _first_text(raw.get("current_location_id")) if raw.get("source") == "world_model" else _first_text(
         raw.get("current_location_id"),
         state.get("current_location_id"),
         _mapping(state.get("player")).get("location_id"),
@@ -90,7 +124,9 @@ def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepos
     if model is None:
         return default_map_repository()
 
-    definitions = list(default_map_repository().list())
+    # A published world's maps are its own; the built-in fixture maps serve only a generated campaign's graph.
+    from_world = not _mapping(_mapping(session.get("state")).get("world_graph"))
+    definitions = [] if from_world else list(default_map_repository().list())
     existing_ids = {definition.map_id for definition in definitions}
     region_ids = sorted({node.region_id for node in model.graph.locations.values()})
     for region_id in region_ids:
