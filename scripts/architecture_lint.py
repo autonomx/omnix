@@ -20,7 +20,7 @@ from architecture_analysis import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-RULES = tuple(f"AL{number:03}" for number in range(1, 21))
+RULES = tuple(f"AL{number:03}" for number in range(1, 22))
 MIGRATIONS = "src/app/persistence/migrations/"
 RETIRED_MIGRATIONS = "src/app/persistence/retired/"
 REGISTRY = "resources/architecture/migration-checksums.json"
@@ -288,6 +288,40 @@ def rpg_turn_path_violations(analysis: SourceAnalysis) -> list[Violation]:
     return violations
 
 
+def _docstrings(tree: ast.AST) -> set[int]:
+    found: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                found.add(id(first.value))
+    return found
+
+
+def rpg_world_content_violations(analysis: SourceAnalysis) -> list[Violation]:
+    """AL021 (RQ-2.8, A4): engine code holds no world content. A string in the ``[rpg_world_content]`` contexts that
+    names a shipped world's people, places or the ids the engine's old copies used (the watchlist) counts, per module
+    and name; docstrings do not. The worlds live in their bundles (``resources/examples/rpg/world-bundles/``)."""
+    policy = analysis.config.get("rpg_world_content", {})
+    names = [str(name) for name in policy.get("names", ()) if str(name)]
+    contexts = tuple(f"app.apps.rpg.{context}" for context in policy.get("contexts", ()))
+    if not names or not contexts:
+        return []
+    pattern = re.compile(r"(?<![A-Za-z0-9_])(" + "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+                         + r")(?![A-Za-z0-9])")
+    violations: list[Violation] = []
+    for path, tree in analysis.trees.items():
+        module = module_name(path)
+        if not any(module == context or module.startswith(context + ".") for context in contexts):
+            continue
+        docstrings = _docstrings(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+                violations.extend(Violation("AL021", path, name, getattr(node, "lineno", 1))
+                                  for name in pattern.findall(node.value))
+    return violations
+
+
 def cycle_violations(analysis: SourceAnalysis) -> list[Violation]:
     # The metric counts reciprocal package pairs. Lint additionally rejects
     # longer module-level package cycles, whose edges may use different modules.
@@ -346,6 +380,7 @@ def measure(sources: dict[str, str], config: dict, protected: dict[str, str]) ->
     analysis = SourceAnalysis(sources, config)
     violations = (analysis.violations() + cycle_violations(analysis) + reciprocal_violations(analysis)
                   + rpg_context_violations(analysis) + rpg_turn_path_violations(analysis)
+                  + rpg_world_content_violations(analysis)
                   + analysis.table_ownership_violations()
                   + migration_violations(sources, protected))
     counts = Counter((item.rule, item.path, item.fingerprint) for item in violations)

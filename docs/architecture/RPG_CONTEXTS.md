@@ -64,6 +64,14 @@ AL019 and AL020 are heuristics over names: state reached under another name is n
 0 is necessary, not sufficient; the playthrough suite's replay of each turn's reported changes is the check
 that holds.
 
+## No world content in engine code (AL021, RQ-2.8)
+
+Every campaign plays from a world (roadmap §4.4): the starter town is The Market Road, a bundle under
+`resources/examples/rpg/world-bundles/the-market-road/`. AL021 counts strings in `rules`, `world`, `session`
+and `narration` (docstrings aside) that name its people or places, or the ids the engine's old copies of it used
+(`loc_tavern`, `npc:Bran`); the watchlist is `[rpg_world_content]` in `resources/architecture/layers.toml`. The
+baseline holds the count when the rule arrived (2026-10-24: 320 in 56 modules) and only shrinks, to 0.
+
 ## The original baseline: 60 upward imports (now 0)
 
 | From → to | Imports |

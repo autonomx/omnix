@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "bdc043c38ec17abadf5186b5427523eaa821d45fbbe38dc5480aa724a3a27782",
+  "policy_digest": "e4940761d1c6b2a2353049c9790c97ad0cdc7f9801a257669eba44893190a9bf",
   "rules": [
     "AL001",
     "AL002",
@@ -21,7 +21,8 @@
     "AL017",
     "AL018",
     "AL019",
-    "AL020"
+    "AL020",
+    "AL021"
   ],
   "schema_version": 1,
   "scope": "tracked_nonvendor_production_python_and_migrations",
@@ -7081,6 +7082,1390 @@
       ],
       "path": "src/app/apps/rpg/world/world_event_director.py",
       "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "Bran",
+      "lines": [
+        534,
+        535,
+        536,
+        583
+      ],
+      "path": "src/app/apps/rpg/narration/ai/world_scene_narrator_payloads.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        614
+      ],
+      "path": "src/app/apps/rpg/narration/ai/world_scene_narrator_service_grounding.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 5,
+      "fingerprint": "Bran",
+      "lines": [
+        12,
+        20,
+        29,
+        38,
+        47
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        12,
+        56
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        15,
+        55,
+        59
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        359,
+        360
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/writer.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 4,
+      "fingerprint": "Bran",
+      "lines": [
+        787,
+        789,
+        791,
+        792
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        372,
+        375
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/visible_response.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        372
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/visible_response.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 22,
+      "fingerprint": "Bran",
+      "lines": [
+        82,
+        83,
+        84,
+        91,
+        92,
+        93,
+        98,
+        99,
+        106,
+        107,
+        123,
+        124,
+        125,
+        140,
+        141,
+        147,
+        148,
+        211,
+        212,
+        257,
+        317,
+        391
+      ],
+      "path": "src/app/apps/rpg/narration/runtime_narration_fallback.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Mira",
+      "lines": [
+        213,
+        313
+      ],
+      "path": "src/app/apps/rpg/narration/runtime_narration_fallback.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        640
+      ],
+      "path": "src/app/apps/rpg/narration/runtime_narration_legacy.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        20
+      ],
+      "path": "src/app/apps/rpg/narration/story/tavern_story_arc_rules.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        34,
+        40,
+        46
+      ],
+      "path": "src/app/apps/rpg/rules/combat/encounters.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 17,
+      "fingerprint": "Bran",
+      "lines": [
+        20,
+        21,
+        22,
+        47,
+        51,
+        52,
+        71,
+        72,
+        91,
+        92,
+        109,
+        110,
+        134,
+        135,
+        151,
+        152,
+        334
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 13,
+      "fingerprint": "Elara",
+      "lines": [
+        32,
+        33,
+        34,
+        166,
+        170,
+        171,
+        194,
+        195,
+        218,
+        219,
+        235,
+        236,
+        336
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 5,
+      "fingerprint": "loc_market",
+      "lines": [
+        36,
+        178,
+        202,
+        225,
+        242
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 7,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        24,
+        59,
+        79,
+        98,
+        117,
+        141,
+        158
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "Elara",
+      "lines": [
+        8,
+        9,
+        10
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/merchant_catalog.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Elara",
+      "lines": [
+        227
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/merchant_runtime.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        26,
+        45
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/objects.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Elara",
+      "lines": [
+        325,
+        361
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/semantic_actions.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Elara",
+      "lines": [
+        357
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/survival_action_runtime.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        16,
+        16
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Elara",
+      "lines": [
+        33,
+        33
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Mira",
+      "lines": [
+        17,
+        17
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        11
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Tomas",
+      "lines": [
+        34,
+        34
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 7,
+      "fingerprint": "loc_market",
+      "lines": [
+        21,
+        22,
+        23,
+        26,
+        27,
+        53,
+        54
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 6,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        9,
+        10,
+        38,
+        39,
+        40,
+        75
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        304,
+        306
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_memory.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        188
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_memory.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        36
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_presence.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 5,
+      "fingerprint": "Bran",
+      "lines": [
+        178,
+        183,
+        261,
+        271,
+        281
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        121,
+        183
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        75
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_turns.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Aldric",
+      "lines": [
+        92
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_values.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        36
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_values.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        33,
+        42
+      ],
+      "path": "src/app/apps/rpg/rules/party/party_composition.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Mira",
+      "lines": [
+        34,
+        42
+      ],
+      "path": "src/app/apps/rpg/rules/party/party_composition.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        194
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        646
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        358,
+        358
+      ],
+      "path": "src/app/apps/rpg/session/jobs/turn_executor.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        358
+      ],
+      "path": "src/app/apps/rpg/session/jobs/turn_executor.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        84,
+        141
+      ],
+      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Mira",
+      "lines": [
+        87
+      ],
+      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Aldric",
+      "lines": [
+        275,
+        276
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 9,
+      "fingerprint": "Bran",
+      "lines": [
+        133,
+        140,
+        143,
+        211,
+        213,
+        234,
+        255,
+        256,
+        270
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 6,
+      "fingerprint": "Elara",
+      "lines": [
+        133,
+        141,
+        260,
+        261,
+        265,
+        266
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "Glimmerdeep",
+      "lines": [
+        175,
+        177,
+        183
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 5,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        127,
+        129,
+        133,
+        139,
+        211
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "glimmerdeep_pass",
+      "lines": [
+        174
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "market_district",
+      "lines": [
+        145
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "northern_road",
+      "lines": [
+        158
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "old_quarry",
+      "lines": [
+        188
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        56,
+        126,
+        609
+      ],
+      "path": "src/app/apps/rpg/session/new_game.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        16,
+        33
+      ],
+      "path": "src/app/apps/rpg/session/quest_evidence.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        156
+      ],
+      "path": "src/app/apps/rpg/session/replay_checkpoint.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        140
+      ],
+      "path": "src/app/apps/rpg/session/turn_contract.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        628
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "glimmerdeep_pass",
+      "lines": [
+        18
+      ],
+      "path": "src/app/apps/rpg/world/climate_profiles.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "market_district",
+      "lines": [
+        16
+      ],
+      "path": "src/app/apps/rpg/world/climate_profiles.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "northern_road",
+      "lines": [
+        17
+      ],
+      "path": "src/app/apps/rpg/world/climate_profiles.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "old_quarry",
+      "lines": [
+        19
+      ],
+      "path": "src/app/apps/rpg/world/climate_profiles.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        15
+      ],
+      "path": "src/app/apps/rpg/world/climate_profiles.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        20
+      ],
+      "path": "src/app/apps/rpg/world/conversation_director.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Mira",
+      "lines": [
+        20
+      ],
+      "path": "src/app/apps/rpg/world/conversation_director.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_market",
+      "lines": [
+        21
+      ],
+      "path": "src/app/apps/rpg/world/conversation_director.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        20
+      ],
+      "path": "src/app/apps/rpg/world/conversation_director.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "loc_market",
+      "lines": [
+        205,
+        230
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_base.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        198,
+        226
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_base.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        106
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_responses.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Mira",
+      "lines": [
+        106
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_responses.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "loc_market",
+      "lines": [
+        77,
+        79
+      ],
+      "path": "src/app/apps/rpg/world/conversation_topics.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        61,
+        63
+      ],
+      "path": "src/app/apps/rpg/world/conversation_topics.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "glimmerdeep_pass",
+      "lines": [
+        46
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "market_district",
+      "lines": [
+        34
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "northern_road",
+      "lines": [
+        40
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "old_quarry",
+      "lines": [
+        52
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        28
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        20,
+        20
+      ],
+      "path": "src/app/apps/rpg/world/locations/discovery.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        186
+      ],
+      "path": "src/app/apps/rpg/world/locations/events.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        178,
+        183
+      ],
+      "path": "src/app/apps/rpg/world/locations/events.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        28
+      ],
+      "path": "src/app/apps/rpg/world/locations/graph.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        27,
+        83,
+        92
+      ],
+      "path": "src/app/apps/rpg/world/locations/graph.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        10,
+        79,
+        88
+      ],
+      "path": "src/app/apps/rpg/world/locations/graph.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        162
+      ],
+      "path": "src/app/apps/rpg/world/locations/map_report.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 4,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        15,
+        16,
+        24,
+        25
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Frost Haven",
+      "lines": [
+        131,
+        280
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Frosted Flagon",
+      "lines": [
+        79
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Frostpine",
+      "lines": [
+        319
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Glimmerdeep",
+      "lines": [
+        293
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "glimmerdeep_pass",
+      "lines": [
+        292
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "market_district",
+      "lines": [
+        104
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "old_quarry",
+      "lines": [
+        301,
+        305
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        78
+      ],
+      "path": "src/app/apps/rpg/world/map_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        68
+      ],
+      "path": "src/app/apps/rpg/world/map_hierarchy_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Frost Haven",
+      "lines": [
+        57
+      ],
+      "path": "src/app/apps/rpg/world/map_hierarchy_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 5,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        55,
+        66,
+        76,
+        86,
+        96
+      ],
+      "path": "src/app/apps/rpg/world/map_hierarchy_fixtures.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "glimmerdeep_pass",
+      "lines": [
+        12
+      ],
+      "path": "src/app/apps/rpg/world/map_persistence.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "glimmerdeep_pass",
+      "lines": [
+        28
+      ],
+      "path": "src/app/apps/rpg/world/map_projection.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "market_district",
+      "lines": [
+        25
+      ],
+      "path": "src/app/apps/rpg/world/map_projection.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "northern_road",
+      "lines": [
+        27
+      ],
+      "path": "src/app/apps/rpg/world/map_projection.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "old_quarry",
+      "lines": [
+        29
+      ],
+      "path": "src/app/apps/rpg/world/map_projection.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/world/map_projection.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        112
+      ],
+      "path": "src/app/apps/rpg/world/memory/social_effects.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "GuardCaptain",
+      "lines": [
+        114
+      ],
+      "path": "src/app/apps/rpg/world/memory/social_effects.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Mira",
+      "lines": [
+        113
+      ],
+      "path": "src/app/apps/rpg/world/memory/social_effects.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 11,
+      "fingerprint": "Bran",
+      "lines": [
+        54,
+        55,
+        56,
+        60,
+        92,
+        119,
+        161,
+        161,
+        220,
+        220,
+        303
+      ],
+      "path": "src/app/apps/rpg/world/npc_biography_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 6,
+      "fingerprint": "GuardCaptain",
+      "lines": [
+        93,
+        162,
+        183,
+        184,
+        305,
+        306
+      ],
+      "path": "src/app/apps/rpg/world/npc_biography_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 8,
+      "fingerprint": "Mira",
+      "lines": [
+        92,
+        124,
+        125,
+        126,
+        130,
+        221,
+        221,
+        304
+      ],
+      "path": "src/app/apps/rpg/world/npc_biography_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_market",
+      "lines": [
+        247
+      ],
+      "path": "src/app/apps/rpg/world/npc_biography_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        58,
+        128,
+        187
+      ],
+      "path": "src/app/apps/rpg/world/npc_biography_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/world/npc_goal_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Mira",
+      "lines": [
+        42
+      ],
+      "path": "src/app/apps/rpg/world/npc_goal_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 4,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        29,
+        37,
+        47,
+        55
+      ],
+      "path": "src/app/apps/rpg/world/npc_goal_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Bran",
+      "lines": [
+        10
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "GuardCaptain",
+      "lines": [
+        43
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Mira",
+      "lines": [
+        21
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_market",
+      "lines": [
+        35
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_patrol",
+      "lines": [
+        46
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        13,
+        24
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Aldric",
+      "lines": [
+        290
+      ],
+      "path": "src/app/apps/rpg/world/political_system.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        13,
+        14
+      ],
+      "path": "src/app/apps/rpg/world/rumor_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Elara",
+      "lines": [
+        27,
+        28
+      ],
+      "path": "src/app/apps/rpg/world/rumor_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_market",
+      "lines": [
+        29
+      ],
+      "path": "src/app/apps/rpg/world/rumor_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        15
+      ],
+      "path": "src/app/apps/rpg/world/rumor_registry.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 4,
+      "fingerprint": "Bran",
+      "lines": [
+        68,
+        68,
+        72,
+        72
+      ],
+      "path": "src/app/apps/rpg/world/scene_activity_scheduler.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 4,
+      "fingerprint": "Mira",
+      "lines": [
+        69,
+        69,
+        73,
+        73
+      ],
+      "path": "src/app/apps/rpg/world/scene_activity_scheduler.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "loc_tavern",
+      "lines": [
+        66
+      ],
+      "path": "src/app/apps/rpg/world/scene_activity_scheduler.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 2,
+      "fingerprint": "Bran",
+      "lines": [
+        43,
+        45
+      ],
+      "path": "src/app/apps/rpg/world/social/npc_backbone.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 1,
+      "fingerprint": "Rusty Flagon",
+      "lines": [
+        154
+      ],
+      "path": "src/app/apps/rpg/world/travel_graph.py",
+      "rule": "AL021"
+    },
+    {
+      "count": 3,
+      "fingerprint": "rusty_flagon",
+      "lines": [
+        153,
+        190,
+        293
+      ],
+      "path": "src/app/apps/rpg/world/travel_graph.py",
+      "rule": "AL021"
     }
   ]
 }

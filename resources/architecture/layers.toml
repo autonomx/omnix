@@ -58,6 +58,16 @@ genesis = ["genesis", "genesis.creator", "genesis.profiles", "genesis.modding", 
 session = ["session", "session.jobs", "session.interactive_cli_state_checkpoint"]
 edge = ["edge", "edge.api", "edge.hermes", "edge.replay", "edge.narrative_replay", "feature", "declarations", "edge.services", "edge.release_finalization", "edge.release_gates", "edge.local_live_smoke", "edge.dialogue_quality_benchmark", "edge.local_dialogue_quality_fixtures", "edge.agent", "__init__"]
 
+# RQ-2.8 (A4): engine code holds no world content. AL021 counts strings in these contexts that name the starter
+# world's people and places, or the ids the engine's old copies of it used; the world is its bundle,
+# resources/examples/rpg/world-bundles/the-market-road/. The baseline only shrinks, to 0.
+[rpg_world_content]
+contexts = ["rules", "world", "session", "narration"]
+names = ["Rusty Flagon", "Frosted Flagon", "Glimmerdeep", "Frostpine", "Frost Haven", "Icefang", "Bran", "Mira", "Elara",
+         "Aldric", "Tomas", "Thorin", "Elandra", "Kael", "Bryn", "Marta", "GuardCaptain", "loc_tavern", "loc_market",
+         "loc_patrol", "rusty_flagon", "npc_innkeeper", "npc_merchant", "npc_guard_captain", "glimmerdeep_pass",
+         "market_district", "northern_road", "old_quarry"]
+
 [production]
 entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/services/stt/nemotron_eou_stt_server.py", "src/services/stt/parakeet_stt_runtime.py", "src/services/stt/parakeet_stt_server.py", "src/services/tts/tts_server.py", "src/sitecustomize.py", "src/usercustomize.py"]
 
