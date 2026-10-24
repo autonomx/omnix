@@ -63,6 +63,9 @@ TRADE_LEDGER_KEPT = 50
 DIALOGUE_EXCHANGES_KEPT = 8
 _PLAYER = ("simulation_state", "player_state")
 _STORE = _PLAYER + ("inventory_state",)
+# Where gear is worn (the store's slots, which combat reads) and what the play screen's sheet calls each.
+SLOT_LABELS = {"main_hand": "Weapon", "off_hand": "Shield", "body": "Armor", "head": "Helmet", "cloak": "Cloak",
+               "ring": "Ring", "tool": "Tool"}
 
 
 class ChangeRejected(ValueError):
@@ -291,15 +294,18 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         _write_items(writer, items)
         writer.set(("simulation_state", "world_items", "by_location", change.location_id), ground)
     elif isinstance(change, ItemEquipped):
-        if not any(_key(item) == change.item_id for item in _items(writer)):
+        item = next((item for item in _items(writer) if _key(item) == change.item_id), None)
+        if item is None:
             raise ChangeRejected(f"the pack holds no {change.item_id} to equip")
         equipment = dict(writer.get(_STORE + ("equipment",)) or {})
         equipment[change.slot] = change.item_id
         writer.set(_STORE + ("equipment",), equipment)
+        _show_worn(writer, change.slot, str(item.get("name") or change.item_id))
     elif isinstance(change, ItemUnequipped):
         equipment = dict(writer.get(_STORE + ("equipment",)) or {})
         equipment.pop(change.slot, None)
         writer.set(_STORE + ("equipment",), equipment)
+        _show_worn(writer, change.slot, "")
     elif isinstance(change, HpChanged):
         hp = dict(writer.get(_PLAYER + ("resources", "hp")) or {"current": 0, "max": 0})
         maximum = int(hp.get("max") or 0)
@@ -492,6 +498,30 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         raise ChangeRejected(f"unknown change {change!r}")
 
 
+def _show_worn(writer: _Writer, slot: str, name: str) -> None:
+    """The sheet's list of worn gear, as the store has it (``name`` empty: the slot is bare)."""
+    sheet = writer.get(("state", "player"))
+    if not isinstance(sheet, dict):
+        return
+    label = SLOT_LABELS.get(slot, slot.replace("_", " ").title())
+    worn = [dict(row) for row in sheet.get("equipment") or () if isinstance(row, dict)
+            and str(row.get("slot") or "").casefold() != label.casefold()]
+    writer.set(("state", "player", "equipment"), [*worn, {"slot": label, "name": name}] if name else worn)
+
+
+def _unequip_gone(writer: _Writer) -> None:
+    """Gear no longer carried is no longer worn."""
+    equipment = writer.get(_STORE + ("equipment",))
+    if not isinstance(equipment, dict) or not equipment:
+        return
+    carried = {_key(item) for item in _items(writer) if _quantity(item) > 0}
+    for slot, item_id in list(equipment.items()):
+        if str(item_id) not in carried:
+            equipment = {key: value for key, value in equipment.items() if key != slot}
+            writer.set(_STORE + ("equipment",), equipment)
+            _show_worn(writer, slot, "")
+
+
 def _show_progression(writer: _Writer, *, xp: int, xp_to_next: int | None = None, level: int | None = None) -> None:
     """The play screen's sheet shows the hero's experience and level as the simulation keeps them."""
     sheet = writer.get(("state", "player"))
@@ -509,4 +539,6 @@ def reduce(document: dict[str, Any], changes: list[StateChange]) -> tuple[dict[s
     writer = _Writer(deepcopy(document))
     for change in changes:
         _apply(writer, change)
+        if isinstance(change, (ItemRemoved, ItemDropped)):
+            _unequip_gone(writer)
     return writer.document, writer.patch()

@@ -180,6 +180,42 @@ def _attach_environment_snapshot_to_session(
     return session
 
 
+# Pack actions that are turns through the turn pipeline (RQ-2.4); the rest (crafting, abilities, inspecting) are
+# still the loadout's own.
+_LOADOUT_TURNS = {"use", "equip", "drop", "unequip"}
+
+
+def _loadout_turn(session_id: str, request: Any) -> dict[str, Any]:
+    """A loadout pack action as a structured-action turn, answered as the loadout answers."""
+    import uuid
+
+    from app.apps.rpg.edge.api.payloads.player_view import player_session_view
+    from app.apps.rpg.edge.api.turn_pipeline import submit_rpg_turn
+    from app.apps.rpg.session.service import load_session
+
+    verbs = {"use": "use", "equip": "equip", "drop": "drop", "unequip": "take off"}
+    payload = submit_rpg_turn(
+        session_id=session_id, command=f"I {verbs[request.action]} the {request.item_name}.",
+        submission_id=f"loadout:{uuid.uuid4().hex}", source="loadout",
+        action={"turn_kind": "structured_action", "type": "loadout", "action": request.action,
+                "item_name": request.item_name})
+    if payload.get("ok") is False:
+        detail = {key: value for key, value in payload.items() if key != "status_code"}
+        raise HTTPException(status_code=int(payload.get("status_code") or 400), detail=detail)
+    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
+    answer = outcome.get("action_result") if isinstance(outcome.get("action_result"), dict) else {}
+    saved = load_session(session_id)
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "status": "ready",
+        "event": {"title": f"{request.action.title()} {request.item_name}", "detail": str(answer.get("detail") or ""),
+                  "kind": "inventory"},
+        "session": player_session_view(saved),
+        "game": saved.get("state", {}),
+    }
+
+
 def _with_environment_snapshot(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
@@ -493,6 +529,8 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
         session_id: str,
         request: RpgLoadoutActionRequest,
     ) -> dict[str, Any]:
+        if request.action in _LOADOUT_TURNS and request.item_name:
+            return _with_environment_snapshot(_loadout_turn(session_id, request))
         return _with_environment_snapshot(
             _raise_for_error(
                 apply_loadout_action(session_id, request),

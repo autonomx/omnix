@@ -39,6 +39,7 @@ LoadoutActionKind = Literal[
     "inspect",
     "use",
     "equip",
+    "unequip",
     "drop",
     "salvage",
     "craft",

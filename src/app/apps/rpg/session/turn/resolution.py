@@ -14,7 +14,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d
 from app.apps.rpg.foundation.state.changes import StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.combat.fight import fight
-from app.apps.rpg.rules.interactions.items import drop_item, pick_up, use_item
+from app.apps.rpg.rules.interactions.items import drop_item, equip_item, pick_up, unequip_item, use_item
 from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
 from app.apps.rpg.rules.rest import rest
 from app.apps.rpg.session.turn.planning import PlannedAction
@@ -76,8 +76,9 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return Resolution(_timed(session, turn.changes, turn.minutes), turn.lines, minutes=turn.minutes,
                           refused=turn.refused, needs=None if turn.refused else "standard_turn",
                           told=not turn.refused)
-    if mechanic in {"use_item", "drop", "take"}:
-        rule = {"use_item": use_item, "drop": drop_item, "take": pick_up}[mechanic]
+    if mechanic in {"use_item", "drop", "take", "equip", "unequip"}:
+        rule = {"use_item": use_item, "drop": drop_item, "take": pick_up, "equip": equip_item,
+                "unequip": unequip_item}[mechanic]
         outcome = rule(simulation, planned.target_id, text)
         if planned.reason == "in_fight" and not outcome.refused:
             # The hero's turn spent on it; then everyone whose turn comes before the hero's next acts.

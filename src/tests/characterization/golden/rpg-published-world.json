@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:58d4fda23e7f44d307c2b4147fbd532719d270e2f231cee5ea8b8ddd9eff7581",
+    "document_hash": "sha256:439cb14d7bffcec986448fbdf5ddf4eb2f3053e17aaba6e356beca80b5bcca74",
     "facts": {
       "combat": {
         "active": false,
@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c58924c08441cd5d7f0defbc6be9de3c0b27cf741538dde15d7f198621ec202f",
+      "document_hash": "sha256:3f5804eba0550ffe54bb279baea87540653bfd8db4bb9b3f30c53871de609896",
       "facts": {
         "combat": {
           "active": false,
@@ -240,7 +240,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:801cb2aa4710b5779dd684c569afb386f6cc84ccb047ffdd525661cbefc0f2a6",
+      "document_hash": "sha256:38cbc785b0920ee7043dfa2bb31adf115511edfc0e6b90b014294a29b8d2c5fa",
       "facts": {
         "combat": {
           "active": false,
@@ -399,7 +399,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:fc1b42ae5c97ec48d9db3d9f34c5b010330882f9d502e2f67110e9d13e06b5d8",
+      "document_hash": "sha256:067fc6646c192874a8a9955e6e5373d53d79b3a392f5ec18fcda64fe2ec958ae",
       "facts": {
         "combat": {
           "active": false,
@@ -554,7 +554,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c132161644253228b9ffb947fcf07b04dd6754aba90e40c792991e63eed47955",
+      "document_hash": "sha256:96d1f26184e6067c6b7db0350057a2a9e59d572ba5695be5380f428256c19ed0",
       "facts": {
         "combat": {
           "active": false,
@@ -713,7 +713,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:09e8a3887a5bbb332c209ffeda26435b5620020d26208aa238ebf97fd2db232a",
+      "document_hash": "sha256:e9c0733d6e4765b0d433cad0f4cc73f6571725b4595acccc033a16231d58ce6a",
       "facts": {
         "combat": {
           "active": false,
@@ -876,7 +876,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:63266237fa60472770a0938bb1a2fcc88dd54f24f6fadec6c5b8c68826798114",
+      "document_hash": "sha256:4643a4e537bdae9a88edd69645a1c617ea225c565ce3a8423eb693d963799701",
       "facts": {
         "combat": {
           "active": false,
@@ -1054,7 +1054,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b2e84314e1d62971d3c77d4c4e2d51990b5f78c95fb9595acdbbf0a33ecea7db",
+      "document_hash": "sha256:d91ecac7ff43c5e4b90af230bc224f19085a6ae0fe01fed0ebf7e5fe68cf4f2d",
       "facts": {
         "combat": {
           "active": false,
@@ -1206,7 +1206,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:da9f78b2d428171e943116124d19c066437b1372caa6a00233c026f72d5d33dc",
+      "document_hash": "sha256:95efa0a56286868181c4af45b94a73a3eb00b1b74719725a34b80a56eb02d0da",
       "facts": {
         "combat": {
           "active": false,
@@ -1364,7 +1364,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f211af06de0e6c7b215a801b7499501ede3eaf31e031a1e1b26efa9a89b427de",
+      "document_hash": "sha256:0f082bc67fe465f1ce6521caedb2e92c2d0bd4af74681d4e96f39fe27a64ead5",
       "facts": {
         "combat": {
           "active": false,
@@ -1521,7 +1521,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:6a88d12b586ddbbdf8c4e8fd991303f84570a9d7a00c67bfc38e659f1bcb218e",
+      "document_hash": "sha256:ff983b35540dc9655939e106308893747784cdd1a1cde8ae6c2f798dd00e0b9d",
       "facts": {
         "combat": {
           "active": false,
@@ -1672,19 +1672,24 @@
     },
     {
       "changes": {
+        "equipment": {
+          "added": [],
+          "removed": [
+            "Iron Dagger"
+          ]
+        },
         "inventory": {
           "Iron Dagger": -1
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:2aac590c7060c5d287ddc5a53cae661ccd582d11379f7547361a6b39d914b4f8",
+      "document_hash": "sha256:e400f31e2e0dc55eb14b9351abe968252f5494fb41905e9d9223cf0edc697bb2",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -1831,14 +1836,13 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:c278b52b07b682c81cd2520ddb333254c481960a879d7565c1ddd678747ff9d5",
+      "document_hash": "sha256:d55f618e032f99a3cf97130ffa8a475ba8168b09bef14b145682eccea513bbc0",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -1991,14 +1995,13 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:e7fb7fbaf95bef2316f2dc854d47493405ca8b5337766642220ddb86647f5e77",
+      "document_hash": "sha256:0e7f07804cd34966274f146baf95b1b751393f6afbfdf286fdfec93ce66c918a",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -2172,14 +2175,13 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:2f089bd6f3f4bfd944d9fc398c6b3b3ecca0048310e50b3aee95c931789026fd",
+      "document_hash": "sha256:392a49ed0f3cc499e0dbd3cefe471366f8b90bd22154166d73946ef2704f2254",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -2337,14 +2339,13 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:2f41f44cedf48588ee5827a527949508884a49eb28d2a0a50db42b3a2056cac0",
+      "document_hash": "sha256:23139c4a3f7fb6713b902b540f07a9c463430ae524b456a2dc9a32c23cfbac28",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -2509,14 +2510,13 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:7f45b67a7706d62851332481baa9a29577d4b383000840563650524f8695ab44",
+      "document_hash": "sha256:8bd09119ae8aa493663e5a409ee8dcba6ca0a87d6f7fad49283d23b4c059d3f1",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -2649,14 +2649,13 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:a2539ace65b7f7ea0b328f5846f2a7a315465cbcd967bcbe41c0772faebb909c",
+      "document_hash": "sha256:c06641fff794dcace0056682a5ed87dc7869365d42cef719440004da45b01b31",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -2805,14 +2804,13 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:790319a89c005ce016f6e5feabfcc1f5f8c353f7dd92945138fbcba3009a5dbc",
+      "document_hash": "sha256:8d55c3359745cf22f0099124af8d431cbb8dfc689b39b30cd6399982e8592c10",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -2963,14 +2961,13 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:207d6d3244f60b152cc2ad40439aadf86dd0764fef97279a69adabf47127f8e6",
+      "document_hash": "sha256:701d69f5a4fe90915cc5678d520d3e17738d447d98052489c8136cb8d1ac7682",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -3122,14 +3119,13 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:107b2e9970811775ed268dae1ae43dadf0f77e04dd68a58fba680854a79dabcd",
+      "document_hash": "sha256:b9525620760e6782d68e957c5155250698f1df609aeda9eb0200bd01c9e15e00",
       "facts": {
         "combat": {
           "active": false,
           "participants": {}
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 100,
@@ -3284,7 +3280,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:03d607beb58686e9efe2c1225500cf4c3fc8f501d73d8082723ad02bb056c124",
+      "document_hash": "sha256:6555410c8a780fbe71f94f93df1cbe642608b10a1821be39b4dddeacc36c6c0a",
       "facts": {
         "combat": {
           "active": true,
@@ -3295,7 +3291,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 96,
@@ -3442,7 +3437,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:72073217e7265418b08bbaf15ced25d32326ed2b01f178c13e1f2b120fcb4f33",
+      "document_hash": "sha256:a24801a29d6549ef4fa8131477ba7976169844900b4434d163a6f43bc91ba6f3",
       "facts": {
         "combat": {
           "active": true,
@@ -3453,7 +3448,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 96,
@@ -3575,7 +3569,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5fe7a1326ae63e45fb4ac7207ec2dad8b8c338d15e1eef058f077d78e70b4815",
+      "document_hash": "sha256:5ca5a1fd06298e9c0844150598fdb8bdc0da96d8ce68f84de9e8cc9c1fbc02d9",
       "facts": {
         "combat": {
           "active": true,
@@ -3586,7 +3580,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 96,
@@ -3743,7 +3736,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:100fe18d9fbe9cc1a3e6c8e113df5be47689439ac64a1975f4ff9fd8a76e569a",
+      "document_hash": "sha256:3abc52984bd27e5ce21460034f0f27e92eab0bc9abcc9ffa4c851a9d552657cb",
       "facts": {
         "combat": {
           "active": true,
@@ -3754,7 +3747,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 95,
@@ -3915,7 +3907,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ebfdba5ac274678faaa770dbfd529cc4def8436d340152b15674e2264deb51cc",
+      "document_hash": "sha256:246ec2db7f7c0e3e7c5def105f37eede0864116b2dc8f3a3a2d7bf26edd15f78",
       "facts": {
         "combat": {
           "active": true,
@@ -3926,7 +3918,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 92,
@@ -4090,7 +4081,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f7ad932edc28ed68cf78922cacc2f341ce1eeabfd71e7a3765966e8736244da0",
+      "document_hash": "sha256:7be760aa3d5cc4816c4c0e7ad6342b71c15d6918a32467ae1bc134f5ffcfc29f",
       "facts": {
         "combat": {
           "active": true,
@@ -4101,7 +4092,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 98,
@@ -4249,7 +4239,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:9f5e0fd7f263617b0a1eb2bb3f22b02940dc7e2c5862663515f8c3998cc8ca4b",
+      "document_hash": "sha256:31638f55d1fe1db7d4ec9aaf50bb58081be0a078c42ee85914630195a4dbfa19",
       "facts": {
         "combat": {
           "active": true,
@@ -4260,7 +4250,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 98,
@@ -4380,7 +4369,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:a97d9e2c636b4e793d067838dc00788b5cbc35c051eb25a3cd17d0b407943477",
+      "document_hash": "sha256:08260251a6a666ccb09ebe64e495b311c927d6024b6003ff3a2f875d5b332bbd",
       "facts": {
         "combat": {
           "active": true,
@@ -4391,7 +4380,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 98,
@@ -4507,7 +4495,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:957cabe7225f034475697240d1bfae4b28df547b5c7b7823b034bc704fb89914",
+      "document_hash": "sha256:1d8994819610f9978d5c5a04c3bf9e6755d991e700239755473003b191742011",
       "facts": {
         "combat": {
           "active": true,
@@ -4518,7 +4506,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 98,
@@ -4634,7 +4621,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:a4d9654c9d1848613c00bcd1cfdde132da2e45fafc2f8b69838af7f2227f8f80",
+      "document_hash": "sha256:54e9c1676520968b2f7c00082c9847698114bc6e9d514a722ba65284120847be",
       "facts": {
         "combat": {
           "active": true,
@@ -4645,7 +4632,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 98,
@@ -4761,7 +4747,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:b72a196be8382a8438c1ef5c5e03931fe6e83c02bdd9367f44687c6878346b52",
+      "document_hash": "sha256:f509fdd25f31d3f46fc6a1522701f37b48a41fb9ce7bc6f40debddae908ab80f",
       "facts": {
         "combat": {
           "active": true,
@@ -4772,7 +4758,6 @@
           }
         },
         "equipment": [
-          "Iron Dagger",
           "Travel Cloak"
         ],
         "hp": 98,

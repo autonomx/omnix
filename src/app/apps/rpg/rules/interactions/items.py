@@ -1,4 +1,5 @@
-"""Items (RQ-2.4; docs/rpg/design/items-and-rest.md): using what the hero carries, putting it down, picking it up.
+"""Items (RQ-2.4; docs/rpg/design/items-and-rest.md): using what the hero carries, putting it down, picking it up,
+and wearing or wielding it.
 
 A pure rule: it reads the hero's pack, the ground where they stand and the world's items, and says what happens
 as changes. What an item does comes from its kind in the world (potion, food, drink).
@@ -14,8 +15,10 @@ from app.apps.rpg.foundation.state.changes import (
     ConditionsChanged,
     HpChanged,
     ItemDropped,
+    ItemEquipped,
     ItemPickedUp,
     ItemRemoved,
+    ItemUnequipped,
     NeedsChanged,
     StateChange,
 )
@@ -128,4 +131,50 @@ def pick_up(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutco
                        [f"You pick up the {name} and stow it in your pack."])
 
 
-__all__ = ["ItemOutcome", "drop_item", "pick_up", "use_item"]
+# Where a thing is worn, by its kind or its name (the store's slots; the sheet calls main_hand "Weapon").
+_SLOT_WORDS = (
+    ("main_hand", ("weapon", "bow", "dagger", "sword", "axe", "staff", "wand", "mace", "spear", "longbow", "club")),
+    ("off_hand", ("shield",)),
+    ("body", ("armor", "armour", "mail", "leather", "plate", "robe")),
+    ("head", ("helmet", "helm", "hood", "cap")),
+    ("cloak", ("cloak", "cape", "mantle")),
+    ("ring", ("ring", "band")),
+)
+
+
+def _slot(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> str:
+    words = set(re.findall(r"[a-z]+", f"{_kind(simulation, item)} {_s(item.get('name'))}".casefold()))
+    return next((slot for slot, names in _SLOT_WORDS if words & set(names)), "")
+
+
+def _worn(simulation: Mapping[str, Any]) -> dict[str, str]:
+    store = _d(_d(simulation.get("player_state")).get("inventory_state"))
+    return {_s(slot): _s(item_id) for slot, item_id in _d(store.get("equipment")).items() if _s(item_id)}
+
+
+def equip_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
+    """Wear or wield something carried, in its place (a second weapon takes the first one's)."""
+    item = _find(_pack(simulation), item_id, text)
+    if not item:
+        return ItemOutcome(lines=["You carry nothing like that."], refused=True)
+    name, slot = _s(item.get("name")) or _id(item), _slot(simulation, item)
+    if not slot:
+        return ItemOutcome(lines=[f"The {name} is not something you can wear or wield."], refused=True)
+    if _worn(simulation).get(slot) == _id(item):
+        return ItemOutcome(lines=[f"You already have the {name} ready."])  # nothing to change, and no harm asking
+    verb = "take up" if slot in {"main_hand", "off_hand"} else "put on"
+    return ItemOutcome([ItemEquipped(slot=slot, item_id=_id(item))], [f"You {verb} the {name}."])
+
+
+def unequip_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
+    """Take off or put away something worn; it stays in the pack."""
+    worn = _worn(simulation)
+    items = {_id(item): item for item in _pack(simulation)}
+    wanted = _find([items[item] for item in worn.values() if item in items], item_id, text)
+    if not wanted:
+        return ItemOutcome(lines=["You are not wearing or wielding anything like that."], refused=True)
+    slot = next(slot for slot, worn_id in worn.items() if worn_id == _id(wanted))
+    return ItemOutcome([ItemUnequipped(slot=slot)], [f"You put away the {_s(wanted.get('name')) or _id(wanted)}."])
+
+
+__all__ = ["ItemOutcome", "drop_item", "equip_item", "pick_up", "unequip_item", "use_item"]

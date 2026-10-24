@@ -5708,7 +5708,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "inspect" | "use" | "equip" | "drop" | "salvage" | "craft" | "modify" | "use_ability" | "hotbar" | "unlock_ability" | "upgrade_ability" | "assign_hotbar" | "remove_hotbar";
+            action: "inspect" | "use" | "equip" | "unequip" | "drop" | "salvage" | "craft" | "modify" | "use_ability" | "hotbar" | "unlock_ability" | "upgrade_ability" | "assign_hotbar" | "remove_hotbar";
             /** Hotbar Slot */
             hotbar_slot?: string | number | null;
             /** Item Name */

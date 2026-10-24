@@ -14,7 +14,7 @@ from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
 PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "take", "rest",
-                           "quest", "practice", "status", "party", "order", "talk", "fight"]
+                           "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip"]
 
 
 # What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).
@@ -63,7 +63,8 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
         return PlannedAction(mechanic="look", target_id=reading.target_id or "", reason=reading.reason)
     if reading.family == "move" and reading.target_kind == "place" and reading.target_id:
         return PlannedAction(mechanic="travel", target_id=reading.target_id, reason=reading.reason)
-    if reading.family in {"use_item", "drop", "take"} and reading.target_kind == "item" and reading.target_id:
+    if (reading.family in {"use_item", "drop", "take", "equip", "unequip"} and reading.target_kind == "item"
+            and reading.target_id):
         return PlannedAction(mechanic=reading.family, target_id=reading.target_id, ticks=0, reason=reading.reason)
     if reading.family == "quest" and reading.target_kind == "quest":
         return PlannedAction(mechanic="quest", target_id=reading.target_id or "", ticks=0, reason=reading.reason)

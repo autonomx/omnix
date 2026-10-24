@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 
 
 class NewerCampaignDocumentError(DependencyUnavailable):
@@ -241,12 +241,20 @@ def _to_v7_starter_world(document: dict[str, Any]) -> dict[str, Any]:
     return bind_to_starter_world(document)
 
 
+def _to_v8_one_gear_record(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 8 (RQ-2.4): the hero's gear and pack in the one store (``foundation/state/gear.py``)."""
+    from app.apps.rpg.foundation.state.gear import gather_gear
+
+    return gather_gear(document)
+
+
 # (target version, upcaster), in order. Version 5 marks the interaction
 # timeline, which the normalization below keeps for every version.
 UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = (
     (4, _to_v4_ambient_runtime),
     (6, _to_v6_sections),
     (7, _to_v7_starter_world),
+    (8, _to_v8_one_gear_record),
 )
 
 

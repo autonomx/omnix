@@ -28,11 +28,12 @@ OFF_SETTING = "OMNIX_RPG_TURN_PIPELINE_OFF"
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
                 "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest",
                 "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
-                "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack"}
+                "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
+                "equip": "equip_item", "unequip": "unequip_item"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
            "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
-           "talk": "social", "fight": "combat"}
+           "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
@@ -223,6 +224,38 @@ def _load(ctx: Any) -> dict[str, Any]:
     return session
 
 
+_LOADOUT = {"use": "use_item", "equip": "equip", "drop": "drop", "unequip": "unequip"}
+
+
+def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], count: int) -> dict[str, Any]:
+    """A pack action from the play screen's loadout (use, equip, take off, drop) as a turn: the item rule's, its
+    lines the game's own (no model call); what the rule refuses refuses the request, with no turn taken."""
+    from app.apps.rpg.foundation.state.changes import TurnCounted
+    from app.apps.rpg.rules.interactions.items import drop_item, equip_item, unequip_item, use_item
+    from app.apps.rpg.session.turn.resolution import Resolution
+
+    mechanic = _LOADOUT[_s(action.get("action"))]
+    rule = {"use_item": use_item, "equip": equip_item, "drop": drop_item, "unequip": unequip_item}[mechanic]
+    simulation = _d(session.get("simulation_state"))
+    if mechanic == "use_item" and _d(simulation.get("combat_state")).get("active") is True:
+        return {"ok": False, "error": "loadout_in_a_fight", "status_code": 409,
+                "detail": "In a fight, say what you use: the others act after it."}
+    outcome = rule(simulation, "", _s(action.get("item_name")))
+    if outcome.refused:
+        return {"ok": False, "error": "loadout_refused", "status_code": 409, "detail": " ".join(outcome.lines)}
+    ticks = -(-outcome.minutes // MINUTES_PER_TICK)
+    resolution = Resolution(
+        [TurnCounted(turn_count=count), *([TimeAdvanced(ticks=ticks, minutes=outcome.minutes)] if outcome.minutes else []),
+         *outcome.changes],
+        outcome.lines, minutes=outcome.minutes, needs="standard_turn" if outcome.minutes else None, told=False,
+        action_result={"kind": "loadout", "action": _s(action.get("action")), "item_name": _s(action.get("item_name")),
+                       "detail": " ".join(outcome.lines)})
+    planned = PlannedAction(mechanic=mechanic, ticks=0, reason="loadout")
+    reading = IntentCandidate(family=mechanic, confidence=1.0, reason="loadout")  # type: ignore[arg-type]
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
 def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     """A grid move or attack in a fight (``session/turn/tactical.py``): the campaign revision the player saw is its
     only token; what the grid refuses refuses the request, with no turn taken."""
@@ -241,6 +274,8 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     simulation = _d(session.get("simulation_state"))
     state, manifest = _d(session.get("state")), _d(session.get("manifest"))
     count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
+    if action.get("type") == "loadout":
+        return _loadout_turn(ctx, session, action, count)
     try:
         definition, snapshot = map_for_turn(_s(action.get("map_instance_id")), campaign_id=ctx.session_id)
         if action.get("type") == "tactical_move":
@@ -291,7 +326,7 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     # A journey's destination and a carried or fallen thing are the scene's, which a reading against none cannot name.
     by_family = {"move": "travel", "use_item": "use_item", "drop": "drop", "take": "take", "quest": "quest",
                  "practice": "practice", "party": "party", "talk": "talk", "ask": "talk", "attack": "fight",
-                 "flee": "fight"}
+                 "flee": "fight", "equip": "equip", "unequip": "unequip"}
     possible = by_family.get(unseen.family) or (glance.mechanic if glance is not None else "")
     if not possible and "," in " ".join(_s(ctx.player_input).split()[:3]):
         possible = "order"  # someone named first ("Liora, keep watch") may be a companion given an order

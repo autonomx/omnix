@@ -30,17 +30,16 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _store(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """The hero's one store: the pack and what is worn (RQ-2.4)."""
+    return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory_state"))
+
+
 def _inventory_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
     if actor_id in {"", "player"}:
-        player_state = _safe_dict(simulation_state.get("player_state"))
-        inv = _safe_dict(player_state.get("inventory"))
-        if not isinstance(inv.get("items"), list):
-            inv["items"] = []
-        if not isinstance(inv.get("equipment"), dict):
-            inv["equipment"] = {}
-        player_state["inventory"] = inv
-        simulation_state["player_state"] = player_state
-        return inv
+        # The hero's pack and gear are the one store (inventory_state); reading them writes nothing.
+        store = _store(simulation_state)
+        return {"items": list(_safe_list(store.get("items"))), "equipment": dict(_safe_dict(store.get("equipment")))}
 
     party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
     for companion in _safe_list(party_state.get("companions")):
@@ -90,7 +89,7 @@ def project_equipment_stats(
     carried = _safe_list(inv.get("items"))
     if not carried and actor_id in {"", "player"}:
         # The hero's pack is the inventory_state; what is no longer carried no longer counts.
-        carried = _safe_list(_safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory_state")).get("items"))
+        carried = _safe_list(_store(simulation_state).get("items"))
     items = [normalize_item_instance(_safe_dict(item)) for item in carried]
     equipment = _safe_dict(inv.get("equipment"))
 
@@ -270,8 +269,10 @@ def consume_equipped_ammo(
         equipment.pop("ammo", None)
     inv["equipment"] = equipment
 
-    if actor_id in {"", "player"}:
-        simulation_state["player_state"]["inventory"] = inv
+    if actor_id in {"", "player"}:  # the one store (inventory_state) takes the arrows used
+        player_state = _safe_dict(simulation_state.get("player_state"))
+        player_state["inventory_state"] = {**_store(simulation_state), "items": inv["items"], "equipment": inv["equipment"]}
+        simulation_state["player_state"] = player_state
 
     return {
         "consumed": True,

@@ -93,7 +93,7 @@ def test_the_hero_fights_with_the_weapon_their_sheet_lists_while_they_carry_it()
     })
     simulation = session["simulation_state"]
 
-    assert simulation["player_state"]["inventory"]["equipment"] == {"main_hand": "iron_dagger"}
+    assert simulation["player_state"]["inventory_state"]["equipment"] == {"main_hand": "iron_dagger"}  # the one store
     assert project_equipment_stats(simulation)["stats"]["damage_max"] == 5  # bare hands 0-1, plus the blade 1-4
 
     simulation["player_state"]["inventory_state"]["items"] = []  # sold

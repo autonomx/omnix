@@ -258,17 +258,18 @@ def adopt_public_inventory(session: Dict[str, Any]) -> Dict[str, Any]:
     return session
 
 
-_SHEET_SLOTS = {"weapon": "main_hand", "main hand": "main_hand", "off hand": "off_hand", "shield": "off_hand"}
+_SHEET_SLOTS = {"weapon": "main_hand", "main hand": "main_hand", "off hand": "off_hand", "shield": "off_hand",
+                "armor": "body", "helmet": "head"}
 
 
 def _hydrate_equipped_gear(player_state: Dict[str, Any], sheet_equipment: Any) -> None:
-    """The gear the character sheet lists as worn, equipped where combat looks for it (while it is still carried)."""
-    gear = _dict(player_state.get("inventory"))
-    if _dict(gear.get("equipment")) or not isinstance(sheet_equipment, list):
+    """The gear the character sheet lists as worn, equipped in the one store (while it is still carried)."""
+    store = _dict(player_state.get("inventory_state"))
+    if _dict(store.get("equipment")) or not isinstance(sheet_equipment, list) or not store:
         return
     carried = {
         str(item.get("name") or "").casefold(): item
-        for item in _dict(player_state.get("inventory_state")).get("items") or ()
+        for item in store.get("items") or ()
         if isinstance(item, dict) and item.get("name")
     }
     equipment: Dict[str, str] = {}
@@ -280,7 +281,7 @@ def _hydrate_equipped_gear(player_state: Dict[str, Any], sheet_equipment: Any) -
         slot = str(_dict(worn).get("slot") or "").strip().casefold()
         equipment[_SHEET_SLOTS.get(slot, slot.replace(" ", "_") or "main_hand")] = item_id
     if equipment:
-        player_state["inventory"] = {**gear, "equipment": equipment}
+        player_state["inventory_state"] = {**store, "equipment": equipment}
 
 
 def _normalize_public_item(item: Dict[str, Any]) -> Dict[str, Any]:
