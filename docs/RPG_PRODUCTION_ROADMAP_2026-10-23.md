@@ -1033,3 +1033,4 @@ Implementation runs on branch `rpg-production` in two lanes (§5): lane A in wor
 | RQ-0.5 | done | 6089ec649a | latency harness per turn class (Claude CLI Haiku N=20: look p50 14.6 s, question 2.0 s, fight 12.4 s); overhead rehearsal at 200 turns + world tick |
 | RQ-0.6 | done (pilot n=180; full 900 is one command; judge uncalibrated until 150 labels are filled) | cd4c163e20 | baseline: correct speaker 0.28, near-duplicate 0.35, contradictions 0, leaks 0, turn failures 0.033 |
 | RQ-0.8 | done | caa55226c2 | `docs/architecture/RPG_ENTRY_POINTS.md` + a test that fails on an unlisted mutating route |
+| RQ-3.1 | done | c5f4d7b3ea | grammar on held-out: family 0.988 (lower 0.981), target 0.992 (lower 0.984); intent call skipped for confident deterministic families; clarifications without model calls; RQ-3.2 ambiguity scenario passes |
