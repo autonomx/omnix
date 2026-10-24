@@ -8,7 +8,6 @@ from app.apps.rpg.rules.interactions.item_model import (
     add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
-    remove_quantity_from_items_list,
 )
 from app.apps.rpg.rules.interactions.merchant_runtime import apply_merchant_interaction
 from app.apps.rpg.rules.survival import apply_survival_effect, ensure_survival_state
@@ -52,13 +51,17 @@ def _tokenize(value: str) -> set[str]:
 
 
 def _player_inventory(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """The player's one inventory store (``player_state.inventory_state``, RQ-1.1); the sheet only projects it.
+
+    A document that predates the store keeps its items under ``inventory``, read once here.
+    """
     player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory = _safe_dict(player_state.get("inventory"))
+    inventory = _safe_dict(player_state.get("inventory_state")) or _safe_dict(player_state.get("inventory"))
     if not isinstance(inventory.get("items"), list):
         inventory["items"] = []
     if not isinstance(inventory.get("equipment"), dict):
         inventory["equipment"] = {}
-    player_state["inventory"] = inventory
+    player_state["inventory_state"] = inventory
     simulation_state["player_state"] = player_state
     return inventory
 
@@ -101,8 +104,10 @@ def _find_inventory_item(items: List[Any], terms: Iterable[str]) -> Dict[str, An
 
 def _remove_one_inventory_item(simulation_state: Dict[str, Any], terms: Iterable[str]) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]:
     inventory = _player_inventory(simulation_state)
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inventory.get("items"))]
-    item = _find_inventory_item(items, terms)
+    stored = [_safe_dict(item) for item in _safe_list(inventory.get("items"))]
+    # Match on normalized copies, but take one from the stored stack itself: normalizing drops the store's
+    # own fields (qty, category, description, durability) and reads a world item's stack as a single one.
+    item = _find_inventory_item([normalize_item_instance(entry) for entry in stored], terms)
     if not item:
         return False, {}, {
             "removed_all": False,
@@ -111,18 +116,25 @@ def _remove_one_inventory_item(simulation_state: Dict[str, Any], terms: Iterable
             "source": "deterministic_item_model",
         }
 
-    remove_result = remove_quantity_from_items_list(
-        items,
-        item_id=_safe_str(item.get("item_id")),
-        quantity=1,
+    item_id = _safe_str(item.get("item_id"))
+    index = next(
+        (i for i, entry in enumerate(stored) if _safe_str(entry.get("item_id") or entry.get("id")) == item_id),
+        -1,
     )
-    if not remove_result.get("removed_all"):
-        return False, item, remove_result
-
-    inventory["items"] = _safe_list(remove_result.get("items"))
-    inventory = recalculate_inventory_derived_fields(inventory)
-    simulation_state["player_state"]["inventory"] = inventory
-    return True, item, remove_result
+    if index < 0:
+        return False, item, {"removed_all": False, "quantity_removed": 0, "quantity_missing": 1,
+                             "source": "deterministic_item_model"}
+    entry = stored[index]
+    key = "qty" if "qty" in entry or "quantity" not in entry else "quantity"
+    remaining = max(0, _safe_int(entry.get(key), 1) - 1)
+    if remaining:
+        stored[index] = {**entry, key: remaining}
+    else:
+        del stored[index]
+    inventory["items"] = stored
+    simulation_state["player_state"]["inventory_state"] = inventory
+    return True, item, {"removed_all": True, "quantity_removed": 1, "quantity_missing": 0,
+                        "items": stored, "source": "deterministic_item_model"}
 
 
 def _find_charged_waterskin(items: List[Any]) -> Tuple[int, Dict[str, Any], int, str]:
@@ -162,7 +174,7 @@ def _consume_waterskin_charge(simulation_state: Dict[str, Any]) -> Tuple[bool, D
     items[index] = updated
     inventory["items"] = items
     inventory = recalculate_inventory_derived_fields(inventory)
-    simulation_state["player_state"]["inventory"] = inventory
+    simulation_state["player_state"]["inventory_state"] = inventory
     return True, item, {
         "charges_before": charges,
         "charges_after": charges - 1,
@@ -189,7 +201,7 @@ def _refill_waterskin(simulation_state: Dict[str, Any]) -> Tuple[bool, Dict[str,
     items[index] = updated
     inventory["items"] = items
     inventory = recalculate_inventory_derived_fields(inventory)
-    simulation_state["player_state"]["inventory"] = inventory
+    simulation_state["player_state"]["inventory_state"] = inventory
     return True, updated, {
         "charges_before": charges,
         "charges_after": _MAX_WATERSKIN_CHARGES,
@@ -199,7 +211,7 @@ def _refill_waterskin(simulation_state: Dict[str, Any]) -> Tuple[bool, Dict[str,
 
 def _currency_container(simulation_state: Dict[str, Any]) -> Dict[str, int]:
     player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory = _safe_dict(player_state.get("inventory"))
+    inventory = _safe_dict(player_state.get("inventory_state")) or _safe_dict(player_state.get("inventory"))
     currency = _safe_dict(inventory.get("currency") or player_state.get("currency"))
     currency = {
         "gold": max(0, _safe_int(currency.get("gold"), 0)),
@@ -208,7 +220,7 @@ def _currency_container(simulation_state: Dict[str, Any]) -> Dict[str, int]:
     }
     player_state["currency"] = currency
     inventory["currency"] = currency
-    player_state["inventory"] = inventory
+    player_state["inventory_state"] = inventory
     simulation_state["player_state"] = player_state
     return currency
 
@@ -239,10 +251,10 @@ def _spend_service_cost(simulation_state: Dict[str, Any], action: str) -> Dict[s
         }
     after = _copper_to_currency(total - cost)
     player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory = _safe_dict(player_state.get("inventory"))
+    inventory = _safe_dict(player_state.get("inventory_state")) or _safe_dict(player_state.get("inventory"))
     player_state["currency"] = after
     inventory["currency"] = after
-    player_state["inventory"] = inventory
+    player_state["inventory_state"] = inventory
     simulation_state["player_state"] = player_state
     return {
         "ok": True,
@@ -258,7 +270,7 @@ def _add_inventory_item(simulation_state: Dict[str, Any], item: Dict[str, Any]) 
     add_result = add_item_to_items_list(_safe_list(inventory.get("items")), item)
     inventory["items"] = _safe_list(add_result.get("items"))
     inventory = recalculate_inventory_derived_fields(inventory)
-    simulation_state["player_state"]["inventory"] = inventory
+    simulation_state["player_state"]["inventory_state"] = inventory
     return add_result
 
 
