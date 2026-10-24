@@ -1025,3 +1025,6 @@ Implementation runs on branch `rpg-production` in two lanes (§5): lane A in wor
 | RQ-0.2 | done | f240bc8f65 | Aurelia golden, 30 turns + a tactical move, role-keyed scripted model; re-recorded on the world clock (no fact changed) |
 | RQ-0.3 | done | 48d4af59ee | playthrough suite on Aurelia, Vesper-9 and the starter town: 44 pass, 20 strict xfail naming their packages; three bugs fixed (travel matching, companion names, second Vesper import) |
 | RQ-0.7 | done | 1c3b67f090 | eight tests skip without a DB; `[rpg_turn_path]` = 512 modules from coverage over the suite; 101 RPG modules never imported, 477 imported but unexecuted |
+| RQ-1.1 | done (narration-table move in RQ-1.4) | cee84e0da7 | document v6: 13 typed sections over v5 paths, one inventory (store wins), creation artifacts stored once (0180), upgrade as a pinned system turn on first load, package format 8; genesis campaign 1.9 MB → 203 KB |
+| RQ-1.2 | done | e1bcb42c1c | 22 StateChange types, reducer with patch from writes; 450 seeded property sequences |
+| RQ-1.3 | done for the turn route | 357667a053 | frozen TurnOutcome with changes, timings, model calls; changed_domains now real; web reads it; contract regenerated |
