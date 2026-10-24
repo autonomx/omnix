@@ -48,6 +48,22 @@ those imports are within one context.
 
 Imports within a context are not checked.
 
+## The turn path's invariants (AL018-AL020, RQ-1.5)
+
+Over the modules a turn executes (`[rpg_turn_path]`), three rules count what the one turn pipeline
+(roadmap §4.1) retires. The baseline holds the counts when the rules arrived (2026-10-24: 16, 964, 735)
+and only shrinks; RQ-2 takes each to 0 as it moves the mechanics onto the pipeline.
+
+| Rule | Counts | Allowed in |
+|---|---|---|
+| AL018 | a campaign save (`save_session`, `save_session_to_postgres`, `save_runtime_session`) | the persistence packages and the commit step (`session.interaction_stages`) |
+| AL019 | a write into a campaign's state by subscript, through the names turn code gives it (`session`, `simulation_state`, `player_state`, …) | the reducer (`foundation.state`) |
+| AL020 | a read of a state section by string key (`.get("simulation_state")`, `["player_state"]`, …) | the typed view (`foundation.state`) |
+
+AL019 and AL020 are heuristics over names: state reached under another name is not counted, so a count of
+0 is necessary, not sufficient; the playthrough suite's replay of each turn's reported changes is the check
+that holds.
+
 ## The original baseline: 60 upward imports (now 0)
 
 | From → to | Imports |

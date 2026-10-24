@@ -56,6 +56,9 @@ CASES = [
     ("AL014", {NEW: "SELECT 1", lint.MIGRATIONS + "0002_duplicate.sql": "SELECT 2"}),
     ("AL015", {APP + "platform/chat/a.py": "def work():\n    import app.apps.rpg.b", APP + "apps/rpg/b.py": "def work():\n    import app.platform.chat.a"}),
     ("AL017", {APP + "apps/rpg/foundation/core/a.py": "def work():\n    import app.apps.rpg.session.b", APP + "apps/rpg/session/b.py": ""}),
+    ("AL018", {APP + "apps/rpg/edge/api/turn_pipeline.py": "def turn(session):\n    save_session(session)"}),
+    ("AL019", {APP + "apps/rpg/edge/api/turn_pipeline.py": "def turn(simulation_state):\n    simulation_state['tick'] = 1"}),
+    ("AL020", {APP + "apps/rpg/edge/api/turn_pipeline.py": "def turn(session):\n    return session.get('simulation_state')"}),
     ("AL016", {APP + "platform/chat/a.py": "SQL = 'SELECT id FROM omnix_rpg_turns'", lint.MIGRATIONS + "0001_platform.sql": "CREATE TABLE omnix_rpg_turns (id int);", "resources/architecture/historical-table-owners.json": '{"tables": {"omnix_rpg_turns": {"owner": "rpg", "created_by": "0001_platform"}}}'}),
 ]
 
@@ -574,4 +577,17 @@ def test_rpg_contexts_import_only_the_contexts_below_them():
                    APP + "apps/rpg/genesis/forge/forge.py": "", APP + "apps/rpg/session/__init__.py": ""}) == []
     # Every top-level entry belongs to a context.
     assert _al017({APP + "apps/rpg/brand_new/a.py": "x = 1"}) == ["rpg_entry_without_context:brand_new"]
+
+
+def test_rpg_turn_path_rules_leave_the_reducer_persistence_and_modules_off_the_turn_path_alone():
+    body = ("def turn(session, simulation_state):\n    save_session(session)\n    simulation_state['tick'] = 1\n"
+            "    return session.get('simulation_state')\n")
+
+    def rules(sources):
+        return {entry["rule"] for entry in report(sources)["violations"]}
+
+    assert {"AL018", "AL019", "AL020"} <= rules({APP + "apps/rpg/edge/api/turn_pipeline.py": body})
+    assert not {"AL019", "AL020"} & rules({APP + "apps/rpg/foundation/state/reducer.py": body})
+    assert "AL018" not in rules({APP + "apps/rpg/session/persistence/session_records.py": body})
+    assert not {"AL018", "AL019", "AL020"} & rules({APP + "apps/rpg/session/not_on_the_turn_path.py": body})
 

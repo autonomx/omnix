@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "8718abd2b27106850896a46625d5d68da34b7b4ed4ae183f01ead362607b1b80",
+  "policy_digest": "bdc043c38ec17abadf5186b5427523eaa821d45fbbe38dc5480aa724a3a27782",
   "rules": [
     "AL001",
     "AL002",
@@ -18,7 +18,10 @@
     "AL014",
     "AL015",
     "AL016",
-    "AL017"
+    "AL017",
+    "AL018",
+    "AL019",
+    "AL020"
   ],
   "schema_version": 1,
   "scope": "tracked_nonvendor_production_python_and_migrations",
@@ -51,6 +54,7033 @@
       ],
       "path": "src/app/persistence/",
       "rule": "AL015"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_session",
+      "lines": [
+        560
+      ],
+      "path": "src/app/apps/rpg/edge/api/turn_pipeline.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_session",
+      "lines": [
+        200
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_runtime.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        648
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        161
+      ],
+      "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 2,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        177,
+        186
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_session",
+      "lines": [
+        571
+      ],
+      "path": "src/app/apps/rpg/session/loadout.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_session",
+      "lines": [
+        610
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        431
+      ],
+      "path": "src/app/apps/rpg/session/semantic_response_projection.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_session",
+      "lines": [
+        468
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 2,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        375,
+        682
+      ],
+      "path": "src/app/apps/rpg/session/turn_authoritative_guards.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        215
+      ],
+      "path": "src/app/apps/rpg/session/turn_bound_narration.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 2,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        168,
+        215
+      ],
+      "path": "src/app/apps/rpg/session/turn_finalization.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "save_runtime_session",
+      "lines": [
+        564
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL018"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        36
+      ],
+      "path": "src/app/apps/rpg/foundation/sandbox/rumor_feedback.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "state",
+      "lines": [
+        141,
+        142,
+        143
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        326
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_player_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        300,
+        303,
+        304,
+        305
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_player_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        590
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_scene_generator.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime",
+      "lines": [
+        504,
+        505
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation",
+      "lines": [
+        513
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "state",
+      "lines": [
+        483,
+        486,
+        491,
+        496,
+        510
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        59,
+        91,
+        193
+      ],
+      "path": "src/app/apps/rpg/genesis/modding/content_packs.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "runtime_state",
+      "lines": [
+        68,
+        69,
+        127,
+        185,
+        203
+      ],
+      "path": "src/app/apps/rpg/narration/ai/conversation_threads.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "runtime_state",
+      "lines": [
+        239,
+        258,
+        508,
+        509,
+        510,
+        511
+      ],
+      "path": "src/app/apps/rpg/narration/ai/npc_reaction_layer.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "runtime_state",
+      "lines": [
+        29,
+        71,
+        168,
+        196
+      ],
+      "path": "src/app/apps/rpg/narration/ai/scene_continuity.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        652,
+        653
+      ],
+      "path": "src/app/apps/rpg/narration/campaign_journal_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        40
+      ],
+      "path": "src/app/apps/rpg/narration/dialogue_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        14
+      ],
+      "path": "src/app/apps/rpg/narration/journal/journal_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime",
+      "lines": [
+        62
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/consumer_publish.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        63
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/consumer_publish.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        48,
+        77,
+        100
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/personality_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        228
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/visual_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        111
+      ],
+      "path": "src/app/apps/rpg/narration/quality.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        785
+      ],
+      "path": "src/app/apps/rpg/narration/response_generation/production_pipeline.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        442
+      ],
+      "path": "src/app/apps/rpg/narration/runtime_narration_fallback.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        210,
+        211
+      ],
+      "path": "src/app/apps/rpg/rules/combat/campaign_mechanics.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        219
+      ],
+      "path": "src/app/apps/rpg/rules/combat/campaign_mechanics.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        309
+      ],
+      "path": "src/app/apps/rpg/rules/combat/companion_ai.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        116,
+        118,
+        119,
+        120
+      ],
+      "path": "src/app/apps/rpg/rules/combat/initiative.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 17,
+      "fingerprint": "state",
+      "lines": [
+        159,
+        160,
+        164,
+        165,
+        169,
+        170,
+        172,
+        173,
+        175,
+        176,
+        179,
+        180,
+        184,
+        185,
+        188,
+        189,
+        190
+      ],
+      "path": "src/app/apps/rpg/rules/combat/lifecycle.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "combat_state",
+      "lines": [
+        102,
+        111,
+        119
+      ],
+      "path": "src/app/apps/rpg/rules/combat/positioning.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "combat_state",
+      "lines": [
+        60,
+        72,
+        109,
+        122
+      ],
+      "path": "src/app/apps/rpg/rules/combat/recovery.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 9,
+      "fingerprint": "combat_state",
+      "lines": [
+        80,
+        157,
+        159,
+        162,
+        228,
+        344,
+        345,
+        358,
+        359
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_attacks.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        163,
+        354,
+        361
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_attacks.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        255
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        49,
+        239,
+        257
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "state",
+      "lines": [
+        233,
+        238,
+        256
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        69
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_start.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 9,
+      "fingerprint": "combat_state",
+      "lines": [
+        79,
+        80,
+        81,
+        137,
+        139,
+        142,
+        149,
+        150,
+        159
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_turns.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        92
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_turns.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        128,
+        134,
+        137
+      ],
+      "path": "src/app/apps/rpg/rules/combat/world_consequences.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        175
+      ],
+      "path": "src/app/apps/rpg/rules/economy/currency.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        172,
+        176,
+        181
+      ],
+      "path": "src/app/apps/rpg/rules/economy/currency.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        167
+      ],
+      "path": "src/app/apps/rpg/rules/economy/currency.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "inventory_state",
+      "lines": [
+        51,
+        54,
+        57
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        48
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "state",
+      "lines": [
+        37,
+        110,
+        142
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        63
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_stock.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        29
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_transactions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        45,
+        72,
+        165
+      ],
+      "path": "src/app/apps/rpg/rules/economy/survival.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        43,
+        46,
+        89,
+        175
+      ],
+      "path": "src/app/apps/rpg/rules/economy/survival.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "inventory_state",
+      "lines": [
+        201,
+        202
+      ],
+      "path": "src/app/apps/rpg/rules/economy/transaction_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 10,
+      "fingerprint": "player_state",
+      "lines": [
+        91,
+        92,
+        93,
+        94,
+        115,
+        131,
+        137,
+        147,
+        203,
+        247
+      ],
+      "path": "src/app/apps/rpg/rules/economy/transaction_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        204,
+        248,
+        294,
+        325
+      ],
+      "path": "src/app/apps/rpg/rules/economy/transaction_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        28,
+        140,
+        141
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/consumable_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        29,
+        142,
+        169
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/consumable_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        38
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/container_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        39,
+        191
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/container_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        30
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/crafting_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        31,
+        170
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/crafting_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        41
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        42,
+        274
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        76
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/inventory.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 7,
+      "fingerprint": "player_state",
+      "lines": [
+        50,
+        59,
+        236,
+        276,
+        378,
+        441,
+        483
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/inventory_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 8,
+      "fingerprint": "simulation_state",
+      "lines": [
+        42,
+        83,
+        86,
+        237,
+        277,
+        379,
+        442,
+        484
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/inventory_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "player_state",
+      "lines": [
+        63,
+        117,
+        118,
+        119,
+        120
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/loot_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        64,
+        122,
+        193
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/loot_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "player_state",
+      "lines": [
+        46,
+        345,
+        346,
+        425,
+        429
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/merchant_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "simulation_state",
+      "lines": [
+        35,
+        54,
+        109,
+        347,
+        430
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/merchant_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        136
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/objects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        35
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/repair_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        36,
+        240
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/repair_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "player_state",
+      "lines": [
+        64,
+        221,
+        223,
+        255,
+        257
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/survival_action_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 9,
+      "fingerprint": "simulation_state",
+      "lines": [
+        65,
+        135,
+        177,
+        204,
+        224,
+        258,
+        273,
+        409,
+        526
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/survival_action_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        171,
+        199
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/survival_action_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "inventory_state",
+      "lines": [
+        93,
+        135,
+        162,
+        169,
+        207,
+        218
+      ],
+      "path": "src/app/apps/rpg/rules/items/inventory_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        94
+      ],
+      "path": "src/app/apps/rpg/rules/items/inventory_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        39,
+        89,
+        141
+      ],
+      "path": "src/app/apps/rpg/rules/items/world_items.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        171,
+        172
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "simulation_state",
+      "lines": [
+        161,
+        163,
+        164,
+        165,
+        170
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "party_state",
+      "lines": [
+        52,
+        269
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_commands.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        49
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_commands.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        44
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_commands.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        25
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_memory.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 7,
+      "fingerprint": "state",
+      "lines": [
+        28,
+        31,
+        34,
+        49,
+        83,
+        157,
+        269
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_memory.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "party_state",
+      "lines": [
+        25,
+        110
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_presence.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        23
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_presence.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        14,
+        121,
+        150,
+        210
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_presence.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        472
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        473
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        35,
+        474,
+        486
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 9,
+      "fingerprint": "state",
+      "lines": [
+        38,
+        41,
+        44,
+        47,
+        93,
+        94,
+        195,
+        196,
+        363
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        69
+      ],
+      "path": "src/app/apps/rpg/rules/party/party_composition.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 10,
+      "fingerprint": "player_state",
+      "lines": [
+        104,
+        145,
+        177,
+        192,
+        222,
+        238,
+        254,
+        269,
+        299,
+        327
+      ],
+      "path": "src/app/apps/rpg/rules/party/party_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        54
+      ],
+      "path": "src/app/apps/rpg/rules/pending_interactions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        20
+      ],
+      "path": "src/app/apps/rpg/rules/player/player_party.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 20,
+      "fingerprint": "player_state",
+      "lines": [
+        17,
+        19,
+        22,
+        24,
+        61,
+        72,
+        91,
+        94,
+        108,
+        111,
+        119,
+        120,
+        121,
+        122,
+        124,
+        130,
+        131,
+        148,
+        153,
+        154
+      ],
+      "path": "src/app/apps/rpg/rules/player/player_progression_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "player_state",
+      "lines": [
+        88,
+        103,
+        104,
+        105,
+        106
+      ],
+      "path": "src/app/apps/rpg/rules/player/player_scene_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        68
+      ],
+      "path": "src/app/apps/rpg/rules/player/player_scene_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        132
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        130,
+        189
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        116,
+        185,
+        253
+      ],
+      "path": "src/app/apps/rpg/rules/survival.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 10,
+      "fingerprint": "state",
+      "lines": [
+        94,
+        96,
+        100,
+        103,
+        105,
+        106,
+        130,
+        169,
+        228,
+        232
+      ],
+      "path": "src/app/apps/rpg/rules/survival.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        209
+      ],
+      "path": "src/app/apps/rpg/rules/survival_tick_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        273,
+        274
+      ],
+      "path": "src/app/apps/rpg/rules/survival_tick_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        270
+      ],
+      "path": "src/app/apps/rpg/rules/survival_tick_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        296
+      ],
+      "path": "src/app/apps/rpg/session/ability_coverage.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        418
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        419
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        171,
+        797,
+        798
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        776,
+        777
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        420,
+        643
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 8,
+      "fingerprint": "runtime_state",
+      "lines": [
+        179,
+        183,
+        189,
+        611,
+        647,
+        648,
+        649,
+        650
+      ],
+      "path": "src/app/apps/rpg/session/ambient_builder.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        235
+      ],
+      "path": "src/app/apps/rpg/session/ambient_tick_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        193
+      ],
+      "path": "src/app/apps/rpg/session/campaign_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation",
+      "lines": [
+        194,
+        255,
+        256
+      ],
+      "path": "src/app/apps/rpg/session/campaign_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        197,
+        231
+      ],
+      "path": "src/app/apps/rpg/session/campaign_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        213,
+        214
+      ],
+      "path": "src/app/apps/rpg/session/causal_turn_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 8,
+      "fingerprint": "combat_state",
+      "lines": [
+        116,
+        117,
+        118,
+        267,
+        542,
+        543,
+        595,
+        596
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        334,
+        469,
+        665
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "session",
+      "lines": [
+        336,
+        340,
+        470,
+        666,
+        670
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        338,
+        669
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        737,
+        738
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "runtime_state",
+      "lines": [
+        221,
+        253,
+        331,
+        492,
+        549
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "runtime_state",
+      "lines": [
+        649,
+        660,
+        661,
+        662,
+        663
+      ],
+      "path": "src/app/apps/rpg/session/combat_intent.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        138
+      ],
+      "path": "src/app/apps/rpg/session/combat_quest_progress.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 16,
+      "fingerprint": "combat_state",
+      "lines": [
+        551,
+        552,
+        553,
+        554,
+        556,
+        558,
+        680,
+        681,
+        682,
+        685,
+        686,
+        687,
+        688,
+        689,
+        690,
+        691
+      ],
+      "path": "src/app/apps/rpg/session/combat_result_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        175,
+        584,
+        766
+      ],
+      "path": "src/app/apps/rpg/session/combat_result_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "session",
+      "lines": [
+        176,
+        181,
+        585,
+        768,
+        772
+      ],
+      "path": "src/app/apps/rpg/session/combat_result_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        180,
+        770
+      ],
+      "path": "src/app/apps/rpg/session/combat_result_reconciliation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        586,
+        587
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        274
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 8,
+      "fingerprint": "session",
+      "lines": [
+        98,
+        275,
+        279,
+        340,
+        341,
+        480,
+        617,
+        618
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        278,
+        615
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        75
+      ],
+      "path": "src/app/apps/rpg/session/combat_xp_projection.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        83
+      ],
+      "path": "src/app/apps/rpg/session/combat_xp_projection.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "runtime_state",
+      "lines": [
+        496,
+        504,
+        520,
+        524,
+        634,
+        657
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        194,
+        202
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        615,
+        616
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "session",
+      "lines": [
+        474,
+        475,
+        617,
+        618
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        473
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "state",
+      "lines": [
+        586,
+        589,
+        590,
+        591,
+        592
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        352
+      ],
+      "path": "src/app/apps/rpg/session/durable_store.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        44,
+        82
+      ],
+      "path": "src/app/apps/rpg/session/duration_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "runtime",
+      "lines": [
+        102,
+        103,
+        104,
+        105,
+        107
+      ],
+      "path": "src/app/apps/rpg/session/interaction_event_store.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        108
+      ],
+      "path": "src/app/apps/rpg/session/interaction_event_store.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "runtime",
+      "lines": [
+        56,
+        60,
+        158,
+        218,
+        219,
+        221
+      ],
+      "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "session",
+      "lines": [
+        61,
+        159,
+        222
+      ],
+      "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "runtime",
+      "lines": [
+        87,
+        88,
+        89,
+        90,
+        91
+      ],
+      "path": "src/app/apps/rpg/session/interaction_timeline.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        92
+      ],
+      "path": "src/app/apps/rpg/session/interaction_timeline.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        301,
+        302
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 11,
+      "fingerprint": "runtime_state",
+      "lines": [
+        166,
+        167,
+        169,
+        294,
+        295,
+        298,
+        303,
+        900,
+        949,
+        983,
+        1005
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "session",
+      "lines": [
+        170,
+        304,
+        901,
+        950,
+        984
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "player_state",
+      "lines": [
+        36,
+        58,
+        80,
+        103
+      ],
+      "path": "src/app/apps/rpg/session/inventory_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        59,
+        81,
+        104
+      ],
+      "path": "src/app/apps/rpg/session/inventory_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        37
+      ],
+      "path": "src/app/apps/rpg/session/item_diagnostics.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        35,
+        103
+      ],
+      "path": "src/app/apps/rpg/session/item_effect_session.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        63
+      ],
+      "path": "src/app/apps/rpg/session/item_loadout_hooks.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        37,
+        43,
+        63,
+        142
+      ],
+      "path": "src/app/apps/rpg/session/item_market_session.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        35
+      ],
+      "path": "src/app/apps/rpg/session/item_pickup_session.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "state",
+      "lines": [
+        47,
+        91,
+        105
+      ],
+      "path": "src/app/apps/rpg/session/item_pickups.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        34
+      ],
+      "path": "src/app/apps/rpg/session/item_report_session.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        40
+      ],
+      "path": "src/app/apps/rpg/session/item_scenarios.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        127,
+        134,
+        139,
+        143
+      ],
+      "path": "src/app/apps/rpg/session/item_signals.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        238
+      ],
+      "path": "src/app/apps/rpg/session/item_state_audit.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        28
+      ],
+      "path": "src/app/apps/rpg/session/item_state_maintenance.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        44
+      ],
+      "path": "src/app/apps/rpg/session/item_turn_hooks.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 13,
+      "fingerprint": "runtime",
+      "lines": [
+        35,
+        48,
+        68,
+        69,
+        73,
+        77,
+        78,
+        79,
+        369,
+        370,
+        371,
+        372,
+        373
+      ],
+      "path": "src/app/apps/rpg/session/legacy_interaction_migration.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "session",
+      "lines": [
+        24,
+        27,
+        42,
+        55,
+        87
+      ],
+      "path": "src/app/apps/rpg/session/legacy_interaction_migration.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        83
+      ],
+      "path": "src/app/apps/rpg/session/loadout.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 11,
+      "fingerprint": "state",
+      "lines": [
+        89,
+        146,
+        150,
+        151,
+        152,
+        158,
+        231,
+        232,
+        292,
+        293,
+        294
+      ],
+      "path": "src/app/apps/rpg/session/loadout.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        184
+      ],
+      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "runtime_state",
+      "lines": [
+        186,
+        282,
+        285,
+        469
+      ],
+      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "simulation_state",
+      "lines": [
+        182,
+        185,
+        442,
+        510,
+        543,
+        711
+      ],
+      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        421,
+        422,
+        423,
+        424
+      ],
+      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime",
+      "lines": [
+        150
+      ],
+      "path": "src/app/apps/rpg/session/persistence/session_records.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        81,
+        149
+      ],
+      "path": "src/app/apps/rpg/session/persistence/session_records.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        269
+      ],
+      "path": "src/app/apps/rpg/session/persistence/session_records.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 12,
+      "fingerprint": "runtime_state",
+      "lines": [
+        153,
+        154,
+        398,
+        527,
+        528,
+        529,
+        530,
+        575,
+        592,
+        871,
+        872,
+        873
+      ],
+      "path": "src/app/apps/rpg/session/player_activity_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "player_state",
+      "lines": [
+        240,
+        241,
+        295,
+        312,
+        313,
+        341
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        42
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "simulation_state",
+      "lines": [
+        43,
+        94,
+        242,
+        296,
+        314,
+        342
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "session",
+      "lines": [
+        314,
+        704,
+        757
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        313
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "inventory_state",
+      "lines": [
+        36,
+        38,
+        249,
+        253
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "player_state",
+      "lines": [
+        28,
+        31,
+        40,
+        254,
+        255,
+        283
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime",
+      "lines": [
+        139
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 7,
+      "fingerprint": "session",
+      "lines": [
+        49,
+        64,
+        65,
+        114,
+        136,
+        149,
+        257
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "simulation",
+      "lines": [
+        44,
+        46,
+        48,
+        135,
+        256
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        62,
+        62
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        158
+      ],
+      "path": "src/app/apps/rpg/session/published_opening_progress.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        160,
+        161
+      ],
+      "path": "src/app/apps/rpg/session/published_opening_progress.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation",
+      "lines": [
+        159
+      ],
+      "path": "src/app/apps/rpg/session/published_opening_progress.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        131,
+        149
+      ],
+      "path": "src/app/apps/rpg/session/published_opening_progress.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        144
+      ],
+      "path": "src/app/apps/rpg/session/quest_evidence.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        145
+      ],
+      "path": "src/app/apps/rpg/session/quest_evidence.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        206
+      ],
+      "path": "src/app/apps/rpg/session/recipe_discovery.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        23
+      ],
+      "path": "src/app/apps/rpg/session/recipe_discovery_session.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 16,
+      "fingerprint": "runtime_state",
+      "lines": [
+        79,
+        89,
+        97,
+        105,
+        113,
+        124,
+        135,
+        151,
+        152,
+        459,
+        460,
+        659,
+        670,
+        771,
+        782,
+        807
+      ],
+      "path": "src/app/apps/rpg/session/semantic_interaction_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        443,
+        508,
+        552
+      ],
+      "path": "src/app/apps/rpg/session/semantic_interaction_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        425,
+        428
+      ],
+      "path": "src/app/apps/rpg/session/semantic_response_projection.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        429
+      ],
+      "path": "src/app/apps/rpg/session/semantic_response_projection.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 7,
+      "fingerprint": "runtime_state",
+      "lines": [
+        242,
+        260,
+        333,
+        353,
+        392,
+        762,
+        830
+      ],
+      "path": "src/app/apps/rpg/session/semantic_state_changes.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "session",
+      "lines": [
+        48,
+        68,
+        76,
+        136
+      ],
+      "path": "src/app/apps/rpg/session/service.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        67,
+        135
+      ],
+      "path": "src/app/apps/rpg/session/service.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        73,
+        92
+      ],
+      "path": "src/app/apps/rpg/session/service_living_world.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        661,
+        662
+      ],
+      "path": "src/app/apps/rpg/session/session_runtime_store.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        518,
+        604
+      ],
+      "path": "src/app/apps/rpg/session/special_combat_turns.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        405
+      ],
+      "path": "src/app/apps/rpg/session/state_normalization.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        384,
+        406,
+        426
+      ],
+      "path": "src/app/apps/rpg/session/state_normalization.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        249,
+        251
+      ],
+      "path": "src/app/apps/rpg/session/state_normalization.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        258,
+        385,
+        407,
+        427
+      ],
+      "path": "src/app/apps/rpg/session/state_normalization.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        60,
+        69
+      ],
+      "path": "src/app/apps/rpg/session/survival_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        53,
+        76
+      ],
+      "path": "src/app/apps/rpg/session/survival_actions.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        230
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "player_state",
+      "lines": [
+        137,
+        138,
+        231,
+        236
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        460,
+        572
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "session",
+      "lines": [
+        140,
+        519,
+        574
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        135,
+        136,
+        139,
+        270
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        679
+      ],
+      "path": "src/app/apps/rpg/session/turn_authoritative_guards.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "session",
+      "lines": [
+        677,
+        680
+      ],
+      "path": "src/app/apps/rpg/session/turn_authoritative_guards.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation",
+      "lines": [
+        664
+      ],
+      "path": "src/app/apps/rpg/session/turn_authoritative_guards.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        210,
+        212
+      ],
+      "path": "src/app/apps/rpg/session/turn_bound_narration.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        213
+      ],
+      "path": "src/app/apps/rpg/session/turn_bound_narration.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "state",
+      "lines": [
+        332,
+        334,
+        342
+      ],
+      "path": "src/app/apps/rpg/session/turn_contract.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        543,
+        549,
+        555
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "session",
+      "lines": [
+        558,
+        559,
+        563
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 25,
+      "fingerprint": "runtime_state",
+      "lines": [
+        55,
+        86,
+        118,
+        149,
+        199,
+        351,
+        364,
+        377,
+        386,
+        426,
+        535,
+        538,
+        541,
+        544,
+        547,
+        552,
+        553,
+        554,
+        555,
+        710,
+        711,
+        712,
+        713,
+        719,
+        758
+      ],
+      "path": "src/app/apps/rpg/session/world_consequence_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        612,
+        622
+      ],
+      "path": "src/app/apps/rpg/session/world_consequence_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "simulation_state",
+      "lines": [
+        121,
+        131,
+        168,
+        218,
+        259,
+        301
+      ],
+      "path": "src/app/apps/rpg/world/causal_runtime_projection.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        59,
+        183,
+        385
+      ],
+      "path": "src/app/apps/rpg/world/companion_acceptance.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 19,
+      "fingerprint": "state",
+      "lines": [
+        61,
+        128,
+        175,
+        178,
+        181,
+        256,
+        257,
+        322,
+        323,
+        324,
+        352,
+        353,
+        354,
+        414,
+        415,
+        416,
+        444,
+        445,
+        446
+      ],
+      "path": "src/app/apps/rpg/world/companion_acceptance.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        38
+      ],
+      "path": "src/app/apps/rpg/world/consequence_signals.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        35,
+        37,
+        125,
+        126
+      ],
+      "path": "src/app/apps/rpg/world/consequence_signals.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        178
+      ],
+      "path": "src/app/apps/rpg/world/conversation_director.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 9,
+      "fingerprint": "state",
+      "lines": [
+        173,
+        175,
+        177,
+        203,
+        247,
+        282,
+        301,
+        305,
+        306
+      ],
+      "path": "src/app/apps/rpg/world/conversation_director.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        42
+      ],
+      "path": "src/app/apps/rpg/world/conversation_rumor_propagation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 7,
+      "fingerprint": "state",
+      "lines": [
+        44,
+        46,
+        48,
+        132,
+        135,
+        137,
+        165
+      ],
+      "path": "src/app/apps/rpg/world/conversation_rumor_propagation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        31
+      ],
+      "path": "src/app/apps/rpg/world/conversation_rumors.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        143,
+        144
+      ],
+      "path": "src/app/apps/rpg/world/conversation_rumors.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        70
+      ],
+      "path": "src/app/apps/rpg/world/conversation_social_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 7,
+      "fingerprint": "state",
+      "lines": [
+        72,
+        74,
+        76,
+        112,
+        146,
+        147,
+        232
+      ],
+      "path": "src/app/apps/rpg/world/conversation_social_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        141
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_base.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 10,
+      "fingerprint": "state",
+      "lines": [
+        99,
+        144,
+        146,
+        148,
+        150,
+        152,
+        154,
+        284,
+        495,
+        513
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_base.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 6,
+      "fingerprint": "state",
+      "lines": [
+        116,
+        117,
+        133,
+        134,
+        457,
+        523
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_pending.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        246
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_responses.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 9,
+      "fingerprint": "state",
+      "lines": [
+        193,
+        272,
+        290,
+        405,
+        461,
+        478,
+        553,
+        557,
+        610
+      ],
+      "path": "src/app/apps/rpg/world/conversation_threads.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        166
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        164,
+        165
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        49
+      ],
+      "path": "src/app/apps/rpg/world/locations/discovery.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        147
+      ],
+      "path": "src/app/apps/rpg/world/locations/encounters.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        26
+      ],
+      "path": "src/app/apps/rpg/world/locations/events.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        119
+      ],
+      "path": "src/app/apps/rpg/world/locations/time.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        80
+      ],
+      "path": "src/app/apps/rpg/world/locations/time.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        79
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime",
+      "lines": [
+        209,
+        210
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel_resources.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        95
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel_resources.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        132,
+        134,
+        166,
+        169
+      ],
+      "path": "src/app/apps/rpg/world/locations/weather.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "session",
+      "lines": [
+        42
+      ],
+      "path": "src/app/apps/rpg/world/map_persistence.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "state",
+      "lines": [
+        37,
+        38,
+        41
+      ],
+      "path": "src/app/apps/rpg/world/map_persistence.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        64
+      ],
+      "path": "src/app/apps/rpg/world/memory/actor_memory_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        194
+      ],
+      "path": "src/app/apps/rpg/world/memory/causal_memory.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        225
+      ],
+      "path": "src/app/apps/rpg/world/memory/causal_memory.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        41
+      ],
+      "path": "src/app/apps/rpg/world/memory/memory_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        25
+      ],
+      "path": "src/app/apps/rpg/world/memory/service_memory.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        25,
+        34
+      ],
+      "path": "src/app/apps/rpg/world/memory/service_social_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        170,
+        178,
+        186
+      ],
+      "path": "src/app/apps/rpg/world/memory/social_effects.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        48
+      ],
+      "path": "src/app/apps/rpg/world/memory/world_memory_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        16
+      ],
+      "path": "src/app/apps/rpg/world/npc_arc_continuity.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        13,
+        15,
+        55,
+        56
+      ],
+      "path": "src/app/apps/rpg/world/npc_arc_continuity.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        46
+      ],
+      "path": "src/app/apps/rpg/world/npc_dialogue_recall.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "state",
+      "lines": [
+        43,
+        45,
+        124,
+        149,
+        150
+      ],
+      "path": "src/app/apps/rpg/world/npc_dialogue_recall.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        25
+      ],
+      "path": "src/app/apps/rpg/world/npc_evolution_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 4,
+      "fingerprint": "state",
+      "lines": [
+        22,
+        24,
+        144,
+        145
+      ],
+      "path": "src/app/apps/rpg/world/npc_evolution_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        75
+      ],
+      "path": "src/app/apps/rpg/world/npc_goal_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 8,
+      "fingerprint": "state",
+      "lines": [
+        77,
+        79,
+        81,
+        122,
+        132,
+        133,
+        210,
+        211
+      ],
+      "path": "src/app/apps/rpg/world/npc_goal_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        25,
+        138
+      ],
+      "path": "src/app/apps/rpg/world/npc_history_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "state",
+      "lines": [
+        22,
+        24,
+        63,
+        64,
+        137
+      ],
+      "path": "src/app/apps/rpg/world/npc_history_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        24,
+        134
+      ],
+      "path": "src/app/apps/rpg/world/npc_knowledge_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "state",
+      "lines": [
+        21,
+        23,
+        62,
+        63,
+        133
+      ],
+      "path": "src/app/apps/rpg/world/npc_knowledge_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        30,
+        71
+      ],
+      "path": "src/app/apps/rpg/world/npc_presence_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "state",
+      "lines": [
+        63,
+        64
+      ],
+      "path": "src/app/apps/rpg/world/npc_presence_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        29,
+        87
+      ],
+      "path": "src/app/apps/rpg/world/npc_reputation_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 3,
+      "fingerprint": "state",
+      "lines": [
+        26,
+        28,
+        86
+      ],
+      "path": "src/app/apps/rpg/world/npc_reputation_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        88
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        86
+      ],
+      "path": "src/app/apps/rpg/world/npc_schedule_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/world/quest_rumor_propagation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "state",
+      "lines": [
+        21,
+        23,
+        45,
+        46,
+        141
+      ],
+      "path": "src/app/apps/rpg/world/quest_rumor_propagation.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        37,
+        250
+      ],
+      "path": "src/app/apps/rpg/world/scene_activity_scheduler.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 9,
+      "fingerprint": "state",
+      "lines": [
+        39,
+        41,
+        43,
+        45,
+        171,
+        201,
+        202,
+        210,
+        252
+      ],
+      "path": "src/app/apps/rpg/world/scene_activity_scheduler.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        28
+      ],
+      "path": "src/app/apps/rpg/world/scene_continuity_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "state",
+      "lines": [
+        25,
+        27,
+        86,
+        87,
+        128
+      ],
+      "path": "src/app/apps/rpg/world/scene_continuity_state.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        49
+      ],
+      "path": "src/app/apps/rpg/world/scene_population_runtime.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        97,
+        243
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_beats.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        236
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_engine.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 5,
+      "fingerprint": "runtime_state",
+      "lines": [
+        241,
+        256,
+        257,
+        290,
+        291
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_world_signals.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        310,
+        352
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_world_signals.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        31
+      ],
+      "path": "src/app/apps/rpg/world/social/npc_conversations.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        68,
+        80
+      ],
+      "path": "src/app/apps/rpg/world/social/offscreen_conversations.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        16
+      ],
+      "path": "src/app/apps/rpg/world/spatial/graph.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 10,
+      "fingerprint": "combat_state",
+      "lines": [
+        133,
+        174,
+        194,
+        206,
+        207,
+        281,
+        282,
+        506,
+        622,
+        638
+      ],
+      "path": "src/app/apps/rpg/world/tactical_spatial.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        446
+      ],
+      "path": "src/app/apps/rpg/world/travel_graph.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        14
+      ],
+      "path": "src/app/apps/rpg/world/world_event_log.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "state",
+      "lines": [
+        18
+      ],
+      "path": "src/app/apps/rpg/world/world_event_log.py",
+      "rule": "AL019"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        176
+      ],
+      "path": "src/app/apps/rpg/edge/api/turn_pipeline.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        85
+      ],
+      "path": "src/app/apps/rpg/foundation/core/determinism.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        250
+      ],
+      "path": "src/app/apps/rpg/foundation/debug_logging.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        246
+      ],
+      "path": "src/app/apps/rpg/foundation/debug_logging.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        245
+      ],
+      "path": "src/app/apps/rpg/foundation/debug_logging.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        29
+      ],
+      "path": "src/app/apps/rpg/foundation/sandbox/outcome_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        47
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_player_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        317
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_player_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        67,
+        567
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_scene_generator.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        590
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_scene_generator.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        468
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_scene_generator.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "npc_index",
+      "lines": [
+        180,
+        805,
+        832
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_simulation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        486
+      ],
+      "path": "src/app/apps/rpg/genesis/creator/world_simulation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        120,
+        503
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        119,
+        512
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/campaign_lore_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/launch_readiness.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        121,
+        123
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/npc_lore_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        110
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/npc_lore_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        89
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/npc_lore_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        49,
+        83,
+        118
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/npc_lore_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        48,
+        82,
+        117
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/npc_lore_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        306
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_materialization.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        305
+      ],
+      "path": "src/app/apps/rpg/genesis/forge/runtime_lore_materialization.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        18
+      ],
+      "path": "src/app/apps/rpg/genesis/profiles/character_cards.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        18
+      ],
+      "path": "src/app/apps/rpg/genesis/profiles/character_cards.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/genesis/profiles/character_cards.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        34,
+        245
+      ],
+      "path": "src/app/apps/rpg/narration/ai/llm_mind/goal_engine.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        164
+      ],
+      "path": "src/app/apps/rpg/narration/ai/memory_narration_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        162,
+        182
+      ],
+      "path": "src/app/apps/rpg/narration/ai/memory_narration_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        164
+      ],
+      "path": "src/app/apps/rpg/narration/ai/memory_narration_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        140,
+        269
+      ],
+      "path": "src/app/apps/rpg/narration/ai/npc_reaction_layer.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        84,
+        206
+      ],
+      "path": "src/app/apps/rpg/narration/ai/scene_continuity.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        85
+      ],
+      "path": "src/app/apps/rpg/narration/ai/scene_continuity.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "survival",
+      "lines": [
+        115,
+        283
+      ],
+      "path": "src/app/apps/rpg/narration/ai/survival_narration_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        299
+      ],
+      "path": "src/app/apps/rpg/narration/ai/world_scene_narrator_prompts.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        298
+      ],
+      "path": "src/app/apps/rpg/narration/ai/world_scene_narrator_prompts.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        770
+      ],
+      "path": "src/app/apps/rpg/narration/ai/world_scene_narrator_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        82
+      ],
+      "path": "src/app/apps/rpg/narration/ai/world_scene_narrator_structured.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "survival",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/narration/ai/world_scene_survival_grounding_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        30
+      ],
+      "path": "src/app/apps/rpg/narration/dialogue/npc_response_architecture.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        44
+      ],
+      "path": "src/app/apps/rpg/narration/memory_writer.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        26
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/consumer_publish.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        84
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/production_path.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        168
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/shadow.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        73
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/shadow.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        57,
+        57
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/shadow.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 6,
+      "fingerprint": "simulation_state",
+      "lines": [
+        56,
+        56,
+        69,
+        69,
+        165,
+        165
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/shadow.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "world_model",
+      "lines": [
+        70
+      ],
+      "path": "src/app/apps/rpg/narration/narrative_engine/shadow.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        331,
+        360
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/current_turn_prompt_contract.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        987,
+        989
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        465,
+        466,
+        984
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        725,
+        983
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "npc_index",
+      "lines": [
+        13,
+        15,
+        64,
+        66
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality_session.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        85
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality_session.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "runtime_state",
+      "lines": [
+        11,
+        60,
+        83,
+        101
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality_session.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        10,
+        59,
+        82,
+        110
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/dialogue_quality_session.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        36
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/grounding_validator.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        69
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/memory_inspector.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        27,
+        115
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/speaker_cards.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        218
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/turn_response.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        216,
+        291
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/turn_response.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        215
+      ],
+      "path": "src/app/apps/rpg/narration/presentation/turn_response.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        109
+      ],
+      "path": "src/app/apps/rpg/narration/response_generation/context_compiler.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 6,
+      "fingerprint": "simulation_state",
+      "lines": [
+        77,
+        89,
+        206,
+        215,
+        221,
+        254
+      ],
+      "path": "src/app/apps/rpg/narration/response_generation/legacy_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        974
+      ],
+      "path": "src/app/apps/rpg/narration/response_generation/production_pipeline.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        228,
+        243,
+        245
+      ],
+      "path": "src/app/apps/rpg/narration/response_generation/strict_pipeline.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        96
+      ],
+      "path": "src/app/apps/rpg/narration/scene_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        115
+      ],
+      "path": "src/app/apps/rpg/narration/scene_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "inventory_state",
+      "lines": [
+        116,
+        144
+      ],
+      "path": "src/app/apps/rpg/rules/action_resolver.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        292
+      ],
+      "path": "src/app/apps/rpg/rules/action_resolver.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        129,
+        173
+      ],
+      "path": "src/app/apps/rpg/rules/combat/campaign_mechanics.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        104
+      ],
+      "path": "src/app/apps/rpg/rules/combat/encounters.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        69,
+        110
+      ],
+      "path": "src/app/apps/rpg/rules/combat/encounters.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        56
+      ],
+      "path": "src/app/apps/rpg/rules/combat/exchange_lines.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        40
+      ],
+      "path": "src/app/apps/rpg/rules/combat/lifecycle.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        20
+      ],
+      "path": "src/app/apps/rpg/rules/combat/lifecycle.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        365
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_attacks.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        40
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "party_state",
+      "lines": [
+        54,
+        246
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        48
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_core.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        27
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_start.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        176
+      ],
+      "path": "src/app/apps/rpg/rules/combat/runtime_turns.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        21
+      ],
+      "path": "src/app/apps/rpg/rules/combat/world_consequences.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "inventory_state",
+      "lines": [
+        113,
+        115,
+        169
+      ],
+      "path": "src/app/apps/rpg/rules/economy/currency.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        112,
+        164
+      ],
+      "path": "src/app/apps/rpg/rules/economy/currency.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        39
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_effects.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        34
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_effects.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "world_model",
+      "lines": [
+        255
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_registry.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "world_model",
+      "lines": [
+        723
+      ],
+      "path": "src/app/apps/rpg/rules/economy/service_resolver.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "economy_state",
+      "lines": [
+        85
+      ],
+      "path": "src/app/apps/rpg/rules/economy/survival.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "inventory_state",
+      "lines": [
+        44,
+        146
+      ],
+      "path": "src/app/apps/rpg/rules/economy/survival.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        40,
+        145
+      ],
+      "path": "src/app/apps/rpg/rules/economy/survival.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "inventory_state",
+      "lines": [
+        160,
+        222
+      ],
+      "path": "src/app/apps/rpg/rules/economy/transaction_effects.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        159,
+        221,
+        270
+      ],
+      "path": "src/app/apps/rpg/rules/economy/transaction_effects.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        333
+      ],
+      "path": "src/app/apps/rpg/rules/economy/transaction_effects.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        22
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/companion_auto_equip.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        22
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/companion_auto_equip.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        22,
+        124,
+        169
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/consumable_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        32,
+        191
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/container_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        24,
+        170
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/crafting_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        93
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        45
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "player_state",
+      "lines": [
+        35,
+        45,
+        93,
+        274
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 13,
+      "fingerprint": "combat_state",
+      "lines": [
+        116,
+        145,
+        221,
+        221,
+        230,
+        250,
+        258,
+        282,
+        290,
+        306,
+        314,
+        333,
+        342
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/interaction_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        19
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/inventory.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        18
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/inventory.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "party_state",
+      "lines": [
+        112,
+        319
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/inventory_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        39,
+        64,
+        112
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/inventory_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        57,
+        83,
+        193
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/loot_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "economy_state",
+      "lines": [
+        63
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/merchant_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        34
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/merchant_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "world_model",
+      "lines": [
+        218
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/merchant_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        29,
+        240
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/repair_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "inventory_state",
+      "lines": [
+        59,
+        214,
+        254
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/survival_action_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 7,
+      "fingerprint": "player_state",
+      "lines": [
+        58,
+        135,
+        177,
+        204,
+        213,
+        253,
+        273
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/survival_action_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "survival",
+      "lines": [
+        509,
+        674
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/survival_action_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        106
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/target_resolver.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        98
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/target_resolver.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        123
+      ],
+      "path": "src/app/apps/rpg/rules/interactions/target_resolver.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        91
+      ],
+      "path": "src/app/apps/rpg/rules/items/inventory_state.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        80,
+        98,
+        158
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "world_model",
+      "lines": [
+        62,
+        74
+      ],
+      "path": "src/app/apps/rpg/rules/location_registry.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        46
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_commands.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        41
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_commands.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "party_state",
+      "lines": [
+        20,
+        41
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_presence.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        11,
+        31,
+        41
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_presence.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        147
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_presence.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        457
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        456
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_quests.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_values.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        24
+      ],
+      "path": "src/app/apps/rpg/rules/party/companion_values.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        11
+      ],
+      "path": "src/app/apps/rpg/rules/party/party_composition.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        11
+      ],
+      "path": "src/app/apps/rpg/rules/party/party_composition.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 12,
+      "fingerprint": "party_state",
+      "lines": [
+        90,
+        124,
+        184,
+        199,
+        210,
+        229,
+        245,
+        261,
+        281,
+        310,
+        334,
+        348
+      ],
+      "path": "src/app/apps/rpg/rules/party/party_state.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        18
+      ],
+      "path": "src/app/apps/rpg/rules/player/player_party.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        75,
+        100
+      ],
+      "path": "src/app/apps/rpg/rules/player/player_scene_state.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        331,
+        331
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "economy_state",
+      "lines": [
+        378
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        334
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        129,
+        233,
+        333
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        476
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "survival",
+      "lines": [
+        135,
+        256,
+        408
+      ],
+      "path": "src/app/apps/rpg/rules/runtime_promotions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        42
+      ],
+      "path": "src/app/apps/rpg/rules/survival_action_context.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        37
+      ],
+      "path": "src/app/apps/rpg/rules/survival_action_context.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        137,
+        224
+      ],
+      "path": "src/app/apps/rpg/rules/survival_tick_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        138,
+        223
+      ],
+      "path": "src/app/apps/rpg/rules/survival_tick_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "survival",
+      "lines": [
+        240
+      ],
+      "path": "src/app/apps/rpg/rules/survival_tick_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        291,
+        307
+      ],
+      "path": "src/app/apps/rpg/rules/validation/integrity.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "survival",
+      "lines": [
+        188
+      ],
+      "path": "src/app/apps/rpg/rules/validation/integrity.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "inventory_state",
+      "lines": [
+        339,
+        804
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 6,
+      "fingerprint": "player_state",
+      "lines": [
+        123,
+        158,
+        219,
+        338,
+        603,
+        790
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        91,
+        784
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 8,
+      "fingerprint": "simulation_state",
+      "lines": [
+        92,
+        276,
+        520,
+        553,
+        568,
+        690,
+        776,
+        785
+      ],
+      "path": "src/app/apps/rpg/session/action_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        302
+      ],
+      "path": "src/app/apps/rpg/session/ambient_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        197,
+        203
+      ],
+      "path": "src/app/apps/rpg/session/ambient_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        514,
+        657
+      ],
+      "path": "src/app/apps/rpg/session/ambient_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        513
+      ],
+      "path": "src/app/apps/rpg/session/ambient_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        154
+      ],
+      "path": "src/app/apps/rpg/session/campaign_state.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        153
+      ],
+      "path": "src/app/apps/rpg/session/campaign_state.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        74,
+        258
+      ],
+      "path": "src/app/apps/rpg/session/campaign_state.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        152,
+        254
+      ],
+      "path": "src/app/apps/rpg/session/campaign_state.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "runtime_state",
+      "lines": [
+        32,
+        45,
+        153,
+        214
+      ],
+      "path": "src/app/apps/rpg/session/causal_turn_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 5,
+      "fingerprint": "simulation_state",
+      "lines": [
+        90,
+        125,
+        140,
+        152,
+        213
+      ],
+      "path": "src/app/apps/rpg/session/causal_turn_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 17,
+      "fingerprint": "combat_state",
+      "lines": [
+        52,
+        53,
+        185,
+        186,
+        187,
+        369,
+        370,
+        524,
+        525,
+        577,
+        578,
+        626,
+        626,
+        689,
+        690,
+        763,
+        764
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_reconciliation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 8,
+      "fingerprint": "runtime_state",
+      "lines": [
+        330,
+        330,
+        467,
+        467,
+        663,
+        663,
+        815,
+        815
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_reconciliation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 6,
+      "fingerprint": "simulation_state",
+      "lines": [
+        331,
+        331,
+        632,
+        632,
+        814,
+        814
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_reconciliation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        568
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        622,
+        730
+      ],
+      "path": "src/app/apps/rpg/session/combat_action_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        102,
+        107
+      ],
+      "path": "src/app/apps/rpg/session/combat_intent.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        231
+      ],
+      "path": "src/app/apps/rpg/session/combat_intent.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        230
+      ],
+      "path": "src/app/apps/rpg/session/combat_intent.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        716
+      ],
+      "path": "src/app/apps/rpg/session/combat_intent.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        39,
+        117
+      ],
+      "path": "src/app/apps/rpg/session/combat_quest_progress.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        50
+      ],
+      "path": "src/app/apps/rpg/session/combat_quest_progress.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        29,
+        29
+      ],
+      "path": "src/app/apps/rpg/session/combat_quest_progress.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 13,
+      "fingerprint": "combat_state",
+      "lines": [
+        24,
+        24,
+        83,
+        84,
+        204,
+        205,
+        206,
+        269,
+        270,
+        495,
+        496,
+        617,
+        618
+      ],
+      "path": "src/app/apps/rpg/session/combat_result_reconciliation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 8,
+      "fingerprint": "runtime_state",
+      "lines": [
+        92,
+        93,
+        172,
+        172,
+        582,
+        582,
+        762,
+        762
+      ],
+      "path": "src/app/apps/rpg/session/combat_result_reconciliation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        171,
+        171,
+        763,
+        763
+      ],
+      "path": "src/app/apps/rpg/session/combat_result_reconciliation.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 8,
+      "fingerprint": "combat_state",
+      "lines": [
+        219,
+        220,
+        370,
+        370,
+        443,
+        443,
+        446,
+        609
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 9,
+      "fingerprint": "runtime_state",
+      "lines": [
+        77,
+        77,
+        132,
+        132,
+        271,
+        271,
+        307,
+        307,
+        605
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 10,
+      "fingerprint": "simulation_state",
+      "lines": [
+        131,
+        131,
+        272,
+        272,
+        306,
+        306,
+        452,
+        452,
+        604,
+        780
+      ],
+      "path": "src/app/apps/rpg/session/combat_turn_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        37,
+        39
+      ],
+      "path": "src/app/apps/rpg/session/combat_xp_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        105,
+        169
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_enrichment.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        99,
+        101
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_enrichment.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        350
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "party_state",
+      "lines": [
+        64,
+        173
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        64,
+        173
+      ],
+      "path": "src/app/apps/rpg/session/companion_turn_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        98,
+        112
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        57,
+        100
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        465
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        464
+      ],
+      "path": "src/app/apps/rpg/session/dialogue_focus.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        228,
+        292
+      ],
+      "path": "src/app/apps/rpg/session/durable_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        278
+      ],
+      "path": "src/app/apps/rpg/session/durable_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        77
+      ],
+      "path": "src/app/apps/rpg/session/duration_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        82
+      ],
+      "path": "src/app/apps/rpg/session/fast_visible_dialogue_hook.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        81
+      ],
+      "path": "src/app/apps/rpg/session/fast_visible_dialogue_hook.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        42
+      ],
+      "path": "src/app/apps/rpg/session/idle_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        14
+      ],
+      "path": "src/app/apps/rpg/session/idle_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        79,
+        113
+      ],
+      "path": "src/app/apps/rpg/session/interaction_event_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "runtime_state",
+      "lines": [
+        29,
+        116,
+        169,
+        206
+      ],
+      "path": "src/app/apps/rpg/session/interaction_lifecycle.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        25
+      ],
+      "path": "src/app/apps/rpg/session/interaction_timeline.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        299
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "runtime_state",
+      "lines": [
+        165,
+        180,
+        293,
+        897
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        896
+      ],
+      "path": "src/app/apps/rpg/session/interactive_first_call_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 5,
+      "fingerprint": "inventory_state",
+      "lines": [
+        18,
+        34,
+        55,
+        78,
+        101
+      ],
+      "path": "src/app/apps/rpg/session/inventory_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "player_state",
+      "lines": [
+        33,
+        54,
+        77,
+        100
+      ],
+      "path": "src/app/apps/rpg/session/inventory_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        30,
+        63
+      ],
+      "path": "src/app/apps/rpg/session/inventory_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        17,
+        92
+      ],
+      "path": "src/app/apps/rpg/session/legacy_interaction_migration.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        94
+      ],
+      "path": "src/app/apps/rpg/session/legacy_interaction_migration.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        183,
+        208
+      ],
+      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        304,
+        330,
+        350,
+        357
+      ],
+      "path": "src/app/apps/rpg/session/narration_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        125,
+        125
+      ],
+      "path": "src/app/apps/rpg/session/narrative_engine_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        39,
+        146
+      ],
+      "path": "src/app/apps/rpg/session/persistence/session_records.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        621
+      ],
+      "path": "src/app/apps/rpg/session/player_activity_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        226
+      ],
+      "path": "src/app/apps/rpg/session/player_activity_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        153
+      ],
+      "path": "src/app/apps/rpg/session/player_agency_contract.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "inventory_state",
+      "lines": [
+        135,
+        135,
+        145,
+        145
+      ],
+      "path": "src/app/apps/rpg/session/player_agency_contract.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "player_state",
+      "lines": [
+        110,
+        110,
+        135,
+        145
+      ],
+      "path": "src/app/apps/rpg/session/player_agency_contract.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "runtime_state",
+      "lines": [
+        72,
+        72,
+        72,
+        214
+      ],
+      "path": "src/app/apps/rpg/session/player_agency_contract.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "simulation_state",
+      "lines": [
+        71,
+        71,
+        71,
+        213
+      ],
+      "path": "src/app/apps/rpg/session/player_agency_contract.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        179,
+        185
+      ],
+      "path": "src/app/apps/rpg/session/player_personality_profile.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        154,
+        154,
+        154
+      ],
+      "path": "src/app/apps/rpg/session/player_personality_profile.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        153,
+        153,
+        153
+      ],
+      "path": "src/app/apps/rpg/session/player_personality_profile.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 6,
+      "fingerprint": "inventory_state",
+      "lines": [
+        124,
+        217,
+        264,
+        295,
+        308,
+        325
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 8,
+      "fingerprint": "player_state",
+      "lines": [
+        84,
+        118,
+        209,
+        263,
+        283,
+        294,
+        307,
+        324
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "quest_state",
+      "lines": [
+        37,
+        41
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        271,
+        290
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "world_model",
+      "lines": [
+        206,
+        321
+      ],
+      "path": "src/app/apps/rpg/session/player_requests.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "combat_state",
+      "lines": [
+        560,
+        561,
+        578,
+        579
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        238
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        172,
+        325
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 5,
+      "fingerprint": "runtime_state",
+      "lines": [
+        154,
+        308,
+        314,
+        867,
+        868
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 7,
+      "fingerprint": "simulation_state",
+      "lines": [
+        152,
+        313,
+        705,
+        709,
+        859,
+        861,
+        862
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "survival",
+      "lines": [
+        313
+      ],
+      "path": "src/app/apps/rpg/session/player_turn_execution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "inventory_state",
+      "lines": [
+        34,
+        79,
+        247,
+        271
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        131
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 5,
+      "fingerprint": "player_state",
+      "lines": [
+        23,
+        74,
+        123,
+        157,
+        246
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        126
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "quest_state",
+      "lines": [
+        47,
+        109
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        137
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 6,
+      "fingerprint": "simulation_state",
+      "lines": [
+        22,
+        73,
+        204,
+        205,
+        206,
+        245
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "world_model",
+      "lines": [
+        122,
+        156
+      ],
+      "path": "src/app/apps/rpg/session/public_state_bridge.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        156
+      ],
+      "path": "src/app/apps/rpg/session/published_opening_progress.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        155
+      ],
+      "path": "src/app/apps/rpg/session/published_opening_progress.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        96
+      ],
+      "path": "src/app/apps/rpg/session/quest_evidence.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        191
+      ],
+      "path": "src/app/apps/rpg/session/response_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        189
+      ],
+      "path": "src/app/apps/rpg/session/response_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        183,
+        253
+      ],
+      "path": "src/app/apps/rpg/session/response_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        182,
+        252,
+        384
+      ],
+      "path": "src/app/apps/rpg/session/response_builder.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "npc_index",
+      "lines": [
+        173,
+        320,
+        564,
+        617
+      ],
+      "path": "src/app/apps/rpg/session/semantic_interaction_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        311
+      ],
+      "path": "src/app/apps/rpg/session/semantic_interaction_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        401
+      ],
+      "path": "src/app/apps/rpg/session/semantic_response_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        825,
+        841
+      ],
+      "path": "src/app/apps/rpg/session/semantic_state_changes.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        687
+      ],
+      "path": "src/app/apps/rpg/session/semantic_state_changes.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        73,
+        96,
+        188
+      ],
+      "path": "src/app/apps/rpg/session/service.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "simulation_state",
+      "lines": [
+        51,
+        127
+      ],
+      "path": "src/app/apps/rpg/session/service.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        153
+      ],
+      "path": "src/app/apps/rpg/session/service_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 12,
+      "fingerprint": "combat_state",
+      "lines": [
+        299,
+        421,
+        488,
+        489,
+        490,
+        491,
+        492,
+        524,
+        831,
+        832,
+        879,
+        879
+      ],
+      "path": "src/app/apps/rpg/session/session_runtime_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        246
+      ],
+      "path": "src/app/apps/rpg/session/session_runtime_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        272,
+        534,
+        535
+      ],
+      "path": "src/app/apps/rpg/session/session_runtime_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        530,
+        531,
+        624
+      ],
+      "path": "src/app/apps/rpg/session/session_runtime_store.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        359
+      ],
+      "path": "src/app/apps/rpg/session/special_combat_turns.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        144
+      ],
+      "path": "src/app/apps/rpg/session/special_combat_turns.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "inventory_state",
+      "lines": [
+        378,
+        425
+      ],
+      "path": "src/app/apps/rpg/session/state_normalization.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        375,
+        423
+      ],
+      "path": "src/app/apps/rpg/session/state_normalization.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        59
+      ],
+      "path": "src/app/apps/rpg/session/survival_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        52
+      ],
+      "path": "src/app/apps/rpg/session/survival_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "survival",
+      "lines": [
+        77,
+        162,
+        174
+      ],
+      "path": "src/app/apps/rpg/session/survival_actions.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        33
+      ],
+      "path": "src/app/apps/rpg/session/survival_persistence.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        82
+      ],
+      "path": "src/app/apps/rpg/session/survival_persistence.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "survival",
+      "lines": [
+        38,
+        41
+      ],
+      "path": "src/app/apps/rpg/session/survival_persistence.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "inventory_state",
+      "lines": [
+        219,
+        229
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "player_state",
+      "lines": [
+        41,
+        59,
+        116,
+        245
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        127,
+        526
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        115,
+        497,
+        525
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "survival",
+      "lines": [
+        39,
+        44,
+        403
+      ],
+      "path": "src/app/apps/rpg/session/survival_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        75
+      ],
+      "path": "src/app/apps/rpg/session/travel_panel_response.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        74
+      ],
+      "path": "src/app/apps/rpg/session/travel_panel_response.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        102
+      ],
+      "path": "src/app/apps/rpg/session/turn_action_resolution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        107
+      ],
+      "path": "src/app/apps/rpg/session/turn_action_resolution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        342,
+        678
+      ],
+      "path": "src/app/apps/rpg/session/turn_authoritative_guards.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 10,
+      "fingerprint": "simulation_state",
+      "lines": [
+        341,
+        368,
+        372,
+        400,
+        430,
+        582,
+        583,
+        584,
+        663,
+        675
+      ],
+      "path": "src/app/apps/rpg/session/turn_authoritative_guards.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        184
+      ],
+      "path": "src/app/apps/rpg/session/turn_bound_narration.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        307,
+        347
+      ],
+      "path": "src/app/apps/rpg/session/turn_combat_resolution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "runtime_state",
+      "lines": [
+        301,
+        345
+      ],
+      "path": "src/app/apps/rpg/session/turn_combat_resolution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "simulation_state",
+      "lines": [
+        97,
+        141,
+        351
+      ],
+      "path": "src/app/apps/rpg/session/turn_combat_resolution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "runtime_state",
+      "lines": [
+        95,
+        208,
+        216
+      ],
+      "path": "src/app/apps/rpg/session/turn_finalization.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        94
+      ],
+      "path": "src/app/apps/rpg/session/turn_finalization.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "combat_state",
+      "lines": [
+        252,
+        252
+      ],
+      "path": "src/app/apps/rpg/session/turn_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        251
+      ],
+      "path": "src/app/apps/rpg/session/turn_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        101,
+        227
+      ],
+      "path": "src/app/apps/rpg/session/turn_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        65,
+        102
+      ],
+      "path": "src/app/apps/rpg/session/turn_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "quest_state",
+      "lines": [
+        276,
+        276
+      ],
+      "path": "src/app/apps/rpg/session/turn_grounding.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "combat_state",
+      "lines": [
+        326,
+        327,
+        328
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        81
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        121
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        140,
+        328,
+        469
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        217
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        661
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        660
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "travel_state",
+      "lines": [
+        39
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "world_model",
+      "lines": [
+        622
+      ],
+      "path": "src/app/apps/rpg/session/turn_payload_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        161
+      ],
+      "path": "src/app/apps/rpg/session/turn_response_composition.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        160
+      ],
+      "path": "src/app/apps/rpg/session/turn_response_composition.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "combat_state",
+      "lines": [
+        435,
+        441,
+        448
+      ],
+      "path": "src/app/apps/rpg/session/turn_world_resolution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        284
+      ],
+      "path": "src/app/apps/rpg/session/turn_world_resolution.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        581
+      ],
+      "path": "src/app/apps/rpg/session/world_consequence_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "economy_state",
+      "lines": [
+        111
+      ],
+      "path": "src/app/apps/rpg/world/causal_runtime_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "travel_state",
+      "lines": [
+        159
+      ],
+      "path": "src/app/apps/rpg/world/causal_runtime_projection.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        147
+      ],
+      "path": "src/app/apps/rpg/world/companion_acceptance.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 4,
+      "fingerprint": "party_state",
+      "lines": [
+        369,
+        387,
+        427,
+        457
+      ],
+      "path": "src/app/apps/rpg/world/companion_acceptance.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "player_state",
+      "lines": [
+        227,
+        367
+      ],
+      "path": "src/app/apps/rpg/world/companion_acceptance.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        150
+      ],
+      "path": "src/app/apps/rpg/world/companion_acceptance.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        62
+      ],
+      "path": "src/app/apps/rpg/world/companion_dialogue.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        61
+      ],
+      "path": "src/app/apps/rpg/world/companion_dialogue.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        75
+      ],
+      "path": "src/app/apps/rpg/world/conversation_director.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        40
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_base.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        40
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_base.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "party_state",
+      "lines": [
+        604
+      ],
+      "path": "src/app/apps/rpg/world/conversation_thread_pending.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "quest_state",
+      "lines": [
+        180
+      ],
+      "path": "src/app/apps/rpg/world/conversation_topics.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        172
+      ],
+      "path": "src/app/apps/rpg/world/environment.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "travel_state",
+      "lines": [
+        35
+      ],
+      "path": "src/app/apps/rpg/world/locations/command_routing.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        279
+      ],
+      "path": "src/app/apps/rpg/world/locations/encounters.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        279
+      ],
+      "path": "src/app/apps/rpg/world/locations/encounters.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "travel_state",
+      "lines": [
+        63
+      ],
+      "path": "src/app/apps/rpg/world/locations/events.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "travel_state",
+      "lines": [
+        27
+      ],
+      "path": "src/app/apps/rpg/world/locations/time.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "travel_state",
+      "lines": [
+        76
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "economy_state",
+      "lines": [
+        91
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel_resources.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "inventory_state",
+      "lines": [
+        26
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel_resources.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        25
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel_resources.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "travel_state",
+      "lines": [
+        166
+      ],
+      "path": "src/app/apps/rpg/world/locations/travel_resources.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        39
+      ],
+      "path": "src/app/apps/rpg/world/npc_party_eligibility.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "present_npc_state",
+      "lines": [
+        28
+      ],
+      "path": "src/app/apps/rpg/world/npc_presence_runtime.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        108
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_engine.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        62
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_engine.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        449
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_engine.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        27,
+        42
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_participants.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "combat_state",
+      "lines": [
+        103
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_settings.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        117
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_settings.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        17,
+        23
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_templates.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        32
+      ],
+      "path": "src/app/apps/rpg/world/social/conversation_topics.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 2,
+      "fingerprint": "npc_index",
+      "lines": [
+        9,
+        26
+      ],
+      "path": "src/app/apps/rpg/world/social/offscreen_conversations.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        62
+      ],
+      "path": "src/app/apps/rpg/world/social/offscreen_conversations.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "combat_state",
+      "lines": [
+        470,
+        495,
+        593
+      ],
+      "path": "src/app/apps/rpg/world/tactical_spatial.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 3,
+      "fingerprint": "player_state",
+      "lines": [
+        286,
+        286,
+        445
+      ],
+      "path": "src/app/apps/rpg/world/travel_graph.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "world_model",
+      "lines": [
+        234
+      ],
+      "path": "src/app/apps/rpg/world/travel_graph.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "npc_index",
+      "lines": [
+        317
+      ],
+      "path": "src/app/apps/rpg/world/world_event_director.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "player_state",
+      "lines": [
+        475
+      ],
+      "path": "src/app/apps/rpg/world/world_event_director.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "runtime_state",
+      "lines": [
+        473
+      ],
+      "path": "src/app/apps/rpg/world/world_event_director.py",
+      "rule": "AL020"
+    },
+    {
+      "count": 1,
+      "fingerprint": "simulation_state",
+      "lines": [
+        472
+      ],
+      "path": "src/app/apps/rpg/world/world_event_director.py",
+      "rule": "AL020"
     }
   ]
 }
