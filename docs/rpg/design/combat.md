@@ -23,7 +23,10 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
   blow.
 - **A blow.** A seeded d20 plus the attacker's accuracy, less any condition penalty (battered 2, wounded 1), against
   the target's defence; a hit deals a seeded roll in the attacker's damage range less the target's armour, at least
-  1. The hero's and companions' numbers are their equipment's; a creature's are its definition's.
+  1. The hero's and companions' numbers are their equipment's; a creature's are its definition's. The hero's level
+  and attributes count too (progression.md): accuracy + (level - 1) / 3 + the better of the strength and dexterity
+  modifiers, damage + the strength modifier, defence 10 + the dexterity modifier + level / 4 (values tuned by the
+  balance simulation, RQ-5.3).
 - **A heavy blow** (more than two fifths of a party member's maximum health at once) leaves them wounded.
 - **Breaking away.** A d20 plus the hero's initiative bonus against 10 plus twice the quickest foe's; on success
   each foe still standing strikes once at disadvantage (a parting blow), and the fight ends; on failure the turn is

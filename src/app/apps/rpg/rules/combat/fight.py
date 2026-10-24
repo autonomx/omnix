@@ -124,9 +124,23 @@ def _numbers(simulation: Mapping[str, Any], combat: Mapping[str, Any], actor_id:
         return {"damage_min": max(1, int(row.get("damage_min") or 1)), "damage_max": max(1, int(row.get("damage_max") or 3)),
                 "accuracy_bonus": int(row.get("accuracy_bonus") or 0) - hindered, "encumbrance_penalty": 0}
     stats = _d(project_equipment_stats(dict(simulation), actor_id=actor_id).get("stats"))
-    return {"damage_min": max(1, int(stats.get("damage_min") or 1)), "damage_max": max(1, int(stats.get("damage_max") or 2)),
-            "accuracy_bonus": int(stats.get("accuracy_bonus") or 0),
-            "encumbrance_penalty": int(stats.get("encumbrance_penalty") or 0)}
+    numbers = {"damage_min": max(1, int(stats.get("damage_min") or 1)), "damage_max": max(1, int(stats.get("damage_max") or 2)),
+               "accuracy_bonus": int(stats.get("accuracy_bonus") or 0),
+               "encumbrance_penalty": int(stats.get("encumbrance_penalty") or 0)}
+    if actor_id == "player":  # the hero's level and attributes count, not their gear alone (progression.md)
+        strength, dexterity = _modifier(simulation, "strength"), _modifier(simulation, "dexterity")
+        harder = max(0, strength)
+        numbers.update(accuracy_bonus=numbers["accuracy_bonus"] + (_level(simulation) - 1) // 3 + max(0, strength, dexterity),
+                       damage_min=numbers["damage_min"] + harder, damage_max=numbers["damage_max"] + harder)
+    return numbers
+
+
+def _level(simulation: Mapping[str, Any]) -> int:
+    return max(1, int(_player(simulation).get("level") or 1))
+
+
+def _modifier(simulation: Mapping[str, Any], attribute: str) -> int:
+    return (int(_d(_player(simulation).get("stats")).get(attribute) or 10) - 10) // 2
 
 
 def _person(simulation: Mapping[str, Any], target_ref: str) -> tuple[str, dict[str, Any]]:
@@ -155,7 +169,8 @@ def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: st
     armor = int(_d(project_equipment_stats(dict(simulation), actor_id="player").get("stats")).get("armor") or 0)
     participants: dict[str, dict[str, Any]] = {"player": {
         "actor_id": "player", "side": "party", "name": "You", "hp": hp, "max_hp": max_hp, "armor": armor,
-        "defense": 10, "initiative_bonus": 1, "status": "active", "status_effects": []}}
+        "defense": 10 + max(0, _modifier(simulation, "dexterity")) + _level(simulation) // 4,
+        "initiative_bonus": 1 + max(0, _modifier(simulation, "dexterity")), "status": "active", "status_effects": []}}
     for companion in _companions(simulation):
         npc_id = _s(companion.get("npc_id"))
         maximum = int(companion.get("max_hp") or 16)

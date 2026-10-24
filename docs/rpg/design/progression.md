@@ -38,12 +38,16 @@ is capped per hour; quest reward XP.
 `rules/player/progression.py`: `gain` is the one curve every source uses (fights, quests, checks, discovery);
 `LevelReached` carries the choices waiting (`level_choices_pending`) and the health the levels add (5 + the
 constitution modifier each, at least 1, healing by as much). Quests pay the experience their rewards name, else
-100 for each of their places; a check passed pays 5 / 10 / 20 / 35 by difficulty (easy, moderate, hard, heroic) to the
+50 for each of their places (tuned from 100 by the balance simulation); a check passed pays 5 / 10 / 20 / 35 by difficulty (easy, moderate, hard, heroic) to the
 hero besides its skill experience; a first visit to a place pays 15. A level's choice is the player's words: "raise
 strength" (+2), "learn <ability>" (one the tree has, the level allows and the prerequisites open), or "improve
 <skill> and <skill>" (a rank each, to 5); `LevelChoiceMade`; with no choice waiting, those words are the older
-path's. Skills: 50 x (rank + 1) to the next rank, 0 to 5; an hour's practice is 5. Not yet: the 500-turn balance
-simulation (RQ-5.3's exit), the choice as clarification options on the play screen (RQ-7.3).
+path's. Skills: 50 x (rank + 1) to the next rank, 0 to 5; an hour's practice is 5. The balance simulation
+(`scripts/rpg_balance_sim.py`, `test_balance.py`) plays 500 turns of Aurelia and the starter world: level, fights won,
+defeats, time hurt and hunger stay inside their bands; the purse, quests completed and the late win rate do not yet
+(no coin once the few authored quests are done, RQ-5.5; side quests, RQ-5.4; a fixed bestiary the hero outgrows,
+RQ-5.6), tracked as a strict expected failure. The hero's level and attributes count in a fight (combat.md). Not yet:
+the choice as clarification options on the play screen (RQ-7.3).
 
 ## Out of scope
 

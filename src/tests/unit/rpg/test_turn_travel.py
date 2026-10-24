@@ -72,7 +72,7 @@ def test_reaching_a_quests_last_place_completes_it_and_pays_its_rewards() -> Non
     assert [change.type for change in changes] == ["quest_place_reached", "quest_status_changed", "purse_changed",
                                                    "item_added", "experience_gained", "level_reached"]
     assert lines[:2] == ["Quest complete: First Night. You receive 20 silver, Wayfarer Sigil.",
-                         "You gain 200 experience."]  # a hundred for each of its places (progression.md)
+                         "You gain 100 experience."]  # fifty for each of its places (progression.md, tuned)
     assert changes[2].delta_copper == 200
     halfway = {**quest, "visited_locations": []}
     changes, lines = arrival_changes(_campaign([halfway])["simulation_state"], "loc:village")

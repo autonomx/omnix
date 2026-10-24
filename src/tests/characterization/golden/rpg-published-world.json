@@ -1975,7 +1975,7 @@
     },
     {
       "changes": {
-        "hp": 10,
+        "hp": 5,
         "inventory": {
           "Wayfarer Sigil": 1
         },
@@ -2002,7 +2002,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:a9b959872ac90ee559fb7bfdcddceff448a0208582be872fc10aabd5f9e0247c",
+      "document_hash": "sha256:b29fb5beca01c112e3dafbca54d66614c8f8d745c14e03b1439b30bd2d943b96",
       "facts": {
         "combat": {
           "active": false,
@@ -2011,7 +2011,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -2169,7 +2169,7 @@
       "session_summary": {
         "interaction_seq": 13,
         "location": "Wayfarers' Guild",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 13,
         "title": "Wren — Starfall Grove"
       },
@@ -2185,7 +2185,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:957036e8cb772900809770d5629da8aa192a7c2601e27bbfc707e326d21a5e08",
+      "document_hash": "sha256:f54764a224119fce4a54ec17e4eba50ffc46565f58be7ec528179306ec8e8f89",
       "facts": {
         "combat": {
           "active": false,
@@ -2194,7 +2194,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -2322,7 +2322,7 @@
       "session_summary": {
         "interaction_seq": 14,
         "location": "Wayfarers' Guild",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 14,
         "title": "Wren — Starfall Grove"
       },
@@ -2351,7 +2351,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:36f90a3327799bca57c5a9ad8bcceefe73456312f0a790eb48bcdca578d34a2c",
+      "document_hash": "sha256:f6feb620bf7395e99fa66dfc7b4bef7e1b68e14a54a4853a5b865075013977e8",
       "facts": {
         "combat": {
           "active": false,
@@ -2360,7 +2360,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -2509,7 +2509,7 @@
       "session_summary": {
         "interaction_seq": 15,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 15,
         "title": "Wren — Starfall Grove"
       },
@@ -2523,7 +2523,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:41baaef3878ccb1013a4b1b1259dd9a4cba3bd93873e35365e0b4d557cd3aeef",
+      "document_hash": "sha256:8349819e2c67ef6c6ecf35fef12596215af3240c20d40b43b2081a08fe82bf40",
       "facts": {
         "combat": {
           "active": false,
@@ -2532,7 +2532,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -2648,7 +2648,7 @@
       "session_summary": {
         "interaction_seq": 16,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 16,
         "title": "Wren — Starfall Grove"
       },
@@ -2663,7 +2663,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:28faa764ab80d94bbfcf06d2103fe72a1af72f2c3c75632fde1a02d34a603ca4",
+      "document_hash": "sha256:6a1f2a8ebe29370b98cff415433b51663757a65f51a36dc6db426afe041244f7",
       "facts": {
         "combat": {
           "active": false,
@@ -2672,7 +2672,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -2806,7 +2806,7 @@
       "session_summary": {
         "interaction_seq": 17,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 17,
         "title": "Wren — Starfall Grove"
       },
@@ -2818,7 +2818,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:4c9c2d7b5e785816eabd246d5fec114ff83cacb2edd1a8e119c747e868931499",
+      "document_hash": "sha256:daf85658edf9ab11d7bd9fc46c4916b26dd8921f5ccd8002db04ee39f0e56505",
       "facts": {
         "combat": {
           "active": false,
@@ -2827,7 +2827,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -2959,7 +2959,7 @@
       "session_summary": {
         "interaction_seq": 18,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 18,
         "title": "Wren — Starfall Grove"
       },
@@ -2975,7 +2975,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ba7760176493aa266433d86106dd1483f59cf3ea4687272fc73de5a166300de2",
+      "document_hash": "sha256:6ec11594184cb3517422aa7e10d5a67ac654acb089a04b055a39a8eaac053568",
       "facts": {
         "combat": {
           "active": false,
@@ -2984,7 +2984,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3117,7 +3117,7 @@
       "session_summary": {
         "interaction_seq": 19,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 19,
         "title": "Wren — Starfall Grove"
       },
@@ -3133,7 +3133,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b50cb7277ac95c83adc3cde880a2c88c61d3a65affa9855adeb60a20a04f22c6",
+      "document_hash": "sha256:db5b9f3aa45a24d3ac29efce78f5c493d0b7c84cf6d49e33771433324a36e759",
       "facts": {
         "combat": {
           "active": false,
@@ -3142,7 +3142,7 @@
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 110,
+        "hp": 105,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3269,7 +3269,7 @@
       "session_summary": {
         "interaction_seq": 20,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 20,
         "title": "Wren — Starfall Grove"
       },
@@ -3284,7 +3284,7 @@
           "participants": {
             "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
-            "player": 106
+            "player": 101
           }
         },
         "hp": -4,
@@ -3294,20 +3294,20 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7627b77848e89e6da6af591d428b0bb80a3617f41e92e5aae69c4ac4f8e7a78d",
+      "document_hash": "sha256:bd74298de78b8942d58122cacdfb9604070eca7acbdad11294262abdf92f85e8",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
-            "player": 106
+            "player": 101
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 106,
+        "hp": 101,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3441,7 +3441,7 @@
       "session_summary": {
         "interaction_seq": 21,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 21,
         "title": "Wren — Starfall Grove"
       },
@@ -3451,20 +3451,20 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:fc26dce35e96f1f1740ac7e3d1e6a531e7cfa1874e53ed12398d4e657cd8541d",
+      "document_hash": "sha256:f189f980e6568f0421d1b84123993d2a7098aa51984dcdd85ca09760bbc8ca26",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 8,
             "npc:liora-fen": 100,
-            "player": 106
+            "player": 101
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 106,
+        "hp": 101,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3574,7 +3574,7 @@
           "participants": {
             "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 106
+            "player": 101
           }
         },
         "survival": {
@@ -3583,20 +3583,20 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f134f32ba6aa470d0e42e691df1f5ad87ef8cf7fc9134966b1b4bd993aa063c3",
+      "document_hash": "sha256:8a5dc9973fdeab62afb7528bec445bbcb75c4db7d02223e4ae938fe8f6924539",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 7,
             "npc:liora-fen": 100,
-            "player": 106
+            "player": 101
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 106,
+        "hp": 101,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3726,7 +3726,7 @@
       "session_summary": {
         "interaction_seq": 23,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 23,
         "title": "Wren — Starfall Grove"
       },
@@ -3740,7 +3740,7 @@
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 105
+            "player": 100
           }
         },
         "hp": -1,
@@ -3750,20 +3750,20 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ed516e1dc8a6ba43db822a6d8a0cb751042c0d37337fc0b51b78dfe446c919e9",
+      "document_hash": "sha256:f6b437f0e33abd36a33c2733e0579ae2965d21adc0e5b210f28fb01a13b8e185",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 105
+            "player": 100
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 105,
+        "hp": 100,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -3897,7 +3897,7 @@
       "session_summary": {
         "interaction_seq": 24,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 24,
         "title": "Wren — Starfall Grove"
       },
@@ -3911,7 +3911,7 @@
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 102
+            "player": 97
           }
         },
         "hp": -3,
@@ -3921,20 +3921,20 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:afd38f72e8d647a31ee33c11507355bafd00f6f786d1076819561ad0d10d0aaa",
+      "document_hash": "sha256:ae7b4eecd7e7476e94c96e80fa079886a4dae155ea0ae741f59e9c596e6a4c32",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 102
+            "player": 97
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 102,
+        "hp": 97,
         "inventory": {
           "Gateborn Compass": 1,
           "Healing Potion": 1,
@@ -4068,7 +4068,7 @@
       "session_summary": {
         "interaction_seq": 25,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 25,
         "title": "Wren — Starfall Grove"
       },
@@ -4082,7 +4082,7 @@
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 108
+            "player": 103
           }
         },
         "hp": 6,
@@ -4095,20 +4095,20 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:872343fa2f586134227d5fa297d87c9432c013186f1517d5043b651b7e9eaa70",
+      "document_hash": "sha256:a6fdf770f3c37abbcbaea6fb0e873e83fa1f6f0961eca78a943504ea240071ca",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 108
+            "player": 103
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 108,
+        "hp": 103,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4243,7 +4243,7 @@
       "session_summary": {
         "interaction_seq": 26,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 26,
         "title": "Wren — Starfall Grove"
       },
@@ -4253,20 +4253,20 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:dd35c12d28bdee27cfa8e7c6714c104179ee250efdb759f601c10f25471f3704",
+      "document_hash": "sha256:59e1804d8eecfd7f0a4a13085990cb5e2abe7c6d46d721ed55dd2f29c77c0765",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 108
+            "player": 103
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 108,
+        "hp": 103,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4373,7 +4373,7 @@
       "session_summary": {
         "interaction_seq": 27,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 27,
         "title": "Wren — Starfall Grove"
       },
@@ -4383,20 +4383,20 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:dec2d73cff8c0cfa5d0652bdc22f427bedc59eb47719b621c369225198f581c0",
+      "document_hash": "sha256:ad0481bcac67be2208a2e3fa8ba622e9c415f4191bc93bb8fc5b7133cf8bb47f",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 108
+            "player": 103
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 108,
+        "hp": 103,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4499,7 +4499,7 @@
       "session_summary": {
         "interaction_seq": 28,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 28,
         "title": "Wren — Starfall Grove"
       },
@@ -4509,20 +4509,20 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:4673064bb4c3603a69444af32b4c70607df03031bc003381c6828d57631bba4d",
+      "document_hash": "sha256:dd1465919287ea0e515789760ba005d81bd77cbc8102d399e6f77a5d14e2f932",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 108
+            "player": 103
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 108,
+        "hp": 103,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4625,7 +4625,7 @@
       "session_summary": {
         "interaction_seq": 29,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 29,
         "title": "Wren — Starfall Grove"
       },
@@ -4635,20 +4635,20 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:5b4aaf6505d7d4f93646fe688c5e0f6bbf670874de8aeab3764615bcffbc73bb",
+      "document_hash": "sha256:021d03f8c2f7d453dcff94e819d5c99c499ce3f27698ce2acaa6aeee9fa51e82",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 108
+            "player": 103
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 108,
+        "hp": 103,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4751,7 +4751,7 @@
       "session_summary": {
         "interaction_seq": 30,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 30,
         "title": "Wren — Starfall Grove"
       },
@@ -4761,20 +4761,20 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:56ddc9bba6d13f7f662a20680a41d61a9d8fa8813f83e242fb90ee9b0c1967ce",
+      "document_hash": "sha256:047c892ab0e3c9bcccc33ff2232d0a9bfc4723d6d9489faf8a8f6c6fadd9df48",
       "facts": {
         "combat": {
           "active": true,
           "participants": {
             "enemy:creature-echo-wolf:1": 6,
             "npc:liora-fen": 100,
-            "player": 108
+            "player": 103
           }
         },
         "equipment": [
           "Travel Cloak"
         ],
-        "hp": 108,
+        "hp": 103,
         "inventory": {
           "Gateborn Compass": 1,
           "Lantern Bread": 2,
@@ -4877,7 +4877,7 @@
       "session_summary": {
         "interaction_seq": 31,
         "location": "Starfall Village",
-        "player_level": 3,
+        "player_level": 2,
         "state_revision": 31,
         "title": "Wren — Starfall Grove"
       },
