@@ -26,11 +26,13 @@ JOURNEYS = {
 @pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
 def test_travel_across_three_places_and_back(launch, world) -> None:
     play = launch(world)
-    for count, (command, place) in enumerate(JOURNEYS[world], start=1):
+    for command, place in JOURNEYS[world]:
+        turns = play.turn_count()
         play.turn(command)
         assert play.location() == place, command
-        assert play.turn_count() == count
+        assert play.turn_count() == turns + 1  # a journey is one turn
         assert play.public()["current_location_name"] in play.model.told()  # the arrival is described
+        play.clear_the_road()  # the roads of a dangerous region may hold something (encounters.md)
     if world == "aurelia":
         assert "npc:elyra-moonroot" not in play.present() and "npc:liora-fen" in play.present()
 

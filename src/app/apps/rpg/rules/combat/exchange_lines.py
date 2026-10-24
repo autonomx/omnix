@@ -73,7 +73,13 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
     if not combat_state:
         return []
     lines: list[str] = []
-    if safe_str(combat_result.get("reason")) == "combat_started" or combat_result.get("opening"):
+    if safe_str(combat_result.get("reason")) == "combat_confronted":
+        foes = [_name(combat_state, safe_str(actor_id), subject=False)
+                for actor_id, row in safe_dict(combat_state.get("participants")).items()
+                if safe_str(safe_dict(row).get("side")) == "enemy"]
+        lines.append(f"{' and '.join(foes)[:1].upper()}{' and '.join(foes)[1:]} {'bars' if len(foes) == 1 else 'bar'} "
+                     "your way: fight, break away, slip past, or talk it down.")
+    elif safe_str(combat_result.get("reason")) == "combat_started" or combat_result.get("opening"):
         foes = [_name(combat_state, safe_str(actor_id), subject=False)
                 for actor_id, row in safe_dict(combat_state.get("participants")).items()
                 if safe_str(safe_dict(row).get("side")) == "enemy"]
@@ -119,6 +125,8 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
         lines.append("The fight is over.")
     elif combat_state.get("active") is not True and ended == "enemy_fled":
         lines.append("The fight is over; it yields you nothing.")
+    elif combat_state.get("active") is not True and ended in {"evaded", "talked_down"}:
+        lines.append("You go on your way; no blow was struck.")
     elif combat_state.get("active") is not True and ended == "party_side_defeated":
         lines.extend(_defeat_lines(safe_dict(combat_state.get("defeat")), foes))
     return lines

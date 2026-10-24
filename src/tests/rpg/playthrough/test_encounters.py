@@ -26,3 +26,24 @@ def test_an_ambusher_strikes_before_the_hero_and_a_guardian_lets_them_go(launch)
     assert combat["active"] is False and combat["ended_reason"] == "party_fled"
     assert not [row for row in combat["combat_log"] if row.get("kind") == "parting_blow"]
     assert "and escape; the fight is over" in play.model.told()
+
+
+def test_on_a_dangerous_road_something_bars_the_way_and_can_be_slipped_past(launch) -> None:
+    """Aurelia's roads are dangerous from the start (severity 70: a 30% chance where no one lives)."""
+    play = launch("aurelia")
+    play.turn("go to Starfall Village")
+    for trip in range(24):
+        arrived = play.turn("go to Skybridge Pass" if trip % 2 == 0 else "go to Starfall Village")
+        if play.combat().get("active"):
+            break
+    else:
+        raise AssertionError("no encounter in 24 journeys")
+    assert play.location() == "location:aurelia:skybridge-pass"  # only where no one lives
+    combat = play.combat()
+    assert combat["current_actor_id"] == "player" and not [row for row in combat["combat_log"] if row.get("kind") == "attack"]
+    assert "bars your way" in arrived["visible_response"]["plain_text"] or "bars your way" in play.model.told()
+    play.turn("I sneak past it.")
+    combat = play.combat()
+    assert combat["active"] is False and combat["ended_reason"] == "evaded"
+    assert "You go on your way; no blow was struck." in play.model.told()
+    assert play.location() == "location:aurelia:skybridge-pass"

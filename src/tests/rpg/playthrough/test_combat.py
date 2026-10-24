@@ -56,6 +56,7 @@ def test_fight_to_defeat_is_a_setback(launch, world) -> None:
     play.turn("I go to my room and sleep for the night.")
     assert play.player_state().get("rest_point") == "location:aurelia:starfall-village"
     play.turn("go to Skybridge Pass")
+    play.clear_the_road()  # what the road brings is not the fight this is about
     purse, minutes = play.purse(), _minutes(play)
     play.turn(f"I attack the {foe}.")
     _fight(play, foe, limit=60)

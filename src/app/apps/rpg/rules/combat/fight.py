@@ -68,8 +68,11 @@ GUARD_BONUS = 2  # defending: added to the hero's defence until their next turn
 FLEE_SHARE, CALL_SHARE, CALL_CHANCE = 0.30, 0.50, 50
 # Attacking someone: how far they, and everyone who sees it, trust the hero less (combat.md).
 ATTACKED_REGARD, WITNESS_REGARD = -40, -15
-# pass: the hero's turn went on something else (a potion); ability: one of the hero's, its effect given
-Action = Literal["attack", "flee", "defend", "ability", "pass"]
+# pass: the hero's turn went on something else (a potion); ability: one of the hero's, its effect given;
+# confront: a foe comes at the hero (the road's danger), and the fight stands at the hero's turn;
+# sneak, parley: before blows are traded, slipping past or talking it down (encounters.md)
+Action = Literal["attack", "flee", "defend", "ability", "pass", "confront", "sneak", "parley"]
+PARLEY_DIFFICULTY = "hard"  # talking a foe down (persuading or intimidating it) is hard (encounters.md)
 
 # A person's fighting numbers by what they do (the world rates its creatures, not its people): combat.md.
 _PERSON_NUMBERS = {
@@ -167,7 +170,9 @@ def _person_foe(npc_id: str, person: Mapping[str, Any]) -> dict[str, Any]:
             **numbers}
 
 
-def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: str) -> dict[str, Any]:
+def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: str, confronted: bool = False
+           ) -> dict[str, Any]:
+    """A fight begins, in its initiative order; a foe that bars the hero's way (``confronted``) waits on them."""
     hp, max_hp = _hero_hp(simulation)
     armor = int(_d(project_equipment_stats(dict(simulation), actor_id="player").get("stats")).get("armor") or 0)
     participants: dict[str, dict[str, Any]] = {"player": {
@@ -188,6 +193,8 @@ def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: st
     order = build_initiative_order(encounter_id=encounter_id, participants=participants)
     if _s(enemy.get("behaviour")) == "ambushes":  # it strikes first in the first round
         order.sort(key=lambda row: _s(_d(row).get("actor_id")) != _s(enemy["actor_id"]))
+    elif confronted:  # it has not struck: the hero chooses first (fight, break away, slip past, talk)
+        order.sort(key=lambda row: _s(_d(row).get("actor_id")) != "player")
     return {"active": True, "encounter_id": encounter_id, "round": 1, "turn_index": 0,
             "current_actor_id": _s(_d(order[0]).get("actor_id")) if order else "player",
             "initiative_order": order, "participants": participants, "combat_log": [], "source": SOURCE}
@@ -439,20 +446,56 @@ def _defeat(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
     return changes, DEFEAT_HOURS * 60
 
 
+def _blooded(combat: Mapping[str, Any]) -> bool:
+    """Whether blows have been traded."""
+    return any(_s(_d(row).get("kind")) in {"attack", "parting_blow"} for row in _l(combat.get("combat_log")))
+
+
+def _speaks(row: Mapping[str, Any]) -> bool:
+    return _s(row.get("kind")) == "person" or row.get("speaks") is True
+
+
+def _avoid(simulation: Mapping[str, Any], combat: dict[str, Any], *, kind: str, turn_key: str
+           ) -> tuple[list[StateChange], list[str], str] | None:
+    """Slipping past (a sneak against the foes' best defence, less 2) or talking them down (persuading or
+    intimidating, hard): the check's changes and lines, and how the encounter ends ("" when it goes on); ``None``
+    when a foe will not be talked to."""
+    from app.apps.rpg.rules.checks import DIFFICULTIES, check
+
+    foes = [participant(combat, actor_id) for actor_id in living_enemy_ids(combat)]
+    if kind != "sneak" and not all(_speaks(row) for row in foes):
+        return None
+    lead = foes[0]
+    target = _s(lead.get("npc_id")) if _s(lead.get("kind")) == "person" else _s(lead.get("definition_id"))
+    difficulty = (max(DIFFICULTIES["trivial"], max(int(row.get("defense") or 10) for row in foes) - 2)
+                  if kind == "sneak" else DIFFICULTIES[PARLEY_DIFFICULTY])
+    tried = check(simulation, kind, target, turn_key=turn_key, difficulty=difficulty)
+    if tried.band == "failure":
+        return tried.changes, tried.lines, ""
+    ended = "evaded" if kind == "sneak" else "talked_down"
+    combat.update(active=False, ended_reason=ended)
+    return tried.changes, tried.lines, ended
+
+
 # -- the turn -----------------------------------------------------------------------------------------------------------
 def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = "", turn_key: str = "",
-          cover: int = 0, ability: FightEffect | None = None, ability_name: str = "") -> FightTurn | None:
+          cover: int = 0, ability: FightEffect | None = None, ability_name: str = "",
+          parley: Literal["persuade", "intimidate"] = "persuade") -> FightTurn | None:
     """One turn of a fight; ``None`` when the target is neither a creature the world knows nor a person present
     (the older path's).
 
-    ``cover`` is what the target's cover adds to its defence against the hero's blow (the grid's, combat.md)."""
+    ``cover`` is what the target's cover adds to its defence against the hero's blow (the grid's, combat.md);
+    ``parley`` is how the hero talks a foe down."""
     existing = _d(simulation.get("combat_state"))
     fighting = existing.get("active") is True
     conditions = _conditions(simulation)
     report: dict[str, Any] = {"earlier_turns": [], "other_turns": [], "parting_blows": [], "foe_ids": []}
     regard: list[StateChange] = []
+    if fighting and action in {"sneak", "parley"} and _blooded(existing):
+        return FightTurn([], ["Blows have been traded: there is no slipping away or talking now. Strike, break away, "
+                              "or use something you carry."], refused=True, minutes=0)
     if not fighting:
-        if action in {"flee", "defend"}:
+        if action in {"flee", "defend", "sneak", "parley"}:
             return FightTurn([], [f"There is no fight to {'flee from' if action == 'flee' else 'guard against'}."],
                              refused=True, minutes=0)
         enemy = instantiate_campaign_creature(simulation, target_ref)
@@ -471,14 +514,27 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
                        for other in routines.present_now(simulation)[1]
                        if other != npc_id and other in people and other not in {
                            _s(row.get("npc_id")) for row in _companions(simulation)}]
-        combat = _start(simulation, enemy, turn_key=turn_key)
+        combat = _start(simulation, enemy, turn_key=turn_key, confronted=action == "confront")
         report["reason"] = "combat_started"
     else:
         combat = _party_as_it_stands(simulation, deepcopy(existing))
     earlier, ended = _until_hero(simulation, combat, conditions)
     report["earlier_turns"] = earlier
     participant(combat, "player").pop("guarding", None)  # a raised guard lasts until the hero's next turn
-    if not ended and action == "pass":
+    tried: list[StateChange] = []
+    tried_lines: list[str] = []
+    if action == "confront":
+        report["reason"] = "combat_confronted"  # the hero's turn is next: fight, break away, slip past, talk
+    elif not ended and action in {"sneak", "parley"}:
+        avoided = _avoid(simulation, combat, kind="sneak" if action == "sneak" else parley, turn_key=turn_key)
+        if avoided is None:
+            foe = _s(participant(combat, living_enemy_ids(combat)[0]).get("name")) or "your foe"
+            return FightTurn([], [f"The {foe} will not be talked to."], refused=True, minutes=0)
+        tried, tried_lines, ended = avoided
+        report["reason"] = f"combat_{ended or action + '_failed'}"
+        if not ended:
+            _advance(combat)  # the try was the hero's turn
+    elif not ended and action == "pass":
         _advance(combat)
     elif not ended and action == "defend":
         participant(combat, "player")["guarding"] = True
@@ -562,10 +618,11 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
                    for actor_id, rows in conditions.items() if rows != before.get(actor_id, []))
     changes.extend(after)
     changes.extend(regard)
+    changes.extend(tried)
     report["combat_state"] = combat
     if action == "pass" and report.get("reason") is None:
         report["reason"] = "combat_turn_passed"
-    lines = [*describe_combat_exchange(report), *spoils]
+    lines = [*tried_lines, *describe_combat_exchange(report), *spoils]
     return FightTurn(changes, lines, minutes=minutes, ended=ended, report=report)
 
 

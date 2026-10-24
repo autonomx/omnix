@@ -360,14 +360,15 @@ def _ability_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> 
 def _map_travel_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
     """A journey chosen on the world map: the travel rule's, its lines the game's own; a road that cannot be taken
     refuses the request, with no turn taken."""
-    from app.apps.rpg.session.turn.resolution import Resolution
+    from app.apps.rpg.session.turn.resolution import Resolution, met_on_the_road
     from app.apps.rpg.session.turn.travel import resolve_travel
 
     planned = PlannedAction(mechanic="travel", target_id=_s(action.get("location_id")), reason="map_travel")
     travel = resolve_travel(planned, session)
     if travel.refused:
         return {"ok": False, "error": "map_travel_refused", "status_code": 409, "detail": " ".join(travel.lines)}
-    resolution = Resolution(travel.changes, travel.lines, minutes=travel.minutes, needs="travel", told=False,
+    changes, lines = met_on_the_road(session, travel)
+    resolution = Resolution(changes, lines, minutes=travel.minutes, needs="travel", told=False,
                             action_result={"kind": "map_travel", "current_location_id": travel.destination,
                                            "detail": " ".join(travel.lines)})
     reading = IntentCandidate(family="move", target_id=planned.target_id, target_kind="place", confidence=1.0,

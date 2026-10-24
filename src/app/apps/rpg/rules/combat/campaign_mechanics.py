@@ -94,6 +94,7 @@ def instantiate_campaign_creature(
         ),
         "vulnerabilities": deepcopy(list(definition.get("vulnerabilities") or ())),
         "behaviour": _text(definition.get("behaviour")) or "fights",
+        "speaks": definition.get("speaks") is True,
         "status": "active",
         "status_effects": [],
         "mechanics_source": "campaign_mechanics_catalog",

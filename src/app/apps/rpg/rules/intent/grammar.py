@@ -109,7 +109,8 @@ _ATTRIBUTE_NAMES = ("strength", "dexterity", "constitution", "intelligence", "wi
 # What a check is (checks.md), by the words that ask for one; searching stays a manipulation of the scene.
 _CHECKS = (
     ("persuade", ("persuade", "convince", "coax", "sweet talk", "win over", "talk him into", "talk her into",
-                  "talk them into")),
+                  "talk them into", "reason with", "talk it down", "talk them down", "talk my way", "parley",
+                  "negotiate with")),
     ("intimidate", ("intimidate", "threaten", "menace", "frighten", "scare")),
     ("deceive", ("lie to", "deceive", "bluff", "mislead", "trick", "fool")),
     ("sneak", ("sneak", "creep", "slip past", "steal past", "tiptoe", "hide from", "move quietly")),

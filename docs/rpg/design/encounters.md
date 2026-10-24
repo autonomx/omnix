@@ -44,4 +44,19 @@ the starter world (0.85). Found with it: a pressure's side quest hunted the stro
 hero's level, which with allies called was more than a match (a level-2 hero fled Bandit Brutes eight times), and
 when none fitted it hunted the weakest anyway (level-9 Icefang Wolves for a level-2 hero), and at level 9 the world's
 boss (three Hollow Archons): a hunt now takes the strongest below the hero's level, else their equal, never a
-boss, and no fitting creature means no offer yet. Not yet: negotiation and stealth (part 2).
+boss, and no fitting creature means no offer yet.
+
+## As built (RQ-5.6, part 2: the road, slipping past, talking down)
+
+A dangerous road is dangerous (`rules/pressures.py` `road_encounter`): arriving where no one lives, in a region whose
+pressure is above 40, a seeded chance of the severity above 40 (Aurelia's roads at 70: three journeys in ten) puts
+one of the pressure's creatures in the hero's way, no stronger than a level above them and never the world's boss;
+both the typed journey and the map's (`session/turn/resolution.py` `met_on_the_road`). The creature bars the way
+(`fight(action="confront")`) and the hero chooses first, unless it ambushes. Before any blow is traded, the hero may
+slip past (a sneak against the foes' best defence less 2, at least 5) or talk it down (persuade or intimidate, hard:
+16), routed from the check grammar (`planning.py`); a person or a creature that speaks only (`speaks`, authored or
+derived from its lore: bandits, knights, the oath-bound), the others "will not be talked to". Success ends the
+encounter (`evaded`, `talked_down`: "You go on your way; no blow was struck."), with the check's own experience and,
+for a person, its regard; failure spends the hero's turn. Once blows are traded it is a fight: no slipping away or
+talking now. The grammar also reads "reason with", "talk it down", "parley", "negotiate with" as persuading. Found
+with it: a check easier than the easiest difficulty had no experience to pay and raised an error.

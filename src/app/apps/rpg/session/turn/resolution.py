@@ -75,6 +75,21 @@ def _ability(planned: PlannedAction, session: Mapping[str, Any], simulation: Map
                       needs="standard_turn")
 
 
+def met_on_the_road(session: Mapping[str, Any], travel: Any) -> tuple[list[StateChange], list[str]]:
+    """A journey's changes and lines, and what bars the way where the hero arrives: on a dangerous road, a place where
+    no one lives may hold one of the pressure's creatures (rules/pressures.py; encounters.md)."""
+    from app.apps.rpg.rules.pressures import road_encounter
+
+    arrived, _ = reduce(dict(session), travel.changes)
+    arrived_at = _d(arrived.get("simulation_state"))
+    turn_key = str(_counted(session).turn_count)
+    foe = road_encounter(arrived_at, turn_key=turn_key)
+    met = fight(arrived_at, action="confront", target_ref=foe, turn_key=turn_key) if foe else None
+    if met is None:
+        return travel.changes, travel.lines
+    return [*travel.changes, *met.changes], [*travel.lines, *met.lines]
+
+
 def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) -> Resolution | None:
     mechanic = planned.mechanic
     if mechanic in {"look", "wait", "clarify"}:
@@ -84,7 +99,8 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
                           needs=None if mechanic == "clarify" else "wait", told=mechanic != "clarify")
     if mechanic == "travel":
         travel = resolve_travel(planned, session)
-        return Resolution(travel.changes, travel.lines, minutes=travel.minutes, refused=travel.refused,
+        changes, lines = (travel.changes, travel.lines) if travel.refused else met_on_the_road(session, travel)
+        return Resolution(changes, lines, minutes=travel.minutes, refused=travel.refused,
                           needs=None if travel.refused else "travel", told=not travel.refused)
     if mechanic == "trade":
         trade = resolve_trade(session, text, selling=planned.reason == "sell")
@@ -96,8 +112,10 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return Resolution([_counted(session)], ["You are in a fight: strike, break away, or use something you carry."],
                           refused=True, told=False)
     if mechanic == "fight":
-        turn = fight(simulation, action={"flee": "flee", "defend": "defend"}.get(planned.reason, "attack"),
-                     target_ref=planned.target_id or text, turn_key=str(_counted(session).turn_count))
+        turn = fight(simulation, action={"flee": "flee", "defend": "defend", "sneak": "sneak", "persuade": "parley",
+                                         "intimidate": "parley"}.get(planned.reason, "attack"),
+                     target_ref=planned.target_id or text, turn_key=str(_counted(session).turn_count),
+                     parley="intimidate" if planned.reason == "intimidate" else "persuade")
         if turn is None:
             return None  # not a creature the world knows: the older path
         return Resolution(_timed(session, turn.changes, turn.minutes), turn.lines, minutes=turn.minutes,
@@ -164,4 +182,4 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
     return None
 
 
-__all__ = ["Resolution", "resolve_turn"]
+__all__ = ["Resolution", "met_on_the_road", "resolve_turn"]

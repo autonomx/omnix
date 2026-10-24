@@ -4,7 +4,9 @@ A pressure (the causal runtime's: danger on the roads, a failing ward) rises by 
 what pushes it back: ``defeat:<creature id>`` for each such creature felled, ``quest:<quest id>`` when that quest is
 completed; each moves the severity by its amount (``lower`` or ``raise``). When the pressure of the hero's region runs high (at least
 ``PRESSURE_QUEST_SEVERITY``) and no open quest answers it, a person whose work fits (a guard, a captain, a guild's)
-who is with the hero offers one: defeat its creatures, then report back. Pure: it returns the changes.
+who is with the hero offers one: defeat its creatures, then report back. And a dangerous road is dangerous: a
+journey to a place where no one lives, in a region whose pressure has creatures, may meet one of them (``road_encounter``;
+encounters.md). Pure: it returns the changes.
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ HUNT_EASES = 20.0  # a pressure quest's hunt pushes its pressure back by at leas
 _UNIQUE = {"boss", "legendary", "mythic", "extreme", "deadly"}  # a world's boss is no side quest's quarry
 _FITTING = re.compile(r"\b(guard|guards|captain|watch|warden|guild|registrar|elder|mayor|sheriff|ranger|marshal)\b")
 _OPEN = {"available", "active"}
+ENCOUNTER_FLOOR = 40.0  # above this severity a region's roads hold danger: the chance is the severity above it, in %
 
 
 def _runtime(simulation: Mapping[str, Any]) -> dict[str, Any]:
@@ -147,4 +150,35 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
     return [], []
 
 
-__all__ = ["HUNT_EASES", "PRESSURE_QUEST_REWARD", "PRESSURE_QUEST_SEVERITY", "lever_pulls", "pressure_offers"]
+def road_encounter(simulation: Mapping[str, Any], *, turn_key: str) -> str:
+    """The creature that bars the hero's way where they have just arrived (its id), or "": only where no one lives,
+    in a region whose pressure is above ``ENCOUNTER_FLOOR``, on a seeded chance of the severity above it; one of the
+    pressure's creatures no stronger than a level above the hero, never the world's boss."""
+    from app.apps.rpg.rules.combat.runtime_core import deterministic_roll
+
+    world_model = _d(simulation.get("world_model"))
+    here = routines.hero_location(simulation)
+    region = _region(world_model, here)
+    if not region or any(_s(_d(person).get("location_id")) == here for person in _d(world_model.get("npcs")).values()):
+        return ""
+    runtime = _runtime(simulation)
+    level = int(_d(simulation.get("player_state")).get("level") or 1)
+    for pressure in _pressures(runtime):
+        pressure_id = _s(pressure["pressure_id"])
+        severity = _severity(runtime, pressure_id)
+        if _pressure_region(world_model, pressure) != region or severity <= ENCOUNTER_FLOOR:
+            continue
+        if deterministic_roll(f"encounter|{pressure_id}|{here}|{turn_key}", 1, 100) > severity - ENCOUNTER_FLOOR:
+            continue
+        foes = sorted(subject for kind, _, subject in (_s(_d(lever).get("action")).partition(":")
+                                                       for lever in _l(pressure.get("levers")))
+                      if kind == "defeat" and (creature := campaign_creature_definition(simulation, subject))
+                      and _s(creature.get("threat")).casefold() not in _UNIQUE
+                      and int(creature.get("level") or 1) <= level + 1)
+        if foes:
+            return foes[deterministic_roll(f"encounter.foe|{pressure_id}|{turn_key}", 1, len(foes)) - 1]
+    return ""
+
+
+__all__ = ["ENCOUNTER_FLOOR", "HUNT_EASES", "PRESSURE_QUEST_REWARD", "PRESSURE_QUEST_SEVERITY", "lever_pulls",
+           "pressure_offers", "road_encounter"]

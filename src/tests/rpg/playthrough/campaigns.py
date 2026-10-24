@@ -170,6 +170,15 @@ class Playthrough:
         assert response.status_code == 200, f"{command!r}: {response.status_code} {response.text[:500]}"
         return response.json()
 
+    def clear_the_road(self, *, limit: int = 12) -> int:
+        """Breaks away from whatever barred the way on arriving (a dangerous road's creature, encounters.md), until
+        no fight is on; the turns it took."""
+        for count in range(limit):
+            if not self.combat().get("active"):
+                return count
+            self.turn("I break away and flee.")
+        raise AssertionError(f"still fighting after {limit} tries to break away: {self.combat()}")
+
     def loadout(self, action: str, item: str):
         return self.client.post(f"/api/rpg/sessions/{self.session_id}/loadout-action",
                                 json={"action": action, "item_name": item})

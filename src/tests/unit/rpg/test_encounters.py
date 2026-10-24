@@ -79,3 +79,60 @@ def test_an_ambusher_strikes_first() -> None:
     ("Hollow Archon", ["splits into conflicting versions"], "calls_allies"), ("Giant Rat", ["filthy"], "fights")])
 def test_a_creature_the_world_says_nothing_of_behaves_as_its_lore_tells(name, traits, behaviour) -> None:
     assert derived_behaviour({"name": name, "traits": traits}) == behaviour
+
+
+BANDIT = {**_BASE, "definition_id": "creature:bandit", "name": "Bandit", "hp": 400, "defense": 45, "speaks": True}
+
+
+def _facing(creature: dict, name: str) -> dict:
+    document = _with(creature)
+    met = fight(document["simulation_state"], action="confront", target_ref=name, turn_key="0")
+    assert met.report["reason"] == "combat_confronted" and met.report["combat_state"]["active"] is True
+    assert met.lines[0].endswith("bars your way: fight, break away, slip past, or talk it down.")
+    document, _ = reduce(document, met.changes)
+    return document
+
+
+def _until_band(document: dict, action: str, band: str, **kwargs):
+    """Tries ``action`` on fresh campaigns (seeded rolls) until one lands ``band``: the turn, and its campaign."""
+    for key in range(40):
+        turn = fight(document["simulation_state"], action=action, turn_key=f"try{key}", **kwargs)
+        if turn.refused or any(getattr(change, "band", None) == band for change in turn.changes):
+            return turn
+    raise AssertionError(f"no {band} in 40 tries")
+
+
+def test_before_blows_a_foe_can_be_slipped_past_or_talked_down_and_after_them_not() -> None:
+    wolf = _facing(WOLF, "wolf")
+    slipped = _until_band(wolf, "sneak", "success")
+    assert slipped.ended == "evaded" and slipped.report["combat_state"]["ended_reason"] == "evaded"
+    assert slipped.lines[-1] == "You go on your way; no blow was struck."
+    assert not any(isinstance(change, ExperienceGained) and change.amount == 40 for change in slipped.changes)
+    assert fight(wolf["simulation_state"], action="parley", turn_key="1").lines == ["The Wolf will not be talked to."]
+
+    bandit = _facing(BANDIT, "bandit")
+    talked = _until_band(bandit, "parley", "success", parley="intimidate")
+    assert talked.ended == "talked_down" and "The Bandit gives way." in talked.lines
+    failed = _until_band(bandit, "parley", "failure")
+    assert failed.ended == "" and failed.report["combat_state"]["active"] is True  # the try was the hero's turn
+
+    struck = fight(bandit["simulation_state"], action="attack", target_ref="bandit", turn_key="2")
+    bloodied, _ = reduce(bandit, struck.changes)
+    late = fight(bloodied["simulation_state"], action="sneak", turn_key="3")
+    assert late.refused and late.lines[0].startswith("Blows have been traded")
+
+
+def test_a_dangerous_road_bars_the_way_where_no_one_lives() -> None:
+    from app.apps.rpg.rules.pressures import road_encounter
+    from tests.unit.rpg.test_pressures import _document as _pressured
+
+    document = _pressured(severity=90)  # 50 points above the floor: an even chance
+    simulation = document["simulation_state"]
+    simulation["player_state"]["location_id"] = "loc:far"
+    simulation["world_model"]["locations"]["loc:far"]["region_id"] = "region:march"
+    met = {road_encounter(simulation, turn_key=str(key)) for key in range(40)}
+    assert met == {"", "creature:wolf"}  # sometimes, and one of the pressure's creatures
+    assert road_encounter(_pressured(severity=90)["simulation_state"], turn_key="1") == ""  # Rhea lives at the gate
+    calm = _pressured(severity=40)["simulation_state"]
+    calm["player_state"]["location_id"] = "loc:far"
+    assert {road_encounter(calm, turn_key=str(key)) for key in range(40)} == {""}

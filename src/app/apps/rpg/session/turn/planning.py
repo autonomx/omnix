@@ -63,6 +63,9 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
                              reason=reading.reason.removeprefix("check:"))
     if not fighting and reading.family == "manipulate" and reading.reason == "searches":
         return PlannedAction(mechanic="check", target_id=reading.target_id or "", ticks=1, reason="search")
+    if fighting and reading.family == "check" and reading.reason in {"check:sneak", "check:persuade", "check:intimidate"}:
+        # Before blows are traded, slipping past or talking the foe down (encounters.md): the fight rule's to judge.
+        return PlannedAction(mechanic="fight", ticks=0, reason=reading.reason.removeprefix("check:"))
     if reading.family == "defend" and fighting:
         return PlannedAction(mechanic="fight", ticks=0, reason="defend")
     if reading.family == "flee" and fighting:

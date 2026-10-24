@@ -126,6 +126,8 @@ def _consequence(simulation: Mapping[str, Any], kind: str, band: str, target_kin
                             f"{name} believes you, for now.", f"{name} sees through the lie.")}[kind]
         line = said[("strong", "success", "cost", "failure").index(band)]
         return ([regard(target_id, delta, f"{kind}:{band}")] if delta else []), [line], 0
+    if kind in {"persuade", "intimidate", "deceive"}:  # a creature that speaks, talked to (encounters.md)
+        return [], [f"The {name} gives way." if won else f"The {name} is not swayed."], 0
     if kind in {"sneak", "pick_lock"}:
         if won:
             done = "You slip by unseen." if kind == "sneak" else "The lock gives."
@@ -163,11 +165,14 @@ def _consequence(simulation: Mapping[str, Any], kind: str, band: str, target_kin
     return [], lines or ["You look carefully, and there is nothing hidden here."], 0
 
 
-def check(simulation: Mapping[str, Any], kind: str, target_id: str = "", *, turn_key: str = "") -> CheckOutcome:
-    """One check: the roll against the difficulty, and what it leads to."""
+def check(simulation: Mapping[str, Any], kind: str, target_id: str = "", *, turn_key: str = "",
+          difficulty: int | None = None) -> CheckOutcome:
+    """One check: the roll against the difficulty (the target's, or what the situation sets: ``difficulty``), and what
+    it leads to."""
     target_kind, record = _target(simulation, target_id)
     here = routines.hero_location(simulation)
-    difficulty = _difficulty(record, kind) + (RETRY_PENALTY if _retried(simulation, kind, target_id, here) else 0)
+    difficulty = ((_difficulty(record, kind) if difficulty is None else int(difficulty))
+                  + (RETRY_PENALTY if _retried(simulation, kind, target_id, here) else 0))
     bonus, skill = _bonus(simulation, kind, target_kind, target_id)
     natural = deterministic_roll(f"check.{kind}.{target_id or here}.{turn_key}", 1, 20)
     total = natural + bonus

@@ -53,7 +53,7 @@ def skill_xp_to_next(rank: int) -> int:
 
 
 def check_xp(difficulty: int) -> int:
-    return next(amount for floor, amount in CHECK_XP if difficulty >= floor)
+    return next((amount for floor, amount in CHECK_XP if difficulty >= floor), CHECK_XP[-1][1])  # below all: the least
 
 
 def _player(simulation: Mapping[str, Any]) -> dict[str, Any]:

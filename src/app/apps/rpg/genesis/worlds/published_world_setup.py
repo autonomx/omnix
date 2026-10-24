@@ -445,6 +445,19 @@ _BEHAVIOUR_WORDS = (
 )
 
 
+# Creatures that can be talked to, where the world does not say (encounters.md): people of a kind, and the knowing.
+_SPEAKING_WORDS = ("bandit", "brigand", "thief", "raider", "smuggler", "pirate", "cultist", "knight", "soldier",
+                   "guard", "warrior", "mage", "witch", "goblin", "orc", "ogre", "troll", "giant", "archon", "oath",
+                   "oaths", "speaks", "talks", "bargains")
+
+
+def derived_speaks(row: Mapping[str, Any]) -> bool:
+    """Whether a creature can be talked to, from its name and traits."""
+    lore = " ".join([_text(row.get("name")), *map(_text, row.get("traits") or ())]).casefold()
+    words = f" {' '.join(re.findall(r'[a-z]+', lore))} "
+    return any(f" {cue} " in words for cue in _SPEAKING_WORDS)
+
+
 def derived_behaviour(row: Mapping[str, Any]) -> str:
     """How a creature fights, from its name and traits; ``fights`` when they say nothing of it."""
     lore = " ".join([_text(row.get("name")), *map(_text, row.get("traits") or ())]).casefold()
@@ -486,6 +499,7 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
             ),
             "behaviour": play.behaviour if play is not None and row.get("behaviour") else derived_behaviour(row),
             "threat": threat,
+            "speaks": row["speaks"] is True if "speaks" in row else derived_speaks(row),
             "loot": [drop.model_dump() for drop in play.loot] if play is not None else [],
             "source": "published_world_bestiary",
         }
