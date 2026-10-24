@@ -67,13 +67,16 @@ def save_session_to_postgres(
     del compact
     if session_save_deferred():
         return session
+    from app.apps.rpg.foundation.persistence.turn_narrations import split_turn_narrations
     from app.apps.rpg.session.campaign_state import split_creation_artifacts, stored_setup_payload
 
     database = _database()
     context = _context(database)
     campaign_id = _campaign_id(session)
-    # What the campaign's creation produced is stored once, outside the document (RQ-1.1).
+    # What the campaign's creation produced is stored once, outside the document (RQ-1.1), and the turns'
+    # narrations beside it (RQ-1.4): a save that changed only narration is no new revision.
     session, artifacts = split_creation_artifacts(session)
+    session, narrations = split_turn_narrations(session)
     if isinstance(session.get("setup_payload"), dict):
         session["setup_payload"] = stored_setup_payload(session["setup_payload"])
     revision = _revision(session)
@@ -127,11 +130,12 @@ def save_session_to_postgres(
                     f"current {existing['revision']}"
                 )
             if revision == existing["revision"] and digest == existing["state_hash"]:
-                if not artifacts:
+                if not artifacts and not narrations:
                     work.rollback()
                     return existing["state"]
                 for kind, document in sorted(artifacts.items()):
                     work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
+                work.rpg.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
                 work.commit()
                 return existing["state"]
             if revision == existing["revision"] and digest != existing["state_hash"]:
@@ -173,6 +177,7 @@ def save_session_to_postgres(
                 raise RevisionConflict(f"RPG session changed while saving: {campaign_id}")
         for kind, document in sorted(artifacts.items()):
             work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
+        work.rpg.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
         work.commit()
     return session
 
@@ -200,12 +205,14 @@ def load_session_from_postgres(session_id: str) -> dict[str, Any] | None:
     context = _context(database)
     with unit_of_work(database) as work:
         campaign = work.rpg.get_campaign(context, session_id)
+        narrations = work.rpg.turn_narrations(context, session_id) if campaign is not None else []
         work.rollback()
     if campaign is None:
         return None
+    from app.apps.rpg.foundation.persistence.turn_narrations import with_turn_narrations
     from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION, schema_version, upcast_if_outdated
 
-    state = dict(campaign["state"])
+    state = with_turn_narrations(dict(campaign["state"]), narrations)
     if schema_version(state) < CURRENT_SCHEMA_VERSION:
         # Stored before the current document version: opening it upgrades it once, as a system turn with a
         # pinned backup (RQ-1.1). Should that fail, the campaign still loads, upcast in memory (WP-5.6).
@@ -217,7 +224,7 @@ def load_session_from_postgres(session_id: str) -> dict[str, Any] | None:
             logger.exception("rpg_campaign_document_upgrade_failed campaign=%s", session_id)
             upgraded = None
         if upgraded is not None:
-            return upgraded["state"]
+            return with_turn_narrations(dict(upgraded["state"]), narrations)
     return upcast_if_outdated(state)
 
 

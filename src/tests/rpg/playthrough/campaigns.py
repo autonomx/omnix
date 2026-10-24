@@ -214,6 +214,17 @@ class Playthrough:
         assert session is not None
         return session
 
+    def stored_row_state(self) -> dict[str, Any]:
+        """The campaign document as the campaign row holds it (without what loading puts back beside it)."""
+        from app.persistence.unit_of_work import unit_of_work
+        from app.runtime.tenant_context import current_tenant
+
+        with unit_of_work() as work:
+            campaign = work.rpg.get_campaign(current_tenant(), self.session_id)
+            work.rollback()
+        assert campaign is not None
+        return dict(campaign["state"])
+
     def revision(self) -> int:
         from app.apps.rpg.session.persistence.session_records import load_session_version_from_postgres
 

@@ -86,8 +86,7 @@ def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() ->
     assert document["runtime_state"]["player_journal"]["entries"]
 
 
-def test_each_mechanic_has_a_setting(monkeypatch) -> None:
+def test_each_mechanic_on_the_pipeline_has_a_setting(monkeypatch) -> None:
     assert pipeline_enabled("look") and pipeline_enabled("wait") and not pipeline_enabled("buy")
     monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_WAIT", "off")
-    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_BUY", "1")
-    assert not pipeline_enabled("wait") and pipeline_enabled("buy")
+    assert not pipeline_enabled("wait") and pipeline_enabled("look")

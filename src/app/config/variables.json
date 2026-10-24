@@ -1736,6 +1736,20 @@
     "type": "integer"
   },
   {
+    "default": "true",
+    "description": "Controls rpg turn pipeline look for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURN_PIPELINE_LOOK",
+    "type": "boolean"
+  },
+  {
+    "default": "true",
+    "description": "Controls rpg turn pipeline wait for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURN_PIPELINE_WAIT",
+    "type": "boolean"
+  },
+  {
     "default": null,
     "description": "Controls rpg world catalog repo for rpg.",
     "feature": "rpg",

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import Any, Mapping
 
+from app.apps.rpg.foundation.persistence.turn_narrations import split_turn_narrations
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.persistence.tenant import TenantContext
 from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
@@ -364,6 +365,8 @@ class PostgresRpgRepository:
         existing = self.get_turn_by_submission(context, campaign_id, submission_id)
         if existing is not None:
             return {"idempotent_replay": True, "campaign": campaign, "turn": existing}
+        # The turns' narrations are kept beside the document, not in it (RQ-1.4).
+        next_state, narrations = split_turn_narrations(dict(next_state))
 
         if campaign["revision"] != expected_revision:
             raise RevisionConflict(
@@ -442,6 +445,7 @@ class PostgresRpgRepository:
         if updated is None:
             raise RevisionConflict(f"campaign changed while committing turn: {campaign_id}")
         updated_campaign = _campaign(updated)
+        self.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
 
         self.connection.execute(
             """
@@ -630,6 +634,61 @@ class PostgresRpgRepository:
             (context.workspace_id, campaign_id, kind, encoded, digest),
         )
         return digest
+
+    TURN_NARRATIONS_KEPT = 64  # as many as the document kept (it pruned to 48-50)
+
+    def put_turn_narrations(
+        self,
+        context: TenantContext,
+        *,
+        campaign_id: str,
+        narrations: Mapping[str, Mapping[str, Any]],
+        kind: str = "narration",
+    ) -> int:
+        """Keep each turn's narration outside the campaign document (RQ-1.4); the number written.
+
+        A turn's narration with the same content is not rewritten; only the newest ``TURN_NARRATIONS_KEPT`` stay.
+        """
+        written = 0
+        for turn_id, document in sorted(narrations.items()):
+            encoded = canonical_json(dict(document))
+            digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+            cursor = self.connection.execute(
+                """
+                INSERT INTO omnix_rpg_turn_narrations (workspace_id, campaign_id, turn_id, kind, document_jsonb, content_hash)
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (workspace_id, campaign_id, turn_id, kind) DO UPDATE
+                   SET document_jsonb = EXCLUDED.document_jsonb, content_hash = EXCLUDED.content_hash,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE omnix_rpg_turn_narrations.content_hash <> EXCLUDED.content_hash
+                """,
+                (context.workspace_id, campaign_id, str(turn_id), kind, encoded, digest),
+            )
+            written += max(0, cursor.rowcount or 0)
+        if written:
+            self.connection.execute(
+                """
+                DELETE FROM omnix_rpg_turn_narrations
+                 WHERE workspace_id = %s AND campaign_id = %s AND kind = %s
+                   AND turn_id NOT IN (
+                       SELECT turn_id FROM omnix_rpg_turn_narrations
+                        WHERE workspace_id = %s AND campaign_id = %s AND kind = %s
+                        ORDER BY updated_at DESC, turn_id DESC LIMIT %s)
+                """,
+                (context.workspace_id, campaign_id, kind, context.workspace_id, campaign_id, kind,
+                 self.TURN_NARRATIONS_KEPT),
+            )
+        return written
+
+    def turn_narrations(self, context: TenantContext, campaign_id: str, *, kind: str = "narration") -> list[tuple[str, dict[str, Any]]]:
+        """The campaign's kept turn narrations, oldest first: (turn id, narration)."""
+        rows = self.connection.execute(
+            "SELECT turn_id, document_jsonb FROM omnix_rpg_turn_narrations "
+            "WHERE workspace_id = %s AND campaign_id = %s AND kind = %s "
+            "ORDER BY updated_at, turn_id LIMIT %s",
+            (context.workspace_id, campaign_id, kind, self.TURN_NARRATIONS_KEPT),
+        ).fetchall()
+        return [(str(row[0]), dict(row[1])) for row in rows]
 
     def get_campaign_artifacts(self, context: TenantContext, campaign_id: str) -> dict[str, dict[str, Any]]:
         """The campaign's creation artifacts by kind."""

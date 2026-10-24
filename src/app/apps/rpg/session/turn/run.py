@@ -7,9 +7,9 @@ commit and narration stages; everything else takes the older path.
 """
 from __future__ import annotations
 
-import os
 from typing import Any
 
+from app.config.env import env_bool
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
@@ -20,19 +20,21 @@ from app.apps.rpg.session.turn.request import TurnRequest
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
 from app.apps.rpg.session.turn.world_tick import world_tick
 
-SETTING = "OMNIX_RPG_TURN_PIPELINE_{mechanic}"
-# On once a mechanic's scenarios pass on the pipeline; the setting goes one release after that.
-ON_BY_DEFAULT = frozenset({"look", "wait"})
+# One setting per mechanic on the pipeline, for development and the operator: on once its scenarios pass on the
+# pipeline, and removed one release after that.
+LOOK_SETTING = "OMNIX_RPG_TURN_PIPELINE_LOOK"
+WAIT_SETTING = "OMNIX_RPG_TURN_PIPELINE_WAIT"
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait"}
 _FAMILY = {"look": "observation", "wait": "ambient"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
 def pipeline_enabled(mechanic: str) -> bool:
-    raw = os.environ.get(SETTING.format(mechanic=mechanic.upper()), "").strip().casefold()
-    if raw in {"0", "false", "off", "no"}:
-        return False
-    return raw in {"1", "true", "on", "yes"} or mechanic in ON_BY_DEFAULT
+    if mechanic == "look":
+        return env_bool(LOOK_SETTING, True)
+    if mechanic == "wait":
+        return env_bool(WAIT_SETTING, True)
+    return False
 
 
 def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int, summary: str) -> JournalWritten:
@@ -142,4 +144,4 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     return ctx
 
 
-__all__ = ["ON_BY_DEFAULT", "SETTING", "apply_planned_turn_stage", "pipeline_enabled", "run_planned_turn"]
+__all__ = ["LOOK_SETTING", "WAIT_SETTING", "apply_planned_turn_stage", "pipeline_enabled", "run_planned_turn"]

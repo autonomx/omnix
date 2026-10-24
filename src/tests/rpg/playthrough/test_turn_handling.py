@@ -124,11 +124,10 @@ def test_a_submission_retried_commits_once(launch, world) -> None:
     assert again.json()["turn_id"] == first["turn_id"]
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-1.4: a deferred narration that finishes while a later turn is in flight saves the campaign outside a "
-    "turn (narration_jobs writes runtime_state.narration_artifacts and bumps the revision), so the later "
-    "turn's commit meets a moved revision; narration should be a pending delivery, not a campaign save")))
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_an_earlier_narration_finishing_meanwhile_moves_no_revision(launch, world) -> None:
+    """RQ-1.4: a turn's narration is kept beside the campaign document, so one that finishes after its turn
+    committed is no campaign revision, and the player's next turn commits on the revision it read."""
     from app.apps.rpg.session.persistence.session_records import load_session_from_postgres, save_session_to_postgres
 
     play = launch(world)
@@ -137,8 +136,12 @@ def test_an_earlier_narration_finishing_meanwhile_moves_no_revision(launch, worl
     # What a deferred narration job does when it finishes (session/narration_jobs.py): it stores the
     # finished narration in the campaign's runtime state and saves the session.
     session = load_session_from_postgres(play.session_id)
-    session["runtime_state"].setdefault("narration_artifacts", {})["turn:1"] = {"status": "final", "text": "Done."}
+    artifact = {"turn_id": "turn:1", "narration": "Done.", "artifact_type": "turn_narration"}
+    session["runtime_state"].setdefault("narration_artifacts", []).append(artifact)
+    session["runtime_state"].setdefault("narration_artifacts_by_turn", {})["turn:1"] = artifact
     save_session_to_postgres(session)
     assert play.revision() == revision  # narration is not a campaign revision
+    assert "narration_artifacts" not in play.stored_row_state()["runtime_state"]  # nor part of the document
     play.turn("wait")
     assert play.revision() == revision + 1
+    assert play.stored()["runtime_state"]["narration_artifacts_by_turn"]["turn:1"]["narration"] == "Done."
