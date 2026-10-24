@@ -29,7 +29,8 @@ def test_state_reads_count_occurrences_and_distinct_keys_per_section():
         "d = simulation_state[key]\n"                # not a literal key
         "e = other_state.get('time')\n"              # not a state section
     )
-    reads = measured({RPG + "session/a.py": source})["state_string_key_reads"]
+    without_turn_path = {key: value for key, value in CONFIG.items() if key != "rpg_turn_path"}
+    reads = measured({RPG + "session/a.py": source}, without_turn_path)["state_string_key_reads"]
     assert reads["simulation_state"] == {"occurrences": 2, "distinct_keys": 1, "keys": {"time": 2}}
     assert reads["runtime_state"]["occurrences"] == 1
     assert reads["occurrences"] == 3

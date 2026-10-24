@@ -5245,22 +5245,22 @@
     "rpg_broad_excepts": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 439
+      "value": 440
     },
     "rpg_contract_bypass_imports": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 910
+      "value": 929
     },
     "rpg_deepcopy_calls": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 1450
+      "value": 1455
     },
     "rpg_dict_str_any": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 9563
+      "value": 9634
     },
     "rpg_nondeterminism": {
       "direction": "lower",
@@ -5270,7 +5270,7 @@
     "rpg_nondeterminism_calls": {
       "direction": "lower",
       "target": "0 reachable from the turn path",
-      "value": 68
+      "value": 47
     },
     "rpg_python_files_over_1200_lines": {
       "direction": "lower",
@@ -5295,12 +5295,12 @@
     "rpg_word_list_constants": {
       "direction": "lower",
       "target": 0,
-      "value": 115
+      "value": 116
     },
     "rpg_world_specific_names": {
       "direction": "lower",
       "target": 0,
-      "value": 551
+      "value": 552
     },
     "schema_excluded_routes": {
       "direction": "lower",

@@ -631,8 +631,9 @@ class PostgresRpgRepository:
     def get_campaign_artifacts(self, context: TenantContext, campaign_id: str) -> dict[str, dict[str, Any]]:
         """The campaign's creation artifacts by kind."""
         rows = self.connection.execute(
+            # A campaign has a handful of artifact kinds; the limit only bounds a corrupt table.
             "SELECT kind, document_jsonb FROM omnix_rpg_campaign_artifacts "
-            "WHERE workspace_id = %s AND campaign_id = %s ORDER BY kind",
+            "WHERE workspace_id = %s AND campaign_id = %s ORDER BY kind LIMIT 64",
             (context.workspace_id, campaign_id),
         ).fetchall()
         return {str(row[0]): dict(row[1]) for row in rows}

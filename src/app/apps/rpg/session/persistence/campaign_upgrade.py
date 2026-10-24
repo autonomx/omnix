@@ -146,19 +146,27 @@ def upgrade_all_campaigns(*, database: Any | None = None) -> list[dict[str, Any]
 
     database = database or _database()
     context = _context(database)
-    with unit_of_work(database) as work:
-        campaign_ids = [str(row[0]) for row in work.connection.execute(
-            "SELECT id FROM omnix_rpg_campaigns WHERE workspace_id = %s "
-            "AND COALESCE((state_jsonb #>> '{manifest,schema_version}')::int, 1) < %s ORDER BY id",
-            (context.workspace_id, _current_version()),
-        ).fetchall()]
-        work.rollback()
     results = []
-    for campaign_id in campaign_ids:
-        upgraded = upgrade_campaign_document(campaign_id, database=database)
-        if upgraded is not None:
-            results.append({key: value for key, value in upgraded.items() if key != "state"})
-    return results
+    after = ""
+    while True:
+        # A page at a time, by id, so a large workspace never loads every campaign id at once.
+        with unit_of_work(database) as work:
+            campaign_ids = [str(row[0]) for row in work.connection.execute(
+                "SELECT id FROM omnix_rpg_campaigns WHERE workspace_id = %s AND id > %s "
+                "AND COALESCE((state_jsonb #>> '{manifest,schema_version}')::int, 1) < %s ORDER BY id LIMIT %s",
+                (context.workspace_id, after, _current_version(), _UPGRADE_PAGE),
+            ).fetchall()]
+            work.rollback()
+        for campaign_id in campaign_ids:
+            upgraded = upgrade_campaign_document(campaign_id, database=database)
+            if upgraded is not None:
+                results.append({key: value for key, value in upgraded.items() if key != "state"})
+        if len(campaign_ids) < _UPGRADE_PAGE:
+            return results
+        after = campaign_ids[-1]
+
+
+_UPGRADE_PAGE = 100
 
 
 def _current_version() -> int:

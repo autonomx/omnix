@@ -51,11 +51,17 @@ def test_clock_marks_reset_per_turn():
     assert latency._ms(None, 1.0) is None and latency._ms(1.5, 1.0) == 500.0
 
 
-def test_counting_provider_times_a_streamed_call_until_its_last_chunk():
-    import time
+def test_counting_provider_times_a_streamed_call_until_its_last_chunk(monkeypatch):
     from types import SimpleNamespace
 
+    import itertools
+    import time
+
     from tests.rehearsal.rpg.worlds import CountingProvider
+
+    # A clock that moves 20 ms each time it is read stands in for real waiting.
+    ticks = (index * 0.02 for index in itertools.count())
+    monkeypatch.setattr(time, "perf_counter", lambda: next(ticks))
 
     class Inner:
         name = "fake"
@@ -63,7 +69,7 @@ def test_counting_provider_times_a_streamed_call_until_its_last_chunk():
         def chat_completion(self, messages, model=None, stream=False, **kwargs):
             def chunks():
                 for text in ("a", "b"):
-                    time.sleep(0.02)
+                    time.perf_counter()  # time passes while the chunk is written
                     yield SimpleNamespace(content=text, model="fake-model")
             return chunks() if stream else SimpleNamespace(content="ab", model="fake-model")
 
