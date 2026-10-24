@@ -20,11 +20,9 @@ from app.apps.rpg.foundation.state.changes import (
     CompanionHpChanged,
     ConditionsChanged,
     DefeatRecorded,
-    ExperienceGained,
     HpChanged,
     ItemAdded,
     ItemRemoved,
-    LevelReached,
     LocationChanged,
     PresenceChanged,
     PurseChanged,
@@ -33,6 +31,7 @@ from app.apps.rpg.foundation.state.changes import (
 )
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.ability_use import FightEffect
+from app.apps.rpg.rules.player import progression
 from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition, instantiate_campaign_creature
 from app.apps.rpg.rules.combat.exchange_lines import describe_combat_exchange
 from app.apps.rpg.rules.combat.runtime_core import (
@@ -293,25 +292,7 @@ def _spoils(simulation: Mapping[str, Any], combat: Mapping[str, Any]) -> tuple[l
               if _s(_d(row).get("side")) == "enemy" and _s(_d(row).get("kind")) != "person"]
     # Each creature's experience as the world rates it, or 25 a level where it gives none (combat.md).
     amount = sum(int(row.get("xp_value") or 0) or 25 * max(1, int(row.get("level") or 1)) for row in fallen)
-    changes: list[StateChange] = []
-    lines: list[str] = []
-    if amount:
-        changes.append(ExperienceGained(amount=amount))
-        lines.append(f"You gain {amount} experience.")
-        player = _player(simulation)
-        level = int(player.get("level") or 1)
-        xp = int(player.get("xp") or 0) + amount
-        to_next = int(player.get("xp_to_next") or 100)
-        points, skill_points = int(player.get("unspent_points") or 0), int(player.get("unspent_skill_points") or 0)
-        rose = False
-        while xp >= to_next:  # the hero's curve (rules/player/player_progression_state.py)
-            xp -= to_next
-            level, points, skill_points, rose = level + 1, points + 2, skill_points + 1, True
-            to_next = level * 100
-        if rose:
-            changes.append(LevelReached(level=level, xp=xp, xp_to_next=to_next, unspent_points=points,
-                                        unspent_skill_points=skill_points))
-            lines.append(f"You reach level {level}.")
+    changes, lines = progression.gain(simulation, amount)  # the one curve, and the level's choice (progression.md)
     items = {_s(row.get("id")): row for row in _l(_d(simulation.get("world_model")).get("items")) if _s(_d(row).get("id"))}
     for row in fallen:
         definition = campaign_creature_definition(simulation, _s(row.get("definition_id"))) or {}

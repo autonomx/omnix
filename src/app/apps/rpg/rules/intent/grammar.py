@@ -20,7 +20,7 @@ from typing import Iterable, Literal
 Family = Literal[
     "look", "inspect", "move", "talk", "ask", "decline", "buy", "sell", "attack", "flee", "defend",
     "take", "drop", "give", "use_item", "equip", "unequip", "manipulate", "rest", "wait", "quest",
-    "practice", "party", "status", "order", "clarify", "ability", "check",
+    "practice", "party", "status", "order", "clarify", "ability", "check", "grow",
 ]
 EntityKind = Literal["person", "creature", "item", "place", "offer", "quest", "skill", "group", "ability"]
 
@@ -104,6 +104,8 @@ _BARE_VERBS = (
     "attack", "buy", "take", "give", "drop", "use", "sell", "equip", "eat", "drink", "fight", "open", "move",
     "talk", "ask", "again", "hmm", "um", "uh", "what", "huh",
 )
+_ATTRIBUTE_NAMES = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma", "agility",
+                    "endurance", "intellect", "perception", "presence")
 # What a check is (checks.md), by the words that ask for one; searching stays a manipulation of the scene.
 _CHECKS = (
     ("persuade", ("persuade", "convince", "coax", "sweet talk", "win over", "talk him into", "talk her into",
@@ -431,6 +433,10 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     if _starts(words, "practice", "train", "drill", "hone", "work on") or _has(words, "practice", "train my",
                                                                                 "practicing", "training"):
         return _candidate("practice", _first(words, scene, "skill"), 0.85, "practice")
+    if (_starts(words, "raise", "increase", "boost") and _has(words, *_ATTRIBUTE_NAMES)) or (
+            _starts(words, "learn") and not _has(words, "about", "more", "what", "how", "where", "who", "why")) or (
+            _starts(words, "improve") and _has(words, "and")):
+        return _candidate("grow", None, 0.85, "level_choice")  # a level's choice (progression.md)
     kind = next((kind for kind, phrases in _CHECKS if _has(words, *phrases)), "")
     if kind and not _has(words, "notice board"):
         # A try decided by a roll (checks.md): persuading someone, sneaking past, climbing, picking a lock...

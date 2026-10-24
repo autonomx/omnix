@@ -144,7 +144,7 @@ def test_the_typed_view_reads_what_the_play_screen_shows(launch, world) -> None:
     assert view.meta.document_version == CURRENT
     assert view.inventory.purse.total_copper == play.purse()
     assert {item.name: item.quantity for item in view.inventory.items} == play.inventory()
-    assert view.player.hp == play.hp() and view.player.skills["swordsmanship"].xp == 10
+    assert view.player.hp == play.hp() and view.player.skills["swordsmanship"].xp == 5
     assert view.location.location_id == play.location()
     assert sorted(view.npcs.present_npc_ids) == sorted(play.present())
     assert [companion.npc_id for companion in view.party.companions] == play.party()

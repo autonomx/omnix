@@ -41,8 +41,10 @@ def test_a_journey_moves_the_party_says_who_is_there_and_takes_the_roads_time() 
     campaign = _campaign()
     travel = resolve_travel(PlannedAction(mechanic="travel", target_id="loc:village"), campaign)
     assert not travel.refused and travel.minutes == 20
-    assert [change.type for change in travel.changes] == ["turn_counted", "location_changed", "presence_changed", "time_advanced"]
-    assert travel.lines == ["You travel to The Village; the road takes 20 minutes.", "Here: Orik, Liora."]
+    assert [change.type for change in travel.changes] == ["turn_counted", "location_changed", "presence_changed",
+                                                          "time_advanced", "experience_gained"]  # a first visit
+    assert travel.lines == ["You travel to The Village; the road takes 20 minutes.", "Here: Orik, Liora.",
+                            "You gain 15 experience."]
     document, _ = reduce(campaign, travel.changes)
     simulation = document["simulation_state"]
     assert simulation["player_state"]["location_id"] == "loc:village" and simulation["previous_location"] == "loc:grove"
@@ -67,8 +69,10 @@ def test_reaching_a_quests_last_place_completes_it_and_pays_its_rewards() -> Non
              "locations": ["loc:grove", "loc:village"], "visited_locations": ["loc:grove"],
              "rewards": ["item:sigil", "20 silver", "companion trust"]}
     changes, lines = arrival_changes(_campaign([quest])["simulation_state"], "loc:village")
-    assert [change.type for change in changes] == ["quest_place_reached", "quest_status_changed", "purse_changed", "item_added"]
-    assert lines == ["Quest complete: First Night. You receive 20 silver, Wayfarer Sigil."]
+    assert [change.type for change in changes] == ["quest_place_reached", "quest_status_changed", "purse_changed",
+                                                   "item_added", "experience_gained", "level_reached"]
+    assert lines[:2] == ["Quest complete: First Night. You receive 20 silver, Wayfarer Sigil.",
+                         "You gain 200 experience."]  # a hundred for each of its places (progression.md)
     assert changes[2].delta_copper == 200
     halfway = {**quest, "visited_locations": []}
     changes, lines = arrival_changes(_campaign([halfway])["simulation_state"], "loc:village")

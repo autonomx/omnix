@@ -15,6 +15,7 @@ from app.apps.rpg.foundation.state.changes import StateChange, TimeAdvanced, Tur
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules import ability_use
 from app.apps.rpg.rules.checks import check
+from app.apps.rpg.rules.player import progression
 from app.apps.rpg.rules.combat.fight import fight
 from app.apps.rpg.rules.interactions.items import drop_item, equip_item, pick_up, unequip_item, use_item
 from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
@@ -104,6 +105,12 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
                           told=not turn.refused)
     if mechanic == "ability":
         return _ability(planned, session, simulation)
+    if mechanic == "grow":
+        if int(_d(simulation.get("player_state")).get("level_choices_pending") or 0) <= 0:
+            return None  # no level's choice is waiting: the older path's (its unspent points)
+        grown = progression.choose(session, text)
+        return Resolution([_counted(session), *grown.changes], grown.lines, refused=grown.refused, told=False,
+                          action_result={"kind": "level_choice", **grown.detail})
     if mechanic == "check":
         tried = check(simulation, planned.reason, planned.target_id, turn_key=str(_counted(session).turn_count))
         return Resolution(_timed(session, tried.changes, tried.minutes), tried.lines, minutes=tried.minutes,

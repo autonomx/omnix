@@ -47,6 +47,11 @@ def companions(simulation: Mapping[str, Any]) -> list[str]:
     return [npc for npc in (_s(_d(companion).get("npc_id")) for companion in _l(party.get("companions"))) if npc]
 
 
+def visited(simulation: Mapping[str, Any]) -> list[str]:
+    """The places the hero has been."""
+    return [_s(place) for place in _l(simulation.get("visited_locations")) if _s(place)]
+
+
 def hero_location(simulation: Mapping[str, Any]) -> str:
     return _s(_d(simulation.get("player_state")).get("location_id")) or _s(simulation.get("location_id"))
 

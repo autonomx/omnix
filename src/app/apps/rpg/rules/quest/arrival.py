@@ -40,8 +40,13 @@ def _reward_items(rewards: list[str], world_items: Mapping[str, Mapping[str, Any
     return items
 
 
-def arrival_changes(simulation_state: Mapping[str, Any], location_id: str) -> tuple[list[StateChange], list[str]]:
-    """What reaching ``location_id`` does to the hero's active quests, and how to say it."""
+def arrival_changes(simulation_state: Mapping[str, Any], location_id: str, *,
+                    discovery_xp: int = 0) -> tuple[list[StateChange], list[str]]:
+    """What reaching ``location_id`` does to the hero's active quests, and how to say it; the experience the arrival
+    earns (a quest finished, and ``discovery_xp`` for a first visit) is gained at once, on the one curve."""
+    from app.apps.rpg.rules.player import progression
+
+    earned = discovery_xp
     world_items = {_s(item.get("id")): _d(item) for item in _l(_d(simulation_state.get("world_model")).get("items"))
                    if isinstance(item, Mapping)}
     changes: list[StateChange] = []
@@ -66,9 +71,14 @@ def arrival_changes(simulation_state: Mapping[str, Any], location_id: str) -> tu
             changes.extend(items)
             received = [*(f"{amount} {coin}" for coin, amount in coins.items() if amount), *(item.name for item in items)]
             lines.append(f"Quest complete: {title}." + (f" You receive {', '.join(received)}." if received else ""))
+            # The experience the quest names, else a hundred for each of its places (progression.md).
+            named = sum(int(amount) for reward in rewards
+                        for amount in re.findall(r"(\d+)\s*(?:xp|experience)", reward.lower()))
+            earned += named or progression.QUEST_STEP_XP * max(1, len(places))
         else:
             lines.append(f"Progress on {title}: {len(visited) + 1} of {len(places)} places reached.")
-    return changes, lines
+    gained, xp_lines = progression.gain(simulation_state, earned)
+    return [*changes, *gained], [*lines, *xp_lines]
 
 
 __all__ = ["arrival_changes"]

@@ -207,6 +207,17 @@ class AbilityUsed(_Change):
     ready_at_turn: int = Field(ge=0)
 
 
+class LevelChoiceMade(_Change):
+    """A level's choice made (progression.md): an attribute raised, an ability learned, or two skills a rank."""
+
+    type: Literal["level_choice_made"] = "level_choice_made"
+    choice: Literal["attribute", "ability", "skills"]
+    attribute: str = ""
+    value: int = 0
+    ability_id: str = ""
+    skills: tuple[str, ...] = ()
+
+
 class CheckResolved(_Change):
     """A check outside a fight (checks.md): the roll against the difficulty, and its band."""
 
@@ -293,6 +304,8 @@ class LevelReached(_Change):
     xp_to_next: int = Field(ge=1)
     unspent_points: int = Field(default=0, ge=0)
     unspent_skill_points: int = Field(default=0, ge=0)
+    choices_pending: int = Field(default=0, ge=0)  # the levels' choices not yet made (progression.md)
+    max_hp_gain: int = Field(default=0, ge=0)  # the health the levels add
 
 
 class DefeatRecorded(_Change):
@@ -410,7 +423,7 @@ StateChange = Annotated[
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
-    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved,
+    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved | LevelChoiceMade,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

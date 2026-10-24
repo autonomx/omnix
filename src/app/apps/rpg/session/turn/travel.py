@@ -20,6 +20,7 @@ from app.apps.rpg.foundation.state.changes import (
     TurnCounted,
 )
 from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.player.progression import DISCOVERY_XP
 from app.apps.rpg.rules.quest.arrival import arrival_changes
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.world_tick import clock_minute
@@ -77,7 +78,8 @@ def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> Trave
     minutes = _road_minutes(world, current, target)
     now = clock_minute(document)  # who is there when the hero arrives, the day gone on by the road's time
     present = routines.present_at(simulation, target, now + minutes, since=now)
-    quests, quest_lines = arrival_changes(simulation, target)
+    first_visit = target not in routines.visited(simulation)  # a first visit to a named place earns experience
+    quests, quest_lines = arrival_changes(simulation, target, discovery_xp=DISCOVERY_XP if first_visit else 0)
     changes: list[StateChange] = [
         counted,
         LocationChanged(location_id=target, location_name=name),

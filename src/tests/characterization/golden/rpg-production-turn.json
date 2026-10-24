@@ -247,6 +247,7 @@
           "time",
           "location",
           "npcs",
+          "player",
           "survival",
           "world",
           "narrative"
@@ -269,6 +270,7 @@
           "time",
           "location",
           "npcs",
+          "player",
           "survival",
           "world",
           "narrative"

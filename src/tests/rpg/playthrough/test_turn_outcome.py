@@ -79,7 +79,7 @@ def test_the_outcome_is_reported_in_every_world(launch, world) -> None:
     play = launch(world)
     outcome = TurnOutcome.model_validate(play.turn("Practice swordsmanship with a careful training drill.")["outcome"])
     progressed = [change for change in outcome.applied_changes if change.type == "skill_progressed"]
-    assert [(change.skill_id, change.xp) for change in progressed] == [("swordsmanship", 10)]
+    assert [(change.skill_id, change.xp) for change in progressed] == [("swordsmanship", 5)]
 
 
 @pytest.mark.parametrize("world", ["aurelia", "starter", "vesper"])

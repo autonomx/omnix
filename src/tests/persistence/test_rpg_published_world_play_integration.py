@@ -354,8 +354,8 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
 
         # Practising a skill earns its experience, on the sheet too.
         turn("Practice swordsmanship with a careful training drill.")
-        assert stored()["simulation_state"]["player_state"]["skills"]["swordsmanship"]["xp"] == 10
-        assert public()["player"]["skills"]["swordsmanship"]["xp"] == 10
+        assert stored()["simulation_state"]["player_state"]["skills"]["swordsmanship"]["xp"] == 5  # an hour of practice
+        assert public()["player"]["skills"]["swordsmanship"]["xp"] == 5
 
         # Reaching a place the quest names advances it.
         assert quests()["First Night in Aurelia"]["visited_locations"] == ["location:aurelia:arrival-grove"]
@@ -385,7 +385,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         assert public()["turn_count"] == 7
         # The narrator is told what the turns did, so it cannot invent otherwise.
         assert any("You take on the quest Voices in the Phone" in text for text in told)
-        assert any("Your practice earns 10 experience in swordsmanship" in text for text in told)
+        assert any("Your practice earns 5 experience in swordsmanship" in text for text in told)
         assert "for A hot meal" in told[-1] and "It eases your hunger." in told[-1]
         # A shop sells this world's goods: the item is in the pack and every copy of the purse agrees, on later
         # turns too. Asking for something general names what is on offer and sells nothing.

@@ -15,11 +15,10 @@ from app.apps.rpg.foundation.state.changes import (
     CompanionLeft,
     CompanionOrdered,
     QuestStatusChanged,
-    SkillProgressed,
     StateChange,
 )
 
-PRACTICE_XP = 10  # progression.md moves practice to its own curve (RQ-5.3)
+PRACTICE_XP = 5  # an hour's practice, on the skill curve (progression.md)
 PARTY_SIZE = 3
 _STATUS_TOPICS = {
     "progress": re.compile(r"\b(level|experience|xp|progress|character)\b"),
@@ -73,17 +72,14 @@ def practise(simulation: Mapping[str, Any], skill_id: str) -> RequestOutcome:
     skills = _d(_d(simulation.get("player_state")).get("skills"))
     if skill_id not in skills:
         return RequestOutcome(lines=["You have no such skill to practise."], refused=True, minutes=0)
-    skill = _d(skills.get(skill_id))
-    level, xp = int(skill.get("level") or 0), int(skill.get("xp") or 0) + PRACTICE_XP
-    to_next = int(skill.get("xp_to_next") or (level + 1) * 25)
+    from app.apps.rpg.rules.player.progression import SKILL_RANK_MAX, skill_gain
+
     name = skill_id.replace("_", " ")
-    lines = [f"Your practice earns {PRACTICE_XP} experience in {name}."]
-    while xp >= to_next:
-        xp, level = xp - to_next, level + 1
-        to_next = (level + 1) * 25
-        lines.append(f"{name.capitalize()} rises to level {level}.")
-    return RequestOutcome([SkillProgressed(skill_id=skill_id, level=level, xp=xp, xp_to_next=to_next)], lines,
-                          minutes=60)
+    if int(_d(skills.get(skill_id)).get("level") or 0) >= SKILL_RANK_MAX:
+        return RequestOutcome(lines=[f"Your {name} is as good as practice can make it."], refused=True, minutes=0)
+    changes, lines = skill_gain(simulation, skill_id, PRACTICE_XP)
+    said = [f"Your practice earns {PRACTICE_XP} experience in {name}.", *lines[1:]]
+    return RequestOutcome(changes, said, minutes=60)
 
 
 def _count(item: Mapping[str, Any]) -> int:

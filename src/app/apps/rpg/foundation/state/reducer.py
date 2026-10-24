@@ -57,6 +57,7 @@ from .changes import (
     TurnCounted,
     AbilityUsed,
     CheckResolved,
+    LevelChoiceMade,
     RegardChanged,
     ResourcesChanged,
     WhereaboutsChanged,
@@ -327,7 +328,21 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
     elif isinstance(change, LevelReached):
         for key in ("level", "xp", "xp_to_next", "unspent_points", "unspent_skill_points"):
             writer.set(_PLAYER + (key,), getattr(change, key))
+        writer.set(_PLAYER + ("level_choices_pending",), change.choices_pending)
+        if change.max_hp_gain:  # each level adds to the hero's health, and heals them by as much
+            hp = dict(writer.get(_PLAYER + ("resources", "hp")) or {"current": 0, "max": 0})
+            hp = {**hp, "max": int(hp.get("max") or 0) + change.max_hp_gain,
+                  "current": int(hp.get("current") or 0) + change.max_hp_gain}
+            writer.set(_PLAYER + ("resources", "hp"), hp)
+            writer.set(_PLAYER + ("hp",), hp["current"])
+            writer.set(_PLAYER + ("max_hp",), hp["max"])
+            if isinstance(writer.get(("state", "player")), dict):
+                writer.set(("state", "player", "resources", "hp"), dict(hp))
+        if isinstance(writer.get(("state", "player")), dict):
+            writer.set(("state", "player", "level_choices_pending"), change.choices_pending)
         _show_progression(writer, xp=change.xp, xp_to_next=change.xp_to_next, level=change.level)
+    elif isinstance(change, LevelChoiceMade):
+        _make_level_choice(writer, change)
     elif isinstance(change, SkillProgressed):
         skill = dict(writer.get(_PLAYER + ("skills", change.skill_id)) or {})
         skill.update(level=change.level, xp=change.xp, xp_to_next=change.xp_to_next)
@@ -544,6 +559,32 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             "tick": int(writer.get(("simulation_state", "tick")) or 0)})
     else:  # pragma: no cover - the vocabulary is closed
         raise ChangeRejected(f"unknown change {change!r}")
+
+
+def _make_level_choice(writer: _Writer, change: LevelChoiceMade) -> None:
+    pending = int(writer.get(_PLAYER + ("level_choices_pending",)) or 0)
+    if pending <= 0:
+        raise ChangeRejected("no level's choice is waiting")
+    writer.set(_PLAYER + ("level_choices_pending",), pending - 1)
+    sheet = isinstance(writer.get(("state", "player")), dict)
+    if sheet:
+        writer.set(("state", "player", "level_choices_pending"), pending - 1)
+    if change.choice == "attribute":
+        writer.set(_PLAYER + ("stats", change.attribute), change.value)
+        if sheet:
+            writer.set(("state", "player", "stats", change.attribute), change.value)
+    elif change.choice == "ability":
+        unlocked = [str(item) for item in writer.get(("state", "ability_state", "unlocked")) or ()]
+        writer.set(("state", "ability_state", "unlocked"), [*unlocked, change.ability_id])
+        ranks = dict(writer.get(("state", "ability_state", "ranks")) or {})
+        writer.set(("state", "ability_state", "ranks"), {**ranks, change.ability_id: 1})
+    else:
+        for skill_id in change.skills:
+            skill = dict(writer.get(_PLAYER + ("skills", skill_id)) or {})
+            skill["level"] = min(5, int(skill.get("level") or 0) + 1)
+            writer.set(_PLAYER + ("skills", skill_id), skill)
+            if sheet:
+                writer.set(("state", "player", "skills", skill_id), dict(skill))
 
 
 def _show_cooldowns(writer: _Writer) -> None:

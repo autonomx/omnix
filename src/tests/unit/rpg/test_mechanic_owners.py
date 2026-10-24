@@ -38,6 +38,7 @@ MECHANIC_OWNERS = {
     "party": "app.apps.rpg.rules.player.requests", "order": "app.apps.rpg.rules.player.requests",
     "talk": "app.apps.rpg.rules.dialogue.plan", "fight": "app.apps.rpg.rules.combat.fight",
     "ability": "app.apps.rpg.rules.ability_use", "check": "app.apps.rpg.rules.checks",
+    "grow": "app.apps.rpg.rules.player.progression",
 }
 # The world tick's own rules (step 6): people's days.
 TICK_OWNERS = ("app.apps.rpg.rules.routines",)
@@ -52,6 +53,7 @@ CHANGE_WRITES = {
     "resources_changed": {"player"},
     "ability_used": {"player"},
     "check_resolved": {"player"},
+    "level_choice_made": {"player"},
 }
 
 
@@ -108,6 +110,8 @@ def _examples(doc: dict) -> list:
         (c.RegardChanged(npc_id=npc, delta=-5), doc), (c.ResourcesChanged(stamina=-1), doc),
         (c.AbilityUsed(ability_id="a:x", ready_at_turn=3), doc),
         (c.CheckResolved(kind="persuade", target_id=npc, natural=12, band="success"), doc),
+        (c.LevelChoiceMade(choice="attribute", attribute="strength", value=12),
+         reduce(doc, [c.LevelReached(level=2, xp=0, xp_to_next=200, choices_pending=1)])[0]),
     ]
 
 

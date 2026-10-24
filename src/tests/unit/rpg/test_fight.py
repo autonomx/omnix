@@ -68,7 +68,8 @@ def test_a_won_fight_earns_the_creatures_experience_and_drops_and_replays() -> N
     document, turn = _until_over(_document(), "rat")
     assert turn.ended == "victory"
     assert ExperienceGained(amount=90) in turn.changes
-    assert LevelReached(level=2, xp=40, xp_to_next=200, unspent_points=2, unspent_skill_points=1) in turn.changes
+    # One curve (progression.md): level 2 brings 5 health and a choice that waits to be made.
+    assert LevelReached(level=2, xp=40, xp_to_next=200, choices_pending=1, max_hp_gain=5) in turn.changes
     assert any(isinstance(change, ItemAdded) and change.item_id == "item:tail" and change.quantity == 2
                for change in turn.changes)
     combat = document["simulation_state"]["combat_state"]

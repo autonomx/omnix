@@ -33,6 +33,18 @@ See the README (levels 2–4 after 100 turns, 5–9 after 500).
 A fight's XP levels the hero up and the choice is offered; choosing an ability makes it usable next turn; practice
 is capped per hour; quest reward XP.
 
+## As built (RQ-5.3 part 1)
+
+`rules/player/progression.py`: `gain` is the one curve every source uses (fights, quests, checks, discovery);
+`LevelReached` carries the choices waiting (`level_choices_pending`) and the health the levels add (5 + the
+constitution modifier each, at least 1, healing by as much). Quests pay the experience their rewards name, else
+100 for each of their places; a check passed pays 5 / 10 / 20 / 35 by difficulty (easy, moderate, hard, heroic) to the
+hero besides its skill experience; a first visit to a place pays 15. A level's choice is the player's words: "raise
+strength" (+2), "learn <ability>" (one the tree has, the level allows and the prerequisites open), or "improve
+<skill> and <skill>" (a rank each, to 5); `LevelChoiceMade`; with no choice waiting, those words are the older
+path's. Skills: 50 x (rank + 1) to the next rank, 0 to 5; an hour's practice is 5. Not yet: the 500-turn balance
+simulation (RQ-5.3's exit), the choice as clarification options on the play screen (RQ-7.3).
+
 ## Out of scope
 
 Classes and multiclassing, respec.

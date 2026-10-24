@@ -179,3 +179,28 @@ def test_abilities_in_a_fight_cost_cool_down_and_act(launch) -> None:
     play.turn("I make camp and sleep for the night.")
     resources = play.public()["player"]["resources"]
     assert resources["stamina"]["current"] == 100 and resources["mana"]["current"] == 30
+
+
+def test_a_won_fight_raises_a_level_whose_choice_waits_and_then_holds(launch) -> None:
+    """RQ-5.3: the one curve levels the hero, with health and a choice that waits without blocking play; the choice
+    raises an attribute or teaches an ability, usable from the next turn."""
+    from app.apps.rpg.session.service import load_session, save_session
+
+    play = launch("aurelia")
+    session = load_session(play.session_id)
+    session["simulation_state"]["player_state"]["xp"] = 95  # five short of level 2
+    session["state"]["player"]["xp"] = {"current": 95, "max": 100}
+    save_session(session, compact=False)
+    for _ in range(20):
+        play.turn("I attack the Echo Wolf.")
+        if not play.combat().get("active"):
+            break
+    player = play.player_state()
+    assert player["level"] == 2 and player["level_choices_pending"] == 1
+    assert player["resources"]["hp"]["max"] == 105  # 5 more health a level (constitution 10)
+    play.turn("look around")  # play goes on while the choice waits
+    raised = play.turn("raise my strength")
+    assert raised["visible_response"]["plain_text"] == "Your strength rises to 12."
+    assert play.player_state()["stats"]["strength"] == 12 and play.player_state()["level_choices_pending"] == 0
+    again = play.turn("raise my strength")  # no choice waits now: the older path's own answer
+    assert play.player_state()["stats"]["strength"] == 12 and again

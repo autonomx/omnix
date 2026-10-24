@@ -17,11 +17,11 @@ from app.apps.rpg.foundation.state.changes import (
     CheckResolved,
     HpChanged,
     RegardChanged,
-    SkillProgressed,
     StateChange,
 )
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.combat.runtime_core import deterministic_roll
+from app.apps.rpg.rules.player import progression
 
 Kind = Literal["persuade", "intimidate", "deceive", "sneak", "climb", "pick_lock", "recall_lore", "search", "notice"]
 KINDS: tuple[str, ...] = ("persuade", "intimidate", "deceive", "sneak", "climb", "pick_lock", "recall_lore", "search",
@@ -97,22 +97,6 @@ def _retried(simulation: Mapping[str, Any], kind: str, target_id: str, here: str
     return any(_s(_d(row).get("kind")) == kind and _s(_d(row).get("target_id")) == target_id
                and _s(_d(row).get("location_id")) == here and tick - int(_d(row).get("tick") or 0) <= RETRY_WINDOW_TICKS
                for row in _l(_d(simulation.get("checks")).get("history")))
-
-
-def _skill_xp(simulation: Mapping[str, Any], skill: str, difficulty: int) -> tuple[list[StateChange], list[str]]:
-    skills = _d(_d(simulation.get("player_state")).get("skills"))
-    if skill not in skills:
-        return [], []
-    amount = max(1, round(SKILL_XP * _XP_SCALE.get(difficulty, difficulty / 13)))
-    row = _d(skills.get(skill))
-    level, xp = int(row.get("level") or 0), int(row.get("xp") or 0) + amount
-    to_next = int(row.get("xp_to_next") or (level + 1) * 25)
-    lines = [f"Your {skill} earns {amount} experience."]
-    while xp >= to_next:  # the skill curve (rules/player/requests.py)
-        xp, level = xp - to_next, level + 1
-        to_next = (level + 1) * 25
-        lines.append(f"{skill.capitalize()} rises to level {level}.")
-    return [SkillProgressed(skill_id=skill, level=level, xp=xp, xp_to_next=to_next)], lines
 
 
 def _name(record: Mapping[str, Any], fallback: str) -> str:
@@ -195,9 +179,11 @@ def check(simulation: Mapping[str, Any], kind: str, target_id: str = "", *, turn
                  + (f" ({_name(record, target_id)})" if target_id else "")
                  + f": d20 {natural} {'+' if bonus >= 0 else '-'} {abs(bonus)} = {total} against {difficulty}, "
                    f"{words[band]}.")
-    if band in {"strong", "success"}:
-        gained, xp_lines = _skill_xp(simulation, skill, difficulty)
-        changes, lines = [*changes, *gained], [*lines, *xp_lines]
+    if band in {"strong", "success"}:  # a success teaches the skill, and earns the hero experience (progression.md)
+        gained, xp_lines = progression.skill_gain(simulation, skill, max(1, round(SKILL_XP * _XP_SCALE.get(
+            difficulty, difficulty / 13))))
+        earned, hero_lines = progression.gain(simulation, progression.check_xp(difficulty))
+        changes, lines = [*changes, *gained, *earned], [*lines, *xp_lines, *hero_lines]
     result = {"kind": kind, "target_id": target_id, "location_id": here, "natural": natural, "bonus": bonus,
               "total": total, "difficulty": difficulty, "margin": margin, "band": band, "skill": skill}
     return CheckOutcome([CheckResolved(**result), *changes], [roll_line, *lines], minutes=MINUTES + extra, band=band,

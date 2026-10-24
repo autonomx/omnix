@@ -50,12 +50,13 @@ def test_a_place_no_road_reaches_is_refused(launch, world) -> None:
 
 @pytest.mark.parametrize("world", in_worlds())
 def test_skill_practice_up_to_a_level(launch, world) -> None:
+    """RQ-5.3: an hour's practice is 5 experience in the skill; rank 1 takes 50 (progression.md)."""
     play = launch(world)
-    for _ in range(3):
+    for _ in range(10):
         play.turn("Practice swordsmanship with a careful training drill.")
     skill = play.player_state()["skills"]["swordsmanship"]
-    assert skill["level"] == 1 and skill["xp"] == 5  # 30 experience: level 1 at 25
-    assert "Swordsmanship rises to level 1." in play.model.told()
+    assert skill["level"] == 1 and skill["xp"] == 0 and skill["xp_to_next"] == 100
+    assert "Swordsmanship rises to rank 1." in play.model.told()
     assert play.public()["player"]["skills"]["swordsmanship"]["level"] == 1  # the sheet shows it
 
 

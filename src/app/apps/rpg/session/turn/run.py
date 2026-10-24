@@ -30,12 +30,13 @@ _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarifica
                 "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest",
                 "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
                 "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
-                "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "check": "skill_check"}
+                "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "check": "skill_check",
+                "grow": "level_choice"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
            "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
            "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory", "ability": "combat",
-           "check": "check"}
+           "check": "check", "grow": "progression"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
@@ -379,7 +380,8 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     # A journey's destination and a carried or fallen thing are the scene's, which a reading against none cannot name.
     by_family = {"move": "travel", "use_item": "use_item", "drop": "drop", "take": "take", "quest": "quest",
                  "practice": "practice", "party": "party", "talk": "talk", "ask": "talk", "attack": "fight",
-                 "flee": "fight", "defend": "fight", "equip": "equip", "unequip": "unequip", "check": "check"}
+                 "flee": "fight", "defend": "fight", "equip": "equip", "unequip": "unequip", "check": "check",
+                 "grow": "grow"}
     possible = by_family.get(unseen.family) or (glance.mechanic if glance is not None else "")
     if not possible and "," in " ".join(_s(ctx.player_input).split()[:3]):
         possible = "order"  # someone named first ("Liora, keep watch") may be a companion given an order
