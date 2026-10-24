@@ -58,17 +58,19 @@ def test_a_question_to_someone_present_is_one_short_call(launch, world) -> None:
     assert after["turn_count"] == before["turn_count"] + 1
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-3.2: an ambiguous address ('I talk to him.' among three people) is settled by the dialogue model "
-    "choosing a speaker; the turn never asks who is meant")))
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_an_ambiguous_command_asks_one_question(launch, world) -> None:
     play = launch(world)
     play.turn("go to Starfall Village")
     assert len(play.present()) >= 3
-    calls = len(play.model.calls)
-    body = play.turn("I talk to him.")
-    assert Role.DIALOGUE.value not in play.model.roles(calls)  # the game asks; no model picks someone
-    assert "?" in body["visible_response"]["plain_text"]
+    calls, count = len(play.model.calls), play.turn_count()
+    # The command grammar asks who is meant (RQ-3.1): a refusal carrying the question, as the dialogue
+    # clarification is, until the turn pipeline commits early answers as turns (RQ-1.4).
+    response = play.post_turn("I talk to him.")
+    assert response.status_code == 400
+    assert response.json()["detail"]["clarification"] == "Who are you speaking to?"
+    assert play.model.roles(calls) == []  # the game asks; no model picks someone
+    assert play.turn_count() == count
 
 
 @pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(

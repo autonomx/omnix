@@ -441,25 +441,66 @@ def confusion(items: list[dict[str, Any]], records: dict[str, dict[str, Any]]) -
     return {gold: dict(predicted.most_common()) for gold, predicted in sorted(table.items())}
 
 
+def grammar_scene(catalog: dict[str, Any], world: str, scene: str):
+    """The corpus scene as the command grammar sees it (RQ-3.1): who and what is here, and what the world knows."""
+    from app.apps.rpg.rules.intent.grammar import SceneEntity, SceneView
+
+    entities = catalog["worlds"][world]["entities"]
+    spec = catalog["worlds"][world]["scenes"][scene]
+    here = (set(spec.get("present") or ()) | set(spec.get("creatures") or ()) | set(spec.get("exits") or ())
+            | set(spec.get("offers") or ()))
+    return SceneView(tuple(
+        SceneEntity(
+            entity_id,
+            entity["kind"],
+            tuple(entity["names"]) + tuple(alias.replace("_", " ") for alias in entity.get("alias_ids") or ()),
+            here=entity_id in here or entity["kind"] in {"item", "skill", "quest"},
+        )
+        for entity_id, entity in entities.items()
+    ))
+
+
+def grammar_records(catalog: dict[str, Any], items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Each item read by the command grammar alone: no campaign, no model."""
+    from app.apps.rpg.rules.intent.grammar import parse_command
+
+    scenes: dict[tuple[str, str], Any] = {}
+    records: dict[str, dict[str, Any]] = {}
+    for item in items:
+        key = (item["world"], item["scene"])
+        scene = scenes.setdefault(key, grammar_scene(catalog, *key))
+        candidate = parse_command(item["input"], scene)
+        records[item["id"]] = {
+            "prediction": {"family": candidate.family, "target": candidate.target_id, "stateful": candidate.stateful,
+                           "confidence": candidate.confidence, "reason": candidate.reason},
+            "correct": {"family": candidate.family == item["action_family"],
+                        "target": candidate.target_id == item["target_entity"]},
+            "static": {"source": f"grammar:{candidate.reason}", "gate": candidate.confidence >= 0.75},
+        }
+    return records
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--split", choices=("held_out", "dev", "all"), default="held_out")
-    parser.add_argument("--mode", choices=("play", "static"), default="play")
+    parser.add_argument("--mode", choices=("play", "static", "grammar"), default="play")
     parser.add_argument("--limit", type=int, default=0, help="evaluate only the first N items (a smoke run)")
     parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--records", type=Path, help="also write every item's reading (JSONL)")
     args = parser.parse_args(argv)
     require_frozen_held_out()
-    from tests.rehearsal.rpg import worlds as harness
-
-    database = harness.require_disposable_database(args.allow_database)
-    harness.bootstrap()
     catalog = json.loads((CORPUS / "catalog.json").read_text(encoding="utf-8"))
     items = load_items(args.split)
     if args.limit:
         items = items[: args.limit]
     started = time.perf_counter()
+    if args.mode == "grammar":
+        return _report_grammar(args, catalog, items, started)
+    from tests.rehearsal.rpg import worlds as harness
+
+    database = harness.require_disposable_database(args.allow_database)
+    harness.bootstrap()
     runner = Worlds(catalog, play=args.mode == "play")
     for world in sorted({item["world"] for item in items}):
         runner.prepare(world)
@@ -507,6 +548,36 @@ def main(argv: list[str] | None = None) -> int:
         by_id = {item["id"]: item for item in items}
         args.records.write_text("".join(json.dumps({**by_id[key], **value}, sort_keys=True, default=str) + "\n"
                                         for key, value in records.items()), encoding="utf-8")
+    print(json.dumps(report["metrics"], indent=2))
+    return 0
+
+
+def _report_grammar(args: Any, catalog: dict[str, Any], items: list[dict[str, Any]], started: float) -> int:
+    records = grammar_records(catalog, items)
+    report = {
+        "schema_version": 1,
+        "measurement": "RPG intent understanding by the command grammar alone (RQ-3.1)",
+        "measured_on": date.today().isoformat(),
+        "revision": subprocess.run(["git", "rev-parse", "--short=10", "HEAD"], cwd=ROOT, capture_output=True,
+                                   text=True).stdout.strip(),
+        "split": args.split,
+        "mode": "grammar",
+        "items": len(items),
+        "held_out_sha256": held_out_digest(),
+        "labels": "model-labelled, pending the owner's spot check",
+        "note": "the grammar's stateful flag reads the words only (a purchase of something not on sale is not "
+                "stateful); whether a turn changes state is the play mode's measure",
+        "metrics": metrics(items, records),
+        "by_world": breakdown(items, records, "world"),
+        "by_family": breakdown(items, records, "action_family"),
+        "family_confusion": confusion(items, records),
+        "elapsed_s": round(time.perf_counter() - started, 1),
+        "gates": {"M2 (from RQ-3)": "action family lower >= 0.95, target entity lower >= 0.95, false stateful upper <= 0.010"},
+    }
+    text = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(text, encoding="utf-8", newline="\n")
     print(json.dumps(report["metrics"], indent=2))
     return 0
 

@@ -205,11 +205,23 @@ def _stateful_runtime_performance_override(
 _PLAIN_OBSERVE_COMMANDS = {"wait", "look", "look around", "listen", "observe", "keep watch"}
 
 
-def _runtime_understood_command(simulation_state: dict[str, Any], player_input: str, *, service_matched: bool) -> str:
+def _runtime_understood_command(
+    simulation_state: dict[str, Any],
+    player_input: str,
+    *,
+    service_matched: bool,
+    reading: Any = None,
+) -> str:
     """Why the intent model can be skipped for this command, or "" when it is needed."""
     text = _s(player_input).strip().lower().rstrip(".!")
     if service_matched:
         return "runtime_request"
+    if reading is not None:
+        from app.apps.rpg.session.command_reading import skip_reason
+
+        reason = skip_reason(reading)
+        if reason:
+            return reason
     if is_ambient_tick_command(text) or text in _PLAIN_OBSERVE_COMMANDS:
         return "observe"
     try:
@@ -810,6 +822,47 @@ def _safe_dialogue_fallback_result(
     )
 
 
+def _grammar_clarification(
+    session: dict[str, Any], runtime_state: dict[str, Any], question: str, reading: Any
+) -> dict[str, Any]:
+    """A command the grammar cannot read in any situation: the game asks instead of guessing (RQ-3.1).
+
+    Like the dialogue clarification ("Who are you speaking to?"), the question is a refusal the play screen
+    shows; committing it as a turn of its own comes with the turn pipeline's early answers (RQ-1.4).
+    """
+    from app.apps.rpg.session.command_reading import reading_record
+
+    resolved = {
+        "ok": False,
+        "error": "command_unclear",
+        "action_type": "command_clarification",
+        "semantic_action_type": "command_clarification",
+        "response_mode": "clarification",
+        "stateful": False,
+        "needs_runtime_resolution": False,
+        "command_reading": reading_record(reading),
+        "outcome": "clarification_required",
+        "source": "command_grammar_v1",
+    }
+    return {
+        "consumed": True,
+        "ok": False,
+        "error": "command_unclear",
+        "clarification_required": True,
+        "clarification": question,
+        "action_type": "command_clarification",
+        "result": dict(resolved),
+        "resolved_result": dict(resolved),
+        "visible_response": {"narration": question, "npc": {}},
+        "narration": question,
+        "final_narration": question,
+        "presentation_narration_selection": {"source": "command_clarification", "runtime_payload_source": ""},
+        "session": session,
+        "turn_id": _build_turn_id(runtime_state),
+        "tick": int(runtime_state.get("tick", 0) or 0),
+    }
+
+
 def _apply_turn_core(
     session_id: str,
     player_input: str,
@@ -884,6 +937,24 @@ def _apply_turn_core(
         timing["manual_turn_ms"] = _ms_since(manual_start)
         return _attach_manual_stage_timing(result, timing) if isinstance(result, dict) else result
 
+    # The command grammar's reading (RQ-3.1): recorded, asked about when unclear, and used to skip the intent call.
+    from app.apps.rpg.session.command_reading import clarification, read_command, reading_record
+
+    try:
+        reading = read_command(simulation_state, _s(player_input), runtime_state)
+    except Exception:
+        logger.debug("suppressed error in %s", "read_command", exc_info=True)
+        reading = None
+    if reading is not None:
+        runtime_state["command_reading"] = reading_record(reading)
+        session["runtime_state"] = runtime_state
+        question = clarification(reading)
+        if question:
+            timing["manual_turn_ms"] = _ms_since(manual_start)
+            return _attach_manual_stage_timing(
+                _grammar_clarification(session, runtime_state, question, reading), timing
+            )
+
     try:
         service_match = resolve_service_turn(
             player_input=_s(player_input),
@@ -905,7 +976,9 @@ def _apply_turn_core(
     action_advisory: dict[str, Any] = {}
     semantic_advisory: dict[str, Any] = {}
     llm_start = perf_counter()
-    understood = _runtime_understood_command(simulation_state, _s(player_input), service_matched=service_matched)
+    understood = _runtime_understood_command(
+        simulation_state, _s(player_input), service_matched=service_matched, reading=reading
+    )
     if understood:
         runtime_state["first_call_intent_skipped"] = understood
         session["runtime_state"] = runtime_state

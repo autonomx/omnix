@@ -81,6 +81,11 @@ def _try_fast_visible_dialogue(
     simulation_state = _d(session.get("simulation_state"))
     runtime_state = _d(session.get("runtime_state"))
     candidate_action = _d(action)
+    from app.apps.rpg.session.command_reading import clarification, read_command
+
+    if clarification(read_command(simulation_state, text, runtime_state)):
+        # The command grammar asks who is meant (RQ-3.1); no fast reply picks someone instead.
+        return {}
     packet = build_turn_grounding_packet(
         player_input=text,
         simulation_state=simulation_state,
