@@ -254,6 +254,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_TURNS_PER_HOUR` | integer | `600` | rpg | Controls rpg turns per hour for rpg. |
 | `OMNIX_RPG_TURN_PIPELINE_LOOK` | boolean | `true` | rpg | Controls rpg turn pipeline look for rpg. |
 | `OMNIX_RPG_TURN_PIPELINE_WAIT` | boolean | `true` | rpg | Controls rpg turn pipeline wait for rpg. |
+| `OMNIX_RPG_TURN_WAIT_SECONDS` | integer | `120` | rpg | Controls rpg turn wait seconds for rpg. |
 | `OMNIX_RPG_WORLD_CATALOG_REPO` | string | — | rpg | Controls rpg world catalog repo for rpg. |
 | `OMNIX_RUN_TOKEN_KEY` | string | — | security | Controls run token key for security. |
 | `OMNIX_S3_ACCESS_KEY_ID` | string | — | kernel | Controls s3 access key id for kernel. |

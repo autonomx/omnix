@@ -76,3 +76,36 @@ def test_only_the_newest_turn_narrations_are_kept() -> None:
         rows = work.rpg.turn_narrations(context, campaign_id)
         work.commit()
     assert len(rows) == kept and {turn_id.split(":")[1] for turn_id, _ in rows} == {"2"}
+
+
+def test_a_turn_waits_for_the_campaigns_turn_in_progress_and_gives_up_after_the_limit(monkeypatch) -> None:
+    import threading
+
+    from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.apps.rpg.session.persistence import turn_order
+
+    bootstrap_postgresql_runtime()
+    campaign_id = f"campaign:order-{uuid4().hex}"
+    monkeypatch.setenv(turn_order.TURN_WAIT_ENV, "1")
+    order: list[str] = []
+    holding, release = threading.Event(), threading.Event()
+
+    def first_turn() -> None:
+        with turn_order.campaign_turn(campaign_id):
+            order.append("first")
+            holding.set()
+            release.wait(10)
+
+    runner = threading.Thread(target=first_turn)
+    runner.start()
+    assert holding.wait(10)
+    with pytest.raises(turn_order.TurnInProgress):  # the first turn holds it past the second's wait
+        with turn_order.campaign_turn(campaign_id):
+            order.append("second, too early")
+    release.set()
+    runner.join(10)
+    with turn_order.campaign_turn(campaign_id):  # once it finishes, the next turn runs
+        order.append("second")
+    with turn_order.campaign_turn(f"{campaign_id}:other"):  # another campaign never waits on it
+        pass
+    assert order == ["first", "second"]

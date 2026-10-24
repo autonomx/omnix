@@ -85,8 +85,8 @@ def test_using_a_carried_item_by_text(launch, world) -> None:
 
 @pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_two_submissions_racing_on_one_revision(launch, world) -> None:
-    """Two tabs submit at once against the same revision: each commits once, in some order, or is refused
-    whole; nothing commits twice and no revision is skipped."""
+    """Two tabs submit at once against the same revision: the campaign's turns run one at a time (RQ-1.4), so
+    both commit, one after the other; nothing commits twice and no revision is skipped."""
     play = launch(world)
     play.turn("look around")
     revision, turns = play.revision(), play.turn_count()
@@ -104,7 +104,7 @@ def test_two_submissions_racing_on_one_revision(launch, world) -> None:
         thread.join(timeout=120)
     codes = sorted(response.status_code for response in responses.values())
     committed = codes.count(200)
-    assert committed >= 1 and set(codes) <= {200, 409}, [(c, r.text[:200]) for c, r in responses.items()]
+    assert codes == [200, 200], [(c, r.text[:200]) for c, r in responses.items()]
     assert play.revision() == revision + committed
     assert play.turn_count() == turns + committed
     rows = play.turn_rows()

@@ -1750,6 +1750,13 @@
     "type": "boolean"
   },
   {
+    "default": "120",
+    "description": "Controls rpg turn wait seconds for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURN_WAIT_SECONDS",
+    "type": "integer"
+  },
+  {
     "default": null,
     "description": "Controls rpg world catalog repo for rpg.",
     "feature": "rpg",
