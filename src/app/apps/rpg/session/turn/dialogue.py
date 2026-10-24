@@ -6,7 +6,6 @@ cannot write one. The plan's changes (what is now known, a quest offered) and th
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass
@@ -14,17 +13,18 @@ from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import DialogueExchanged, StateChange
+from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_data
 from app.apps.rpg.rules.dialogue.plan import DialoguePlan, build_plan, line_keeps_the_plan, plan_changes
 from app.prompts import prompt_template
 
 logger = logging.getLogger(__name__)
 _LINE_PROMPT = prompt_template(
-    "rpg.ai_compact_dialogue.plan", "1",
+    "rpg.ai_compact_dialogue.plan", "2",
     "Reply as the speaker in the PLAN, in one or two concise spoken sentences, in their voice and stance. Output "
     "only the words they say: no name label, narration, JSON or markdown. Share what may_reveal holds, offer what "
     "offers_quest or offers_to_tell_for_a_price hold, and name each of wares with its price as written; about anything else, answer from their role and "
     "background or say they do not know. Never say or hint at anything in must_never_reveal. Keep continuity with "
-    "recent_exchanges without repeating them.\nPLAYER: {v0}\nPLAN: ",
+    "recent_exchanges without repeating them. " + WORLD_DATA_RULE + "\nPLAYER: {v0}\nPLAN: ",
 )
 MAX_LINE = 400
 
@@ -52,7 +52,7 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
     if gateway is None:
         return ""
     context = {**plan.context(), "recent_exchanges": exchanges[-3:]}
-    prompt = _LINE_PROMPT.format(v0=text[:500]) + json.dumps(context, ensure_ascii=False, separators=(",", ":"))
+    prompt = _LINE_PROMPT.format(v0=text[:500]) + world_data(context)  # the plan's world text, fenced as data
     try:
         raw = gateway.generate(prompt, provider_options={"temperature": 0.55, "max_tokens": 90,
                                                          "chat_template_kwargs": {"enable_thinking": False}})

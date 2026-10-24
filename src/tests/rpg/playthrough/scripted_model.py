@@ -106,6 +106,13 @@ class ModelCall:
 
 
 def _context_json(text: str) -> dict[str, Any]:
+    if "<<<WORLD_DATA\n" in text:  # a plan fenced as the world's data (narration/world_data.py)
+        try:
+            value = json.loads(text.rsplit("<<<WORLD_DATA\n", 1)[1].rsplit("\nWORLD_DATA>>>", 1)[0])
+        except ValueError:
+            value = None
+        if isinstance(value, dict):
+            return value
     for marker in ("CONTEXT: ", "Context JSON:\n"):
         if marker in text:
             try:

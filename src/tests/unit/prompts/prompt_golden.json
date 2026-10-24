@@ -256,8 +256,8 @@
     "version": "1"
   },
   "rpg.ai_compact_dialogue.plan": {
-    "sha256": "93daa83da68b34b8e89c6c08caed1bf63ebbf54fbb3a250fc9fca87cc1e5f3ca",
-    "version": "1"
+    "sha256": "0097dc646d5f3b3b974796dbde5cb8300306740d493b9cb1c75625b11e47f3f2",
+    "version": "2"
   },
   "rpg.ai_compact_dialogue.prompt": {
     "sha256": "75a9f9b0d5bd2a489941ff24cdc8e535a435228880baf043ced3711b00d00ebc",
@@ -388,8 +388,8 @@
     "version": "1"
   },
   "rpg.narrative_provider.system_prompt": {
-    "sha256": "72738b24980cf193c45ff61e513782b57ba1a25b203c08ca69cf44ba23ca21d1",
-    "version": "2"
+    "sha256": "961d4569774c3eb2dc5411e275b8fae9463aee309a45f3b33340c95fa251a3ef",
+    "version": "3"
   },
   "rpg.npc_dialogue_intelligence.system": {
     "sha256": "43159871a9f6453a0ed96f6e94ddf1b6b2f4ac88ddd0d30fc18f5e814c2aea48",
