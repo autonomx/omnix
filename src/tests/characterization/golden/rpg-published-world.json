@@ -41,55 +41,13 @@
   "turns": [
     {
       "changes": {
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 0
-          }
-        },
         "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:8912f2daf6aab3252de65f0832a8696b8d996f20dbad15bb9bdd66a611a947e4",
+      "document_hash": "sha256:e53bf7e5d53318e9091c9601f1a12ce2653fc1373b7df4c001f159ec6ca1629f",
       "facts": {
         "combat": {
           "active": false,
@@ -118,48 +76,7 @@
           "The Hollow Meridian": "available",
           "Voices in the Phone": "available"
         },
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 0
-          }
-        },
+        "skills": {},
         "survival": {
           "fatigue": 1,
           "hunger": 1,
@@ -173,135 +90,46 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
-        "runtime_state/actor_activities",
-        "runtime_state/ambient_history",
         "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/conversation_settings",
-        "runtime_state/conversation_threads",
-        "runtime_state/current_scene",
-        "runtime_state/director_log",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
-        "runtime_state/last_conversation_intervention",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/location_conditions",
-        "runtime_state/narration_quality",
-        "runtime_state/offscreen_conversation_summaries",
-        "runtime_state/opening_runtime",
-        "runtime_state/perf_trace",
-        "runtime_state/performance",
         "runtime_state/player_journal",
-        "runtime_state/player_request_events",
-        "runtime_state/post_player_quiet_ticks",
-        "runtime_state/recent_conversation_thread_events",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/response_soft_truth",
-        "runtime_state/scene_beat_memory",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/story_policy",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "runtime_state/world_pressure",
-        "runtime_state/world_rumors",
-        "setup_payload/campaign_objective",
-        "setup_payload/canon_notes",
-        "setup_payload/content_balance",
-        "setup_payload/desired_content_mix",
-        "setup_payload/forbidden_content",
-        "setup_payload/genre_rules",
-        "setup_payload/hard_rules",
-        "setup_payload/lore_constraints",
-        "setup_payload/metadata",
-        "setup_payload/opening",
-        "setup_payload/opening_hook",
-        "setup_payload/pacing",
-        "setup_payload/player_role",
-        "setup_payload/response_length",
-        "setup_payload/safety",
-        "setup_payload/setup_id",
-        "setup_payload/soft_tone_rules",
-        "setup_payload/starter_conflict",
-        "setup_payload/starting_gear",
-        "setup_payload/starting_resources",
-        "setup_payload/world_behavior",
-        "simulation_state/active_effects",
-        "simulation_state/active_interactions",
-        "simulation_state/active_rumors",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
-        "simulation_state/consequences",
-        "simulation_state/conversation_thread_state",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/environment",
-        "simulation_state/event_history",
-        "simulation_state/events",
         "simulation_state/faction_reputation",
-        "simulation_state/factions",
-        "simulation_state/history",
-        "simulation_state/incidents",
-        "simulation_state/location_state",
-        "simulation_state/locations",
-        "simulation_state/memory_state",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_index",
-        "simulation_state/npc_minds",
         "simulation_state/npc_presence",
-        "simulation_state/player_state",
-        "simulation_state/policy_reactions",
-        "simulation_state/present_npcs",
-        "simulation_state/presentation_state",
-        "simulation_state/quest_state",
-        "simulation_state/response_soft_truth",
-        "simulation_state/sandbox_state",
-        "simulation_state/sandbox_summary",
-        "simulation_state/save_meta",
-        "simulation_state/social_state",
-        "simulation_state/step_hash",
         "simulation_state/survival",
-        "simulation_state/threads",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
-        "simulation_state/world_items",
         "state/current_turn",
-        "state/player",
-        "state/turn_count",
-        "state/world"
+        "state/turn_count"
       ],
       "response": {
         "changed_domains": [
           "time",
-          "survival"
+          "survival",
+          "world",
+          "narrative"
         ],
-        "source": "narrative_engine_resolved_turn_v1",
+        "source": "narrative_engine_scene_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
-            "survival"
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 2
         }
@@ -319,7 +147,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:d2670fb4fc195357b98aaee02f0bc28c4dee32dba27579b7dfeae8816706726b",
+      "document_hash": "sha256:14ae84830bc7b382bff057b612063bc6408732096ea34617bbeeb90bb2e0e757",
       "facts": {
         "combat": {
           "active": false,
@@ -348,48 +176,7 @@
           "The Hollow Meridian": "available",
           "Voices in the Phone": "available"
         },
-        "skills": {
-          "archery": {
-            "level": 0,
-            "xp": 0
-          },
-          "defense": {
-            "level": 0,
-            "xp": 0
-          },
-          "firearms": {
-            "level": 0,
-            "xp": 0
-          },
-          "hacking": {
-            "level": 0,
-            "xp": 0
-          },
-          "intimidation": {
-            "level": 0,
-            "xp": 0
-          },
-          "investigation": {
-            "level": 0,
-            "xp": 0
-          },
-          "magic": {
-            "level": 0,
-            "xp": 0
-          },
-          "persuasion": {
-            "level": 0,
-            "xp": 0
-          },
-          "stealth": {
-            "level": 0,
-            "xp": 0
-          },
-          "swordsmanship": {
-            "level": 0,
-            "xp": 0
-          }
-        },
+        "skills": {},
         "survival": {
           "fatigue": 1,
           "hunger": 1,
@@ -415,6 +202,9 @@
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "simulation_state/conversation_thread_state",
+        "simulation_state/environment",
+        "simulation_state/player_state",
+        "simulation_state/quest_state",
         "state/current_turn",
         "state/turn_count"
       ],
@@ -458,7 +248,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cd38ad878a0648b8bd3c8250417853072530d5f3320b7c880394cac73ac6863f",
+      "document_hash": "sha256:63c4fbe0554eb3456fe659235261a79e08e06c0a89a44bd50fa758a441d5df85",
       "facts": {
         "combat": {
           "active": false,
@@ -488,6 +278,84 @@
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "available"
+        },
+        "skills": {},
+        "survival": {
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 4
+        },
+        "turn_count": 3
+      },
+      "model_calls": [
+        "narration"
+      ],
+      "patched_sections": [
+        "manifest/current_turn",
+        "manifest/turn_count",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
+        "runtime_state/interaction_lifecycles",
+        "runtime_state/interaction_seq",
+        "runtime_state/interaction_timeline",
+        "runtime_state/last_interaction",
+        "runtime_state/recent_interactions",
+        "runtime_state/response_soft_truth",
+        "runtime_state/state_revision",
+        "runtime_state/survival_tick_history",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/companion_acceptance_state",
+        "simulation_state/companion_memory_state",
+        "simulation_state/companion_presence_projection",
+        "simulation_state/companion_quest_state",
+        "simulation_state/conversation_thread_state",
+        "simulation_state/economy_state",
+        "simulation_state/merchant_state",
+        "simulation_state/npc_reputation_state",
+        "simulation_state/party_composition_effects",
+        "simulation_state/player_state",
+        "simulation_state/present_npc_state",
+        "simulation_state/response_soft_truth",
+        "simulation_state/survival",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
+        "state/current_turn",
+        "state/turn_count"
+      ],
+      "response": {
+        "changed_domains": [
+          "time",
+          "survival",
+          "party"
+        ],
+        "source": "narrative_engine_resolved_turn_v1",
+        "state": {
+          "changed": true,
+          "changed_domains": [
+            "time",
+            "survival",
+            "party"
+          ],
+          "revision": 4
+        }
+      },
+      "session_summary": {
+        "interaction_seq": 3,
+        "location": "Starfall Grove",
+        "player_level": 1,
+        "state_revision": 4,
+        "title": "Wren — Starfall Grove"
+      },
+      "status": 200,
+      "step": "I ask Liora Fen to join my party as a companion.",
+      "turn_rows": 1
+    },
+    {
+      "changes": {
+        "quests": {
+          "Voices in the Phone": "active"
         },
         "skills": {
           "archery": {
@@ -532,87 +400,12 @@
           }
         },
         "survival": {
-          "fatigue": 2,
-          "hunger": 2,
-          "thirst": 4
-        },
-        "turn_count": 3
-      },
-      "model_calls": [
-        "narration"
-      ],
-      "patched_sections": [
-        "manifest/current_turn",
-        "manifest/turn_count",
-        "runtime_state/causal_applied_turn_keys",
-        "runtime_state/causal_last_applied_tick",
-        "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/interaction_lifecycles",
-        "runtime_state/interaction_seq",
-        "runtime_state/interaction_timeline",
-        "runtime_state/last_interaction",
-        "runtime_state/recent_interactions",
-        "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "simulation_state/causal_runtime_projection",
-        "simulation_state/causal_world_runtime",
-        "simulation_state/companion_acceptance_state",
-        "simulation_state/companion_memory_state",
-        "simulation_state/companion_presence_projection",
-        "simulation_state/companion_quest_state",
-        "simulation_state/conversation_thread_state",
-        "simulation_state/economy_state",
-        "simulation_state/merchant_state",
-        "simulation_state/npc_reputation_state",
-        "simulation_state/party_composition_effects",
-        "simulation_state/player_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/survival",
-        "simulation_state/travel_state",
-        "simulation_state/world_event_state",
-        "state/current_turn",
-        "state/turn_count"
-      ],
-      "response": {
-        "changed_domains": [
-          "time",
-          "survival",
-          "party"
-        ],
-        "source": "narrative_engine_resolved_turn_v1",
-        "state": {
-          "changed": true,
-          "changed_domains": [
-            "time",
-            "survival",
-            "party"
-          ],
-          "revision": 4
-        }
-      },
-      "session_summary": {
-        "interaction_seq": 3,
-        "location": "Starfall Grove",
-        "player_level": 1,
-        "state_revision": 4,
-        "title": "Wren — Starfall Grove"
-      },
-      "status": 200,
-      "step": "I ask Liora Fen to join my party as a companion.",
-      "turn_rows": 1
-    },
-    {
-      "changes": {
-        "quests": {
-          "Voices in the Phone": "active"
-        },
-        "survival": {
           "fatigue": 1,
           "hunger": 1,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:18e6311cc26bdd9f1be927a2150299d967fa9c7f54f7b269a8563e46222f6d1f",
+      "document_hash": "sha256:4af3bb211099190afc541f71315e2eee5ffb18f6a738e530067ca64ded16d126",
       "facts": {
         "combat": {
           "active": false,
@@ -699,15 +492,21 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/actor_activities",
+        "runtime_state/ambient_history",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
+        "runtime_state/conversation_settings",
+        "runtime_state/conversation_threads",
         "runtime_state/current_scene",
+        "runtime_state/director_log",
         "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
+        "runtime_state/last_conversation_intervention",
         "runtime_state/last_interaction",
         "runtime_state/last_player_action",
         "runtime_state/last_player_action_context",
@@ -715,42 +514,93 @@
         "runtime_state/last_real_player_activity_at",
         "runtime_state/last_turn_contract",
         "runtime_state/last_turn_result",
+        "runtime_state/location_conditions",
         "runtime_state/narration_quality",
+        "runtime_state/offscreen_conversation_summaries",
+        "runtime_state/opening_runtime",
         "runtime_state/perf_trace",
+        "runtime_state/performance",
         "runtime_state/player_request_events",
+        "runtime_state/post_player_quiet_ticks",
+        "runtime_state/recent_conversation_thread_events",
         "runtime_state/recent_interactions",
         "runtime_state/recent_scene_beats",
         "runtime_state/recent_world_event_rows",
+        "runtime_state/scene_beat_memory",
         "runtime_state/semantic_action_index",
         "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
+        "runtime_state/story_policy",
         "runtime_state/survival_tick_history",
         "runtime_state/tick",
         "runtime_state/turn_history",
+        "runtime_state/world_consequences",
+        "runtime_state/world_pressure",
+        "runtime_state/world_rumors",
+        "setup_payload/campaign_objective",
+        "setup_payload/canon_notes",
+        "setup_payload/content_balance",
+        "setup_payload/desired_content_mix",
+        "setup_payload/forbidden_content",
+        "setup_payload/genre_rules",
+        "setup_payload/hard_rules",
+        "setup_payload/lore_constraints",
         "setup_payload/metadata",
+        "setup_payload/opening",
+        "setup_payload/opening_hook",
+        "setup_payload/pacing",
+        "setup_payload/player_role",
+        "setup_payload/response_length",
+        "setup_payload/safety",
+        "setup_payload/setup_id",
+        "setup_payload/soft_tone_rules",
+        "setup_payload/starter_conflict",
+        "setup_payload/starting_gear",
+        "setup_payload/starting_resources",
+        "setup_payload/world_behavior",
+        "simulation_state/active_effects",
+        "simulation_state/active_interactions",
+        "simulation_state/active_rumors",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
+        "simulation_state/consequences",
         "simulation_state/debug_meta",
         "simulation_state/economy_state",
         "simulation_state/event_history",
         "simulation_state/events",
+        "simulation_state/factions",
         "simulation_state/history",
+        "simulation_state/incidents",
+        "simulation_state/location_state",
         "simulation_state/locations",
+        "simulation_state/memory_state",
         "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
+        "simulation_state/npc_index",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
+        "simulation_state/policy_reactions",
+        "simulation_state/present_npcs",
+        "simulation_state/presentation_state",
         "simulation_state/quest_state",
+        "simulation_state/sandbox_state",
+        "simulation_state/sandbox_summary",
+        "simulation_state/save_meta",
+        "simulation_state/social_state",
         "simulation_state/step_hash",
         "simulation_state/survival",
+        "simulation_state/threads",
         "simulation_state/tick",
         "simulation_state/timeline",
         "simulation_state/travel_state",
         "simulation_state/turn_index",
         "simulation_state/world_event_state",
+        "simulation_state/world_items",
         "state/current_turn",
+        "state/player",
         "state/quests",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
@@ -794,7 +644,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ea6282b985f0bc1287c2c993f13cf709ffe133886e14d0c4597bac85f06010ba",
+      "document_hash": "sha256:1d38342945fd638e892471a385527328a0e7fbfd6602c7b4eaf5c3ed645c4bb1",
       "facts": {
         "combat": {
           "active": false,
@@ -979,7 +829,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:c8771450f3e270624681e5174d0df9961b7cc2f87862b1fab58dfec06df07750",
+      "document_hash": "sha256:5789e8cae6b408517f5f9620ac80b8b5919216b4e55e26a7a7d0f894c34cafbe",
       "facts": {
         "combat": {
           "active": false,
@@ -1179,7 +1029,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:21eab829263928ee0377b5404e5e1a3d3ddfb84674b1c69a58b96af65a2824b2",
+      "document_hash": "sha256:c1b7e3bd654c1ba49ddb9059d7ddc2c59b940e2f60bf7264956889006b3cfd8f",
       "facts": {
         "combat": {
           "active": false,
@@ -1268,52 +1118,25 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "setup_payload/metadata",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/event_history",
-        "simulation_state/events",
-        "simulation_state/history",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_minds",
-        "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
@@ -1321,14 +1144,18 @@
       "response": {
         "changed_domains": [
           "time",
-          "survival"
+          "survival",
+          "world",
+          "narrative"
         ],
-        "source": "narrative_engine_resolved_turn_v1",
+        "source": "narrative_engine_scene_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
-            "survival"
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 8
         }
@@ -1346,7 +1173,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:5a73688264626aefe09ed74c1f6e943ac2e7be7593b88e1d204528807f04a0b0",
+      "document_hash": "sha256:f833dcfa9bb66f12afaa8c7523bf71e225bad1d859e53ca9012ce29a8cd42053",
       "facts": {
         "combat": {
           "active": false,
@@ -1477,7 +1304,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:394c3843e8ea511768e98d9db972174d37841f9ebacd94f9e9da15776bd39d37",
+      "document_hash": "sha256:89f0a78103fafc5c947b51eeb3672a6943a29206c1d894530ec1664d40c02691",
       "facts": {
         "combat": {
           "active": false,
@@ -1567,6 +1394,7 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
@@ -1576,6 +1404,7 @@
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
         "runtime_state/narration_quality",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "simulation_state/causal_runtime_projection",
@@ -1623,7 +1452,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:f61523ad216bc734d00e6af6827ed358a0085a725aed813faa7ce85a5eb6e6a6",
+      "document_hash": "sha256:e113015ae72b19df092719c88996a4945c93ba5fe8b0cb36acd97421e41cfd37",
       "facts": {
         "combat": {
           "active": false,
@@ -1772,7 +1601,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:71c1af9de25f30a3b7f5a0bf0abc73ba5984745dce255cb21b2596232fcee9ff",
+      "document_hash": "sha256:18d1b7eef0a8d48659e9515570ef38606bd1c02ee51227857f90e974e32dca80",
       "facts": {
         "combat": {
           "active": false,
@@ -1889,12 +1718,14 @@
         "runtime_state/survival_tick_history",
         "runtime_state/tick",
         "runtime_state/turn_history",
+        "runtime_state/world_consequences",
         "setup_payload/metadata",
         "simulation_state/active_interactions",
         "simulation_state/debug_meta",
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/locations",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
         "simulation_state/player_state",
@@ -1947,7 +1778,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e9387d2232b826413320673bd5073b2330f2457cd6a946e5528f692f9cede027",
+      "document_hash": "sha256:45e24ffe0425ebd89fb8a3696b1c1e25f49c0d14821fce03002d777173f69f40",
       "facts": {
         "combat": {
           "active": false,
@@ -2074,6 +1905,7 @@
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/locations",
         "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
@@ -2146,7 +1978,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:8964b2ace6508b285fddeb65ff3dd07e4c939d1b9aa2f9d29f5da0ff74a9f9f0",
+      "document_hash": "sha256:b5fb500aa202b81905a3862e14e215fbd0be1d5fbc6723429b4049ca1ee542fc",
       "facts": {
         "combat": {
           "active": false,
@@ -2348,7 +2180,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1b2f34b489292029febc12b2dc270efc2f0acd0c188514d5fad2a133ee99d9fd",
+      "document_hash": "sha256:68491ca8209f14da465cfa1f22043e6237320137ab1d947808e5a5ef9760a64b",
       "facts": {
         "combat": {
           "active": false,
@@ -2437,53 +2269,25 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "setup_payload/metadata",
-        "simulation_state/active_interactions",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/event_history",
-        "simulation_state/events",
-        "simulation_state/history",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_minds",
-        "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
@@ -2491,14 +2295,18 @@
       "response": {
         "changed_domains": [
           "time",
-          "survival"
+          "survival",
+          "world",
+          "narrative"
         ],
-        "source": "narrative_engine_resolved_turn_v1",
+        "source": "narrative_engine_scene_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
-            "survival"
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 15
         }
@@ -2535,7 +2343,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:8bf811a7c6640a7e0fb897fb2280f112ca0bb0602b83b09611dc61c65a0f8acb",
+      "document_hash": "sha256:f12bf67c35566ec36699caf3c2f74820b05aea04394a00b7783a06148f91353e",
       "facts": {
         "combat": {
           "active": false,
@@ -2626,6 +2434,7 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
@@ -2644,6 +2453,7 @@
         "runtime_state/last_turn_result",
         "runtime_state/narration_quality",
         "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/recent_scene_beats",
         "runtime_state/recent_world_event_rows",
@@ -2653,6 +2463,7 @@
         "runtime_state/survival_tick_history",
         "runtime_state/tick",
         "runtime_state/turn_history",
+        "runtime_state/world_consequences",
         "setup_payload/metadata",
         "simulation_state/active_interactions",
         "simulation_state/causal_runtime_projection",
@@ -2733,7 +2544,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c024d8b58c31f5e4dcb68d9437aeeb67458e18bf842055b7f721a369cf3e9d5e",
+      "document_hash": "sha256:57d4e78a52a4d830e79ce79fea19b5c308d21780a666cf7f4c870f10b136230a",
       "facts": {
         "combat": {
           "active": false,
@@ -2914,7 +2725,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:20866e4695fe910aed96b1732ba5b480cd227977bb95134979c5b3f2585e980b",
+      "document_hash": "sha256:41812f7f282780d7a461bcc93e1db46f1e7a5d0db4c7a4b5a8c79f6023036bd6",
       "facts": {
         "combat": {
           "active": false,
@@ -3064,7 +2875,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:5ccca5844ab0e9aa6f161e827c582189c539f772923296e3febb63abe45d1bc4",
+      "document_hash": "sha256:3a524149e28b396e9331b0cc007217234504fe7a9c8b015c313d2871fa8e3052",
       "facts": {
         "combat": {
           "active": false,
@@ -3207,7 +3018,7 @@
           "fatigue": -15
         }
       },
-      "document_hash": "sha256:916298588d1085a766e6018899040054612b5b09cad2edca26cc475950913477",
+      "document_hash": "sha256:48267e33c96357a071e02a99350fca49f5e0efe054d2590b7fbd3278c37f1a22",
       "facts": {
         "combat": {
           "active": false,
@@ -3352,7 +3163,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c6e92f939f824555a903727861347954f179be845e75a663ad3f5513a2119323",
+      "document_hash": "sha256:f814ca709dc4c8a37e86e1721efda8b653cae047e7e161d5a5fd8f220a84527e",
       "facts": {
         "combat": {
           "active": false,
@@ -3442,67 +3253,33 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
-        "runtime_state/current_scene",
-        "runtime_state/grounded_scene_context",
+        "runtime_state/campaign_calendar",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
-        "runtime_state/player_request_events",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "setup_payload/metadata",
-        "simulation_state/active_interactions",
-        "simulation_state/conversation_director_state",
-        "simulation_state/conversation_thread_state",
-        "simulation_state/debug_meta",
-        "simulation_state/event_history",
-        "simulation_state/events",
-        "simulation_state/history",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_goal_state",
-        "simulation_state/npc_history_state",
-        "simulation_state/npc_minds",
-        "simulation_state/npc_schedule_state",
-        "simulation_state/present_npc_state",
-        "simulation_state/rumor_propagation_state",
-        "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
-        "simulation_state/turn_index",
         "state/current_turn",
         "state/turn_count"
       ],
       "response": {
         "changed_domains": [
           "time",
-          "survival"
+          "survival",
+          "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
-            "survival"
+            "survival",
+            "narrative"
           ],
           "revision": 21
         }
@@ -3535,7 +3312,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:dbc83d4f1ddd8af9405e734ebbbd51bfd579bb77272a80f16378dfaa770340ee",
+      "document_hash": "sha256:ab7116047b0c000c7d1ff9307fc80752903628a371c10971730e8e129ca25615",
       "facts": {
         "combat": {
           "active": true,
@@ -3630,6 +3407,7 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
@@ -3648,6 +3426,8 @@
         "runtime_state/last_turn_result",
         "runtime_state/narration_quality",
         "runtime_state/perf_trace",
+        "runtime_state/player_journal",
+        "runtime_state/player_request_events",
         "runtime_state/recent_interactions",
         "runtime_state/recent_scene_beats",
         "runtime_state/recent_world_event_rows",
@@ -3659,6 +3439,7 @@
         "runtime_state/turn_history",
         "runtime_state/world_consequences",
         "setup_payload/metadata",
+        "simulation_state/active_interactions",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/combat_state",
@@ -3716,7 +3497,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:dbc83d4f1ddd8af9405e734ebbbd51bfd579bb77272a80f16378dfaa770340ee",
+      "document_hash": "sha256:ab7116047b0c000c7d1ff9307fc80752903628a371c10971730e8e129ca25615",
       "facts": {
         "combat": {
           "active": true,
@@ -3835,7 +3616,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:49d314a6f68256b133734384612faa697e634cb937ae9566513698ce662b1fa9",
+      "document_hash": "sha256:18d5957460a3f51361c2aacb1def8dc064af9e3a27ffa06bbb3c24df1fd96bbf",
       "facts": {
         "combat": {
           "active": true,
@@ -4024,7 +3805,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cbceb16596b0160573cc157bf814aceba68a4c5ba34ad073645cc7fe185a35f9",
+      "document_hash": "sha256:f0fa3cf1655bb52140bfed2b446eee85fca5fdc038e42ae137b43d3db8e14808",
       "facts": {
         "combat": {
           "active": true,
@@ -4204,7 +3985,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c27de7e60c49e57a214090fa6d1c6335cc789b9b0dc21ad6cbb9c03503fea13c",
+      "document_hash": "sha256:ab03d7759a90081b9fff556fedd3daea246facc03d231f4c2fd515050ed52293",
       "facts": {
         "combat": {
           "active": false,
@@ -4380,7 +4161,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:13ac3c49994bd5e7167fd8f024f1362adfcb30279e4cef985aa23bc863d1329f",
+      "document_hash": "sha256:767ccc0cef0ddbfb61d5b7b3ed7f8f9d5295a4118c3ce7e9341a3efd6a5f58de",
       "facts": {
         "combat": {
           "active": false,
@@ -4531,7 +4312,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:321429aa37b67c222ad2bbc7c4bc795c626c81f668d4bde9f5d96fae0c1ca43b",
+      "document_hash": "sha256:11a9f18829e29d0ff1640c3b97a112a44c4fa71d4b5aaefa7c25460de9c9cc99",
       "facts": {
         "combat": {
           "active": false,
@@ -4651,6 +4432,7 @@
         "runtime_state/survival_tick_history",
         "runtime_state/tick",
         "runtime_state/turn_history",
+        "runtime_state/world_consequences",
         "setup_payload/metadata",
         "simulation_state/debug_meta",
         "simulation_state/event_history",
@@ -4711,7 +4493,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:9161a5b135114709366534c4c89453f7cddcc0e16a102a63537bd50ab86f4edd",
+      "document_hash": "sha256:4f2c62830f23d40eed24a6d4751d57f545e8437bf8db943fa5b84debad63dd64",
       "facts": {
         "combat": {
           "active": false,
@@ -4918,7 +4700,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:7d1a11613a013f164afa8de43c2a6cb429dc25bbf7a05e93f2015588627f0358",
+      "document_hash": "sha256:07d5711b72d82dc2456eb6a727518a39c078a2a1dab5a912cd1aa869bc3db23e",
       "facts": {
         "combat": {
           "active": false,
@@ -5126,7 +4908,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:e3880d63a0b0966fdeea95ccad5a01991b730cfe36fa50ed1882322359997de6",
+      "document_hash": "sha256:68a7ef2e9e9c30cfb46c1743ad41c27cac9d14a854f41dca01822bc0ef4b1bb2",
       "facts": {
         "combat": {
           "active": false,
@@ -5321,7 +5103,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:6e19984425439aa1995d490e9368f7753c9b4074c4f1034bb1db1edfda321fc7",
+      "document_hash": "sha256:9e682aa1af1077462702f31132083dbb32f52fcb956a65b01adbc9e365cdecb2",
       "facts": {
         "combat": {
           "active": false,
@@ -5412,53 +5194,25 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "setup_payload/metadata",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
-        "simulation_state/conversation_thread_state",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/event_history",
-        "simulation_state/events",
-        "simulation_state/history",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_minds",
-        "simulation_state/step_hash",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/turn_count"
@@ -5466,14 +5220,18 @@
       "response": {
         "changed_domains": [
           "time",
-          "survival"
+          "survival",
+          "world",
+          "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "time",
-            "survival"
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 31
         }

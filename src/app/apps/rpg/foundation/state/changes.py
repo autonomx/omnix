@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 
 class _Change(BaseModel):
@@ -170,11 +170,51 @@ class CombatEnded(_Change):
     outcome: Literal["victory", "defeat", "fled", "ended"] = "ended"
 
 
+# What the world tick (pipeline step 6) owns: the causal runtime and the subsystems it projects onto, and its
+# bookkeeping. The tick replaces these whole until RQ-2.7 says what it changes in typed terms.
+WORLD_TICK_SECTIONS = frozenset({
+    "causal_world_runtime", "causal_runtime_projection", "economy_state", "merchant_state", "travel_state",
+    "faction_reputation", "npc_presence", "world_event_state",
+})
+WORLD_TICK_RUNTIME_KEYS = frozenset({
+    "causal_applied_turn_keys", "causal_last_applied_turn_key", "causal_last_applied_tick",
+})
+
+
+class WorldTicked(_Change):
+    """The world moved on: the sections the world tick owns, as it left them."""
+
+    type: Literal["world_ticked"] = "world_ticked"
+    simulation: dict[str, Any] = Field(default_factory=dict)
+    runtime: dict[str, Any] = Field(default_factory=dict)
+    # What the tick did, for a reader: the clock tick, the events it raised, the sections it replaced.
+    summary: dict[str, Any] = Field(default_factory=dict)
+
+    def reported(self) -> "WorldTicked":
+        """As a turn outcome reports it: the summary, without the sections' contents (the turn's patch has them)."""
+        return WorldTicked(summary={**self.summary, "sections": sorted(self.simulation)})
+
+    @model_validator(mode="after")
+    def _owned(self) -> "WorldTicked":
+        stray = (set(self.simulation) - WORLD_TICK_SECTIONS) | (set(self.runtime) - WORLD_TICK_RUNTIME_KEYS)
+        if stray:
+            raise ValueError(f"the world tick does not own {sorted(stray)}")
+        return self
+
+
+class JournalWritten(_Change):
+    """The turn in the player's journal and on the campaign calendar, as the journal keeper left them."""
+
+    type: Literal["journal_written"] = "journal_written"
+    calendar: dict[str, Any] = Field(default_factory=dict)
+    journal: dict[str, Any] = Field(default_factory=dict)
+
+
 StateChange = Annotated[
     PurseChanged | ItemAdded | ItemRemoved | ItemDropped | ItemPickedUp | ItemEquipped | ItemUnequipped
     | HpChanged | ExperienceGained | SkillProgressed | LocationChanged | PresenceChanged | TimeAdvanced
     | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
-    | CombatStarted | CombatantHpChanged | CombatEnded,
+    | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

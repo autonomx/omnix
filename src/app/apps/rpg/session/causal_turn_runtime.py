@@ -142,6 +142,48 @@ def _turn_session(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return None
 
 
+def causal_tick(session: Mapping[str, Any], *, turn_key: str, turn: int) -> dict[str, Any] | None:
+    """One causal tick of the world for a turn, on a copy: the sections it changed and its receipt.
+
+    ``None`` when the world has no causal runtime; ``{"applied": False, ...}`` when this turn already ticked it.
+    The world tick (RQ-1.4 step 6) turns the sections into a ``WorldTicked`` change.
+    """
+    session = copy_state(dict(session))
+    simulation = _dict(session.get("simulation_state"))
+    runtime_state = _dict(session.get("runtime_state"))
+    runtime = simulation.get("causal_world_runtime")
+    if not isinstance(runtime, Mapping):
+        bootstrap = _bootstrap_from_session(session)
+        if not bootstrap:
+            return None
+        runtime = initialize_causal_runtime(simulation, bootstrap)
+    applied = [str(value) for value in runtime_state.get("causal_applied_turn_keys") or ()]
+    if turn_key in applied:
+        return {"applied": False, "reason": "turn_already_applied", "turn_key": turn_key,
+                "tick": int(_dict(runtime).get("last_tick") or 0),
+                "projection": _dict(simulation.get("causal_runtime_projection")), "simulation": {}, "runtime": {}}
+    before = copy_state(simulation)
+    last_tick = int(_dict(runtime).get("last_tick") or 0)
+    target_tick = max(last_tick + 1, turn if turn > 0 else last_tick + 1)
+    next_runtime, emitted = advance_installed_causal_runtime(simulation, tick=target_tick)
+    projection = project_causal_runtime_to_subsystems(simulation, next_runtime, tick=target_tick)
+    return {
+        "applied": True,
+        "reason": "causal_runtime_advanced",
+        "turn_key": turn_key,
+        "tick": target_tick,
+        "event_ids": [event.event_id for event in emitted],
+        "runtime_hash": str(next_runtime.get("runtime_hash") or ""),
+        "projection": projection,
+        "simulation": {key: value for key, value in simulation.items() if before.get(key) != value},
+        "runtime": {
+            "causal_applied_turn_keys": [*applied, turn_key][-256:],
+            "causal_last_applied_turn_key": turn_key,
+            "causal_last_applied_tick": target_tick,
+        },
+    }
+
+
 def advance_causal_runtime_for_turn(
     session_id: str,
     payload: Mapping[str, Any],
@@ -161,62 +203,18 @@ def advance_causal_runtime_for_turn(
     if not isinstance(session_raw, Mapping):
         return result
     session = copy_state(dict(session_raw))
-    simulation = _dict(session.get("simulation_state"))
-    runtime_state = _dict(session.get("runtime_state"))
-    runtime = simulation.get("causal_world_runtime")
-    if not isinstance(runtime, Mapping):
-        bootstrap = _bootstrap_from_session(session)
-        if not bootstrap:
-            return result
-        runtime = initialize_causal_runtime(simulation, bootstrap)
-
     turn = _turn_value(result, session)
     key = _turn_key(session_id, result, session, turn)
-    applied = [str(value) for value in runtime_state.get("causal_applied_turn_keys") or ()]
-    if key in applied:
-        projection = _dict(simulation.get("causal_runtime_projection"))
-        result = _attach_session_state(result, session)
-        return _attach_receipt(
-            result,
-            {
-                "applied": False,
-                "reason": "turn_already_applied",
-                "turn_key": key,
-                "tick": int(_dict(runtime).get("last_tick") or 0),
-                "projection": projection,
-            },
-        )
-
-    last_tick = int(_dict(runtime).get("last_tick") or 0)
-    target_tick = max(last_tick + 1, turn if turn > 0 else last_tick + 1)
-    next_runtime, emitted = advance_installed_causal_runtime(
-        simulation,
-        tick=target_tick,
-    )
-    projection = project_causal_runtime_to_subsystems(
-        simulation,
-        next_runtime,
-        tick=target_tick,
-    )
-    runtime_state["causal_applied_turn_keys"] = [*applied, key][-256:]
-    runtime_state["causal_last_applied_turn_key"] = key
-    runtime_state["causal_last_applied_tick"] = target_tick
-    session["simulation_state"] = simulation
-    session["runtime_state"] = runtime_state
-    saver(session)
+    tick = causal_tick(session, turn_key=key, turn=turn)
+    if tick is None:
+        return result
+    sections, runtime_keys = tick.pop("simulation"), tick.pop("runtime")
+    if tick["applied"]:
+        session["simulation_state"] = {**_dict(session.get("simulation_state")), **sections}
+        session["runtime_state"] = {**_dict(session.get("runtime_state")), **runtime_keys}
+        saver(session)
     result = _attach_session_state(result, session)
-    return _attach_receipt(
-        result,
-        {
-            "applied": True,
-            "reason": "causal_runtime_advanced",
-            "turn_key": key,
-            "tick": target_tick,
-            "event_ids": [event.event_id for event in emitted],
-            "runtime_hash": str(next_runtime.get("runtime_hash") or ""),
-            "projection": projection,
-        },
-    )
+    return _attach_receipt(result, tick)
 
 
-__all__ = ["advance_causal_runtime_for_turn"]
+__all__ = ["advance_causal_runtime_for_turn", "causal_tick"]

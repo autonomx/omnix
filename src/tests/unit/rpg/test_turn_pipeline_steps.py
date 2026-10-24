@@ -1,0 +1,93 @@
+"""The turn pipeline's steps for look and wait (RQ-1.4): plan, resolve, world tick, and the reducer."""
+from __future__ import annotations
+
+import pytest
+
+from app.apps.rpg.foundation.state.changes import WorldTicked
+from app.apps.rpg.foundation.state.reducer import reduce
+from app.apps.rpg.rules.intent.grammar import IntentCandidate
+from app.apps.rpg.session.turn import PlannedAction, TurnRequest, pipeline_enabled, plan_action, run_planned_turn
+from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
+from app.apps.rpg.session.turn.world_tick import world_tick
+
+
+def _campaign(**simulation):
+    return {
+        "manifest": {"session_id": "rpg_test", "turn_count": 3},
+        "state": {"turn_count": 3, "current_location_name": "Gate"},
+        "runtime_state": {"tick": 5},
+        "simulation_state": {
+            "tick": 5,
+            "player_state": {"location_id": "loc:gate"},
+            "survival": {"enabled": True, "hunger": 10, "thirst": 99, "fatigue": 0},
+            "world_model": {"locations": {"loc:gate": {"name": "The Gate", "exits": {"north": "loc:inn"}},
+                                          "loc:inn": {"name": "The Inn"}},
+                            "npcs": {"npc:wren": {"name": "Wren"}}},
+            "present_npc_state": {"present_npc_ids": ["npc:wren"]},
+            **simulation,
+        },
+    }
+
+
+@pytest.mark.parametrize(("reading", "planned"), [
+    (IntentCandidate("look", confidence=0.9, reason="looks"), "look"),
+    (IntentCandidate("wait", confidence=0.9, reason="waits"), "wait"),
+    (IntentCandidate("look", confidence=0.5), None),  # not confident: the older path decides
+    (IntentCandidate("wait", confidence=0.9, clauses=("wait", "look")), None),  # two steps
+    (IntentCandidate("buy", target_id="offer:bread", target_kind="offer", confidence=0.9), None),  # not moved yet
+])
+def test_only_confident_single_step_look_and_wait_are_planned(reading, planned) -> None:
+    plan = plan_action(reading)
+    assert (plan.mechanic if plan else None) == planned
+
+
+def test_look_counts_the_turn_and_passes_a_tick_and_states_what_is_seen() -> None:
+    campaign = _campaign()
+    changes = resolve(PlannedAction(mechanic="look"), campaign)
+    assert [change.type for change in changes] == ["turn_counted", "time_advanced"]
+    assert changes[0].turn_count == 4
+    assert outcome_lines(PlannedAction(mechanic="look"), campaign) == [
+        "You look around The Gate.", "Here: Wren.", "Paths lead to The Inn."]
+
+
+def test_a_hero_with_no_place_is_placed_where_the_world_begins() -> None:
+    campaign = _campaign(player_state={}, world_model={"start_location_id": "loc:gate"})
+    assert [change.type for change in resolve(PlannedAction(mechanic="wait"), campaign)][1] == "location_changed"
+
+
+def test_needs_rise_with_the_time_and_stop_at_their_ceiling() -> None:
+    changes, receipt = world_tick(_campaign(), mechanic="wait", ticks=1, turn_key="turn:6", turn=4)
+    [needs] = changes
+    assert (needs.hunger, needs.thirst, needs.fatigue) == (1, 1, 1) and receipt == {}  # thirst stops at 100
+    assert world_tick(_campaign(survival={"enabled": False}), mechanic="wait", ticks=1, turn_key="t", turn=1)[0] == []
+
+
+def test_the_world_tick_may_replace_only_the_sections_it_owns() -> None:
+    with pytest.raises(ValueError, match="does not own"):
+        WorldTicked(simulation={"player_state": {}})
+    document, _ = reduce(_campaign(), [WorldTicked(simulation={"economy_state": {"prices": 2}},
+                                                   runtime={"causal_last_applied_tick": 6})])
+    assert document["simulation_state"]["economy_state"] == {"prices": 2}
+    assert document["runtime_state"]["causal_last_applied_tick"] == 6
+
+
+def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() -> None:
+    campaign = _campaign()
+    reading = IntentCandidate("wait", confidence=0.9, reason="waits")
+    result = run_planned_turn(campaign, request=TurnRequest(kind="player_text", session_id="rpg_test", text="wait"),
+                              planned=plan_action(reading), reading=reading)
+    assert campaign["simulation_state"]["tick"] == 5  # the turn-start campaign is not touched
+    document = result["session"]
+    assert document["simulation_state"]["tick"] == 6 and document["state"]["turn_count"] == 4
+    assert document["simulation_state"]["survival"]["hunger"] == 11
+    assert [change["type"] for change in result["turn_pipeline"]["changes"]] == [
+        "turn_counted", "time_advanced", "needs_changed", "journal_written"]
+    assert result["resolved_result"]["outcome_lines"] == ["You wait a while in The Gate; time passes.", "Around you: Wren."]
+    assert document["runtime_state"]["player_journal"]["entries"]
+
+
+def test_each_mechanic_has_a_setting(monkeypatch) -> None:
+    assert pipeline_enabled("look") and pipeline_enabled("wait") and not pipeline_enabled("buy")
+    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_WAIT", "off")
+    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_BUY", "1")
+    assert not pipeline_enabled("wait") and pipeline_enabled("buy")

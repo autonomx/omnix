@@ -201,7 +201,8 @@ def _purse(copper: int) -> dict[str, int]:
 def _lose_coin(simulation_state: dict[str, Any]) -> int:
     """A fifth of the purse, rounded down, at least a copper while there is any (the one purse, RQ-2.0)."""
     player = _player(simulation_state)
-    store = player.get("inventory_state") if isinstance(player.get("inventory_state"), dict) else {}
+    raw_store = player.get("inventory_state")
+    store: dict[str, Any] = raw_store if isinstance(raw_store, dict) else {}
     total = _copper(store.get("currency") or player.get("currency"))
     if total <= 0:
         return 0

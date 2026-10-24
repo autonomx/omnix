@@ -8,7 +8,8 @@ until the web client reads only the outcome).
 
 Until the pipeline (RQ-1.4) plans and resolves turns itself, ``build_turn_outcome`` reads the outcome off the
 turn's existing result and the documents before and after it: ``applied_changes`` comes from
-``foundation.state.extract.changes_between``; ``planned_action`` and ``dialogue_plan`` are empty.
+``foundation.state.extract.changes_between``, or from the pipeline for a turn it ran (RQ-1.4), which also names
+the ``planned_action``; ``dialogue_plan`` is empty.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.apps.rpg.foundation.state.changes import StateChange
+from app.apps.rpg.foundation.state.changes import parse_changes
 from app.apps.rpg.foundation.state.extract import CHANGE_SECTIONS, changes_between
 
 TURN_OUTCOME_FORMAT = "rpg_turn_outcome_v1"
@@ -105,7 +107,12 @@ def build_turn_outcome(
     """The outcome of a turn from its result and the documents before and after it."""
     root = _mapping(result)
     sources = (root, _mapping(root.get("result")), _mapping(root.get("authoritative")))
-    changes = changes_between(before, after) if before is not None and after is not None else []
+    planned = _mapping(root.get("turn_pipeline"))
+    if isinstance(planned.get("changes"), list):
+        # A turn the pipeline ran says what it changed (RQ-1.4); no need to read it off the documents.
+        changes = parse_changes(planned["changes"])
+    else:
+        changes = changes_between(before, after) if before is not None and after is not None else []
     canonical = _mapping(root.get("canonical_narrative_response"))
     speakers = tuple(dict.fromkeys(
         str(block.get("speaker_id")) for block in canonical.get("blocks") or ()
@@ -131,6 +138,7 @@ def build_turn_outcome(
             target_id=_first(sources, "target_id"),
             source=_first(sources, "source"),
         ),
+        planned_action=str(planned["mechanic"]) if planned.get("mechanic") else None,
         applied_changes=tuple(changes),
         world_events=tuple(dict(event) for event in events[:12]),
         narration=NarrationReference(

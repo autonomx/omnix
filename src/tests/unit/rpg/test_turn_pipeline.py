@@ -65,14 +65,15 @@ def test_public_interactive_turn_routes_through_the_pipeline_core(monkeypatch) -
         or {"ok": False, "error": "focused_test"},
     )
 
+    # Look and wait run on the turn pipeline (RQ-1.4); other commands still reach the core.
     result = interactive_first_call_runtime.apply_turn(
         "campaign-2",
-        "wait",
+        "I hum a tune",
         performance_override={"fast_visible_dialogue": False},
     )
 
     assert result["error"] == "focused_test"
-    assert calls == [("campaign-2", "wait")]
+    assert calls == [("campaign-2", "I hum a tune")]
 
 
 def test_fast_visible_dialogue_stage_short_circuits_stateful_resolution(monkeypatch) -> None:
@@ -366,6 +367,7 @@ def test_production_turn_pipeline_declares_commit_and_post_commit_stages() -> No
     stage_names = [stage.name for stage in pipeline.TURN_PIPELINE]
 
     assert stage_names == [
+        "planned_turn",
         "fast_visible_dialogue",
         "resolve",
         "fast_combat_result",
@@ -375,7 +377,7 @@ def test_production_turn_pipeline_declares_commit_and_post_commit_stages() -> No
         "interaction_commit",
         "interaction_lifecycle",
     ]
-    assert pipeline.TURN_PIPELINE[6].commit_boundary is True
+    assert pipeline.TURN_PIPELINE[7].commit_boundary is True
 
 
 def test_interaction_commit_stage_updates_session_override_without_false_durability(

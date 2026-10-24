@@ -37,8 +37,10 @@ from .changes import (
     QuestStatusChanged,
     SkillProgressed,
     StateChange,
+    JournalWritten,
     TimeAdvanced,
     TurnCounted,
+    WorldTicked,
 )
 
 JsonPatch = list[dict[str, Any]]
@@ -243,6 +245,14 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         for path in (("manifest", "turn_count"), ("manifest", "current_turn"), ("state", "turn_count"),
                      ("state", "current_turn")):
             writer.set(path, change.turn_count)
+    elif isinstance(change, WorldTicked):
+        for key, value in change.simulation.items():
+            writer.set(("simulation_state", key), value)
+        for key, value in change.runtime.items():
+            writer.set(("runtime_state", key), value)
+    elif isinstance(change, JournalWritten):
+        writer.set(("runtime_state", "campaign_calendar"), change.calendar)
+        writer.set(("runtime_state", "player_journal"), change.journal)
     elif isinstance(change, NeedsChanged):
         survival = dict(writer.get(("simulation_state", "survival")) or {})
         for need in ("hunger", "thirst", "fatigue"):

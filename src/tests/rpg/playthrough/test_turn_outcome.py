@@ -79,3 +79,32 @@ def test_the_outcome_is_reported_in_every_world(launch, world) -> None:
     outcome = TurnOutcome.model_validate(play.turn("Practice swordsmanship with a careful training drill.")["outcome"])
     progressed = [change for change in outcome.applied_changes if change.type == "skill_progressed"]
     assert [(change.skill_id, change.xp) for change in progressed] == [("swordsmanship", 10)]
+
+
+@pytest.mark.parametrize("world", ["aurelia", "starter", "vesper"])
+def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> None:
+    """RQ-1.4: look and wait are planned, resolved to changes, reduced and ticked on the pipeline; the changes the
+    turn reports are all it changed in the campaign's facts, and the world's causal clock ticks with them."""
+    from app.apps.rpg.foundation.state import parse_changes, reduce
+    from app.apps.rpg.narration.presentation.turn_outcome import TurnOutcome
+
+    play = launch(world)
+    for command in ("look around", "wait", "where am I?"):
+        before = play.stored()
+        outcome = TurnOutcome.model_validate(play.turn(command)["outcome"])
+        types = [change.type for change in outcome.applied_changes]
+        assert outcome.planned_action == ("wait" if command == "wait" else "look"), (command, outcome)
+        placed = [kind for kind in types if kind != "location_changed"]  # the starter town places the hero first
+        assert placed[:2] == ["turn_counted", "time_advanced"] and types[-1] == "journal_written", types
+        assert ("world_ticked" in types) == (world == "aurelia"), types  # Aurelia's pressures run on a clock
+        replayed, _ = reduce(before, parse_changes([change.model_dump() for change in outcome.applied_changes]))
+        after = play.stored()
+        assert _facts(replayed) == _facts(after), command
+        if world == "aurelia":  # the outcome names what the tick replaced; the turn's patch carries it
+            [ticked] = [change for change in outcome.applied_changes if change.type == "world_ticked"]
+            assert "causal_world_runtime" in ticked.summary["sections"] and not ticked.simulation
+        assert replayed["runtime_state"]["player_journal"] == after["runtime_state"]["player_journal"]
+
+    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_LOOK", "0")  # turned off, look takes the older path
+    outcome = TurnOutcome.model_validate(play.turn("look around")["outcome"])
+    assert outcome.planned_action is None

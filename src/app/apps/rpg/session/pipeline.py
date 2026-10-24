@@ -170,7 +170,21 @@ class InteractionLifecycleStage:
         return initialize_lifecycle(ctx)
 
 
+@dataclass(frozen=True, slots=True)
+class PlannedTurnStage:
+    """Run the turn on the one turn pipeline when its mechanic has moved there (RQ-1.4)."""
+
+    name: str = "planned_turn"
+    optional: bool = False
+
+    def run(self, ctx: TurnContext) -> TurnContext:
+        from app.apps.rpg.session.turn.run import apply_planned_turn_stage
+
+        return apply_planned_turn_stage(ctx)
+
+
 TURN_PIPELINE: tuple[TurnStage, ...] = (
+    PlannedTurnStage(),
     FastVisibleDialogueStage(),
     CoreResolutionStage(),
     FastCombatResultStage(),
