@@ -1,7 +1,8 @@
 """What a lost fight costs, and what a rest restores (RQ-5.1; docs/rpg/design/stakes.md).
 
 A standard defeat is a setback: the hero wakes where they last rested, hurt and battered, lighter in the
-purse, perhaps without something they carried. In a hardcore campaign defeat ends the hero's story.
+purse, perhaps without something they carried. In a hardcore campaign defeat ends the hero's story. A heavy
+blow leaves a wound that lingers until a potion, a healer or two nights' rest.
 """
 from __future__ import annotations
 
@@ -18,6 +19,10 @@ DEFEAT_PURSE_SHARE = 0.20
 DEFEAT_ITEM_LOSS_CHANCE = 0.5
 BATTERED = "battered"
 BATTERED_PENALTY = 2
+WOUNDED = "wounded"
+WOUNDING_SHARE = 0.4  # a blow taking more than this share of max HP in one go wounds
+WOUNDED_PENALTY = 1
+WOUND_RESTS = 2
 FULL_RESTS = frozenset({"sleep", "inn_lodging", "make_camp"})
 
 
@@ -41,15 +46,45 @@ def attack_penalty(simulation_state: dict[str, Any], actor_id: str) -> int:
 
 
 def record_rest(simulation_state: dict[str, Any], *, kind: str) -> dict[str, Any]:
-    """A full rest (a night's lodging, sleep, a camp) is where a beaten hero wakes, and it ends being battered."""
+    """A full rest (a night's lodging, sleep, a camp) is where a beaten hero wakes; it ends being battered and
+    brings a wound a night nearer healing."""
     if kind not in FULL_RESTS:
         return {}
     player = _player(simulation_state)
     location_id = safe_str(player.get("location_id") or simulation_state.get("location_id"))
     if location_id:
         player["rest_point"] = location_id
-    healed = [actor_id for actor_id, actor in _party(simulation_state) if _remove(actor, BATTERED)]
+    healed: list[str] = []
+    for actor_id, actor in _party(simulation_state):
+        battered = _remove(actor, BATTERED)
+        if _rest_wound(actor) or battered:
+            healed.append(actor_id)
     return {"rest_point": location_id, "healed": healed}
+
+
+def wound_on_heavy_blow(simulation_state: dict[str, Any], actor_id: str, *, damage: int, max_hp: int) -> bool:
+    """A blow taking more than two fifths of a party member's strength at once leaves them wounded."""
+    actor = _actor(simulation_state, actor_id)
+    if not actor or damage <= max(1, max_hp) * WOUNDING_SHARE:
+        return False
+    if not any(condition.get("kind") == WOUNDED for condition in conditions(actor)):
+        actor["conditions"] = [*conditions(actor), {"kind": WOUNDED, "attack_penalty": WOUNDED_PENALTY,
+                                                     "healing_share": 0.5, "rests_left": WOUND_RESTS,
+                                                     "until": "healed", "source": "heavy_blow", "actor_id": actor_id}]
+    return True
+
+
+def healing(simulation_state: dict[str, Any], actor_id: str, amount: int) -> int:
+    """How much of a heal takes hold: half while wounded."""
+    actor = _actor(simulation_state, actor_id)
+    if any(condition.get("kind") == WOUNDED for condition in conditions(actor)):
+        return max(0, amount) // 2
+    return max(0, amount)
+
+
+def treat_wound(simulation_state: dict[str, Any], actor_id: str) -> bool:
+    """A potion or a healer's care closes a wound."""
+    return _remove(_actor(simulation_state, actor_id), WOUNDED)
 
 
 def apply_defeat(simulation_state: dict[str, Any], combat_state: dict[str, Any]) -> dict[str, Any]:
@@ -137,6 +172,23 @@ def _remove(actor: dict[str, Any], kind: str) -> bool:
     return removed
 
 
+def _rest_wound(actor: dict[str, Any]) -> bool:
+    """A night's rest on a wound; True when it closes."""
+    kept: list[dict[str, Any]] = []
+    closed = False
+    for condition in conditions(actor):
+        if condition.get("kind") == WOUNDED:
+            left = safe_int(condition.get("rests_left"), WOUND_RESTS) - 1
+            if left <= 0:
+                closed = True
+                continue
+            condition = {**condition, "rests_left": left}
+        kept.append(condition)
+    if conditions(actor):
+        actor["conditions"] = kept
+    return closed
+
+
 def _copper(purse: Any) -> int:
     purse = safe_dict(purse)
     return safe_int(purse.get("gold"), 0) * 100 + safe_int(purse.get("silver"), 0) * 10 + safe_int(purse.get("copper"), 0)
@@ -206,10 +258,14 @@ def _wake_location(simulation_state: dict[str, Any]) -> str:
 __all__ = [
     "BATTERED",
     "DEFEAT_HOURS",
+    "WOUNDED",
     "apply_defeat",
     "attack_penalty",
     "campaign_ended",
     "conditions",
+    "healing",
     "is_hardcore",
     "record_rest",
+    "treat_wound",
+    "wound_on_heavy_blow",
 ]

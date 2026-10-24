@@ -64,8 +64,15 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
         lines.append(f"The fight begins: you against {' and '.join(foes) or 'your foe'}.")
     reason = safe_str(combat_result.get("reason"))
     foes = " and ".join(_name(combat_state, safe_str(foe), subject=False) for foe in safe_list(combat_result.get("foe_ids")))
+    fell_fleeing = reason == "combat_fled" and safe_str(combat_state.get("ended_reason")) == "party_side_defeated"
     if reason == "combat_fled":
-        lines.append(f"You break away from {foes or 'the fight'} and escape; the fight is over.")
+        blows = safe_list(combat_result.get("parting_blows"))
+        lines.append(f"You break away from {foes or 'the fight'}; "
+                     f"{'a parting blow follows' if len(blows) == 1 else 'parting blows follow'} you."
+                     if blows else f"You break away from {foes or 'the fight'} and escape; the fight is over.")
+        lines.extend(_blow(combat_state, safe_dict(blow)) for blow in safe_list(combat_result.get("parting_blows")))
+        if not fell_fleeing and combat_result.get("parting_blows"):
+            lines.append("You escape; the fight is over, and it yields you nothing.")
     elif reason == "combat_flee_failed":
         lines.append(f"You try to break away, but {foes or 'your foe'} cuts you off.")
     attacks = [
@@ -74,6 +81,11 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
         *safe_list(combat_result.get("other_turns")),
     ]
     lines.extend(_blow(combat_state, safe_dict(attack)) for attack in attacks)
+    wounded = [safe_dict(attack) for attack in [*attacks, *safe_list(combat_result.get("parting_blows"))]
+               if safe_dict(attack).get("wounded")]
+    for attack in wounded:
+        who = _name(combat_state, safe_str(attack.get("target_id")), subject=True)
+        lines.append(f"{who} {'are' if who == 'You' else 'is'} wounded: the blow will not heal quickly.")
     ended = safe_str(combat_state.get("ended_reason"))
     if combat_state.get("active") is not True and ended == "enemy_side_defeated":
         lines.append("The fight is over.")

@@ -221,13 +221,13 @@
     },
     {
       "blocks": [
-        "action||You break away from the Echo Wolf and escape; the fight is over.",
-        "result||Consequence: You break away from the Echo Wolf and escape; the fight is over.",
-        "choice||Offered choice: You break away from the Echo Wolf and escape; the fight is over."
+        "action||You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.",
+        "result||Consequence: You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.",
+        "choice||Offered choice: You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing."
       ],
       "step": "I flee from the Echo Wolf.",
-      "told": "You break away from the Echo Wolf and escape; the fight is over. You break away from the Echo Wolf and escape; the fight is over. You break away from the Echo Wolf and escape; the fight is over.",
-      "visible": "You break away from the Echo Wolf and escape; the fight is over.\n\nConsequence: You break away from the Echo Wolf and escape; the fight is over."
+      "told": "You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing. You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing. You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.",
+      "visible": "You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing.\n\nConsequence: You break away from the Echo Wolf; a parting blow follows you. The Echo Wolf misses you. You escape; the fight is over, and it yields you nothing."
     },
     {
       "blocks": [

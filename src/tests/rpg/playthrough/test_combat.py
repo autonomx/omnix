@@ -92,6 +92,7 @@ def test_fleeing_ends_the_fight_and_counts(launch, world) -> None:
     assert "You break away" in told or "cuts you off" in told, told
     assert play.turn_count() == turns + 1
     if "You break away" in told:
+        assert "parting blow" in told, told  # breaking away costs a blow from each foe standing (RQ-5.1)
         assert not play.combat().get("active")
         assert not (play.stored()["runtime_state"].get("combat_state") or {}).get("active")
     assert play.survival()["hunger"] >= hunger  # time passes in a fight too

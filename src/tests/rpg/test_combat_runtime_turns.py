@@ -140,7 +140,9 @@ def test_the_hero_can_break_away_from_a_fight():
     lines = describe_combat_exchange(result)
     if result["escaped"]:
         assert state["combat_state"]["active"] is False and state["combat_state"]["ended_reason"] == "party_fled"
-        assert lines == ["You break away from the Echo Wolf and escape; the fight is over."]
+        # The wolf strikes at the hero breaking away (RQ-5.1).
+        assert lines[0] == "You break away from the Echo Wolf; a parting blow follows you."
+        assert lines[-1] == "You escape; the fight is over, and it yields you nothing."
     else:
         assert state["combat_state"]["current_actor_id"] == "player"  # the wolf has had its turn
         assert lines[0] == "You try to break away, but the Echo Wolf cuts you off."

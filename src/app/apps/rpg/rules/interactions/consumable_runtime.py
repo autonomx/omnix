@@ -129,7 +129,11 @@ def apply_consumable_interaction(
     }
 
     if effect_kind == "heal":
-        amount = max(0, _safe_int(effect.get("amount"), 0))
+        from app.apps.rpg.rules.combat.stakes import healing, treat_wound
+
+        # A wound halves what a heal restores; the draught closes it (RQ-5.1).
+        amount = healing(simulation_state, "player", max(0, _safe_int(effect.get("amount"), 0)))
+        treated = treat_wound(simulation_state, "player")
         hp_before = _safe_int(player_state.get("hp"), _safe_int(player_state.get("max_hp"), 20))
         max_hp = max(1, _safe_int(player_state.get("max_hp"), 20))
         hp_after = min(max_hp, hp_before + amount)
@@ -140,6 +144,7 @@ def apply_consumable_interaction(
             "applied": True,
             "kind": "heal",
             "amount": amount,
+            "wound_treated": treated,
             "hp_before": hp_before,
             "hp_after": hp_after,
             "max_hp": max_hp,

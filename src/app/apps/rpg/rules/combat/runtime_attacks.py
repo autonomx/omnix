@@ -20,7 +20,7 @@ from app.apps.rpg.rules.combat.runtime_core import (
     sync_participant_hp_to_actor_state,
 )
 from app.apps.rpg.rules.combat.runtime_turns import advance_combat_turn, gate_combat_action
-from app.apps.rpg.rules.combat.stakes import apply_defeat, attack_penalty
+from app.apps.rpg.rules.combat.stakes import apply_defeat, attack_penalty, wound_on_heavy_blow
 from app.apps.rpg.rules.interactions.equipment_runtime import (
     consume_equipped_ammo,
     project_equipment_stats,
@@ -73,6 +73,9 @@ def resolve_combat_attack(
     )
     target["hp"] = resolution["target_hp_after"]
     target["status"] = "defeated" if resolution["defeated"] else safe_str(target.get("status") or "active")
+    if safe_str(target.get("side")) == "party" and not resolution["defeated"]:
+        resolution["wounded"] = wound_on_heavy_blow(
+            simulation_state, target_id, damage=resolution["damage_applied"], max_hp=safe_int(target.get("max_hp"), 20))
     participants[target_id] = target
     combat_state["participants"] = participants
     sync_participant_hp_to_actor_state(
@@ -120,7 +123,9 @@ def resolve_combat_flee(
     actor_id: str = "player",
     tick: int = 0,
 ) -> Dict[str, Any]:
-    """Break away from the fight: d20 plus the hero's quickness against 8 plus the quickest foe's."""
+    """Break away from the fight: d20 plus the hero's quickness against 10 plus twice the quickest foe's
+    (docs/rpg/design/stakes.md). Breaking away costs a parting blow from each foe still standing, struck at
+    disadvantage; failing costs the turn. A fight fled from yields no loot and no experience."""
     combat_state = get_combat_state(simulation_state)
     if combat_state.get("active") is not True:
         return {"resolved": False, "changed_state": False, "reason": "combat_not_active", "source": SOURCE}
@@ -133,7 +138,7 @@ def resolve_combat_flee(
     foes = [participant(combat_state, foe_id) for foe_id in living_enemy_ids(combat_state)]
     roll = deterministic_roll(combat_seed(combat_state, "flee", actor_id), 1, 20)
     total = roll + safe_int(hero.get("initiative_bonus"), 0)
-    bar = 8 + max([safe_int(foe.get("initiative_bonus"), 0) for foe in foes] or [0])
+    bar = 10 + 2 * max([safe_int(foe.get("initiative_bonus"), 0) for foe in foes] or [0])
     escaped = total >= bar
     combat_state.setdefault("combat_log", []).append({
         "kind": "flee",
@@ -145,9 +150,16 @@ def resolve_combat_flee(
         "escaped": escaped,
         "tick": int(tick or 0),
     })
+    foe_ids = living_enemy_ids(combat_state)
+    parting_blows: list[Dict[str, Any]] = []
     if escaped:
+        parting_blows = _parting_blows(simulation_state, combat_state, actor_id, foe_ids)
         combat_state["active"] = False
-        combat_state["ended_reason"] = "party_fled"
+        if safe_int(participant(combat_state, actor_id).get("hp"), 0) <= 0 and not living_party_ids(combat_state):
+            combat_state["ended_reason"] = "party_side_defeated"  # cut down while breaking away
+            apply_defeat(simulation_state, combat_state)
+        else:
+            combat_state["ended_reason"] = "party_fled"
         simulation_state["combat_state"] = combat_state
     else:
         advance_combat_turn(simulation_state, tick=tick)
@@ -157,7 +169,8 @@ def resolve_combat_flee(
         "reason": "combat_fled" if escaped else "combat_flee_failed",
         "actor_id": actor_id,
         "escaped": escaped,
-        "foe_ids": living_enemy_ids(combat_state),
+        "parting_blows": deepcopy(parting_blows),
+        "foe_ids": foe_ids,
         "combat_state": deepcopy(get_combat_state(simulation_state)),
         "tick": int(tick or 0),
         "source": SOURCE,
@@ -193,6 +206,35 @@ def resolve_turns_until_player(
     return results
 
 
+def _parting_blows(
+    simulation_state: Dict[str, Any],
+    combat_state: Dict[str, Any],
+    actor_id: str,
+    foe_ids: list[str],
+) -> list[Dict[str, Any]]:
+    """Each foe still standing strikes once at the hero breaking away, at disadvantage."""
+    blows: list[Dict[str, Any]] = []
+    participants = safe_dict(combat_state.get("participants"))
+    for foe_id in foe_ids:
+        hero = participant(combat_state, actor_id)
+        if safe_int(hero.get("hp"), 0) <= 0:
+            break
+        blow = _roll_attack(simulation_state, combat_state, foe_id, actor_id, hero, {}, kind="parting_blow",
+                            disadvantage=True)
+        hero["hp"] = blow["target_hp_after"]
+        if blow["defeated"]:
+            hero["status"] = "defeated"
+        participants[actor_id] = hero
+        combat_state["participants"] = participants
+        sync_participant_hp_to_actor_state(simulation_state, actor_id=actor_id, hp=blow["target_hp_after"],
+                                           status=safe_str(hero.get("status")))
+        if blow["hit"] and not blow["defeated"]:
+            blow["wounded"] = wound_on_heavy_blow(simulation_state, actor_id, damage=blow["damage_applied"],
+                                                  max_hp=safe_int(hero.get("max_hp"), 20))
+        blows.append({"actor_id": foe_id, "target_id": actor_id, "parting_blow": True, **blow})
+    return blows
+
+
 def _roll_attack(
     simulation_state: Dict[str, Any],
     combat_state: Dict[str, Any],
@@ -200,13 +242,18 @@ def _roll_attack(
     target_id: str,
     target: Dict[str, Any],
     combat_modifiers: Dict[str, Any],
+    *,
+    kind: str = "attack",
+    disadvantage: bool = False,
 ) -> Dict[str, Any]:
     actor_stats = damage_bounds_for_actor(simulation_state, actor_id)
     morale_accuracy_bonus = safe_int(combat_modifiers.get("accuracy_bonus"), 0)
     morale_damage_bonus = safe_int(combat_modifiers.get("damage_bonus"), 0)
     target_defense = safe_int(target.get("defense"), 10)
     target_armor = safe_int(target.get("armor"), 0)
-    attack_roll = deterministic_roll(combat_seed(combat_state, "attack", actor_id, target_id), 1, 20)
+    attack_roll = deterministic_roll(combat_seed(combat_state, kind, actor_id, target_id), 1, 20)
+    if disadvantage:  # roll twice, keep the lower
+        attack_roll = min(attack_roll, deterministic_roll(combat_seed(combat_state, kind, actor_id, target_id, 2), 1, 20))
     condition_penalty = attack_penalty(simulation_state, actor_id)  # battered from a lost fight (RQ-5.1)
     attack_total = (
         attack_roll
@@ -224,7 +271,7 @@ def _roll_attack(
 
     if hit:
         damage_roll = deterministic_roll(
-            combat_seed(combat_state, "damage", actor_id, target_id),
+            combat_seed(combat_state, "damage" if kind == "attack" else f"{kind}:damage", actor_id, target_id),
             actor_stats["damage_min"],
             actor_stats["damage_max"],
         )
