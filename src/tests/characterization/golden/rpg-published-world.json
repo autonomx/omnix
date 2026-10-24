@@ -1433,7 +1433,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:5d547fb302c63261ed67ad77f721ee11fa82d82a7ffa1dc9fe2118e14255a06b",
+      "document_hash": "sha256:e19e5f90cf38867deb61b6f055b9c0a22aef6bb2ac3259804d056fa393f78d8e",
       "facts": {
         "combat": {
           "active": false,
@@ -1533,15 +1533,9 @@
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "simulation_state/environment",
-        "simulation_state/memory_state",
-        "simulation_state/npc_emotion_state",
-        "simulation_state/pending_interactions",
         "simulation_state/player_state",
-        "simulation_state/relationship_state",
-        "simulation_state/service_offer_state",
         "simulation_state/tick",
-        "simulation_state/transaction_history",
-        "simulation_state/world_event_state",
+        "simulation_state/trade",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -1584,14 +1578,9 @@
         "inventory": {
           "Iron Dagger": -1
         },
-        "purse_copper": 5,
-        "survival": {
-          "fatigue": 1,
-          "hunger": 1,
-          "thirst": 2
-        }
+        "purse_copper": 5
       },
-      "document_hash": "sha256:a9f597d94cb01fcd70deb2d08f193d605e1bdd0e4975480af5a730c0c6bca5ae",
+      "document_hash": "sha256:d21eec1ce96f0564b3e5a9d5a2557ccf1ce9d6442ed471783c35fe45ab07776a",
       "facts": {
         "combat": {
           "active": false,
@@ -1668,83 +1657,52 @@
           }
         },
         "survival": {
-          "fatigue": 8,
-          "hunger": 8,
-          "thirst": 15
+          "fatigue": 7,
+          "hunger": 7,
+          "thirst": 13
         },
         "turn_count": 11
       },
       "model_calls": [
-        "dialogue",
         "narration"
       ],
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "manifest/updated_at",
-        "runtime_state/actor_activities",
         "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
-        "runtime_state/current_scene",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
-        "runtime_state/last_player_action_context",
-        "runtime_state/last_player_turn_at",
-        "runtime_state/last_real_player_activity_at",
-        "runtime_state/last_turn_contract",
-        "runtime_state/last_turn_result",
-        "runtime_state/narration_quality",
-        "runtime_state/perf_trace",
         "runtime_state/player_journal",
-        "runtime_state/player_request_events",
         "runtime_state/recent_interactions",
-        "runtime_state/recent_scene_beats",
-        "runtime_state/recent_world_event_rows",
-        "runtime_state/semantic_action_index",
-        "runtime_state/semantic_action_records",
         "runtime_state/state_revision",
-        "runtime_state/survival_tick_history",
-        "runtime_state/tick",
-        "runtime_state/turn_history",
-        "runtime_state/world_consequences",
-        "setup_payload/metadata",
-        "simulation_state/active_interactions",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
-        "simulation_state/debug_meta",
         "simulation_state/economy_state",
-        "simulation_state/event_history",
-        "simulation_state/events",
-        "simulation_state/history",
-        "simulation_state/locations",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
-        "simulation_state/npc_decisions",
-        "simulation_state/npc_minds",
         "simulation_state/player_state",
-        "simulation_state/relationship_state",
-        "simulation_state/step_hash",
-        "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/timeline",
+        "simulation_state/trade",
         "simulation_state/travel_state",
-        "simulation_state/turn_index",
         "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
           "inventory",
-          "survival"
+          "economy",
+          "world",
+          "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
         "state": {
@@ -1752,7 +1710,9 @@
           "changed_domains": [
             "time",
             "inventory",
-            "survival"
+            "economy",
+            "world",
+            "narrative"
           ],
           "revision": 12
         }
@@ -1779,7 +1739,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:2ec9387c7e8ebe56152142394b5a82d9a8473ab69bba32cf753e01e42ba745da",
+      "document_hash": "sha256:f6f30b46aa96133db5cbe6ced337f234a551eb339587dfb6d3f5befbdf424c7c",
       "facts": {
         "combat": {
           "active": false,
@@ -1856,9 +1816,9 @@
           }
         },
         "survival": {
-          "fatigue": 9,
-          "hunger": 9,
-          "thirst": 17
+          "fatigue": 8,
+          "hunger": 8,
+          "thirst": 15
         },
         "turn_count": 12
       },
@@ -1869,6 +1829,7 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "manifest/updated_at",
+        "runtime_state/campaign_calendar",
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
@@ -1887,6 +1848,7 @@
         "runtime_state/last_turn_result",
         "runtime_state/narration_quality",
         "runtime_state/perf_trace",
+        "runtime_state/player_journal",
         "runtime_state/player_request_events",
         "runtime_state/recent_interactions",
         "runtime_state/recent_scene_beats",
@@ -1897,8 +1859,8 @@
         "runtime_state/survival_tick_history",
         "runtime_state/tick",
         "runtime_state/turn_history",
+        "runtime_state/world_consequences",
         "setup_payload/metadata",
-        "simulation_state/active_interactions",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
@@ -1979,7 +1941,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:509998f5acdc0bc48d16f6b7f7b6dcd69cdebef66a2f2fdc48f4c30398019ee2",
+      "document_hash": "sha256:2ebe52156719cccba320aea06a0a7310b367ba13d3a483c719f4798c5070d823",
       "facts": {
         "combat": {
           "active": false,
@@ -2056,9 +2018,9 @@
           }
         },
         "survival": {
-          "fatigue": 11,
-          "hunger": 11,
-          "thirst": 20
+          "fatigue": 10,
+          "hunger": 10,
+          "thirst": 18
         },
         "turn_count": 13
       },
@@ -2160,7 +2122,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:d29eb18f9d56be90876b49c7cedf26f2223455ca494894247a9211f092d91ce7",
+      "document_hash": "sha256:76067db39920a641fc59d907b38985ccd6e5f1f04577d0049b4e19d38f944b8b",
       "facts": {
         "combat": {
           "active": false,
@@ -2237,9 +2199,9 @@
           }
         },
         "survival": {
-          "fatigue": 12,
-          "hunger": 12,
-          "thirst": 22
+          "fatigue": 11,
+          "hunger": 11,
+          "thirst": 20
         },
         "turn_count": 14
       },
@@ -2325,7 +2287,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:5abca94eceb54e21fd4d729b007a555aab73b61afb432523382c96bf3d1d6565",
+      "document_hash": "sha256:44b5c1d3efc1583f745002099c90aab9de2cd5adebd8cd05e0643a761eed1555",
       "facts": {
         "combat": {
           "active": false,
@@ -2403,9 +2365,9 @@
           }
         },
         "survival": {
-          "fatigue": 14,
-          "hunger": 14,
-          "thirst": 25
+          "fatigue": 13,
+          "hunger": 13,
+          "thirst": 23
         },
         "turn_count": 15
       },
@@ -2502,7 +2464,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:12acb4e2607dfe4683a40038ad5d56f6c81590ff37a1e4ecd343de7c56da7542",
+      "document_hash": "sha256:ae0d6303c64bb5dacb45390a6519aa556650fb7a5ad86cb0dd14886da0a7b67c",
       "facts": {
         "combat": {
           "active": false,
@@ -2580,9 +2542,9 @@
           }
         },
         "survival": {
-          "fatigue": 15,
-          "hunger": 15,
-          "thirst": 27
+          "fatigue": 14,
+          "hunger": 14,
+          "thirst": 25
         },
         "turn_count": 16
       },
@@ -2598,13 +2560,11 @@
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
         "runtime_state/current_scene",
-        "runtime_state/grounded_scene_context",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/last_player_action",
         "runtime_state/last_player_action_context",
         "runtime_state/last_player_turn_at",
         "runtime_state/last_real_player_activity_at",
@@ -2625,7 +2585,6 @@
         "runtime_state/turn_history",
         "runtime_state/world_consequences",
         "setup_payload/metadata",
-        "simulation_state/active_interactions",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/debug_meta",
@@ -2681,10 +2640,10 @@
       "changes": {
         "purse_copper": -8,
         "survival": {
-          "hunger": -15
+          "hunger": -14
         }
       },
-      "document_hash": "sha256:b4016f52f51b6fb79317faaacbb35c0898dc8b356c837c1e21039c424706c957",
+      "document_hash": "sha256:8b726e0ab6f63fbc10749466b91c002b3885de9c28384e84e96be0da1f25c1e1",
       "facts": {
         "combat": {
           "active": false,
@@ -2762,9 +2721,9 @@
           }
         },
         "survival": {
-          "fatigue": 15,
+          "fatigue": 14,
           "hunger": 0,
-          "thirst": 27
+          "thirst": 25
         },
         "turn_count": 17
       },
@@ -2790,14 +2749,11 @@
         "simulation_state/causal_world_runtime",
         "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/memory_state",
         "simulation_state/merchant_state",
-        "simulation_state/npc_emotion_state",
         "simulation_state/player_state",
-        "simulation_state/relationship_state",
         "simulation_state/survival",
         "simulation_state/tick",
-        "simulation_state/transaction_history",
+        "simulation_state/trade",
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
@@ -2843,7 +2799,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:69be2f668f3d148a88761f9f07821d8d7b87791c220f4ecfa8cadad7285af9ed",
+      "document_hash": "sha256:4e25449e915935a0b3907f072235a291947def6a0aad82a57ca5db5241e1743b",
       "facts": {
         "combat": {
           "active": false,
@@ -2921,9 +2877,9 @@
           }
         },
         "survival": {
-          "fatigue": 15,
+          "fatigue": 14,
           "hunger": 0,
-          "thirst": 27
+          "thirst": 25
         },
         "turn_count": 18
       },
@@ -2950,14 +2906,10 @@
         "simulation_state/causal_world_runtime",
         "simulation_state/economy_state",
         "simulation_state/environment",
-        "simulation_state/memory_state",
         "simulation_state/merchant_state",
-        "simulation_state/npc_emotion_state",
         "simulation_state/player_state",
-        "simulation_state/relationship_state",
-        "simulation_state/service_offer_state",
         "simulation_state/tick",
-        "simulation_state/transaction_history",
+        "simulation_state/trade",
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
@@ -3000,10 +2952,10 @@
     {
       "changes": {
         "survival": {
-          "fatigue": -15
+          "fatigue": -14
         }
       },
-      "document_hash": "sha256:17e108f7df8eae0ce8283453c8e478fef67c9e5205f340151d8599161e29e34c",
+      "document_hash": "sha256:512187f8ae6fe8b20e6930128e9d4a26322a9396f7a95b46bc15c2e3eec0ec7c",
       "facts": {
         "combat": {
           "active": false,
@@ -3083,7 +3035,7 @@
         "survival": {
           "fatigue": 0,
           "hunger": 0,
-          "thirst": 27
+          "thirst": 25
         },
         "turn_count": 19
       },
@@ -3158,7 +3110,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b684f9edff386bee81a70c63c4a559e8af304a723cd879e3aab0b419bce8eacd",
+      "document_hash": "sha256:f7c5574915ea257be0eb265c37ed32edf13e9b731fb8fcac6f54433232960f75",
       "facts": {
         "combat": {
           "active": false,
@@ -3238,7 +3190,7 @@
         "survival": {
           "fatigue": 1,
           "hunger": 1,
-          "thirst": 29
+          "thirst": 27
         },
         "turn_count": 20
       },
@@ -3320,7 +3272,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cbf5017e5a58c194a8017afe74e8f08ad97e52ef6eeb0527443d85f95d0263a9",
+      "document_hash": "sha256:af8e09a8d2bef223e7ec259933fd95ab8f20be2832594b41a7556569bccb8a91",
       "facts": {
         "combat": {
           "active": true,
@@ -3404,7 +3356,7 @@
         "survival": {
           "fatigue": 2,
           "hunger": 2,
-          "thirst": 31
+          "thirst": 29
         },
         "turn_count": 21
       },
@@ -3455,6 +3407,7 @@
         "simulation_state/event_history",
         "simulation_state/events",
         "simulation_state/history",
+        "simulation_state/locations",
         "simulation_state/merchant_state",
         "simulation_state/npc_decisions",
         "simulation_state/npc_minds",
@@ -3503,7 +3456,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:cbf5017e5a58c194a8017afe74e8f08ad97e52ef6eeb0527443d85f95d0263a9",
+      "document_hash": "sha256:af8e09a8d2bef223e7ec259933fd95ab8f20be2832594b41a7556569bccb8a91",
       "facts": {
         "combat": {
           "active": true,
@@ -3587,7 +3540,7 @@
         "survival": {
           "fatigue": 2,
           "hunger": 2,
-          "thirst": 31
+          "thirst": 29
         },
         "turn_count": 21
       },
@@ -3622,7 +3575,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:9df111a60344f7e783107dbcf4a0003f31df6d84efe3ff1b88c033feee8e7405",
+      "document_hash": "sha256:c667f4a47b77b27a3c1db9f8e5619934f034a43c752ccbdbf6a7bc0fd57b1828",
       "facts": {
         "combat": {
           "active": true,
@@ -3706,7 +3659,7 @@
         "survival": {
           "fatigue": 3,
           "hunger": 3,
-          "thirst": 33
+          "thirst": 31
         },
         "turn_count": 22
       },
@@ -3810,7 +3763,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f233bbddec72beec229161b76d3d53489947dee80f0c8fc8b326546ea4dadd44",
+      "document_hash": "sha256:3a51b9ed46dd3347f6d35d36924263bc0482abb95c3473879edd28dbe9bdf272",
       "facts": {
         "combat": {
           "active": true,
@@ -3894,7 +3847,7 @@
         "survival": {
           "fatigue": 4,
           "hunger": 4,
-          "thirst": 35
+          "thirst": 33
         },
         "turn_count": 23
       },
@@ -3990,7 +3943,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:aac4223cabd1893a7a766474f5c51674dbffb249b4bfc38e3ed76e345cd2c884",
+      "document_hash": "sha256:6bf36a67122a43799fe3faf6ac5fea475895aad5a05c3c65ea2a1db300c977e9",
       "facts": {
         "combat": {
           "active": false,
@@ -4074,7 +4027,7 @@
         "survival": {
           "fatigue": 5,
           "hunger": 5,
-          "thirst": 37
+          "thirst": 35
         },
         "turn_count": 24
       },
@@ -4166,7 +4119,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:ed1ff10b20d9843dc819a89d7fc96ca26544a6dc14f004a0f188a6fa1d311028",
+      "document_hash": "sha256:da9ceca1fe406de60100729a2acf6d9cd15e312c28a665a23205c8157c9f7eb4",
       "facts": {
         "combat": {
           "active": false,
@@ -4250,7 +4203,7 @@
         "survival": {
           "fatigue": 5,
           "hunger": 5,
-          "thirst": 37
+          "thirst": 35
         },
         "turn_count": 25
       },
@@ -4317,7 +4270,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:dfcb3e2ccca91d36f2910463b3900499f0928c1e066b1a1d7de9f8f1c85e452d",
+      "document_hash": "sha256:824da3e607c6cdad7b4c4e46bd67124c980afcf78a28743127f636809ed7830f",
       "facts": {
         "combat": {
           "active": false,
@@ -4401,7 +4354,7 @@
         "survival": {
           "fatigue": 6,
           "hunger": 6,
-          "thirst": 39
+          "thirst": 37
         },
         "turn_count": 26
       },
@@ -4497,7 +4450,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:7f704d4df4e0aca0dc56c97839a07a4c3b23b39140cc03597e752cec33aafb03",
+      "document_hash": "sha256:3225aa00f2c12ca50cc7801b3da06be80122389e68a4e38e25702f8f66b36092",
       "facts": {
         "combat": {
           "active": false,
@@ -4578,7 +4531,7 @@
         "survival": {
           "fatigue": 8,
           "hunger": 8,
-          "thirst": 42
+          "thirst": 40
         },
         "turn_count": 27
       },
@@ -4683,7 +4636,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:1912f0b3de3704f54e8817888dd657aeb2e2993d296267b988f9b21464529a78",
+      "document_hash": "sha256:b83dd68dc7f2d56cc192eedc2288a5f05d92785e1feb7c8fc013d5edd3b40e04",
       "facts": {
         "combat": {
           "active": false,
@@ -4767,7 +4720,7 @@
         "survival": {
           "fatigue": 10,
           "hunger": 10,
-          "thirst": 45
+          "thirst": 43
         },
         "turn_count": 28
       },
@@ -4871,7 +4824,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:b0144482f10bd232eb45e533c777a64e7c7e1b7c2f28709b06d7d425739041c0",
+      "document_hash": "sha256:9374b86597d71b4054f1d19f328278d37c71ca46d99ce3eb62ddd7fbf9a06726",
       "facts": {
         "combat": {
           "active": false,
@@ -4952,7 +4905,7 @@
         "survival": {
           "fatigue": 12,
           "hunger": 12,
-          "thirst": 48
+          "thirst": 46
         },
         "turn_count": 29
       },
@@ -5046,7 +4999,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e129596454f774c7e86de6d38a7182cb7996b4a0eb905a1967ccce8e929472b1",
+      "document_hash": "sha256:df0c4de6994b30d46bd82408ffb3ada222194cc35352b06cd3f72823d9484a94",
       "facts": {
         "combat": {
           "active": false,
@@ -5127,7 +5080,7 @@
         "survival": {
           "fatigue": 13,
           "hunger": 13,
-          "thirst": 50
+          "thirst": 48
         },
         "turn_count": 30
       },

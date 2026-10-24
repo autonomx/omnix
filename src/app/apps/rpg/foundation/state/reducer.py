@@ -38,13 +38,16 @@ from .changes import (
     SkillProgressed,
     StateChange,
     JournalWritten,
+    ServiceReserved,
+    StockTaken,
     TimeAdvanced,
-    TradeRecorded,
+    TradeRemembered,
     TurnCounted,
     WorldTicked,
 )
 
 JsonPatch = list[dict[str, Any]]
+TRADE_LEDGER_KEPT = 50
 _PLAYER = ("simulation_state", "player_state")
 _STORE = _PLAYER + ("inventory_state",)
 
@@ -330,9 +333,23 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             writer.set(("state", "world", "environment"), environment)
             writer.set(("state", "world", "time"),
                        f"Day {minutes // 1440 + 1} • {minutes % 1440 // 60:02d}:{minutes % 60:02d}")
-    elif isinstance(change, TradeRecorded):
-        for key, value in change.simulation.items():
-            writer.set(("simulation_state", key), value)
+    elif isinstance(change, ServiceReserved):
+        reserved = [dict(service) for service in writer.get(("simulation_state", "active_services")) or ()
+                    if isinstance(service, dict)]
+        reserved.append({"service_id": change.offer_id, "offer_id": change.offer_id, "service_kind": change.service_kind,
+                         "provider_id": change.provider_id, "provider_name": change.provider_name,
+                         "label": change.label, "duration": change.duration, "status": "active",
+                         "started_tick": int(writer.get(("simulation_state", "tick")) or 0),
+                         "effects": {"duration": change.duration, f"{change.service_kind}_reserved": True}})
+        writer.set(("simulation_state", "active_services"), reserved)
+    elif isinstance(change, StockTaken):
+        writer.set(("simulation_state", "trade", "stock", change.offer_id), change.remaining)
+    elif isinstance(change, TradeRemembered):
+        ledger = [dict(row) for row in writer.get(("simulation_state", "trade", "ledger")) or () if isinstance(row, dict)]
+        ledger.append({"provider_id": change.provider_id, "provider_name": change.provider_name, "deal": change.deal,
+                       "what": change.what, "copper": change.copper,
+                       "tick": int(writer.get(("simulation_state", "tick")) or 0)})
+        writer.set(("simulation_state", "trade", "ledger"), ledger[-TRADE_LEDGER_KEPT:])
     elif isinstance(change, JournalWritten):
         writer.set(("runtime_state", "campaign_calendar"), change.calendar)
         writer.set(("runtime_state", "player_journal"), change.journal)

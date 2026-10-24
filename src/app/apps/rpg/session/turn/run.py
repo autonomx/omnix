@@ -11,7 +11,7 @@ from typing import Any
 
 from app.config.env import env_bool
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
-from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, TradeRecorded, WorldTicked
+from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_command
 from app.apps.rpg.session.command_reading import read_command, reading_record
@@ -30,7 +30,7 @@ LOOK_SETTING = "OMNIX_RPG_TURN_PIPELINE_LOOK"
 WAIT_SETTING = "OMNIX_RPG_TURN_PIPELINE_WAIT"
 CLARIFY_SETTING = "OMNIX_RPG_TURN_PIPELINE_CLARIFY"
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
-                "trade": "service_purchase"}
+                "trade": "trade"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel", "trade": "commerce"}
 SOURCE = "rpg_turn_pipeline_v1"
 
@@ -143,7 +143,7 @@ def run_planned_turn(
             "planned": planned.model_dump(mode="json"),
             "intent": reading_record(reading),
             # As the outcome reports them: a world tick's summary, not the sections it replaced (the patch has those).
-            "changes": [(change.reported() if isinstance(change, (WorldTicked, TradeRecorded)) else change).model_dump(mode="json")
+            "changes": [(change.reported() if isinstance(change, WorldTicked) else change).model_dump(mode="json")
                         for change in applied],
         },
     }
@@ -199,7 +199,7 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
         "source": SOURCE, "response_mode": "world_tick", "resolved_result": resolved, "result": dict(resolved),
         "causal_world_runtime": causal, "world_tick": {"elapsed_seconds": seconds, "ticks": ticks},
         "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick",
-                          "changes": [(change.reported() if isinstance(change, (WorldTicked, TradeRecorded)) else change)
+                          "changes": [(change.reported() if isinstance(change, WorldTicked) else change)
                                       .model_dump(mode="json") for change in changes]},
     }
     from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
@@ -248,7 +248,8 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     if planned is None or not pipeline_enabled(planned.mechanic):
         return ctx
     request = TurnRequest(kind="player_text", session_id=ctx.session_id, text=_s(ctx.player_input))
-    trade = resolve_trade(session, request.text) if planned.mechanic == "trade" else None
+    trade = (resolve_trade(session, request.text, selling=planned.reason == "sell")
+             if planned.mechanic == "trade" else None)
     if planned.mechanic == "trade" and trade is None:
         return ctx  # not a trade the pipeline makes: the older path answers
     ctx.result = run_planned_turn(session, request=request, planned=planned, reading=reading, trade=trade)

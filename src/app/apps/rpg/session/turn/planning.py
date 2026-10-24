@@ -37,8 +37,8 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
         return PlannedAction(mechanic="clarify", ticks=0, reason=reading.reason, question=question)
     if len(reading.clauses) > 1:
         return None
-    if reading.family == "buy":  # which offer is the economy's to say (the service resolver), so any reading
-        return PlannedAction(mechanic="trade", reason=reading.reason)
+    if reading.family in {"buy", "sell"}:  # which offer, or which buyer, is the trade rule's to say
+        return PlannedAction(mechanic="trade", reason=reading.family)
     if reading.confidence < SKIP_CONFIDENCE:
         return None
     if reading.family == "look":

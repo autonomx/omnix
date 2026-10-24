@@ -94,11 +94,12 @@
     {
       "blocks": [
         "action||You sell the Iron Dagger to Brindle Gearwing for 5 copper.",
+        "result||Consequence: You sell the Iron Dagger to Brindle Gearwing for 5 copper.",
         "choice||Offered choice: You sell the Iron Dagger to Brindle Gearwing for 5 copper."
       ],
       "step": "I sell my Iron Dagger to Brindle Gearwing.",
-      "told": "You sell the Iron Dagger to Brindle Gearwing for 5 copper. You sell the Iron Dagger to Brindle Gearwing for 5 copper.",
-      "visible": "You sell the Iron Dagger to Brindle Gearwing for 5 copper."
+      "told": "You sell the Iron Dagger to Brindle Gearwing for 5 copper. You sell the Iron Dagger to Brindle Gearwing for 5 copper. You sell the Iron Dagger to Brindle Gearwing for 5 copper.",
+      "visible": "You sell the Iron Dagger to Brindle Gearwing for 5 copper.\n\nConsequence: You sell the Iron Dagger to Brindle Gearwing for 5 copper."
     },
     {
       "blocks": [
