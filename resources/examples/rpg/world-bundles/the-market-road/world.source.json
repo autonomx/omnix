@@ -1,477 +1,3419 @@
 {
-  "released_at": "2026-10-24T08:00:00+00:00",
-  "world": {
-    "id": "world:the-market-road",
-    "title": "The Market Road",
-    "description": "A rain-soaked market town on the old trade road: the Rusty Flagon and its regulars, a market square, a road watched by bandits, an abandoned mill, and an old quarry where a light burns that should have gone out years ago.",
-    "genre": "classic_fantasy",
-    "tone": "grounded heroic adventure",
-    "seed": 7,
-    "status": "published",
-    "source_mode": "manual",
-    "draft_revision": 1,
-    "metadata": {
-      "campaign_template": "classic_fantasy",
-      "content_rating": "teen",
-      "recommended_level_range": "1-4",
-      "default_scenario_id": "scenario:market-road:rusty-flagon",
-      "builtin": "starter",
-      "tags": ["starter", "classic fantasy", "tavern", "bandits", "mystery"]
-    }
-  },
-  "revision": {
-    "title": "The Market Road",
-    "provenance": {
-      "authoring_mode": "curated starter world",
-      "purpose": "the classic new game's world (RQ-2.8)",
-      "schema": "market_road_starter_v1",
-      "source": "autonomx/omnix built-in bundle"
-    },
-    "canon": {
-      "campaign_template": "classic_fantasy",
-      "summary": "A small market town where the old trade road meets the hills. Caravans have thinned since bandits took to the road near the old mill, a market porter moves sealed crates after dusk, and a pale light has begun to glow in the abandoned quarry. The Rusty Flagon hears all of it first.",
-      "themes": ["small-town trust", "trade under threat", "a mystery in the hills"],
-      "safety_and_tone": {"violence": "moderate", "tone": "grounded, warm, with danger on the road"},
-      "regions": [
-        {"id": "region:market-road:town", "name": "Market Road", "capital": "location:market-road:market-square",
-         "summary": "The town itself: the Rusty Flagon, the market square and the lanes between them"},
-        {"id": "region:market-road:trade-road", "name": "the Trade Road",
-         "summary": "The rutted road north of town, the brush on either side, and the old mill on its spur"},
-        {"id": "region:market-road:quarry", "name": "the Abandoned Works",
-         "summary": "The old quarry and its rusted workings, long closed"},
-        {"id": "region:market-road:pass", "name": "the Mountain Pass",
-         "summary": "The cold climb where the trade road crosses the mountains"}
-      ],
-      "characters": [
-        {"id": "npc:bran", "name": "Bran", "species": "human", "role": "innkeeper of the Rusty Flagon",
-         "location_id": "location:market-road:rusty-flagon",
-         "biography": "Bran keeps the Rusty Flagon running, watches debts carefully, and treats rumors as useful only when they come from reliable mouths. He has heard every story the road can tell and believes about a third of them.",
-         "personality": ["practical", "guarded", "plainspoken", "dry humor", "protective of his regulars"],
-         "speech_style": "plainspoken and unhurried; tavern and trade metaphors; asks direct questions; rarely volunteers dangerous details",
-         "goals": ["keep the tavern calm, paid, and orderly", "hear reliable news from the roads before trouble reaches town"],
-         "secrets": ["he lent money against the old mill before it was abandoned, and the debt is why he never goes near it"],
-         "relationships": {"npc:mira": "respects her curiosity but thinks she invites trouble",
-                           "npc:aldric": "a necessary but tense working relationship",
-                           "npc:elara": "an old friend who pays her tab"}},
-        {"id": "npc:mira", "name": "Mira", "species": "human", "role": "curious local informant and would-be companion",
-         "location_id": "location:market-road:rusty-flagon",
-         "biography": "Mira listens more than she speaks, collects patterns in gossip, and pushes people to admit what they are trying to avoid. She has been waiting for someone willing to walk the road with her and see what is really out there.",
-         "personality": ["curious", "observant", "wry", "probing", "socially agile"],
-         "speech_style": "quick and wry; asks pointed follow-up questions; notices contradictions and phrases her suspicions carefully",
-         "goals": ["learn what is really happening on the road and in the quarry", "find a traveler brave enough to go with her"],
-         "secrets": ["she followed the porter Tomas one night and saw him hand a sealed crate to a stranger on the road"],
-         "relationships": {"npc:bran": "respects Bran's caution but thinks he withholds too much",
-                           "npc:aldric": "does not fully trust official explanations",
-                           "npc:tomas": "watches him"}},
-        {"id": "npc:elara", "name": "Elara", "species": "human", "role": "merchant of the market square",
-         "location_id": "location:market-road:market-square",
-         "biography": "Elara runs the best-stocked stall in the square and measures every rumor by what it does to roads, prices and risk. Her caravans have stopped coming since the bandits arrived, and she is short of patience as well as stock.",
-         "personality": ["pragmatic", "shrewd", "careful", "talkative when profit is near"],
-         "speech_style": "brisk and practical; compares danger to cost; does not give information away for free",
-         "goals": ["get the caravans moving again", "sell what she has before the road closes for good"],
-         "secrets": ["she has been buying the porter's sealed crates without asking what is in them"],
-         "relationships": {"npc:bran": "an old friend", "npc:tomas": "her porter, and more useful than she admits"}},
-        {"id": "npc:aldric", "name": "Captain Aldric", "species": "human", "role": "captain of the town watch",
-         "location_id": "location:market-road:market-square",
-         "biography": "Captain Aldric is responsible for public order and frames every problem in terms of risk, witnesses and containment. He has too few guards for the road and too many questions he cannot answer.",
-         "personality": ["disciplined", "skeptical", "protective", "authoritative"],
-         "speech_style": "controlled and clipped; asks for facts; uses watch procedure; avoids speculation",
-         "goals": ["keep the trade road open", "find the two caravan guards who went missing near the mill"],
-         "secrets": ["the town council has told him to keep the quarry light quiet until after the harvest fair"],
-         "relationships": {"npc:bran": "relies on Bran for tavern reports but distrusts gossip",
-                           "npc:mira": "useful but difficult to control"}},
-        {"id": "npc:tomas", "name": "Tomas", "species": "human", "role": "porter of the market square",
-         "location_id": "location:market-road:market-square",
-         "biography": "Tomas hauls goods between the square and the road for whoever pays. He is cheerful by day and hard to find after dusk.",
-         "personality": ["cheerful", "evasive", "strong", "nervous around the watch"],
-         "speech_style": "friendly and chatty until asked about his evenings, then short",
-         "goals": ["keep his night work quiet", "earn enough to leave town"],
-         "secrets": ["the sealed crates come from the old quarry, and he does not know what is inside them"],
-         "relationships": {"npc:elara": "his best customer", "npc:aldric": "avoids him"}}
-      ],
-      "items": [
-        {"id": "item:healing-potion", "name": "Healing Potion", "type": "potion", "rarity": "common", "effect": "restores health"},
-        {"id": "item:torch", "name": "Torch", "type": "tool", "rarity": "common", "effect": "lights dark places for an hour"},
-        {"id": "item:rope", "name": "Rope", "type": "tool", "rarity": "common", "effect": "fifty feet of sturdy hemp rope"},
-        {"id": "item:trail-rations", "name": "Trail Rations", "type": "food", "rarity": "common", "effect": "a day's dried meat, hard cheese and berries; eases hunger"},
-        {"id": "item:water-skin", "name": "Water Skin", "type": "drink", "rarity": "common", "effect": "eases thirst"},
-        {"id": "item:small-pouch", "name": "Small Pouch", "type": "container", "rarity": "common", "effect": "holds coins and small things"},
-        {"id": "item:sealed-crate", "name": "Sealed Crate", "type": "quest", "rarity": "uncommon", "effect": "heavy, nailed shut, faintly warm"},
-        {"id": "item:quarry-shard", "name": "Quarry Shard", "type": "quest", "rarity": "rare", "effect": "a sliver of pale stone that glows in the dark"}
-      ],
-      "economy": {
-        "currency": {"copper": 1, "silver": 10, "gold": 100},
-        "trade": "Caravans bring cloth and tools up the trade road and carry quarry stone and wool back down; since the bandits came, little moves at all.",
-        "typical_prices": {"healing_potion": "1 gold", "inn_room": "5 silver/night", "meal": "1 silver 5 copper", "ale": "8 copper"},
-        "providers": [
-          {"provider_id": "npc:bran", "location_id": "location:market-road:rusty-flagon",
-           "sells": [
-             {"offer_key": "common-room-cot", "service": "lodging", "name": "Common room cot", "description": "A simple cot in the common room for one night.", "price": {"silver": 5}, "stock": 6, "restock_per_day": 6},
-             {"offer_key": "private-room", "service": "lodging", "name": "Private room", "description": "A private room upstairs for one night.", "price": {"gold": 1}, "stock": 1, "restock_per_day": 1},
-             {"offer_key": "hot-stew", "service": "meal", "name": "Hot stew", "description": "A hot bowl of stew and bread.", "price": {"silver": 1, "copper": 5}},
-             {"offer_key": "mug-of-ale", "service": "drink", "name": "Mug of ale", "description": "A mug of the local ale.", "price": {"copper": 8}},
-             {"offer_key": "trail-rations", "service": "shop_goods", "name": "Trail Rations", "description": "A wrapped day of dried meat, hard cheese, and preserved berries.", "price": {"silver": 5}, "item_id": "item:trail-rations", "stock": 4, "restock_per_day": 2},
-             {"offer_key": "local-rumor", "service": "paid_information", "name": "Local rumor", "description": "A useful rumor from the common room.", "price": {"silver": 2}}
-           ]},
-          {"provider_id": "npc:elara", "location_id": "location:market-road:market-square",
-           "sells": [
-             {"offer_key": "healing-potion", "service": "shop_goods", "name": "Healing Potion", "description": "A stoppered vial of red tincture.", "price": {"gold": 1}, "item_id": "item:healing-potion", "stock": 3, "restock_per_day": 1},
-             {"offer_key": "torch", "service": "shop_goods", "name": "Torch", "description": "A simple torch for dark places.", "price": {"silver": 1}, "item_id": "item:torch", "stock": 3, "restock_per_day": 2},
-             {"offer_key": "rope", "service": "shop_goods", "name": "Rope", "description": "Fifty feet of sturdy hemp rope.", "price": {"silver": 3}, "item_id": "item:rope", "stock": 2, "restock_per_day": 1},
-             {"offer_key": "market-information", "service": "paid_information", "name": "Market information", "description": "What the caravans and the stallholders are saying.", "price": {"silver": 2}},
-             {"offer_key": "gear-repair", "service": "repair", "name": "Basic gear repair", "description": "Minor repair work on worn equipment.", "price": {"silver": 4}}
-           ],
-           "buys": {"item_types": ["potion", "tool", "weapon", "armor", "clothing", "food"], "price_fraction": 0.5}}
-        ]
-      },
-      "routines": [
-        {"npc_id": "npc:bran",
-         "schedule": [{"from_hour": 0, "to_hour": 6, "location_id": "location:market-road:rusty-flagon", "activity": "asleep upstairs"},
-                      {"from_hour": 6, "to_hour": 24, "location_id": "location:market-road:rusty-flagon", "activity": "keeping the tavern"}],
-         "goals": [{"goal_id": "goal:bran:orderly-tavern", "summary": "Keep the tavern calm, paid, and orderly.", "priority": 3, "topics": ["tavern", "debts"]},
-                   {"goal_id": "goal:bran:road-news", "summary": "Hear reliable news from the roads.", "priority": 2, "topics": ["road", "rumor", "bandits"]}]},
-        {"npc_id": "npc:mira",
-         "schedule": [{"from_hour": 0, "to_hour": 8, "location_id": "location:market-road:rusty-flagon", "activity": "asleep in a rented cot"},
-                      {"from_hour": 8, "to_hour": 16, "location_id": "location:market-road:market-square", "activity": "listening to the stallholders"},
-                      {"from_hour": 16, "to_hour": 24, "location_id": "location:market-road:rusty-flagon", "activity": "watching the common room"}],
-         "goals": [{"goal_id": "goal:mira:the-truth", "summary": "Learn what is really happening on the road and in the quarry.", "priority": 3, "topics": ["quarry", "lights", "crates"]}]},
-        {"npc_id": "npc:elara",
-         "schedule": [{"from_hour": 0, "to_hour": 7, "location_id": "location:market-road:market-square", "activity": "asleep above her stall"},
-                      {"from_hour": 7, "to_hour": 19, "location_id": "location:market-road:market-square", "activity": "selling at her stall"},
-                      {"from_hour": 19, "to_hour": 23, "location_id": "location:market-road:rusty-flagon", "activity": "arguing prices over supper"},
-                      {"from_hour": 23, "to_hour": 24, "location_id": "location:market-road:market-square", "activity": "closing up"}],
-         "goals": [{"goal_id": "goal:elara:caravans", "summary": "Get the caravans moving again.", "priority": 3, "topics": ["caravans", "road", "bandits"], "location_id": "location:market-road:northern-road"}]},
-        {"npc_id": "npc:aldric",
-         "schedule": [{"from_hour": 0, "to_hour": 8, "location_id": "location:market-road:market-square", "activity": "asleep at the watch house"},
-                      {"from_hour": 8, "to_hour": 14, "location_id": "location:market-road:northern-road", "activity": "patrolling the road"},
-                      {"from_hour": 14, "to_hour": 20, "location_id": "location:market-road:market-square", "activity": "keeping order in the square"},
-                      {"from_hour": 20, "to_hour": 24, "location_id": "location:market-road:rusty-flagon", "activity": "taking reports at the tavern"}],
-         "goals": [{"goal_id": "goal:aldric:open-road", "summary": "Keep the trade road open and find the missing guards.", "priority": 3, "topics": ["road", "bandits", "missing"], "location_id": "location:market-road:old-mill"}]},
-        {"npc_id": "npc:tomas",
-         "schedule": [{"from_hour": 0, "to_hour": 6, "location_id": "location:market-road:market-square", "activity": "asleep in the porters' loft"},
-                      {"from_hour": 6, "to_hour": 18, "location_id": "location:market-road:market-square", "activity": "hauling crates"},
-                      {"from_hour": 18, "to_hour": 22, "location_id": "location:market-road:northern-road", "activity": "moving sealed crates after dusk"},
-                      {"from_hour": 22, "to_hour": 24, "location_id": "location:market-road:market-square", "activity": "back in the loft"}],
-         "goals": [{"goal_id": "goal:tomas:quiet-work", "summary": "Keep his night work quiet.", "priority": 3, "topics": ["crates", "night"]}]}
-      ],
-      "knowledge": [
-        {"npc_id": "npc:bran", "facts": [
-          {"fact_id": "fact:bran:rooms", "text": "A cot in the common room is five silver a night; the private room upstairs is a gold coin.", "topics": ["room", "rooms", "bed", "lodging", "night"]},
-          {"fact_id": "fact:bran:roads", "text": "The northern road runs past the mill spur and the quarry track, and on up to Glimmerdeep Pass; the climb takes half a day.", "topics": ["road", "roads", "north", "pass", "glimmerdeep", "quarry", "mill"]},
-          {"fact_id": "fact:bran:mill-bandits", "text": "Travelers have seen armed figures camped at the old mill, and the last two caravans that took the mill spur never reached town.", "shares": "for_price", "price": {"silver": 2}, "topics": ["bandits", "mill", "caravans", "trouble", "rumor"]}
-        ]},
-        {"npc_id": "npc:mira", "facts": [
-          {"fact_id": "fact:mira:quarry-light", "text": "A pale light has been seen in the old quarry at night, from a fissure that should have gone dark years ago.", "shares": "when_trusted", "trust_needed": 10, "topics": ["quarry", "light", "lights", "glow", "fissure"]},
-          {"fact_id": "fact:mira:crates", "text": "Tomas the porter carries sealed crates out along the northern road after dusk.", "shares": "when_trusted", "trust_needed": 40, "topics": ["crates", "tomas", "smugglers", "smuggling", "porter"]}
-        ]},
-        {"npc_id": "npc:elara", "facts": [
-          {"fact_id": "fact:elara:prices", "text": "Caravans have thinned since the bandits came, and every price on the road is up by a third.", "topics": ["prices", "caravans", "trade", "goods"]},
-          {"fact_id": "fact:elara:smugglers", "text": "Someone moves sealed crates through the square after dusk, and they are worth more than anything on my stall.", "shares": "for_price", "price": {"silver": 2}, "topics": ["crates", "smugglers", "smuggling", "dusk", "night"]}
-        ]},
-        {"npc_id": "npc:aldric", "facts": [
-          {"fact_id": "fact:aldric:patrols", "text": "The watch patrols the northern road as far as the mill spur, and no farther.", "topics": ["patrol", "patrols", "watch", "road", "guards"]},
-          {"fact_id": "fact:aldric:missing-guards", "text": "Two caravan guards went missing near the old mill last week; their horses came back without them.", "shares": "when_trusted", "trust_needed": 30, "topics": ["missing", "guards", "caravan", "mill", "horses"]}
-        ]},
-        {"npc_id": "npc:tomas", "facts": [
-          {"fact_id": "fact:tomas:market", "text": "The square is busiest at noon, and Elara pays the fairest rates.", "topics": ["market", "square", "work", "elara"]}
-        ]}
-      ],
-      "pressures": [
-        {"pressure_id": "pressure:market-road:bandits", "name": "Bandits on the trade road", "region_id": "region:market-road:trade-road",
-         "description": "Bandits camped at the old mill raid the caravans, and trade into town is drying up.",
-         "dimension": "trade_access", "severity": 45, "trend": "escalating",
-         "levers": [{"action": "defeat the bandits at the mill", "effect": "lower", "amount": 25}, {"action": "escort a caravan", "effect": "lower", "amount": 10}]},
-        {"pressure_id": "pressure:market-road:quarry-light", "name": "The light in the quarry", "region_id": "region:market-road:quarry",
-         "description": "Something in the old quarry is waking, and the sealed crates leaving it carry it into town.",
-         "dimension": "political_stability", "severity": 30, "trend": "volatile",
-         "levers": [{"action": "seal the quarry fissure", "effect": "lower", "amount": 30}, {"action": "deliver a sealed crate", "effect": "raise", "amount": 10}]}
-      ],
-      "bestiary": [
-        {"id": "creature:market-road:bandit", "name": "Bandit", "threat": "low", "traits": ["desperate", "works in groups"],
-         "stats": {"level": 1, "hp": 10, "defense": 10, "damage_min": 1, "damage_max": 4, "accuracy_bonus": 1, "xp_value": 25},
-         "behaviour": "flees_when_hurt", "loot": [{"item_id": "item:trail-rations", "chance": 0.4}]},
-        {"id": "creature:market-road:bandit-archer", "name": "Bandit Archer", "threat": "low", "traits": ["keeps her distance"],
-         "stats": {"level": 1, "hp": 8, "defense": 9, "damage_min": 1, "damage_max": 4, "accuracy_bonus": 2, "xp_value": 25},
-         "behaviour": "ambushes", "loot": [{"item_id": "item:torch", "chance": 0.3}]},
-        {"id": "creature:market-road:bandit-brute", "name": "Bandit Brute", "threat": "medium", "traits": ["leads the mill camp"],
-         "stats": {"level": 2, "hp": 18, "defense": 9, "damage_min": 2, "damage_max": 6, "accuracy_bonus": 0, "xp_value": 50},
-         "behaviour": "calls_allies", "loot": [{"item_id": "item:healing-potion", "chance": 0.5}]},
-        {"id": "creature:market-road:wolf", "name": "Wolf", "threat": "low", "traits": ["hunts in the brush"],
-         "stats": {"level": 1, "hp": 9, "defense": 11, "damage_min": 1, "damage_max": 4, "accuracy_bonus": 2, "xp_value": 25},
-         "behaviour": "flees_when_hurt"},
-        {"id": "creature:market-road:giant-rat", "name": "Giant Rat", "threat": "low", "traits": ["lives in cellars"],
-         "stats": {"level": 1, "hp": 5, "defense": 10, "damage_min": 1, "damage_max": 3, "accuracy_bonus": 1, "xp_value": 10},
-         "behaviour": "fights"},
-        {"id": "creature:market-road:quarry-husk", "name": "Quarry Husk", "threat": "medium", "traits": ["glows faintly", "drawn to the fissure"],
-         "stats": {"level": 2, "hp": 14, "defense": 10, "damage_min": 1, "damage_max": 5, "accuracy_bonus": 1, "xp_value": 40},
-         "behaviour": "guards", "loot": [{"item_id": "item:quarry-shard", "chance": 0.25}]}
-      ],
-      "quests": [
-        {"id": "quest:market-road:tavern-rumor", "title": "Rumor at the Rusty Flagon", "tier": "side",
-         "objective": "Ask Bran or the tavern regulars which rumor is true.",
-         "locations": ["location:market-road:rusty-flagon"], "rewards": ["a lead", "Bran's trust"]},
-        {"id": "quest:market-road:bandit-trail", "title": "Bandit Trail", "tier": "main",
-         "objective": "Follow the bandits' trail up the mill spur and break their camp at the old mill.",
-         "locations": ["location:market-road:northern-road", "location:market-road:old-mill"], "rewards": ["20 silver", "the watch's gratitude"]},
-        {"id": "quest:market-road:missing-guards", "title": "The Missing Guards", "tier": "side",
-         "objective": "Find out what happened to the two caravan guards who vanished near the mill.",
-         "locations": ["location:market-road:market-square", "location:market-road:old-mill"], "rewards": ["10 silver", "Captain Aldric's trust"]},
-        {"id": "quest:market-road:watch-trouble", "title": "Trouble with the Watch", "tier": "side",
-         "objective": "Learn why the watch is watching you, and avoid making it worse.",
-         "locations": ["location:market-road:rusty-flagon", "location:market-road:market-square"], "rewards": ["the watch's good word"]},
-        {"id": "quest:market-road:merchant-job", "title": "Merchant Job", "tier": "side",
-         "objective": "Meet Elara, agree her price, and get her caravan's goods through the trade road.",
-         "locations": ["location:market-road:market-square", "location:market-road:northern-road"], "rewards": ["15 silver", "a discount at Elara's stall"]},
-        {"id": "quest:market-road:quarry-lights", "title": "Lights in the Old Quarry", "tier": "main",
-         "objective": "Find the source of the pale light in the old quarry, and what the sealed crates carry.",
-         "locations": ["location:market-road:old-quarry"], "rewards": ["a Quarry Shard", "the town's thanks"]},
-        {"id": "quest:market-road:cellar-rats", "title": "Rats in the Cellar", "tier": "side",
-         "objective": "Clear the giant rats out of the Rusty Flagon's cellar.",
-         "locations": ["location:market-road:rusty-flagon"], "rewards": ["a free night's lodging"]}
-      ]
-    },
-    "topology": {
-      "schema_version": "rpg_world_topology_v1",
-      "locations": [
-        {"id": "location:market-road:rusty-flagon", "name": "Rusty Flagon Tavern", "region_id": "region:market-road:town",
-         "map_id": "map:market-road:rusty-flagon",
-         "environment": {"climate_profile_id": "temperate_hills", "weather": "Rainy", "exposure": "indoor", "shelter": "sheltered", "light": "tavern_lit"},
-         "aliases": ["the tavern", "tavern", "the inn", "inn", "the rusty flagon"],
-         "description": "A smoky tavern and inn with worn beams, a crackling hearth, and rain tapping at the shutters. A notice board beside the stairs lists work for caravan guards, rat catchers, and anyone willing to look into strange lights near the old quarry."},
-        {"id": "location:market-road:market-square", "name": "Market Square", "region_id": "region:market-road:town",
-         "map_id": "map:market-road:market-square",
-         "environment": {"climate_profile_id": "temperate_hills", "weather": "Cloudy", "exposure": "outdoor", "shelter": "partly_sheltered"},
-         "aliases": ["the market", "market", "the square", "square", "the market district"],
-         "description": "Market stalls crowd the square, and voices rise over the smell of bread, rain, and horse leather. Half the caravan stalls stand empty."},
-        {"id": "location:market-road:northern-road", "name": "Northern Road", "region_id": "region:market-road:trade-road",
-         "map_id": "map:market-road:northern-road",
-         "environment": {"climate_profile_id": "road_lowlands", "weather": "Overcast", "exposure": "outdoor", "shelter": "exposed"},
-         "aliases": ["the road", "the northern road", "the trade road", "outside", "out of town"],
-         "description": "The Northern Road cuts between wet pines and wagon-rutted mud. A broken milestone leans beside the ditch, and fresh hoofprints lead toward the pass while older tracks vanish into the brush."},
-        {"id": "location:market-road:old-mill", "name": "Old Mill", "region_id": "region:market-road:trade-road",
-         "map_id": "map:market-road:old-mill",
-         "environment": {"climate_profile_id": "road_lowlands", "weather": "Overcast", "exposure": "outdoor", "shelter": "partly_sheltered"},
-         "aliases": ["the mill", "the old mill", "mill"],
-         "description": "A weathered mill on its spur off the road, its wheel stopped and its timbers broken. Bandit tracks and a cold campfire mark the yard."},
-        {"id": "location:market-road:brushland", "name": "The Brushland", "region_id": "region:market-road:trade-road",
-         "map_id": "map:market-road:brushland",
-         "environment": {"climate_profile_id": "road_lowlands", "weather": "Overcast", "exposure": "outdoor", "shelter": "exposed"},
-         "aliases": ["the wilderness", "the brush", "the wilds", "wilderness"],
-         "description": "Brush, shallow gullies, and game trails on either side of the road, where wolves hunt at dusk."},
-        {"id": "location:market-road:old-quarry", "name": "Old Quarry", "region_id": "region:market-road:quarry",
-         "map_id": "map:market-road:old-quarry",
-         "environment": {"climate_profile_id": "quarry_hills", "weather": "Grey and still", "exposure": "outdoor", "shelter": "exposed"},
-         "aliases": ["the quarry", "quarry", "the old quarry"],
-         "description": "The old quarry yawns open beneath a rim of cracked stone. Rusted pulleys creak in the breeze, and pale light glows from a fissure that should have gone dark years ago."},
-        {"id": "location:market-road:glimmerdeep-pass", "name": "Glimmerdeep Pass", "region_id": "region:market-road:pass",
-         "map_id": "map:market-road:glimmerdeep-pass",
-         "environment": {"climate_profile_id": "northern_mountains", "weather": "Cold, Windy", "temperature": -12, "exposure": "outdoor", "shelter": "exposed"},
-         "aliases": ["the pass", "glimmerdeep", "the mountain pass"],
-         "description": "The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both sides, and an ancient stone archway stands ahead, half-buried in drifts."}
-      ],
-      "routes": [
-        {"id": "route:market-road:tavern-lane", "from": "location:market-road:rusty-flagon", "to": "location:market-road:market-square", "travel_time": "5 minutes", "portal_id": "portal:market-road:tavern-to-square"},
-        {"id": "route:market-road:town-gate", "from": "location:market-road:rusty-flagon", "to": "location:market-road:northern-road", "travel_time": "10 minutes", "portal_id": "portal:market-road:tavern-to-road"},
-        {"id": "route:market-road:cart-track", "from": "location:market-road:market-square", "to": "location:market-road:northern-road", "travel_time": "10 minutes", "portal_id": "portal:market-road:square-to-road"},
-        {"id": "route:market-road:mill-spur", "from": "location:market-road:northern-road", "to": "location:market-road:old-mill", "travel_time": "30 minutes", "portal_id": "portal:market-road:road-to-mill"},
-        {"id": "route:market-road:brush-trail", "from": "location:market-road:northern-road", "to": "location:market-road:brushland", "travel_time": "20 minutes", "portal_id": "portal:market-road:road-to-brush"},
-        {"id": "route:market-road:quarry-track", "from": "location:market-road:northern-road", "to": "location:market-road:old-quarry", "travel_time": "1 hour", "portal_id": "portal:market-road:road-to-quarry"},
-        {"id": "route:market-road:the-climb", "from": "location:market-road:northern-road", "to": "location:market-road:glimmerdeep-pass", "travel_time": "4 hours", "portal_id": "portal:market-road:road-to-pass"}
-      ]
-    },
-    "adventure_seeds": [
-      {"id": "seed:market-road:tavern-rumor", "opening_hook": "tavern_rumor", "quest_id": "quest:market-road:tavern-rumor", "title": "A rumor by the hearth",
-       "hook": "A low conversation near the hearth hints at trouble outside town."},
-      {"id": "seed:market-road:bandit-trail", "opening_hook": "bandit_trail", "quest_id": "quest:market-road:bandit-trail", "title": "Fresh tracks",
-       "hook": "A road-worn witness describes raiders and fresh hoofprints beyond the market road."},
-      {"id": "seed:market-road:missing-guards", "opening_hook": "missing_person", "quest_id": "quest:market-road:missing-guards", "title": "Horses without riders",
-       "hook": "Two caravan horses came back to town without their guards."},
-      {"id": "seed:market-road:watch-trouble", "opening_hook": "guard_trouble", "quest_id": "quest:market-road:watch-trouble", "title": "Eyes on the stranger",
-       "hook": "The watch captain studies you from the doorway while a patrol blocks the street outside."},
-      {"id": "seed:market-road:merchant-job", "opening_hook": "merchant_job", "quest_id": "quest:market-road:merchant-job", "title": "A merchant short of stock",
-       "hook": "Elara needs someone to get her goods through the trade road."},
-      {"id": "seed:market-road:quarry-lights", "quest_id": "quest:market-road:quarry-lights", "title": "A light that should be dark",
-       "hook": "The notice board offers coin to anyone willing to look into the strange lights near the old quarry."},
-      {"id": "seed:market-road:cellar-rats", "quest_id": "quest:market-road:cellar-rats", "title": "Something in the cellar",
-       "hook": "Bran is offering a free night to whoever clears the rats from his cellar."}
-    ]
-  },
-  "legacy_ids": {
-    "loc_tavern": "location:market-road:rusty-flagon",
-    "rusty_flagon_tavern": "location:market-road:rusty-flagon",
-    "location:rusty_flagon_tavern": "location:market-road:rusty-flagon",
-    "location:rusty_flagon": "location:market-road:rusty-flagon",
-    "loc_market": "location:market-road:market-square",
-    "market_district": "location:market-road:market-square",
-    "location:market": "location:market-road:market-square",
-    "northern_road": "location:market-road:northern-road",
-    "location:old_road": "location:market-road:northern-road",
-    "loc_patrol": "location:market-road:northern-road",
-    "location:old_mill": "location:market-road:old-mill",
-    "location:nearby_wilderness": "location:market-road:brushland",
-    "old_quarry": "location:market-road:old-quarry",
-    "glimmerdeep_pass": "location:market-road:glimmerdeep-pass",
-    "npc:Bran": "npc:bran",
-    "npc_innkeeper": "npc:bran",
-    "npc:Mira": "npc:mira",
-    "npc:Elara": "npc:elara",
-    "npc:Merchant": "npc:elara",
-    "npc_merchant": "npc:elara",
-    "npc:GuardCaptain": "npc:aldric",
-    "npc_guard_captain": "npc:aldric",
-    "npc:Tomas": "npc:tomas"
-  },
-  "palette": [
-    {"code": ".", "terrain_id": "floor", "walkable": true, "blocks_sight": false, "movement_cost": 10},
-    {"code": "#", "terrain_id": "wall", "walkable": false, "blocks_sight": true, "movement_cost": 99},
-    {"code": "c", "terrain_id": "counter", "walkable": false, "blocks_sight": false, "movement_cost": 99},
-    {"code": "t", "terrain_id": "table", "walkable": false, "blocks_sight": false, "movement_cost": 99},
-    {"code": "d", "terrain_id": "door", "walkable": true, "blocks_sight": false, "movement_cost": 10},
-    {"code": "g", "terrain_id": "grass", "walkable": true, "blocks_sight": false, "movement_cost": 10},
-    {"code": "r", "terrain_id": "road", "walkable": true, "blocks_sight": false, "movement_cost": 7},
-    {"code": "s", "terrain_id": "stall", "walkable": false, "blocks_sight": false, "movement_cost": 99},
-    {"code": "f", "terrain_id": "forest", "walkable": true, "blocks_sight": true, "movement_cost": 15},
-    {"code": "w", "terrain_id": "water", "walkable": false, "blocks_sight": false, "movement_cost": 99},
-    {"code": "x", "terrain_id": "rubble", "walkable": true, "blocks_sight": false, "movement_cost": 14},
-    {"code": "o", "terrain_id": "stone", "walkable": false, "blocks_sight": true, "movement_cost": 99},
-    {"code": "n", "terrain_id": "snow", "walkable": true, "blocks_sight": false, "movement_cost": 14}
-  ],
-  "maps": [
-    {"map_id": "map:market-road:rusty-flagon", "location_id": "location:market-road:rusty-flagon", "level": "interior",
-     "rows": ["##########",
-              "#........#",
-              "#.cccc...#",
-              "#........#",
-              "#..t..t..d",
-              "#........#",
-              "#..t.....#",
-              "####d#####"],
-     "spawns": [["spawn:market-road:hearth", [5, 5], ["player", "arrival"]],
-                ["spawn:market-road:bran", [3, 1], ["npc"]],
-                ["spawn:market-road:mira", [7, 3], ["npc"]],
-                ["spawn:market-road:tavern-guest", [1, 5], ["npc"]]],
-     "zones": [["zone:market-road:common-room", "Common Room", [[4, 4], [5, 4], [4, 5], [5, 5], [6, 5]]],
-               ["zone:market-road:bar", "The Bar", [[2, 1], [3, 1], [4, 1], [5, 1]]]],
-     "portals": [["portal:market-road:tavern-to-square", [4, 7], "map:market-road:market-square", [5, 1]],
-                 ["portal:market-road:tavern-to-road", [9, 4], "map:market-road:northern-road", [1, 2]]]},
-    {"map_id": "map:market-road:market-square", "location_id": "location:market-road:market-square", "level": "settlement",
-     "rows": ["gggggrgggggg",
-              "gsssgrrgsssg",
-              "gg..rrrr..gg",
-              "grrrrrrrrrrr",
-              "gg..rrrr..gg",
-              "gsssgrrgsssg",
-              "gggggrgggggg"],
-     "spawns": [["spawn:market-road:square", [6, 3], ["player", "arrival"]],
-                ["spawn:market-road:elara", [2, 2], ["npc"]],
-                ["spawn:market-road:tomas", [9, 4], ["npc"]],
-                ["spawn:market-road:aldric", [7, 2], ["npc"]]],
-     "zones": [["zone:market-road:stalls", "The Stalls", [[1, 2], [2, 2], [3, 2], [8, 2], [9, 2], [10, 2]]]],
-     "portals": [["portal:market-road:square-to-tavern", [5, 1], "map:market-road:rusty-flagon", [4, 7]],
-                 ["portal:market-road:square-to-road", [11, 3], "map:market-road:northern-road", [1, 3]]]},
-    {"map_id": "map:market-road:northern-road", "location_id": "location:market-road:northern-road", "level": "encounter",
-     "rows": ["ffffffrffffffr",
-              "ffggggrgggggrf",
-              "rrrrrrrrrrrrrr",
-              "rggggrgggggggr",
-              "ffffrffffffffr",
-              "ffffrfffffffff"],
-     "spawns": [["spawn:market-road:milestone", [3, 2], ["player", "arrival"]],
-                ["spawn:market-road:patrol", [8, 2], ["npc"]]],
-     "zones": [["zone:market-road:milestone", "Broken Milestone", [[3, 3], [4, 3]]]],
-     "portals": [["portal:market-road:road-to-tavern", [0, 2], "map:market-road:rusty-flagon", [9, 4]],
-                 ["portal:market-road:road-to-square", [0, 3], "map:market-road:market-square", [11, 3]],
-                 ["portal:market-road:road-to-mill", [6, 0], "map:market-road:old-mill", [4, 7]],
-                 ["portal:market-road:road-to-brush", [4, 5], "map:market-road:brushland", [5, 0]],
-                 ["portal:market-road:road-to-quarry", [13, 4], "map:market-road:old-quarry", [0, 4]],
-                 ["portal:market-road:road-to-pass", [13, 0], "map:market-road:glimmerdeep-pass", [0, 3]]]},
-    {"map_id": "map:market-road:old-mill", "location_id": "location:market-road:old-mill", "level": "encounter",
-     "rows": ["wwwwwwwwww",
-              "w###..###w",
-              "g#.x...x#g",
-              "g#......#g",
-              "g###..###g",
-              "gggg..gggg",
-              "gxggggggxg",
-              "ggggrggggg"],
-     "spawns": [["spawn:market-road:mill-yard", [4, 6], ["player", "arrival"]],
-                ["spawn:market-road:mill-camp", [5, 3], ["enemy"]]],
-     "zones": [["zone:market-road:bandit-camp", "Bandit Camp", [[3, 2], [4, 3], [5, 3], [6, 2]]]],
-     "portals": [["portal:market-road:mill-to-road", [4, 7], "map:market-road:northern-road", [6, 0]]]},
-    {"map_id": "map:market-road:brushland", "location_id": "location:market-road:brushland", "level": "encounter",
-     "rows": ["fffffgffff",
-              "ffggggggff",
-              "fgggfgggfg",
-              "gggffffggg",
-              "fggggggggf",
-              "ffffffffff"],
-     "spawns": [["spawn:market-road:game-trail", [5, 1], ["player", "arrival"]],
-                ["spawn:market-road:wolf-den", [8, 4], ["enemy"]]],
-     "zones": [["zone:market-road:gully", "Shallow Gully", [[4, 3], [5, 3], [6, 3]]]],
-     "portals": [["portal:market-road:brush-to-road", [5, 0], "map:market-road:northern-road", [4, 5]]]},
-    {"map_id": "map:market-road:old-quarry", "location_id": "location:market-road:old-quarry", "level": "encounter",
-     "rows": ["oooooooooo",
-              "oxx....xxo",
-              "ox..oo..xo",
-              "o...oo...o",
-              "r........o",
-              "oxx....xxo",
-              "oooooooooo"],
-     "spawns": [["spawn:market-road:quarry-rim", [1, 4], ["player", "arrival"]],
-                ["spawn:market-road:fissure", [6, 3], ["enemy"]]],
-     "zones": [["zone:market-road:fissure", "The Glowing Fissure", [[4, 2], [5, 2], [4, 3], [5, 3]]]],
-     "portals": [["portal:market-road:quarry-to-road", [0, 4], "map:market-road:northern-road", [13, 4]]]},
-    {"map_id": "map:market-road:glimmerdeep-pass", "location_id": "location:market-road:glimmerdeep-pass", "level": "encounter",
-     "rows": ["oooooooooooo",
-              "onnnnnnnnnno",
-              "nnnnnoonnnnn",
-              "rnnnnoonnnnn",
-              "onnnnnnnnnno",
-              "oooooooooooo"],
-     "spawns": [["spawn:market-road:pass-foot", [1, 3], ["player", "arrival"]]],
-     "zones": [["zone:market-road:archway", "The Buried Archway", [[5, 2], [6, 2], [5, 3], [6, 3]]]],
-     "portals": [["portal:market-road:pass-to-road", [0, 3], "map:market-road:northern-road", [13, 0]]]}
-  ],
-  "scenarios": [
-    {"scenario_id": "scenario:market-road:rusty-flagon", "title": "At the Rusty Flagon",
-     "description": "Rain on the shutters, Bran behind the counter, and a notice board full of work. The classic start.",
-     "starting_location_id": "location:market-road:rusty-flagon", "starting_epoch": "Day 1 • 08:00",
-     "initial_npc_ids": ["npc:bran", "npc:mira"],
-     "place": [["npc:bran", "spawn:market-road:bran"], ["npc:mira", "spawn:market-road:mira"]],
-     "opening_seed_ids": ["seed:market-road:tavern-rumor", "seed:market-road:quarry-lights", "seed:market-road:bandit-trail", "seed:market-road:cellar-rats"],
-     "metadata": {"starting_place_key": "rusty_flagon_tavern", "recommended": "new campaign"}},
-    {"scenario_id": "scenario:market-road:market-square", "title": "In the Market",
-     "description": "Start among the stalls, where Elara is short of stock and Tomas is short of answers.",
-     "starting_location_id": "location:market-road:market-square", "starting_epoch": "Day 1 • 09:00",
-     "initial_npc_ids": ["npc:elara", "npc:tomas", "npc:aldric"],
-     "place": [["npc:elara", "spawn:market-road:elara"], ["npc:tomas", "spawn:market-road:tomas"], ["npc:aldric", "spawn:market-road:aldric"]],
-     "opening_seed_ids": ["seed:market-road:merchant-job", "seed:market-road:missing-guards", "seed:market-road:watch-trouble"],
-     "metadata": {"starting_place_key": "market_district"}},
-    {"scenario_id": "scenario:market-road:northern-road", "title": "On the Northern Road",
-     "description": "Start on the road itself, beside fresh hoofprints and a broken milestone.",
-     "starting_location_id": "location:market-road:northern-road", "starting_epoch": "Day 1 • 10:15",
-     "initial_npc_ids": [],
-     "place": [],
-     "opening_seed_ids": ["seed:market-road:bandit-trail", "seed:market-road:missing-guards"],
-     "metadata": {"starting_place_key": "northern_road"}},
-    {"scenario_id": "scenario:market-road:old-quarry", "title": "At the Old Quarry",
-     "description": "Start at the quarry's rim as the light in the fissure brightens.",
-     "starting_location_id": "location:market-road:old-quarry", "starting_epoch": "Day 1 • 16:20",
-     "initial_npc_ids": [],
-     "place": [],
-     "opening_seed_ids": ["seed:market-road:quarry-lights"],
-     "metadata": {"starting_place_key": "old_quarry"}},
-    {"scenario_id": "scenario:market-road:glimmerdeep-pass", "title": "At Glimmerdeep Pass",
-     "description": "Start high in the mountains, at an ancient archway half-buried in snow.",
-     "starting_location_id": "location:market-road:glimmerdeep-pass", "starting_epoch": "Day 1 • 09:42",
-     "initial_npc_ids": [],
-     "place": [],
-     "opening_seed_ids": ["seed:market-road:quarry-lights"],
-     "metadata": {"starting_place_key": "glimmerdeep_pass"}}
-  ],
-  "starting_resources": {
-    "currency": {"silver": 10},
-    "inventory": [{"id": "item:trail-rations", "quantity": 3}, {"id": "item:torch", "quantity": 2},
-                  {"id": "item:water-skin", "quantity": 1}, {"id": "item:small-pouch", "quantity": 1}]
+ "released_at": "2026-10-24T08:00:00+00:00",
+ "world": {
+  "id": "world:the-market-road",
+  "title": "The Market Road",
+  "description": "A rain-soaked market town on the old trade road: the Rusty Flagon and its regulars, a market square, a road watched by bandits, an abandoned mill, and an old quarry where a light burns that should have gone out years ago.",
+  "genre": "classic_fantasy",
+  "tone": "grounded heroic adventure",
+  "seed": 7,
+  "status": "published",
+  "source_mode": "manual",
+  "draft_revision": 1,
+  "metadata": {
+   "campaign_template": "classic_fantasy",
+   "content_rating": "teen",
+   "recommended_level_range": "1-4",
+   "default_scenario_id": "scenario:market-road:rusty-flagon",
+   "builtin": "starter",
+   "tags": [
+    "starter",
+    "classic fantasy",
+    "tavern",
+    "bandits",
+    "mystery"
+   ],
+   "demo_scenario_id": "scenario:market-road:frostbound-relic"
   }
+ },
+ "revision": {
+  "title": "The Market Road",
+  "provenance": {
+   "authoring_mode": "curated starter world",
+   "purpose": "the classic new game's world (RQ-2.8)",
+   "schema": "market_road_starter_v1",
+   "source": "autonomx/omnix built-in bundle"
+  },
+  "canon": {
+   "campaign_template": "classic_fantasy",
+   "summary": "A small market town where the old trade road meets the hills. Caravans have thinned since bandits took to the road near the old mill, a market porter moves sealed crates after dusk, and a pale light has begun to glow in the abandoned quarry. The Rusty Flagon hears all of it first.",
+   "themes": [
+    "small-town trust",
+    "trade under threat",
+    "a mystery in the hills"
+   ],
+   "safety_and_tone": {
+    "violence": "moderate",
+    "tone": "grounded, warm, with danger on the road"
+   },
+   "regions": [
+    {
+     "id": "region:market-road:town",
+     "name": "Market Road",
+     "capital": "location:market-road:market-square",
+     "summary": "The town itself: the Rusty Flagon, the market square and the lanes between them"
+    },
+    {
+     "id": "region:market-road:trade-road",
+     "name": "the Trade Road",
+     "summary": "The rutted road north of town, the brush on either side, and the old mill on its spur"
+    },
+    {
+     "id": "region:market-road:quarry",
+     "name": "the Abandoned Works",
+     "summary": "The old quarry and its rusted workings, long closed"
+    },
+    {
+     "id": "region:market-road:pass",
+     "name": "the Mountain Pass",
+     "summary": "The cold climb where the trade road crosses the mountains"
+    },
+    {
+     "id": "region:market-road:north",
+     "name": "the Northern Pass",
+     "capital": "location:market-road:frost-haven",
+     "summary": "The snowbound country beyond Glimmerdeep Pass: the fortified refuge of Frost Haven, the hamlet in the pines, the old watchtower, and the deep places under the arch"
+    }
+   ],
+   "characters": [
+    {
+     "id": "npc:bran",
+     "name": "Bran",
+     "species": "human",
+     "role": "innkeeper of the Rusty Flagon",
+     "location_id": "location:market-road:rusty-flagon",
+     "biography": "Bran keeps the Rusty Flagon running, watches debts carefully, and treats rumors as useful only when they come from reliable mouths. He has heard every story the road can tell and believes about a third of them.",
+     "personality": [
+      "practical",
+      "guarded",
+      "plainspoken",
+      "dry humor",
+      "protective of his regulars"
+     ],
+     "speech_style": "plainspoken and unhurried; tavern and trade metaphors; asks direct questions; rarely volunteers dangerous details",
+     "goals": [
+      "keep the tavern calm, paid, and orderly",
+      "hear reliable news from the roads before trouble reaches town"
+     ],
+     "secrets": [
+      "he lent money against the old mill before it was abandoned, and the debt is why he never goes near it"
+     ],
+     "relationships": {
+      "npc:mira": "respects her curiosity but thinks she invites trouble",
+      "npc:aldric": "a necessary but tense working relationship",
+      "npc:elara": "an old friend who pays her tab"
+     }
+    },
+    {
+     "id": "npc:mira",
+     "name": "Mira",
+     "species": "human",
+     "role": "curious local informant and would-be companion",
+     "location_id": "location:market-road:rusty-flagon",
+     "biography": "Mira listens more than she speaks, collects patterns in gossip, and pushes people to admit what they are trying to avoid. She has been waiting for someone willing to walk the road with her and see what is really out there.",
+     "personality": [
+      "curious",
+      "observant",
+      "wry",
+      "probing",
+      "socially agile"
+     ],
+     "speech_style": "quick and wry; asks pointed follow-up questions; notices contradictions and phrases her suspicions carefully",
+     "goals": [
+      "learn what is really happening on the road and in the quarry",
+      "find a traveler brave enough to go with her"
+     ],
+     "secrets": [
+      "she followed the porter Tomas one night and saw him hand a sealed crate to a stranger on the road"
+     ],
+     "relationships": {
+      "npc:bran": "respects Bran's caution but thinks he withholds too much",
+      "npc:aldric": "does not fully trust official explanations",
+      "npc:tomas": "watches him"
+     }
+    },
+    {
+     "id": "npc:elara",
+     "name": "Elara",
+     "species": "human",
+     "role": "merchant of the market square",
+     "location_id": "location:market-road:market-square",
+     "biography": "Elara runs the best-stocked stall in the square and measures every rumor by what it does to roads, prices and risk. Her caravans have stopped coming since the bandits arrived, and she is short of patience as well as stock.",
+     "personality": [
+      "pragmatic",
+      "shrewd",
+      "careful",
+      "talkative when profit is near"
+     ],
+     "speech_style": "brisk and practical; compares danger to cost; does not give information away for free",
+     "goals": [
+      "get the caravans moving again",
+      "sell what she has before the road closes for good"
+     ],
+     "secrets": [
+      "she has been buying the porter's sealed crates without asking what is in them"
+     ],
+     "relationships": {
+      "npc:bran": "an old friend",
+      "npc:tomas": "her porter, and more useful than she admits"
+     }
+    },
+    {
+     "id": "npc:aldric",
+     "name": "Captain Aldric",
+     "species": "human",
+     "role": "captain of the town watch",
+     "location_id": "location:market-road:market-square",
+     "biography": "Captain Aldric is responsible for public order and frames every problem in terms of risk, witnesses and containment. He has too few guards for the road and too many questions he cannot answer.",
+     "personality": [
+      "disciplined",
+      "skeptical",
+      "protective",
+      "authoritative"
+     ],
+     "speech_style": "controlled and clipped; asks for facts; uses watch procedure; avoids speculation",
+     "goals": [
+      "keep the trade road open",
+      "find the two caravan guards who went missing near the mill"
+     ],
+     "secrets": [
+      "the town council has told him to keep the quarry light quiet until after the harvest fair"
+     ],
+     "relationships": {
+      "npc:bran": "relies on Bran for tavern reports but distrusts gossip",
+      "npc:mira": "useful but difficult to control"
+     }
+    },
+    {
+     "id": "npc:tomas",
+     "name": "Tomas",
+     "species": "human",
+     "role": "porter of the market square",
+     "location_id": "location:market-road:market-square",
+     "biography": "Tomas hauls goods between the square and the road for whoever pays. He is cheerful by day and hard to find after dusk.",
+     "personality": [
+      "cheerful",
+      "evasive",
+      "strong",
+      "nervous around the watch"
+     ],
+     "speech_style": "friendly and chatty until asked about his evenings, then short",
+     "goals": [
+      "keep his night work quiet",
+      "earn enough to leave town"
+     ],
+     "secrets": [
+      "the sealed crates come from the old quarry, and he does not know what is inside them"
+     ],
+     "relationships": {
+      "npc:elara": "his best customer",
+      "npc:aldric": "avoids him"
+     }
+    },
+    {
+     "id": "npc:thorin",
+     "name": "Thorin Ironfist",
+     "species": "dwarf",
+     "role": "warrior and sworn companion",
+     "location_id": "location:market-road:glimmerdeep-pass",
+     "biography": "Thorin Ironfist served twenty winters on the Northern Watch before the watch could no longer pay him. He walks with whoever is going somewhere dangerous, and says so plainly.",
+     "personality": [
+      "steady",
+      "blunt",
+      "loyal",
+      "superstitious about the pass"
+     ],
+     "speech_style": "gruff and short; dwarven oaths; keeps watch out loud",
+     "goals": [
+      "see the party home alive",
+      "learn what drove the Icefang down from the heights"
+     ],
+     "secrets": [
+      "he abandoned his post at the Northern Watch the night the beacon went dark"
+     ],
+     "relationships": {
+      "npc:elandra": "trusts her magic, not her maps",
+      "npc:kael": "keeps an eye on his hands",
+      "npc:bryn": "his old captain"
+     }
+    },
+    {
+     "id": "npc:elandra",
+     "name": "Elandra",
+     "species": "elf",
+     "role": "mage and companion",
+     "location_id": "location:market-road:glimmerdeep-pass",
+     "biography": "Elandra studies the old stone of the north, which remembers more than it should. The Frostbound Relic is the reason she came, and the reason she stays.",
+     "personality": [
+      "curious",
+      "precise",
+      "impatient with superstition",
+      "kind under pressure"
+     ],
+     "speech_style": "careful and scholarly; explains too much when nervous",
+     "goals": [
+      "recover the Frostbound Relic before anyone else",
+      "read the runes on the buried archway"
+     ],
+     "secrets": [
+      "the relic answered her once, in a dream, and asked to be found"
+     ],
+     "relationships": {
+      "npc:thorin": "fond of him",
+      "npc:kael": "finds him useful and tiring"
+     }
+    },
+    {
+     "id": "npc:kael",
+     "name": "Kael",
+     "species": "human",
+     "role": "rogue and companion",
+     "location_id": "location:market-road:glimmerdeep-pass",
+     "biography": "Kael scouts ahead, opens what is locked, and counts what the party carries. He joined for the bounty on the Icefang Alpha and has not yet said what he will do with it.",
+     "personality": [
+      "quick",
+      "wry",
+      "watchful",
+      "fond of coin"
+     ],
+     "speech_style": "light and teasing; answers questions with questions",
+     "goals": [
+      "claim the bounty on the Icefang Alpha",
+      "pay off a debt in Frost Haven"
+     ],
+     "secrets": [
+      "he owes the debt to the smugglers who move crates down the Market Road"
+     ],
+     "relationships": {
+      "npc:thorin": "respects him",
+      "npc:elandra": "likes to provoke her"
+     }
+    },
+    {
+     "id": "npc:bryn",
+     "name": "Captain Bryn",
+     "species": "human",
+     "role": "captain of the Northern Watch",
+     "location_id": "location:market-road:frost-haven",
+     "biography": "Captain Bryn holds Frost Haven Keep with half the guards she needs. The torn banner at the pass belongs to her watch, and she wants to know who carried it there.",
+     "personality": [
+      "stern",
+      "fair",
+      "tired",
+      "proud of her people"
+     ],
+     "speech_style": "formal and brief; watch procedure; never wastes a word",
+     "goals": [
+      "relight the beacon at the Northern Watch",
+      "keep the pass open for the spring caravans"
+     ],
+     "secrets": [
+      "she sent the patrol that never came back from the watchtower"
+     ],
+     "relationships": {
+      "npc:thorin": "a deserter she still misses"
+     }
+    },
+    {
+     "id": "npc:marta",
+     "name": "Marta",
+     "species": "human",
+     "role": "keeper of the Frosted Flagon",
+     "location_id": "location:market-road:frost-haven",
+     "biography": "Marta keeps the Frosted Flagon warm for travelers from the western road, and stocks potions for the ones who come back from the pass.",
+     "personality": [
+      "warm",
+      "practical",
+      "nosy"
+     ],
+     "speech_style": "brisk and motherly; calls everyone traveler",
+     "goals": [
+      "keep the inn full",
+      "hear what is happening up at the watchtower"
+     ],
+     "secrets": [
+      "she buys the smugglers' crates too, and sells what is in them as medicine"
+     ],
+     "relationships": {
+      "npc:bryn": "an old friend"
+     }
+    }
+   ],
+   "items": [
+    {
+     "id": "item:healing-potion",
+     "name": "Healing Potion",
+     "type": "potion",
+     "rarity": "common",
+     "effect": "restores health"
+    },
+    {
+     "id": "item:torch",
+     "name": "Torch",
+     "type": "tool",
+     "rarity": "common",
+     "effect": "lights dark places for an hour"
+    },
+    {
+     "id": "item:rope",
+     "name": "Rope",
+     "type": "tool",
+     "rarity": "common",
+     "effect": "fifty feet of sturdy hemp rope"
+    },
+    {
+     "id": "item:trail-rations",
+     "name": "Trail Rations",
+     "type": "food",
+     "rarity": "common",
+     "effect": "a day's dried meat, hard cheese and berries; eases hunger"
+    },
+    {
+     "id": "item:water-skin",
+     "name": "Water Skin",
+     "type": "drink",
+     "rarity": "common",
+     "effect": "eases thirst"
+    },
+    {
+     "id": "item:small-pouch",
+     "name": "Small Pouch",
+     "type": "container",
+     "rarity": "common",
+     "effect": "holds coins and small things"
+    },
+    {
+     "id": "item:sealed-crate",
+     "name": "Sealed Crate",
+     "type": "quest",
+     "rarity": "uncommon",
+     "effect": "heavy, nailed shut, faintly warm"
+    },
+    {
+     "id": "item:quarry-shard",
+     "name": "Quarry Shard",
+     "type": "quest",
+     "rarity": "rare",
+     "effect": "a sliver of pale stone that glows in the dark"
+    },
+    {
+     "id": "item:health-potion",
+     "name": "Health Potion",
+     "type": "potion",
+     "rarity": "common",
+     "effect": "restores health"
+    },
+    {
+     "id": "item:mana-potion",
+     "name": "Mana Potion",
+     "type": "potion",
+     "rarity": "common",
+     "effect": "restores mana"
+    },
+    {
+     "id": "item:focus-crystal",
+     "name": "Focus Crystal",
+     "type": "tool",
+     "rarity": "uncommon",
+     "effect": "steadies a spellcaster's focus"
+    },
+    {
+     "id": "item:rope-coil",
+     "name": "Rope Coil",
+     "type": "tool",
+     "rarity": "common",
+     "effect": "a coil of climbing rope"
+    },
+    {
+     "id": "item:keenleaf",
+     "name": "Keenleaf",
+     "type": "herb",
+     "rarity": "uncommon",
+     "effect": "sharpens the senses for a while"
+    },
+    {
+     "id": "item:ancient-scroll",
+     "name": "Ancient Scroll",
+     "type": "quest",
+     "rarity": "rare",
+     "effect": "runes copied from the buried archway"
+    },
+    {
+     "id": "item:longbow-of-the-boreal-wind",
+     "name": "Longbow of the Boreal Wind",
+     "type": "weapon",
+     "rarity": "epic",
+     "effect": "a bow whose arrows fly true in any wind"
+    },
+    {
+     "id": "item:shadow-leather-armor",
+     "name": "Shadow Leather Armor +2",
+     "type": "armor",
+     "rarity": "rare",
+     "effect": "dark leather that drinks the light"
+    },
+    {
+     "id": "item:cloak-of-the-owl",
+     "name": "Cloak of the Owl",
+     "type": "clothing",
+     "rarity": "rare",
+     "effect": "quiet in the snow, and warm"
+    },
+    {
+     "id": "item:band-of-keen-senses",
+     "name": "Band of Keen Senses",
+     "type": "ring",
+     "rarity": "rare",
+     "effect": "the wearer hears what moves in the dark"
+    },
+    {
+     "id": "item:frostbound-relic",
+     "name": "Frostbound Relic",
+     "type": "quest",
+     "rarity": "legendary",
+     "effect": "cold to the touch, and humming"
+    }
+   ],
+   "economy": {
+    "currency": {
+     "copper": 1,
+     "silver": 10,
+     "gold": 100
+    },
+    "trade": "Caravans bring cloth and tools up the trade road and carry quarry stone and wool back down; since the bandits came, little moves at all.",
+    "typical_prices": {
+     "healing_potion": "1 gold",
+     "inn_room": "5 silver/night",
+     "meal": "1 silver 5 copper",
+     "ale": "8 copper"
+    },
+    "providers": [
+     {
+      "provider_id": "npc:bran",
+      "location_id": "location:market-road:rusty-flagon",
+      "sells": [
+       {
+        "offer_key": "common-room-cot",
+        "service": "lodging",
+        "name": "Common room cot",
+        "description": "A simple cot in the common room for one night.",
+        "price": {
+         "silver": 5
+        },
+        "stock": 6,
+        "restock_per_day": 6
+       },
+       {
+        "offer_key": "private-room",
+        "service": "lodging",
+        "name": "Private room",
+        "description": "A private room upstairs for one night.",
+        "price": {
+         "gold": 1
+        },
+        "stock": 1,
+        "restock_per_day": 1
+       },
+       {
+        "offer_key": "hot-stew",
+        "service": "meal",
+        "name": "Hot stew",
+        "description": "A hot bowl of stew and bread.",
+        "price": {
+         "silver": 1,
+         "copper": 5
+        }
+       },
+       {
+        "offer_key": "mug-of-ale",
+        "service": "drink",
+        "name": "Mug of ale",
+        "description": "A mug of the local ale.",
+        "price": {
+         "copper": 8
+        }
+       },
+       {
+        "offer_key": "trail-rations",
+        "service": "shop_goods",
+        "name": "Trail Rations",
+        "description": "A wrapped day of dried meat, hard cheese, and preserved berries.",
+        "price": {
+         "silver": 5
+        },
+        "item_id": "item:trail-rations",
+        "stock": 4,
+        "restock_per_day": 2
+       },
+       {
+        "offer_key": "local-rumor",
+        "service": "paid_information",
+        "name": "Local rumor",
+        "description": "A useful rumor from the common room.",
+        "price": {
+         "silver": 2
+        }
+       }
+      ]
+     },
+     {
+      "provider_id": "npc:elara",
+      "location_id": "location:market-road:market-square",
+      "sells": [
+       {
+        "offer_key": "healing-potion",
+        "service": "shop_goods",
+        "name": "Healing Potion",
+        "description": "A stoppered vial of red tincture.",
+        "price": {
+         "gold": 1
+        },
+        "item_id": "item:healing-potion",
+        "stock": 3,
+        "restock_per_day": 1
+       },
+       {
+        "offer_key": "torch",
+        "service": "shop_goods",
+        "name": "Torch",
+        "description": "A simple torch for dark places.",
+        "price": {
+         "silver": 1
+        },
+        "item_id": "item:torch",
+        "stock": 3,
+        "restock_per_day": 2
+       },
+       {
+        "offer_key": "rope",
+        "service": "shop_goods",
+        "name": "Rope",
+        "description": "Fifty feet of sturdy hemp rope.",
+        "price": {
+         "silver": 3
+        },
+        "item_id": "item:rope",
+        "stock": 2,
+        "restock_per_day": 1
+       },
+       {
+        "offer_key": "market-information",
+        "service": "paid_information",
+        "name": "Market information",
+        "description": "What the caravans and the stallholders are saying.",
+        "price": {
+         "silver": 2
+        }
+       },
+       {
+        "offer_key": "gear-repair",
+        "service": "repair",
+        "name": "Basic gear repair",
+        "description": "Minor repair work on worn equipment.",
+        "price": {
+         "silver": 4
+        }
+       }
+      ],
+      "buys": {
+       "item_types": [
+        "potion",
+        "tool",
+        "weapon",
+        "armor",
+        "clothing",
+        "food"
+       ],
+       "price_fraction": 0.5
+      }
+     },
+     {
+      "provider_id": "npc:marta",
+      "location_id": "location:market-road:frost-haven",
+      "sells": [
+       {
+        "offer_key": "inn-bed",
+        "service": "lodging",
+        "name": "A bed at the Frosted Flagon",
+        "description": "A warm bed for the night.",
+        "price": {
+         "silver": 8
+        },
+        "stock": 4,
+        "restock_per_day": 4
+       },
+       {
+        "offer_key": "hot-broth",
+        "service": "meal",
+        "name": "Hot broth",
+        "description": "Mutton broth and black bread.",
+        "price": {
+         "silver": 2
+        }
+       },
+       {
+        "offer_key": "mulled-wine",
+        "service": "drink",
+        "name": "Mulled wine",
+        "description": "Wine warmed with spices.",
+        "price": {
+         "silver": 1
+        }
+       },
+       {
+        "offer_key": "health-potion",
+        "service": "shop_goods",
+        "name": "Health Potion",
+        "description": "A vial for the road.",
+        "price": {
+         "gold": 2
+        },
+        "item_id": "item:health-potion",
+        "stock": 6,
+        "restock_per_day": 2
+       },
+       {
+        "offer_key": "mana-potion",
+        "service": "shop_goods",
+        "name": "Mana Potion",
+        "description": "A blue tincture.",
+        "price": {
+         "gold": 3
+        },
+        "item_id": "item:mana-potion",
+        "stock": 4,
+        "restock_per_day": 1
+       }
+      ],
+      "buys": {
+       "item_types": [
+        "potion",
+        "herb",
+        "tool",
+        "weapon",
+        "armor"
+       ],
+       "price_fraction": 0.5
+      }
+     }
+    ]
+   },
+   "routines": [
+    {
+     "npc_id": "npc:bran",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 6,
+       "location_id": "location:market-road:rusty-flagon",
+       "activity": "asleep upstairs"
+      },
+      {
+       "from_hour": 6,
+       "to_hour": 24,
+       "location_id": "location:market-road:rusty-flagon",
+       "activity": "keeping the tavern"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:bran:orderly-tavern",
+       "summary": "Keep the tavern calm, paid, and orderly.",
+       "priority": 3,
+       "topics": [
+        "tavern",
+        "debts"
+       ]
+      },
+      {
+       "goal_id": "goal:bran:road-news",
+       "summary": "Hear reliable news from the roads.",
+       "priority": 2,
+       "topics": [
+        "road",
+        "rumor",
+        "bandits"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:mira",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 8,
+       "location_id": "location:market-road:rusty-flagon",
+       "activity": "asleep in a rented cot"
+      },
+      {
+       "from_hour": 8,
+       "to_hour": 16,
+       "location_id": "location:market-road:market-square",
+       "activity": "listening to the stallholders"
+      },
+      {
+       "from_hour": 16,
+       "to_hour": 24,
+       "location_id": "location:market-road:rusty-flagon",
+       "activity": "watching the common room"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:mira:the-truth",
+       "summary": "Learn what is really happening on the road and in the quarry.",
+       "priority": 3,
+       "topics": [
+        "quarry",
+        "lights",
+        "crates"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:elara",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 7,
+       "location_id": "location:market-road:market-square",
+       "activity": "asleep above her stall"
+      },
+      {
+       "from_hour": 7,
+       "to_hour": 19,
+       "location_id": "location:market-road:market-square",
+       "activity": "selling at her stall"
+      },
+      {
+       "from_hour": 19,
+       "to_hour": 23,
+       "location_id": "location:market-road:rusty-flagon",
+       "activity": "arguing prices over supper"
+      },
+      {
+       "from_hour": 23,
+       "to_hour": 24,
+       "location_id": "location:market-road:market-square",
+       "activity": "closing up"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:elara:caravans",
+       "summary": "Get the caravans moving again.",
+       "priority": 3,
+       "topics": [
+        "caravans",
+        "road",
+        "bandits"
+       ],
+       "location_id": "location:market-road:northern-road"
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:aldric",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 8,
+       "location_id": "location:market-road:market-square",
+       "activity": "asleep at the watch house"
+      },
+      {
+       "from_hour": 8,
+       "to_hour": 14,
+       "location_id": "location:market-road:northern-road",
+       "activity": "patrolling the road"
+      },
+      {
+       "from_hour": 14,
+       "to_hour": 20,
+       "location_id": "location:market-road:market-square",
+       "activity": "keeping order in the square"
+      },
+      {
+       "from_hour": 20,
+       "to_hour": 24,
+       "location_id": "location:market-road:rusty-flagon",
+       "activity": "taking reports at the tavern"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:aldric:open-road",
+       "summary": "Keep the trade road open and find the missing guards.",
+       "priority": 3,
+       "topics": [
+        "road",
+        "bandits",
+        "missing"
+       ],
+       "location_id": "location:market-road:old-mill"
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:tomas",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 6,
+       "location_id": "location:market-road:market-square",
+       "activity": "asleep in the porters' loft"
+      },
+      {
+       "from_hour": 6,
+       "to_hour": 18,
+       "location_id": "location:market-road:market-square",
+       "activity": "hauling crates"
+      },
+      {
+       "from_hour": 18,
+       "to_hour": 22,
+       "location_id": "location:market-road:northern-road",
+       "activity": "moving sealed crates after dusk"
+      },
+      {
+       "from_hour": 22,
+       "to_hour": 24,
+       "location_id": "location:market-road:market-square",
+       "activity": "back in the loft"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:tomas:quiet-work",
+       "summary": "Keep his night work quiet.",
+       "priority": 3,
+       "topics": [
+        "crates",
+        "night"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:thorin",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 24,
+       "location_id": "location:market-road:glimmerdeep-pass",
+       "activity": "keeping watch with the party"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:thorin:home-alive",
+       "summary": "See the party home alive.",
+       "priority": 3,
+       "topics": [
+        "pass",
+        "icefang",
+        "watch"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:elandra",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 24,
+       "location_id": "location:market-road:glimmerdeep-pass",
+       "activity": "reading the archway's runes"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:elandra:relic",
+       "summary": "Recover the Frostbound Relic.",
+       "priority": 3,
+       "topics": [
+        "relic",
+        "runes",
+        "archway"
+       ],
+       "location_id": "location:market-road:the-glimmerdeep"
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:kael",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 24,
+       "location_id": "location:market-road:glimmerdeep-pass",
+       "activity": "scouting the tracks"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:kael:bounty",
+       "summary": "Claim the bounty on the Icefang Alpha.",
+       "priority": 3,
+       "topics": [
+        "bounty",
+        "icefang",
+        "alpha",
+        "tracks"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:bryn",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 24,
+       "location_id": "location:market-road:frost-haven",
+       "activity": "holding the keep"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:bryn:beacon",
+       "summary": "Relight the beacon at the Northern Watch.",
+       "priority": 3,
+       "topics": [
+        "beacon",
+        "watch",
+        "watchtower",
+        "patrol"
+       ],
+       "location_id": "location:market-road:northern-watch"
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:marta",
+     "schedule": [
+      {
+       "from_hour": 0,
+       "to_hour": 24,
+       "location_id": "location:market-road:frost-haven",
+       "activity": "keeping the Frosted Flagon"
+      }
+     ],
+     "goals": [
+      {
+       "goal_id": "goal:marta:full-inn",
+       "summary": "Keep the inn full.",
+       "priority": 2,
+       "topics": [
+        "inn",
+        "rooms",
+        "travelers"
+       ]
+      }
+     ]
+    }
+   ],
+   "knowledge": [
+    {
+     "npc_id": "npc:bran",
+     "facts": [
+      {
+       "fact_id": "fact:bran:rooms",
+       "text": "A cot in the common room is five silver a night; the private room upstairs is a gold coin.",
+       "topics": [
+        "room",
+        "rooms",
+        "bed",
+        "lodging",
+        "night"
+       ]
+      },
+      {
+       "fact_id": "fact:bran:roads",
+       "text": "The northern road runs past the mill spur and the quarry track, and on up to Glimmerdeep Pass; the climb takes half a day.",
+       "topics": [
+        "road",
+        "roads",
+        "north",
+        "pass",
+        "glimmerdeep",
+        "quarry",
+        "mill"
+       ]
+      },
+      {
+       "fact_id": "fact:bran:mill-bandits",
+       "text": "Travelers have seen armed figures camped at the old mill, and the last two caravans that took the mill spur never reached town.",
+       "shares": "for_price",
+       "price": {
+        "silver": 2
+       },
+       "topics": [
+        "bandits",
+        "mill",
+        "caravans",
+        "trouble",
+        "rumor"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:mira",
+     "facts": [
+      {
+       "fact_id": "fact:mira:quarry-light",
+       "text": "A pale light has been seen in the old quarry at night, from a fissure that should have gone dark years ago.",
+       "shares": "when_trusted",
+       "trust_needed": 10,
+       "topics": [
+        "quarry",
+        "light",
+        "lights",
+        "glow",
+        "fissure"
+       ]
+      },
+      {
+       "fact_id": "fact:mira:crates",
+       "text": "Tomas the porter carries sealed crates out along the northern road after dusk.",
+       "shares": "when_trusted",
+       "trust_needed": 40,
+       "topics": [
+        "crates",
+        "tomas",
+        "smugglers",
+        "smuggling",
+        "porter"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:elara",
+     "facts": [
+      {
+       "fact_id": "fact:elara:prices",
+       "text": "Caravans have thinned since the bandits came, and every price on the road is up by a third.",
+       "topics": [
+        "prices",
+        "caravans",
+        "trade",
+        "goods"
+       ]
+      },
+      {
+       "fact_id": "fact:elara:smugglers",
+       "text": "Someone moves sealed crates through the square after dusk, and they are worth more than anything on my stall.",
+       "shares": "for_price",
+       "price": {
+        "silver": 2
+       },
+       "topics": [
+        "crates",
+        "smugglers",
+        "smuggling",
+        "dusk",
+        "night"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:aldric",
+     "facts": [
+      {
+       "fact_id": "fact:aldric:patrols",
+       "text": "The watch patrols the northern road as far as the mill spur, and no farther.",
+       "topics": [
+        "patrol",
+        "patrols",
+        "watch",
+        "road",
+        "guards"
+       ]
+      },
+      {
+       "fact_id": "fact:aldric:missing-guards",
+       "text": "Two caravan guards went missing near the old mill last week; their horses came back without them.",
+       "shares": "when_trusted",
+       "trust_needed": 30,
+       "topics": [
+        "missing",
+        "guards",
+        "caravan",
+        "mill",
+        "horses"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:tomas",
+     "facts": [
+      {
+       "fact_id": "fact:tomas:market",
+       "text": "The square is busiest at noon, and Elara pays the fairest rates.",
+       "topics": [
+        "market",
+        "square",
+        "work",
+        "elara"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:thorin",
+     "facts": [
+      {
+       "fact_id": "fact:thorin:tracks",
+       "text": "Those tracks are Icefang, and too big for a common wolf: the alpha came down from the heights.",
+       "topics": [
+        "tracks",
+        "icefang",
+        "alpha",
+        "claws",
+        "beast"
+       ]
+      },
+      {
+       "fact_id": "fact:thorin:banner",
+       "text": "That banner is the Northern Watch's. Someone carried it up here, and the watch does not come this far.",
+       "shares": "when_trusted",
+       "trust_needed": 40,
+       "topics": [
+        "banner",
+        "watch",
+        "northern"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:elandra",
+     "facts": [
+      {
+       "fact_id": "fact:elandra:archway",
+       "text": "The runes on the archway are a ward, and the ward is failing; whatever it keeps under the snow is waking.",
+       "topics": [
+        "archway",
+        "runes",
+        "arch",
+        "ward",
+        "relic"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:kael",
+     "facts": [
+      {
+       "fact_id": "fact:kael:bounty",
+       "text": "Frost Haven pays fifty gold for the Icefang Alpha's head, and Captain Bryn pays it herself.",
+       "topics": [
+        "bounty",
+        "alpha",
+        "gold",
+        "reward"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:bryn",
+     "facts": [
+      {
+       "fact_id": "fact:bryn:patrol",
+       "text": "A patrol went up to the Northern Watch ten days ago and the beacon has been dark since.",
+       "shares": "when_trusted",
+       "trust_needed": 20,
+       "topics": [
+        "patrol",
+        "beacon",
+        "watchtower",
+        "watch",
+        "missing"
+       ]
+      }
+     ]
+    },
+    {
+     "npc_id": "npc:marta",
+     "facts": [
+      {
+       "fact_id": "fact:marta:rooms",
+       "text": "A bed is eight silver, broth two, and the wine is the warmest thing north of the pass.",
+       "topics": [
+        "bed",
+        "room",
+        "rooms",
+        "broth",
+        "wine"
+       ]
+      }
+     ]
+    }
+   ],
+   "pressures": [
+    {
+     "pressure_id": "pressure:market-road:bandits",
+     "name": "Bandits on the trade road",
+     "region_id": "region:market-road:trade-road",
+     "description": "Bandits camped at the old mill raid the caravans, and trade into town is drying up.",
+     "dimension": "trade_access",
+     "severity": 45,
+     "trend": "escalating",
+     "levers": [
+      {
+       "action": "defeat the bandits at the mill",
+       "effect": "lower",
+       "amount": 25
+      },
+      {
+       "action": "escort a caravan",
+       "effect": "lower",
+       "amount": 10
+      }
+     ]
+    },
+    {
+     "pressure_id": "pressure:market-road:quarry-light",
+     "name": "The light in the quarry",
+     "region_id": "region:market-road:quarry",
+     "description": "Something in the old quarry is waking, and the sealed crates leaving it carry it into town.",
+     "dimension": "political_stability",
+     "severity": 30,
+     "trend": "volatile",
+     "levers": [
+      {
+       "action": "seal the quarry fissure",
+       "effect": "lower",
+       "amount": 30
+      },
+      {
+       "action": "deliver a sealed crate",
+       "effect": "raise",
+       "amount": 10
+      }
+     ]
+    },
+    {
+     "pressure_id": "pressure:market-road:failing-ward",
+     "name": "The failing ward",
+     "region_id": "region:market-road:north",
+     "description": "The ward on the buried archway is failing, and the beasts of the heights are coming down.",
+     "dimension": "population_index",
+     "severity": 55,
+     "trend": "escalating",
+     "levers": [
+      {
+       "action": "recover the Frostbound Relic",
+       "effect": "lower",
+       "amount": 40
+      },
+      {
+       "action": "slay the Icefang Alpha",
+       "effect": "lower",
+       "amount": 15
+      }
+     ]
+    }
+   ],
+   "bestiary": [
+    {
+     "id": "creature:market-road:bandit",
+     "name": "Bandit",
+     "threat": "low",
+     "traits": [
+      "desperate",
+      "works in groups"
+     ],
+     "stats": {
+      "level": 1,
+      "hp": 10,
+      "defense": 10,
+      "damage_min": 1,
+      "damage_max": 4,
+      "accuracy_bonus": 1,
+      "xp_value": 25
+     },
+     "behaviour": "flees_when_hurt",
+     "loot": [
+      {
+       "item_id": "item:trail-rations",
+       "chance": 0.4
+      }
+     ]
+    },
+    {
+     "id": "creature:market-road:bandit-archer",
+     "name": "Bandit Archer",
+     "threat": "low",
+     "traits": [
+      "keeps her distance"
+     ],
+     "stats": {
+      "level": 1,
+      "hp": 8,
+      "defense": 9,
+      "damage_min": 1,
+      "damage_max": 4,
+      "accuracy_bonus": 2,
+      "xp_value": 25
+     },
+     "behaviour": "ambushes",
+     "loot": [
+      {
+       "item_id": "item:torch",
+       "chance": 0.3
+      }
+     ]
+    },
+    {
+     "id": "creature:market-road:bandit-brute",
+     "name": "Bandit Brute",
+     "threat": "medium",
+     "traits": [
+      "leads the mill camp"
+     ],
+     "stats": {
+      "level": 2,
+      "hp": 18,
+      "defense": 9,
+      "damage_min": 2,
+      "damage_max": 6,
+      "accuracy_bonus": 0,
+      "xp_value": 50
+     },
+     "behaviour": "calls_allies",
+     "loot": [
+      {
+       "item_id": "item:healing-potion",
+       "chance": 0.5
+      }
+     ]
+    },
+    {
+     "id": "creature:market-road:wolf",
+     "name": "Wolf",
+     "threat": "low",
+     "traits": [
+      "hunts in the brush"
+     ],
+     "stats": {
+      "level": 1,
+      "hp": 9,
+      "defense": 11,
+      "damage_min": 1,
+      "damage_max": 4,
+      "accuracy_bonus": 2,
+      "xp_value": 25
+     },
+     "behaviour": "flees_when_hurt"
+    },
+    {
+     "id": "creature:market-road:giant-rat",
+     "name": "Giant Rat",
+     "threat": "low",
+     "traits": [
+      "lives in cellars"
+     ],
+     "stats": {
+      "level": 1,
+      "hp": 5,
+      "defense": 10,
+      "damage_min": 1,
+      "damage_max": 3,
+      "accuracy_bonus": 1,
+      "xp_value": 10
+     },
+     "behaviour": "fights"
+    },
+    {
+     "id": "creature:market-road:quarry-husk",
+     "name": "Quarry Husk",
+     "threat": "medium",
+     "traits": [
+      "glows faintly",
+      "drawn to the fissure"
+     ],
+     "stats": {
+      "level": 2,
+      "hp": 14,
+      "defense": 10,
+      "damage_min": 1,
+      "damage_max": 5,
+      "accuracy_bonus": 1,
+      "xp_value": 40
+     },
+     "behaviour": "guards",
+     "loot": [
+      {
+       "item_id": "item:quarry-shard",
+       "chance": 0.25
+      }
+     ]
+    },
+    {
+     "id": "creature:market-road:icefang-wolf",
+     "name": "Icefang Wolf",
+     "threat": "high",
+     "traits": [
+      "hunts in packs",
+      "frost on its breath"
+     ],
+     "stats": {
+      "level": 9,
+      "hp": 70,
+      "defense": 15,
+      "damage_min": 6,
+      "damage_max": 14,
+      "accuracy_bonus": 5,
+      "xp_value": 320
+     },
+     "behaviour": "calls_allies"
+    },
+    {
+     "id": "creature:market-road:icefang-alpha",
+     "name": "Icefang Alpha",
+     "threat": "deadly",
+     "traits": [
+      "huge",
+      "clawed",
+      "scarred by an old spear"
+     ],
+     "stats": {
+      "level": 14,
+      "hp": 220,
+      "defense": 18,
+      "damage_min": 12,
+      "damage_max": 26,
+      "accuracy_bonus": 7,
+      "xp_value": 1500
+     },
+     "behaviour": "fights",
+     "loot": [
+      {
+       "item_id": "item:keenleaf",
+       "chance": 0.5,
+       "quantity": 2
+      }
+     ]
+    }
+   ],
+   "quests": [
+    {
+     "id": "quest:market-road:tavern-rumor",
+     "title": "Rumor at the Rusty Flagon",
+     "tier": "side",
+     "objective": "Ask Bran or the tavern regulars which rumor is true.",
+     "locations": [
+      "location:market-road:rusty-flagon"
+     ],
+     "rewards": [
+      "a lead",
+      "Bran's trust"
+     ]
+    },
+    {
+     "id": "quest:market-road:bandit-trail",
+     "title": "Bandit Trail",
+     "tier": "main",
+     "objective": "Follow the bandits' trail up the mill spur and break their camp at the old mill.",
+     "locations": [
+      "location:market-road:northern-road",
+      "location:market-road:old-mill"
+     ],
+     "rewards": [
+      "20 silver",
+      "the watch's gratitude"
+     ]
+    },
+    {
+     "id": "quest:market-road:missing-guards",
+     "title": "The Missing Guards",
+     "tier": "side",
+     "objective": "Find out what happened to the two caravan guards who vanished near the mill.",
+     "locations": [
+      "location:market-road:market-square",
+      "location:market-road:old-mill"
+     ],
+     "rewards": [
+      "10 silver",
+      "Captain Aldric's trust"
+     ]
+    },
+    {
+     "id": "quest:market-road:watch-trouble",
+     "title": "Trouble with the Watch",
+     "tier": "side",
+     "objective": "Learn why the watch is watching you, and avoid making it worse.",
+     "locations": [
+      "location:market-road:rusty-flagon",
+      "location:market-road:market-square"
+     ],
+     "rewards": [
+      "the watch's good word"
+     ]
+    },
+    {
+     "id": "quest:market-road:merchant-job",
+     "title": "Merchant Job",
+     "tier": "side",
+     "objective": "Meet Elara, agree her price, and get her caravan's goods through the trade road.",
+     "locations": [
+      "location:market-road:market-square",
+      "location:market-road:northern-road"
+     ],
+     "rewards": [
+      "15 silver",
+      "a discount at Elara's stall"
+     ]
+    },
+    {
+     "id": "quest:market-road:quarry-lights",
+     "title": "Lights in the Old Quarry",
+     "tier": "main",
+     "objective": "Find the source of the pale light in the old quarry, and what the sealed crates carry.",
+     "locations": [
+      "location:market-road:old-quarry"
+     ],
+     "rewards": [
+      "a Quarry Shard",
+      "the town's thanks"
+     ]
+    },
+    {
+     "id": "quest:market-road:cellar-rats",
+     "title": "Rats in the Cellar",
+     "tier": "side",
+     "objective": "Clear the giant rats out of the Rusty Flagon's cellar.",
+     "locations": [
+      "location:market-road:rusty-flagon"
+     ],
+     "rewards": [
+      "a free night's lodging"
+     ]
+    },
+    {
+     "id": "quest:market-road:frostbound-relic",
+     "title": "The Frostbound Relic",
+     "tier": "main",
+     "objective": "Find the relic in the Glimmerdeep.",
+     "locations": [
+      "location:market-road:glimmerdeep-pass",
+      "location:market-road:the-glimmerdeep"
+     ],
+     "rewards": [
+      "the Frostbound Relic",
+      "Elandra's trust"
+     ]
+    },
+    {
+     "id": "quest:market-road:secrets-in-the-snow",
+     "title": "Secrets in the Snow",
+     "tier": "side",
+     "objective": "Investigate the old watchtower.",
+     "locations": [
+      "location:market-road:northern-watch"
+     ],
+     "rewards": [
+      "Captain Bryn's trust"
+     ]
+    },
+    {
+     "id": "quest:market-road:icefang-alpha",
+     "title": "Bounty: Icefang Alpha",
+     "tier": "side",
+     "objective": "Track down the alpha beast.",
+     "locations": [
+      "location:market-road:frostpine-hollow",
+      "location:market-road:glimmerdeep-pass"
+     ],
+     "rewards": [
+      "50 gold"
+     ]
+    }
+   ]
+  },
+  "topology": {
+   "schema_version": "rpg_world_topology_v1",
+   "locations": [
+    {
+     "id": "location:market-road:rusty-flagon",
+     "name": "Rusty Flagon Tavern",
+     "region_id": "region:market-road:town",
+     "map_id": "map:market-road:rusty-flagon",
+     "environment": {
+      "climate_profile_id": "temperate_hills",
+      "weather": "Rainy",
+      "exposure": "indoor",
+      "shelter": "sheltered",
+      "light": "tavern_lit"
+     },
+     "aliases": [
+      "the tavern",
+      "tavern",
+      "the inn",
+      "inn",
+      "the rusty flagon"
+     ],
+     "description": "A smoky tavern and inn with worn beams, a crackling hearth, and rain tapping at the shutters. A notice board beside the stairs lists work for caravan guards, rat catchers, and anyone willing to look into strange lights near the old quarry."
+    },
+    {
+     "id": "location:market-road:market-square",
+     "name": "Market Square",
+     "region_id": "region:market-road:town",
+     "map_id": "map:market-road:market-square",
+     "environment": {
+      "climate_profile_id": "temperate_hills",
+      "weather": "Cloudy",
+      "exposure": "outdoor",
+      "shelter": "partly_sheltered"
+     },
+     "aliases": [
+      "the market",
+      "market",
+      "the square",
+      "square",
+      "the market district"
+     ],
+     "description": "Market stalls crowd the square, and voices rise over the smell of bread, rain, and horse leather. Half the caravan stalls stand empty."
+    },
+    {
+     "id": "location:market-road:northern-road",
+     "name": "Northern Road",
+     "region_id": "region:market-road:trade-road",
+     "map_id": "map:market-road:northern-road",
+     "environment": {
+      "climate_profile_id": "road_lowlands",
+      "weather": "Overcast",
+      "exposure": "outdoor",
+      "shelter": "exposed"
+     },
+     "aliases": [
+      "the road",
+      "the northern road",
+      "the trade road",
+      "outside",
+      "out of town"
+     ],
+     "description": "The Northern Road cuts between wet pines and wagon-rutted mud. A broken milestone leans beside the ditch, and fresh hoofprints lead toward the pass while older tracks vanish into the brush."
+    },
+    {
+     "id": "location:market-road:old-mill",
+     "name": "Old Mill",
+     "region_id": "region:market-road:trade-road",
+     "map_id": "map:market-road:old-mill",
+     "environment": {
+      "climate_profile_id": "road_lowlands",
+      "weather": "Overcast",
+      "exposure": "outdoor",
+      "shelter": "partly_sheltered"
+     },
+     "aliases": [
+      "the mill",
+      "the old mill",
+      "mill"
+     ],
+     "description": "A weathered mill on its spur off the road, its wheel stopped and its timbers broken. Bandit tracks and a cold campfire mark the yard."
+    },
+    {
+     "id": "location:market-road:brushland",
+     "name": "The Brushland",
+     "region_id": "region:market-road:trade-road",
+     "map_id": "map:market-road:brushland",
+     "environment": {
+      "climate_profile_id": "road_lowlands",
+      "weather": "Overcast",
+      "exposure": "outdoor",
+      "shelter": "exposed"
+     },
+     "aliases": [
+      "the wilderness",
+      "the brush",
+      "the wilds",
+      "wilderness"
+     ],
+     "description": "Brush, shallow gullies, and game trails on either side of the road, where wolves hunt at dusk."
+    },
+    {
+     "id": "location:market-road:old-quarry",
+     "name": "Old Quarry",
+     "region_id": "region:market-road:quarry",
+     "map_id": "map:market-road:old-quarry",
+     "environment": {
+      "climate_profile_id": "quarry_hills",
+      "weather": "Grey and still",
+      "exposure": "outdoor",
+      "shelter": "exposed"
+     },
+     "aliases": [
+      "the quarry",
+      "quarry",
+      "the old quarry"
+     ],
+     "description": "The old quarry yawns open beneath a rim of cracked stone. Rusted pulleys creak in the breeze, and pale light glows from a fissure that should have gone dark years ago."
+    },
+    {
+     "id": "location:market-road:glimmerdeep-pass",
+     "name": "Glimmerdeep Pass",
+     "region_id": "region:market-road:pass",
+     "map_id": "map:market-road:glimmerdeep-pass",
+     "environment": {
+      "climate_profile_id": "northern_mountains",
+      "weather": "Cold, Windy",
+      "temperature": -12,
+      "exposure": "outdoor",
+      "shelter": "exposed"
+     },
+     "aliases": [
+      "the pass",
+      "glimmerdeep",
+      "the mountain pass"
+     ],
+     "description": "The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both sides, and an ancient stone archway stands ahead, half-buried in drifts."
+    },
+    {
+     "id": "location:market-road:frost-haven",
+     "name": "Frost Haven",
+     "region_id": "region:market-road:north",
+     "map_id": "map:market-road:frost-haven",
+     "environment": {
+      "climate_profile_id": "northern_mountains",
+      "exposure": "outdoor",
+      "shelter": "partly_sheltered",
+      "weather": "Cold, Windy",
+      "temperature": -8
+     },
+     "aliases": [
+      "the haven",
+      "frost haven",
+      "the keep",
+      "the frosted flagon"
+     ],
+     "description": "A fortified mountain settlement and caravan refuge: the Frosted Flagon, the Ember & Iron smithy, and Frost Haven Keep behind its walls."
+    },
+    {
+     "id": "location:market-road:frostpine-hollow",
+     "name": "Frostpine Hollow",
+     "region_id": "region:market-road:north",
+     "map_id": "map:market-road:frostpine-hollow",
+     "environment": {
+      "climate_profile_id": "northern_mountains",
+      "exposure": "outdoor",
+      "shelter": "partly_sheltered",
+      "weather": "Overcast",
+      "temperature": -6
+     },
+     "aliases": [
+      "the hollow",
+      "frostpine"
+     ],
+     "description": "A wooded hamlet below the exposed pass, where the party rested after the Icefang fight."
+    },
+    {
+     "id": "location:market-road:northern-watch",
+     "name": "Northern Watch",
+     "region_id": "region:market-road:north",
+     "map_id": "map:market-road:northern-watch",
+     "environment": {
+      "climate_profile_id": "northern_mountains",
+      "exposure": "outdoor",
+      "shelter": "exposed",
+      "weather": "Cold, Windy",
+      "temperature": -14
+     },
+     "aliases": [
+      "the watchtower",
+      "the old watchtower",
+      "the watch"
+     ],
+     "description": "A remote watchtower overlooking the high road; its beacon has been dark for ten days."
+    },
+    {
+     "id": "location:market-road:the-glimmerdeep",
+     "name": "The Glimmerdeep",
+     "region_id": "region:market-road:north",
+     "map_id": "map:market-road:the-glimmerdeep",
+     "environment": {
+      "climate_profile_id": "northern_mountains",
+      "exposure": "indoor",
+      "shelter": "sheltered",
+      "weather": "Still and cold",
+      "temperature": -4
+     },
+     "aliases": [
+      "the deep",
+      "beyond the archway",
+      "under the arch"
+     ],
+     "description": "Ice-walled caverns beyond the buried archway, glittering with frost, where something hums in the dark."
+    }
+   ],
+   "routes": [
+    {
+     "id": "route:market-road:tavern-lane",
+     "from": "location:market-road:rusty-flagon",
+     "to": "location:market-road:market-square",
+     "travel_time": "5 minutes",
+     "portal_id": "portal:market-road:tavern-to-square"
+    },
+    {
+     "id": "route:market-road:town-gate",
+     "from": "location:market-road:rusty-flagon",
+     "to": "location:market-road:northern-road",
+     "travel_time": "10 minutes",
+     "portal_id": "portal:market-road:tavern-to-road"
+    },
+    {
+     "id": "route:market-road:cart-track",
+     "from": "location:market-road:market-square",
+     "to": "location:market-road:northern-road",
+     "travel_time": "10 minutes",
+     "portal_id": "portal:market-road:square-to-road"
+    },
+    {
+     "id": "route:market-road:mill-spur",
+     "from": "location:market-road:northern-road",
+     "to": "location:market-road:old-mill",
+     "travel_time": "30 minutes",
+     "portal_id": "portal:market-road:road-to-mill"
+    },
+    {
+     "id": "route:market-road:brush-trail",
+     "from": "location:market-road:northern-road",
+     "to": "location:market-road:brushland",
+     "travel_time": "20 minutes",
+     "portal_id": "portal:market-road:road-to-brush"
+    },
+    {
+     "id": "route:market-road:quarry-track",
+     "from": "location:market-road:northern-road",
+     "to": "location:market-road:old-quarry",
+     "travel_time": "1 hour",
+     "portal_id": "portal:market-road:road-to-quarry"
+    },
+    {
+     "id": "route:market-road:the-climb",
+     "from": "location:market-road:northern-road",
+     "to": "location:market-road:glimmerdeep-pass",
+     "travel_time": "4 hours",
+     "portal_id": "portal:market-road:road-to-pass"
+    },
+    {
+     "id": "route:market-road:descent-to-the-hollow",
+     "from": "location:market-road:glimmerdeep-pass",
+     "to": "location:market-road:frostpine-hollow",
+     "travel_time": "2 hours",
+     "portal_id": "portal:market-road:pass-to-hollow"
+    },
+    {
+     "id": "route:market-road:haven-road",
+     "from": "location:market-road:frostpine-hollow",
+     "to": "location:market-road:frost-haven",
+     "travel_time": "1 hour",
+     "portal_id": "portal:market-road:hollow-to-haven"
+    },
+    {
+     "id": "route:market-road:watch-road",
+     "from": "location:market-road:frost-haven",
+     "to": "location:market-road:northern-watch",
+     "travel_time": "1 hour",
+     "portal_id": "portal:market-road:haven-to-watch"
+    },
+    {
+     "id": "route:market-road:through-the-arch",
+     "from": "location:market-road:glimmerdeep-pass",
+     "to": "location:market-road:the-glimmerdeep",
+     "travel_time": "15 minutes",
+     "portal_id": "portal:market-road:pass-to-deep"
+    }
+   ]
+  },
+  "adventure_seeds": [
+   {
+    "id": "seed:market-road:tavern-rumor",
+    "opening_hook": "tavern_rumor",
+    "quest_id": "quest:market-road:tavern-rumor",
+    "title": "A rumor by the hearth",
+    "hook": "A low conversation near the hearth hints at trouble outside town."
+   },
+   {
+    "id": "seed:market-road:bandit-trail",
+    "opening_hook": "bandit_trail",
+    "quest_id": "quest:market-road:bandit-trail",
+    "title": "Fresh tracks",
+    "hook": "A road-worn witness describes raiders and fresh hoofprints beyond the market road."
+   },
+   {
+    "id": "seed:market-road:missing-guards",
+    "opening_hook": "missing_person",
+    "quest_id": "quest:market-road:missing-guards",
+    "title": "Horses without riders",
+    "hook": "Two caravan horses came back to town without their guards."
+   },
+   {
+    "id": "seed:market-road:watch-trouble",
+    "opening_hook": "guard_trouble",
+    "quest_id": "quest:market-road:watch-trouble",
+    "title": "Eyes on the stranger",
+    "hook": "The watch captain studies you from the doorway while a patrol blocks the street outside."
+   },
+   {
+    "id": "seed:market-road:merchant-job",
+    "opening_hook": "merchant_job",
+    "quest_id": "quest:market-road:merchant-job",
+    "title": "A merchant short of stock",
+    "hook": "Elara needs someone to get her goods through the trade road."
+   },
+   {
+    "id": "seed:market-road:quarry-lights",
+    "quest_id": "quest:market-road:quarry-lights",
+    "title": "A light that should be dark",
+    "hook": "The notice board offers coin to anyone willing to look into the strange lights near the old quarry."
+   },
+   {
+    "id": "seed:market-road:cellar-rats",
+    "quest_id": "quest:market-road:cellar-rats",
+    "title": "Something in the cellar",
+    "hook": "Bran is offering a free night to whoever clears the rats from his cellar."
+   },
+   {
+    "id": "seed:market-road:frostbound-relic",
+    "quest_id": "quest:market-road:frostbound-relic",
+    "title": "Clawed tracks at the archway",
+    "hook": "Faint tracks, large, clawed and fresh, mar the snow near the archway."
+   },
+   {
+    "id": "seed:market-road:secrets-in-the-snow",
+    "quest_id": "quest:market-road:secrets-in-the-snow",
+    "title": "A torn banner",
+    "hook": "A torn banner from the Northern Watch flutters in the wind."
+   },
+   {
+    "id": "seed:market-road:icefang-alpha",
+    "quest_id": "quest:market-road:icefang-alpha",
+    "title": "A bounty posted in Frost Haven",
+    "hook": "Something big passed through here not long ago."
+   }
+  ]
+ },
+ "legacy_ids": {
+  "loc_tavern": "location:market-road:rusty-flagon",
+  "rusty_flagon_tavern": "location:market-road:rusty-flagon",
+  "location:rusty_flagon_tavern": "location:market-road:rusty-flagon",
+  "location:rusty_flagon": "location:market-road:rusty-flagon",
+  "loc_market": "location:market-road:market-square",
+  "market_district": "location:market-road:market-square",
+  "location:market": "location:market-road:market-square",
+  "northern_road": "location:market-road:northern-road",
+  "location:old_road": "location:market-road:northern-road",
+  "loc_patrol": "location:market-road:northern-road",
+  "location:old_mill": "location:market-road:old-mill",
+  "location:nearby_wilderness": "location:market-road:brushland",
+  "old_quarry": "location:market-road:old-quarry",
+  "glimmerdeep_pass": "location:market-road:glimmerdeep-pass",
+  "npc:Bran": "npc:bran",
+  "npc_innkeeper": "npc:bran",
+  "npc:Mira": "npc:mira",
+  "npc:Elara": "npc:elara",
+  "npc:Merchant": "npc:elara",
+  "npc_merchant": "npc:elara",
+  "npc:GuardCaptain": "npc:aldric",
+  "npc_guard_captain": "npc:aldric",
+  "npc:Tomas": "npc:tomas"
+ },
+ "palette": [
+  {
+   "code": ".",
+   "terrain_id": "floor",
+   "walkable": true,
+   "blocks_sight": false,
+   "movement_cost": 10
+  },
+  {
+   "code": "#",
+   "terrain_id": "wall",
+   "walkable": false,
+   "blocks_sight": true,
+   "movement_cost": 99
+  },
+  {
+   "code": "c",
+   "terrain_id": "counter",
+   "walkable": false,
+   "blocks_sight": false,
+   "movement_cost": 99
+  },
+  {
+   "code": "t",
+   "terrain_id": "table",
+   "walkable": false,
+   "blocks_sight": false,
+   "movement_cost": 99
+  },
+  {
+   "code": "d",
+   "terrain_id": "door",
+   "walkable": true,
+   "blocks_sight": false,
+   "movement_cost": 10
+  },
+  {
+   "code": "g",
+   "terrain_id": "grass",
+   "walkable": true,
+   "blocks_sight": false,
+   "movement_cost": 10
+  },
+  {
+   "code": "r",
+   "terrain_id": "road",
+   "walkable": true,
+   "blocks_sight": false,
+   "movement_cost": 7
+  },
+  {
+   "code": "s",
+   "terrain_id": "stall",
+   "walkable": false,
+   "blocks_sight": false,
+   "movement_cost": 99
+  },
+  {
+   "code": "f",
+   "terrain_id": "forest",
+   "walkable": true,
+   "blocks_sight": true,
+   "movement_cost": 15
+  },
+  {
+   "code": "w",
+   "terrain_id": "water",
+   "walkable": false,
+   "blocks_sight": false,
+   "movement_cost": 99
+  },
+  {
+   "code": "x",
+   "terrain_id": "rubble",
+   "walkable": true,
+   "blocks_sight": false,
+   "movement_cost": 14
+  },
+  {
+   "code": "o",
+   "terrain_id": "stone",
+   "walkable": false,
+   "blocks_sight": true,
+   "movement_cost": 99
+  },
+  {
+   "code": "n",
+   "terrain_id": "snow",
+   "walkable": true,
+   "blocks_sight": false,
+   "movement_cost": 14
+  }
+ ],
+ "maps": [
+  {
+   "map_id": "map:market-road:rusty-flagon",
+   "location_id": "location:market-road:rusty-flagon",
+   "level": "interior",
+   "rows": [
+    "##########",
+    "#........#",
+    "#.cccc...#",
+    "#........#",
+    "#..t..t..d",
+    "#........#",
+    "#..t.....#",
+    "####d#####"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:hearth",
+     [
+      5,
+      5
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:bran",
+     [
+      3,
+      1
+     ],
+     [
+      "npc"
+     ]
+    ],
+    [
+     "spawn:market-road:mira",
+     [
+      7,
+      3
+     ],
+     [
+      "npc"
+     ]
+    ],
+    [
+     "spawn:market-road:tavern-guest",
+     [
+      1,
+      5
+     ],
+     [
+      "npc"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:common-room",
+     "Common Room",
+     [
+      [
+       4,
+       4
+      ],
+      [
+       5,
+       4
+      ],
+      [
+       4,
+       5
+      ],
+      [
+       5,
+       5
+      ],
+      [
+       6,
+       5
+      ]
+     ]
+    ],
+    [
+     "zone:market-road:bar",
+     "The Bar",
+     [
+      [
+       2,
+       1
+      ],
+      [
+       3,
+       1
+      ],
+      [
+       4,
+       1
+      ],
+      [
+       5,
+       1
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:tavern-to-square",
+     [
+      4,
+      7
+     ],
+     "map:market-road:market-square",
+     [
+      5,
+      1
+     ]
+    ],
+    [
+     "portal:market-road:tavern-to-road",
+     [
+      9,
+      4
+     ],
+     "map:market-road:northern-road",
+     [
+      1,
+      2
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:market-square",
+   "location_id": "location:market-road:market-square",
+   "level": "settlement",
+   "rows": [
+    "gggggrgggggg",
+    "gsssgrrgsssg",
+    "gg..rrrr..gg",
+    "grrrrrrrrrrr",
+    "gg..rrrr..gg",
+    "gsssgrrgsssg",
+    "gggggrgggggg"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:square",
+     [
+      6,
+      3
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:elara",
+     [
+      2,
+      2
+     ],
+     [
+      "npc"
+     ]
+    ],
+    [
+     "spawn:market-road:tomas",
+     [
+      9,
+      4
+     ],
+     [
+      "npc"
+     ]
+    ],
+    [
+     "spawn:market-road:aldric",
+     [
+      7,
+      2
+     ],
+     [
+      "npc"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:stalls",
+     "The Stalls",
+     [
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       2
+      ],
+      [
+       3,
+       2
+      ],
+      [
+       8,
+       2
+      ],
+      [
+       9,
+       2
+      ],
+      [
+       10,
+       2
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:square-to-tavern",
+     [
+      5,
+      1
+     ],
+     "map:market-road:rusty-flagon",
+     [
+      4,
+      7
+     ]
+    ],
+    [
+     "portal:market-road:square-to-road",
+     [
+      11,
+      3
+     ],
+     "map:market-road:northern-road",
+     [
+      1,
+      3
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:northern-road",
+   "location_id": "location:market-road:northern-road",
+   "level": "encounter",
+   "rows": [
+    "ffffffrffffffr",
+    "ffggggrgggggrf",
+    "rrrrrrrrrrrrrr",
+    "rggggrgggggggr",
+    "ffffrffffffffr",
+    "ffffrfffffffff"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:milestone",
+     [
+      3,
+      2
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:patrol",
+     [
+      8,
+      2
+     ],
+     [
+      "npc"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:milestone",
+     "Broken Milestone",
+     [
+      [
+       3,
+       3
+      ],
+      [
+       4,
+       3
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:road-to-tavern",
+     [
+      0,
+      2
+     ],
+     "map:market-road:rusty-flagon",
+     [
+      9,
+      4
+     ]
+    ],
+    [
+     "portal:market-road:road-to-square",
+     [
+      0,
+      3
+     ],
+     "map:market-road:market-square",
+     [
+      11,
+      3
+     ]
+    ],
+    [
+     "portal:market-road:road-to-mill",
+     [
+      6,
+      0
+     ],
+     "map:market-road:old-mill",
+     [
+      4,
+      7
+     ]
+    ],
+    [
+     "portal:market-road:road-to-brush",
+     [
+      4,
+      5
+     ],
+     "map:market-road:brushland",
+     [
+      5,
+      0
+     ]
+    ],
+    [
+     "portal:market-road:road-to-quarry",
+     [
+      13,
+      4
+     ],
+     "map:market-road:old-quarry",
+     [
+      0,
+      4
+     ]
+    ],
+    [
+     "portal:market-road:road-to-pass",
+     [
+      13,
+      0
+     ],
+     "map:market-road:glimmerdeep-pass",
+     [
+      0,
+      3
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:old-mill",
+   "location_id": "location:market-road:old-mill",
+   "level": "encounter",
+   "rows": [
+    "wwwwwwwwww",
+    "w###..###w",
+    "g#.x...x#g",
+    "g#......#g",
+    "g###..###g",
+    "gggg..gggg",
+    "gxggggggxg",
+    "ggggrggggg"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:mill-yard",
+     [
+      4,
+      6
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:mill-camp",
+     [
+      5,
+      3
+     ],
+     [
+      "enemy"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:bandit-camp",
+     "Bandit Camp",
+     [
+      [
+       3,
+       2
+      ],
+      [
+       4,
+       3
+      ],
+      [
+       5,
+       3
+      ],
+      [
+       6,
+       2
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:mill-to-road",
+     [
+      4,
+      7
+     ],
+     "map:market-road:northern-road",
+     [
+      6,
+      0
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:brushland",
+   "location_id": "location:market-road:brushland",
+   "level": "encounter",
+   "rows": [
+    "fffffgffff",
+    "ffggggggff",
+    "fgggfgggfg",
+    "gggffffggg",
+    "fggggggggf",
+    "ffffffffff"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:game-trail",
+     [
+      5,
+      1
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:wolf-den",
+     [
+      8,
+      4
+     ],
+     [
+      "enemy"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:gully",
+     "Shallow Gully",
+     [
+      [
+       4,
+       3
+      ],
+      [
+       5,
+       3
+      ],
+      [
+       6,
+       3
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:brush-to-road",
+     [
+      5,
+      0
+     ],
+     "map:market-road:northern-road",
+     [
+      4,
+      5
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:old-quarry",
+   "location_id": "location:market-road:old-quarry",
+   "level": "encounter",
+   "rows": [
+    "oooooooooo",
+    "oxx....xxo",
+    "ox..oo..xo",
+    "o...oo...o",
+    "r........o",
+    "oxx....xxo",
+    "oooooooooo"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:quarry-rim",
+     [
+      1,
+      4
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:fissure",
+     [
+      6,
+      3
+     ],
+     [
+      "enemy"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:fissure",
+     "The Glowing Fissure",
+     [
+      [
+       4,
+       2
+      ],
+      [
+       5,
+       2
+      ],
+      [
+       4,
+       3
+      ],
+      [
+       5,
+       3
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:quarry-to-road",
+     [
+      0,
+      4
+     ],
+     "map:market-road:northern-road",
+     [
+      13,
+      4
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:glimmerdeep-pass",
+   "location_id": "location:market-road:glimmerdeep-pass",
+   "level": "encounter",
+   "rows": [
+    "oooooooooooo",
+    "onnnnnnnnnno",
+    "nnnnnoonnnnn",
+    "rnnnnoonnnnn",
+    "onnnnnnnnnno",
+    "oooooooooooo"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:pass-foot",
+     [
+      1,
+      3
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:thorin",
+     [
+      2,
+      3
+     ],
+     [
+      "npc"
+     ]
+    ],
+    [
+     "spawn:market-road:elandra",
+     [
+      4,
+      2
+     ],
+     [
+      "npc"
+     ]
+    ],
+    [
+     "spawn:market-road:kael",
+     [
+      3,
+      4
+     ],
+     [
+      "npc"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:archway",
+     "The Buried Archway",
+     [
+      [
+       5,
+       2
+      ],
+      [
+       6,
+       2
+      ],
+      [
+       5,
+       3
+      ],
+      [
+       6,
+       3
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:pass-to-road",
+     [
+      0,
+      3
+     ],
+     "map:market-road:northern-road",
+     [
+      13,
+      0
+     ]
+    ],
+    [
+     "portal:market-road:pass-to-hollow",
+     [
+      11,
+      3
+     ],
+     "map:market-road:frostpine-hollow",
+     [
+      0,
+      2
+     ]
+    ],
+    [
+     "portal:market-road:pass-to-deep",
+     [
+      7,
+      2
+     ],
+     "map:market-road:the-glimmerdeep",
+     [
+      4,
+      5
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:frostpine-hollow",
+   "location_id": "location:market-road:frostpine-hollow",
+   "level": "settlement",
+   "rows": [
+    "ffffffffff",
+    "rnnnnnnnnf",
+    "rnn##nn##r",
+    "fnnnnnnnnf",
+    "ffffffffff"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:hollow-road",
+     [
+      1,
+      2
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:hamlet",
+     "The Hamlet",
+     [
+      [
+       3,
+       2
+      ],
+      [
+       4,
+       2
+      ],
+      [
+       7,
+       2
+      ],
+      [
+       8,
+       2
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:hollow-to-pass",
+     [
+      0,
+      2
+     ],
+     "map:market-road:glimmerdeep-pass",
+     [
+      11,
+      3
+     ]
+    ],
+    [
+     "portal:market-road:hollow-to-haven",
+     [
+      9,
+      2
+     ],
+     "map:market-road:frost-haven",
+     [
+      0,
+      3
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:frost-haven",
+   "location_id": "location:market-road:frost-haven",
+   "level": "settlement",
+   "rows": [
+    "############",
+    "#..##..##..#",
+    "#..........#",
+    "r..........d",
+    "#..##..##..#",
+    "############"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:haven-gate",
+     [
+      1,
+      3
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:bryn",
+     [
+      9,
+      2
+     ],
+     [
+      "npc"
+     ]
+    ],
+    [
+     "spawn:market-road:marta",
+     [
+      2,
+      2
+     ],
+     [
+      "npc"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:keep-yard",
+     "Keep Yard",
+     [
+      [
+       8,
+       2
+      ],
+      [
+       9,
+       2
+      ],
+      [
+       10,
+       2
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:haven-to-hollow",
+     [
+      0,
+      3
+     ],
+     "map:market-road:frostpine-hollow",
+     [
+      9,
+      2
+     ]
+    ],
+    [
+     "portal:market-road:haven-to-watch",
+     [
+      11,
+      3
+     ],
+     "map:market-road:northern-watch",
+     [
+      0,
+      3
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:northern-watch",
+   "location_id": "location:market-road:northern-watch",
+   "level": "encounter",
+   "rows": [
+    "oooooooo",
+    "onnnnnno",
+    "on####no",
+    "rn#..#no",
+    "onnnnnno",
+    "oooooooo"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:watch-path",
+     [
+      1,
+      3
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:tower",
+     "The Tower",
+     [
+      [
+       3,
+       3
+      ],
+      [
+       4,
+       3
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:watch-to-haven",
+     [
+      0,
+      3
+     ],
+     "map:market-road:frost-haven",
+     [
+      11,
+      3
+     ]
+    ]
+   ]
+  },
+  {
+   "map_id": "map:market-road:the-glimmerdeep",
+   "location_id": "location:market-road:the-glimmerdeep",
+   "level": "dungeon",
+   "rows": [
+    "oooooooooo",
+    "o........o",
+    "o..oo....o",
+    "o......x.o",
+    "o.x......o",
+    "oooo.ooooo"
+   ],
+   "spawns": [
+    [
+     "spawn:market-road:deep-mouth",
+     [
+      4,
+      4
+     ],
+     [
+      "player",
+      "arrival"
+     ]
+    ],
+    [
+     "spawn:market-road:relic-chamber",
+     [
+      7,
+      1
+     ],
+     [
+      "enemy"
+     ]
+    ]
+   ],
+   "zones": [
+    [
+     "zone:market-road:relic-chamber",
+     "The Humming Chamber",
+     [
+      [
+       6,
+       1
+      ],
+      [
+       7,
+       1
+      ],
+      [
+       8,
+       1
+      ]
+     ]
+    ]
+   ],
+   "portals": [
+    [
+     "portal:market-road:deep-to-pass",
+     [
+      4,
+      5
+     ],
+     "map:market-road:glimmerdeep-pass",
+     [
+      7,
+      2
+     ]
+    ]
+   ]
+  }
+ ],
+ "scenarios": [
+  {
+   "scenario_id": "scenario:market-road:rusty-flagon",
+   "title": "At the Rusty Flagon",
+   "description": "Rain on the shutters, Bran behind the counter, and a notice board full of work. The classic start.",
+   "starting_location_id": "location:market-road:rusty-flagon",
+   "starting_epoch": "Day 1 • 08:00",
+   "initial_npc_ids": [
+    "npc:bran",
+    "npc:mira"
+   ],
+   "place": [
+    [
+     "npc:bran",
+     "spawn:market-road:bran"
+    ],
+    [
+     "npc:mira",
+     "spawn:market-road:mira"
+    ]
+   ],
+   "opening_seed_ids": [
+    "seed:market-road:tavern-rumor",
+    "seed:market-road:quarry-lights",
+    "seed:market-road:bandit-trail",
+    "seed:market-road:cellar-rats"
+   ],
+   "metadata": {
+    "starting_place_key": "rusty_flagon_tavern",
+    "recommended": "new campaign"
+   }
+  },
+  {
+   "scenario_id": "scenario:market-road:market-square",
+   "title": "In the Market",
+   "description": "Start among the stalls, where Elara is short of stock and Tomas is short of answers.",
+   "starting_location_id": "location:market-road:market-square",
+   "starting_epoch": "Day 1 • 09:00",
+   "initial_npc_ids": [
+    "npc:elara",
+    "npc:tomas",
+    "npc:aldric"
+   ],
+   "place": [
+    [
+     "npc:elara",
+     "spawn:market-road:elara"
+    ],
+    [
+     "npc:tomas",
+     "spawn:market-road:tomas"
+    ],
+    [
+     "npc:aldric",
+     "spawn:market-road:aldric"
+    ]
+   ],
+   "opening_seed_ids": [
+    "seed:market-road:merchant-job",
+    "seed:market-road:missing-guards",
+    "seed:market-road:watch-trouble"
+   ],
+   "metadata": {
+    "starting_place_key": "market_district"
+   }
+  },
+  {
+   "scenario_id": "scenario:market-road:northern-road",
+   "title": "On the Northern Road",
+   "description": "Start on the road itself, beside fresh hoofprints and a broken milestone.",
+   "starting_location_id": "location:market-road:northern-road",
+   "starting_epoch": "Day 1 • 10:15",
+   "initial_npc_ids": [],
+   "place": [],
+   "opening_seed_ids": [
+    "seed:market-road:bandit-trail",
+    "seed:market-road:missing-guards"
+   ],
+   "metadata": {
+    "starting_place_key": "northern_road"
+   }
+  },
+  {
+   "scenario_id": "scenario:market-road:old-quarry",
+   "title": "At the Old Quarry",
+   "description": "Start at the quarry's rim as the light in the fissure brightens.",
+   "starting_location_id": "location:market-road:old-quarry",
+   "starting_epoch": "Day 1 • 16:20",
+   "initial_npc_ids": [],
+   "place": [],
+   "opening_seed_ids": [
+    "seed:market-road:quarry-lights"
+   ],
+   "metadata": {
+    "starting_place_key": "old_quarry"
+   }
+  },
+  {
+   "scenario_id": "scenario:market-road:glimmerdeep-pass",
+   "title": "At Glimmerdeep Pass",
+   "description": "Start high in the mountains, at an ancient archway half-buried in snow.",
+   "starting_location_id": "location:market-road:glimmerdeep-pass",
+   "starting_epoch": "Day 1 • 09:42",
+   "initial_npc_ids": [],
+   "place": [],
+   "opening_seed_ids": [
+    "seed:market-road:quarry-lights"
+   ],
+   "metadata": {
+    "starting_place_key": "glimmerdeep_pass"
+   }
+  },
+  {
+   "scenario_id": "scenario:market-road:frostbound-relic",
+   "title": "Demo: Glimmerdeep Pass",
+   "description": "Level 14 ranger party at Glimmerdeep Pass with quests, equipment, journal, relationships, and world state preloaded.",
+   "starting_location_id": "location:market-road:glimmerdeep-pass",
+   "starting_epoch": "Day 18 • 09:42",
+   "initial_npc_ids": [
+    "npc:thorin",
+    "npc:elandra",
+    "npc:kael"
+   ],
+   "place": [
+    [
+     "npc:thorin",
+     "spawn:market-road:thorin"
+    ],
+    [
+     "npc:elandra",
+     "spawn:market-road:elandra"
+    ],
+    [
+     "npc:kael",
+     "spawn:market-road:kael"
+    ]
+   ],
+   "opening_seed_ids": [
+    "seed:market-road:frostbound-relic",
+    "seed:market-road:secrets-in-the-snow",
+    "seed:market-road:icefang-alpha"
+   ],
+   "protagonist_options": [
+    {
+     "id": "protagonist:alyndra",
+     "name": "Alyndra",
+     "pronouns": "she/her",
+     "background": "Wanderer of the North",
+     "build": "ranger",
+     "primary_capability": "recon",
+     "secondary_capabilities": [
+      "survival",
+      "combat"
+     ],
+     "power_source": "martial",
+     "generated_class_name": "Ranger"
+    }
+   ],
+   "starting_resources": {
+    "currency": {
+     "gold": 1248
+    },
+    "inventory": [
+     {
+      "id": "item:health-potion",
+      "quantity": 12
+     },
+     {
+      "id": "item:mana-potion",
+      "quantity": 7
+     },
+     {
+      "id": "item:trail-rations",
+      "quantity": 5
+     },
+     {
+      "id": "item:focus-crystal",
+      "quantity": 3
+     },
+     {
+      "id": "item:rope-coil",
+      "quantity": 2
+     },
+     {
+      "id": "item:torch",
+      "quantity": 9
+     },
+     {
+      "id": "item:keenleaf",
+      "quantity": 4
+     },
+     {
+      "id": "item:ancient-scroll",
+      "quantity": 6
+     }
+    ],
+    "equipment": [
+     {
+      "slot": "Weapon",
+      "id": "item:longbow-of-the-boreal-wind"
+     },
+     {
+      "slot": "Armor",
+      "id": "item:shadow-leather-armor"
+     },
+     {
+      "slot": "Cloak",
+      "id": "item:cloak-of-the-owl"
+     },
+     {
+      "slot": "Ring",
+      "id": "item:band-of-keen-senses"
+     }
+    ],
+    "level": 14,
+    "party": [
+     "npc:thorin",
+     "npc:elandra",
+     "npc:kael"
+    ],
+    "standing": {
+     "npc:thorin": 78,
+     "npc:elandra": 64,
+     "npc:kael": 52,
+     "npc:bryn": 10
+    },
+    "active_quest_ids": [
+     "quest:market-road:frostbound-relic",
+     "quest:market-road:secrets-in-the-snow",
+     "quest:market-road:icefang-alpha"
+    ],
+    "turn": 73,
+    "journal": [
+     {
+      "turn": 61,
+      "time": "Day 17 • 21:30",
+      "title": "Long rest at Frostpine",
+      "detail": "Recovered after the Icefang fight.",
+      "kind": "rest"
+     },
+     {
+      "turn": 69,
+      "time": "Day 18 • 08:15",
+      "title": "Left Frostpine Hollow",
+      "detail": "Followed the northern trail.",
+      "kind": "travel"
+     },
+     {
+      "turn": 72,
+      "time": "Day 18 • 09:40",
+      "title": "Trail sign found",
+      "detail": "Detected tracks near the northern archway.",
+      "kind": "discovery"
+     }
+    ]
+   },
+   "metadata": {
+    "kind": "in_progress_demo",
+    "preset_id": "demo_glimmerdeep_pass_lvl14"
+   }
+  }
+ ],
+ "starting_resources": {
+  "currency": {
+   "silver": 10
+  },
+  "inventory": [
+   {
+    "id": "item:trail-rations",
+    "quantity": 3
+   },
+   {
+    "id": "item:torch",
+    "quantity": 2
+   },
+   {
+    "id": "item:water-skin",
+    "quantity": 1
+   },
+   {
+    "id": "item:small-pouch",
+    "quantity": 1
+   }
+  ]
+ }
 }

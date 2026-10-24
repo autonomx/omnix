@@ -170,6 +170,6 @@ def test_demo_preset_normalization_gets_environment_state(monkeypatch, tmp_path)
     assert result["ok"] is True
     state = result["game"]
     environment = state["world"]["environment"]
-    assert environment["region_id"] == "mountain_pass"
+    assert environment["region_id"] == "region:market-road:pass"  # the demo is an opening of the starter world
     assert environment["climate_profile_id"] == "northern_mountains"
     assert state["scene"]["environment_context"]["exposure"] == "outdoor"

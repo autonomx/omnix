@@ -168,6 +168,54 @@ def _opening_environment(
     return environment, context
 
 
+def _continue_in_progress(session: dict[str, Any], scenario: Any, world_model: Mapping[str, Any]) -> None:
+    """An opening that starts a campaign already under way (a demo): the turn it starts at, the journal so far, the
+    quests already taken up, who travels with the hero, and how the hero stands with people. All of it is the
+    scenario's ``starting_resources``; an opening without them starts at the beginning."""
+    resources = _record(scenario.starting_resources)
+    state = _record(session.get("state"))
+    npcs = _record(world_model.get("npcs"))
+    turn = int(resources.get("turn") or 0)
+    if turn:  # the sheet's count, which the next turn counts on from (not the campaign's revision, which is 0)
+        state["current_turn"] = state["turn_count"] = turn
+    journal = [_record(entry) for entry in resources.get("journal") or () if _record(entry).get("title")]
+    if journal:
+        timeline = [*journal, *[_record(entry) for entry in state.get("timeline") or ()]]
+        state["timeline"] = timeline
+        state["journal"] = {"entries": timeline}
+    active = {str(quest_id) for quest_id in resources.get("active_quest_ids") or ()}
+    if active:
+        state["quests"] = [{**quest, "status": "active"} if quest.get("id") in active else quest
+                           for quest in (_record(row) for row in state.get("quests") or ())]
+    standing = {str(npc_id): int(trust) for npc_id, trust in _record(resources.get("standing")).items() if npc_id in npcs}
+    simulation = _record(session.get("simulation_state"))
+    player_state = _record(simulation.get("player_state"))
+    level = int(resources.get("level") or 0)
+    if level:  # the simulation's own record of the hero, as the sheet shows them
+        player_state.update(level=level, xp=0, xp_to_next=100 * level)
+    party = [str(npc_id) for npc_id in resources.get("party") or () if str(npc_id) in npcs]
+    if party:
+        location_id = str(scenario.starting_location_id)
+        player_state["party_state"] = {
+            **_record(player_state.get("party_state")), "max_size": max(3, len(party)),
+            "companions": [{"npc_id": npc_id, "name": str(_record(npcs[npc_id]).get("name") or npc_id),
+                            "role": str(_record(npcs[npc_id]).get("role") or "companion"), "hp": 100, "max_hp": 100,
+                            "status": "active", "follow_mode": "following_player", "location_id": location_id,
+                            "trust": standing.get(npc_id, 50)} for npc_id in party],
+        }
+        state["party"] = [{"name": str(_record(npcs[npc_id]).get("name") or npc_id),
+                           "class": str(_record(npcs[npc_id]).get("role") or "companion")} for npc_id in party]
+    if standing:
+        simulation["relationship_state"] = {**_record(simulation.get("relationship_state")),
+                                            **{npc_id: {"trust": trust} for npc_id, trust in standing.items()}}
+        state["relationships"] = [{"name": str(_record(npcs[npc_id]).get("name") or npc_id),
+                                   "stance": "Ally" if npc_id in party else "Neutral", "score": trust}
+                                  for npc_id, trust in standing.items()]
+    simulation["player_state"] = player_state
+    session["simulation_state"] = simulation
+    session["state"] = state
+
+
 def _apply_published_opening_state(
     session: dict[str, Any],
     *,
@@ -198,6 +246,8 @@ def _apply_published_opening_state(
         # The player chose their own starting gear and purse: they set out with that, not the opening's kit.
         kit = {**kit, "inventory": [_record(item) for item in player.get("inventory") or ()],
                "currency": dict(_record(player.get("currency")))}
+    if kit["equipment"]:
+        player["equipment"] = kit["equipment"]
     player.update(
         {
             "inventory": kit["inventory"],
@@ -275,6 +325,7 @@ def _apply_published_opening_state(
         "opening_hook": "published_opening",
     }
     session["state"] = state
+    _continue_in_progress(session, scenario, world_model)
     setup = creator_setup(revision, scenario, world_model, world)
     first_quest = _record((state.get("quests") or [{}])[0])
     setup["opening"] = {
@@ -415,9 +466,11 @@ def launch_published_scenario(
     player_payload.setdefault("pronouns", "they/them")
     player_payload.setdefault("background", "World Traveler")
     player_payload.setdefault("build", "balanced_adventurer")
+    opening_level = int(_record(scenario.starting_resources).get("level") or 0)
     request = sessions.new_game_request(
         {
             **dict(new_game or {}),
+            **({"level": opening_level} if opening_level else {}),
             "campaign_template": str(
                 canon.get("campaign_template") or "classic_fantasy"
             ),

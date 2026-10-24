@@ -17,7 +17,6 @@ from app.apps.rpg.session.ability_system import build_progression_package
 from app.apps.rpg.session.new_game_settings import build_new_game_setup_effects
 from app.apps.rpg.session.service import archive_session, load_session, save_session
 
-DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
 NEW_GAME_CONTRACT_VERSION = "rpg_new_game_v1"
 
 
@@ -611,7 +610,8 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     features = request.features.model_dump(mode="json")
     seed = int(request.seed if request.seed is not None else secrets.randbits(64))
     request_payload = request.model_dump(mode="json")
-    progression = build_progression_package(request_payload, build_id=request.player.build, level=1, seed=seed)
+    level = starting_level(request)
+    progression = build_progression_package(request_payload, build_id=request.player.build, level=level, seed=seed)
     identity = progression["character_identity"]
     story_setup = _build_story_setup(request, location, seed)
     loadout = _starter_loadout(request)
@@ -680,8 +680,8 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "class": identity["generated_class_name"],
             "role": identity["primary_capability"],
             "build": request.player.build,
-            "level": 1,
-            "xp": {"current": 0, "max": 100},
+            "level": level,
+            "xp": {"current": 0, "max": 100 * level},
             "stats": stat_profile["stats"],
             "resources": stat_profile["resources"],
             "currency": loadout["currency"],
@@ -716,6 +716,15 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     }
 
 
+def starting_level(request: Any) -> int:
+    """The hero's level at the start: 1, or the level an opening begins at (a campaign already under way)."""
+    extra = getattr(request, "__pydantic_extra__", None)
+    try:
+        return max(1, min(30, int((extra or {}).get("level") or 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
 def _requested_genesis(request: RpgNewGameRequest) -> bool:
     extra = getattr(request, "__pydantic_extra__", None)
     return isinstance(extra, dict) and bool(extra.get("genesis") or extra.get("compiled_genesis"))
@@ -735,94 +744,6 @@ def _setup_payload_with_identity(request: RpgNewGameRequest, identity: dict[str,
     payload["generated_class_name"] = identity["generated_class_name"]
     payload["generated_class_summary"] = identity["generated_class_summary"]
     return payload
-
-
-def _demo_state(session_id: str, now: str) -> dict[str, Any]:
-    demo_payload = {
-        "campaign_template": "classic_fantasy",
-        "genre": "classic_fantasy",
-        "tone": "heroic mountain mystery",
-        "player": {"name": "Alyndra", "pronouns": "she/her", "background": "Wanderer of the North", "build": "ranger"},
-        "primary_capability": "recon",
-        "secondary_capabilities": ["survival", "combat"],
-        "power_source": "martial",
-        "generated_class_name": "Ranger",
-    }
-    progression = build_progression_package(demo_payload, build_id="ranger", level=14, seed=140914)
-    return {
-        "contract_version": NEW_GAME_CONTRACT_VERSION,
-        "session_id": session_id,
-        "title": "Demo: Glimmerdeep Pass",
-        "location": "Glimmerdeep Pass",
-        "current_location": "Glimmerdeep Pass",
-        "summary": "Faint tracks—large, clawed, and fresh—mar the snow near the archway. A torn banner from the Northern Watch flutters in the wind. Something big passed through here not long ago.",
-        "current_turn": 73,
-        "turn_count": 73,
-        "updated_at": now,
-        "metadata": {"kind": "playable_demo_clone", "created_from_preset": DEMO_PRESET_ID, "seed": 140914, "genre": "classic_fantasy"},
-        "character_identity": progression["character_identity"],
-        "ability_tree": progression["ability_tree"],
-        "ability_state": progression["ability_state"],
-        "hotbar": progression["hotbar"],
-        "skill_progression": {"tracking": {"xp": 240, "rank": 4}, "marksmanship": {"xp": 310, "rank": 5}},
-        "mechanics": {"dimension_effects": [], "pending_dimension_effects": []},
-        "narrative_affordances": {},
-        "player": {
-            "name": "Alyndra",
-            "pronouns": "she/her",
-            "background": "Wanderer of the North",
-            "class": "Ranger",
-            "role": "recon",
-            "level": 14,
-            "xp": {"current": 7450, "max": 12000},
-            "resources": {"hp": {"current": 86, "max": 110}, "stamina": {"current": 72, "max": 100}, "mana": {"current": 64, "max": 120}},
-            "currency": {"gold": 1248},
-            "renown": "Honored (35)",
-            "equipment": [
-                {"slot": "Weapon", "name": "Longbow of the Boreal Wind"},
-                {"slot": "Armor", "name": "Shadow Leather Armor +2"},
-                {"slot": "Cloak", "name": "Cloak of the Owl"},
-                {"slot": "Ring", "name": "Band of Keen Senses"},
-            ],
-            "inventory": [
-                {"name": "Health Potion", "quantity": 12},
-                {"name": "Mana Potion", "quantity": 7},
-                {"name": "Trail Rations", "quantity": 5},
-                {"name": "Focus Crystal", "quantity": 3},
-                {"name": "Rope Coil", "quantity": 2},
-                {"name": "Torch", "quantity": 9},
-                {"name": "Keenleaf", "quantity": 4},
-                {"name": "Ancient Scroll", "quantity": 6},
-            ],
-        },
-        "world": {"time": "Day 18 • 09:42", "weather": "Cold, Windy", "temperature": -12, "reputation": {"label": "Honored", "score": 35}},
-        "party": [
-            {"name": "Thorin Ironfist", "class": "Warrior", "level": 14, "resources": {"hp": {"current": 112, "max": 140}}},
-            {"name": "Elandra", "class": "Mage", "level": 13, "resources": {"hp": {"current": 78, "max": 90}}},
-            {"name": "Kael", "class": "Rogue", "level": 12, "resources": {"hp": {"current": 68, "max": 85}}},
-        ],
-        "quests": [
-            {"id": "frostbound_relic", "title": "The Frostbound Relic", "status": "active", "objective": "Find the relic in Glimmerdeep."},
-            {"id": "secrets_in_snow", "title": "Secrets in the Snow", "status": "active", "objective": "Investigate the old watchtower."},
-            {"id": "icefang_alpha", "title": "Bounty: Icefang Alpha", "status": "active", "objective": "Track down the alpha beast."},
-        ],
-        "relationships": [
-            {"name": "Thorin Ironfist", "stance": "Ally", "score": 78},
-            {"name": "Elandra", "stance": "Ally", "score": 64},
-            {"name": "Kael", "stance": "Ally", "score": 52},
-            {"name": "Captain Bryn", "stance": "Neutral", "score": 10},
-        ],
-        "encounter": {"status": "inactive", "title": "No active combat", "summary": "All quiet for now."},
-        "timeline": [
-            {"turn": 73, "time": "Day 18 • 09:42", "title": "Arrived at Glimmerdeep Pass", "detail": "The party makes its way through the winding mountain trail and reaches the ancient pass.", "kind": "travel"},
-            {"turn": 73, "time": "Day 18 • 09:42", "title": "Thorin watches the pass", "actor": "Thorin Ironfist", "detail": "Best keep our eyes open. This place gives me the chills.", "kind": "dialogue"},
-            {"turn": 72, "time": "Day 18 • 09:40", "title": "Trail sign found", "detail": "Detected tracks near the northern archway.", "kind": "discovery"},
-            {"turn": 69, "time": "Day 18 • 08:15", "title": "Left Frostpine Hollow", "detail": "Followed the northern trail.", "kind": "travel"},
-            {"turn": 61, "time": "Day 17 • 21:30", "title": "Long Rest at Frostpine", "detail": "Recovered after the Icefang fight.", "kind": "rest"},
-        ],
-        "journal": {"entries": []},
-        "features": {"autosave": True, "validator": True, "background_soft_audit": True, "llm_narration": True, "image_generation": False, "tts": False, "stt": False, "companions_enabled": True, "permadeath": False},
-    }
 
 
 def _save_created_session(session: dict[str, Any]) -> dict[str, Any]:
@@ -904,40 +825,20 @@ def _with_creation_progress(create: Any) -> dict[str, Any]:
 
 
 def list_rpg_presets() -> dict[str, Any]:
-    return {
-        "ok": True,
-        "presets": [
-            {
-                "preset_id": DEMO_PRESET_ID,
-                "name": "Demo: Glimmerdeep Pass",
-                "description": "Level 14 ranger party at Glimmerdeep Pass with quests, equipment, journal, relationships, and world state preloaded.",
-                "kind": "in_progress_demo",
-                "level": 14,
-                "location": "Glimmerdeep Pass",
-                "clone_on_start": True,
-            }
-        ],
-    }
+    """The campaigns already under way a player can start: the starter world's preset openings (the demo)."""
+    from app.apps.rpg.genesis.worlds.builtin_worlds import presets
+
+    return {"ok": True, "presets": presets()}
 
 
 def start_rpg_preset(preset_id: str) -> dict[str, Any]:
-    if preset_id != DEMO_PRESET_ID:
+    """Start a preset: the starter world's opening that names it, a campaign already under way (roadmap §4.4)."""
+    from app.apps.rpg.genesis.worlds.builtin_worlds import launch_preset, presets
+    from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
+
+    if preset_id not in {preset["preset_id"] for preset in presets()}:
         return {"ok": False, "error": "unknown_rpg_preset", "preset_id": preset_id}
-    now = _utc_now()
-    session_id = _new_session_id("rpg_demo")
-    state = _demo_state(session_id, now)
-    session = {
-        "manifest": {
-            **_base_manifest(session_id, "Demo: Glimmerdeep Pass", now, source_template_id=preset_id, kind="playable_demo_clone"),
-            "created_from_preset": preset_id,
-            "preset_name": "Demo: Glimmerdeep Pass",
-        },
-        "state": state,
-        "setup_payload": {"preset_id": preset_id, "mode": "clone_on_start"},
-        "simulation_state": _simulation_state_stub(140914),
-        "runtime_state": {"active_job_id": None, "last_error": None, "created_from": preset_id},
-    }
-    return _save_created_session(session)
+    return launch_preset(preset_id, sessions=SESSION_CAMPAIGN_SESSIONS)
 
 
 def continue_rpg_session(session_id: str) -> dict[str, Any]:

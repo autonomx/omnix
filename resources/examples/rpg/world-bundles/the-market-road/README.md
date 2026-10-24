@@ -23,13 +23,17 @@ beside the older world and existing campaigns keep theirs.
 
 ## Included content
 
-- 7 places in 4 regions, joined by 7 roads with travel times; each place says how it is met (climate, weather at
-  an opening, indoors or out);
-- 5 people with biographies, voices, goals, secrets and relationships: Bran the innkeeper, Mira (who will travel
-  with the hero), Elara the merchant, Captain Aldric of the watch, and Tomas the porter;
-- how the world plays (RQ-2.0 sections): two sellers with prices, stock, restock and buy-back; a daily routine and
-  goals for each person; what each knows and on what terms; two pressures; a bestiary with fighting numbers,
+- 11 places in 5 regions, joined by 11 roads with travel times, from the Rusty Flagon up the trade road to
+  Glimmerdeep Pass and the snowbound north beyond it; each place says how it is met (climate, weather at an
+  opening, indoors or out) and the names players call it by;
+- 10 people with biographies, voices, goals, secrets and relationships: in town Bran the innkeeper, Mira (who will
+  travel with the hero), Elara the merchant, Captain Aldric of the watch and Tomas the porter; in the north Thorin
+  Ironfist, Elandra and Kael (the demo's party), Captain Bryn of the Northern Watch and Marta of the Frosted Flagon;
+- how the world plays (RQ-2.0 sections): three sellers with prices, stock, restock and buy-back; a daily routine
+  and goals for each person; what each knows and on what terms; three pressures; a bestiary with fighting numbers,
   behaviour and loot;
-- 7 quests and the story seeds that lead to them, each naming the opening hook a new game can choose;
-- 7 square-grid maps, with spawn points, zones and portals along the roads;
-- 5 openings, one per starting place the new-game screen offers (`metadata.starting_place_key`).
+- 10 quests and the story seeds that lead to them, the town's naming the opening hook a new game can choose;
+- 11 square-grid maps, with spawn points, zones and portals along the roads;
+- 6 openings: one per starting place the new-game screen offers (`metadata.starting_place_key`), and the demo
+  (`metadata.preset_id`), a campaign already under way: a level 14 ranger with her party, kit, quests, standing
+  and journal at Glimmerdeep Pass (`starting_resources`).

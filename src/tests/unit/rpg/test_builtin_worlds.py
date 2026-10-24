@@ -30,7 +30,7 @@ def test_the_starter_world_is_certified_for_launch_with_its_openings() -> None:
     [release] = payload.world_releases
     assert release["document"]["certification"]["launch_ready"] is True
     assert release["document"]["certification"]["missing_requirements"] == []
-    places = {row["metadata"]["starting_place_key"] for row in payload.scenarios}
+    places = {row["metadata"].get("starting_place_key") for row in payload.scenarios} - {None}
     assert places == {"rusty_flagon_tavern", "market_district", "northern_road", "old_quarry", "glimmerdeep_pass"}
     assert payload.world["metadata"]["default_scenario_id"] in {row["id"] for row in payload.scenarios}
 

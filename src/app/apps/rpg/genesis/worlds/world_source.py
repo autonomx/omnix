@@ -122,7 +122,8 @@ def compile_world(source: dict[str, Any]) -> dict[str, Any]:
             compatible_release=release.release,
             starting_epoch=opening["starting_epoch"],
             initial_npc_ids=opening["initial_npc_ids"],
-            starting_resources=source["starting_resources"],
+            starting_resources=opening.get("starting_resources") or source["starting_resources"],
+            protagonist_options=opening.get("protagonist_options") or (),
             opening_seed_ids=opening["opening_seed_ids"],
             map_initialization=[
                 MapInitializationOperation(operation_id=f"init:{npc_id.split(':', 1)[1]}:{start_map.rsplit(':', 1)[1]}",

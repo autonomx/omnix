@@ -159,8 +159,9 @@ def bind_to_starter_world(document: dict[str, Any]) -> dict[str, Any]:
     return {**bound, "simulation_state": simulation, "state": state, "runtime_state": runtime}
 
 
-def _opening(world_id: str, starting_place: str, *, database: Any | None) -> dict[str, Any]:
-    """The opening whose scenario names ``starting_place`` (else the world's default), as its latest revision."""
+def _opening(world_id: str, starting_place: str = "", *, preset: str = "", database: Any | None) -> dict[str, Any]:
+    """The opening whose scenario names ``starting_place`` or ``preset`` (else the world's default), as its latest
+    revision."""
     from app.persistence.unit_of_work import unit_of_work
     from app.runtime.tenant_context import current_tenant
 
@@ -169,8 +170,10 @@ def _opening(world_id: str, starting_place: str, *, database: Any | None) -> dic
         world = work.world_scenarios.get_world(context, world_id) or {}
         default = str(dict(world.get("metadata") or {}).get("default_scenario_id") or "")
         scenarios = list(work.world_library.iter_scenarios(context, world_id=world_id))
-        chosen = (next((row for row in scenarios
-                        if dict(row.get("metadata") or {}).get("starting_place_key") == starting_place), None)
+        named = [row for row in scenarios
+                 if (starting_place and dict(row.get("metadata") or {}).get("starting_place_key") == starting_place)
+                 or (preset and dict(row.get("metadata") or {}).get("preset_id") == preset)]
+        chosen = (next(iter(named), None)
                   or next((row for row in scenarios if str(row.get("id")) == default), None)
                   or min(scenarios, key=lambda row: str(row.get("id"))))
         revisions = work.world_library.list_scenario_revisions(context, str(chosen["id"]))
@@ -218,5 +221,47 @@ def launch_starter(request: Any, *, sessions: Any, opening_hook: str = "",
     )
 
 
+def presets(world: BuiltinWorld = STARTER) -> list[dict[str, Any]]:
+    """The campaigns already under way a player can start from the world (its openings that name a preset)."""
+    source = world_source(world)
+    places = {row["id"]: row["name"] for row in source["revision"]["topology"]["locations"]}
+    return [
+        {"preset_id": opening["metadata"]["preset_id"], "name": opening["title"], "description": opening["description"],
+         "kind": opening["metadata"].get("kind") or "in_progress", "level": int(opening["starting_resources"].get("level") or 1),
+         "location": places.get(opening["starting_location_id"], ""), "clone_on_start": True}
+        for opening in source["scenarios"] if opening.get("metadata", {}).get("preset_id")
+    ]
+
+
+def launch_preset(preset_id: str, *, sessions: Any, database: Any | None = None) -> dict[str, Any]:
+    """A campaign already under way, as the world's preset opening has it: its hero, kit, party and journal."""
+    from .postgres_service import load_published_resources
+    from .published_launch import launch_published_scenario
+
+    world_id = ensure_builtin_world(STARTER, database=database)
+    document = _opening(world_id, preset=preset_id, database=database)
+    _, _, scenario = load_published_resources(
+        world_id=world_id, world_revision=int(document["world_revision"]),
+        world_release=int(document["compatible_release"]), scenario_id=str(document["scenario_id"]),
+        scenario_revision=int(document["revision"]), database=database,
+    )
+    hero = dict(next(iter(scenario.protagonist_options), {}))
+    player = {key: hero[key] for key in ("name", "pronouns", "background", "build") if hero.get(key)}
+    made = {key: hero[key] for key in ("primary_capability", "secondary_capabilities", "power_source",
+                                       "generated_class_name") if hero.get(key)}
+    launched = launch_published_scenario(
+        sessions=sessions,
+        world_id=world_id,
+        world_revision=int(document["world_revision"]),
+        world_release=int(document["compatible_release"]),
+        scenario_id=str(document["scenario_id"]),
+        scenario_revision=int(document["revision"]),
+        player=player,
+        new_game={**made, "player": player},
+        database=database,
+    )
+    return launched
+
+
 __all__ = ["STARTER", "BuiltinWorld", "bind_to_starter_world", "builtin_world_model", "ensure_builtin_world", "installed_world_id",
-           "launch_starter", "legacy_ids", "world_source"]
+           "launch_preset", "launch_starter", "legacy_ids", "presets", "world_source"]

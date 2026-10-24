@@ -554,12 +554,24 @@ def opening_kit(
     equipment: Iterable[Mapping[str, Any]],
     inventory: Iterable[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """The opening's starting items and purse, keeping the build's equipped gear so the hero can still fight."""
+    """The opening's starting items and purse, keeping the build's equipped gear so the hero can still fight; an
+    opening that equips the hero itself (``equipment``: slot and item) carries that gear instead."""
 
     canon = _mapping(getattr(revision, "canon", None))
     resources = _mapping(getattr(scenario, "starting_resources", None))
+    authored = [_mapping(row) for row in resources.get("equipment") or () if _text(_mapping(row).get("id"))]
     equipped = {_text(item.get("name")).casefold() for item in equipment}
-    items: list[dict[str, Any]] = [dict(item) for item in inventory if _text(item.get("name")).casefold() in equipped]
+    items: list[dict[str, Any]] = [] if authored else [
+        dict(item) for item in inventory if _text(item.get("name")).casefold() in equipped]
+    worn: list[dict[str, str]] = []
+    for row in authored:
+        canon_item = _canon_item(canon, _text(row.get("id")))
+        name = _text(canon_item.get("name")) or _label_from_id(_text(row.get("id")))
+        worn.append({"slot": _text(row.get("slot")) or "Gear", "name": name})
+        items.append({"id": _text(row.get("id")), "name": name, "quantity": 1,
+                      "type": _text(canon_item.get("type")) or "misc",
+                      "description": _text(canon_item.get("effect") or canon_item.get("description")),
+                      "rarity": _text(canon_item.get("rarity"))})
     for raw in resources.get("inventory") or ():
         item_id = _text(raw if isinstance(raw, str) else _mapping(raw).get("id"))
         if not item_id:
@@ -586,6 +598,7 @@ def opening_kit(
     return {
         "inventory": items,
         "currency": currency,
+        "equipment": worn,
         "health": int(stats.get("health") or 0),
         "aether": int(stats.get("aether") or stats.get("mana") or 0),
         "knowledge": [_text(value) for value in resources.get("knowledge") or () if _text(value)],
