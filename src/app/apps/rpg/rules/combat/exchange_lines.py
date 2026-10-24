@@ -32,6 +32,24 @@ def _blow(combat_state: dict[str, Any], attack: dict[str, Any]) -> str:
     return f"{actor} {verb} {target} for {safe_int(attack.get('damage_applied'), 0)} ({left} of {most} left)."
 
 
+def _defeat_lines(defeat: dict[str, Any], foes: str) -> list[str]:
+    """What a lost fight cost, as facts the narrator may not soften (RQ-5.1)."""
+    by = " and ".join(name if name.casefold().startswith(("the ", "your ")) else f"the {name}"
+                      for name in map(safe_str, safe_list(defeat.get("defeated_by"))) if name) or foes or "your foe"
+    if defeat.get("ended"):
+        return [f"You fall to {by}, and do not rise again. Your story ends here."]
+    lines = [
+        f"You fall to {by}, and the fight is lost. You wake at {safe_str(defeat.get('woke_at_name')) or 'the last place you rested'} "
+        f"{safe_int(defeat.get('hours'), 8)} hours later, battered "
+        f"({safe_int(defeat.get('hp'), 1)} of {safe_int(defeat.get('max_hp'), 1)} left)."
+    ]
+    if safe_int(defeat.get("coin_lost_copper"), 0) > 0:
+        lines.append(f"Your purse is lighter by {safe_int(defeat.get('coin_lost_copper'), 0)} copper.")
+    if safe_dict(defeat.get("item_lost")):
+        lines.append(f"Your {safe_str(safe_dict(defeat.get('item_lost')).get('name'))} is gone.")
+    return lines
+
+
 def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
     """The blows struck this turn, in the order they fell, and how the fight stands after them."""
     combat_result = safe_dict(combat_result)
@@ -60,11 +78,7 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
     if combat_state.get("active") is not True and ended == "enemy_side_defeated":
         lines.append("The fight is over.")
     elif combat_state.get("active") is not True and ended == "party_side_defeated":
-        revived = safe_dict(combat_state.get("revived"))
-        lines.append(
-            "You fall, and the fight is lost. When you come to, your foe is gone; you are badly hurt "
-            f"({safe_int(revived.get('hp'), 1)} of {safe_int(revived.get('max_hp'), 1)} left)."
-        )
+        lines.extend(_defeat_lines(safe_dict(combat_state.get("defeat")), foes))
     return lines
 
 

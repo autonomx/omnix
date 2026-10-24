@@ -194,7 +194,8 @@ class PostgresRpgRepository:
 
         ``campaign_launch_readiness`` asks whether the setup's world forge is a
         non-empty object, whether the state has a (truthy) campaign bible, and
-        reads the runtime's launch gate; the truthiness is evaluated here.
+        reads the runtime's launch gate; the truthiness is evaluated here. The turn route also reads
+        whether the campaign has ended (a hardcore defeat, RQ-5.1).
         """
         row = self.connection.execute(
             """
@@ -202,7 +203,8 @@ class PostgresRpgRepository:
                             AND state_jsonb #> '{setup_payload,world_forge}' <> '{}'::jsonb, FALSE),
                    COALESCE(state_jsonb #> '{state,campaign_bible}' NOT IN
                             ('null'::jsonb, 'false'::jsonb, '0'::jsonb, '""'::jsonb, '{}'::jsonb, '[]'::jsonb), FALSE),
-                   state_jsonb #> '{runtime_state,campaign_launch_gate}'
+                   state_jsonb #> '{runtime_state,campaign_launch_gate}',
+                   state_jsonb #> '{simulation_state,campaign_end}'
               FROM omnix_rpg_campaigns WHERE id = %s AND workspace_id = %s
             """,
             (campaign_id, context.workspace_id),
@@ -214,6 +216,7 @@ class PostgresRpgRepository:
             "setup_payload": {"world_forge": {"enabled": True} if row[0] else {}},
             "state": {"campaign_bible": True if row[1] else None},
             "runtime_state": {"campaign_launch_gate": dict(gate)},
+            "simulation_state": {"campaign_end": dict(row[3]) if isinstance(row[3], dict) else {}},
         }
 
     def stored_version(self, context: TenantContext, campaign_id: str) -> tuple[int, str] | None:

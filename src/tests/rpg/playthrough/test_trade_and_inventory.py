@@ -115,3 +115,17 @@ def test_lodging_and_needs_over_a_night(launch, world) -> None:
     rested = play.survival()
     assert rested["fatigue"] < needs["fatigue"]
     assert play.purse() == purse - inn["meal"] - inn["room"]  # the night was paid for
+
+
+@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
+    "RQ-2.3: a second night's lodging from the same keeper takes the coin, but the turn is not presented as a "
+    "purchase and 'sleep for the night' then uses no room: no rest, no time passes, the room stays reserved")))
+def test_a_second_night_of_lodging_is_used(launch, world) -> None:
+    play, inn = launch(world), INN[world]
+    for step in inn["route"]:
+        play.turn(step)
+    for night in range(2):
+        play.turn(f"I rent a room for the night from {inn['keeper']}.")
+        play.turn("I go to my room and sleep for the night.")
+        services = play.simulation().get("active_services") or []
+        assert [service.get("status") for service in services] == ["consumed"] * (night + 1), services

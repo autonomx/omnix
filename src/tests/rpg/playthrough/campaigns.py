@@ -63,7 +63,8 @@ def _import_and_adopt(source_dir: Path, tmp_path, monkeypatch, *, name: str) -> 
     return world_id
 
 
-def _launch_scenario(world_id: str, scenario_match: str, player: dict[str, Any]) -> str:
+def _launch_scenario(world_id: str, scenario_match: str, player: dict[str, Any],
+                     gameplay: dict[str, Any] | None = None) -> str:
     from app.persistence.unit_of_work import unit_of_work
     from app.runtime.tenant_context import current_tenant
     from app.apps.rpg.edge.api.feature_routes.rpg_world_library_routes import SESSION_CAMPAIGN_SESSIONS
@@ -83,15 +84,17 @@ def _launch_scenario(world_id: str, scenario_match: str, player: dict[str, Any])
         scenario_id=str(document["scenario_id"]),
         scenario_revision=int(document["revision"]),
         player=player,
+        gameplay=gameplay,
         features={"llm_narration": True, "image_generation": False},
     )
     return str(launched["session_id"])
 
 
-def launch_aurelia(tmp_path, monkeypatch, *, opening: str = "gateborn") -> tuple[str, str]:
+def launch_aurelia(tmp_path, monkeypatch, *, opening: str = "gateborn",
+                   gameplay: dict[str, Any] | None = None) -> tuple[str, str]:
     """Aurelia from its bundle, launched from an opening ("Gateborn: First Light" by default): (session, world)."""
     world_id = _import_and_adopt(AURELIA, tmp_path, monkeypatch, name="aurelia-play")
-    return _launch_scenario(world_id, opening, {"name": "Wren", "pronouns": "they/them"}), world_id
+    return _launch_scenario(world_id, opening, {"name": "Wren", "pronouns": "they/them"}, gameplay), world_id
 
 
 def launch_vesper(tmp_path, monkeypatch, *, opening: str = "") -> tuple[str, str]:

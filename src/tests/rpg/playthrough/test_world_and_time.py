@@ -87,3 +87,16 @@ def test_idle_resume_is_a_turn_with_a_recap(launch, world) -> None:
     assert play.revision() == revision + 1
     assert len(play.turn_rows()) == rows + 1  # time away is a world_tick turn, replayable like the rest
     assert play.turn_rows()[-1]["state_delta"]
+
+
+@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
+    "RQ-2.4: sleeping or making camp away from an inn does nothing on the published-world turn path (the survival "
+    "rest actions are not reached): no fatigue eases, no time passes, and the camp is not a rest point")))
+def test_a_night_camped_in_the_wild_is_a_rest(launch, world) -> None:
+    play = launch(world)
+    for _ in range(3):
+        play.turn("wait")
+    fatigue = play.survival()["fatigue"]
+    play.turn("I make camp and sleep for the night.")
+    assert play.survival()["fatigue"] < fatigue
+    assert play.player_state().get("rest_point") == play.location()

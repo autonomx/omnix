@@ -19,9 +19,9 @@ def launch(model, tmp_path, monkeypatch):
     """Start a campaign ("aurelia", "vesper", "starter", or "genesis": a wizard-made new game) and return its
     playthrough."""
 
-    def start(world: str) -> Playthrough:
+    def start(world: str, *, gameplay: dict | None = None) -> Playthrough:
         if world == "aurelia":
-            session_id, _ = launch_aurelia(tmp_path, monkeypatch)
+            session_id, _ = launch_aurelia(tmp_path, monkeypatch, gameplay=gameplay)
         elif world == "vesper":
             session_id, _ = launch_vesper(tmp_path, monkeypatch)
         elif world == "starter":

@@ -5,11 +5,13 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.apps.rpg.world.environment_time import advance_environment_time
+from app.apps.rpg.rules.combat.stakes import record_rest
 from app.apps.rpg.rules.survival import apply_survival_effect
 
 DURATION_ACTION_VERSION = "rpg_duration_action_v1"
 MINUTES_PER_DAY = 24 * 60
 DEFAULT_MORNING_MINUTE = 8 * 60
+FULL_REST_MINUTES = 6 * 60  # a stay this long is a full rest (RQ-5.1)
 
 
 def apply_duration_action(
@@ -51,6 +53,8 @@ def apply_duration_action(
         tick=tick,
         source="duration_action_runtime",
     )
+    if minutes >= FULL_REST_MINUTES:
+        record_rest(state, kind="sleep")
     return {
         "schema_version": DURATION_ACTION_VERSION,
         "ok": True,
@@ -65,6 +69,19 @@ def apply_duration_action(
         "survival_result": survival_result,
         "source": "deterministic_duration_action_runtime",
     }
+
+
+def pass_time_after_defeat(simulation_state: Dict[str, Any]) -> int:
+    """The hours a beaten hero lies senseless pass, once per defeat (RQ-5.1); the minutes passed."""
+    state = simulation_state if isinstance(simulation_state, dict) else {}
+    defeat = _dict(_dict(state.get("combat_state")).get("defeat"))
+    minutes = int(defeat.get("hours") or 0) * 60
+    if minutes <= 0 or defeat.get("time_passed"):
+        return 0
+    environment = _dict(state.get("environment")) or {"absolute_minutes": DEFAULT_MORNING_MINUTE, "active_events": []}
+    state["environment"] = advance_environment_time(environment, elapsed_minutes=minutes)
+    defeat["time_passed"] = True
+    return minutes
 
 
 def duration_minutes(environment: Dict[str, Any], policy: str) -> int:
@@ -126,4 +143,4 @@ def _text(value: Any) -> str:
     return str(value).strip() if value is not None else ""
 
 
-__all__ = ["DURATION_ACTION_VERSION", "apply_duration_action", "duration_minutes"]
+__all__ = ["DURATION_ACTION_VERSION", "apply_duration_action", "duration_minutes", "pass_time_after_defeat"]

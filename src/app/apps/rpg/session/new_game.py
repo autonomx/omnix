@@ -576,9 +576,11 @@ def _starter_loadout(request: RpgNewGameRequest) -> dict[str, Any]:
     }
 
 
-def _simulation_state_stub(seed: int) -> dict[str, Any]:
+def _simulation_state_stub(seed: int, *, hardcore: bool = False) -> dict[str, Any]:
     return {
         "seed": seed,
+        # Hardcore: defeat ends the campaign (RQ-5.1).
+        "campaign_rules": {"hardcore": bool(hardcore)},
         "rng_seed": seed,
         "turn_index": 0,
         "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
@@ -834,7 +836,7 @@ def _build_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
         "manifest": _base_manifest(session_id, state["title"], now, source_template_id=request.campaign_template, kind="new_game"),
         "state": state,
         "setup_payload": setup_payload,
-        "simulation_state": _simulation_state_stub(seed),
+        "simulation_state": _simulation_state_stub(seed, hardcore=request.permadeath),
         "runtime_state": {"active_job_id": None, "last_error": None, "created_from": "new_game"},
     }
 

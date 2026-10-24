@@ -167,6 +167,25 @@ def _execute_foreground_rpg_turn(
             span["enabled"] = gate.get("enabled")
             span["ready"] = gate.get("ready")
 
+        with rpg_pipeline_span("turn.campaign_ended_gate") as span:
+            # A hardcore campaign ends when the hero falls; it plays no more turns (RQ-5.1).
+            from app.apps.rpg.rules.combat.stakes import campaign_ended
+
+            ended = campaign_ended(launch_session.get("simulation_state") or {})
+            span["ended"] = bool(ended)
+            if ended:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "ok": False,
+                        "error": "rpg_campaign_ended",
+                        "session_id": session_id,
+                        "reason": str(ended.get("reason") or "ended"),
+                        "message": "This hero's story has ended: they fell in a hardcore campaign. "
+                                   "Start a new campaign to play on.",
+                    },
+                )
+
         with rpg_pipeline_span("turn.budget_gate") as span:
             from app.apps.rpg.session.turn_budget import TurnBudgetExceeded, require_turn_budget
 

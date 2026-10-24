@@ -39,32 +39,46 @@ def test_fight_to_victory(launch, world) -> None:
     assert "falls" in play.model.told().lower() or "defeat" in play.model.told().lower(), play.model.told()
 
 
+def _minutes(play) -> int:
+    return int((play.simulation().get("environment") or {}).get("absolute_minutes") or 0)
+
+
 @pytest.mark.parametrize("world", in_worlds("aurelia"))
-def test_fight_to_defeat_leaves_the_hero_hurt(launch, world) -> None:
-    """Today's defeat: the fight ends and the hero is left at a tenth of their strength."""
-    play, foe = launch(world), FOES[world][1]
-    play.turn(f"I attack the {foe}.")
-    _fight(play, foe, limit=60)
-    assert play.combat()["participants"]["player"]["hp"] <= play.hp()
-    assert play.hp() == max(1, 100 // 10)
-    assert not play.combat().get("active")
-
-
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-5.1: no defeat model (Q-1): a lost fight leaves the hero where they fell, with their coin and pack, and "
-    "no time passes; the setback (wake where you last rested, hurt, something lost, time passed) is not built")))
 def test_fight_to_defeat_is_a_setback(launch, world) -> None:
+    """A lost fight (docs/rpg/design/stakes.md): the hero wakes where they last rested, eight hours later, at a
+    quarter of their strength and battered, a fifth of the purse gone (a full rest ending battered is
+    tests/unit/rpg/test_combat_stakes.py; a second night's lodging is RQ-2.3)."""
     play, foe = launch(world), FOES[world][1]
     play.turn("go to Starfall Village")
     play.turn("I rent a room for the night from Orik Stonewake.")
     play.turn("I go to my room and sleep for the night.")
+    assert play.player_state().get("rest_point") == "location:aurelia:starfall-village"
     play.turn("go to Skybridge Pass")
-    purse, pack, clock = play.purse(), play.inventory(), play.stored()["runtime_state"].get("campaign_calendar")
+    purse, minutes = play.purse(), _minutes(play)
     play.turn(f"I attack the {foe}.")
     _fight(play, foe, limit=60)
+
+    state = play.player_state()
+    assert not play.combat().get("active") and play.combat()["ended_reason"] == "party_side_defeated"
     assert play.location() == "location:aurelia:starfall-village"  # back where they last rested
-    assert play.purse() < purse or play.inventory() != pack  # something was lost
-    assert play.stored()["runtime_state"].get("campaign_calendar") != clock
+    assert play.hp() == 100 // 4
+    assert [condition["kind"] for condition in state.get("conditions") or ()] == ["battered"]
+    assert play.purse() == purse - max(1, purse // 5)
+    assert _minutes(play) >= minutes + 8 * 60
+    assert state.get("defeats") == 1
+    told = play.model.told()
+    assert "the fight is lost" in told and "8 hours later" in told, told
+
+
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
+def test_hardcore_defeat_ends_the_campaign(launch, world) -> None:
+    play, foe = launch(world, gameplay={"permadeath": True}), FOES[world][1]
+    play.turn(f"I attack the {foe}.")
+    _fight(play, foe, limit=60)
+    assert play.simulation()["campaign_end"]["reason"] == "defeated"
+    assert "Your story ends here." in play.model.told()
+    refused = play.post_turn("look around")
+    assert refused.status_code == 409 and refused.json()["detail"]["error"] == "rpg_campaign_ended"
 
 
 @pytest.mark.parametrize("world", in_worlds())

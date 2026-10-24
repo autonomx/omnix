@@ -20,6 +20,7 @@ from app.apps.rpg.rules.combat.runtime_core import (
     sync_participant_hp_to_actor_state,
 )
 from app.apps.rpg.rules.combat.runtime_turns import advance_combat_turn, gate_combat_action
+from app.apps.rpg.rules.combat.stakes import apply_defeat, attack_penalty
 from app.apps.rpg.rules.interactions.equipment_runtime import (
     consume_equipped_ammo,
     project_equipment_stats,
@@ -206,11 +207,13 @@ def _roll_attack(
     target_defense = safe_int(target.get("defense"), 10)
     target_armor = safe_int(target.get("armor"), 0)
     attack_roll = deterministic_roll(combat_seed(combat_state, "attack", actor_id, target_id), 1, 20)
+    condition_penalty = attack_penalty(simulation_state, actor_id)  # battered from a lost fight (RQ-5.1)
     attack_total = (
         attack_roll
         + actor_stats["accuracy_bonus"]
         + morale_accuracy_bonus
         - actor_stats["encumbrance_penalty"]
+        - condition_penalty
     )
     hit = attack_total >= target_defense
     hp_before = safe_int(target.get("hp"), 0)
@@ -235,6 +238,7 @@ def _roll_attack(
         "attack_total": attack_total,
         "equipment_accuracy_bonus": actor_stats["accuracy_bonus"],
         "morale_accuracy_bonus": morale_accuracy_bonus,
+        "condition_penalty": condition_penalty,
         "target_defense": target_defense,
         "damage_roll": damage_roll,
         "morale_damage_bonus": morale_damage_bonus,
@@ -306,25 +310,13 @@ def _finish_attack(
     if defeated and not living_party_ids(combat_state):
         combat_state["active"] = False
         combat_state["ended_reason"] = "party_side_defeated"
-        _left_for_dead(simulation_state, combat_state)
+        apply_defeat(simulation_state, combat_state)
         simulation_state["combat_state"] = combat_state
         return combat_state, True, {}, ""
 
     advance = advance_combat_turn(simulation_state, tick=tick)
     combat_state = safe_dict(simulation_state.get("combat_state"))
     return combat_state, False, {}, safe_str(advance.get("current_actor_id"))
-
-
-def _left_for_dead(simulation_state: Dict[str, Any], combat_state: Dict[str, Any]) -> None:
-    """A lost fight is not the end: the hero comes to, badly hurt (a tenth of their strength), the foe gone."""
-    hero = participant(combat_state, "player")
-    if not hero:
-        return
-    hp = max(1, safe_int(hero.get("max_hp"), 20) // 10)
-    hero["hp"] = hp
-    hero["status"] = "active"
-    combat_state["revived"] = {"actor_id": "player", "hp": hp, "max_hp": safe_int(hero.get("max_hp"), 20)}
-    sync_participant_hp_to_actor_state(simulation_state, actor_id="player", hp=hp, status="wounded")
 
 
 def _combat_log_entry(

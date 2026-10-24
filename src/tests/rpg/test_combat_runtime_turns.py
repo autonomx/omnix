@@ -107,10 +107,10 @@ def test_a_lost_fight_leaves_the_hero_hurt_but_alive():
 
     assert state["combat_state"]["active"] is False
     assert state["combat_state"]["ended_reason"] == "party_side_defeated"
-    assert state["player_state"]["resources"]["hp"]["current"] == 10
-    assert describe_combat_exchange(opened["combat_result"])[-1] == (
-        "You fall, and the fight is lost. When you come to, your foe is gone; you are badly hurt (10 of 100 left)."
-    )
+    assert state["player_state"]["resources"]["hp"]["current"] == 25  # a quarter of their strength (RQ-5.1)
+    lines = describe_combat_exchange(opened["combat_result"])
+    assert lines[-1].startswith("You fall to the Echo Wolf, and the fight is lost. You wake at "), lines
+    assert "8 hours later, battered (25 of 100 left)." in lines[-1]
 
 
 def test_a_stage_carries_only_what_it_changed_onto_the_authoritative_state():

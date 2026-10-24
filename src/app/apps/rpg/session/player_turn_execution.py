@@ -49,6 +49,7 @@ from app.apps.rpg.rules.party.companion_turns import (
 from app.apps.rpg.rules.party.companion_commands import (
     maybe_apply_companion_command as maybe_apply_companion_command,
 )
+from app.apps.rpg.session.duration_actions import pass_time_after_defeat
 from app.apps.rpg.rules.interactions.interaction_runtime import (
     resolve_general_interaction as resolve_general_interaction,
 )
@@ -526,6 +527,7 @@ def apply_turn(
         actor_id="player",
         tick=tick,
     )
+    pass_time_after_defeat(simulation_state)
     record_elapsed_turn_stage(
         "pre_authoritative_general_interaction",
         _general_interaction_started,

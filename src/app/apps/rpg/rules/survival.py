@@ -251,6 +251,9 @@ def apply_survival_effect(
     }
     _append_event(state, event)
     simulation_state[SURVIVAL_STATE_KEY] = state
+    from app.apps.rpg.rules.combat.stakes import record_rest
+
+    record_rest(simulation_state, kind=action_kind)  # a full rest is where a beaten hero wakes (RQ-5.1)
     return {
         "ok": True,
         "action_category": "survival",
