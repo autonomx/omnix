@@ -1028,3 +1028,8 @@ Implementation runs on branch `rpg-production` in two lanes (§5): lane A in wor
 | RQ-1.1 | done (narration-table move in RQ-1.4) | cee84e0da7 | document v6: 13 typed sections over v5 paths, one inventory (store wins), creation artifacts stored once (0180), upgrade as a pinned system turn on first load, package format 8; genesis campaign 1.9 MB → 203 KB |
 | RQ-1.2 | done | e1bcb42c1c | 22 StateChange types, reducer with patch from writes; 450 seeded property sequences |
 | RQ-1.3 | done for the turn route | 357667a053 | frozen TurnOutcome with changes, timings, model calls; changed_domains now real; web reads it; contract regenerated |
+| RQ-0.1 | done | 39f83b58e5 | `scripts/rpg_scorecard.py` + ratchets in architecture_metrics (re-baselined at the RQ-1 merge, d1e9c2c87d) |
+| RQ-0.4 | done | 47419da86c | 2,000-input corpus (800 dev / 1,200 frozen held-out), static + play harness with Wilson bounds; baseline in `docs/measurements/rpg-intent-baseline-2026-10-23.json` |
+| RQ-0.5 | done | 6089ec649a | latency harness per turn class (Claude CLI Haiku N=20: look p50 14.6 s, question 2.0 s, fight 12.4 s); overhead rehearsal at 200 turns + world tick |
+| RQ-0.6 | done (pilot n=180; full 900 is one command; judge uncalibrated until 150 labels are filled) | cd4c163e20 | baseline: correct speaker 0.28, near-duplicate 0.35, contradictions 0, leaks 0, turn failures 0.033 |
+| RQ-0.8 | done | caa55226c2 | `docs/architecture/RPG_ENTRY_POINTS.md` + a test that fails on an unlisted mutating route |
