@@ -189,6 +189,16 @@ class DialogueExchanged(_Change):
     npc_line: str = ""
 
 
+class RegardChanged(_Change):
+    """How far someone trusts the hero moved (an attack, seen or suffered), from -100 to 100."""
+
+    type: Literal["regard_changed"] = "regard_changed"
+    npc_id: str = Field(min_length=1)
+    name: str = ""
+    delta: int
+    reason: str = ""
+
+
 class KnowledgeShared(_Change):
     """Something a person knows, now known to the hero."""
 
@@ -366,7 +376,7 @@ StateChange = Annotated[
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
-    | DefeatRecorded | CampaignEnded | WhereaboutsChanged,
+    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

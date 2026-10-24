@@ -2,7 +2,8 @@
 
 ## What the player experiences
 
-The hero attacks a creature the world knows ("I attack the Echo Wolf"), and a fight begins: everyone rolls for
+The hero attacks a creature the world knows ("I attack the Echo Wolf") or someone present ("I attack Bran"), and a
+fight begins: everyone rolls for
 initiative, and whoever is quicker than the hero strikes first. Each turn the hero strikes or tries to break away,
 then everyone else whose turn comes before the hero's next acts: creatures strike the party, companions strike the
 creatures. A won fight earns the creatures' experience and whatever they drop; a lost one is the setback of
@@ -10,8 +11,13 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
 
 ## Rules
 
-- **Who can be fought.** A creature of the world's bestiary (the campaign's creature definitions). Anything else
-  (a person, an object) is not this rule's: the turn takes the older path. There is no default foe.
+- **Who can be fought.** A creature of the world's bestiary (the campaign's creature definitions), or a person
+  present. A person's numbers come from what they do: a fighter (guard, soldier, captain, hunter, scout...) level 3,
+  22 health, defence 13, armour 1, 2-6 damage, +3; someone hardy (smith, porter, innkeeper...) level 2, 16, 11, 1-4,
+  +1; anyone else 10 health, defence 10, 1-3. The hero does not turn on a companion (refused, no turn taken).
+  Anything else (an object) is not this rule's: the turn takes the older path. There is no default foe.
+- **Attacking someone** costs their trust (-40) and that of everyone present who saw it (-15), on the -100 to 100
+  scale dialogue reads (wary below 0); the play screen's relationships list shows it.
 - **The start.** The participants are the hero, the companions in the party, and the creature. Initiative is a
   seeded d20 plus each one's initiative bonus; ties go by id. Foes ahead of the hero act before the hero's first
   blow.
@@ -24,9 +30,11 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
   spent.
 - **Others' turns.** After the hero acts, everyone whose turn comes before the hero's next acts, each striking the
   first foe standing. Start-of-turn conditions (a stun from a weakness) apply as turns pass.
-- **The end.** Every creature down: victory, the experience of each (its `xp_value`, or 25 a level where the
+- **The end.** Every foe down: victory; a person beaten yields (alive), for no experience or spoils; each creature
+  earns the experience of each (its `xp_value`, or 25 a level where the
   world gives none), and each loot drop on its seeded chance into the pack. The party down: defeat (stakes.md). Fled: nothing.
-- **In a fight** the hero strikes, breaks away, or uses something carried (a potion), which spends their turn
+- **In a fight** the hero strikes, breaks away, defends (their defence +2 until their next turn), or uses something
+  carried (a potion), which spends their turn
   before the others act; the party's health is the party's, so a heal between blows holds. Leaving, resting,
   waiting, trading, talking it over or picking things up is refused in the game's own words; the turn is counted
   and nothing else changes.
@@ -42,7 +50,7 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
 
 ## State it changes
 
-`CombatAdvanced` (the combat section as the turn leaves it), `HpChanged`, `CompanionHpChanged`, `ConditionsChanged`
+`CombatAdvanced` (the combat section as the turn leaves it), `RegardChanged` (attacking a person), `HpChanged`, `CompanionHpChanged`, `ConditionsChanged`
 (wounds; battered on defeat), `ExperienceGained` and `LevelReached`, `ItemAdded` (loot), and on defeat
 `DefeatRecorded`, `PurseChanged`, `ItemRemoved`, `LocationChanged`, `PresenceChanged`, or `CampaignEnded` in
 hardcore; `TurnCounted`, `TimeAdvanced`.
@@ -55,9 +63,10 @@ The narrator may not add blows, damage or combatants.
 ## Scenarios
 
 A fight to victory (experience and loot); a lost fight is a setback; hardcore defeat ends the campaign; fleeing
-ends the fight with parting blows; a creature the world does not know is not fought by this rule.
+ends the fight with parting blows; a creature the world does not know is not fought by this rule; fighting a person
+costs trust, and beaten they yield for nothing; a companion is not turned on; defending raises the hero's guard.
 
 ## Out of scope (RQ-2.6 part 2)
 
 Abilities and their costs, ammunition, companion commands mid-fight, reactions on the grid (a blow at a foe moving
-out of reach), creatures placed on the grid when a fight starts, and fighting people.
+out of reach), creatures placed on the grid when a fight starts, guards joining a fight in their town.

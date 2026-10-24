@@ -43,9 +43,11 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
         return PlannedAction(mechanic="clarify", ticks=0, reason=reading.reason, question=question)
     if len(reading.clauses) > 1:
         return None
-    if reading.family == "attack" and (fighting or (reading.target_kind == "creature" and reading.target_id)):
-        # A creature the world knows, or in a fight the foe in front of the hero (combat.md).
+    if reading.family == "attack" and (fighting or (reading.target_kind in {"creature", "person"} and reading.target_id)):
+        # A creature the world knows or a person present, or in a fight the foe in front of the hero (combat.md).
         return PlannedAction(mechanic="fight", target_id=reading.target_id or "", ticks=0, reason="attack")
+    if reading.family == "defend" and fighting:
+        return PlannedAction(mechanic="fight", ticks=0, reason="defend")
     if reading.family == "flee" and fighting:
         return PlannedAction(mechanic="fight", ticks=0, reason="flee")
     if fighting and reading.family == "use_item" and reading.target_kind == "item" and reading.target_id:

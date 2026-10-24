@@ -55,6 +55,7 @@ from .changes import (
     TimeAdvanced,
     TradeRemembered,
     TurnCounted,
+    RegardChanged,
     WhereaboutsChanged,
     WorldTicked,
 )
@@ -349,6 +350,12 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
                 "location_id": change.location_id, "location_name": name, "title": name,
                 "summary": str(place.get("description") or name), "present_npc_ids": list(change.present_npc_ids),
                 "actors": [person["name"] for person in here]})
+    elif isinstance(change, RegardChanged):
+        kept = writer.get(("simulation_state", "relationship_state", change.npc_id))
+        kept = dict(kept) if isinstance(kept, dict) else {}
+        trust = max(-100, min(100, int(kept.get("trust") or kept.get("score") or 0) + change.delta))
+        writer.set(("simulation_state", "relationship_state", change.npc_id), {**kept, "trust": trust})
+        _show_regard(writer, change.name or change.npc_id, trust)
     elif isinstance(change, WhereaboutsChanged):
         for person in change.people:  # the npcs section's index: where each is, doing what
             kept = writer.get(("simulation_state", "npc_index", person.npc_id))
@@ -508,6 +515,18 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             "tick": int(writer.get(("simulation_state", "tick")) or 0)})
     else:  # pragma: no cover - the vocabulary is closed
         raise ChangeRejected(f"unknown change {change!r}")
+
+
+def _show_regard(writer: _Writer, name: str, trust: int) -> None:
+    """The play screen's relationships list: the person's standing with the hero, as the sheet words it."""
+    rows = writer.get(("state", "relationships"))
+    if not isinstance(writer.get(("state",)), dict):
+        return
+    rows = [dict(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    stance = "Friendly" if trust >= 50 else "Hostile" if trust <= -50 else "Wary" if trust < 0 else "Neutral"
+    entry = {"name": name, "stance": stance, "score": trust}
+    rows = [entry if row.get("name") == name else row for row in rows]
+    writer.set(("state", "relationships"), rows if entry in rows else [*rows, entry])
 
 
 def _show_worn(writer: _Writer, slot: str, name: str) -> None:

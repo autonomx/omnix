@@ -116,3 +116,38 @@ def test_tactical_move_and_attack_in_a_fight(launch, world) -> None:
     enemy = next(actor for actor in play.combat()["participants"] if actor.startswith("enemy:"))
     attacked = play.tactical_attack(enemy)
     assert attacked.status_code == 200, attacked.text[:300]
+
+
+def test_fighting_a_person_costs_trust_and_earns_nothing(launch) -> None:
+    """RQ-2.6 part 2: a person present can be fought, by numbers from what they do; the one attacked and everyone
+    who sees it trust the hero less; beaten, they yield, for no experience or spoils; and a companion is not turned on."""
+    play = launch("starter")  # Bran and Mira in the common room
+    xp = int(play.player_state().get("xp") or 0)
+    started = play.turn("I attack Bran.")
+    combat = play.combat()
+    assert combat["active"] is True and combat["participants"]["npc:bran"]["kind"] == "person"
+    assert "The fight begins: you against Bran." in started["visible_response"]["plain_text"]
+    regard = play.simulation()["relationship_state"]
+    assert regard["npc:bran"]["trust"] == -40 and regard["npc:mira"]["trust"] == -15
+    assert {row["name"]: row["stance"] for row in play.public()["relationships"]}["Bran"] == "Wary"
+
+    guarded = play.turn("I defend myself.")
+    assert guarded["visible_response"]["plain_text"].startswith("You raise your guard.")
+    last = guarded
+    for _ in range(30):
+        if not play.combat().get("active"):
+            break
+        last = play.turn("attack")
+    combat = play.combat()
+    assert combat.get("active") is not True and combat["ended_reason"] == "enemy_side_defeated"
+    assert "and Bran yields." in last["visible_response"]["plain_text"]
+    assert int(play.player_state().get("xp") or 0) == xp  # no experience for beating people
+
+
+def test_a_companion_is_not_turned_on(launch) -> None:
+    play = launch("aurelia")
+    play.turn("I ask Liora Fen to join my party as a companion.")
+    assert "npc:liora-fen" in play.party()
+    refused = play.turn("I attack Liora Fen.")
+    assert "You will not turn on Liora Fen." in refused["visible_response"]["plain_text"]
+    assert play.combat().get("active") is not True

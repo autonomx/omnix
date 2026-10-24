@@ -28,6 +28,7 @@ from app.apps.rpg.foundation.state.changes import (
     LocationChanged,
     PresenceChanged,
     PurseChanged,
+    RegardChanged,
     StateChange,
 )
 from app.apps.rpg.rules import routines
@@ -61,7 +62,24 @@ from app.apps.rpg.rules.interactions.equipment_runtime import project_equipment_
 
 SOURCE = "rpg_turn_pipeline_fight_v1"
 MINUTES_PER_TURN = 1
-Action = Literal["attack", "flee", "pass"]  # pass: the hero's turn went on something else (a potion)
+GUARD_BONUS = 2  # defending: added to the hero's defence until their next turn
+# Attacking someone: how far they, and everyone who sees it, trust the hero less (combat.md).
+ATTACKED_REGARD, WITNESS_REGARD = -40, -15
+Action = Literal["attack", "flee", "defend", "pass"]  # pass: the hero's turn went on something else (a potion)
+
+# A person's fighting numbers by what they do (the world rates its creatures, not its people): combat.md.
+_PERSON_NUMBERS = {
+    "fighter": {"level": 3, "hp": 22, "defense": 13, "armor": 1, "damage_min": 2, "damage_max": 6,
+                "accuracy_bonus": 3, "initiative_bonus": 1},
+    "hardy": {"level": 2, "hp": 16, "defense": 11, "armor": 0, "damage_min": 1, "damage_max": 4,
+              "accuracy_bonus": 1, "initiative_bonus": 1},
+    "townsfolk": {"level": 1, "hp": 10, "defense": 10, "armor": 0, "damage_min": 1, "damage_max": 3,
+                  "accuracy_bonus": 0, "initiative_bonus": 0},
+}
+_FIGHTER_WORDS = {"guard", "soldier", "captain", "knight", "warrior", "mercenary", "sellsword", "watch", "sergeant",
+                  "champion", "veteran", "hunter", "ranger", "scout", "bandit", "thug", "enforcer", "duelist"}
+_HARDY_WORDS = {"smith", "blacksmith", "porter", "miner", "sailor", "dockhand", "farmer", "woodcutter", "innkeeper",
+                "bouncer", "tracker", "guide", "keeper", "sentry"}
 
 
 @dataclass(frozen=True)
@@ -109,6 +127,27 @@ def _numbers(simulation: Mapping[str, Any], combat: Mapping[str, Any], actor_id:
             "encumbrance_penalty": int(stats.get("encumbrance_penalty") or 0)}
 
 
+def _person(simulation: Mapping[str, Any], target_ref: str) -> tuple[str, dict[str, Any]]:
+    """The person present the hero means to fight, by id or name: (id, their world record), or ("", {})."""
+    people = _d(_d(simulation.get("world_model")).get("npcs"))
+    here = routines.present_now(simulation)[1]
+    wanted = target_ref.casefold().removeprefix("the ").strip()
+    for npc_id in here:
+        name = _s(_d(people.get(npc_id)).get("name"))
+        if npc_id in people and wanted and (wanted == npc_id.casefold() or (name and name.casefold() in wanted)):
+            return npc_id, _d(people[npc_id])
+    return "", {}
+
+
+def _person_foe(npc_id: str, person: Mapping[str, Any]) -> dict[str, Any]:
+    words = set(_s(f"{person.get('role')} {person.get('name')}").casefold().replace("-", " ").split())
+    rank = "fighter" if words & _FIGHTER_WORDS else "hardy" if words & _HARDY_WORDS else "townsfolk"
+    numbers = _PERSON_NUMBERS[rank]
+    return {"actor_id": npc_id, "enemy_id": npc_id, "npc_id": npc_id, "definition_id": npc_id, "kind": "person",
+            "name": _s(person.get("name")) or npc_id, "side": "enemy", "max_hp": numbers["hp"], "tags": [rank],
+            **numbers}
+
+
 def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: str) -> dict[str, Any]:
     hp, max_hp = _hero_hp(simulation)
     armor = int(_d(project_equipment_stats(dict(simulation), actor_id="player").get("stats")).get("armor") or 0)
@@ -148,7 +187,7 @@ def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
         roll = min(roll, deterministic_roll(combat_seed(combat, kind, actor_id, target_id, 2), 1, 20))
     penalty = _penalty(conditions, actor_id)
     total = roll + numbers["accuracy_bonus"] - numbers["encumbrance_penalty"] - penalty
-    defense = int(target.get("defense") or 10) + max(0, cover)
+    defense = int(target.get("defense") or 10) + max(0, cover) + (GUARD_BONUS if target.get("guarding") else 0)
     hit = total >= defense
     before = int(target.get("hp") or 0)
     damage = 0
@@ -236,8 +275,9 @@ def _named(combat: Mapping[str, Any], target_ref: str) -> str:
 # -- the end ------------------------------------------------------------------------------------------------------------
 def _spoils(simulation: Mapping[str, Any], combat: Mapping[str, Any]) -> tuple[list[StateChange], list[str]]:
     """What a won fight earns: each fallen creature's experience, and its drops on their seeded chances."""
+    # A person beaten yields: no experience or spoils for beating people (combat.md).
     fallen = [participant(dict(combat), actor_id) for actor_id, row in _d(combat.get("participants")).items()
-              if _s(_d(row).get("side")) == "enemy"]
+              if _s(_d(row).get("side")) == "enemy" and _s(_d(row).get("kind")) != "person"]
     # Each creature's experience as the world rates it, or 25 a level where it gives none (combat.md).
     amount = sum(int(row.get("xp_value") or 0) or 25 * max(1, int(row.get("level") or 1)) for row in fallen)
     changes: list[StateChange] = []
@@ -346,26 +386,47 @@ def _defeat(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
 # -- the turn -----------------------------------------------------------------------------------------------------------
 def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = "", turn_key: str = "",
           cover: int = 0) -> FightTurn | None:
-    """One turn of a fight; ``None`` when the target is not a creature the world knows (the older path's).
+    """One turn of a fight; ``None`` when the target is neither a creature the world knows nor a person present
+    (the older path's).
 
     ``cover`` is what the target's cover adds to its defence against the hero's blow (the grid's, combat.md)."""
     existing = _d(simulation.get("combat_state"))
     fighting = existing.get("active") is True
     conditions = _conditions(simulation)
     report: dict[str, Any] = {"earlier_turns": [], "other_turns": [], "parting_blows": [], "foe_ids": []}
+    regard: list[StateChange] = []
     if not fighting:
-        if action == "flee":
-            return FightTurn([], ["There is no fight to flee from."], refused=True, minutes=0)
+        if action in {"flee", "defend"}:
+            return FightTurn([], [f"There is no fight to {'flee from' if action == 'flee' else 'guard against'}."],
+                             refused=True, minutes=0)
         enemy = instantiate_campaign_creature(simulation, target_ref)
         if enemy is None:
-            return None
+            npc_id, person = _person(simulation, target_ref)
+            if not npc_id:
+                return None
+            name = _s(person.get("name")) or npc_id
+            if npc_id in {_s(row.get("npc_id")) for row in _companions(simulation)}:
+                return FightTurn([], [f"You will not turn on {name}."], refused=True, minutes=0)
+            enemy = _person_foe(npc_id, person)
+            people = _d(_d(simulation.get("world_model")).get("npcs"))
+            regard = [RegardChanged(npc_id=npc_id, name=name, delta=ATTACKED_REGARD, reason="attacked")]
+            regard += [RegardChanged(npc_id=other, name=_s(_d(people.get(other)).get("name")) or other,
+                                     delta=WITNESS_REGARD, reason="saw_an_attack")
+                       for other in routines.present_now(simulation)[1]
+                       if other != npc_id and other in people and other not in {
+                           _s(row.get("npc_id")) for row in _companions(simulation)}]
         combat = _start(simulation, enemy, turn_key=turn_key)
         report["reason"] = "combat_started"
     else:
         combat = _party_as_it_stands(simulation, deepcopy(existing))
     earlier, ended = _until_hero(simulation, combat, conditions)
     report["earlier_turns"] = earlier
+    participant(combat, "player").pop("guarding", None)  # a raised guard lasts until the hero's next turn
     if not ended and action == "pass":
+        _advance(combat)
+    elif not ended and action == "defend":
+        participant(combat, "player")["guarding"] = True
+        report["reason"] = "combat_defended"
         _advance(combat)
     elif not ended and action == "attack":
         target_id = _named(combat, target_ref) or default_target_for_actor(combat, "player")
@@ -423,6 +484,7 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     changes.extend(ConditionsChanged(actor_id=actor_id, conditions=tuple(rows))
                    for actor_id, rows in conditions.items() if rows != before.get(actor_id, []))
     changes.extend(after)
+    changes.extend(regard)
     report["combat_state"] = combat
     if action == "pass" and report.get("reason") is None:
         report["reason"] = "combat_turn_passed"
@@ -430,4 +492,4 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
     return FightTurn(changes, lines, minutes=minutes, ended=ended, report=report)
 
 
-__all__ = ["FightTurn", "MINUTES_PER_TURN", "fight"]
+__all__ = ["ATTACKED_REGARD", "FightTurn", "GUARD_BONUS", "MINUTES_PER_TURN", "WITNESS_REGARD", "fight"]

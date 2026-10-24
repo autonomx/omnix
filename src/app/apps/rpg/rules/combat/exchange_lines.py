@@ -11,8 +11,9 @@ def _name(combat_state: dict[str, Any], actor_id: str, *, subject: bool) -> str:
         return "You" if subject else "you"
     row = participant(combat_state, actor_id)
     name = safe_str(row.get("name")) or "your foe"
-    # A creature is one of its kind ("the Echo Wolf"); a companion goes by their own name.
-    if safe_str(row.get("side")) == "enemy" and not name.casefold().startswith(("the ", "your ")):
+    # A creature is one of its kind ("the Echo Wolf"); a companion or a person goes by their own name.
+    if (safe_str(row.get("side")) == "enemy" and safe_str(row.get("kind")) != "person"
+            and not name.casefold().startswith(("the ", "your "))):
         name = f"the {name}"
     return name[:1].upper() + name[1:] if subject else name
 
@@ -28,7 +29,9 @@ def _blow(combat_state: dict[str, Any], attack: dict[str, Any]) -> str:
     left = safe_int(attack.get("target_hp_after"), 0)
     most = safe_int(participant(combat_state, target_id).get("max_hp"), 0)
     if attack.get("defeated"):
-        return f"{actor} {verb} {target} for {safe_int(attack.get('damage_applied'), 0)}, and {target} falls."
+        # A person beaten gives up the fight; a creature falls.
+        end = "yields" if safe_str(participant(combat_state, target_id).get("kind")) == "person" else "falls"
+        return f"{actor} {verb} {target} for {safe_int(attack.get('damage_applied'), 0)}, and {target} {end}."
     return f"{actor} {verb} {target} for {safe_int(attack.get('damage_applied'), 0)} ({left} of {most} left)."
 
 
@@ -75,6 +78,8 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
             lines.append("You escape; the fight is over, and it yields you nothing.")
     elif reason == "combat_flee_failed":
         lines.append(f"You try to break away, but {foes or 'your foe'} cuts you off.")
+    elif reason == "combat_defended":
+        lines.append("You raise your guard.")
     attacks = [
         *safe_list(combat_result.get("earlier_turns")),
         *([combat_result] if combat_result.get("hit") is not None else []),

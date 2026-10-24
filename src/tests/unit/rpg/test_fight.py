@@ -138,3 +138,41 @@ def test_in_a_fight_the_hero_strikes_flees_or_uses_something_and_nothing_else() 
     assert plan_action(reading("use_item", target_id="item:potion", target_kind="item"), fighting=True).reason == "in_fight"
     assert plan_action(reading("move", target_id="loc:inn", target_kind="place"), fighting=True).reason == "busy"
     assert plan_action(reading("status"), fighting=True).mechanic == "status"
+
+
+def _with_people(document: dict[str, Any]) -> dict[str, Any]:
+    simulation = document["simulation_state"]
+    simulation["world_model"]["npcs"] = {"npc:guard": {"name": "Hale", "role": "town guard"},
+                                         "npc:baker": {"name": "Wenna", "role": "baker"},
+                                         "npc:ally": {"name": "Ash", "role": "scout"}}
+    simulation["present_npc_state"] = {"location_id": "loc:road", "present_npc_ids": ["npc:guard", "npc:baker", "npc:ally"]}
+    simulation["player_state"]["party_state"] = {"companions": [{"npc_id": "npc:ally", "name": "Ash", "hp": 16}]}
+    return document
+
+
+def test_a_person_present_is_fought_by_what_they_do_and_everyone_who_saw_trusts_less() -> None:
+    document = _with_people(_document())
+    turn = fight(document["simulation_state"], action="attack", target_ref="npc:guard", turn_key="1")
+    assert turn is not None and not turn.refused
+    foe = turn.report["combat_state"]["participants"]["npc:guard"]
+    assert (foe["kind"], foe["tags"], foe["defense"]) == ("person", ["fighter"], 13)  # a guard fights like one
+    regard = {change.npc_id: change.delta for change in turn.changes if change.type == "regard_changed"}
+    assert regard == {"npc:guard": -40, "npc:baker": -15}  # the companion is with the hero, not a witness
+    after, _ = reduce(document, turn.changes)
+    assert after["simulation_state"]["relationship_state"]["npc:baker"]["trust"] == -15
+    assert fight(document["simulation_state"], action="attack", target_ref="npc:ally", turn_key="1").refused
+    assert fight(document["simulation_state"], action="attack", target_ref="npc:nobody", turn_key="1") is None
+
+
+def test_defending_raises_the_heros_guard_until_their_next_turn() -> None:
+    document = _with_people(_document())
+    assert fight(document["simulation_state"], action="defend", turn_key="1").refused  # no fight to guard against
+    started = fight(document["simulation_state"], action="attack", target_ref="npc:baker", turn_key="1")
+    document, _ = reduce(document, started.changes)
+    guarded = fight(document["simulation_state"], action="defend", turn_key="2")
+    assert guarded.lines[0] == "You raise your guard."
+    assert guarded.report["combat_state"]["participants"]["player"]["guarding"] is True
+    document, _ = reduce(document, guarded.changes)
+    struck = fight(document["simulation_state"], action="attack", turn_key="3")
+    assert "guarding" not in struck.report["combat_state"]["participants"]["player"]
+    assert plan_action(IntentCandidate("defend", confidence=0.85), fighting=True).reason == "defend"

@@ -69,7 +69,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return Resolution([_counted(session)], ["You are in a fight: strike, break away, or use something you carry."],
                           refused=True, told=False)
     if mechanic == "fight":
-        turn = fight(simulation, action="flee" if planned.reason == "flee" else "attack",
+        turn = fight(simulation, action={"flee": "flee", "defend": "defend"}.get(planned.reason, "attack"),
                      target_ref=planned.target_id or text, turn_key=str(_counted(session).turn_count))
         if turn is None:
             return None  # not a creature the world knows: the older path
