@@ -112,7 +112,7 @@ PLAYER_STATE: Path = ("simulation_state", "player_state")
 class PlayerSection(Section):
     """The hero: who they are, their level and experience, health and abilities' scores, skills."""
 
-    PATHS = (PLAYER_STATE,)
+    PATHS = (PLAYER_STATE, ("state", "ability_state"))  # the hero's abilities: unlocked, ranks, cooldowns
     _TYPED: ClassVar[set[str]] = {"name", "level", "xp", "xp_to_next", "resources", "stats", "skills",
                                   # owned by other sections
                                   "inventory", "inventory_state", "currency", "party_state", "location_id",
@@ -190,8 +190,12 @@ class InventorySection(Section):
 class LocationSection(Section):
     """Where the hero is, and the places they have been."""
 
-    PATHS = (PLAYER_STATE + ("location_id",), ("simulation_state", "travel_state"),
-             ("simulation_state", "location_state"))
+    PATHS = (PLAYER_STATE + ("location_id",), PLAYER_STATE + ("current_location_id",), ("simulation_state", "travel_state"),
+             ("simulation_state", "location_state"), ("runtime_state", "current_scene"),
+             # the older readers' copies of where the hero is, kept in step by the reducer until they go (RQ-2.10)
+             *(("simulation_state", key) for key in ("location_id", "location_name", "current_location",
+                                                     "current_location_id", "current_location_name",
+                                                     "previous_location", "visited_locations")))
 
     location_id: str = ""
     location_name: str = ""
@@ -215,7 +219,8 @@ class LocationSection(Section):
 class TimeSection(Section):
     """The turn counter, the simulation tick, and the in-game calendar."""
 
-    PATHS = (("simulation_state", "tick"), ("manifest", "turn_count"), ("runtime_state", "campaign_calendar"))
+    PATHS = (("simulation_state", "tick"), ("manifest", "turn_count"), ("manifest", "current_turn"),
+             ("runtime_state", "campaign_calendar"))
 
     tick: int = 0
     turn_count: int = 0
@@ -352,7 +357,8 @@ class NpcsSection(Section):
     """Runtime state of the world's people: where each is, who is present, cursors and regard."""
 
     PATHS = (("simulation_state", "npc_index"), ("simulation_state", "present_npc_state"),
-             ("runtime_state", "current_scene", "present_npc_ids"),
+             ("runtime_state", "current_scene", "present_npc_ids"), ("simulation_state", "present_npcs"),
+             ("simulation_state", "dialogue"), ("runtime_state", "dialogue_focus"),
              *(("simulation_state", key) for key in _NPC_RUNTIME_KEYS))
 
     index: dict[str, NpcRuntime] = Field(default_factory=dict)
@@ -399,7 +405,8 @@ class WorldSection(Section):
 
 
 class EconomySection(Section):
-    PATHS = (("simulation_state", "merchant_state"), ("simulation_state", "economy_state"))
+    PATHS = (("simulation_state", "merchant_state"), ("simulation_state", "economy_state"),
+             ("simulation_state", "trade"), ("simulation_state", "active_services"))
 
     offers: dict[str, Any] = Field(default_factory=dict)
 
@@ -429,7 +436,7 @@ class NarrativeSection(Section):
 
 
 class MetaSection(Section):
-    PATHS = (("manifest",), ("simulation_state", "rng_seed"))
+    PATHS = (("manifest",), ("simulation_state", "rng_seed"), ("simulation_state", "campaign_end"))
 
     campaign_id: str = ""
     document_version: int = 1

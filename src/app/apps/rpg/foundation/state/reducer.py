@@ -232,7 +232,6 @@ def _move_hero(writer: _Writer, change: LocationChanged) -> None:
         writer.set(("simulation_state", "location_state"), {"current_location_id": location_id,
                                                              "current_location": deepcopy(place),
                                                              "available_exits": dict(exits)})
-        writer.set(("simulation_state", "present_npcs"), deepcopy(list(place.get("present_npcs") or [])))
     if not change.location_name:
         return
     name = change.location_name
