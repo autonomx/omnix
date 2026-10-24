@@ -93,6 +93,7 @@ def _turn(row: Any) -> dict[str, Any]:
         "compact_response": dict(row[14]),
         "created_at": row[15].isoformat(),
         "state_delta": list(row[16]) if row[16] is not None else None,
+        "maps_hash_after": str(row[17]) if row[17] is not None else None,
     }
 
 
@@ -100,7 +101,7 @@ _TURN_COLUMNS = """
 id, workspace_id, campaign_id, sequence, submission_id, expected_revision,
 resulting_revision, command_jsonb, canonical_effects_jsonb, state_hash_before,
 state_hash_after, engine_version, schema_version, interaction_id,
-compact_response, created_at, state_delta_jsonb
+compact_response, created_at, state_delta_jsonb, maps_hash_after
 """
 
 
@@ -391,10 +392,10 @@ class PostgresRpgRepository:
                 expected_revision, resulting_revision, command_jsonb,
                 canonical_effects_jsonb, state_hash_before, state_hash_after,
                 engine_version, schema_version, interaction_id, compact_response,
-                state_delta_jsonb, document_version
+                state_delta_jsonb, document_version, maps_hash_after
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
-                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s
+                %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s
             ) RETURNING {_TURN_COLUMNS}
             """,
             (
@@ -415,6 +416,7 @@ class PostgresRpgRepository:
                 encoded_response.decode("utf-8"),
                 canonical_json(_turn_delta(campaign["state"], next_state)),
                 document_version(next_state),
+                self.touched_maps_hash(context, campaign_id),
             ),
         ).fetchone()
         turn = _turn(row)
@@ -634,6 +636,22 @@ class PostgresRpgRepository:
             (context.workspace_id, campaign_id, kind, encoded, digest),
         )
         return digest
+
+    def touched_maps_hash(self, context: TenantContext, campaign_id: str) -> str | None:
+        """The hash of the campaign's map-instance snapshots changed in this transaction, in id order (RQ-1.4).
+
+        A map instance's update stamps ``updated_at`` with the transaction's start time, so those are the ones
+        this turn moved anyone on; ``None`` when it touched no map.
+        """
+        rows = self.connection.execute(
+            "SELECT map_instance_id, snapshot_jsonb FROM omnix_rpg_campaign_map_instances "
+            "WHERE workspace_id = %s AND campaign_id = %s AND updated_at = CURRENT_TIMESTAMP "
+            "ORDER BY map_instance_id",
+            (context.workspace_id, campaign_id),
+        ).fetchall()
+        if not rows:
+            return None
+        return hashlib.sha256(canonical_json([[str(row[0]), dict(row[1])] for row in rows]).encode("utf-8")).hexdigest()
 
     TURN_NARRATIONS_KEPT = 64  # as many as the document kept (it pruned to 48-50)
 

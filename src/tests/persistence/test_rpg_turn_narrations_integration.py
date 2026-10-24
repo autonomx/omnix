@@ -45,6 +45,7 @@ def test_turn_narrations_leave_the_document_and_come_back_on_load() -> None:
         )
         work.commit()
     assert "narration_artifacts" not in committed["campaign"]["state"]["runtime_state"]
+    assert committed["turn"]["maps_hash_after"] is None  # it moved no one on a map
 
     loaded = load_session_from_postgres(campaign_id)
     assert loaded["runtime_state"]["narration_artifacts_by_turn"]["turn:1"]["narration"] == "Narrated turn:1."
@@ -109,3 +110,4 @@ def test_a_turn_waits_for_the_campaigns_turn_in_progress_and_gives_up_after_the_
     with turn_order.campaign_turn(f"{campaign_id}:other"):  # another campaign never waits on it
         pass
     assert order == ["first", "second"]
+
