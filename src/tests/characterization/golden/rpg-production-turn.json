@@ -26,6 +26,7 @@
         "changed_domains": [
           "time",
           "survival",
+          "npcs",
           "world",
           "narrative"
         ],
@@ -46,6 +47,7 @@
         "changed_domains": [
           "time",
           "survival",
+          "npcs",
           "world",
           "narrative"
         ],

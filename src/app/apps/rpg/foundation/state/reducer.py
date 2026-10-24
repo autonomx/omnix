@@ -55,6 +55,7 @@ from .changes import (
     TimeAdvanced,
     TradeRemembered,
     TurnCounted,
+    WhereaboutsChanged,
     WorldTicked,
 )
 
@@ -336,13 +337,24 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         writer.set(("runtime_state", "current_scene", "present_npc_ids"), list(change.present_npc_ids))
         place = _world_place(writer, change.location_id)
         if place:  # the scene the narrator and the scene readers build on is the place the hero is in
+            people = writer.get(("simulation_state", "world_model", "npcs"))
+            people = people if isinstance(people, dict) else {}
+            here = [{"id": npc_id, "name": str((people.get(npc_id) or {}).get("name") or npc_id),
+                     "role": str((people.get(npc_id) or {}).get("role") or "")} for npc_id in change.present_npc_ids]
+            writer.set(("simulation_state", "present_npcs"), here)
             scene = writer.get(("runtime_state", "current_scene"))
             name = str(place.get("name") or change.location_id)
             writer.set(("runtime_state", "current_scene"), {
                 **(scene if isinstance(scene, dict) else {}), "scene_id": f"scene:{change.location_id}",
                 "location_id": change.location_id, "location_name": name, "title": name,
                 "summary": str(place.get("description") or name), "present_npc_ids": list(change.present_npc_ids),
-                "actors": [str(npc.get("name") or "") for npc in place.get("present_npcs") or () if isinstance(npc, dict)]})
+                "actors": [person["name"] for person in here]})
+    elif isinstance(change, WhereaboutsChanged):
+        for person in change.people:  # the npcs section's index: where each is, doing what
+            kept = writer.get(("simulation_state", "npc_index", person.npc_id))
+            writer.set(("simulation_state", "npc_index", person.npc_id), {
+                **(kept if isinstance(kept, dict) else {"npc_id": person.npc_id}),
+                "location_id": person.location_id, "activity": person.activity})
     elif isinstance(change, TimeAdvanced):
         writer.set(("simulation_state", "tick"), int(writer.get(("simulation_state", "tick")) or 0) + change.ticks)
     elif isinstance(change, TurnCounted):

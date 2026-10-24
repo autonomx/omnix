@@ -30,6 +30,7 @@ from app.apps.rpg.foundation.state.changes import (
     PurseChanged,
     StateChange,
 )
+from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition, instantiate_campaign_creature
 from app.apps.rpg.rules.combat.exchange_lines import describe_combat_exchange
 from app.apps.rpg.rules.combat.runtime_core import (
@@ -331,8 +332,9 @@ def _defeat(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
     if woke_at and woke_at != here and woke_at in places:
         place = _d(places[woke_at])
         changes.append(LocationChanged(location_id=woke_at, location_name=_s(place.get("name"))))
+        now = routines.clock(simulation)  # who is there as the hero wakes, the hours they were out gone by
         changes.append(PresenceChanged(location_id=woke_at, present_npc_ids=tuple(
-            _s(_d(npc).get("id")) for npc in _l(place.get("present_npcs")) if _s(_d(npc).get("id")))))
+            routines.present_at(simulation, woke_at, now + DEFEAT_HOURS * 60, since=now))))
     combat["defeat"] = {"hardcore": False, "defeated_by": foes[:1], "hp": hp, "max_hp": max_hp,
                         "coin_lost_copper": lost, "item_lost": item_lost, "woke_at": woke_at,
                         "woke_at_name": _s(_d(places.get(woke_at)).get("name")) or woke_at, "hours": DEFEAT_HOURS,

@@ -1,114 +1,59 @@
-"""Hidden gateway routes for durable campaign NPC spatial simulation."""
+"""The world's people through the day: time passing with no player action, and where everyone is (RQ-2.7).
+
+``/spatial-ticks`` lets the world go on for a few ticks: a ``world_tick`` turn through the turn route
+(``session/turn/run.py``), so people follow their day (``rules/routines.py``), the clock and the causal pressures move,
+and all of it commits with the campaign's revision. ``/spatial-state`` reads where everyone is from the campaign. The
+routines are the world's own (``canon.routines``); the older spatial runtime, with its own clock, goals and routines
+in tables outside the campaign, is gone (its tables retire by a forward migration after a release).
+"""
 from __future__ import annotations
-from fastapi import APIRouter
 
-from typing import Any, Literal, Mapping
+from typing import Any
 
-from fastapi import HTTPException, Query, Request
-from pydantic import ValidationError
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.apps.rpg.world.npc_spatial_campaign_authoring import (
-    configure_campaign_spatial_policy,
-    read_campaign_spatial_state,
-    save_campaign_spatial_goal,
-    save_campaign_spatial_routine,
-)
-from app.apps.rpg.world.npc_spatial_campaign_contracts import (
-    CampaignNpcSpatialGoal,
-    CampaignNpcSpatialPolicy,
-    CampaignNpcSpatialRoutine,
-    CampaignSpatialTickRequest,
-    NpcSpatialRoutineStep,
-)
-from app.apps.rpg.world.npc_spatial_campaign_runtime import advance_campaign_spatial_tick
-
-from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
-from app.apps.rpg.edge.api.route_contracts import (
-    RpgSpatialClockResponse,
-    RpgSpatialGoalResponse,
-    RpgSpatialRoutineResponse,
-    RpgSpatialStateResponse,
-    RpgSpatialTickResponse,
-)
+from app.apps.rpg.edge.api.route_contracts import RpgSpatialStateResponse
 from app.apps.rpg.edge.api.web_contracts import documented
-
-class _TypedRequestModel(_TypedRequestBaseModel):
-    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
-
-class RpgSaveCampaignSpatialGoalRequestBody(_TypedRequestModel):
-    goal_id: str = _typed_field(min_length=1)
-    goal_revision: int = _typed_field(default=1, ge=1)
-    actor_id: str = _typed_field(min_length=1)
-    map_instance_id: str = _typed_field(min_length=1)
-    goal_type: Literal["move_to_cell", "transition_via_portal"]
-    target_cell: tuple[int, int] | None = None
-    portal_id: str | None = None
-    target_map_instance_id: str | None = None
-    priority: int = 0
-    issued_tick: int = _typed_field(default=0, ge=0)
-    not_before_tick: int = _typed_field(default=0, ge=0)
-    expires_after_tick: int | None = _typed_field(default=None, ge=0)
-    status: Literal["active", "completed", "blocked", "canceled", "expired"] = "active"
-    routine_id: str | None = None
-    blocked_attempts: int = _typed_field(default=0, ge=0)
-    last_decision: dict[str, Any] = _typed_field(default_factory=dict)
-    metadata: dict[str, Any] = _typed_field(default_factory=dict)
-    expected_revision: int = _typed_field(default=0, ge=0)
-
-class RpgSaveCampaignSpatialRoutineRequestBody(_TypedRequestModel):
-    routine_id: str = _typed_field(min_length=1)
-    routine_revision: int = _typed_field(default=1, ge=1)
-    actor_id: str = _typed_field(min_length=1)
-    enabled: bool = True
-    interval_ticks: int = _typed_field(default=1, ge=1)
-    steps: tuple[NpcSpatialRoutineStep, ...] = _typed_field(min_length=1)
-    next_step_index: int = _typed_field(default=0, ge=0)
-    emission_count: int = _typed_field(default=0, ge=0)
-    next_due_tick: int = _typed_field(default=0, ge=0)
-    last_issued_tick: int | None = _typed_field(default=None, ge=0)
-    metadata: dict[str, Any] = _typed_field(default_factory=dict)
-    expected_revision: int = _typed_field(default=0, ge=0)
-
-class RpgConfigureCampaignSpatialPolicyRequestBody(_TypedRequestModel):
-    expected_world_tick: int = _typed_field(ge=0)
-    active_actor_budget: int = _typed_field(default=16, ge=1)
-    coarse_actor_budget: int = _typed_field(default=4, ge=1)
-    coarse_tick_interval: int = _typed_field(default=5, ge=1)
-    transition_actor_budget: int = _typed_field(default=4, ge=1)
-    max_blocked_attempts: int = _typed_field(default=3, ge=1)
-
-class RpgAdvanceCampaignSpatialTickRequestBody(_TypedRequestModel):
-    expected_world_tick: int = _typed_field(ge=0)
-    active_map_instance_ids: tuple[str, ...] = ()
-    coarse_map_instance_ids: tuple[str, ...] = ()
-
+from app.apps.rpg.narration.presentation.turn_response import RpgTurnResponse
 
 _ROUTE_SENTINEL = "_omnix_rpg_npc_spatial_routes_registered"
+MAX_TICKS = 12  # as time away: the most the world goes on in one turn (session/turn/run.py)
 
 
-def _body(value: object) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise HTTPException(
-            status_code=422,
-            detail={"ok": False, "error": "request_body_must_be_object"},
-        )
-    return value
+class RpgAdvanceCampaignSpatialTickRequestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticks: int = Field(default=1, ge=1, le=MAX_TICKS)
 
 
-def _raise_domain_error(exc: Exception) -> None:
-    if isinstance(exc, ValidationError):
-        raise HTTPException(status_code=422, detail=exc.errors()) from exc
-    if isinstance(exc, KeyError):
-        raise HTTPException(
-            status_code=404,
-            detail={"ok": False, "error": str(exc).strip("'")},
-        ) from exc
-    if isinstance(exc, ValueError):
-        raise HTTPException(
-            status_code=409,
-            detail={"ok": False, "error": str(exc)},
-        ) from exc
-    raise exc
+def _whereabouts(campaign_id: str) -> dict[str, Any]:
+    from app.apps.rpg.foundation.safe_values import safe_dict as _d
+    from app.apps.rpg.rules import routines
+    from app.apps.rpg.session.service import load_session
+
+    session = load_session(campaign_id)
+    if not session:
+        raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found"})
+    simulation = _d(session.get("simulation_state"))
+    world = _d(simulation.get("world_model"))
+    people, places = _d(world.get("npcs")), _d(world.get("locations"))
+    minute = routines.clock(simulation)
+    return {
+        "ok": True,
+        "campaign_id": campaign_id,
+        "revision": int(_d(session.get("runtime_state")).get("state_revision") or 0),
+        "absolute_minutes": minute,
+        "hero_location_id": routines.hero_location(simulation),
+        "present_npc_ids": routines.present_now(simulation)[1],
+        "people": [
+            {"npc_id": npc_id, "name": str(_d(people.get(npc_id)).get("name") or npc_id),
+             "location_id": where.location_id,
+             "location_name": str(_d(places.get(where.location_id)).get("name") or where.location_id),
+             "activity": where.activity}
+            for npc_id, where in routines.whereabouts(simulation, minute).items()
+        ],
+    }
 
 
 def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
@@ -117,103 +62,26 @@ def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
     setattr(state, _ROUTE_SENTINEL, True)
 
     @router.post(
-        "/api/rpg/campaigns/{campaign_id}/spatial-goals",
-        responses=documented(RpgSpatialGoalResponse),
-    )
-    def rpg_save_campaign_spatial_goal(
-        campaign_id: str,
-        request: Request, request_body: RpgSaveCampaignSpatialGoalRequestBody,
-    ) -> dict[str, Any]:
-        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
-        payload["campaign_id"] = campaign_id
-        expected_revision = int(payload.pop("expected_revision", 0))
-        try:
-            goal = CampaignNpcSpatialGoal.model_validate(payload)
-            return save_campaign_spatial_goal(
-                goal,
-                expected_revision=expected_revision,
-            )
-        except Exception as exc:
-            _raise_domain_error(exc)
-            raise
-
-    @router.post(
-        "/api/rpg/campaigns/{campaign_id}/spatial-routines",
-        responses=documented(RpgSpatialRoutineResponse),
-    )
-    def rpg_save_campaign_spatial_routine(
-        campaign_id: str,
-        request: Request, request_body: RpgSaveCampaignSpatialRoutineRequestBody,
-    ) -> dict[str, Any]:
-        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
-        payload["campaign_id"] = campaign_id
-        expected_revision = int(payload.pop("expected_revision", 0))
-        try:
-            routine = CampaignNpcSpatialRoutine.model_validate(payload)
-            return save_campaign_spatial_routine(
-                routine,
-                expected_revision=expected_revision,
-            )
-        except Exception as exc:
-            _raise_domain_error(exc)
-            raise
-
-    @router.post(
-        "/api/rpg/campaigns/{campaign_id}/spatial-policy",
-        responses=documented(RpgSpatialClockResponse),
-    )
-    def rpg_configure_campaign_spatial_policy(
-        campaign_id: str,
-        request: Request, request_body: RpgConfigureCampaignSpatialPolicyRequestBody,
-    ) -> dict[str, Any]:
-        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
-        expected_world_tick = int(payload.pop("expected_world_tick", -1))
-        if expected_world_tick < 0:
-            raise HTTPException(
-                status_code=422,
-                detail={"ok": False, "error": "expected_world_tick_required"},
-            )
-        try:
-            policy = CampaignNpcSpatialPolicy.model_validate(payload)
-            return configure_campaign_spatial_policy(
-                campaign_id,
-                policy,
-                expected_world_tick=expected_world_tick,
-            )
-        except Exception as exc:
-            _raise_domain_error(exc)
-            raise
-
-    @router.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-ticks",
-        responses=documented(RpgSpatialTickResponse),
+        responses={200: {"model": RpgTurnResponse, "description": "The world_tick turn's rpg_turn_response_v2 contract."}},
     )
-    def rpg_advance_campaign_spatial_tick(
+    async def rpg_advance_campaign_spatial_tick(
         campaign_id: str,
-        request: Request, request_body: RpgAdvanceCampaignSpatialTickRequestBody,
-    ) -> dict[str, Any]:
-        try:
-            tick_request = CampaignSpatialTickRequest.model_validate(
-                _body(request_body.model_dump(exclude_unset=True, by_alias=True))
-            )
-            return advance_campaign_spatial_tick(campaign_id, tick_request)
-        except Exception as exc:
-            _raise_domain_error(exc)
-            raise
+        http_request: Request, request_body: RpgAdvanceCampaignSpatialTickRequestBody,
+    ) -> Any:
+        """The world goes on for ``ticks`` ticks (10 in-game minutes each), as a world_tick turn."""
+        from app.apps.rpg.edge.api.turn_pipeline import execute_foreground_rpg_turn
+
+        return await execute_foreground_rpg_turn(
+            session_id=campaign_id,
+            command="",
+            request=http_request,
+            action={"turn_kind": "world_tick", "ticks": request_body.ticks},
+        )
 
     @router.get(
         "/api/rpg/campaigns/{campaign_id}/spatial-state",
         responses=documented(RpgSpatialStateResponse),
     )
-    def rpg_read_campaign_spatial_state(
-        campaign_id: str,
-        tick_limit: int = Query(default=50, ge=1, le=500),
-    ) -> dict[str, Any]:
-        try:
-            return read_campaign_spatial_state(
-                campaign_id,
-                tick_limit=tick_limit,
-            )
-        except Exception as exc:
-            _raise_domain_error(exc)
-            raise
+    def rpg_read_campaign_spatial_state(campaign_id: str) -> dict[str, Any]:
+        return _whereabouts(campaign_id)

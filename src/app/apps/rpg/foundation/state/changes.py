@@ -108,6 +108,21 @@ class PresenceChanged(_Change):
     present_npc_ids: tuple[str, ...] = ()
 
 
+class PersonWhereabouts(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    npc_id: str = Field(min_length=1)
+    location_id: str = Field(min_length=1)
+    activity: str = ""
+
+
+class WhereaboutsChanged(_Change):
+    """Where the world's people went as time passed, and what they are doing there (their routines, RQ-2.7)."""
+
+    type: Literal["whereabouts_changed"] = "whereabouts_changed"
+    people: tuple[PersonWhereabouts, ...] = Field(min_length=1)
+
+
 class TimeAdvanced(_Change):
     """The turn's ticks of the campaign clock, and the in-game minutes they took (the world tick moves the clock)."""
 
@@ -351,7 +366,7 @@ StateChange = Annotated[
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
-    | DefeatRecorded | CampaignEnded,
+    | DefeatRecorded | CampaignEnded | WhereaboutsChanged,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

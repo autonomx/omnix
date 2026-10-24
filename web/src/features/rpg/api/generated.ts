@@ -565,57 +565,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/rpg/campaigns/{campaign_id}/spatial-goals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rpg Save Campaign Spatial Goal */
-        post: operations["rpg_save_campaign_spatial_goal_api_rpg_campaigns__campaign_id__spatial_goals_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/rpg/campaigns/{campaign_id}/spatial-policy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rpg Configure Campaign Spatial Policy */
-        post: operations["rpg_configure_campaign_spatial_policy_api_rpg_campaigns__campaign_id__spatial_policy_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/rpg/campaigns/{campaign_id}/spatial-routines": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rpg Save Campaign Spatial Routine */
-        post: operations["rpg_save_campaign_spatial_routine_api_rpg_campaigns__campaign_id__spatial_routines_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/rpg/campaigns/{campaign_id}/spatial-state": {
         parameters: {
             query?: never;
@@ -642,7 +591,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rpg Advance Campaign Spatial Tick */
+        /**
+         * Rpg Advance Campaign Spatial Tick
+         * @description The world goes on for ``ticks`` ticks (10 in-game minutes each), as a world_tick turn.
+         */
         post: operations["rpg_advance_campaign_spatial_tick_api_rpg_campaigns__campaign_id__spatial_ticks_post"];
         delete?: never;
         options?: never;
@@ -4419,38 +4371,6 @@ export interface components {
              */
             type: "needs_changed";
         };
-        /** NpcSpatialRoutineStep */
-        NpcSpatialRoutineStep: {
-            /** Expires After Ticks */
-            expires_after_ticks?: number | null;
-            /**
-             * Goal Type
-             * @enum {string}
-             */
-            goal_type: "move_to_cell" | "transition_via_portal";
-            /** Map Instance Id */
-            map_instance_id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /** Portal Id */
-            portal_id?: string | null;
-            /**
-             * Priority
-             * @default 0
-             */
-            priority?: number;
-            /** Step Id */
-            step_id: string;
-            /** Target Cell */
-            target_cell?: [
-                number,
-                number
-            ] | null;
-            /** Target Map Instance Id */
-            target_map_instance_id?: string | null;
-        };
         /** PackModelLicence */
         PackModelLicence: core["schemas"]["PackModelLicence"];
         /** PackModelStatus */
@@ -4479,6 +4399,18 @@ export interface components {
         PasswordLoginRequest: core["schemas"]["PasswordLoginRequest"];
         /** PersistenceInventory */
         PersistenceInventory: core["schemas"]["PersistenceInventory"];
+        /** PersonWhereabouts */
+        PersonWhereabouts: {
+            /**
+             * Activity
+             * @default
+             */
+            activity: string;
+            /** Location Id */
+            location_id: string;
+            /** Npc Id */
+            npc_id: string;
+        };
         /**
          * PresenceChanged
          * @description Who is present where the hero is.
@@ -4737,19 +4669,10 @@ export interface components {
         /** RpgAdvanceCampaignSpatialTickRequestBody */
         RpgAdvanceCampaignSpatialTickRequestBody: {
             /**
-             * Active Map Instance Ids
-             * @default []
+             * Ticks
+             * @default 1
              */
-            active_map_instance_ids?: string[];
-            /**
-             * Coarse Map Instance Ids
-             * @default []
-             */
-            coarse_map_instance_ids?: string[];
-            /** Expected World Tick */
-            expected_world_tick: number;
-        } & {
-            [key: string]: unknown;
+            ticks?: number;
         };
         /** RpgApplyTurnRequestBody */
         RpgApplyTurnRequestBody: {
@@ -5281,38 +5204,6 @@ export interface components {
          */
         RpgCompatibilityResponse: {
             [key: string]: components["schemas"]["JsonValue"];
-        };
-        /** RpgConfigureCampaignSpatialPolicyRequestBody */
-        RpgConfigureCampaignSpatialPolicyRequestBody: {
-            /**
-             * Active Actor Budget
-             * @default 16
-             */
-            active_actor_budget?: number;
-            /**
-             * Coarse Actor Budget
-             * @default 4
-             */
-            coarse_actor_budget?: number;
-            /**
-             * Coarse Tick Interval
-             * @default 5
-             */
-            coarse_tick_interval?: number;
-            /** Expected World Tick */
-            expected_world_tick: number;
-            /**
-             * Max Blocked Attempts
-             * @default 3
-             */
-            max_blocked_attempts?: number;
-            /**
-             * Transition Actor Budget
-             * @default 4
-             */
-            transition_actor_budget?: number;
-        } & {
-            [key: string]: unknown;
         };
         /** RpgCreateScenarioRequestBody */
         RpgCreateScenarioRequestBody: {
@@ -6452,6 +6343,19 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** RpgPersonWhereabouts */
+        RpgPersonWhereabouts: {
+            /** Activity */
+            activity: string;
+            /** Location Id */
+            location_id: string;
+            /** Location Name */
+            location_name: string;
+            /** Name */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+        };
         /** RpgPlayerOptions */
         RpgPlayerOptions: {
             /**
@@ -6815,131 +6719,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** RpgSaveCampaignSpatialGoalRequestBody */
-        RpgSaveCampaignSpatialGoalRequestBody: {
-            /** Actor Id */
-            actor_id: string;
-            /**
-             * Blocked Attempts
-             * @default 0
-             */
-            blocked_attempts?: number;
-            /**
-             * Expected Revision
-             * @default 0
-             */
-            expected_revision?: number;
-            /** Expires After Tick */
-            expires_after_tick?: number | null;
-            /** Goal Id */
-            goal_id: string;
-            /**
-             * Goal Revision
-             * @default 1
-             */
-            goal_revision?: number;
-            /**
-             * Goal Type
-             * @enum {string}
-             */
-            goal_type: "move_to_cell" | "transition_via_portal";
-            /**
-             * Issued Tick
-             * @default 0
-             */
-            issued_tick?: number;
-            /** Last Decision */
-            last_decision?: {
-                [key: string]: unknown;
-            };
-            /** Map Instance Id */
-            map_instance_id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Not Before Tick
-             * @default 0
-             */
-            not_before_tick?: number;
-            /** Portal Id */
-            portal_id?: string | null;
-            /**
-             * Priority
-             * @default 0
-             */
-            priority?: number;
-            /** Routine Id */
-            routine_id?: string | null;
-            /**
-             * Status
-             * @default active
-             * @enum {string}
-             */
-            status?: "active" | "completed" | "blocked" | "canceled" | "expired";
-            /** Target Cell */
-            target_cell?: [
-                number,
-                number
-            ] | null;
-            /** Target Map Instance Id */
-            target_map_instance_id?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /** RpgSaveCampaignSpatialRoutineRequestBody */
-        RpgSaveCampaignSpatialRoutineRequestBody: {
-            /** Actor Id */
-            actor_id: string;
-            /**
-             * Emission Count
-             * @default 0
-             */
-            emission_count?: number;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled?: boolean;
-            /**
-             * Expected Revision
-             * @default 0
-             */
-            expected_revision?: number;
-            /**
-             * Interval Ticks
-             * @default 1
-             */
-            interval_ticks?: number;
-            /** Last Issued Tick */
-            last_issued_tick?: number | null;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Next Due Tick
-             * @default 0
-             */
-            next_due_tick?: number;
-            /**
-             * Next Step Index
-             * @default 0
-             */
-            next_step_index?: number;
-            /** Routine Id */
-            routine_id: string;
-            /**
-             * Routine Revision
-             * @default 1
-             */
-            routine_revision?: number;
-            /** Steps */
-            steps: components["schemas"]["NpcSpatialRoutineStep"][];
-        } & {
-            [key: string]: unknown;
-        };
         /** RpgScenarioLifecycleResponse */
         RpgScenarioLifecycleResponse: {
             /** Idempotent */
@@ -7089,188 +6868,25 @@ export interface components {
             /** World Id */
             world_id: string;
         };
-        /** RpgSpatialClock */
-        RpgSpatialClock: {
-            /** Aggregate Metrics */
-            aggregate_metrics: {
-                [key: string]: unknown;
-            };
-            /** Campaign Id */
-            campaign_id: string;
-            /** Created At */
-            created_at: string;
-            /** Policy */
-            policy: {
-                [key: string]: unknown;
-            };
-            /** Updated At */
-            updated_at: string;
-            /** World Tick */
-            world_tick: number;
-        };
-        /** RpgSpatialClockResponse */
-        RpgSpatialClockResponse: {
-            clock: components["schemas"]["RpgSpatialClock"];
-            /** Ok */
-            ok: boolean;
-        };
-        /** RpgSpatialGoal */
-        RpgSpatialGoal: {
-            /** Actor Id */
-            actor_id: string;
-            /** Blocked Attempts */
-            blocked_attempts: number;
-            /** Campaign Id */
-            campaign_id: string;
-            /** Created At */
-            created_at: string;
-            /** Expires After Tick */
-            expires_after_tick: number | null;
-            /** Goal Id */
-            goal_id: string;
-            /** Goal Revision */
-            goal_revision: number;
-            /** Goal Type */
-            goal_type: string;
-            /** Issued Tick */
-            issued_tick: number;
-            /** Last Decision */
-            last_decision: {
-                [key: string]: unknown;
-            };
-            /** Map Instance Id */
-            map_instance_id: string;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Not Before Tick */
-            not_before_tick: number;
-            /** Portal Id */
-            portal_id: string | null;
-            /** Priority */
-            priority: number;
-            /** Routine Id */
-            routine_id: string | null;
-            /** Status */
-            status: string;
-            /** Target Cell */
-            target_cell: number[] | null;
-            /** Target Map Instance Id */
-            target_map_instance_id: string | null;
-            /** Updated At */
-            updated_at: string;
-        };
-        /** RpgSpatialGoalResponse */
-        RpgSpatialGoalResponse: {
-            goal: components["schemas"]["RpgSpatialGoal"];
-            /** Ok */
-            ok: boolean;
-        };
-        /** RpgSpatialRoutine */
-        RpgSpatialRoutine: {
-            /** Actor Id */
-            actor_id: string;
-            /** Campaign Id */
-            campaign_id: string;
-            /** Created At */
-            created_at: string;
-            /** Emission Count */
-            emission_count: number;
-            /** Enabled */
-            enabled: boolean;
-            /** Interval Ticks */
-            interval_ticks: number;
-            /** Last Issued Tick */
-            last_issued_tick: number | null;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Next Due Tick */
-            next_due_tick: number;
-            /** Next Step Index */
-            next_step_index: number;
-            /** Routine Id */
-            routine_id: string;
-            /** Routine Revision */
-            routine_revision: number;
-            /** Steps */
-            steps: {
-                [key: string]: unknown;
-            }[];
-            /** Updated At */
-            updated_at: string;
-        };
-        /** RpgSpatialRoutineResponse */
-        RpgSpatialRoutineResponse: {
-            /** Ok */
-            ok: boolean;
-            routine: components["schemas"]["RpgSpatialRoutine"];
-        };
-        /** RpgSpatialRoutineState */
-        RpgSpatialRoutineState: {
-            /** Actor Id */
-            actor_id: string;
-            /** Created At */
-            created_at: string;
-            /** Emission Count */
-            emission_count: number;
-            /** Enabled */
-            enabled: boolean;
-            /** Interval Ticks */
-            interval_ticks: number;
-            /** Last Issued Tick */
-            last_issued_tick: number | null;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Next Due Tick */
-            next_due_tick: number;
-            /** Next Step Index */
-            next_step_index: number;
-            /** Routine Id */
-            routine_id: string;
-            /** Routine Revision */
-            routine_revision: number;
-            /** Steps */
-            steps: {
-                [key: string]: unknown;
-            }[];
-            /** Updated At */
-            updated_at: string;
-        };
-        /** RpgSpatialStateResponse */
-        RpgSpatialStateResponse: {
-            clock: components["schemas"]["RpgSpatialClock"];
-            /** Goals */
-            goals: components["schemas"]["RpgSpatialGoal"][];
-            /** Ok */
-            ok: boolean;
-            /** Recent Ticks */
-            recent_ticks: {
-                [key: string]: unknown;
-            }[];
-            /** Routines */
-            routines: components["schemas"]["RpgSpatialRoutineState"][];
-        };
         /**
-         * RpgSpatialTickResponse
-         * @description One simulation tick: the advanced clock, the tick's result and its metrics.
+         * RpgSpatialStateResponse
+         * @description Where each of the world's people is, and what they are doing, at the campaign clock's time (RQ-2.7).
          */
-        RpgSpatialTickResponse: {
-            clock: components["schemas"]["RpgSpatialClock"];
-            /** Metrics */
-            metrics: {
-                [key: string]: unknown;
-            };
+        RpgSpatialStateResponse: {
+            /** Absolute Minutes */
+            absolute_minutes: number;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Hero Location Id */
+            hero_location_id: string;
             /** Ok */
             ok: boolean;
-            /** Result */
-            result: {
-                [key: string]: unknown;
-            };
+            /** People */
+            people: components["schemas"]["RpgPersonWhereabouts"][];
+            /** Present Npc Ids */
+            present_npc_ids: string[];
+            /** Revision */
+            revision: number;
         };
         /** RpgStarterBubblePromotionResponse */
         RpgStarterBubblePromotionResponse: {
@@ -9404,7 +9020,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;
@@ -9470,6 +9086,19 @@ export interface components {
         ValidationError: core["schemas"]["ValidationError"];
         /** VersionDiagnostics */
         VersionDiagnostics: core["schemas"]["VersionDiagnostics"];
+        /**
+         * WhereaboutsChanged
+         * @description Where the world's people went as time passed, and what they are doing there (their routines, RQ-2.7).
+         */
+        WhereaboutsChanged: {
+            /** People */
+            people: components["schemas"]["PersonWhereabouts"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "whereabouts_changed";
+        };
         /** WorkerHealth */
         WorkerHealth: core["schemas"]["WorkerHealth"];
         /** WorkerHealthPayload */
@@ -10551,116 +10180,9 @@ export interface operations {
             };
         };
     };
-    rpg_save_campaign_spatial_goal_api_rpg_campaigns__campaign_id__spatial_goals_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                campaign_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RpgSaveCampaignSpatialGoalRequestBody"];
-            };
-        };
-        responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RpgSpatialGoalResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rpg_configure_campaign_spatial_policy_api_rpg_campaigns__campaign_id__spatial_policy_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                campaign_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RpgConfigureCampaignSpatialPolicyRequestBody"];
-            };
-        };
-        responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RpgSpatialClockResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rpg_save_campaign_spatial_routine_api_rpg_campaigns__campaign_id__spatial_routines_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                campaign_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RpgSaveCampaignSpatialRoutineRequestBody"];
-            };
-        };
-        responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RpgSpatialRoutineResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     rpg_read_campaign_spatial_state_api_rpg_campaigns__campaign_id__spatial_state_get: {
         parameters: {
-            query?: {
-                tick_limit?: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 campaign_id: string;
@@ -10704,13 +10226,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The fields the RPG web client reads; the response is not filtered. */
+            /** @description The world_tick turn's rpg_turn_response_v2 contract. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RpgSpatialTickResponse"];
+                    "application/json": components["schemas"]["RpgTurnResponse"];
                 };
             };
             /** @description Validation Error */

@@ -7,10 +7,12 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
+from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import LocationChanged, StateChange, TimeAdvanced, TurnCounted
+from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.session.turn.planning import PlannedAction
+from app.apps.rpg.session.turn.world_tick import clock_minute
 
 MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 
@@ -39,9 +41,7 @@ def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[s
     location_id = _s(_d(simulation.get("player_state")).get("location_id") or simulation.get("location_id"))
     location = _d(_d(world.get("locations")).get(location_id))
     name = _s(location.get("name")) or _s(_d(document.get("state")).get("current_location_name")) or "this place"
-    people = {**_d(simulation.get("npc_index")), **_d(world.get("npcs"))}
-    present = [_s(_d(people.get(npc_id)).get("name")) for npc_id in _l(_d(simulation.get("present_npc_state")).get("present_npc_ids"))]
-    present = [person for person in present if person]
+    present = routines.described(simulation, routines.present_now(simulation)[1], clock_minute(document))
     if planned.mechanic == "wait":
         return [f"You wait a while in {name}; time passes.", *([f"Around you: {', '.join(present)}."] if present else [])]
     lines = [f"You look around {name}."]

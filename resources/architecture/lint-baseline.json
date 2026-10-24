@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "e4940761d1c6b2a2353049c9790c97ad0cdc7f9801a257669eba44893190a9bf",
+  "policy_digest": "69c649c3076a6d295f3b00e783c340ef0ec04b4c56d28e93888cb16c3be3ed7a",
   "rules": [
     "AL001",
     "AL002",
@@ -799,17 +799,16 @@
       "count": 1,
       "fingerprint": "player_state",
       "lines": [
-        41
+        274
       ],
       "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
       "rule": "AL019"
     },
     {
-      "count": 2,
+      "count": 1,
       "fingerprint": "simulation_state",
       "lines": [
-        42,
-        274
+        275
       ],
       "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
       "rule": "AL019"
@@ -1426,8 +1425,8 @@
       "fingerprint": "simulation",
       "lines": [
         194,
-        255,
-        256
+        272,
+        273
       ],
       "path": "src/app/apps/rpg/session/campaign_state.py",
       "rule": "AL019"
@@ -2044,7 +2043,7 @@
       "count": 1,
       "fingerprint": "session",
       "lines": [
-        83
+        84
       ],
       "path": "src/app/apps/rpg/session/loadout.py",
       "rule": "AL019"
@@ -2053,17 +2052,17 @@
       "count": 11,
       "fingerprint": "state",
       "lines": [
-        89,
-        146,
-        150,
+        90,
+        147,
         151,
         152,
-        158,
-        231,
+        153,
+        159,
         232,
-        292,
+        233,
         293,
-        294
+        294,
+        295
       ],
       "path": "src/app/apps/rpg/session/loadout.py",
       "rule": "AL019"
@@ -2241,7 +2240,7 @@
         40,
         254,
         255,
-        283
+        284
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL019"
@@ -2964,7 +2963,7 @@
       "count": 1,
       "fingerprint": "session",
       "lines": [
-        166
+        168
       ],
       "path": "src/app/apps/rpg/world/environment.py",
       "rule": "AL019"
@@ -2973,8 +2972,8 @@
       "count": 2,
       "fingerprint": "state",
       "lines": [
-        164,
-        165
+        166,
+        167
       ],
       "path": "src/app/apps/rpg/world/environment.py",
       "rule": "AL019"
@@ -3068,7 +3067,7 @@
       "count": 1,
       "fingerprint": "session",
       "lines": [
-        42
+        43
       ],
       "path": "src/app/apps/rpg/world/map_persistence.py",
       "rule": "AL019"
@@ -3077,9 +3076,9 @@
       "count": 3,
       "fingerprint": "state",
       "lines": [
-        37,
         38,
-        41
+        39,
+        42
       ],
       "path": "src/app/apps/rpg/world/map_persistence.py",
       "rule": "AL019"
@@ -3504,24 +3503,6 @@
       "rule": "AL019"
     },
     {
-      "count": 10,
-      "fingerprint": "combat_state",
-      "lines": [
-        133,
-        174,
-        194,
-        206,
-        207,
-        281,
-        282,
-        506,
-        622,
-        638
-      ],
-      "path": "src/app/apps/rpg/world/tactical_spatial.py",
-      "rule": "AL019"
-    },
-    {
       "count": 1,
       "fingerprint": "player_state",
       "lines": [
@@ -3552,7 +3533,7 @@
       "count": 1,
       "fingerprint": "simulation_state",
       "lines": [
-        176
+        244
       ],
       "path": "src/app/apps/rpg/edge/api/turn_pipeline.py",
       "rule": "AL020"
@@ -4512,7 +4493,7 @@
       "count": 1,
       "fingerprint": "inventory_state",
       "lines": [
-        93
+        35
       ],
       "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
       "rule": "AL020"
@@ -4521,19 +4502,18 @@
       "count": 1,
       "fingerprint": "party_state",
       "lines": [
-        45
+        44
       ],
       "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
       "rule": "AL020"
     },
     {
-      "count": 4,
+      "count": 3,
       "fingerprint": "player_state",
       "lines": [
         35,
-        45,
-        93,
-        274
+        44,
+        273
       ],
       "path": "src/app/apps/rpg/rules/interactions/equipment_runtime.py",
       "rule": "AL020"
@@ -5116,7 +5096,7 @@
       "fingerprint": "runtime_state",
       "lines": [
         74,
-        258
+        275
       ],
       "path": "src/app/apps/rpg/session/campaign_state.py",
       "rule": "AL020"
@@ -5126,7 +5106,7 @@
       "fingerprint": "simulation_state",
       "lines": [
         152,
-        254
+        271
       ],
       "path": "src/app/apps/rpg/session/campaign_state.py",
       "rule": "AL020"
@@ -5956,7 +5936,7 @@
         34,
         79,
         247,
-        271
+        267
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL020"
@@ -6810,7 +6790,7 @@
       "count": 1,
       "fingerprint": "simulation_state",
       "lines": [
-        172
+        174
       ],
       "path": "src/app/apps/rpg/world/environment.py",
       "rule": "AL020"
@@ -7017,12 +6997,11 @@
       "rule": "AL020"
     },
     {
-      "count": 3,
+      "count": 2,
       "fingerprint": "combat_state",
       "lines": [
-        470,
-        495,
-        593
+        61,
+        61
       ],
       "path": "src/app/apps/rpg/world/tactical_spatial.py",
       "rule": "AL020"

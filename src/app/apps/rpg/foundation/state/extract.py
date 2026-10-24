@@ -184,5 +184,5 @@ CHANGE_SECTIONS: dict[str, str] = {
     "rest_taken": "player", "service_used": "economy", "companion_ordered": "party",
     "dialogue_exchanged": "npcs", "knowledge_shared": "npcs", "quest_offered": "quests",
     "combat_advanced": "combat", "companion_hp_changed": "party", "level_reached": "player",
-    "defeat_recorded": "player", "campaign_ended": "meta",
+    "defeat_recorded": "player", "campaign_ended": "meta", "whereabouts_changed": "npcs",
 }

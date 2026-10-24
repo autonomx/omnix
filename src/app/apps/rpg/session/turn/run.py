@@ -84,11 +84,12 @@ def run_planned_turn(
     turn_id = f"turn:{tick}"
     tick_changes: list[StateChange] = []
     causal: dict[str, Any] = {}
+    seen: list[str] = []
     if resolution.minutes:  # the world moves on only when time passed
-        tick_changes, causal = world_tick(document, needs=resolution.needs, minutes=resolution.minutes,
-                                          turn_key=turn_id, turn=turn_index)
+        tick_changes, causal, seen = world_tick(document, needs=resolution.needs, minutes=resolution.minutes,
+                                                turn_key=turn_id, turn=turn_index)
         document, _ = reduce(document, tick_changes)
-    lines = resolution.lines
+    lines = [*resolution.lines, *seen]  # what the hero did, then the comings and goings while it took
     applied = [*resolution.changes, *tick_changes]
     if planned.mechanic != "clarify" and not resolution.refused:  # a question back or a refusal is no journal entry
         journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
@@ -169,27 +170,34 @@ MAX_WORLD_TICKS = 12
 
 
 def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dict[str, Any]:
-    """A ``world_tick`` turn (RQ-2.7): the world moves on for the time the player was away, and the recap says how.
+    """A ``world_tick`` turn (RQ-2.7): the world moves on for the time the player was away, or for the ticks asked
+    for (``/spatial-ticks``), and the recap says how.
 
-    The hero did nothing, so no turn is counted and their needs do not rise; the campaign's clock and its causal
-    pressures advance. The recap is the game's own line, with no model call.
+    The hero did nothing, so no turn is counted and their needs do not rise; the campaign's clock, its people's days
+    and its causal pressures advance. The recap is the game's own line, with no model call.
     """
     seconds = int(request.action.get("elapsed_seconds") or request.elapsed_minutes * 60)
-    ticks = min(MAX_WORLD_TICKS, max(0, seconds // SECONDS_PER_WORLD_TICK))
+    asked = int(request.action.get("ticks") or 0)
+    ticks = min(MAX_WORLD_TICKS, max(0, asked or seconds // SECONDS_PER_WORLD_TICK))
     changes: list[StateChange] = [TimeAdvanced(ticks=ticks, minutes=ticks * MINUTES_PER_TICK)] if ticks else []
     document, _ = reduce(session, changes)
     simulation = _d(document.get("simulation_state"))
     tick = int(simulation.get("tick") or 0)
     turn_id = f"turn:{tick}:world"
     causal: dict[str, Any] = {}
+    seen: list[str] = []
     if ticks:
-        tick_changes, causal = world_tick(document, needs=None, minutes=ticks * MINUTES_PER_TICK, turn_key=turn_id,
-                                          turn=tick)
+        tick_changes, causal, seen = world_tick(document, needs=None, minutes=ticks * MINUTES_PER_TICK,
+                                                turn_key=turn_id, turn=tick)
         document, _ = reduce(document, tick_changes)
         changes.extend(tick_changes)
     place = outcome_lines(PlannedAction(mechanic="look"), document)[0].removeprefix("You look around ").rstrip(".")
-    recap = (f"You return to {place}. The world went on while you were away." if ticks
-             else f"You return to {place}; little time has passed.")
+    if asked:
+        opening = f"Time passes in {place}."
+    else:
+        opening = (f"You return to {place}. The world went on while you were away." if ticks
+                   else f"You return to {place}; little time has passed.")
+    recap = " ".join([opening, *seen])
     resolved = {"ok": True, "outcome": "success", "action_type": "world_tick", "semantic_action_type": "world_tick",
                 "semantic_family": "world", "summary": recap, "outcome_lines": [recap], "turn_id": turn_id,
                 "tick": tick, "source": SOURCE, "response_mode": "world_tick"}

@@ -65,7 +65,7 @@ def test_a_hero_with_no_place_is_placed_where_the_world_begins() -> None:
 
 
 def test_needs_rise_once_a_turn_and_stop_at_their_ceiling() -> None:
-    changes, receipt = world_tick(_campaign(), needs="wait", minutes=0, turn_key="turn:6", turn=4)
+    changes, receipt, _ = world_tick(_campaign(), needs="wait", minutes=0, turn_key="turn:6", turn=4)
     [needs] = changes
     assert (needs.hunger, needs.thirst, needs.fatigue) == (1, 1, 1) and receipt == {}  # thirst stops at 100
     assert world_tick(_campaign(survival={"enabled": False}), needs="wait", minutes=0, turn_key="t", turn=1)[0] == []
@@ -75,7 +75,7 @@ def test_needs_rise_once_a_turn_and_stop_at_their_ceiling() -> None:
 def test_the_one_clock_moves_by_the_turns_minutes_and_the_play_screen_shows_it() -> None:
     campaign = _campaign()
     campaign["state"]["world"] = {"environment": {"absolute_minutes": 9 * 60 + 50, "active_events": []}}
-    changes, _ = world_tick(campaign, needs="wait", minutes=30, turn_key="turn:6", turn=4)
+    changes, _, _ = world_tick(campaign, needs="wait", minutes=30, turn_key="turn:6", turn=4)
     document, _ = reduce(campaign, changes)
     assert document["simulation_state"]["environment"]["absolute_minutes"] == 10 * 60 + 20
     assert document["state"]["world"]["environment"]["absolute_minutes"] == 10 * 60 + 20
@@ -101,7 +101,8 @@ def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() ->
     assert document["simulation_state"]["survival"]["hunger"] == 11
     assert document["simulation_state"]["environment"]["absolute_minutes"] == 9 * 60 + 30
     assert [change["type"] for change in result["turn_pipeline"]["changes"]] == [
-        "turn_counted", "time_advanced", "needs_changed", "world_ticked", "journal_written"]
+        "turn_counted", "time_advanced", "needs_changed", "whereabouts_changed", "world_ticked", "journal_written"]
+    assert document["simulation_state"]["npc_index"]["npc:wren"]["location_id"] == "loc:gate"  # in the scene: here
     assert result["resolved_result"]["outcome_lines"] == ["You wait a while in The Gate; time passes.", "Around you: Wren."]
     assert document["runtime_state"]["player_journal"]["entries"]
 

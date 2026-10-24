@@ -28,7 +28,7 @@ after time away finds the world moved on.
 ## State it changes
 
 `TimeAdvanced` (ticks, minutes), `WorldTicked` (the environment, and the causal runtime's sections when the world has
-one).
+one), and the people's whereabouts and presence at the new time (`routines.md`).
 
 ## Scenarios
 
@@ -37,4 +37,4 @@ hours with no need raised; a clarification takes no time.
 
 ## Out of scope
 
-Per-route travel times on the clock (RQ-2.1), routines that move people by the hour (RQ-4.3).
+Per-route travel times on the clock (RQ-2.1). Routines that move people by the hour are in `routines.md`.

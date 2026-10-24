@@ -19,8 +19,10 @@ from app.apps.rpg.foundation.state.changes import (
     TimeAdvanced,
     TurnCounted,
 )
+from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.quest.arrival import arrival_changes
 from app.apps.rpg.session.turn.planning import PlannedAction
+from app.apps.rpg.session.turn.world_tick import clock_minute
 from app.apps.rpg.world.travel_graph import _edge_is_available, travel_graph_for_state
 
 MINUTES_PER_TICK = 10
@@ -45,14 +47,6 @@ def _road_minutes(world_model: Mapping[str, Any], origin: str, target: str) -> i
             if match:
                 return int(match.group(1)) * {"minute": 1, "hour": 60, "day": 1440}[match.group(2)]
     return DEFAULT_ROAD_MINUTES
-
-
-def _present_at(simulation: Mapping[str, Any], location: Mapping[str, Any]) -> list[str]:
-    """Who is at a place when the hero arrives: the people who live there, and the hero's companions."""
-    companions = [_s(_d(companion).get("npc_id"))
-                  for companion in _l(_d(_d(simulation.get("player_state")).get("party_state")).get("companions"))]
-    residents = [_s(_d(npc).get("id")) for npc in _l(location.get("present_npcs"))]
-    return [npc_id for npc_id in dict.fromkeys(residents + companions) if npc_id]
 
 
 def _routes_line(graph: Any, simulation: Mapping[str, Any], current: str) -> str:
@@ -81,7 +75,8 @@ def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> Trave
             [counted], [f"No road leads straight from here to {name}. " + _routes_line(graph, simulation, current)],
             refused=True)
     minutes = _road_minutes(world, current, target)
-    present = _present_at(simulation, _d(locations.get(target)))
+    now = clock_minute(document)  # who is there when the hero arrives, the day gone on by the road's time
+    present = routines.present_at(simulation, target, now + minutes, since=now)
     quests, quest_lines = arrival_changes(simulation, target)
     changes: list[StateChange] = [
         counted,
@@ -90,12 +85,11 @@ def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> Trave
         TimeAdvanced(ticks=max(1, math.ceil(minutes / MINUTES_PER_TICK)), minutes=minutes),
         *quests,
     ]
-    people = {**_d(simulation.get("npc_index")), **_d(world.get("npcs"))}
-    here = [_s(_d(people.get(npc_id)).get("name")) for npc_id in present]
+    here = routines.described(simulation, present, now + minutes, since=now, hero_at=target)
     # The place's own description reaches the narrator with the scene (runtime_state.current_scene).
     lines = [f"You travel to {name}; the road takes {minutes} minutes."]
-    if [person for person in here if person]:
-        lines.append(f"Here: {', '.join(person for person in here if person)}.")
+    if here:
+        lines.append(f"Here: {', '.join(here)}.")
     return TravelResolution(changes, [*lines, *quest_lines], minutes=minutes, destination=target,
                             quest_lines=quest_lines)
 

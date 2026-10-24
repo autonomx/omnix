@@ -31794,101 +31794,6 @@
         "title": "NoveltyShadowAnnotation",
         "type": "object"
       },
-      "NpcSpatialRoutineStep": {
-        "additionalProperties": false,
-        "properties": {
-          "expires_after_ticks": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires After Ticks"
-          },
-          "goal_type": {
-            "enum": [
-              "move_to_cell",
-              "transition_via_portal"
-            ],
-            "title": "Goal Type",
-            "type": "string"
-          },
-          "map_instance_id": {
-            "minLength": 1,
-            "title": "Map Instance Id",
-            "type": "string"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "portal_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Portal Id"
-          },
-          "priority": {
-            "default": 0,
-            "title": "Priority",
-            "type": "integer"
-          },
-          "step_id": {
-            "minLength": 1,
-            "title": "Step Id",
-            "type": "string"
-          },
-          "target_cell": {
-            "anyOf": [
-              {
-                "maxItems": 2,
-                "minItems": 2,
-                "prefixItems": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Cell"
-          },
-          "target_map_instance_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Map Instance Id"
-          }
-        },
-        "required": [
-          "step_id",
-          "map_instance_id",
-          "goal_type"
-        ],
-        "title": "NpcSpatialRoutineStep",
-        "type": "object"
-      },
       "OmnixRouteDecision": {
         "additionalProperties": false,
         "properties": {
@@ -38324,6 +38229,33 @@
         "title": "PersistenceInventory",
         "type": "object"
       },
+      "PersonWhereabouts": {
+        "additionalProperties": false,
+        "properties": {
+          "activity": {
+            "default": "",
+            "title": "Activity",
+            "type": "string"
+          },
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "location_id",
+          "activity"
+        ],
+        "title": "PersonWhereabouts",
+        "type": "object"
+      },
       "PlanImpactDisposition": {
         "additionalProperties": false,
         "properties": {
@@ -44754,33 +44686,16 @@
         "type": "object"
       },
       "RpgAdvanceCampaignSpatialTickRequestBody": {
-        "additionalProperties": true,
+        "additionalProperties": false,
         "properties": {
-          "active_map_instance_ids": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Active Map Instance Ids",
-            "type": "array"
-          },
-          "coarse_map_instance_ids": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Coarse Map Instance Ids",
-            "type": "array"
-          },
-          "expected_world_tick": {
-            "minimum": 0,
-            "title": "Expected World Tick",
+          "ticks": {
+            "default": 1,
+            "maximum": 12,
+            "minimum": 1,
+            "title": "Ticks",
             "type": "integer"
           }
         },
-        "required": [
-          "expected_world_tick"
-        ],
         "title": "RpgAdvanceCampaignSpatialTickRequestBody",
         "type": "object"
       },
@@ -46111,51 +46026,6 @@
         },
         "description": "Validate JSON object responses from legacy compatibility handlers.",
         "title": "RpgCompatibilityResponse",
-        "type": "object"
-      },
-      "RpgConfigureCampaignSpatialPolicyRequestBody": {
-        "additionalProperties": true,
-        "properties": {
-          "active_actor_budget": {
-            "default": 16,
-            "minimum": 1,
-            "title": "Active Actor Budget",
-            "type": "integer"
-          },
-          "coarse_actor_budget": {
-            "default": 4,
-            "minimum": 1,
-            "title": "Coarse Actor Budget",
-            "type": "integer"
-          },
-          "coarse_tick_interval": {
-            "default": 5,
-            "minimum": 1,
-            "title": "Coarse Tick Interval",
-            "type": "integer"
-          },
-          "expected_world_tick": {
-            "minimum": 0,
-            "title": "Expected World Tick",
-            "type": "integer"
-          },
-          "max_blocked_attempts": {
-            "default": 3,
-            "minimum": 1,
-            "title": "Max Blocked Attempts",
-            "type": "integer"
-          },
-          "transition_actor_budget": {
-            "default": 4,
-            "minimum": 1,
-            "title": "Transition Actor Budget",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "expected_world_tick"
-        ],
-        "title": "RpgConfigureCampaignSpatialPolicyRequestBody",
         "type": "object"
       },
       "RpgCreateScenarioRequestBody": {
@@ -48816,6 +48686,39 @@
         "title": "RpgObserverProjectionResponse",
         "type": "object"
       },
+      "RpgPersonWhereabouts": {
+        "properties": {
+          "activity": {
+            "title": "Activity",
+            "type": "string"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "location_name": {
+            "title": "Location Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "npc_id": {
+            "title": "Npc Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "name",
+          "location_id",
+          "location_name",
+          "activity"
+        ],
+        "title": "RpgPersonWhereabouts",
+        "type": "object"
+      },
       "RpgPlayerOptions": {
         "properties": {
           "background": {
@@ -49437,253 +49340,6 @@
         "title": "RpgResumeRequestBody",
         "type": "object"
       },
-      "RpgSaveCampaignSpatialGoalRequestBody": {
-        "additionalProperties": true,
-        "properties": {
-          "actor_id": {
-            "minLength": 1,
-            "title": "Actor Id",
-            "type": "string"
-          },
-          "blocked_attempts": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Blocked Attempts",
-            "type": "integer"
-          },
-          "expected_revision": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Expected Revision",
-            "type": "integer"
-          },
-          "expires_after_tick": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires After Tick"
-          },
-          "goal_id": {
-            "minLength": 1,
-            "title": "Goal Id",
-            "type": "string"
-          },
-          "goal_revision": {
-            "default": 1,
-            "minimum": 1,
-            "title": "Goal Revision",
-            "type": "integer"
-          },
-          "goal_type": {
-            "enum": [
-              "move_to_cell",
-              "transition_via_portal"
-            ],
-            "title": "Goal Type",
-            "type": "string"
-          },
-          "issued_tick": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Issued Tick",
-            "type": "integer"
-          },
-          "last_decision": {
-            "additionalProperties": true,
-            "title": "Last Decision",
-            "type": "object"
-          },
-          "map_instance_id": {
-            "minLength": 1,
-            "title": "Map Instance Id",
-            "type": "string"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "not_before_tick": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Not Before Tick",
-            "type": "integer"
-          },
-          "portal_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Portal Id"
-          },
-          "priority": {
-            "default": 0,
-            "title": "Priority",
-            "type": "integer"
-          },
-          "routine_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Routine Id"
-          },
-          "status": {
-            "default": "active",
-            "enum": [
-              "active",
-              "completed",
-              "blocked",
-              "canceled",
-              "expired"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "target_cell": {
-            "anyOf": [
-              {
-                "maxItems": 2,
-                "minItems": 2,
-                "prefixItems": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Cell"
-          },
-          "target_map_instance_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Map Instance Id"
-          }
-        },
-        "required": [
-          "goal_id",
-          "actor_id",
-          "map_instance_id",
-          "goal_type"
-        ],
-        "title": "RpgSaveCampaignSpatialGoalRequestBody",
-        "type": "object"
-      },
-      "RpgSaveCampaignSpatialRoutineRequestBody": {
-        "additionalProperties": true,
-        "properties": {
-          "actor_id": {
-            "minLength": 1,
-            "title": "Actor Id",
-            "type": "string"
-          },
-          "emission_count": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Emission Count",
-            "type": "integer"
-          },
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "expected_revision": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Expected Revision",
-            "type": "integer"
-          },
-          "interval_ticks": {
-            "default": 1,
-            "minimum": 1,
-            "title": "Interval Ticks",
-            "type": "integer"
-          },
-          "last_issued_tick": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Issued Tick"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "next_due_tick": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Next Due Tick",
-            "type": "integer"
-          },
-          "next_step_index": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Next Step Index",
-            "type": "integer"
-          },
-          "routine_id": {
-            "minLength": 1,
-            "title": "Routine Id",
-            "type": "string"
-          },
-          "routine_revision": {
-            "default": 1,
-            "minimum": 1,
-            "title": "Routine Revision",
-            "type": "integer"
-          },
-          "steps": {
-            "items": {
-              "$ref": "#/components/schemas/NpcSpatialRoutineStep"
-            },
-            "minItems": 1,
-            "title": "Steps",
-            "type": "array"
-          }
-        },
-        "required": [
-          "routine_id",
-          "actor_id",
-          "steps"
-        ],
-        "title": "RpgSaveCampaignSpatialRoutineRequestBody",
-        "type": "object"
-      },
       "RpgScenarioLifecycleResponse": {
         "properties": {
           "idempotent": {
@@ -50018,490 +49674,54 @@
         "title": "RpgSharedWorldStateResponse",
         "type": "object"
       },
-      "RpgSpatialClock": {
-        "properties": {
-          "aggregate_metrics": {
-            "additionalProperties": true,
-            "title": "Aggregate Metrics",
-            "type": "object"
-          },
-          "campaign_id": {
-            "title": "Campaign Id",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "policy": {
-            "additionalProperties": true,
-            "title": "Policy",
-            "type": "object"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          },
-          "world_tick": {
-            "title": "World Tick",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "campaign_id",
-          "world_tick",
-          "policy",
-          "aggregate_metrics",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "RpgSpatialClock",
-        "type": "object"
-      },
-      "RpgSpatialClockResponse": {
-        "properties": {
-          "clock": {
-            "$ref": "#/components/schemas/RpgSpatialClock"
-          },
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "clock"
-        ],
-        "title": "RpgSpatialClockResponse",
-        "type": "object"
-      },
-      "RpgSpatialGoal": {
-        "properties": {
-          "actor_id": {
-            "title": "Actor Id",
-            "type": "string"
-          },
-          "blocked_attempts": {
-            "title": "Blocked Attempts",
-            "type": "integer"
-          },
-          "campaign_id": {
-            "title": "Campaign Id",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "expires_after_tick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires After Tick"
-          },
-          "goal_id": {
-            "title": "Goal Id",
-            "type": "string"
-          },
-          "goal_revision": {
-            "title": "Goal Revision",
-            "type": "integer"
-          },
-          "goal_type": {
-            "title": "Goal Type",
-            "type": "string"
-          },
-          "issued_tick": {
-            "title": "Issued Tick",
-            "type": "integer"
-          },
-          "last_decision": {
-            "additionalProperties": true,
-            "title": "Last Decision",
-            "type": "object"
-          },
-          "map_instance_id": {
-            "title": "Map Instance Id",
-            "type": "string"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "not_before_tick": {
-            "title": "Not Before Tick",
-            "type": "integer"
-          },
-          "portal_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Portal Id"
-          },
-          "priority": {
-            "title": "Priority",
-            "type": "integer"
-          },
-          "routine_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Routine Id"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "target_cell": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "integer"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Cell"
-          },
-          "target_map_instance_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Map Instance Id"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "goal_id",
-          "goal_revision",
-          "campaign_id",
-          "actor_id",
-          "map_instance_id",
-          "goal_type",
-          "target_cell",
-          "portal_id",
-          "target_map_instance_id",
-          "priority",
-          "issued_tick",
-          "not_before_tick",
-          "expires_after_tick",
-          "status",
-          "routine_id",
-          "blocked_attempts",
-          "last_decision",
-          "metadata",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "RpgSpatialGoal",
-        "type": "object"
-      },
-      "RpgSpatialGoalResponse": {
-        "properties": {
-          "goal": {
-            "$ref": "#/components/schemas/RpgSpatialGoal"
-          },
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "goal"
-        ],
-        "title": "RpgSpatialGoalResponse",
-        "type": "object"
-      },
-      "RpgSpatialRoutine": {
-        "properties": {
-          "actor_id": {
-            "title": "Actor Id",
-            "type": "string"
-          },
-          "campaign_id": {
-            "title": "Campaign Id",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "emission_count": {
-            "title": "Emission Count",
-            "type": "integer"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "interval_ticks": {
-            "title": "Interval Ticks",
-            "type": "integer"
-          },
-          "last_issued_tick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Issued Tick"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "next_due_tick": {
-            "title": "Next Due Tick",
-            "type": "integer"
-          },
-          "next_step_index": {
-            "title": "Next Step Index",
-            "type": "integer"
-          },
-          "routine_id": {
-            "title": "Routine Id",
-            "type": "string"
-          },
-          "routine_revision": {
-            "title": "Routine Revision",
-            "type": "integer"
-          },
-          "steps": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Steps",
-            "type": "array"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "routine_id",
-          "routine_revision",
-          "actor_id",
-          "enabled",
-          "interval_ticks",
-          "steps",
-          "next_step_index",
-          "emission_count",
-          "next_due_tick",
-          "last_issued_tick",
-          "metadata",
-          "created_at",
-          "updated_at",
-          "campaign_id"
-        ],
-        "title": "RpgSpatialRoutine",
-        "type": "object"
-      },
-      "RpgSpatialRoutineResponse": {
-        "properties": {
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "routine": {
-            "$ref": "#/components/schemas/RpgSpatialRoutine"
-          }
-        },
-        "required": [
-          "ok",
-          "routine"
-        ],
-        "title": "RpgSpatialRoutineResponse",
-        "type": "object"
-      },
-      "RpgSpatialRoutineState": {
-        "properties": {
-          "actor_id": {
-            "title": "Actor Id",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "emission_count": {
-            "title": "Emission Count",
-            "type": "integer"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "interval_ticks": {
-            "title": "Interval Ticks",
-            "type": "integer"
-          },
-          "last_issued_tick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Issued Tick"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "next_due_tick": {
-            "title": "Next Due Tick",
-            "type": "integer"
-          },
-          "next_step_index": {
-            "title": "Next Step Index",
-            "type": "integer"
-          },
-          "routine_id": {
-            "title": "Routine Id",
-            "type": "string"
-          },
-          "routine_revision": {
-            "title": "Routine Revision",
-            "type": "integer"
-          },
-          "steps": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Steps",
-            "type": "array"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "routine_id",
-          "routine_revision",
-          "actor_id",
-          "enabled",
-          "interval_ticks",
-          "steps",
-          "next_step_index",
-          "emission_count",
-          "next_due_tick",
-          "last_issued_tick",
-          "metadata",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "RpgSpatialRoutineState",
-        "type": "object"
-      },
       "RpgSpatialStateResponse": {
+        "description": "Where each of the world's people is, and what they are doing, at the campaign clock's time (RQ-2.7).",
         "properties": {
-          "clock": {
-            "$ref": "#/components/schemas/RpgSpatialClock"
+          "absolute_minutes": {
+            "title": "Absolute Minutes",
+            "type": "integer"
           },
-          "goals": {
-            "items": {
-              "$ref": "#/components/schemas/RpgSpatialGoal"
-            },
-            "title": "Goals",
-            "type": "array"
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "hero_location_id": {
+            "title": "Hero Location Id",
+            "type": "string"
           },
           "ok": {
             "title": "Ok",
             "type": "boolean"
           },
-          "recent_ticks": {
+          "people": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RpgPersonWhereabouts"
             },
-            "title": "Recent Ticks",
+            "title": "People",
             "type": "array"
           },
-          "routines": {
+          "present_npc_ids": {
             "items": {
-              "$ref": "#/components/schemas/RpgSpatialRoutineState"
+              "type": "string"
             },
-            "title": "Routines",
+            "title": "Present Npc Ids",
             "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
           }
         },
         "required": [
           "ok",
-          "clock",
-          "goals",
-          "routines",
-          "recent_ticks"
+          "campaign_id",
+          "revision",
+          "absolute_minutes",
+          "hero_location_id",
+          "present_npc_ids",
+          "people"
         ],
         "title": "RpgSpatialStateResponse",
-        "type": "object"
-      },
-      "RpgSpatialTickResponse": {
-        "description": "One simulation tick: the advanced clock, the tick's result and its metrics.",
-        "properties": {
-          "clock": {
-            "$ref": "#/components/schemas/RpgSpatialClock"
-          },
-          "metrics": {
-            "additionalProperties": true,
-            "title": "Metrics",
-            "type": "object"
-          },
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "result": {
-            "additionalProperties": true,
-            "title": "Result",
-            "type": "object"
-          }
-        },
-        "required": [
-          "ok",
-          "clock",
-          "result",
-          "metrics"
-        ],
-        "title": "RpgSpatialTickResponse",
         "type": "object"
       },
       "RpgStarterBubblePromotionResponse": {
@@ -67393,6 +66613,7 @@
                   "time_advanced": "#/components/schemas/TimeAdvanced",
                   "trade_remembered": "#/components/schemas/TradeRemembered",
                   "turn_counted": "#/components/schemas/TurnCounted",
+                  "whereabouts_changed": "#/components/schemas/WhereaboutsChanged",
                   "world_ticked": "#/components/schemas/WorldTicked"
                 },
                 "propertyName": "type"
@@ -67514,6 +66735,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/CampaignEnded"
+                },
+                {
+                  "$ref": "#/components/schemas/WhereaboutsChanged"
                 }
               ]
             },
@@ -70791,6 +70015,32 @@
           "enabled"
         ],
         "title": "WatermarkSetting",
+        "type": "object"
+      },
+      "WhereaboutsChanged": {
+        "additionalProperties": false,
+        "description": "Where the world's people went as time passed, and what they are doing there (their routines, RQ-2.7).",
+        "properties": {
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PersonWhereabouts"
+            },
+            "minItems": 1,
+            "title": "People",
+            "type": "array"
+          },
+          "type": {
+            "const": "whereabouts_changed",
+            "default": "whereabouts_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "people",
+          "type"
+        ],
+        "title": "WhereaboutsChanged",
         "type": "object"
       },
       "WorkerHealth": {
@@ -87342,162 +86592,6 @@
         "summary": "Rpg Schedule Campaign Materialization"
       }
     },
-    "/api/rpg/campaigns/{campaign_id}/spatial-goals": {
-      "post": {
-        "operationId": "rpg_save_campaign_spatial_goal_api_rpg_campaigns__campaign_id__spatial_goals_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "campaign_id",
-            "required": true,
-            "schema": {
-              "title": "Campaign Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RpgSaveCampaignSpatialGoalRequestBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RpgSpatialGoalResponse",
-                  "additionalProperties": true,
-                  "title": "Response Rpg Save Campaign Spatial Goal Api Rpg Campaigns  Campaign Id  Spatial Goals Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The fields the RPG web client reads; the response is not filtered."
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rpg Save Campaign Spatial Goal"
-      }
-    },
-    "/api/rpg/campaigns/{campaign_id}/spatial-policy": {
-      "post": {
-        "operationId": "rpg_configure_campaign_spatial_policy_api_rpg_campaigns__campaign_id__spatial_policy_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "campaign_id",
-            "required": true,
-            "schema": {
-              "title": "Campaign Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RpgConfigureCampaignSpatialPolicyRequestBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RpgSpatialClockResponse",
-                  "additionalProperties": true,
-                  "title": "Response Rpg Configure Campaign Spatial Policy Api Rpg Campaigns  Campaign Id  Spatial Policy Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The fields the RPG web client reads; the response is not filtered."
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rpg Configure Campaign Spatial Policy"
-      }
-    },
-    "/api/rpg/campaigns/{campaign_id}/spatial-routines": {
-      "post": {
-        "operationId": "rpg_save_campaign_spatial_routine_api_rpg_campaigns__campaign_id__spatial_routines_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "campaign_id",
-            "required": true,
-            "schema": {
-              "title": "Campaign Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RpgSaveCampaignSpatialRoutineRequestBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RpgSpatialRoutineResponse",
-                  "additionalProperties": true,
-                  "title": "Response Rpg Save Campaign Spatial Routine Api Rpg Campaigns  Campaign Id  Spatial Routines Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "The fields the RPG web client reads; the response is not filtered."
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rpg Save Campaign Spatial Routine"
-      }
-    },
     "/api/rpg/campaigns/{campaign_id}/spatial-state": {
       "get": {
         "operationId": "rpg_read_campaign_spatial_state_api_rpg_campaigns__campaign_id__spatial_state_get",
@@ -87509,18 +86603,6 @@
             "schema": {
               "title": "Campaign Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tick_limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 500,
-              "minimum": 1,
-              "title": "Tick Limit",
-              "type": "integer"
             }
           }
         ],
@@ -87554,6 +86636,7 @@
     },
     "/api/rpg/campaigns/{campaign_id}/spatial-ticks": {
       "post": {
+        "description": "The world goes on for ``ticks`` ticks (10 in-game minutes each), as a world_tick turn.",
         "operationId": "rpg_advance_campaign_spatial_tick_api_rpg_campaigns__campaign_id__spatial_ticks_post",
         "parameters": [
           {
@@ -87581,14 +86664,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RpgSpatialTickResponse",
-                  "additionalProperties": true,
-                  "title": "Response Rpg Advance Campaign Spatial Tick Api Rpg Campaigns  Campaign Id  Spatial Ticks Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgTurnResponse",
+                  "title": "Response Rpg Advance Campaign Spatial Tick Api Rpg Campaigns  Campaign Id  Spatial Ticks Post"
                 }
               }
             },
-            "description": "The fields the RPG web client reads; the response is not filtered."
+            "description": "The world_tick turn's rpg_turn_response_v2 contract."
           },
           "422": {
             "content": {

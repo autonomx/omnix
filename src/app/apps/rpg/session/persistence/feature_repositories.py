@@ -12,7 +12,6 @@ from app.apps.rpg.foundation.persistence.rpg_map_instance_repository import Post
 from app.apps.rpg.narration.persistence.rpg_narrative_delivery_repository import PostgresRpgNarrativeDeliveryRepository
 from app.apps.rpg.narration.persistence.rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
 from app.apps.rpg.narration.persistence.rpg_narrative_retirement_repository import PostgresRpgNarrativeRetirementRepository
-from app.apps.rpg.world.persistence.rpg_npc_spatial_repository import PostgresRpgNpcSpatialRepository
 from app.apps.rpg.world.persistence.rpg_observer_repository import PostgresRpgObserverRepository
 from app.apps.rpg.foundation.persistence.rpg_repository import PostgresRpgRepository
 from app.apps.rpg.genesis.persistence.rpg_trusted_world_scenario_repository import PostgresTrustedRpgWorldScenarioRepository
@@ -37,7 +36,6 @@ RPG_REPOSITORY_SPECS = (
     RepositorySpec(PostgresRpgWorldGenerationRepository, PostgresRpgWorldGenerationRepository, "world_generation"),
     RepositorySpec(PostgresRpgWorldLibraryRepository, PostgresRpgWorldLibraryRepository, "world_library"),
     RepositorySpec(PostgresRpgMapInstanceRepository, PostgresRpgMapInstanceRepository, "map_instances"),
-    RepositorySpec(PostgresRpgNpcSpatialRepository, PostgresRpgNpcSpatialRepository, "npc_spatial"),
     RepositorySpec(PostgresRpgObserverRepository, PostgresRpgObserverRepository, "observers"),
     RepositorySpec(PostgresRpgHermesResearchRepository, PostgresRpgHermesResearchRepository, "hermes_research"),
     RepositorySpec(PostgresRpgNarrativeResponseRepository, PostgresRpgNarrativeResponseRepository, "narrative_responses"),

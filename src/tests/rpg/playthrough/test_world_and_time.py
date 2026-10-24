@@ -123,3 +123,57 @@ def test_the_world_map_is_the_worlds_own_and_its_journeys_are_turns(launch) -> N
     destination = acted.json()["action_result"]["current_location_id"]
     assert play.location() == destination != "location:aurelia:arrival-grove"
     assert play.turn_count() == turns + 1
+
+
+def test_the_worlds_people_keep_their_day(launch) -> None:
+    """RQ-2.7: routines run on the one clock. Away from the hero, people are where their day puts them; someone in
+    the scene with the hero stays until their day turns, and the hero sees who comes and goes."""
+    play = launch("starter")  # the Rusty Flagon at 08:00: Bran and Mira in the common room
+    assert play.present() == ["npc:bran", "npc:mira"]
+
+    def said(turn: dict) -> str:
+        return turn["visible_response"]["plain_text"]
+
+    arrival = play.turn("go to the market")  # 08:05: Mira's day has her at the market now, Aldric out on the road
+    assert play.present() == ["npc:mira", "npc:elara", "npc:tomas"]
+    assert "Mira (listening to the stallholders)" in said(arrival) and "Aldric" not in said(arrival)
+    for _ in range(11):  # to 13:35
+        play.turn("wait a while")
+    assert "npc:aldric" not in play.present()
+    waited = play.turn("wait a while")  # 14:05: his patrol over, he keeps order in the square
+    assert "Captain Aldric arrives, keeping order in the square." in said(waited)
+    assert play.present()[-1] == "npc:aldric"
+    aldric = play.simulation()["npc_index"]["npc:aldric"]
+    assert (aldric["location_id"], aldric["activity"]) == ("location:market-road:market-square",
+                                                            "keeping order in the square")
+    for _ in range(3):  # to 15:35: Mira stays while the hero is with her
+        play.turn("wait a while")
+    assert "npc:mira" in play.present()
+    waited = play.turn("wait a while")  # 16:05: her day turns to the evening in the tavern
+    assert "Mira leaves for Rusty Flagon Tavern." in said(waited) and "npc:mira" not in play.present()
+    back = play.turn("go to the tavern")
+    assert play.present() == ["npc:bran", "npc:mira"]
+    assert "Mira (watching the common room)" in said(back)
+    assert play.stored()["runtime_state"]["current_scene"]["actors"] == ["Bran", "Mira"]
+
+
+def test_time_passing_on_its_own_is_a_world_tick_turn(launch) -> None:
+    """RQ-2.7: ``/spatial-ticks`` lets the world go on with no player action, as a world_tick turn committed like the
+    rest; ``/spatial-state`` reads where everyone is from the campaign."""
+    from app.apps.rpg.narration.presentation.turn_outcome import TurnOutcome
+
+    play = launch("starter")
+    revision, turns, rows, calls = play.revision(), play.turn_count(), len(play.turn_rows()), len(play.model.calls)
+    ticked = play.client.post(f"/api/rpg/campaigns/{play.session_id}/spatial-ticks", json={"ticks": 3},
+                              headers={"x-omnix-rpg-submission-id": "ticks-1"})
+    assert ticked.status_code == 200, ticked.text[:300]
+    assert TurnOutcome.model_validate(ticked.json()["outcome"]).kind == "world_tick" and play.model.roles(calls) == []
+    assert ticked.json()["visible_response"]["plain_text"].startswith("Time passes in Rusty Flagon Tavern.")
+    assert play.revision() == revision + 1 and play.turn_count() == turns and len(play.turn_rows()) == rows + 1
+    state = play.client.get(f"/api/rpg/campaigns/{play.session_id}/spatial-state")
+    assert state.status_code == 200, state.text[:300]
+    body = state.json()
+    assert body["absolute_minutes"] == 8 * 60 + 30 and body["present_npc_ids"] == ["npc:bran", "npc:mira"]
+    aldric = next(person for person in body["people"] if person["npc_id"] == "npc:aldric")
+    assert (aldric["location_name"], aldric["activity"]) == ("Northern Road", "patrolling the road")
+    assert play.client.post(f"/api/rpg/campaigns/{play.session_id}/spatial-ticks", json={"ticks": 13}).status_code == 422
