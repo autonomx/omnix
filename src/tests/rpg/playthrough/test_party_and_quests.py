@@ -30,9 +30,7 @@ def test_companion_joins_and_follows(launch, world) -> None:
     assert play.party() == [npc_id]
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-2.5: a companion takes no command ('Liora, keep watch') and cannot be asked to leave: the command is "
-    "an intent-model question and 'leave the party' is read as travel")))
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_companion_takes_a_command_and_leaves(launch, world) -> None:
     play = launch(world)
     play.turn("I ask Liora Fen to join my party as a companion.")

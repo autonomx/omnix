@@ -14,6 +14,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d
 from app.apps.rpg.foundation.state.changes import StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.interactions.items import drop_item, pick_up, use_item
+from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
 from app.apps.rpg.rules.rest import rest
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
@@ -65,6 +66,24 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         outcome = rule(simulation, planned.target_id, text)
         return Resolution(_timed(session, outcome.changes, outcome.minutes), outcome.lines, minutes=outcome.minutes,
                           refused=outcome.refused, told=not outcome.refused)
+    if mechanic in {"quest", "practice", "status", "party", "order"}:
+        if mechanic == "quest":
+            asked = accept_quest(simulation, planned.target_id)
+        elif mechanic == "practice":
+            asked = practise(simulation, planned.target_id)
+        elif mechanic == "status":
+            asked = status(simulation, text)
+        elif mechanic == "party":
+            asked = leave(simulation, planned.target_id) if planned.reason == "party_leave" else join(simulation, planned.target_id)
+        else:
+            ordered = order(simulation, planned.target_id, text)
+            if ordered is None:
+                return None  # spoken to someone who takes no orders: it is talk, the older path's
+            asked = ordered
+        # Asking where one stands, or giving an order, is said by the game; the rest is told to the narrator.
+        quiet = mechanic in {"status", "order"} or asked.refused
+        return Resolution(_timed(session, asked.changes, asked.minutes), asked.lines, minutes=asked.minutes,
+                          refused=asked.refused, needs=None if quiet else "standard_turn", told=not quiet)
     if mechanic == "rest":
         outcome = rest(simulation, text)
         return Resolution(_timed(session, outcome.changes, outcome.minutes), outcome.lines, minutes=outcome.minutes,

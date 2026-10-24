@@ -58,9 +58,11 @@ def test_mechanics_change_real_state_and_survival_reads_whole_words(play) -> Non
     tired = play.survival()["fatigue"]
     play.turn("I walk along the forest edge and look at the trees.")
     assert play.survival()["fatigue"] > tired
-    play.turn("Check my quests")
-    assert "Active quests: First Night in Aurelia" in play.model.told()
-    assert "Quests you could take on: Voices in the Phone, The Hollow Meridian" in play.model.told()
+    calls = len(play.model.calls)
+    shown = play.turn("Check my quests")["visible_response"]["plain_text"]
+    assert "Active quests: First Night in Aurelia" in shown
+    assert "Quests you could take on: Voices in the Phone, The Hollow Meridian" in shown
+    assert play.model.roles(calls) == []  # the game reads it off the campaign; no model rephrases it (RQ-2.5)
 
 
 def test_every_turn_counts_and_the_narrator_is_told_the_purchase(play) -> None:

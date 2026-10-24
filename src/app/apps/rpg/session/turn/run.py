@@ -26,9 +26,12 @@ from app.apps.rpg.session.turn.world_tick import world_tick
 # on once its scenarios pass on the pipeline, and the setting goes when the older path does.
 OFF_SETTING = "OMNIX_RPG_TURN_PIPELINE_OFF"
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
-                "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest"}
+                "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest",
+                "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
+                "order": "companion_order"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
-           "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival"}
+           "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
+           "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
@@ -189,13 +192,20 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
 
 
 def _load(ctx: Any) -> dict[str, Any]:
-    """Step 1: the turn-start campaign, its simulation filled in from the play screen's sheet where a campaign
-    created before its first turn left it empty (as every older turn path does first)."""
+    """Step 1: the turn-start campaign, normalized as every older turn path does first: its simulation filled in
+    from the play screen's sheet, and the hero's progression (level, skills) given its defaults."""
+    from app.apps.rpg.rules.player.player_progression_state import ensure_player_progression_state
     from app.apps.rpg.session.interactive_first_call_runtime import _select_session
     from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
 
     session = _select_session(ctx.session_id, session_override=ctx.session_override)
-    return hydrate_simulation_player(session) if session else session
+    if not session:
+        return session
+    session = hydrate_simulation_player(session)
+    simulation = _d(session.get("simulation_state"))
+    simulation["player_state"] = ensure_player_progression_state(_d(simulation.get("player_state")))
+    session["simulation_state"] = simulation
+    return session
 
 
 def apply_planned_turn_stage(ctx: Any) -> Any:
@@ -215,8 +225,11 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     unseen = parse_command(_s(ctx.player_input), SceneView(()))
     glance = plan_action(unseen)
     # A journey's destination and a carried or fallen thing are the scene's, which a reading against none cannot name.
-    by_family = {"move": "travel", "use_item": "use_item", "drop": "drop", "take": "take"}
+    by_family = {"move": "travel", "use_item": "use_item", "drop": "drop", "take": "take", "quest": "quest",
+                 "practice": "practice", "party": "party"}
     possible = by_family.get(unseen.family) or (glance.mechanic if glance is not None else "")
+    if not possible and "," in " ".join(_s(ctx.player_input).split()[:3]):
+        possible = "order"  # someone named first ("Liora, keep watch") may be a companion given an order
     if not possible or not pipeline_enabled(possible):
         return ctx
     session = _load(ctx)

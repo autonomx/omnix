@@ -154,6 +154,15 @@ class CompanionLeft(_Change):
     npc_id: str = Field(min_length=1)
 
 
+class CompanionOrdered(_Change):
+    """A standing order a companion keeps until given another: keep watch, stay here, follow."""
+
+    type: Literal["companion_ordered"] = "companion_ordered"
+    npc_id: str = Field(min_length=1)
+    order: str = Field(min_length=1)
+    stance: str = ""
+
+
 class CombatStarted(_Change):
     """A fight begins, with each participant's health."""
 
@@ -271,7 +280,7 @@ StateChange = Annotated[
     | HpChanged | ExperienceGained | SkillProgressed | LocationChanged | PresenceChanged | TimeAdvanced
     | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
-    | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed,
+    | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

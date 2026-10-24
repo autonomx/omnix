@@ -181,5 +181,5 @@ CHANGE_SECTIONS: dict[str, str] = {
     "companion_left": "party", "combat_started": "combat", "combatant_hp_changed": "combat", "combat_ended": "combat",
     "world_ticked": "world", "journal_written": "narrative", "service_reserved": "economy",
     "stock_taken": "economy", "trade_remembered": "economy", "conditions_changed": "player",
-    "rest_taken": "player", "service_used": "economy",
+    "rest_taken": "player", "service_used": "economy", "companion_ordered": "party",
 }

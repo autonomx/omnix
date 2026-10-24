@@ -21,6 +21,7 @@ from .changes import (
     CombatEnded,
     CompanionJoined,
     CompanionLeft,
+    CompanionOrdered,
     ExperienceGained,
     HpChanged,
     ItemAdded,
@@ -303,6 +304,8 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         skill = dict(writer.get(_PLAYER + ("skills", change.skill_id)) or {})
         skill.update(level=change.level, xp=change.xp, xp_to_next=change.xp_to_next)
         writer.set(_PLAYER + ("skills", change.skill_id), skill)
+        if isinstance(writer.get(("state", "player")), dict):  # the play screen's sheet shows it
+            writer.set(("state", "player", "skills", change.skill_id), dict(skill))
     elif isinstance(change, LocationChanged):
         _move_hero(writer, change)
     elif isinstance(change, PresenceChanged):
@@ -410,6 +413,14 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         party = dict(writer.get(_PLAYER + ("party_state",)) or {})
         companions = [dict(row) for row in party.get("companions") or () if row.get("npc_id") != change.npc_id]
         writer.set(_PLAYER + ("party_state",), {**party, "companions": companions})
+    elif isinstance(change, CompanionOrdered):
+        party = dict(writer.get(_PLAYER + ("party_state",)) or {})
+        companions = [dict(row) for row in party.get("companions") or () if isinstance(row, dict)]
+        if not any(row.get("npc_id") == change.npc_id for row in companions):
+            raise ChangeRejected(f"{change.npc_id} is not in the party")
+        party["companions"] = [{**row, "orders": change.order, "stance": change.stance or row.get("stance", "")}
+                               if row.get("npc_id") == change.npc_id else row for row in companions]
+        writer.set(_PLAYER + ("party_state",), party)
     elif isinstance(change, CombatStarted):
         combat = writer.get(("simulation_state", "combat_state"))
         if isinstance(combat, dict) and combat.get("active"):

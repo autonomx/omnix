@@ -20,7 +20,7 @@ from typing import Iterable, Literal
 Family = Literal[
     "look", "inspect", "move", "talk", "ask", "decline", "buy", "sell", "attack", "flee", "defend",
     "take", "drop", "give", "use_item", "equip", "unequip", "manipulate", "rest", "wait", "quest",
-    "practice", "party", "status", "clarify",
+    "practice", "party", "status", "order", "clarify",
 ]
 EntityKind = Literal["person", "creature", "item", "place", "offer", "quest", "skill", "group"]
 
@@ -269,6 +269,10 @@ def parse_command(text: str, scene: SceneView) -> IntentCandidate:
     return candidate
 
 
+_ORDERS = (
+    "keep watch", "stand guard", "stand watch", "keep guard", "guard me", "guard the", "wait here", "stay here", "stay back",
+    "follow me", "scout ahead", "scout", "hold back", "hold position", "protect me", "cover me", "take point",
+)
 _STATUS_QUESTIONS = (
     "how hurt", "how am i", "my health", "what am i carrying", "what do i have", "what quests", "my quests",
     "what level", "my level", "how much money do i have", "how much gold do i have", "how much coin do i have",
@@ -340,8 +344,14 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
         return _candidate("wait", None, 0.85, "waits")
     if _has(words, "take me to", "bring me to", "lead me to", "guide me to") and _first(words, scene, "place"):
         return _candidate("move", _first(words, scene, "place"), 0.8, "asks_to_be_led")
+    if _has(words, "leave the party", "leave my party", "leave the group", "part ways", "go your own way", "dismiss"):
+        return _candidate("party", _first(words, scene, "person"), 0.85, "party_leave")
     if _has(words, "join my party", "join the party", "join me", "come with me", "travel with me", "recruit"):
         return _candidate("party", _first(words, scene, "person"), 0.85, "party")
+    lead = _find(words[:3], scene.of("person"))
+    if not question and lead and lead[0].start <= 1 and _has(words, *_ORDERS):
+        # "Liora, keep watch": an order to someone named first; whether they take it is the party rule's to say.
+        return _candidate("order", lead[0], 0.85, "orders")
 
     if question:
         lead = _find(words[:3], scene.of("person"))
