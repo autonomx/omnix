@@ -180,6 +180,24 @@ def nearby_npc_profiles(*, simulation_state: dict[str, Any], runtime_state: dict
     return [_rich_profile(npc_id, by_id[npc_id], sim, rt, None) for npc_id in npc_ids if npc_id in by_id]
 
 
+def _grammar_addressed(player_input: str, sim: Dict[str, Any], rt: Dict[str, Any]) -> List[str]:
+    """The person the command grammar reads the player as speaking to (RQ-3.3), when it is sure.
+
+    It knows people by first name, role and title ("Liora", "the innkeeper", "my guide") and by whole words,
+    where the substring match below needs the full name and finds "Bran" in "brandish".
+    """
+    try:
+        from app.apps.rpg.session.command_reading import read_command
+
+        reading = read_command(sim, player_input, rt)
+    except Exception:
+        return []
+    if reading.family in {"talk", "ask"} and reading.target_kind == "person" and reading.confidence >= 0.8 \
+            and reading.reason in {"talks", "asks_someone"} and reading.target_id:
+        return [reading.target_id]
+    return []
+
+
 def _referenced_npcs(player_input: str, npcs: List[Dict[str, Any]]) -> List[str]:
     text = _norm(player_input)
     out = []
@@ -210,7 +228,7 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
     scene = _scene(sim, rt)
     all_npcs = _npcs(sim, rt)
     present = _present_ids(sim, rt, scene)
-    referenced = _referenced_npcs(player_input, all_npcs)
+    referenced = _grammar_addressed(player_input, sim, rt) or _referenced_npcs(player_input, all_npcs)
     dialogue_resolution = resolve_dialogue_target(
         player_input=player_input,
         simulation_state=sim,

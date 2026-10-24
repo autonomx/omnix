@@ -1,4 +1,4 @@
-"""The model names who the player addresses ("the bartender") among present NPCs, in the one dialogue call."""
+"""Who answers: the person the player names (by name, role or title), else the model chooses among those present."""
 from __future__ import annotations
 
 import json
@@ -27,17 +27,32 @@ class _Gateway:
         return self.answer if isinstance(self.answer, str) else json.dumps(self.answer)
 
 
-def test_the_model_chooses_the_addressed_npc_and_answers_as_them() -> None:
+def test_a_person_named_by_their_role_answers_without_the_model_choosing() -> None:
     simulation, runtime = _state()
-    gateway = _Gateway({"speaker_id": "npc:bran", "line": "Evening, traveler. What can I pour you?"})
+    gateway = _Gateway("Evening, traveler. What can I pour you?")
 
     advisory = build_compact_dialogue_advisory(
         llm_gateway=gateway, player_input="talk to the bartender",
         simulation_state=simulation, runtime_state=runtime,
     )
 
+    # The command grammar knows Bran by his role (RQ-3.3): the one call only writes his line.
+    assert len(gateway.prompts) == 1 and '"present_npcs"' not in gateway.prompts[0]
+    assert advisory["target_id"] == "npc:bran"
+    assert advisory["visible_response"]["npc"] == {"speaker": "Bran", "line": "Evening, traveler. What can I pour you?"}
+
+
+def test_the_model_chooses_the_addressed_npc_and_answers_as_them() -> None:
+    simulation, runtime = _state()
+    gateway = _Gateway({"speaker_id": "npc:bran", "line": "Evening, traveler. What can I pour you?"})
+
+    advisory = build_compact_dialogue_advisory(
+        llm_gateway=gateway, player_input="talk to the one pouring drinks",
+        simulation_state=simulation, runtime_state=runtime,
+    )
+
     assert len(gateway.prompts) == 1
-    assert '"present_npcs"' in gateway.prompts[0] and "bartender" in gateway.prompts[0]
+    assert '"present_npcs"' in gateway.prompts[0] and "pouring drinks" in gateway.prompts[0]
     assert advisory["target_id"] == "npc:bran"
     assert advisory["visible_response"]["npc"] == {"speaker": "Bran", "line": "Evening, traveler. What can I pour you?"}
 
@@ -46,6 +61,6 @@ def test_an_unknown_speaker_falls_back_to_the_full_semantic_path() -> None:
     simulation, runtime = _state()
     for answer in ({"speaker_id": "npc:the", "line": "Hello."}, "not json", {"speaker_id": "npc:bran", "line": ""}):
         assert build_compact_dialogue_advisory(
-            llm_gateway=_Gateway(answer), player_input="talk to the bartender",
+            llm_gateway=_Gateway(answer), player_input="talk to the one pouring drinks",
             simulation_state=simulation, runtime_state=runtime,
         ) == {}
