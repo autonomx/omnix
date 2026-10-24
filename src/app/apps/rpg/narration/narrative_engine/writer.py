@@ -309,20 +309,25 @@ class StructuredNarrativeWriter:
 
 
 _FIELD_LINE = re.compile(r"^\s*[A-Za-z][\w ]{0,30}:\s")
+_CODE = re.compile(r"^[a-z0-9_.:-]+$")  # an identifier or a reason code, not prose
 
 
 def _speakable(record: EvidenceRecord) -> bool:
     """Whether a character could say this aloud: not narrator-only notes, their own profile, or a field-by-field
-    canon page ("Name: ...", "Role: ...")."""
+    canon page ("Name: ...", "Role: ..." on any of its lines)."""
     if record.visibility is VisibilityClass.NARRATOR_ONLY or record.evidence_id.endswith(":profile"):
         return False
-    return not _FIELD_LINE.match(record.content)
+    return not any(_FIELD_LINE.match(line) for line in record.content.splitlines())
+
+
+def _prose(record: EvidenceRecord) -> bool:
+    return not _CODE.match(record.content.strip())
 
 
 def _evidence_text(beat: NarrativeBeat, evidence: Mapping[str, EvidenceRecord], word_limit: int = 0) -> str:
     for ref in beat.evidence_refs:
         record = evidence.get(ref)
-        if record and record.content.strip() and (not beat.speaker_id or _speakable(record)):
+        if record and record.content.strip() and _prose(record) and (not beat.speaker_id or _speakable(record)):
             return _within_words(record.content.strip(), word_limit)
     return ""
 
@@ -354,12 +359,8 @@ def _deterministic_text(
 ) -> str:
     grounded = _evidence_text(beat, evidence, word_limit)
     target = beat.speaker_id or request.target_actor_id or "The nearby figure"
-    name = target.split(":")[-1].replace("_", " ").title()
+    name = target.split(":")[-1].replace("_", " ").replace("-", " ").title()
     if beat.purpose is BeatPurpose.PHYSICAL_REACTION:
-        if "Bran" in name:
-            return "Bran pauses with the cloth still wrapped around the cup, weighing the question before he answers."
-        if "Vexira" in name:
-            return "Vexira stills, her attention sharpening as the chamber seems to hold its breath with her."
         return f"{name} pauses, giving the question their full attention."
     if beat.purpose is BeatPurpose.DIRECT_ANSWER:
         return grounded or "I can answer only from what is known here and now."

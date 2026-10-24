@@ -2693,6 +2693,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AbilityUsed
+         * @description An ability of the hero's used: ready again from ``ready_at_turn`` (its cooldown, in the hero's turns).
+         */
+        AbilityUsed: {
+            /** Ability Id */
+            ability_id: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Ready At Turn */
+            ready_at_turn: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "ability_used";
+        };
         /** AccountResponse */
         AccountResponse: core["schemas"]["AccountResponse"];
         /** ActivateLive2DAvatarRequest */
@@ -4553,6 +4573,31 @@ export interface components {
         };
         /** RedirectUrlResponse */
         RedirectUrlResponse: core["schemas"]["RedirectUrlResponse"];
+        /**
+         * RegardChanged
+         * @description How far someone trusts the hero moved (an attack, seen or suffered), from -100 to 100.
+         */
+        RegardChanged: {
+            /** Delta */
+            delta: number;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "regard_changed";
+        };
         /** RegisterRequest */
         RegisterRequest: core["schemas"]["RegisterRequest"];
         /** RenderedPrompt */
@@ -4586,6 +4631,32 @@ export interface components {
          * @enum {string}
          */
         ResourceClass: core["schemas"]["ResourceClass"];
+        /**
+         * ResourcesChanged
+         * @description The hero's stamina and mana spent (an ability) or restored (a rest), within their pools.
+         */
+        ResourcesChanged: {
+            /**
+             * Mana
+             * @default 0
+             */
+            mana: number;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Stamina
+             * @default 0
+             */
+            stamina: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resources_changed";
+        };
         /**
          * RestTaken
          * @description A full rest: where the hero last rested, and so where a beaten hero wakes.
@@ -7088,6 +7159,10 @@ export interface components {
             interaction_id?: string | null;
             /** Job Id */
             job_id?: string | null;
+            /** Notices */
+            notices?: {
+                [key: string]: string;
+            }[];
             /** Ok */
             ok: boolean;
             outcome?: components["schemas"]["TurnOutcome"] | null;
@@ -9020,7 +9095,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;

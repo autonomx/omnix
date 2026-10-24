@@ -26,16 +26,32 @@ def counting_model_calls() -> Iterator[Counter[str]]:
         _CALLS.reset(token)
 
 
+_FAILED = "failed:"
+
+
 def current_model_calls() -> dict[str, int]:
     """The calls counted so far in the enclosing count, by kind (empty outside one)."""
     calls = _CALLS.get()
-    return dict(sorted(calls.items())) if calls is not None else {}
+    return dict(sorted((kind, count) for kind, count in calls.items() if not kind.startswith(_FAILED))) if calls else {}
+
+
+def current_model_failures() -> dict[str, int]:
+    """The calls that failed so far in the enclosing count (the provider down or too slow), by kind (RQ-8.8)."""
+    calls = _CALLS.get()
+    return {kind.removeprefix(_FAILED): count for kind, count in sorted(calls.items())
+            if kind.startswith(_FAILED)} if calls else {}
 
 
 def record_model_call(kind: str) -> None:
     calls = _CALLS.get()
     if calls is not None:
         calls[kind] += 1
+
+
+def record_model_failure(kind: str) -> None:
+    calls = _CALLS.get()
+    if calls is not None:
+        calls[_FAILED + kind] += 1
 
 
 class CountedProvider:
@@ -49,8 +65,16 @@ class CountedProvider:
 
     def chat_completion(self, *args: Any, **kwargs: Any) -> Any:
         record_model_call("provider")
-        return self._provider.chat_completion(*args, **kwargs)
+        try:
+            return self._provider.chat_completion(*args, **kwargs)
+        except Exception:
+            record_model_failure("provider")
+            raise
 
     def chat(self, *args: Any, **kwargs: Any) -> Any:
         record_model_call("provider")
-        return self._provider.chat(*args, **kwargs)
+        try:
+            return self._provider.chat(*args, **kwargs)
+        except Exception:
+            record_model_failure("provider")
+            raise

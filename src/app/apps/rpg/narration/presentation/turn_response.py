@@ -77,6 +77,8 @@ class RpgTurnResponse(_OpenContract):
     session_summary: dict[str, Any] = Field(default_factory=dict)
     canonical_narrative_response: dict[str, Any] | None = None
     outcome: TurnOutcome | None = None
+    # What the play screen tells the player beside the turn: the storyteller unavailable (RQ-8.8).
+    notices: list[dict[str, str]] = Field(default_factory=list)
 
 
 def attach_turn_outcome(payload: dict[str, Any], outcome: TurnOutcome) -> dict[str, Any]:

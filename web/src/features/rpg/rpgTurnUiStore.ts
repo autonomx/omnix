@@ -55,6 +55,8 @@ interface RpgTurnResponseV2 {
   performance?: Record<string, unknown>;
   /** The turn's one result (RQ-1.3): its changes, narration, timings and model calls. */
   outcome?: RpgTurnOutcome | null;
+  /** What the player is told beside the turn: the storyteller unavailable (RQ-8.8). */
+  notices?: { kind?: string; message?: string }[];
 }
 
 export type RpgTurnOutcome = components['schemas']['TurnOutcome'];
@@ -461,6 +463,23 @@ function visibleEntriesFromPayload(
         messageIndex: 0,
       });
     }
+  }
+  for (const [index, notice] of (payload.notices || []).entries()) {
+    const text = notice.message?.trim();
+    if (!text) continue;
+    entries.push({
+      id: `${interactionId}:notice:${index}`,
+      sessionId,
+      submissionId,
+      interactionId,
+      status: 'complete',
+      avatar: 'O',
+      speaker: 'Omnix',
+      text,
+      tone: 'narrator',
+      messageKind: notice.kind || 'notice',
+      messageIndex: index,
+    });
   }
   return entries;
 }

@@ -119,11 +119,14 @@ class AppLLMGateway:
             timing.get("stage", ""),
         )
         messages = self._build_messages(prompt, context=context)
+        options = dict(provider_options or {})
+        if timeout_s is not None:  # the call kind's own limit (RQ-8.8): a slow provider is a failed call
+            options.setdefault("request_timeout_seconds", float(timeout_s))
         try:
             response = self.provider.chat_completion(
                 messages=messages,
                 stream=False,
-                **dict(provider_options or {}),
+                **options,
             )
             logger.info(
                 "[RPG GATEWAY] generate_end dt=%.3fs response_type=%s",

@@ -1,6 +1,41 @@
 {
   "components": {
     "schemas": {
+      "AbilityUsed": {
+        "additionalProperties": false,
+        "description": "An ability of the hero's used: ready again from ``ready_at_turn`` (its cooldown, in the hero's turns).",
+        "properties": {
+          "ability_id": {
+            "minLength": 1,
+            "title": "Ability Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "ready_at_turn": {
+            "minimum": 0,
+            "title": "Ready At Turn",
+            "type": "integer"
+          },
+          "type": {
+            "const": "ability_used",
+            "default": "ability_used",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ability_id",
+          "ready_at_turn",
+          "type",
+          "name"
+        ],
+        "title": "AbilityUsed",
+        "type": "object"
+      },
       "AcceptancePlan": {
         "additionalProperties": false,
         "properties": {
@@ -42497,6 +42532,46 @@
         "title": "RefreshSessionMemoryRequest",
         "type": "object"
       },
+      "RegardChanged": {
+        "additionalProperties": false,
+        "description": "How far someone trusts the hero moved (an attack, seen or suffered), from -100 to 100.",
+        "properties": {
+          "delta": {
+            "title": "Delta",
+            "type": "integer"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "type": {
+            "const": "regard_changed",
+            "default": "regard_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "delta",
+          "type",
+          "name",
+          "reason"
+        ],
+        "title": "RegardChanged",
+        "type": "object"
+      },
       "RegisterRequest": {
         "properties": {
           "display_name": {
@@ -43971,6 +44046,41 @@
           "resource_id"
         ],
         "title": "ResourceScope",
+        "type": "object"
+      },
+      "ResourcesChanged": {
+        "additionalProperties": false,
+        "description": "The hero's stamina and mana spent (an ability) or restored (a rest), within their pools.",
+        "properties": {
+          "mana": {
+            "default": 0,
+            "title": "Mana",
+            "type": "integer"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "stamina": {
+            "default": 0,
+            "title": "Stamina",
+            "type": "integer"
+          },
+          "type": {
+            "const": "resources_changed",
+            "default": "resources_changed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "stamina",
+          "mana",
+          "reason"
+        ],
+        "title": "ResourcesChanged",
         "type": "object"
       },
       "RestTaken": {
@@ -50201,6 +50311,16 @@
               }
             ],
             "title": "Job Id"
+          },
+          "notices": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Notices",
+            "type": "array"
           },
           "ok": {
             "title": "Ok",
@@ -66575,6 +66695,7 @@
             "items": {
               "discriminator": {
                 "mapping": {
+                  "ability_used": "#/components/schemas/AbilityUsed",
                   "campaign_ended": "#/components/schemas/CampaignEnded",
                   "combat_advanced": "#/components/schemas/CombatAdvanced",
                   "combat_ended": "#/components/schemas/CombatEnded",
@@ -66605,6 +66726,8 @@
                   "quest_offered": "#/components/schemas/QuestOffered",
                   "quest_place_reached": "#/components/schemas/QuestPlaceReached",
                   "quest_status_changed": "#/components/schemas/QuestStatusChanged",
+                  "regard_changed": "#/components/schemas/RegardChanged",
+                  "resources_changed": "#/components/schemas/ResourcesChanged",
                   "rest_taken": "#/components/schemas/RestTaken",
                   "service_reserved": "#/components/schemas/ServiceReserved",
                   "service_used": "#/components/schemas/ServiceUsed",
@@ -66738,6 +66861,15 @@
                 },
                 {
                   "$ref": "#/components/schemas/WhereaboutsChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/RegardChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourcesChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/AbilityUsed"
                 }
               ]
             },

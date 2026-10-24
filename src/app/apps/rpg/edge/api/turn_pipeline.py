@@ -76,6 +76,10 @@ async def execute_foreground_rpg_turn(
         ) from exc
 
 
+STORYTELLER_UNAVAILABLE = ("The storyteller is unavailable right now, so the game tells what happens plainly. "
+                           "Plain commands still work: look around, go somewhere, talk to someone, buy, attack.")
+
+
 def submit_rpg_turn(
     *,
     session_id: str,
@@ -558,6 +562,12 @@ def run_rpg_turn(
                 timings={**(payload.get("timing") or {}), "pipeline_before_encode_ms": trace.elapsed_ms},
             )
             payload = attach_turn_outcome(payload, outcome)
+            from app.apps.rpg.foundation.model_calls import current_model_failures
+
+            if current_model_failures():
+                # The provider was down or too slow: the game told the turn plainly, and the player is told why.
+                payload["notices"] = [{"kind": "storyteller_unavailable", "message": STORYTELLER_UNAVAILABLE}]
+                span["model_failures"] = current_model_failures()
             span["model_calls"] = outcome.model_calls.total
             span["applied_changes"] = len(outcome.applied_changes)
             payload_timing = (

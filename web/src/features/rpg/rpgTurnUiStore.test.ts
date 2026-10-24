@@ -248,6 +248,28 @@ describe('rpgTurnUiStore', () => {
     expect(await turnFailureMessage(new Response('oops', { status: 500 }))).toBe('Turn failed (500).');
   });
 
+  it('tells the player when the storyteller is unavailable', () => {
+    beginRpgTurnUiSubmission({ sessionId: 'session:outage', submissionId: 'submit:outage', command: 'look around' });
+    completeRpgTurnUiSubmission({
+      sessionId: 'session:outage',
+      submissionId: 'submit:outage',
+      payload: {
+        ok: true,
+        contract_version: 'rpg_turn_response_v2',
+        interaction_id: 'interaction:9',
+        visible_response: { narration: 'You look around the grove.' },
+        notices: [{ kind: 'storyteller_unavailable', message: 'The storyteller is unavailable right now.' }],
+      },
+    });
+    const entries = getRpgTurnUiEntries('session:outage');
+    expect(entries.map((entry) => entry.text)).toEqual([
+      'look around',
+      'You look around the grove.',
+      'The storyteller is unavailable right now.',
+    ]);
+    expect(entries[2].messageKind).toBe('storyteller_unavailable');
+  });
+
   it('does not request heavy query refreshes for explicit conversation-only turns', () => {
     expect(refreshPathsForChangedDomains('session:bran', ['conversation'])).toEqual([
       '/api/rpg/sessions/session%3Abran',

@@ -20,6 +20,11 @@ _NON_NPC_SPEAKERS = {
 }
 
 
+_CODE = re.compile(r"^[a-z0-9_.:-]+$")
+NOTHING_COMES_OF_IT = ("Nothing comes of that. Say what you do: look around, go somewhere, talk to someone, buy "
+                       "something, or attack.")
+
+
 def build_visible_response(result: Any, fallback_command: str = "") -> dict[str, Any]:
     """Return one bounded narration/dialogue contract from a nested turn result."""
 
@@ -46,6 +51,8 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
 
     if narration and _is_player_restatement(narration, player_input):
         narration = ""
+    if narration and _CODE.match(narration):
+        narration = ""  # a reason code ("no_supported_semantic_action_detected") is not something to show
     if line and _is_player_restatement(line, player_input):
         line = ""
 
@@ -88,7 +95,7 @@ def build_visible_response(result: Any, fallback_command: str = "") -> dict[str,
                 ]
                 paragraphs.extend([narration, f'{speaker}: "{line}"'])
             elif fallback_command:
-                paragraphs.append(f"Your command is accepted: {fallback_command}.")
+                paragraphs.append(NOTHING_COMES_OF_IT)
 
     plain_text = _dedupe_paragraphs(paragraphs)
     return {

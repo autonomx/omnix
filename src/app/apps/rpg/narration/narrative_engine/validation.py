@@ -408,6 +408,9 @@ def write_validate_repair(
             writer.write(request, plan, evidence),
         )
     except Exception as exc:
+        from app.apps.rpg.foundation.model_calls import record_model_failure
+
+        record_model_failure("narrative_writer")  # the storyteller is down or too slow: the turn says so (RQ-8.8)
         if not allow_deterministic_fallback:
             logger.warning("rpg narrative provider failed; publishing validated fallback prose", exc_info=True)
         fallback = _validated_fallback(

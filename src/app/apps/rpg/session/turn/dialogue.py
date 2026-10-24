@@ -27,6 +27,7 @@ _LINE_PROMPT = prompt_template(
     "recent_exchanges without repeating them. " + WORLD_DATA_RULE + "\nPLAYER: {v0}\nPLAN: ",
 )
 MAX_LINE = 400
+LINE_TIMEOUT_SECONDS = 20.0  # a person's line: past this the plan's own line answers (RQ-8.8)
 
 
 @dataclass(frozen=True)
@@ -54,8 +55,9 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
     context = {**plan.context(), "recent_exchanges": exchanges[-3:]}
     prompt = _LINE_PROMPT.format(v0=text[:500]) + world_data(context)  # the plan's world text, fenced as data
     try:
-        raw = gateway.generate(prompt, provider_options={"temperature": 0.55, "max_tokens": 90,
-                                                         "chat_template_kwargs": {"enable_thinking": False}})
+        raw = gateway.generate(prompt, timeout_s=LINE_TIMEOUT_SECONDS,
+                               provider_options={"temperature": 0.55, "max_tokens": 90,
+                                                 "chat_template_kwargs": {"enable_thinking": False}})
     except Exception:
         logger.warning("rpg_dialogue_line_failed speaker=%s", plan.speaker_id, exc_info=True)
         return ""
