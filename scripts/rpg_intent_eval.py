@@ -1,0 +1,516 @@
+"""Measure how the RPG understands player inputs today, on the RQ-0.4 intent corpus.
+
+Each corpus item names a world, a scene (where the player stands), the input, and its labels: action family, target
+entity, and whether the correct handling changes campaign state. The harness launches the three worlds on a
+disposable PostgreSQL database (``tests/rehearsal/rpg/worlds.py``), brings each scene about by playing its setup
+commands, and snapshots it. Then, for every item, it measures today's deterministic understanding, without a model:
+
+1. **Static reading** (``--mode static`` and ``play``): the functions the turn runs before any model call, in the
+   order ``interactive_first_call_runtime._apply_turn_core`` runs them: the service matcher
+   (``resolve_service_turn``), the companion request (``requested_companion``), the player's own requests
+   (``apply_player_requests``: quest, practice, status, sell, drop, pick up), the plain observe commands, travel
+   (``resolve_travel_destination``) and combat (``_combat_command``). Those are "the commands the game resolves
+   itself" (bb83af47aa); an input none of them takes would go to the intent model. For those, the reading falls back
+   to the rules the stateful runtime applies (``resolve_semantic_action_v2``, then
+   ``turn_contract.interpret_turn_action``), and finally to the safe dialogue reply (family ``talk``).
+2. **Play** (``--mode play``, the default): the scene's snapshot is restored, the input is played through
+   ``POST /api/rpg/sessions/{id}/turn`` with the scripted model (the intent router answers "{}", so the engine
+   decides), and the saved game is compared with the snapshot. A material change (place, purse, pack, equipment,
+   party, quests, skills, hit points or a fight, an NPC's health, fatigue relieved) makes the turn stateful, and
+   decides the family and target (a changed place is a move, a smaller purse a purchase, ...). Without one, the
+   static reading stands and the turn is not stateful. Time passing and needs drifting are not material.
+
+Metrics, each with its own denominator and Wilson 95% bounds: action family accuracy (all items), target entity
+accuracy (items with a gold target; the prediction is resolved to a catalog entity by id, alias id or name), and the
+false stateful rate (items whose correct handling changes nothing, but the turn changed state). Missed stateful
+(stateful items that changed nothing) and the share of inputs the game resolves without a model call are reported
+alongside. ``--model-advisory`` is not implemented for the baseline: the deterministic reading is the baseline.
+
+The held-out file is frozen: its SHA-256 is pinned below and the harness refuses to run when it differs.
+
+    OMNIX_DATABASE_URL=postgresql://...@127.0.0.1:16432/<disposable db> \\
+        python scripts/rpg_intent_eval.py --split held_out --output docs/measurements/rpg-intent-baseline-<date>.json
+"""
+from __future__ import annotations
+
+import argparse
+from collections import Counter, defaultdict
+import copy
+from datetime import date
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from tests.rehearsal.rpg.stats import proportion  # noqa: E402
+
+CORPUS = ROOT / "resources/benchmarks/rpg/intent_corpus"
+HELD_OUT = CORPUS / "held_out.jsonl"
+# Frozen 2026-10-23 (RQ-0.4). Changing the held-out set is a re-freeze: change this pin in a reviewed commit.
+HELD_OUT_SHA256 = "80fec6faa4b5ff71f6e7505bfd3f345a17e91526b8a9b302647eb104b5217811"
+STATEFUL_FAMILIES = {"move", "buy", "sell", "attack", "take", "drop", "give", "use_item", "equip", "unequip", "rest",
+                     "quest", "practice", "party"}
+
+
+def held_out_digest() -> str:
+    """The held-out file's SHA-256, over LF line endings (a Windows checkout may write CRLF)."""
+    return hashlib.sha256(HELD_OUT.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def require_frozen_held_out() -> None:
+    digest = held_out_digest()
+    if digest != HELD_OUT_SHA256:
+        raise SystemExit(f"the frozen held-out set changed: sha256 {digest}, pinned {HELD_OUT_SHA256}")
+
+
+def load_items(split: str) -> list[dict[str, Any]]:
+    names = {"held_out": ["held_out"], "dev": ["dev"], "all": ["dev", "held_out"]}[split]
+    rows = []
+    for name in names:
+        with (CORPUS / f"{name}.jsonl").open(encoding="utf-8") as stream:
+            rows.extend(json.loads(line) for line in stream if line.strip())
+    return rows
+
+
+# --- entity resolution -----------------------------------------------------------------------------------------
+
+def _norm(text: Any) -> str:
+    value = re.sub(r"[^a-z0-9:' -]+", " ", str(text or "").lower())
+    value = re.sub(r"\b(the|a|an|my|some|of|for)\b", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+class Catalog:
+    """A world's entities, by id, by the ids the engine may report, and by the names the player uses."""
+
+    def __init__(self, world: dict[str, Any]) -> None:
+        self.entities = world["entities"]
+        self.scenes = world["scenes"]
+        self.by_id: dict[str, str] = {}
+        self.by_name: list[tuple[str, str]] = []
+        for key, entity in self.entities.items():
+            self.by_id[key.lower()] = key
+            for alias in entity.get("alias_ids") or ():
+                self.by_id[str(alias).lower()] = key
+            for name in entity.get("names") or ():
+                if _norm(name):
+                    self.by_name.append((_norm(name), key))
+        self.by_name.sort(key=lambda pair: -len(pair[0]))
+
+    def resolve(self, value: Any) -> str | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.lower() in self.by_id:
+            return self.by_id[text.lower()]
+        # An engine id built from a canon slug ("npc:liora-fen:..." or "creature:echo-wolf").
+        for prefix in sorted(self.by_id, key=len, reverse=True):
+            if ":" in prefix and text.lower().startswith(prefix + ":"):
+                return self.by_id[prefix]
+        normalized = _norm(text.replace("_", " ").replace("-", " "))
+        for name, key in self.by_name:
+            if name == normalized:
+                return key
+        for name, key in self.by_name:
+            if len(name) > 3 and re.search(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", normalized):
+                return key
+        return None
+
+
+# --- today's static reading -------------------------------------------------------------------------------------
+
+_PLAIN_WAIT = {"wait", "keep watch"}
+
+
+def static_reading(simulation_state: dict[str, Any], runtime_state: dict[str, Any], text: str) -> dict[str, Any]:
+    """What today's deterministic code makes of the input, without a model (see the module docstring)."""
+    from app.apps.rpg.rules.economy.service_resolver import resolve_service_turn
+    from app.apps.rpg.rules.interactions.semantic_actions import resolve_semantic_action_v2, semantic_action_kind
+    from app.apps.rpg.session.interactive_first_call_runtime import _PLAIN_OBSERVE_COMMANDS, _combat_command
+    from app.apps.rpg.session.player_requests import apply_player_requests
+    from app.apps.rpg.session.turn_contract import interpret_turn_action
+    from app.apps.rpg.world.companion_acceptance import requested_companion
+    from app.apps.rpg.world.travel_graph import resolve_travel_destination
+
+    sim = copy.deepcopy(simulation_state)
+    runtime = copy.deepcopy(runtime_state)
+    plain = text.strip().lower().rstrip(".!")
+
+    def read(family: str, target: Any, stateful: bool, source: str, gate: bool) -> dict[str, Any]:
+        return {"family": family, "target_ref": target or None, "stateful": stateful, "source": source, "gate": gate}
+
+    try:
+        service = resolve_service_turn(player_input=text, action={}, resolved_action={}, simulation_state=sim,
+                                       runtime_state=runtime)
+    except Exception as exc:  # the matcher's own failure is part of today's behaviour
+        service = {"matched": False, "error": type(exc).__name__}
+    if service.get("matched"):
+        kind = str(service.get("kind") or "")
+        offer = str(service.get("selected_offer_id") or "")
+        if kind == "service_inquiry":
+            return read("ask", offer or service.get("provider_id"), False, "service_inquiry", True)
+        if kind == "service_consumption":
+            return read("rest", service.get("provider_id"), True, "service_consumption", True)
+        return read("buy", offer or service.get("provider_id"), bool(offer), "service_purchase", True)
+    companion = requested_companion(sim, text)
+    if companion:
+        return read("party", companion.get("npc_id"), True, "requested_companion", True)
+    for event in apply_player_requests(copy.deepcopy(sim), text):
+        kind = str(event.get("kind") or "")
+        if kind == "quest_accepted":
+            return read("quest", event.get("quest_id"), True, "player_request", True)
+        if kind in {"quest_already_active", "quest_unchanged"}:
+            return read("quest", event.get("quest_id"), False, "player_request", True)
+        if kind == "skill_practised":
+            return read("practice", f"skill:{event.get('skill_id')}", True, "player_request", True)
+        if kind == "status_report":
+            return read("status", None, False, "player_request", True)
+        if kind == "item_sold":
+            return read("sell", event.get("item"), True, "player_request", True)
+        if kind == "sale_refused":
+            return read("sell", event.get("item"), False, "player_request", True)
+        if kind == "item_dropped":
+            return read("drop", event.get("item"), True, "player_request", True)
+        if kind == "item_picked_up":
+            return read("take", event.get("item"), True, "player_request", True)
+        if kind == "pick_up_refused":
+            return read("take", None, False, "player_request", True)
+    if plain in _PLAIN_WAIT:
+        return read("wait", None, False, "observe_command", True)
+    if plain in _PLAIN_OBSERVE_COMMANDS:
+        return read("look", None, False, "observe_command", True)
+    try:
+        travel = resolve_travel_destination(player_input=text, state=sim)
+    except Exception:
+        travel = {}
+    if travel.get("ok"):
+        destination = travel.get("destination") if isinstance(travel.get("destination"), dict) else {}
+        return read("move", destination.get("location_id") or travel.get("to_location"), True, "travel", True)
+    try:
+        combat = _combat_command(copy.deepcopy(sim), text)
+    except Exception:
+        combat = False
+    semantic = resolve_semantic_action_v2(player_input=text, actor_id="player")
+    semantic_kind = semantic_action_kind(semantic) if semantic.get("resolved") else ""
+    if combat:
+        family = "flee" if semantic_kind == "flee" else "attack"
+        return read(family, semantic.get("target_ref"), True, "combat_command", True)
+    # Nothing above takes it: today the intent model would be asked. Without it, the runtime's own rules.
+    semantic_family = {
+        "inspect": "inspect", "open": "manipulate", "close": "manipulate", "take": "take", "drop": "drop",
+        "give": "give", "put": "give", "use": "use_item", "use_item": "use_item", "consume": "use_item",
+        "repair": "manipulate", "craft": "manipulate", "equip": "equip", "unequip": "unequip", "attack": "attack",
+        "talk": "talk", "buy": "buy", "sell": "sell", "defend": "defend", "flee": "flee",
+    }.get(semantic_kind)
+    if semantic_family:
+        return read(semantic_family, semantic.get("target_ref"), semantic_family in STATEFUL_FAMILIES,
+                    f"semantic_action:{semantic_kind}", False)
+    contract = interpret_turn_action(sim, runtime, text, {})
+    intent = str(contract.get("intent") or "")
+    contract_family = {"attack": "attack", "apologize": "talk", "service": "buy", "ask": "ask", "perform": "talk"}.get(intent)
+    if contract_family:
+        return read(contract_family, contract.get("target_id") or contract.get("target_name"),
+                    contract_family in STATEFUL_FAMILIES, f"turn_contract:{intent}", False)
+    return read("talk", None, False, "dialogue_fallback", False)
+
+
+# --- material state -------------------------------------------------------------------------------------------
+
+def _copper(currency: Any) -> int:
+    currency = currency if isinstance(currency, dict) else {}
+    return int(currency.get("gold") or 0) * 100 + int(currency.get("silver") or 0) * 10 + int(currency.get("copper") or 0)
+
+
+def material_state(session: dict[str, Any]) -> dict[str, Any]:
+    from app.apps.rpg.rules.combat.runtime_core import get_combat_state
+
+    sim = copy.deepcopy(session.get("simulation_state") or {})
+    player = sim.get("player_state") or {}
+    inventory = player.get("inventory_state") or {}
+    items: Counter = Counter()
+    for item in inventory.get("items") or ():
+        items[str(item.get("item_id") or item.get("name"))] += int(item.get("qty") or item.get("quantity") or 1)
+    equipment = {**((player.get("inventory") or {}).get("equipment") or {}), **(inventory.get("equipment") or {})}
+    return {
+        "location": str(player.get("location_id") or sim.get("location_id") or ""),
+        "purse": _copper(player.get("currency") or inventory.get("currency")),
+        "items": dict(items),
+        "equipment": json.dumps(equipment, sort_keys=True),
+        "party": sorted(str(companion.get("id") or companion.get("npc_id") or companion.get("name"))
+                        for companion in (player.get("party_state") or {}).get("companions") or ()),
+        "quests": {str(quest.get("id")): str(quest.get("status")) for quest in (sim.get("quest_state") or {}).get("quests") or ()},
+        "skills": {key: [int(value.get("level") or 0), int(value.get("xp") or 0)]
+                   for key, value in (player.get("skills") or {}).items() if isinstance(value, dict)},
+        "hp": int((((player.get("resources") or {}).get("hp")) or {}).get("current") or 0),
+        "combat": get_combat_state(sim).get("active") is True,
+        "npc_health": {str(row.get("id")): int(row.get("health") or 100) for row in sim.get("actor_states") or ()
+                       if isinstance(row, dict)},
+        "fatigue": int((sim.get("survival") or {}).get("fatigue") or 0),
+    }
+
+
+def changes(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    if after["location"] != before["location"]:
+        found.append({"kind": "location", "to": after["location"]})
+    if after["combat"] and not before["combat"]:
+        found.append({"kind": "combat_started"})
+    hurt = [key for key, value in after["npc_health"].items() if value < before["npc_health"].get(key, 100)]
+    if hurt:
+        found.append({"kind": "npc_hurt", "ids": hurt})
+    if after["hp"] < before["hp"]:
+        found.append({"kind": "player_hurt"})
+    joined = [key for key in after["party"] if key not in before["party"]]
+    if joined:
+        found.append({"kind": "party_joined", "ids": joined})
+    if after["party"] != before["party"] and not joined:
+        found.append({"kind": "party_changed"})
+    quests = [key for key, status in after["quests"].items() if before["quests"].get(key) != status]
+    if quests:
+        found.append({"kind": "quest_changed", "ids": quests})
+    skills = [key for key, value in after["skills"].items() if value != before["skills"].get(key)]
+    if skills:
+        found.append({"kind": "skill_changed", "ids": skills})
+    if after["purse"] != before["purse"]:
+        found.append({"kind": "purse", "delta": after["purse"] - before["purse"]})
+    gained = [key for key, qty in after["items"].items() if qty > before["items"].get(key, 0)]
+    lost = [key for key, qty in before["items"].items() if qty > after["items"].get(key, 0)]
+    if gained:
+        found.append({"kind": "items_gained", "ids": gained})
+    if lost:
+        found.append({"kind": "items_lost", "ids": lost})
+    if after["equipment"] != before["equipment"]:
+        found.append({"kind": "equipment"})
+    if after["fatigue"] < before["fatigue"] or after["hp"] > before["hp"]:
+        found.append({"kind": "rested"})
+    return found
+
+
+def observed_reading(found: list[dict[str, Any]], static: dict[str, Any], session: dict[str, Any]) -> dict[str, Any] | None:
+    """The family and target the material changes show, or None when nothing material changed."""
+    kinds = {change["kind"]: change for change in found}
+    if not kinds:
+        return None
+    service = ((session.get("runtime_state") or {}).get("last_turn_contract") or {}).get("service_result") or {}
+    if "location" in kinds:
+        return {"family": "move", "target_ref": kinds["location"]["to"]}
+    if "combat_started" in kinds or "npc_hurt" in kinds or "player_hurt" in kinds:
+        target = (kinds.get("npc_hurt") or {}).get("ids", [None])[0] or static.get("target_ref")
+        return {"family": "attack", "target_ref": target}
+    if "party_joined" in kinds:
+        return {"family": "party", "target_ref": kinds["party_joined"]["ids"][0]}
+    if "skill_changed" in kinds and static.get("family") == "practice":
+        return {"family": "practice", "target_ref": f"skill:{kinds['skill_changed']['ids'][0]}"}
+    purse = kinds.get("purse", {}).get("delta", 0)
+    if purse < 0:
+        offer = service.get("selected_offer_id") or ((service.get("purchase") or {}).get("offer_id"))
+        gained = kinds.get("items_gained", {}).get("ids", [None])[0]
+        return {"family": "buy", "target_ref": offer or gained or static.get("target_ref")}
+    if purse > 0 and "items_lost" in kinds:
+        return {"family": "sell", "target_ref": kinds["items_lost"]["ids"][0]}
+    if "items_lost" in kinds:
+        family = static["family"] if static.get("family") in {"give", "drop", "use_item"} else "drop"
+        return {"family": family, "target_ref": kinds["items_lost"]["ids"][0]}
+    if "items_gained" in kinds:
+        return {"family": "take", "target_ref": kinds["items_gained"]["ids"][0]}
+    if "quest_changed" in kinds:
+        return {"family": "quest", "target_ref": kinds["quest_changed"]["ids"][0]}
+    if "skill_changed" in kinds:
+        return {"family": "practice", "target_ref": f"skill:{kinds['skill_changed']['ids'][0]}"}
+    if "equipment" in kinds:
+        family = static["family"] if static.get("family") in {"equip", "unequip"} else "equip"
+        return {"family": family, "target_ref": static.get("target_ref")}
+    if purse > 0:
+        return {"family": static.get("family") or "quest", "target_ref": static.get("target_ref")}
+    if "rested" in kinds:
+        return {"family": "rest", "target_ref": None}
+    return {"family": static.get("family"), "target_ref": static.get("target_ref")}
+
+
+# --- the run ----------------------------------------------------------------------------------------------------
+
+class Worlds:
+    """The three worlds on the database, each scene snapshotted, and a way back to a snapshot."""
+
+    def __init__(self, catalog: dict[str, Any], *, play: bool) -> None:
+        from tests.rehearsal.rpg import worlds as harness
+
+        self.harness = harness
+        self.catalog = {world: Catalog(data) for world, data in catalog["worlds"].items()}
+        self.model = harness.install_scripted_model()
+        self.client = harness.turn_client()
+        self.sessions: dict[str, str] = {}
+        self.snapshots: dict[tuple[str, str], dict[str, Any]] = {}
+        self.scene_report: dict[str, dict[str, Any]] = {}
+        self.play = play
+
+    def turn(self, session_id: str, command: str) -> tuple[int, float]:
+        started = time.perf_counter()
+        response = self.client.post(f"/api/rpg/sessions/{session_id}/turn", json={"command": command})
+        return response.status_code, (time.perf_counter() - started) * 1000
+
+    def restore(self, session_id: str, snapshot: dict[str, Any]) -> None:
+        from app.apps.rpg.session.service import save_session
+
+        current = self.harness.load(session_id)
+        restored = copy.deepcopy(snapshot)
+        restored.setdefault("runtime_state", {})["state_revision"] = (current.get("runtime_state") or {}).get("state_revision")
+        save_session(restored)
+
+    def prepare(self, world: str) -> None:
+        catalog = self.catalog[world]
+        session_id = self.harness.launch(world)
+        self.sessions[world] = session_id
+        status, _ = self.turn(session_id, "look around")
+        opening = self.harness.load(session_id)
+        for scene, spec in catalog.scenes.items():
+            self.restore(session_id, opening)
+            statuses = [status] + [self.turn(session_id, command)[0] for command in spec.get("setup") or ()]
+            snapshot = self.harness.load(session_id)
+            where = material_state(snapshot)["location"]
+            reached = catalog.resolve(where) == catalog.resolve(spec["location_id"])
+            self.snapshots[(world, scene)] = snapshot
+            self.scene_report[f"{world}/{scene}"] = {"reached": reached, "location": where, "http": statuses}
+
+    def evaluate(self, item: dict[str, Any]) -> dict[str, Any]:
+        world, scene = item["world"], item["scene"]
+        snapshot = self.snapshots[(world, scene)]
+        static = static_reading(snapshot.get("simulation_state") or {}, snapshot.get("runtime_state") or {}, item["input"])
+        record: dict[str, Any] = {"id": item["id"], "static": static}
+        prediction = {"family": static["family"], "target_ref": static["target_ref"], "stateful": static["stateful"]}
+        if self.play:
+            session_id = self.sessions[world]
+            self.restore(session_id, snapshot)
+            calls_before = len(self.model.calls)
+            status, elapsed = self.turn(session_id, item["input"])
+            after = self.harness.load(session_id)
+            found = changes(material_state(snapshot), material_state(after))
+            observed = observed_reading(found, static, after)
+            prediction = {"family": (observed or static)["family"], "target_ref": (observed or static)["target_ref"],
+                          "stateful": observed is not None}
+            record.update({"http": status, "turn_ms": round(elapsed, 1), "changes": found,
+                           "model_calls": self.model.calls[calls_before:]})
+        prediction["target_entity"] = self.catalog[world].resolve(prediction["target_ref"])
+        record["prediction"] = prediction
+        record["correct"] = {
+            "family": prediction["family"] == item["action_family"],
+            "target": (prediction["target_entity"] == item["target_entity"]) if item["target_entity"] else None,
+            "stateful": prediction["stateful"] == item["stateful"],
+        }
+        return record
+
+
+def metrics(items: list[dict[str, Any]], records: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    family_ok = sum(records[item["id"]]["correct"]["family"] for item in items)
+    targeted = [item for item in items if item["target_entity"]]
+    target_ok = sum(bool(records[item["id"]]["correct"]["target"]) for item in targeted)
+    calm = [item for item in items if not item["stateful"]]
+    false_stateful = sum(records[item["id"]]["prediction"]["stateful"] for item in calm)
+    stateful = [item for item in items if item["stateful"]]
+    missed = sum(not records[item["id"]]["prediction"]["stateful"] for item in stateful)
+    gate = sum(records[item["id"]]["static"]["gate"] for item in items)
+    return {
+        "action_family_accuracy": proportion(family_ok, len(items)),
+        "target_entity_accuracy": proportion(target_ok, len(targeted)),
+        "false_stateful_rate": proportion(false_stateful, len(calm)),
+        "missed_stateful_rate": proportion(missed, len(stateful)),
+        "resolved_without_model": proportion(gate, len(items)),
+    }
+
+
+def breakdown(items: list[dict[str, Any]], records: dict[str, dict[str, Any]], key: str) -> dict[str, Any]:
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in items:
+        groups[str(item[key])].append(item)
+    return {name: {"n": len(group), **{metric: value for metric, value in metrics(group, records).items()
+                                      if metric != "resolved_without_model"}} for name, group in sorted(groups.items())}
+
+
+def confusion(items: list[dict[str, Any]], records: dict[str, dict[str, Any]]) -> dict[str, dict[str, int]]:
+    table: dict[str, Counter] = defaultdict(Counter)
+    for item in items:
+        table[item["action_family"]][records[item["id"]]["prediction"]["family"]] += 1
+    return {gold: dict(predicted.most_common()) for gold, predicted in sorted(table.items())}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
+    parser.add_argument("--split", choices=("held_out", "dev", "all"), default="held_out")
+    parser.add_argument("--mode", choices=("play", "static"), default="play")
+    parser.add_argument("--limit", type=int, default=0, help="evaluate only the first N items (a smoke run)")
+    parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--records", type=Path, help="also write every item's reading (JSONL)")
+    args = parser.parse_args(argv)
+    require_frozen_held_out()
+    from tests.rehearsal.rpg import worlds as harness
+
+    database = harness.require_disposable_database(args.allow_database)
+    harness.bootstrap()
+    catalog = json.loads((CORPUS / "catalog.json").read_text(encoding="utf-8"))
+    items = load_items(args.split)
+    if args.limit:
+        items = items[: args.limit]
+    started = time.perf_counter()
+    runner = Worlds(catalog, play=args.mode == "play")
+    for world in sorted({item["world"] for item in items}):
+        runner.prepare(world)
+    records: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(items, 1):
+        records[item["id"]] = runner.evaluate(item)
+        if index % 100 == 0:
+            print(f"{index}/{len(items)}", file=sys.stderr)
+    stateful_turn_ms = [record["turn_ms"] for record in records.values() if "turn_ms" in record]
+    report = {
+        "schema_version": 1,
+        "measurement": "RPG intent understanding without a model (RQ-0.4 baseline)",
+        "measured_on": date.today().isoformat(),
+        "revision": subprocess.run(["git", "rev-parse", "--short=10", "HEAD"], cwd=ROOT, capture_output=True,
+                                   text=True).stdout.strip(),
+        "database": database,
+        "split": args.split,
+        "mode": args.mode,
+        "items": len(items),
+        "held_out_sha256": held_out_digest(),
+        "labels": "model-labelled, pending the owner's spot check",
+        "model": "none: the scripted model answers the intent router with no advice; the engine decides",
+        "scenes": runner.scene_report,
+        "metrics": metrics(items, records),
+        # A scene the setup commands did not reach is played where the player stayed; its items are shown apart.
+        "metrics_reached_scenes_only": metrics(
+            [item for item in items if runner.scene_report.get(f"{item['world']}/{item['scene']}", {}).get("reached")],
+            records),
+        "unreached_scene_items": sum(not runner.scene_report.get(f"{item['world']}/{item['scene']}", {}).get("reached")
+                                     for item in items),
+        "by_world": breakdown(items, records, "world"),
+        "by_family": breakdown(items, records, "action_family"),
+        "family_confusion": confusion(items, records),
+        "static_sources": dict(Counter(record["static"]["source"].split(":")[0] for record in records.values()).most_common()),
+        "turn_ms_p50": sorted(stateful_turn_ms)[len(stateful_turn_ms) // 2] if stateful_turn_ms else None,
+        "elapsed_s": round(time.perf_counter() - started, 1),
+        "gates": {"M2 (from RQ-3)": "action family lower >= 0.95, target entity lower >= 0.95, false stateful upper <= 0.010"},
+    }
+    text = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(text, encoding="utf-8", newline="\n")
+    if args.records:
+        args.records.parent.mkdir(parents=True, exist_ok=True)
+        by_id = {item["id"]: item for item in items}
+        args.records.write_text("".join(json.dumps({**by_id[key], **value}, sort_keys=True, default=str) + "\n"
+                                        for key, value in records.items()), encoding="utf-8")
+    print(json.dumps(report["metrics"], indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    os.environ.setdefault("OMNIX_RPG_TURNS_PER_HOUR", "0")
+    raise SystemExit(main())

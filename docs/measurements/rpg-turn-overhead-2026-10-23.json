@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "measurement": "RPG turn overhead without model time (WP-5.6)",
+  "revision": "caa55226c2fa50cda17591ac4982dfb37c63a1ad",
+  "python": "3.11.12",
+  "platform": "Windows-10-10.0.26300-SP0",
+  "database": "omnix_rq_b",
+  "budget_p95_ms": 150,
+  "budget_statements_per_turn": 20,
+  "results": [
+    {
+      "state_kb_requested": 100,
+      "state_bytes": 102731,
+      "turns": 200,
+      "turn_request_ms": {
+        "p50": 1169.1,
+        "p95": 2037.6,
+        "max": 2207.2
+      },
+      "turn_request_ms_by_50_turns": [
+        {
+          "p50": 386.8,
+          "p95": 623.0,
+          "max": 697.7
+        },
+        {
+          "p50": 894.2,
+          "p95": 1319.9,
+          "max": 1425.6
+        },
+        {
+          "p50": 1649.7,
+          "p95": 1922.4,
+          "max": 2207.2
+        },
+        {
+          "p50": 1881.3,
+          "p95": 2123.0,
+          "max": 2162.6
+        }
+      ],
+      "statements_by_50_turns": [
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 58.0
+        },
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 47.0
+        },
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 47.0
+        },
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 47.0
+        }
+      ],
+      "state_bytes_after": 3957369,
+      "persist_foreground_turn_ms": {
+        "p50": 390.5,
+        "p95": 871.2,
+        "max": 922.3
+      },
+      "statements_per_turn": {
+        "p50": 45.0,
+        "p95": 47.0,
+        "max": 58.0
+      },
+      "wal_bytes_per_turn": {
+        "p50": 652668.0,
+        "p95": 1189552.0,
+        "max": 2353712.0
+      },
+      "model_calls_per_turn": 1.0
+    },
+    {
+      "state_kb_requested": 1024,
+      "state_bytes": 1051671,
+      "turns": 200,
+      "turn_request_ms": {
+        "p50": 1225.3,
+        "p95": 2147.5,
+        "max": 2374.5
+      },
+      "turn_request_ms_by_50_turns": [
+        {
+          "p50": 417.7,
+          "p95": 628.0,
+          "max": 689.6
+        },
+        {
+          "p50": 907.9,
+          "p95": 1330.3,
+          "max": 1653.7
+        },
+        {
+          "p50": 1713.6,
+          "p95": 2124.8,
+          "max": 2179.3
+        },
+        {
+          "p50": 1940.4,
+          "p95": 2273.0,
+          "max": 2374.5
+        }
+      ],
+      "statements_by_50_turns": [
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 58.0
+        },
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 47.0
+        },
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 47.0
+        },
+        {
+          "p50": 45.0,
+          "p95": 47.0,
+          "max": 47.0
+        }
+      ],
+      "state_bytes_after": 4906316,
+      "persist_foreground_turn_ms": {
+        "p50": 415.2,
+        "p95": 895.4,
+        "max": 932.2
+      },
+      "statements_per_turn": {
+        "p50": 45.0,
+        "p95": 47.0,
+        "max": 58.0
+      },
+      "wal_bytes_per_turn": {
+        "p50": 727976.0,
+        "p95": 3314712.0,
+        "max": 10712136.0
+      },
+      "model_calls_per_turn": 1.0
+    }
+  ],
+  "world_tick": {
+    "requested_in_game_hours": 24,
+    "elapsed_seconds_given_to_resume": 86400,
+    "resume_catchup_tick_cap": 12,
+    "state_bytes": 91445,
+    "cases": {
+      "idle_resume_catchup": {
+        "runs": 20,
+        "ms": {
+          "p50": 76.4,
+          "p95": 84.0,
+          "max": 84.0
+        },
+        "statements": {
+          "p50": 11.0,
+          "p95": 11.0,
+          "max": 11.0
+        },
+        "clock_advance": {
+          "environment_minutes": {
+            "p50": -480.0,
+            "p95": -480.0,
+            "max": -480.0
+          },
+          "calendar_minutes": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "simulation_ticks": {
+            "p50": 6.0,
+            "p95": 6.0,
+            "max": 6.0
+          }
+        },
+        "ticks_applied": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        },
+        "http_statuses": [
+          200
+        ]
+      },
+      "wait_turn": {
+        "runs": 20,
+        "ms": {
+          "p50": 213.2,
+          "p95": 274.0,
+          "max": 274.0
+        },
+        "statements": {
+          "p50": 45.0,
+          "p95": 45.0,
+          "max": 45.0
+        },
+        "clock_advance": {
+          "environment_minutes": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "calendar_minutes": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "simulation_ticks": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "max": 1.0
+          }
+        },
+        "ticks_applied": null,
+        "http_statuses": [
+          200
+        ]
+      }
+    },
+    "budget_p95_ms": 500
+  }
+}
