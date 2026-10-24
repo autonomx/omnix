@@ -236,6 +236,28 @@ class TradeRemembered(_Change):
     copper: int = Field(default=0, ge=0)
 
 
+class ConditionsChanged(_Change):
+    """An actor's lingering conditions (battered, wounded), as the rule left them: the hero or a companion."""
+
+    type: Literal["conditions_changed"] = "conditions_changed"
+    actor_id: str = Field(min_length=1)
+    conditions: tuple[dict[str, Any], ...] = ()
+
+
+class RestTaken(_Change):
+    """A full rest: where the hero last rested, and so where a beaten hero wakes."""
+
+    type: Literal["rest_taken"] = "rest_taken"
+    location_id: str = Field(min_length=1)
+
+
+class ServiceUsed(_Change):
+    """A service paid for and kept, used now: the room slept in."""
+
+    type: Literal["service_used"] = "service_used"
+    offer_id: str = Field(min_length=1)
+
+
 class JournalWritten(_Change):
     """The turn in the player's journal and on the campaign calendar, as the journal keeper left them."""
 
@@ -249,7 +271,7 @@ StateChange = Annotated[
     | HpChanged | ExperienceGained | SkillProgressed | LocationChanged | PresenceChanged | TimeAdvanced
     | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
-    | StockTaken | TradeRemembered,
+    | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

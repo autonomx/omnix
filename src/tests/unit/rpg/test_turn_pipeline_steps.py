@@ -7,8 +7,15 @@ from app.apps.rpg.foundation.state.changes import WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate
 from app.apps.rpg.session.turn import PlannedAction, TurnRequest, pipeline_enabled, plan_action, run_planned_turn
+from app.apps.rpg.session.turn.resolution import resolve_turn
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
 from app.apps.rpg.session.turn.world_tick import world_tick
+
+
+def _run(campaign, text, reading):
+    planned = plan_action(reading)
+    return run_planned_turn(campaign, request=TurnRequest(kind="player_text", session_id="rpg_test", text=text),
+                            planned=planned, reading=reading, resolution=resolve_turn(planned, campaign, text))
 
 
 def _campaign(**simulation):
@@ -58,17 +65,17 @@ def test_a_hero_with_no_place_is_placed_where_the_world_begins() -> None:
 
 
 def test_needs_rise_once_a_turn_and_stop_at_their_ceiling() -> None:
-    changes, receipt = world_tick(_campaign(), mechanic="wait", minutes=0, turn_key="turn:6", turn=4)
+    changes, receipt = world_tick(_campaign(), needs="wait", minutes=0, turn_key="turn:6", turn=4)
     [needs] = changes
     assert (needs.hunger, needs.thirst, needs.fatigue) == (1, 1, 1) and receipt == {}  # thirst stops at 100
-    assert world_tick(_campaign(survival={"enabled": False}), mechanic="wait", minutes=0, turn_key="t", turn=1)[0] == []
-    assert world_tick(_campaign(), mechanic="world_tick", minutes=0, turn_key="t", turn=1)[0] == []  # time away
+    assert world_tick(_campaign(survival={"enabled": False}), needs="wait", minutes=0, turn_key="t", turn=1)[0] == []
+    assert world_tick(_campaign(), needs=None, minutes=0, turn_key="t", turn=1)[0] == []  # time away
 
 
 def test_the_one_clock_moves_by_the_turns_minutes_and_the_play_screen_shows_it() -> None:
     campaign = _campaign()
     campaign["state"]["world"] = {"environment": {"absolute_minutes": 9 * 60 + 50, "active_events": []}}
-    changes, _ = world_tick(campaign, mechanic="wait", minutes=30, turn_key="turn:6", turn=4)
+    changes, _ = world_tick(campaign, needs="wait", minutes=30, turn_key="turn:6", turn=4)
     document, _ = reduce(campaign, changes)
     assert document["simulation_state"]["environment"]["absolute_minutes"] == 10 * 60 + 20
     assert document["state"]["world"]["environment"]["absolute_minutes"] == 10 * 60 + 20
@@ -87,8 +94,7 @@ def test_the_world_tick_may_replace_only_the_sections_it_owns() -> None:
 def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() -> None:
     campaign = _campaign()
     reading = IntentCandidate("wait", confidence=0.9, reason="waits")
-    result = run_planned_turn(campaign, request=TurnRequest(kind="player_text", session_id="rpg_test", text="wait"),
-                              planned=plan_action(reading), reading=reading)
+    result = _run(campaign, "wait", reading)
     assert campaign["simulation_state"]["tick"] == 5  # the turn-start campaign is not touched
     document = result["session"]
     assert document["simulation_state"]["tick"] == 8 and document["state"]["turn_count"] == 4  # a while: 3 ticks
@@ -100,10 +106,10 @@ def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() ->
     assert document["runtime_state"]["player_journal"]["entries"]
 
 
-def test_each_mechanic_on_the_pipeline_has_a_setting(monkeypatch) -> None:
-    assert pipeline_enabled("look") and pipeline_enabled("wait") and not pipeline_enabled("buy")
-    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_WAIT", "off")
-    assert not pipeline_enabled("wait") and pipeline_enabled("look")
+def test_mechanics_can_be_kept_on_the_older_path(monkeypatch) -> None:
+    assert pipeline_enabled("look") and pipeline_enabled("rest") and not pipeline_enabled("buy")
+    monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_OFF", "wait,rest")
+    assert not pipeline_enabled("wait") and not pipeline_enabled("rest") and pipeline_enabled("look")
 
 
 def test_an_unclear_command_is_planned_as_the_games_question_and_a_bare_attack_in_a_fight_is_not() -> None:
@@ -121,9 +127,7 @@ def test_a_question_back_is_a_counted_turn_in_which_no_time_passes() -> None:
 
     campaign = _campaign()
     reading = parse_command("I talk to him.", SceneView(()))
-    result = run_planned_turn(campaign, request=TurnRequest(kind="player_text", session_id="rpg_test",
-                                                            text="I talk to him."),
-                              planned=plan_action(reading), reading=reading)
+    result = _run(campaign, "I talk to him.", reading)
     assert [change["type"] for change in result["turn_pipeline"]["changes"]] == ["turn_counted"]
     assert result["clarification"] == "Who are you speaking to?"
     canonical = result["canonical_narrative_response"]

@@ -828,7 +828,7 @@ def _grammar_clarification(
     """A command the grammar cannot read in any situation: the game asks instead of guessing (RQ-3.1).
 
     The turn pipeline commits the question as a turn of its own (RQ-1.4); this refusal carrying it answers only
-    while ``OMNIX_RPG_TURN_PIPELINE_CLARIFY`` is off.
+    while ``OMNIX_RPG_TURN_PIPELINE_OFF`` keeps ``clarify`` on the older path.
     """
     from app.apps.rpg.session.command_reading import reading_record
 

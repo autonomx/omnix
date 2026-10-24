@@ -95,9 +95,7 @@ def test_idle_resume_is_a_turn_with_a_recap(launch, world) -> None:
     assert play.simulation()["tick"] == tick + 12  # an hour away is the most the world catches up on
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-2.4: sleeping or making camp away from an inn does nothing on the published-world turn path (the survival "
-    "rest actions are not reached): no fatigue eases, no time passes, and the camp is not a rest point")))
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_a_night_camped_in_the_wild_is_a_rest(launch, world) -> None:
     play = launch(world)
     for _ in range(3):

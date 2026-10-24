@@ -46,8 +46,7 @@ def _minutes(play) -> int:
 @pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_fight_to_defeat_is_a_setback(launch, world) -> None:
     """A lost fight (docs/rpg/design/stakes.md): the hero wakes where they last rested, eight hours later, at a
-    quarter of their strength and battered, a fifth of the purse gone (a full rest ending battered is
-    tests/unit/rpg/test_combat_stakes.py; a second night's lodging is RQ-2.3)."""
+    quarter of their strength and battered, a fifth of the purse gone; a night's rest ends being battered."""
     play, foe = launch(world), FOES[world][1]
     play.turn("go to Starfall Village")
     play.turn("I rent a room for the night from Orik Stonewake.")
@@ -68,6 +67,10 @@ def test_fight_to_defeat_is_a_setback(launch, world) -> None:
     assert state.get("defeats") == 1
     told = play.model.told()
     assert "the fight is lost" in told and "8 hours later" in told, told
+
+    play.turn("I rent a room for the night from Orik Stonewake.")  # a full rest ends being battered
+    play.turn("I go to my room and sleep for the night.")
+    assert not play.player_state().get("conditions")
 
 
 @pytest.mark.parametrize("world", in_worlds("aurelia"))

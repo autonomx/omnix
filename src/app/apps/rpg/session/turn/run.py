@@ -1,15 +1,16 @@
 """Steps 1-6 of a turn on the pipeline, and the stage that hands it to the commit (RQ-1.4, roadmap §4.1).
 
-``apply_planned_turn_stage`` runs first in the session's turn pipeline. For a reading the pipeline plans (look and wait
-so far) whose mechanic's setting is on, it loads the turn-start campaign, resolves the plan to changes, applies
-them with the reducer, lets the world tick, records the turn in the journal, and leaves the result for the
-commit and narration stages; everything else takes the older path.
+``apply_planned_turn_stage`` runs first in the session's turn pipeline. For a reading the pipeline plans, it loads
+the turn-start campaign, has the mechanic's rule resolve the plan to changes (``resolution.py``), applies them
+with the reducer, lets the world tick for the time the turn took, records the turn in the journal, and leaves the
+result for the commit and narration stages. A ``world_tick`` turn (the player's return) runs here too. Everything
+else takes the older path, until its mechanic moves (RQ-2).
 """
 from __future__ import annotations
 
 from typing import Any
 
-from app.config.env import env_bool
+from app.config.env import env_list
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
@@ -17,36 +18,22 @@ from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_
 from app.apps.rpg.session.command_reading import read_command, reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
-from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
-from app.apps.rpg.session.turn.trade import TradeResolution, resolve_trade
-from app.apps.rpg.session.turn.travel import resolve_travel
-from app.apps.rpg.session.turn.world_tick import MINUTES_PER_TICK, world_tick
+from app.apps.rpg.session.turn.resolution import MINUTES_PER_TICK, Resolution, resolve_turn
+from app.apps.rpg.session.turn.resolvers import outcome_lines
+from app.apps.rpg.session.turn.world_tick import world_tick
 
-# One setting per mechanic on the pipeline, for development and the operator: on once its scenarios pass on the
-# pipeline, and removed one release after that.
-TRAVEL_SETTING = "OMNIX_RPG_TURN_PIPELINE_TRAVEL"
-TRADE_SETTING = "OMNIX_RPG_TURN_PIPELINE_TRADE"
-LOOK_SETTING = "OMNIX_RPG_TURN_PIPELINE_LOOK"
-WAIT_SETTING = "OMNIX_RPG_TURN_PIPELINE_WAIT"
-CLARIFY_SETTING = "OMNIX_RPG_TURN_PIPELINE_CLARIFY"
+# The mechanics to keep on the older path, for development and the operator (e.g. "trade,rest"); each mechanic is
+# on once its scenarios pass on the pipeline, and the setting goes when the older path does.
+OFF_SETTING = "OMNIX_RPG_TURN_PIPELINE_OFF"
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
-                "trade": "trade"}
-_FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel", "trade": "commerce"}
+                "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest"}
+_FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
+           "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
 def pipeline_enabled(mechanic: str) -> bool:
-    if mechanic == "look":
-        return env_bool(LOOK_SETTING, True)
-    if mechanic == "wait":
-        return env_bool(WAIT_SETTING, True)
-    if mechanic == "clarify":
-        return env_bool(CLARIFY_SETTING, True)
-    if mechanic == "travel":
-        return env_bool(TRAVEL_SETTING, True)
-    if mechanic == "trade":
-        return env_bool(TRADE_SETTING, True)
-    return False
+    return mechanic in _ACTION_TYPE and mechanic not in set(env_list(OFF_SETTING))
 
 
 def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int, summary: str) -> JournalWritten:
@@ -70,48 +57,43 @@ def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int,
                           journal=_d(runtime_state.get("player_journal")))
 
 
+def _reported(changes: list[StateChange]) -> list[dict[str, Any]]:
+    """As the outcome reports them: a world tick's summary, not the sections it replaced (the patch has those)."""
+    return [(change.reported() if isinstance(change, WorldTicked) else change).model_dump(mode="json")
+            for change in changes]
+
+
 def run_planned_turn(
     session: dict[str, Any],
     *,
     request: TurnRequest,
     planned: PlannedAction,
     reading: IntentCandidate,
-    trade: TradeResolution | None = None,
+    resolution: Resolution,
 ) -> dict[str, Any]:
-    """Resolve, apply and tick one planned turn against the turn-start campaign; the result for the commit."""
-    stated: list[str] | None = None
-    refused = False
-    if trade is not None:
-        changes, stated, minutes, refused = trade.changes, trade.lines, trade.minutes, trade.refused
-    elif planned.mechanic == "travel":
-        travel = resolve_travel(planned, session)
-        changes, stated, minutes, refused = travel.changes, travel.lines, travel.minutes, travel.refused
-    else:
-        changes, minutes = resolve(planned, session), planned.ticks * MINUTES_PER_TICK
-    document, _ = reduce(session, changes)
+    """Apply one resolved turn to the turn-start campaign and let the world tick; the result for the commit."""
+    document, _ = reduce(session, resolution.changes)
     simulation = _d(document.get("simulation_state"))
     tick = int(simulation.get("tick") or 0)
     turn_index = int(_d(document.get("state")).get("turn_count") or 0)
     turn_id = f"turn:{tick}"
     tick_changes: list[StateChange] = []
     causal: dict[str, Any] = {}
-    if minutes:  # the world moves on only when time passed
-        tick_changes, causal = world_tick(document, mechanic=planned.mechanic, minutes=minutes, turn_key=turn_id,
-                                          turn=turn_index)
+    if resolution.minutes:  # the world moves on only when time passed
+        tick_changes, causal = world_tick(document, needs=resolution.needs, minutes=resolution.minutes,
+                                          turn_key=turn_id, turn=turn_index)
         document, _ = reduce(document, tick_changes)
-    lines = stated if stated is not None else outcome_lines(planned, document)
-    applied = [*changes, *tick_changes]
-    # The game's own line, with no model call: a question back, or a journey refused. A trade, refused or not, is
-    # told to the narrator, as the older path told it.
-    answered = planned.mechanic == "clarify" or (refused and trade is None)
-    if planned.mechanic != "clarify" and not refused:  # a question back or a refusal is no entry in the journal
+    lines = resolution.lines
+    applied = [*resolution.changes, *tick_changes]
+    if planned.mechanic != "clarify" and not resolution.refused:  # a question back or a refusal is no journal entry
         journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
         document, _ = reduce(document, [journal])
         applied.append(journal)
 
+    outcome = "clarification_required" if planned.mechanic == "clarify" else "refused" if resolution.refused else "success"
     resolved = {
         "ok": True,
-        "outcome": "clarification_required" if planned.mechanic == "clarify" else "refused" if refused else "success",
+        "outcome": outcome,
         "action_type": _ACTION_TYPE[planned.mechanic],
         "semantic_action_type": _ACTION_TYPE[planned.mechanic],
         "semantic_family": _FAMILY[planned.mechanic],
@@ -142,23 +124,22 @@ def run_planned_turn(
             "mechanic": planned.mechanic,
             "planned": planned.model_dump(mode="json"),
             "intent": reading_record(reading),
-            # As the outcome reports them: a world tick's summary, not the sections it replaced (the patch has those).
-            "changes": [(change.reported() if isinstance(change, WorldTicked) else change).model_dump(mode="json")
-                        for change in applied],
+            "changes": _reported(applied),
         },
     }
-    if answered:
+    if not resolution.told:
         # The game asks, or says why not; no model writes it (the narrative engine adopts it as the turn's prose).
         from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
         from app.apps.rpg.session.narrative_engine_bridge import publish_fixed_narration
 
-        if planned.mechanic == "clarify":
+        asks = planned.mechanic == "clarify"
+        if asks:
             result["clarification"] = planned.question
             result["response_mode"] = resolved["response_mode"] = "clarification"
         result = publish_fixed_narration(
             result, session_id=request.session_id, text=" ".join(lines),
-            kind=BeatKind.CLARIFICATION if planned.mechanic == "clarify" else BeatKind.RESULT,
-            purpose=BeatPurpose.CLARIFICATION if planned.mechanic == "clarify" else BeatPurpose.CONSEQUENCE,
+            kind=BeatKind.CLARIFICATION if asks else BeatKind.RESULT,
+            purpose=BeatPurpose.CLARIFICATION if asks else BeatPurpose.CONSEQUENCE,
             source=f"rpg_turn_pipeline_{planned.mechanic}_v1")
     return result
 
@@ -183,8 +164,8 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
     turn_id = f"turn:{tick}:world"
     causal: dict[str, Any] = {}
     if ticks:
-        tick_changes, causal = world_tick(document, mechanic="world_tick", minutes=ticks * MINUTES_PER_TICK,
-                                          turn_key=turn_id, turn=tick)
+        tick_changes, causal = world_tick(document, needs=None, minutes=ticks * MINUTES_PER_TICK, turn_key=turn_id,
+                                          turn=tick)
         document, _ = reduce(document, tick_changes)
         changes.extend(tick_changes)
     place = outcome_lines(PlannedAction(mechanic="look"), document)[0].removeprefix("You look around ").rstrip(".")
@@ -198,9 +179,7 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
         "action_type": "world_tick", "semantic_family": "world", "llm_called": False, "llm_purpose": "turn_pipeline",
         "source": SOURCE, "response_mode": "world_tick", "resolved_result": resolved, "result": dict(resolved),
         "causal_world_runtime": causal, "world_tick": {"elapsed_seconds": seconds, "ticks": ticks},
-        "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick",
-                          "changes": [(change.reported() if isinstance(change, WorldTicked) else change)
-                                      .model_dump(mode="json") for change in changes]},
+        "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick", "changes": _reported(changes)},
     }
     from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
     from app.apps.rpg.session.narrative_engine_bridge import publish_fixed_narration
@@ -235,8 +214,9 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     # Read against no scene first: only a command that could be one the pipeline runs loads the campaign here.
     unseen = parse_command(_s(ctx.player_input), SceneView(()))
     glance = plan_action(unseen)
-    # A journey's destination is one of the scene's places, which a reading against no scene cannot name.
-    possible = "travel" if unseen.family == "move" else glance.mechanic if glance is not None else ""
+    # A journey's destination and a carried or fallen thing are the scene's, which a reading against none cannot name.
+    by_family = {"move": "travel", "use_item": "use_item", "drop": "drop", "take": "take"}
+    possible = by_family.get(unseen.family) or (glance.mechanic if glance is not None else "")
     if not possible or not pipeline_enabled(possible):
         return ctx
     session = _load(ctx)
@@ -247,16 +227,14 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     planned = plan_action(reading, fighting=_d(simulation.get("combat_state")).get("active") is True)
     if planned is None or not pipeline_enabled(planned.mechanic):
         return ctx
+    resolution = resolve_turn(planned, session, _s(ctx.player_input))
+    if resolution is None:
+        return ctx  # the mechanic's rule has nothing to say for this campaign: the older path answers
     request = TurnRequest(kind="player_text", session_id=ctx.session_id, text=_s(ctx.player_input))
-    trade = (resolve_trade(session, request.text, selling=planned.reason == "sell")
-             if planned.mechanic == "trade" else None)
-    if planned.mechanic == "trade" and trade is None:
-        return ctx  # not a trade the pipeline makes: the older path answers
-    ctx.result = run_planned_turn(session, request=request, planned=planned, reading=reading, trade=trade)
+    ctx.result = run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
     ctx.result.setdefault("trace_id", ctx.trace_id)
     ctx.resolved = True
     return ctx
 
 
-__all__ = ["CLARIFY_SETTING", "LOOK_SETTING", "TRADE_SETTING", "TRAVEL_SETTING", "WAIT_SETTING", "apply_planned_turn_stage", "pipeline_enabled",
-           "run_planned_turn", "run_world_tick_turn"]
+__all__ = ["OFF_SETTING", "apply_planned_turn_stage", "pipeline_enabled", "run_planned_turn", "run_world_tick_turn"]

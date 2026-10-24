@@ -125,7 +125,7 @@
         "narration||You look around Wayfarers' Guild. Here: Princess Seraphine Valecourt, Miri Kestrel, Liora Fen. Paths lead to Starfall Village."
       ],
       "step": "look around",
-      "told": "You look around Wayfarers' Guild. Here: Princess Seraphine Valecourt, Miri Kestrel, Liora Fen. Paths lead to Starfall Village. Lantern Bread\nLantern Bread is an established item in the campaign world, described through public and presently observable facts. Wayfarers' Guild\nRegion: Starfall March\nDescription: Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Miri Kestrel\nId: npc:miri-kestrel\nName: Miri Kestrel\nRole: Wayfarers' Guild registrar\nGoals:\n• professionalize the guild\n• open a cross-world museum\n• keep Seraphine out of paperwork disasters\nSpecies: halfling\nBiography: Miri maintains the Earthborn Registry and can estimate a newcomer's affinity from the objects that crossed with them.\nPersonality:\n• cheerful\n• mercantile\n• hyper-competent\n• collector of Earth snacks\nSpeech Style: rapid lists, friendly bargaining, calls everyone dear traveler",
+      "told": "You look around Wayfarers' Guild. Here: Princess Seraphine Valecourt, Miri Kestrel, Liora Fen. Paths lead to Starfall Village. Wayfarers' Guild\nRegion: Starfall March\nDescription: Wayfarers' Guild, in Starfall March: frontier farms, gate scars, and multicultural trade. Liora Fen\nId: npc:liora-fen\nName: Liora Fen\nRole: guide and first companion\nGoals:\n• find her missing foster mother\n• keep new arrivals alive\n• prove foxkin can lead mixed parties\nSpecies: foxkin\nBiography: Liora was raised by gatewardens who vanished during the last Meridian flare. She patrols Starfall Grove and has guided seven Earthborn arrivals; three survived long enough to choose a life in Aurelia.\nPersonality:\n• wry\n• protective\n• curious about Earth slang\n• afraid of being abandoned\nSpeech Style: dry humor, short practical sentences, occasional fox metaphors\nRelationships:\nNpc:Vael-Ardyn: suspicious respect\nNpc:Archon-Malrec: personal hatred\nNpc:Seraphine-Valecourt: trusted patron\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-liora-portrait Miri Kestrel\nId: npc:miri-kestrel\nName: Miri Kestrel\nRole: Wayfarers' Guild registrar\nGoals:\n• professionalize the guild\n• open a cross-world museum\n• keep Seraphine out of paperwork disasters\nSpecies: halfling\nBiography: Miri maintains the Earthborn Registry and can estimate a newcomer's affinity from the objects that crossed with them.\nPersonality:\n• cheerful\n• mercantile\n• hyper-competent\n• collector of Earth snacks\nSpeech Style: rapid lists, friendly bargaining, calls everyone dear traveler Princess Seraphine Valecourt\nId: npc:seraphine-valecourt\nName: Princess Seraphine Valecourt\nRole: princess-engineer and reformist patron\nGoals:\n• repair the royal Meridian engine\n• prevent civil war\n• learn why Earthborn arrivals are increasing\nSpecies: human\nBiography: Second heir of the Meridian Crown, Seraphine rebuilds ancient gateworks and secretly sponsors the Wayfarers' Guild. She believes Earthborn knowledge can modernize Aurelia without repeating the Cataclysm.\nPersonality:\n• brilliant\n• formal in public\n• recklessly hands-on\n• genuinely compassionate\nSpeech Style: precise technical language softened by earnest warmth\nPortrait Asset Id: image:world-import:world-aurelia-play-WORLD:image-aurelia-seraphine-portrait",
       "visible": "You look around Wayfarers' Guild. Here: Princess Seraphine Valecourt, Miri Kestrel, Liora Fen. Paths lead to Starfall Village."
     },
     {
@@ -169,12 +169,12 @@
     },
     {
       "blocks": [
-        "action||You use A night's lodging and rest for 21 hours. The reserved service is consumed.",
-        "choice||Offered choice: You use A night's lodging and rest for 21 hours. The reserved service is consumed."
+        "action||You rest through the night in the room you paid for (a night's lodging, 8 hours).",
+        "choice||Offered choice: You rest through the night in the room you paid for (a night's lodging, 8 hours)."
       ],
       "step": "I go to my room and sleep for the night.",
-      "told": "You use A night's lodging and rest for 21 hours. The reserved service is consumed. You use A night's lodging and rest for 21 hours. The reserved service is consumed.",
-      "visible": "You use A night's lodging and rest for 21 hours. The reserved service is consumed."
+      "told": "You rest through the night in the room you paid for (a night's lodging, 8 hours). You rest through the night in the room you paid for (a night's lodging, 8 hours).",
+      "visible": "You rest through the night in the room you paid for (a night's lodging, 8 hours)."
     },
     {
       "blocks": [
@@ -230,12 +230,12 @@
     },
     {
       "blocks": [
-        "action||Orik Stonewake offers: A drink (8 copper).",
-        "choice||Offered choice: Orik Stonewake offers: A drink (8 copper)."
+        "action||You drink the Healing Potion. It restores 7 health.",
+        "choice||Offered choice: You drink the Healing Potion. It restores 7 health."
       ],
       "step": "I drink the Healing Potion.",
-      "told": "Orik Stonewake offers: A drink (8 copper). Orik Stonewake offers: A drink (8 copper).",
-      "visible": "Orik Stonewake offers: A drink (8 copper)."
+      "told": "You drink the Healing Potion. It restores 7 health. You drink the Healing Potion. It restores 7 health.",
+      "visible": "You drink the Healing Potion. It restores 7 health."
     },
     {
       "blocks": [

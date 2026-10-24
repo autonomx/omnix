@@ -75,10 +75,7 @@ def test_an_ambiguous_command_asks_one_question(launch, world) -> None:
         assert after[fact] == before[fact], fact
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-2.4: the command grammar reads 'I eat one Lantern Bread.' as using the carried item, but the turn's "
-    "item rules know only the built-in catalog (unknown_item) and its drop/take paths differ from the ground-"
-    "item rules; one item engine (RQ-2.4) takes the grammar's item actions")))
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
 def test_using_a_carried_item_by_text(launch, world) -> None:
     play = launch(world)
     play.turn("I eat one Lantern Bread.")

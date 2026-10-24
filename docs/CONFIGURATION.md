@@ -252,11 +252,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
 | `OMNIX_RPG_SNAPSHOT_EVERY` | integer | `20` | rpg | Controls rpg snapshot every for rpg. |
 | `OMNIX_RPG_TURNS_PER_HOUR` | integer | `600` | rpg | Controls rpg turns per hour for rpg. |
-| `OMNIX_RPG_TURN_PIPELINE_CLARIFY` | boolean | `true` | rpg | Controls rpg turn pipeline clarify for rpg. |
-| `OMNIX_RPG_TURN_PIPELINE_LOOK` | boolean | `true` | rpg | Controls rpg turn pipeline look for rpg. |
-| `OMNIX_RPG_TURN_PIPELINE_TRADE` | boolean | `true` | rpg | Controls rpg turn pipeline trade for rpg. |
-| `OMNIX_RPG_TURN_PIPELINE_TRAVEL` | boolean | `true` | rpg | Controls rpg turn pipeline travel for rpg. |
-| `OMNIX_RPG_TURN_PIPELINE_WAIT` | boolean | `true` | rpg | Controls rpg turn pipeline wait for rpg. |
+| `OMNIX_RPG_TURN_PIPELINE_OFF` | list | — | rpg | Controls rpg turn pipeline off for rpg. |
 | `OMNIX_RPG_TURN_WAIT_SECONDS` | integer | `120` | rpg | Controls rpg turn wait seconds for rpg. |
 | `OMNIX_RPG_WORLD_CATALOG_REPO` | string | — | rpg | Controls rpg world catalog repo for rpg. |
 | `OMNIX_RUN_TOKEN_KEY` | string | — | security | Controls run token key for security. |

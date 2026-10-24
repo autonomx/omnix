@@ -37,8 +37,11 @@ from .changes import (
     QuestStatusChanged,
     SkillProgressed,
     StateChange,
+    ConditionsChanged,
     JournalWritten,
+    RestTaken,
     ServiceReserved,
+    ServiceUsed,
     StockTaken,
     TimeAdvanced,
     TradeRemembered,
@@ -292,6 +295,7 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         maximum = int(hp.get("max") or 0)
         hp["current"] = max(0, min(maximum, int(hp.get("current") or 0) + change.delta))
         writer.set(_PLAYER + ("resources", "hp"), hp)
+        writer.set(_PLAYER + ("hp",), hp["current"])
         writer.set(("state", "player", "resources", "hp"), dict(hp))
     elif isinstance(change, ExperienceGained):
         writer.set(_PLAYER + ("xp",), int(writer.get(_PLAYER + ("xp",)) or 0) + change.amount)
@@ -342,6 +346,29 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
                          "started_tick": int(writer.get(("simulation_state", "tick")) or 0),
                          "effects": {"duration": change.duration, f"{change.service_kind}_reserved": True}})
         writer.set(("simulation_state", "active_services"), reserved)
+    elif isinstance(change, ConditionsChanged):
+        conditions = [dict(condition) for condition in change.conditions]
+        if change.actor_id == "player":
+            writer.set(_PLAYER + ("conditions",), conditions)
+        else:
+            party = dict(writer.get(_PLAYER + ("party_state",)) or {})
+            companions = [dict(row) for row in party.get("companions") or () if isinstance(row, dict)]
+            if not any(row.get("npc_id") == change.actor_id for row in companions):
+                raise ChangeRejected(f"{change.actor_id} is not in the party")
+            party["companions"] = [{**row, "conditions": conditions} if row.get("npc_id") == change.actor_id else row
+                                   for row in companions]
+            writer.set(_PLAYER + ("party_state",), party)
+    elif isinstance(change, RestTaken):
+        writer.set(_PLAYER + ("rest_point",), change.location_id)
+    elif isinstance(change, ServiceUsed):
+        services = [dict(row) for row in writer.get(("simulation_state", "active_services")) or () if isinstance(row, dict)]
+        index = next((i for i, row in enumerate(services)
+                      if row.get("offer_id") == change.offer_id and row.get("status") == "active"), None)
+        if index is None:
+            raise ChangeRejected(f"no {change.offer_id} is kept to use")
+        services[index] = {**services[index], "status": "consumed",
+                           "consumed_tick": int(writer.get(("simulation_state", "tick")) or 0)}
+        writer.set(("simulation_state", "active_services"), services)
     elif isinstance(change, StockTaken):
         writer.set(("simulation_state", "trade", "stock", change.offer_id), change.remaining)
     elif isinstance(change, TradeRemembered):
