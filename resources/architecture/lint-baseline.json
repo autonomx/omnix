@@ -7118,16 +7118,6 @@
       "rule": "AL021"
     },
     {
-      "count": 2,
-      "fingerprint": "Bran",
-      "lines": [
-        359,
-        360
-      ],
-      "path": "src/app/apps/rpg/narration/narrative_engine/writer.py",
-      "rule": "AL021"
-    },
-    {
       "count": 4,
       "fingerprint": "Bran",
       "lines": [
@@ -7143,8 +7133,8 @@
       "count": 2,
       "fingerprint": "Bran",
       "lines": [
-        372,
-        375
+        379,
+        382
       ],
       "path": "src/app/apps/rpg/narration/presentation/visible_response.py",
       "rule": "AL021"
@@ -7153,7 +7143,7 @@
       "count": 1,
       "fingerprint": "Rusty Flagon",
       "lines": [
-        372
+        379
       ],
       "path": "src/app/apps/rpg/narration/presentation/visible_response.py",
       "rule": "AL021"
