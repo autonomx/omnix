@@ -189,10 +189,11 @@ def _lead_seed_id(revision_seeds: Any, opening_hook: str) -> str:
     return ""
 
 
-def launch_starter(request: Any, *, sessions: Any, opening_hook: str = "",
+def launch_starter(request: Any, *, sessions: Any, opening_hook: str = "", prepare: Any = None,
                    database: Any | None = None) -> dict[str, Any]:
     """The classic new game: the starter world's opening for the request's starting place, its hero as made
-    (``sessions`` creates and saves the campaign, as for any published launch)."""
+    (``sessions`` creates and saves the campaign, as for any published launch; ``prepare`` adds the caller's own
+    records before that save)."""
     from .postgres_service import load_published_resources
     from .published_launch import launch_published_scenario
 
@@ -217,6 +218,7 @@ def launch_starter(request: Any, *, sessions: Any, opening_hook: str = "",
         features=made.get("features"),
         new_game=made,
         lead_seed_id=_lead_seed_id(revision.adventure_seeds, opening_hook),
+        prepare=prepare,
         database=database,
     )
 

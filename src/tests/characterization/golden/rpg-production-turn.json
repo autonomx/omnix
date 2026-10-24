@@ -38,7 +38,7 @@
         "interaction_seq": 1,
         "location": "Rusty Flagon Tavern",
         "player_level": 1,
-        "state_revision": 2,
+        "state_revision": 1,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
       "simulation_tick": 1,
@@ -51,7 +51,7 @@
           "world",
           "narrative"
         ],
-        "revision": 2
+        "revision": 1
       },
       "turn_id": "turn:1",
       "visible_response": {
@@ -98,7 +98,7 @@
         "interaction_seq": 2,
         "location": "Rusty Flagon Tavern",
         "player_level": 1,
-        "state_revision": 3,
+        "state_revision": 2,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
       "simulation_tick": 0,
@@ -108,7 +108,7 @@
           "conversation",
           "time"
         ],
-        "revision": 3
+        "revision": 2
       },
       "turn_id": "turn:0",
       "visible_response": {
@@ -182,7 +182,7 @@
         "interaction_seq": 3,
         "location": "Rusty Flagon Tavern",
         "player_level": 1,
-        "state_revision": 4,
+        "state_revision": 3,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
       "simulation_tick": 2,
@@ -196,7 +196,7 @@
           "world",
           "narrative"
         ],
-        "revision": 4
+        "revision": 3
       },
       "turn_id": "turn:2",
       "visible_response": {
@@ -259,7 +259,7 @@
         "interaction_seq": 4,
         "location": "Northern Road",
         "player_level": 1,
-        "state_revision": 5,
+        "state_revision": 4,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
       "simulation_tick": 3,
@@ -273,7 +273,7 @@
           "world",
           "narrative"
         ],
-        "revision": 5
+        "revision": 4
       },
       "turn_id": "turn:3",
       "visible_response": {
@@ -327,7 +327,7 @@
         "interaction_seq": 5,
         "location": "Northern Road",
         "player_level": 1,
-        "state_revision": 6,
+        "state_revision": 5,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
       "simulation_tick": 6,
@@ -339,7 +339,7 @@
           "world",
           "narrative"
         ],
-        "revision": 6
+        "revision": 5
       },
       "turn_id": "turn:6",
       "visible_response": {

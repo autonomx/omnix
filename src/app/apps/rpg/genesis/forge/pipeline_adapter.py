@@ -189,6 +189,30 @@ def prepare_new_game_session_from_compiled_genesis(
     )
 
 
+def _launch_in_starter_world(
+    *,
+    sessions: CampaignSessions,
+    bootstrap: dict[str, Any],
+    compiled: dict[str, Any],
+    contract: CampaignGenesisContract,
+    legacy: dict[str, Any],
+) -> dict[str, Any]:
+    """No World Forge: the wizard's hero sets out in the starter world, from its opening for the chosen starting
+    place and hook (roadmap §4.4: every campaign plays from a world), with the genesis the wizard made attached."""
+    from app.apps.rpg.genesis.worlds.builtin_worlds import launch_starter
+
+    def with_genesis(session: dict[str, Any]) -> dict[str, Any]:
+        built = {"ok": True, "session_id": str(_safe_dict(session.get("manifest")).get("session_id") or ""),
+                 "session": session}
+        built = attach_genesis_to_created_session(built, contract, persist=False, sessions=sessions)
+        return attach_compiled_genesis_to_session(built, compiled, bootstrap, persist=False, sessions=sessions)["session"]
+
+    request = _preserve_seed_zero(sessions.new_game_request(legacy))
+    result = launch_starter(request, sessions=sessions, opening_hook=str(contract.story_options.opening_hook or ""),
+                            prepare=with_genesis)
+    return _attach_world_forge_progress(result, None)
+
+
 def create_new_game_session_from_compiled_genesis(
     *,
     sessions: CampaignSessions,
@@ -198,6 +222,9 @@ def create_new_game_session_from_compiled_genesis(
     legacy: dict[str, Any],
     prepared_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if not contract.world_forge.enabled:
+        return _launch_in_starter_world(sessions=sessions, bootstrap=bootstrap, compiled=compiled, contract=contract,
+                                        legacy=legacy)
     result = prepared_result or prepare_new_game_session_from_compiled_genesis(
         bootstrap=bootstrap,
         compiled=compiled,
@@ -206,7 +233,7 @@ def create_new_game_session_from_compiled_genesis(
         sessions=sessions,
     )
     session = raw_session if isinstance(raw_session := result.get("session"), dict) else None
-    if session is None or not contract.world_forge.enabled:
+    if session is None:
         result["status"] = "ready"
         return _save_prepared_result(_attach_world_forge_progress(result, None), sessions=sessions)
     session_id = str(result.get("session_id") or "")
@@ -287,14 +314,15 @@ def create_new_game_from_genesis_payload(payload: dict[str, Any], *, sessions: C
     )
     compiled = compile_campaign_genesis(contract)
     bootstrap = bootstrap_session_from_compiled_genesis(compiled)
-    prepared = prepare_new_game_session_from_compiled_genesis(
-        bootstrap=bootstrap,
-        compiled=compiled,
-        contract=contract,
-        legacy=legacy,
-        sessions=sessions,
-    )
+    prepared = None
     if contract.world_forge.enabled:
+        prepared = prepare_new_game_session_from_compiled_genesis(
+            bootstrap=bootstrap,
+            compiled=compiled,
+            contract=contract,
+            legacy=legacy,
+            sessions=sessions,
+        )
         from .async_coordinator import (
             campaign_genesis_async_enabled,
             campaign_genesis_sync_fallback_allowed,

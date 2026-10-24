@@ -188,24 +188,20 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
     class _Sessions(SessionCampaignSessions):
         """The real request validation; creation and saves stay in memory."""
 
-        def create_new_game(self, request):
+        def build_new_game(self, request):
             return {
-                "ok": True,
-                "session_id": "campaign:published",
-                "session": {
-                    "manifest": {
-                        "id": "campaign:published",
-                        "session_id": "campaign:published",
-                        "schema_version": "rpg-session-v1",
-                    },
-                    "state": {"title": "Published Campaign"},
-                    "runtime_state": {},
-                    "setup_payload": {},
+                "manifest": {
+                    "id": "campaign:published",
+                    "session_id": "campaign:published",
+                    "schema_version": "rpg-session-v1",
                 },
+                "state": {"title": "Published Campaign"},
+                "runtime_state": {},
+                "setup_payload": {},
             }
 
-        def save(self, session, *, compact=False):
-            return session
+        def save_created(self, session):
+            return {"ok": True, "session_id": "campaign:published", "session": session}
 
     def fake_schedule(campaign_id: str, **kwargs):
         captured["materialization_signal"] = {

@@ -31,7 +31,9 @@ def test_turn_narrations_leave_the_document_and_come_back_on_load() -> None:
     bootstrap_postgresql_runtime()
     context = current_tenant()
     campaign_id = f"campaign:narrations-{uuid4().hex}"
-    state = {"manifest": {"session_id": campaign_id, "id": campaign_id, "schema_version": 6},
+    from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION
+
+    state = {"manifest": {"session_id": campaign_id, "id": campaign_id, "schema_version": CURRENT_SCHEMA_VERSION},
              "runtime_state": {"state_revision": 0}, "simulation_state": {"tick": 0}}
     with unit_of_work() as work:
         work.rpg.create_campaign(context, campaign_id=campaign_id, title="Narrations", state=state,

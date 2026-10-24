@@ -17,11 +17,11 @@ camp in the wild, restores the hero; a short rest takes the edge off.
 - **Putting down and picking up** (no time): one of a stack, or the number the player says ("two"). What lies on the
   ground stays where it was put down.
 - **Wearing and wielding** (no time): a weapon is taken up in the main hand (a shield in the off hand), armour,
-  a helmet, a cloak or a ring goes on its place, taking the place of what was there; it stays in the pack. Food,
-  potions and tools are not worn. Asking for what is already worn changes nothing. Taking something off puts it
+  a helmet, a cloak or a ring goes on its place, and a tool (a compass, a lantern, a torch) is held to hand, each
+  taking the place of what was there; it stays in the pack. Food and potions are not worn. Asking for what is already worn changes nothing. Taking something off puts it
   away. Gear that leaves the pack (dropped, sold, used up) is no longer worn.
 - **One gear record** (document version 8): what is worn is the store's (`inventory_state.equipment`, by slot:
-  `main_hand`, `off_hand`, `body`, `head`, `cloak`, `ring`), which combat reads; the play screen's sheet lists it
+  `main_hand`, `off_hand`, `body`, `head`, `cloak`, `ring`, `tool`), which combat reads; the play screen's sheet lists it
   ("Weapon", "Cloak", ...). The old third record (`player_state.inventory`) is gathered into the store.
 - **The loadout** (the play screen's pack) uses, equips, takes off and drops as structured-action turns: the same
   rules, their lines the game's own (no model call); what a rule refuses takes no turn. In a fight, an item is used

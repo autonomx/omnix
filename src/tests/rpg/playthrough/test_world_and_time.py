@@ -178,3 +178,18 @@ def test_time_passing_on_its_own_is_a_world_tick_turn(launch) -> None:
     aldric = next(person for person in body["people"] if person["npc_id"] == "npc:aldric")
     assert (aldric["location_name"], aldric["activity"]) == ("Northern Road", "patrolling the road")
     assert play.client.post(f"/api/rpg/campaigns/{play.session_id}/spatial-ticks", json={"ticks": 13}).status_code == 422
+
+
+def test_a_wizard_campaign_without_world_forge_sets_out_in_the_starter_world(launch) -> None:
+    """§4.4: every campaign plays from a world. The creation wizard's campaign with no World Forge was the engine's
+    built-in tavern (another copy of the starter town, with no world model, so no mechanic of the pipeline ran in
+    it); it is the starter world's opening for the chosen place, with the wizard's hero and genesis attached."""
+    play = launch("genesis")
+    stored = play.stored()
+    assert stored["state"]["world_binding"]["world_id"].startswith("world:the-market-road-")
+    assert play.location() == "location:market-road:rusty-flagon" and play.present() == ["npc:bran", "npc:mira"]
+    assert stored["state"]["genesis_snapshot"]["identity"]["origin"] == "frontier_village"  # the wizard's hero
+    assert stored["state"]["metadata"]["seed"] == 0  # the wizard's own seed, 0 included
+    assert stored["runtime_state"]["creation_progress"]["stage"] == "ready_first_turn"
+    play.turn("go to the market")  # travel on the pipeline: the world model's roads
+    assert play.location() == "location:market-road:market-square"

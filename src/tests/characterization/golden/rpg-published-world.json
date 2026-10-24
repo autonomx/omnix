@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:4d8ca342ee6db4646ff3be4c7e7def5b35f5d99bec6c929cd3dc192fe9c311a4",
+    "document_hash": "sha256:840ed9d9d9ae961feafff67b2ec4a312596a530bcd7948a7071dc395ca6a5847",
     "facts": {
       "combat": {
         "active": false,
@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:19c698292e2ef30a7740eaeabd2ad955a354976100f184ec4fff8228040fa36f",
+      "document_hash": "sha256:e16344d2fcd08fe2a000e35d53e992bc611a83696667191ed90a763a5bd98a41",
       "facts": {
         "combat": {
           "active": false,
@@ -199,7 +199,6 @@
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/map_state",
         "state/turn_count",
         "state/world"
       ],
@@ -219,14 +218,14 @@
             "world",
             "narrative"
           ],
-          "revision": 2
+          "revision": 1
         }
       },
       "session_summary": {
         "interaction_seq": 1,
         "location": "Starfall Grove",
         "player_level": 1,
-        "state_revision": 2,
+        "state_revision": 1,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -241,7 +240,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0e47df76c194333bdcff23f280d0963daecab9d499fd307226ffd554c530f533",
+      "document_hash": "sha256:9debc126f1b07f17777ca9f55194997a3fa8834d5d73f5130c7a8116a1b7bcb7",
       "facts": {
         "combat": {
           "active": false,
@@ -372,14 +371,14 @@
             "world",
             "narrative"
           ],
-          "revision": 3
+          "revision": 2
         }
       },
       "session_summary": {
         "interaction_seq": 2,
         "location": "Starfall Grove",
         "player_level": 1,
-        "state_revision": 3,
+        "state_revision": 2,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -400,7 +399,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3a1b5502ae1ebf0db1ea6f3c65be43a02dd2967f21c1c2b9b56d2a89343153a5",
+      "document_hash": "sha256:caf4f09b5ac62e362917256f70367dca3109e04708d91e8a3cac174dc38f1fbd",
       "facts": {
         "combat": {
           "active": false,
@@ -530,14 +529,14 @@
             "world",
             "narrative"
           ],
-          "revision": 4
+          "revision": 3
         }
       },
       "session_summary": {
         "interaction_seq": 3,
         "location": "Starfall Grove",
         "player_level": 1,
-        "state_revision": 4,
+        "state_revision": 3,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -555,7 +554,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:84a54b85f239ebcbd3b24f06e49e048079b109fed3a0fb72f2f730f656a67245",
+      "document_hash": "sha256:e3ff8269cc11839819d5b60c1caa8ef219bad25cb6a9777877b62039c9f9051a",
       "facts": {
         "combat": {
           "active": false,
@@ -686,14 +685,14 @@
             "world",
             "narrative"
           ],
-          "revision": 5
+          "revision": 4
         }
       },
       "session_summary": {
         "interaction_seq": 4,
         "location": "Starfall Grove",
         "player_level": 1,
-        "state_revision": 5,
+        "state_revision": 4,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -714,7 +713,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ccdbdf82b565c912d89c3498b4132f5f7870845cf896cda7ff43e9c00e5e0974",
+      "document_hash": "sha256:b6880365b8267d345f64c2f5fa10926577b7097666a40b4b477acd685ffe5e6e",
       "facts": {
         "combat": {
           "active": false,
@@ -845,14 +844,14 @@
             "world",
             "narrative"
           ],
-          "revision": 6
+          "revision": 5
         }
       },
       "session_summary": {
         "interaction_seq": 5,
         "location": "Starfall Grove",
         "player_level": 1,
-        "state_revision": 6,
+        "state_revision": 5,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -877,7 +876,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:ad1ef4f36c8248b8153fd674f654046d893dd4f7b11586aa95acbb771df98043",
+      "document_hash": "sha256:9061548405f112fecca0dbeaf99692bc9d566e626bc127fe9b787056e89f0f0f",
       "facts": {
         "combat": {
           "active": false,
@@ -1034,14 +1033,14 @@
             "world",
             "narrative"
           ],
-          "revision": 7
+          "revision": 6
         }
       },
       "session_summary": {
         "interaction_seq": 6,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 7,
+        "state_revision": 6,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -1056,7 +1055,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f26beace6879d44d5c7d416ae0b890986b47e7a5b54b3f190b4c73ccc50468ad",
+      "document_hash": "sha256:eaf0bbf1676d7f542ce0e4082e18d01a7ed726907d3db5c0c3a008570d3a47e9",
       "facts": {
         "combat": {
           "active": false,
@@ -1188,14 +1187,14 @@
             "world",
             "narrative"
           ],
-          "revision": 8
+          "revision": 7
         }
       },
       "session_summary": {
         "interaction_seq": 7,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 8,
+        "state_revision": 7,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -1210,7 +1209,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cc21b11195fa9ad706c1b6e63ff591657e2a2392a6596f84d5500b1ab3c26a68",
+      "document_hash": "sha256:7f9c8058992b8c62799d09e293baefc4358ca8c6fb51083b325f394cde1b8099",
       "facts": {
         "combat": {
           "active": false,
@@ -1346,14 +1345,14 @@
             "world",
             "narrative"
           ],
-          "revision": 9
+          "revision": 8
         }
       },
       "session_summary": {
         "interaction_seq": 8,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 9,
+        "state_revision": 8,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -1368,7 +1367,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:01243942049e9cae7a394dc82f0db437da5364c20e65ab55c4a9058fcc9b6a8c",
+      "document_hash": "sha256:c5517b06b70f1276fe0504ac9a14a1034a45575ec470e8c9be1f8df1d3c5a6f5",
       "facts": {
         "combat": {
           "active": false,
@@ -1504,14 +1503,14 @@
             "world",
             "narrative"
           ],
-          "revision": 10
+          "revision": 9
         }
       },
       "session_summary": {
         "interaction_seq": 9,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 10,
+        "state_revision": 9,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -1525,7 +1524,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:e398f8a7f18745332425904a43509b54609f5bfffbf80c5ce8a54eb9ad6f87a7",
+      "document_hash": "sha256:587822d1049d55a917042adbd5a14d9384ba0509bc062809efb7539a2f008a75",
       "facts": {
         "combat": {
           "active": false,
@@ -1660,14 +1659,14 @@
             "world",
             "narrative"
           ],
-          "revision": 11
+          "revision": 10
         }
       },
       "session_summary": {
         "interaction_seq": 10,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 11,
+        "state_revision": 10,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -1687,7 +1686,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:f84f482539e9bb74b35d0df2e010b056ef344797fa12ed955de91e6d925359d8",
+      "document_hash": "sha256:e1c5f709e8bde920ead44230afc53fd3af1c4cf5dabab0dd2d0a5bb384df13a2",
       "facts": {
         "combat": {
           "active": false,
@@ -1820,14 +1819,14 @@
             "world",
             "narrative"
           ],
-          "revision": 12
+          "revision": 11
         }
       },
       "session_summary": {
         "interaction_seq": 11,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 12,
+        "state_revision": 11,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -1840,7 +1839,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:c41973f7b47dcc49e5f4489bb3919de874abc5a8984632069bc99f850bc0e3cb",
+      "document_hash": "sha256:3c2be87763bd6a90f2825fed606644c9b3302c54a75d2908c82372b3e7a24554",
       "facts": {
         "combat": {
           "active": false,
@@ -1957,14 +1956,14 @@
             "inventory",
             "narrative"
           ],
-          "revision": 13
+          "revision": 12
         }
       },
       "session_summary": {
         "interaction_seq": 12,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 13,
+        "state_revision": 12,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -1999,7 +1998,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:0d2d664365c423a04ee781554e484c37ff5a10045f3ab6be221bdec6c29696ef",
+      "document_hash": "sha256:7adc5c98124841fa284642acca2be2ddfe27264882e53b8d8ceeb8af19783a42",
       "facts": {
         "combat": {
           "active": false,
@@ -2158,14 +2157,14 @@
             "world",
             "narrative"
           ],
-          "revision": 14
+          "revision": 13
         }
       },
       "session_summary": {
         "interaction_seq": 13,
         "location": "Wayfarers' Guild",
         "player_level": 1,
-        "state_revision": 14,
+        "state_revision": 13,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -2180,7 +2179,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:590a68fc4b5b3f1c2d50aebd8f1dbbb7bd6bc36fc89097bb3118361d3a97ede5",
+      "document_hash": "sha256:cbed13bb4572e8b6499eb49a7cafaff979f6ef480e1f74586d64d0637efdf313",
       "facts": {
         "combat": {
           "active": false,
@@ -2311,14 +2310,14 @@
             "world",
             "narrative"
           ],
-          "revision": 15
+          "revision": 14
         }
       },
       "session_summary": {
         "interaction_seq": 14,
         "location": "Wayfarers' Guild",
         "player_level": 1,
-        "state_revision": 15,
+        "state_revision": 14,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -2346,7 +2345,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:224038515915df23230ad8a932799ae4e1496f4e8888d980658a60307b18f9d8",
+      "document_hash": "sha256:8d380eed6f45bc793bce4e35416d9dc024e35a070e09e4ba5f9e37d0d9f227ca",
       "facts": {
         "combat": {
           "active": false,
@@ -2498,14 +2497,14 @@
             "world",
             "narrative"
           ],
-          "revision": 16
+          "revision": 15
         }
       },
       "session_summary": {
         "interaction_seq": 15,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 16,
+        "state_revision": 15,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -2518,7 +2517,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:740727fce95621bb6a97ae5d5ea9cc65f32b12b0aca6cd168e9bfffc79e39329",
+      "document_hash": "sha256:9328b8e13f3456efef85acf76e06cdae4358ea28b2d03ce73c96351574df1ea9",
       "facts": {
         "combat": {
           "active": false,
@@ -2637,14 +2636,14 @@
             "inventory",
             "narrative"
           ],
-          "revision": 17
+          "revision": 16
         }
       },
       "session_summary": {
         "interaction_seq": 16,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 17,
+        "state_revision": 16,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -2658,7 +2657,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:e1b5817d944444e124ad965ebfe2c0d79d88b97e26e3bb3e023cb64d24ebf32f",
+      "document_hash": "sha256:e88215bcdbcc6b1540e6f33135f9f3be93589aae3923f01ee33b8a63524e5c40",
       "facts": {
         "combat": {
           "active": false,
@@ -2795,14 +2794,14 @@
             "world",
             "narrative"
           ],
-          "revision": 18
+          "revision": 17
         }
       },
       "session_summary": {
         "interaction_seq": 17,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 18,
+        "state_revision": 17,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -2813,7 +2812,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:99eb17bb1ce41262679a51dd733aa3bd50dea52d853fee22a061ce83b6322a06",
+      "document_hash": "sha256:7a737cae58df8655ddd7c05ceeea9e63795fc38dbd77e0b823125d2563ebd9f3",
       "facts": {
         "combat": {
           "active": false,
@@ -2948,14 +2947,14 @@
             "world",
             "narrative"
           ],
-          "revision": 19
+          "revision": 18
         }
       },
       "session_summary": {
         "interaction_seq": 18,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 19,
+        "state_revision": 18,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -2970,7 +2969,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1c7a8bfdf8722e4220df8ad1f052827a4d8cc79412a0427d60d48060dbc15818",
+      "document_hash": "sha256:7c47b4be5e1132dcb4c02815534139b2912beffd614ddfd9e2e9de32720783cc",
       "facts": {
         "combat": {
           "active": false,
@@ -3106,14 +3105,14 @@
             "world",
             "narrative"
           ],
-          "revision": 20
+          "revision": 19
         }
       },
       "session_summary": {
         "interaction_seq": 19,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 20,
+        "state_revision": 19,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -3128,7 +3127,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5992bbfcc5d3c1875019522efff0b9511bb67e357a7848dba2e05c1a6702c5e1",
+      "document_hash": "sha256:d74b4c0a170406ac3f409d3f3984afa0ae59b72e87418e4a3ecce64bd8a1f913",
       "facts": {
         "combat": {
           "active": false,
@@ -3258,14 +3257,14 @@
             "world",
             "narrative"
           ],
-          "revision": 21
+          "revision": 20
         }
       },
       "session_summary": {
         "interaction_seq": 20,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 21,
+        "state_revision": 20,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -3289,7 +3288,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:a5867df7a4bba93a201d56f00a132f62dab8bd0625d3fe184e857ab9592d9469",
+      "document_hash": "sha256:278e440728c6ae85f460914fdfa41eb95d53e6851a44ab8de03c35889449c3da",
       "facts": {
         "combat": {
           "active": true,
@@ -3430,14 +3429,14 @@
             "world",
             "narrative"
           ],
-          "revision": 22
+          "revision": 21
         }
       },
       "session_summary": {
         "interaction_seq": 21,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 22,
+        "state_revision": 21,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -3446,7 +3445,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:88f66bbdedb7edcf6125807b10f91d43fb084574a3cc0d8741b5c48cabfd783d",
+      "document_hash": "sha256:e8c55f2c79e3b0eec4f7c944b99a8709d79fbab3e7a278c5c7f52c10eaca7110",
       "facts": {
         "combat": {
           "active": true,
@@ -3578,7 +3577,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:73d8011e9f7fca5c605e49628917d7578def9cc4b01bcfe6c6a23d4ee58f8dd5",
+      "document_hash": "sha256:36d0fb8703a4d65280cc33f71c8f1d0bbedb4a1db6c0d24aeea9a596379c9c74",
       "facts": {
         "combat": {
           "active": true,
@@ -3715,14 +3714,14 @@
             "world",
             "narrative"
           ],
-          "revision": 24
+          "revision": 23
         }
       },
       "session_summary": {
         "interaction_seq": 23,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 24,
+        "state_revision": 23,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -3745,7 +3744,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b6e84eab308ea35fe70daf9debbe0f0bbc48026bc71fd1b2a25d1c16f5744381",
+      "document_hash": "sha256:feaa6ca016b9322111ea242e3e414a84427cb34f32fcd2f673eac36304dfc959",
       "facts": {
         "combat": {
           "active": true,
@@ -3886,14 +3885,14 @@
             "world",
             "narrative"
           ],
-          "revision": 25
+          "revision": 24
         }
       },
       "session_summary": {
         "interaction_seq": 24,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 25,
+        "state_revision": 24,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -3916,7 +3915,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:9d88982b6bc3d2066a8ad23c589e1c4a37f115e963172437f030e8e3a23e08e8",
+      "document_hash": "sha256:9156b6bfe41cdecbba496cb3f37390bf16dcbb7154c7a620142ee9b1a867de40",
       "facts": {
         "combat": {
           "active": true,
@@ -4057,14 +4056,14 @@
             "world",
             "narrative"
           ],
-          "revision": 26
+          "revision": 25
         }
       },
       "session_summary": {
         "interaction_seq": 25,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 26,
+        "state_revision": 25,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -4090,7 +4089,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7a46e5b07e8b961b559a6f7201932b8236dc37471ba3ab4f7a0293167893f59b",
+      "document_hash": "sha256:0ba089c68fdc847f03d9ec1724629edf05818883e5eb168ba00c05190bff9075",
       "facts": {
         "combat": {
           "active": true,
@@ -4232,14 +4231,14 @@
             "world",
             "narrative"
           ],
-          "revision": 27
+          "revision": 26
         }
       },
       "session_summary": {
         "interaction_seq": 26,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 27,
+        "state_revision": 26,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -4248,7 +4247,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:c9717e2f59ebfbe21748e088f42fe6eb67c79074c5bdd29dd78302e8e3b1157e",
+      "document_hash": "sha256:f145bd11c337f45e9531e1efe51d34c98fe9baf5698f826b64e89e6e53f4f70a",
       "facts": {
         "combat": {
           "active": true,
@@ -4362,14 +4361,14 @@
             "time",
             "narrative"
           ],
-          "revision": 28
+          "revision": 27
         }
       },
       "session_summary": {
         "interaction_seq": 27,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 28,
+        "state_revision": 27,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -4378,7 +4377,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:86110a152566c98c3346bdea513eaac6b6218c4c29342c2988416a2ade44088c",
+      "document_hash": "sha256:7bf2cd4751ac111e0a2fa28720e1cbef364dc04f24f9531d40433e4c8f53f9bf",
       "facts": {
         "combat": {
           "active": true,
@@ -4488,14 +4487,14 @@
           "changed_domains": [
             "time"
           ],
-          "revision": 29
+          "revision": 28
         }
       },
       "session_summary": {
         "interaction_seq": 28,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 29,
+        "state_revision": 28,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -4504,7 +4503,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:7e53090381a6bcb2bb2e98aa4dfc1a20c2ab858d8086c12541a08401d05bff70",
+      "document_hash": "sha256:19237e5070531e44cca8c740b92e9612e1127c71dda4554a438f7c44e699909a",
       "facts": {
         "combat": {
           "active": true,
@@ -4614,14 +4613,14 @@
           "changed_domains": [
             "time"
           ],
-          "revision": 30
+          "revision": 29
         }
       },
       "session_summary": {
         "interaction_seq": 29,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 30,
+        "state_revision": 29,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -4630,7 +4629,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:05e6fdcce63de1cbd033e0d67779788a661ac5a21f56a906934dae13e7c22778",
+      "document_hash": "sha256:21bcd38b86873b09099f318fdf73a7030850074c4e85dd482be0025e8ad656d7",
       "facts": {
         "combat": {
           "active": true,
@@ -4740,14 +4739,14 @@
           "changed_domains": [
             "time"
           ],
-          "revision": 31
+          "revision": 30
         }
       },
       "session_summary": {
         "interaction_seq": 30,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 31,
+        "state_revision": 30,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,
@@ -4756,7 +4755,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:425d9fa1c012352246275c44502e06f33ed9297adaf4b7714ab89c75188bdcdb",
+      "document_hash": "sha256:bb27143b103c43ee2a1885a86c8f01b8e04da1af5d60dea42ed95ef672e4a08d",
       "facts": {
         "combat": {
           "active": true,
@@ -4866,14 +4865,14 @@
           "changed_domains": [
             "time"
           ],
-          "revision": 32
+          "revision": 31
         }
       },
       "session_summary": {
         "interaction_seq": 31,
         "location": "Starfall Village",
         "player_level": 1,
-        "state_revision": 32,
+        "state_revision": 31,
         "title": "Wren — Starfall Grove"
       },
       "status": 200,

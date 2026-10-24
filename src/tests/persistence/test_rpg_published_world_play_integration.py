@@ -63,6 +63,8 @@ class _ScriptedModel:
             answer = json.dumps({"format_version": "rpg_narration_candidates_v1", "primary": narration, "safe_fallback": narration})
         elif "materializes durable, player-safe RPG canon" in text:
             kind, answer = "canon_dossier", json.dumps({"entities": [], "documents": [], "facts": [], "relationships": []})
+        elif "Reply as the speaker in the PLAN" in text:  # the dialogue plan's one call for the line (RQ-2.2)
+            kind, answer = "dialogue_line", "Welcome, traveler."
         elif "first-call semantic intent router" in text:
             kind = "semantic_intent"
         elif "CONTEXT:" in text:
@@ -267,7 +269,7 @@ def test_item_actions_and_story_turns_share_one_inventory(tmp_path, monkeypatch)
         items, _ = sheet()
         assert items["Lantern Bread"] == 1 and items["Gateborn Compass"] == 1
         used = act("use", "Lantern Bread")
-        assert used["consumed"] is True
+        assert used["ok"] is True and used["event"]["title"] == "Use Lantern Bread"  # a turn of the pipeline (RQ-2.4)
         assert "Lantern Bread" not in sheet()[0]
         # "useful" is not "use": searching consumes nothing.
         turn("Search the area for useful supplies I can pick up")
@@ -373,7 +375,7 @@ def test_world_mechanics_change_real_state(tmp_path, monkeypatch) -> None:
         # Asking someone present a question is one short model call for their line, not the full narrative writer.
         calls, writes = len(model.calls), len(told)
         turn("I ask Orik Stonewake what he thinks of the newcomers.")
-        assert model.calls[calls:] == ["turn_narration"] and len(told) == writes, model.calls[calls:]
+        assert model.calls[calls:] == ["dialogue_line"] and len(told) == writes, model.calls[calls:]
 
         # A meal at the inn costs coin and eases hunger.
         purse = public()["player"]["currency"]

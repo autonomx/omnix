@@ -67,3 +67,11 @@ def test_version_8_gathers_the_old_gear_record_into_the_store() -> None:
     assert [item["item_id"] for item in player["inventory_state"]["items"]] == ["item:sword", "item:bread", "item:coin"]
     assert player["inventory_state"]["equipment"] == {"main_hand": "item:sword", "cloak": "item:cloak"}
     assert gather_gear(gathered) is gathered  # nothing left to gather
+
+
+def test_a_tool_is_held_to_hand_and_food_is_not_worn() -> None:
+    simulation = {"player_state": {"inventory_state": {"items": [
+        {"item_id": "item:compass", "name": "Gateborn Compass", "type": "trinket", "qty": 1}, dict(BREAD)]}}}
+    held = equip_item(simulation, "", "hold the gateborn compass")
+    assert not held.refused and [change.slot for change in held.changes] == ["tool"]
+    assert equip_item(simulation, "", "wear the bread").refused

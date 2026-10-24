@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from app.security.tenant_context import current_tenant
 from app.apps.rpg.foundation.persistence.rpg_campaign_bible_repository import campaign_bible_hash
@@ -317,12 +317,15 @@ def _apply_published_opening_state(
         "suggested_actions": quick_actions,
     }
     metadata = _record(state.get("metadata"))
+    # The hook the opening leads with: the story seed the player chose, or the opening's own.
+    lead_hook = next((str(_record(seed).get("opening_hook") or "") for seed in revision.adventure_seeds or ()
+                      if lead_seed_id and str(_record(seed).get("id") or "") == lead_seed_id), "")
     state["metadata"] = {
         **metadata,
         "starting_location_id": location_id,
         "starting_location_name": location_name,
         "opening_source": "published_scenario",
-        "opening_hook": "published_opening",
+        "opening_hook": lead_hook or "published_opening",
     }
     session["state"] = state
     _continue_in_progress(session, scenario, world_model)
@@ -407,6 +410,24 @@ def _apply_published_opening_state(
     session["simulation_state"] = simulation
 
 
+def _seed(new_game: Mapping[str, Any] | None, world: Mapping[str, Any]) -> int:
+    """The new game's own seed when it names one (0 included), else the world's."""
+    seed = dict(new_game or {}).get("seed")
+    return int(seed) if seed is not None else int(world.get("seed") or 0)
+
+
+def _with_completed_creation(session: dict[str, Any], session_id: str) -> dict[str, Any]:
+    from app.apps.rpg.genesis.creation_progress import (
+        attach_creation_metadata,
+        build_creation_job,
+        build_creation_progress_snapshot,
+    )
+
+    job = build_creation_job(session_id=session_id, status="completed")
+    return attach_creation_metadata(session, job, build_creation_progress_snapshot(session_id=session_id,
+                                                                                   status="completed"))
+
+
 def launch_published_scenario(
     *,
     sessions: CampaignSessions,
@@ -420,12 +441,14 @@ def launch_published_scenario(
     features: Mapping[str, Any] | None = None,
     new_game: Mapping[str, Any] | None = None,
     lead_seed_id: str = "",
+    prepare: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
     """Create a playable campaign without invoking World Forge or any model provider.
 
     ``new_game`` is the rest of a new game's request (the hero's class, stats and chosen gear), kept under what the
-    world decides; ``lead_seed_id`` is the opening's story seed the player chose to start with.
+    world decides; ``lead_seed_id`` is the opening's story seed the player chose to start with; ``prepare`` adds
+    the caller's own records to the campaign (the creation wizard's genesis) before its one save.
     """
 
     revision, release, scenario = load_published_resources(
@@ -493,15 +516,16 @@ def launch_published_scenario(
                 gameplay_payload.get("companions_enabled", True)
             ),
             "permadeath": bool(gameplay_payload.get("permadeath", False)),
-            "seed": int(dict(new_game or {}).get("seed") or world.get("seed") or 0),
+            "seed": _seed(new_game, world),
             "features": dict(features or {}),
         }
     )
-    created = sessions.create_new_game(request)
-    session_id = str(created.get("session_id") or "")
-    session = raw_session if isinstance(raw_session := created.get("session"), dict) else None
-    if not session_id or session is None:
+    # Built, not saved: the campaign is saved once, opened in its world (and with the creation's progress).
+    session = sessions.build_new_game(request)
+    session_id = str(_record(session.get("manifest")).get("session_id") or "")
+    if not session_id:
         raise RuntimeError("published_scenario_session_creation_failed")
+    session = _with_completed_creation(session, session_id)
 
     binding = resolve_campaign_binding(
         campaign_id=session_id,
@@ -579,9 +603,11 @@ def launch_published_scenario(
         campaign_id=session_id,
         topology=revision.topology,
     )
+    if prepare is not None:
+        session = prepare(session)
     state = _record(session.get("state"))
     manifest = _record(session.get("manifest"))
-    saved = sessions.save(session, compact=True)
+    saved = sessions.save_created(session)["session"]
 
     try:
         with unit_of_work(database) as work:

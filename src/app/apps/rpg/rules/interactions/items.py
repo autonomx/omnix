@@ -139,6 +139,7 @@ _SLOT_WORDS = (
     ("head", ("helmet", "helm", "hood", "cap")),
     ("cloak", ("cloak", "cape", "mantle")),
     ("ring", ("ring", "band")),
+    ("tool", ("tool", "compass", "lantern", "lamp", "torch", "spyglass", "lens", "pickaxe", "kit")),  # held to hand
 )
 
 
