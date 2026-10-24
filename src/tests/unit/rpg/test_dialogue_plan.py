@@ -124,3 +124,9 @@ def test_only_someone_present_answers() -> None:
     session = _session()
     session["simulation_state"]["present_npc_state"]["present_npc_ids"] = []
     assert turn_dialogue.resolve_dialogue(session, ORIK, "hello") is None
+
+
+def test_asked_about_one_ware_they_name_that_one() -> None:
+    plan = build_plan(_simulation(), ORIK, "What does a room cost?")
+    assert plan is not None and plan.wares == ("Room for 3 silver",)
+    assert line_keeps_the_plan(plan, "A room is three silver a night.")

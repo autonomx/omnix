@@ -710,7 +710,15 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "journal": {"entries": timeline},
         "quick_actions": quick_actions,
         "features": {**features, "companions_enabled": request.companions_enabled, "permadeath": request.permadeath},
+        # Which world the campaign plays from, stated at birth: World Forge's own, or the one whose launch fills this
+        # campaign in (a published world's opening binds it). Never the starter town by default (RQ-2.8).
+        "world_binding": {"kind": "genesis" if _requested_genesis(request) else "unbound"},
     }
+
+
+def _requested_genesis(request: RpgNewGameRequest) -> bool:
+    extra = getattr(request, "__pydantic_extra__", None)
+    return isinstance(extra, dict) and bool(extra.get("genesis") or extra.get("compiled_genesis"))
 
 
 def _setup_payload_with_identity(request: RpgNewGameRequest, identity: dict[str, Any]) -> dict[str, Any]:
@@ -849,9 +857,11 @@ def create_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
     """The classic new game: an opening of the starter world, The Market Road (roadmap §4.4), for the request's
     starting place and opening hook, with the hero as the player made them; in the progress envelope."""
     from app.apps.rpg.genesis.worlds.builtin_worlds import launch_starter
+    from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
     hook = _story_option(request, "opening_hook", "")
-    return _with_creation_progress(lambda: launch_starter(request, opening_hook=hook))
+    return _with_creation_progress(
+        lambda: launch_starter(request, sessions=SESSION_CAMPAIGN_SESSIONS, opening_hook=hook))
 
 
 def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[str, Any]:

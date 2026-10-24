@@ -71,11 +71,11 @@
     },
     {
       "blocks": [
-        "dialogue|npc:brindle-gearwing|I have Lantern Bread for 8 copper, Healing Potion for 3 silver, Gear repair for 4 silver."
+        "dialogue|npc:brindle-gearwing|I have Healing Potion for 3 silver."
       ],
       "step": "I ask Brindle Gearwing what a Healing Potion costs.",
       "told": "",
-      "visible": "Brindle Gearwing: \"I have Lantern Bread for 8 copper, Healing Potion for 3 silver, Gear repair for 4 silver.\""
+      "visible": "Brindle Gearwing: \"I have Healing Potion for 3 silver.\""
     },
     {
       "blocks": [

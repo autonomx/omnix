@@ -75,6 +75,11 @@ def _words(text: str) -> set[str]:
     return {word for word in _WORD.findall(text.casefold()) if word not in _STOP and len(word) > 2}
 
 
+def _stem(word: str) -> str:
+    """``rooms`` and ``room`` are one word to a buyer."""
+    return word[:-1] if word.endswith("s") and len(word) > 3 else word
+
+
 def _trust(simulation: Mapping[str, Any], npc_id: str) -> int:
     for row in _l(_d(_d(simulation.get("player_state")).get("party_state")).get("companions")):
         if _d(row).get("npc_id") == npc_id:
@@ -104,7 +109,7 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
     name = _s(npc.get("name")) or speaker_id
     trust = _trust(simulation, speaker_id)
     stance = "friendly" if trust >= FRIENDLY_TRUST else "wary" if trust < 0 else "neutral"
-    asked = _words(text)
+    asked = _words(text) | {_stem(word) for word in _words(text)}
     known = set(_l(_d(_d(simulation.get("dialogue")).get("known_facts")).get(speaker_id)))
     reveals, revealed_ids, priced, held = [], [], [], 0
     for fact in _facts(world, speaker_id):
@@ -135,6 +140,9 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
     if _WARES.search(text.casefold()):
         on_sale = [_d(offer) for offer in _l(_d(world.get("offers")).get(speaker_id))
                    if _s(_d(offer).get("label")) and stock_left(simulation, _d(offer)) != 0]
+        # Asked about some of them ("what does a room cost"), those; asked what they sell, all of them.
+        named = [offer for offer in on_sale if asked & {_stem(word) for word in _words(_s(offer.get("label")))}]
+        on_sale = named or on_sale
     return DialoguePlan(
         speaker_id=speaker_id, speaker_name=name, role=_s(npc.get("role")), stance=stance,
         voice=_s(npc.get("speech_style")), personality=tuple(_s(trait) for trait in _l(npc.get("personality"))),
@@ -157,10 +165,12 @@ def plan_changes(plan: DialoguePlan) -> list[StateChange]:
 
 
 def line_keeps_the_plan(plan: DialoguePlan, line: str) -> bool:
-    """The written line may be shown: it is not empty, names each ware asked about (the prices are the game's,
-    so a line that leaves one out gives way to the plan's own list), and repeats none of the speaker's secrets."""
+    """The written line may be shown: it is not empty, names each ware asked about (by a word of its name: the
+    prices are the game's, so a line that leaves one out gives way to the plan's own list), and repeats none of
+    the speaker's secrets."""
     lowered = line.casefold()
-    if not lowered.strip() or any(name.casefold() not in lowered for name in plan.ware_names):
+    said = {_stem(word) for word in _words(line)}
+    if not lowered.strip() or any(not said & {_stem(word) for word in _words(name)} for name in plan.ware_names):
         return False
     for secret in plan.secrets:
         words = _words(secret)

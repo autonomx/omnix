@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 
 class NewerCampaignDocumentError(DependencyUnavailable):
@@ -218,8 +218,8 @@ def _to_v6_sections(document: dict[str, Any]) -> dict[str, Any]:
     - The compiled genesis and bootstrap snapshot leave the document where it is stored, not here: saving
       and the upgrade turn store each once outside it (``split_creation_artifacts``), so an upcast in memory
       loses nothing.
-    - A campaign with no published world is bound to the starter town or the demo (``state.world_binding``),
-      until those become bundled worlds (RQ-2.8).
+    - A campaign with no published world is bound to the starter town or the demo (``state.world_binding``);
+      version 7 binds the starter town's to the starter world.
     """
     document, _ = merge_inventories(document)
     document["setup_payload"] = stored_setup_payload(document.get("setup_payload"))
@@ -233,11 +233,20 @@ def _to_v6_sections(document: dict[str, Any]) -> dict[str, Any]:
     return document
 
 
+def _to_v7_starter_world(document: dict[str, Any]) -> dict[str, Any]:
+    """Version 7 (RQ-2.8): a campaign of the starter town plays from the starter world, The Market Road (its ids
+    rewritten to the world's, its world model attached; ``genesis/worlds/builtin_worlds.py``)."""
+    from app.apps.rpg.genesis.worlds.builtin_worlds import bind_to_starter_world
+
+    return bind_to_starter_world(document)
+
+
 # (target version, upcaster), in order. Version 5 marks the interaction
 # timeline, which the normalization below keeps for every version.
 UPCASTERS: tuple[tuple[int, Callable[[dict[str, Any]], dict[str, Any]]], ...] = (
     (4, _to_v4_ambient_runtime),
     (6, _to_v6_sections),
+    (7, _to_v7_starter_world),
 )
 
 

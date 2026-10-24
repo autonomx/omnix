@@ -296,6 +296,31 @@
        "hook": "Bran is offering a free night to whoever clears the rats from his cellar."}
     ]
   },
+  "legacy_ids": {
+    "loc_tavern": "location:market-road:rusty-flagon",
+    "rusty_flagon_tavern": "location:market-road:rusty-flagon",
+    "location:rusty_flagon_tavern": "location:market-road:rusty-flagon",
+    "location:rusty_flagon": "location:market-road:rusty-flagon",
+    "loc_market": "location:market-road:market-square",
+    "market_district": "location:market-road:market-square",
+    "location:market": "location:market-road:market-square",
+    "northern_road": "location:market-road:northern-road",
+    "location:old_road": "location:market-road:northern-road",
+    "loc_patrol": "location:market-road:northern-road",
+    "location:old_mill": "location:market-road:old-mill",
+    "location:nearby_wilderness": "location:market-road:brushland",
+    "old_quarry": "location:market-road:old-quarry",
+    "glimmerdeep_pass": "location:market-road:glimmerdeep-pass",
+    "npc:Bran": "npc:bran",
+    "npc_innkeeper": "npc:bran",
+    "npc:Mira": "npc:mira",
+    "npc:Elara": "npc:elara",
+    "npc:Merchant": "npc:elara",
+    "npc_merchant": "npc:elara",
+    "npc:GuardCaptain": "npc:aldric",
+    "npc_guard_captain": "npc:aldric",
+    "npc:Tomas": "npc:tomas"
+  },
   "palette": [
     {"code": ".", "terrain_id": "floor", "walkable": true, "blocks_sight": false, "movement_cost": 10},
     {"code": "#", "terrain_id": "wall", "walkable": false, "blocks_sight": true, "movement_cost": 99},

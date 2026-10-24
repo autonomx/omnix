@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION
 from tests.rpg.playthrough.campaigns import POSTGRES
 
 pytestmark = POSTGRES
@@ -52,7 +53,7 @@ def test_each_turn_reports_its_outcome_and_the_changes_replay_its_facts(launch) 
         outcome = TurnOutcome.model_validate(body["outcome"])
         types = {change.type for change in outcome.applied_changes}
         assert kinds <= types, (command, types)
-        assert outcome.kind == "player_text" and outcome.document_version == 6
+        assert outcome.kind == "player_text" and outcome.document_version == CURRENT_SCHEMA_VERSION
         assert outcome.revision == play.revision()
         # Every model call the turn made is counted, by kind.
         assert outcome.model_calls.total == len(play.model.calls) - calls, (command, outcome.model_calls)

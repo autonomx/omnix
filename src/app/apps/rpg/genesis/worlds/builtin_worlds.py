@@ -30,12 +30,46 @@ STARTER = BuiltinWorld(key="starter", bundle="the-market-road")
 
 
 @lru_cache(maxsize=None)
+def _source_text(world: BuiltinWorld) -> str:
+    return resources_root().joinpath(*BUNDLES_DIR, world.bundle, "world.source.json").read_text(encoding="utf-8")
+
+
+def world_source(world: BuiltinWorld) -> dict[str, Any]:
+    """The world's readable source (a fresh copy)."""
+    return json.loads(_source_text(world))
+
+
+@lru_cache(maxsize=None)
 def bundle_bytes(world: BuiltinWorld) -> bytes:
     """The world's bundle, built from its ``world.source.json``."""
     from .world_source import build_bundle
 
-    source = resources_root().joinpath(*BUNDLES_DIR, world.bundle, "world.source.json")
-    return build_bundle(json.loads(source.read_text(encoding="utf-8")))
+    return build_bundle(world_source(world))
+
+
+def legacy_ids(world: BuiltinWorld) -> dict[str, str]:
+    """The ids the engine's own copies of this world used (``loc_tavern``, ``npc:Bran``), and the world's for each."""
+    return {str(old): str(new) for old, new in dict(world_source(world).get("legacy_ids") or {}).items()}
+
+
+@lru_cache(maxsize=None)
+def _revision(world: BuiltinWorld) -> Any:
+    from .contracts import WorldRevisionDocument
+    from .world_source import compile_world
+
+    [row] = compile_world(world_source(world))["world_revisions"]
+    return WorldRevisionDocument.model_validate(row["document"])
+
+
+def builtin_world_model(world: BuiltinWorld, location_id: str) -> dict[str, Any]:
+    """The world model a campaign of ``world`` plays from, for a hero at ``location_id``: built from the source
+    alone (no library), for a campaign made before the world was a bundle (the v7 upgrade binds it)."""
+    from types import SimpleNamespace
+
+    from .published_world_setup import session_world_model
+
+    model = session_world_model(_revision(world), SimpleNamespace(starting_location_id=location_id))
+    return {**model, "world_id": installed_world_id(world)}
 
 
 def installed_world_id(world: BuiltinWorld) -> str:
@@ -67,6 +101,64 @@ def ensure_builtin_world(world: BuiltinWorld, *, database: Any | None = None) ->
     return world_id
 
 
+def _with_ids(value: Any, ids: Mapping[str, str]) -> Any:
+    """``value`` with every string that is one of ``ids`` (a whole value or key, never part of one) replaced."""
+    if isinstance(value, dict):
+        return {(ids.get(key, key) if isinstance(key, str) else key): _with_ids(child, ids) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_with_ids(child, ids) for child in value]
+    if isinstance(value, str):
+        return ids.get(value, value)
+    return value
+
+
+def _default_start(world: BuiltinWorld) -> str:
+    source = world_source(world)
+    default = str(source["world"]["metadata"].get("default_scenario_id") or "")
+    return next(str(row["starting_location_id"]) for row in source["scenarios"] if row["scenario_id"] == default)
+
+
+def bind_to_starter_world(document: dict[str, Any]) -> dict[str, Any]:
+    """A campaign made in the starter town before it was a world, playing from the starter world: its places and
+    people named by the world's ids, the world model for where the hero stands, who is present there, and its
+    binding naming the world. A campaign that already plays from a world is returned as it is; one World Forge made
+    (``setup_payload.genesis``), which the version 6 upgrade also marked "starter", is marked as its own."""
+    state = document.get("state") if isinstance(document.get("state"), dict) else {}
+    binding = state.get("world_binding") if isinstance(state.get("world_binding"), dict) else {}
+    simulation = document.get("simulation_state") if isinstance(document.get("simulation_state"), dict) else {}
+    if binding.get("kind") != "starter" or binding.get("world_id") or simulation.get("world_model"):
+        return document
+    setup = document.get("setup_payload") if isinstance(document.get("setup_payload"), dict) else {}
+    if setup.get("genesis") or setup.get("compiled_genesis"):
+        return {**document, "state": {**state, "world_binding": {"kind": "genesis"}}}
+    bound = _with_ids(document, legacy_ids(STARTER))
+    simulation, state = dict(bound.get("simulation_state") or {}), dict(bound.get("state") or {})
+    player = dict(simulation.get("player_state") or {})
+    here = str(player.get("location_id") or simulation.get("location_id") or state.get("current_location_id") or "")
+    model = builtin_world_model(STARTER, here)
+    if here not in model["locations"]:
+        here = _default_start(STARTER)
+        model = builtin_world_model(STARTER, here)
+    place = model["locations"][here]
+    player.update(location_id=here, current_location_id=here)
+    simulation.update(
+        world_model=model, player_state=player, location_id=here, current_location_id=here,
+        present_npc_state={**dict(simulation.get("present_npc_state") or {}), "location_id": here,
+                           "present_npc_ids": [npc["id"] for npc in place["present_npcs"]]},
+    )
+    present = [npc["id"] for npc in place["present_npcs"]]
+    runtime = dict(bound.get("runtime_state") or {})
+    scene = dict(runtime.get("current_scene") or {})
+    runtime["current_scene"] = {  # the scene the narrator and the scene readers build on, as presence writes it
+        **scene, "scene_id": f"scene:{here}", "location_id": here, "location_name": place["name"],
+        "title": place["name"], "summary": place["description"], "present_npc_ids": present,
+        "actors": [npc["name"] for npc in place["present_npcs"]],
+    }
+    state.update(current_location_id=here,
+                 world_binding={"kind": "starter", "world_id": installed_world_id(STARTER), "source": "builtin_world"})
+    return {**bound, "simulation_state": simulation, "state": state, "runtime_state": runtime}
+
+
 def _opening(world_id: str, starting_place: str, *, database: Any | None) -> dict[str, Any]:
     """The opening whose scenario names ``starting_place`` (else the world's default), as its latest revision."""
     from app.persistence.unit_of_work import unit_of_work
@@ -94,10 +186,10 @@ def _lead_seed_id(revision_seeds: Any, opening_hook: str) -> str:
     return ""
 
 
-def launch_starter(request: Any, *, opening_hook: str = "", database: Any | None = None) -> dict[str, Any]:
-    """The classic new game: the starter world's opening for the request's starting place, its hero as made."""
-    from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
-
+def launch_starter(request: Any, *, sessions: Any, opening_hook: str = "",
+                   database: Any | None = None) -> dict[str, Any]:
+    """The classic new game: the starter world's opening for the request's starting place, its hero as made
+    (``sessions`` creates and saves the campaign, as for any published launch)."""
     from .postgres_service import load_published_resources
     from .published_launch import launch_published_scenario
 
@@ -110,7 +202,7 @@ def launch_starter(request: Any, *, opening_hook: str = "", database: Any | None
     )
     made = request.model_dump(mode="json", exclude={"starting_location"})
     return launch_published_scenario(
-        sessions=SESSION_CAMPAIGN_SESSIONS,
+        sessions=sessions,
         world_id=world_id,
         world_revision=int(document["world_revision"]),
         world_release=int(document["compatible_release"]),
@@ -126,4 +218,5 @@ def launch_starter(request: Any, *, opening_hook: str = "", database: Any | None
     )
 
 
-__all__ = ["STARTER", "BuiltinWorld", "ensure_builtin_world", "installed_world_id", "launch_starter"]
+__all__ = ["STARTER", "BuiltinWorld", "bind_to_starter_world", "builtin_world_model", "ensure_builtin_world", "installed_world_id",
+           "launch_starter", "legacy_ids", "world_source"]

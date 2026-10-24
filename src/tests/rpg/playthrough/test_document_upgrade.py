@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from app.apps.rpg.session.campaign_state import CURRENT_SCHEMA_VERSION as CURRENT
 from tests.rpg.playthrough.campaigns import POSTGRES
 
 pytestmark = POSTGRES
@@ -91,15 +92,15 @@ def test_a_v5_campaign_upgrades_once_as_a_system_turn_and_plays_on(launch, world
     assert play.facts() == facts  # opening it through the gateway upgrades it, and no fact changes
     assert play.revision() == revision + 1
     stored = play.stored()
-    assert stored["manifest"]["schema_version"] == 6
+    assert stored["manifest"]["schema_version"] == CURRENT
     assert "simulation_state" not in stored["setup_payload"].get("metadata", {})
     turns, snapshots, artifacts = _rows(play.session_id)
     upgrade = turns[-1]
-    assert upgrade[0] == revision + 1 and upgrade[2] == 6
+    assert upgrade[0] == revision + 1 and upgrade[2] == CURRENT
     assert upgrade[1] == {"kind": "system", "type": "document_upgrade", "from_document_version": 5,
-                          "to_document_version": 6}
+                          "to_document_version": CURRENT}
     assert upgrade[3]["inventory_differences"] == []  # this campaign's copies already agreed
-    assert (revision, True, 5) in snapshots and (revision + 1, True, 6) in snapshots
+    assert (revision, True, 5) in snapshots and (revision + 1, True, CURRENT) in snapshots
     if world == "genesis":
         assert sorted(artifacts) == ["bootstrap_snapshot", "compiled_genesis"]
         assert artifacts["compiled_genesis"] == v5["setup_payload"]["compiled_genesis"]
@@ -111,7 +112,7 @@ def test_a_v5_campaign_upgrades_once_as_a_system_turn_and_plays_on(launch, world
     assert play.revision() == revision + 1  # opened again: upgraded once only
     play.turn("wait")
     turns, _, _ = _rows(play.session_id)
-    assert turns[-1][0] == revision + 2 and turns[-1][2] == 6
+    assert turns[-1][0] == revision + 2 and turns[-1][2] == CURRENT
     assert play.turn_count() == facts["turn_count"] + 1
 
     audit = _replay_audit()
@@ -123,7 +124,7 @@ def test_a_v5_campaign_upgrades_once_as_a_system_turn_and_plays_on(launch, world
     assert report["replay_reaches_current"] and report["replay_matches_current"], report
     assert report["document_version_boundaries"] == [revision + 1]  # the upgrade turn, after unrecorded v5 rows
     assert report["document_version_mismatches"] == []
-    assert report["verified_turns_by_document_version"]["6"] == 2
+    assert report["verified_turns_by_document_version"][str(CURRENT)] == 2
 
 
 @pytest.mark.parametrize("world", ["starter", "aurelia", "vesper", "genesis"])
@@ -140,7 +141,7 @@ def test_the_typed_view_reads_what_the_play_screen_shows(launch, world) -> None:
         play.turn("I buy a Healing Potion from Brindle Gearwing.")
     view = CampaignStateView(play.stored())
     view.validate()
-    assert view.meta.document_version == 6
+    assert view.meta.document_version == CURRENT
     assert view.inventory.purse.total_copper == play.purse()
     assert {item.name: item.quantity for item in view.inventory.items} == play.inventory()
     assert view.player.hp == play.hp() and view.player.skills["swordsmanship"].xp == 10
@@ -152,3 +153,33 @@ def test_the_typed_view_reads_what_the_play_screen_shows(launch, world) -> None:
     assert (view.survival.hunger, view.survival.thirst, view.survival.fatigue) == tuple(
         play.survival()[key] for key in ("hunger", "thirst", "fatigue"))
     assert view.time.turn_count == play.turn_count()
+
+
+def test_a_starter_town_campaign_from_before_its_world_upgrades_and_plays_in_it(model) -> None:
+    """RQ-2.8: a classic new game made before the starter town was a world (the engine's own copies: loc_tavern,
+    npc:Bran, no world model) opens as a campaign of The Market Road: the upgrade binds it, and it travels, trades
+    and talks on the turn pipeline like any published campaign."""
+    from app.apps.rpg.genesis.worlds.builtin_worlds import STARTER, installed_world_id
+    from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session_with_progress
+    from tests.rpg.playthrough.campaigns import Playthrough
+    from tests.rpg.playthrough.scripted_model import Role
+
+    session_id = str(create_new_game_session_with_progress(RpgNewGameRequest(seed=7))["session_id"])
+    v5 = _store_as_v5(session_id)
+    assert "world_model" not in v5["simulation_state"]
+    play = Playthrough(session_id)
+    play.model = model
+    stored = play.stored()  # opening it upgrades it
+    assert stored["manifest"]["schema_version"] == CURRENT
+    assert stored["state"]["world_binding"]["world_id"] == installed_world_id(STARTER)
+    assert play.location() == "location:market-road:rusty-flagon"
+    assert sorted(play.present()) == ["npc:bran", "npc:mira"]
+
+    model.answer(Role.DIALOGUE, ("Bran", "Rooms are five silver."))
+    body = play.turn("I ask Bran what a room costs.")
+    assert "Rooms are five silver." in body["visible_response"]["plain_text"]
+    play.turn("go to the market")
+    assert play.location() == "location:market-road:market-square"
+    purse = play.purse()
+    play.turn("I buy a Torch from Elara.")
+    assert play.purse() == purse - 10

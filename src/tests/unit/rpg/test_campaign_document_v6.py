@@ -1,4 +1,5 @@
-"""Campaign documents upcast from v5 to v6: one inventory, no creation artifacts, every campaign bound (RQ-1.1).
+"""Campaign documents upcast from v5: one inventory, no creation artifacts, every campaign bound (RQ-1.1, v6),
+and a starter town campaign playing from the starter world (RQ-2.8, v7).
 
 The fixtures are real v5 documents, written by the v5 code two turns into a campaign: the starter town, the
 demo, a World Forge (genesis) new game, Aurelia and Vesper-9. (Vesper-9's campaign bible projection and the
@@ -14,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from app.apps.rpg.foundation.state import SECTION_PATHS, CampaignStateView, read_path
+from app.apps.rpg.genesis.worlds.builtin_worlds import STARTER, installed_world_id, legacy_ids
 from app.apps.rpg.session.campaign_state import (
     CREATION_ARTIFACT_PATHS,
     CURRENT_SCHEMA_VERSION,
@@ -26,7 +28,7 @@ from app.apps.rpg.session.campaign_state import (
 
 FIXTURES = Path(__file__).resolve().parents[2] / "rpg" / "fixtures" / "campaign_documents_v5"
 SHAPES = ("starter", "demo", "genesis", "aurelia", "vesper")
-BINDING = {"starter": "starter", "demo": "demo", "genesis": "starter", "aurelia": "published", "vesper": "published"}
+BINDING = {"starter": "starter", "demo": "demo", "genesis": "genesis", "aurelia": "published", "vesper": "published"}
 
 
 def _v5(shape: str) -> dict:
@@ -59,13 +61,18 @@ def test_every_campaign_shape_upcasts_validates_and_round_trips(shape: str) -> N
     assert v5["manifest"]["schema_version"] == 5
     v6 = upcast_campaign_document(deepcopy(v5))
 
-    assert v6["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION == 6
+    assert v6["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION == 7
     CampaignState.model_validate(v6)
     CampaignStateView(v6).validate()  # every section reads
-    assert _facts(v6) == _facts(v5)  # the upgrade changes no fact a player can check
+    expected = _facts(v5)
+    if shape == "starter":  # the starter world names its places by its own ids
+        expected["location"] = legacy_ids(STARTER).get(expected["location"], expected["location"])
+    assert _facts(v6) == expected  # the upgrade changes no fact a player can check
     assert "simulation_state" not in v6["setup_payload"].get("metadata", {})
     assert CampaignStateView(v6).world.binding_kind == BINDING[shape]
-    if BINDING[shape] != "published":
+    if shape == "starter":
+        assert v6["state"]["world_binding"]["world_id"] == installed_world_id(STARTER)
+    elif BINDING[shape] != "published":
         assert v6["state"]["world_binding"] == {"kind": BINDING[shape]}
 
     stored = json.loads(json.dumps(v6))  # what PostgreSQL stores and returns
@@ -137,7 +144,7 @@ def test_save_package_format_8_carries_a_v6_campaign_document() -> None:
     v6 = upcast_campaign_document(_v5("aurelia"))
     package = build_campaign_save_package(v6, now="2026-10-23T00:00:00+00:00")
     assert package["schema_version"] == CURRENT_RPG_SCHEMA_VERSION == 8
-    assert package["campaign"]["document_version"] == 6
+    assert package["campaign"]["document_version"] == CURRENT_SCHEMA_VERSION
     assert load_campaign_save_package(json.loads(json.dumps(package))) == json.loads(json.dumps(v6))
 
     v7 = {key: value for key, value in package.items() if key != "campaign"} | {"schema_version": 7}
@@ -146,8 +153,32 @@ def test_save_package_format_8_carries_a_v6_campaign_document() -> None:
     assert load_campaign_save_package(v7) is None  # a v7 package carries no campaign document
 
     v5_package = build_campaign_save_package(_v5("starter"))
-    assert load_campaign_save_package(v5_package)["manifest"]["schema_version"] == 6  # upcast on load
+    assert load_campaign_save_package(v5_package)["manifest"]["schema_version"] == CURRENT_SCHEMA_VERSION  # on load
     newer = deepcopy(package)
-    newer["campaign"]["document"]["manifest"]["schema_version"] = 7
+    newer["campaign"]["document"]["manifest"]["schema_version"] = CURRENT_SCHEMA_VERSION + 1
     with pytest.raises(NewerCampaignDocumentError):
         load_campaign_save_package(newer)
+
+
+def test_a_starter_town_campaign_plays_from_the_starter_world() -> None:
+    """v7 (RQ-2.8): the places and people the starter town's code named (loc_tavern, npc:Bran) are the world's,
+    and the campaign has the world model for where the hero stands, with who is present there."""
+    v5 = _v5("starter")
+    upgraded = upcast_campaign_document(deepcopy(v5))
+    simulation = upgraded["simulation_state"]
+    model = simulation["world_model"]
+    here = simulation["player_state"]["location_id"]
+    assert here in model["locations"] and here.startswith("location:market-road:")
+    assert set(simulation["present_npc_state"]["present_npc_ids"]) == {
+        npc["id"] for npc in model["locations"][here]["present_npcs"]}
+    assert {"npc:bran", "npc:mira", "npc:elara"} <= set(model["npcs"])
+    text = json.dumps(upgraded)
+    for legacy in ("\"loc_tavern\"", "\"npc:Bran\""):
+        assert legacy not in text, legacy
+
+
+def test_a_world_forge_campaign_is_not_bound_to_the_starter_world() -> None:
+    upgraded = upcast_campaign_document(_v5("genesis"))
+    assert upgraded["state"]["world_binding"] == {"kind": "genesis"}
+    assert "world_model" not in upgraded["simulation_state"] or upgraded["simulation_state"]["world_model"].get(
+        "world_id") != installed_world_id(STARTER)
