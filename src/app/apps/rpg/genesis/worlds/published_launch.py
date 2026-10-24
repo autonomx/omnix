@@ -286,7 +286,10 @@ def _apply_published_opening_state(
             "current_location_id": location_id,
             "current_location_name": location_name,
             "summary": description,
-            "quests": opening_quests(revision, scenario, lead_seed_id=lead_seed_id),
+            # The quest the opening starts on is taken up now: a deadline it has runs from the opening's clock.
+            "quests": [{**quest, "accepted_at_minute": int(environment.get("absolute_minutes") or 0)}
+                       if quest["status"] == "active" else quest
+                       for quest in opening_quests(revision, scenario, lead_seed_id=lead_seed_id)],
             "relationships": [],
             "party": [],
             "quick_actions": quick_actions,

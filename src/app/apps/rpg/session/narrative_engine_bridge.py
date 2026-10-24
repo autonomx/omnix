@@ -517,6 +517,11 @@ def _adopt_compact_provider_dialogue(
             "sequence": 0,
         }
     ]
+    # What the exchange led to, the game's own words: said after the line, by the narrator.
+    aftermath = _text(visible.get("aftermath"))
+    if aftermath:
+        messages.append({"kind": "narration", "speaker": "Omnix (Narrator)", "text": aftermath,
+                         "block_id": f"{request_id}:aftermath", "sequence": 1})
     projected_visible.update(
         {
             "messages": messages,
@@ -524,7 +529,8 @@ def _adopt_compact_provider_dialogue(
             "plain_text": (
                 f"{_text(visible.get('narration'))}\n\n" if _text(visible.get("narration")) else ""
             )
-            + f'{speaker}: "{line}"',
+            + f'{speaker}: "{line}"'
+            + (f"\n\n{aftermath}" if aftermath else ""),
         }
     )
     result.update(projection)

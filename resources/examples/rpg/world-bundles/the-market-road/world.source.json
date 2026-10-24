@@ -1518,6 +1518,23 @@
      "rewards": [
       "a lead",
       "Bran's trust"
+     ],
+     "giver_id": "npc:bran",
+     "steps": [
+      {
+       "id": "ask",
+       "summary": "Ask Bran or Mira which rumor is true",
+       "any_of": [
+        {
+         "talk": "npc:bran",
+         "about": ["rumor", "rumour", "story", "stories"]
+        },
+        {
+         "talk": "npc:mira",
+         "about": ["rumor", "rumour", "story", "stories"]
+        }
+       ]
+      }
      ]
     },
     {
@@ -1573,6 +1590,29 @@
      "rewards": [
       "15 silver",
       "a discount at Elara's stall"
+     ],
+     "giver_id": "npc:elara",
+     "deadline_hours": 24,
+     "steps": [
+      {
+       "id": "meet",
+       "summary": "Meet Elara at the market and agree her price",
+       "all_of": [
+        {
+         "talk": "npc:elara",
+         "about": ["job", "work", "price", "goods", "caravan", "deal"]
+        }
+       ]
+      },
+      {
+       "id": "deliver",
+       "summary": "Take her goods up the northern road",
+       "all_of": [
+        {
+         "reach": "location:market-road:northern-road"
+        }
+       ]
+      }
      ]
     },
     {
@@ -1598,6 +1638,28 @@
      ],
      "rewards": [
       "a free night's lodging"
+     ],
+     "giver_id": "npc:bran",
+     "steps": [
+      {
+       "id": "clear",
+       "summary": "Clear the giant rats from the cellar",
+       "all_of": [
+        {
+         "defeat": "creature:market-road:giant-rat",
+         "count": 3
+        }
+       ]
+      },
+      {
+       "id": "report",
+       "summary": "Tell Bran the cellar is clear",
+       "all_of": [
+        {
+         "talk": "npc:bran"
+        }
+       ]
+      }
      ]
     },
     {

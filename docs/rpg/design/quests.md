@@ -34,3 +34,20 @@ Offer in conversation → accept → two steps → reward; a branch taken; a dea
 ## Out of scope
 
 Quest chains across campaigns, procedurally generated main quests.
+
+## As built (RQ-5.4, part 1)
+
+A world authors a quest's `steps` (`rules/quest/progress.py`): stages done in order, each `all_of` conditions or
+`any_of` alternatives (the branches); a condition is `reach` a place, `talk` to someone (a `DialogueExchanged` this
+turn; with `about`, the hero's words must touch one of its words), `hold` an item, `defeat` a creature `count` times (tallied from won fights in `progress.counts`) or pass a
+`check` (a `CheckResolved` not failed, of that kind and target). `_quests_advance` judges them after the turn's
+changes and world tick (`session/turn/run.py`), and after a `world_tick` turn, so a deadline can run out while the
+hero is away. The changes: `QuestProgressed` (the tallies), `QuestStepCompleted` (the stage, the branch taken and the
+next objective, which the log shows), then `QuestStatusChanged` completed with the rewards (`quest_rewards`: coin,
+items, and the XP named or 50 per step), or failed when `deadline_hours` have passed since `accepted_at_minute`
+(stamped when the quest becomes active, at the opening for the quest a campaign starts on), with the giver's regard
+−10 (`RegardChanged`). A quest without steps advances by its places, as before (`arrival.py`). On a dialogue turn
+what the exchange led to is said after the person's line (`aftermath`). The starter world authors steps on three
+quests (the tavern rumor, ask Bran or Mira; the cellar rats, three then the report; Elara's job, with a day's
+deadline). A quest offered in conversation (RQ-2.2) fails against whoever offered it. Not yet: `fail_conditions`
+beyond the deadline, a pressure below a value, and pressure side quests (part 2).

@@ -647,6 +647,10 @@ def opening_quests(revision: Any, scenario: Any, *, lead_seed_id: str = "") -> l
             "locations": places,
             # The player starts at the opening's place, so a quest that names it has already been there.
             "visited_locations": [start] if start in places else [],
+            # A quest of steps, its deadline and who gave it, as the world wrote them (quests.md).
+            **{key: quest[key] for key in ("steps", "deadline_hours", "giver_id") if quest.get(key)},
+            **({"objective": _text(_mapping(quest["steps"][0]).get("summary")) or _text(quest.get("objective"))}
+               if quest.get("steps") else {}),
             "source": "published_world",
         })
     return log

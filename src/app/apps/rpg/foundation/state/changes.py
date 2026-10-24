@@ -207,6 +207,26 @@ class AbilityUsed(_Change):
     ready_at_turn: int = Field(ge=0)
 
 
+class QuestStepCompleted(_Change):
+    """A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the
+    branch, when the stage had more than one), and what it asks next."""
+
+    type: Literal["quest_step_completed"] = "quest_step_completed"
+    quest_id: str = Field(min_length=1)
+    stage: int = Field(ge=1)
+    step_id: str = ""
+    branch: int | None = None
+    next_objective: str = ""
+
+
+class QuestProgressed(_Change):
+    """A quest's running tallies (the creatures of a "defeat" step felled so far)."""
+
+    type: Literal["quest_progressed"] = "quest_progressed"
+    quest_id: str = Field(min_length=1)
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
 class RevisionRestored(_Change):
     """The game as it stood at an earlier revision, restored as a new revision (rewind.md): the sheet, the simulation
     and the game's runtime sections are the earlier document's; the campaign's bookkeeping (its revision, its
@@ -434,7 +454,7 @@ StateChange = Annotated[
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
     | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved | LevelChoiceMade
-    | RevisionRestored,
+    | RevisionRestored | QuestStepCompleted | QuestProgressed,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

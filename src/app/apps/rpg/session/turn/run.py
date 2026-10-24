@@ -71,6 +71,19 @@ def _reported(changes: list[StateChange]) -> list[dict[str, Any]]:
             for change in changes]
 
 
+def _quests_advance(document: dict[str, Any], applied: list[StateChange]) -> tuple[dict[str, Any], list[StateChange],
+                                                                                   list[str]]:
+    """The quests of steps the turn moved on (rules/quest/progress.py): stages done, quests completed or failed."""
+    from app.apps.rpg.rules.quest.arrival import quest_rewards
+    from app.apps.rpg.rules.quest.progress import quest_progress
+
+    simulation = _d(document.get("simulation_state"))
+    changes, lines = quest_progress(simulation, applied, lambda quest: quest_rewards(simulation, quest))
+    if changes:
+        document, _ = reduce(document, changes)
+    return document, changes, lines
+
+
 def run_planned_turn(
     session: dict[str, Any],
     *,
@@ -92,8 +105,10 @@ def run_planned_turn(
         tick_changes, causal, seen = world_tick(document, needs=resolution.needs, minutes=resolution.minutes,
                                                 turn_key=turn_id, turn=turn_index)
         document, _ = reduce(document, tick_changes)
-    lines = [*resolution.lines, *seen]  # what the hero did, then the comings and goings while it took
     applied = [*resolution.changes, *tick_changes]
+    document, quested, quest_lines = _quests_advance(document, applied)  # step 5: the quests the turn moved
+    applied += quested
+    lines = [*resolution.lines, *seen, *quest_lines]  # what the hero did, the comings and goings, what it led to
     if planned.mechanic != "clarify" and not resolution.refused:  # a question back or a refusal is no journal entry
         journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
         document, _ = reduce(document, [journal])
@@ -147,7 +162,8 @@ def run_planned_turn(
         result["first_call_semantic_advisory"] = {
             "source": "compact_grounded_dialogue_v1",
             "target_id": speech["speaker_id"],
-            "visible_response": {"narration": "", "npc": dict(result["npc"])},
+            # What the exchange led to (a quest's step done, who came and went) is said after the line.
+            "visible_response": {"narration": "", "npc": dict(result["npc"]), "aftermath": " ".join([*seen, *quest_lines])},
             "first_call_grounding_diagnostics": {"provider_called": True, "source": "rpg_turn_pipeline_dialogue_v1"},
         }
     if not resolution.told:
@@ -194,6 +210,9 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
                                                 turn_key=turn_id, turn=tick)
         document, _ = reduce(document, tick_changes)
         changes.extend(tick_changes)
+        document, quested, quest_lines = _quests_advance(document, tick_changes)  # a deadline may run out away
+        changes.extend(quested)
+        seen = [*seen, *quest_lines]
     place = outcome_lines(PlannedAction(mechanic="look"), document)[0].removeprefix("You look around ").rstrip(".")
     if asked:
         opening = f"Time passes in {place}."

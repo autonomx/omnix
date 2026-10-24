@@ -40,6 +40,29 @@ def _reward_items(rewards: list[str], world_items: Mapping[str, Mapping[str, Any
     return items
 
 
+def quest_rewards(simulation_state: Mapping[str, Any], quest: Mapping[str, Any]) -> tuple[list[StateChange], str]:
+    """A completed quest's rewards (its coin, items and experience: what it names, else 50 for each of its steps or
+    places, progression.md), and how to say what the hero receives."""
+    from app.apps.rpg.rules.player import progression
+
+    world_items = {_s(item.get("id")): _d(item) for item in _l(_d(simulation_state.get("world_model")).get("items"))
+                   if isinstance(item, Mapping)}
+    rewards = [_s(reward) for reward in _l(quest.get("rewards"))]
+    coins = _reward_coins(rewards)
+    changes: list[StateChange] = []
+    copper = sum(amount * _COINS[coin] for coin, amount in coins.items())
+    if copper:
+        changes.append(PurseChanged(delta_copper=copper, reason=f"quest reward: {_s(quest.get('title'))}"))
+    items = _reward_items(rewards, world_items)
+    changes.extend(items)
+    named = sum(int(amount) for reward in rewards for amount in re.findall(r"(\d+)\s*(?:xp|experience)", reward.lower()))
+    stages = len(_l(quest.get("steps"))) or len(_l(quest.get("locations")))
+    gained, xp_lines = progression.gain(simulation_state, named or progression.QUEST_STEP_XP * max(1, stages))
+    received = [*(f"{amount} {coin}" for coin, amount in coins.items() if amount), *(item.name for item in items)]
+    said = " ".join([*([f"You receive {', '.join(received)}."] if received else []), *xp_lines])
+    return [*changes, *gained], said
+
+
 def arrival_changes(simulation_state: Mapping[str, Any], location_id: str, *,
                     discovery_xp: int = 0) -> tuple[list[StateChange], list[str]]:
     """What reaching ``location_id`` does to the hero's active quests, and how to say it; the experience the arrival
@@ -56,7 +79,8 @@ def arrival_changes(simulation_state: Mapping[str, Any], location_id: str, *,
         quest_id = _s(quest.get("quest_id") or quest.get("id"))
         places = [_s(place) for place in _l(quest.get("locations"))]
         visited = [_s(place) for place in _l(quest.get("visited_locations"))]
-        if not quest_id or quest.get("status") != "active" or location_id not in places or location_id in visited:
+        if (not quest_id or quest.get("status") != "active" or location_id not in places or location_id in visited
+                or _l(quest.get("steps"))):  # a quest of steps advances by them (progress.py)
             continue
         changes.append(QuestPlaceReached(quest_id=quest_id, location_id=location_id))
         title = _s(quest.get("title")) or quest_id
@@ -81,4 +105,4 @@ def arrival_changes(simulation_state: Mapping[str, Any], location_id: str, *,
     return [*changes, *gained], [*lines, *xp_lines]
 
 
-__all__ = ["arrival_changes"]
+__all__ = ["arrival_changes", "quest_rewards"]

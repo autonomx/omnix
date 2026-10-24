@@ -35,7 +35,9 @@ from .changes import (
     PresenceChanged,
     PurseChanged,
     QuestPlaceReached,
+    QuestProgressed,
     QuestStatusChanged,
+    QuestStepCompleted,
     SkillProgressed,
     StateChange,
     ConditionsChanged,
@@ -478,6 +480,25 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
     elif isinstance(change, QuestStatusChanged):
         rows, index = _quest_rows(writer, change.quest_id)
         rows[index] = {**rows[index], "status": change.status}
+        if change.status == "active" and rows[index].get("accepted_at_minute") is None:
+            # When it was taken up, on the campaign clock: a quest's deadline runs from here (quests.md).
+            environment = writer.get(("simulation_state", "environment"))
+            minutes = environment.get("absolute_minutes") if isinstance(environment, dict) else None
+            rows[index]["accepted_at_minute"] = int(minutes or 0)
+        _write_quests(writer, rows)
+    elif isinstance(change, QuestStepCompleted):
+        rows, index = _quest_rows(writer, change.quest_id)
+        progress = dict(rows[index].get("progress") or {})
+        branches = list(progress.get("branches") or [])
+        if change.branch is not None:
+            branches.append({"stage": change.stage - 1, "branch": change.branch})
+        rows[index] = {**rows[index], "progress": {**progress, "stage": change.stage, "branches": branches},
+                       **({"objective": change.next_objective} if change.next_objective else {})}
+        _write_quests(writer, rows)
+    elif isinstance(change, QuestProgressed):
+        rows, index = _quest_rows(writer, change.quest_id)
+        rows[index] = {**rows[index], "progress": {**dict(rows[index].get("progress") or {}),
+                                                   "counts": dict(change.counts)}}
         _write_quests(writer, rows)
     elif isinstance(change, QuestPlaceReached):
         rows, index = _quest_rows(writer, change.quest_id)

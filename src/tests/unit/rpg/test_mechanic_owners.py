@@ -115,6 +115,8 @@ def _examples(doc: dict) -> list:
         (c.AbilityUsed(ability_id="a:x", ready_at_turn=3), doc),
         (c.CheckResolved(kind="persuade", target_id=npc, natural=12, band="success"), doc),
         (c.RevisionRestored(source_revision=0, document=json.loads(json.dumps(doc))), joined),
+        (c.QuestStepCompleted(quest_id="quest:voices-in-the-phone", stage=1, next_objective="Go on"), doc),
+        (c.QuestProgressed(quest_id="quest:voices-in-the-phone", counts={"creature:echo-wolf": 1}), doc),
         (c.LevelChoiceMade(choice="attribute", attribute="strength", value=12),
          reduce(doc, [c.LevelReached(level=2, xp=0, xp_to_next=200, choices_pending=1)])[0]),
     ]
