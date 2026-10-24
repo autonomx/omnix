@@ -90,3 +90,28 @@ def test_each_mechanic_on_the_pipeline_has_a_setting(monkeypatch) -> None:
     assert pipeline_enabled("look") and pipeline_enabled("wait") and not pipeline_enabled("buy")
     monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_WAIT", "off")
     assert not pipeline_enabled("wait") and pipeline_enabled("look")
+
+
+def test_an_unclear_command_is_planned_as_the_games_question_and_a_bare_attack_in_a_fight_is_not() -> None:
+    from app.apps.rpg.rules.intent.grammar import SceneView, parse_command
+
+    unclear = parse_command("I talk to him.", SceneView(()))
+    plan = plan_action(unclear)
+    assert (plan.mechanic, plan.question, plan.ticks) == ("clarify", "Who are you speaking to?", 0)
+    no_target = IntentCandidate("clarify", confidence=0.9, reason="attack_without_target")
+    assert plan_action(no_target).mechanic == "clarify" and plan_action(no_target, fighting=True) is None
+
+
+def test_a_question_back_is_a_counted_turn_in_which_no_time_passes() -> None:
+    from app.apps.rpg.rules.intent.grammar import SceneView, parse_command
+
+    campaign = _campaign()
+    reading = parse_command("I talk to him.", SceneView(()))
+    result = run_planned_turn(campaign, request=TurnRequest(kind="player_text", session_id="rpg_test",
+                                                            text="I talk to him."),
+                              planned=plan_action(reading), reading=reading)
+    assert [change["type"] for change in result["turn_pipeline"]["changes"]] == ["turn_counted"]
+    assert result["clarification"] == "Who are you speaking to?"
+    canonical = result["canonical_narrative_response"]
+    assert [block["text"] for block in canonical["blocks"]] == ["Who are you speaking to?"]
+    assert result["session"]["simulation_state"]["tick"] == 5

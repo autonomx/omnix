@@ -827,8 +827,8 @@ def _grammar_clarification(
 ) -> dict[str, Any]:
     """A command the grammar cannot read in any situation: the game asks instead of guessing (RQ-3.1).
 
-    Like the dialogue clarification ("Who are you speaking to?"), the question is a refusal the play screen
-    shows; committing it as a turn of its own comes with the turn pipeline's early answers (RQ-1.4).
+    The turn pipeline commits the question as a turn of its own (RQ-1.4); this refusal carrying it answers only
+    while ``OMNIX_RPG_TURN_PIPELINE_CLARIFY`` is off.
     """
     from app.apps.rpg.session.command_reading import reading_record
 

@@ -1737,6 +1737,13 @@
   },
   {
     "default": "true",
+    "description": "Controls rpg turn pipeline clarify for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURN_PIPELINE_CLARIFY",
+    "type": "boolean"
+  },
+  {
+    "default": "true",
     "description": "Controls rpg turn pipeline look for rpg.",
     "feature": "rpg",
     "name": "OMNIX_RPG_TURN_PIPELINE_LOOK",

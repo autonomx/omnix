@@ -30,6 +30,8 @@ def resolve(planned: PlannedAction, document: Mapping[str, Any]) -> list[StateCh
 
 def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[str]:
     """What the hero perceives, as plain facts for the narration."""
+    if planned.mechanic == "clarify":
+        return [planned.question]
     simulation = _d(document.get("simulation_state"))
     world = _d(simulation.get("world_model"))
     location_id = _s(_d(simulation.get("player_state")).get("location_id") or simulation.get("location_id"))

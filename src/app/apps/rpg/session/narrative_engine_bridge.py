@@ -627,6 +627,48 @@ def _resolved_significance(
     return NarrativeSignificance.ROUTINE
 
 
+def publish_fixed_narration(
+    result: dict[str, Any],
+    *,
+    session_id: str,
+    text: str,
+    kind: BeatKind,
+    purpose: BeatPurpose,
+    source: str,
+) -> dict[str, Any]:
+    """Publish a line the game wrote itself (a clarifying question) as the turn's canonical prose: no model call."""
+    turn_id = _text(result.get("turn_id")) or "turn:0"
+    request_id = f"{purpose.value}:{session_id}:{turn_id}"
+    block_id = f"{request_id}:line"
+    response = CanonicalNarrativeResponse(
+        response_id=f"narrative:{session_id}:{turn_id}:1",
+        request_id=request_id,
+        turn_id=turn_id,
+        campaign_id=session_id,
+        revision=1,
+        blocks=(NarrativeBlock(block_id=block_id, beat_id=f"{request_id}:{purpose.value}", sequence=0, kind=kind,
+                               purpose=purpose, text=text, metadata={"source": source}),),
+        evidence_used=(),
+        validation=ValidationReport(passed=True, metadata={"fixed_line": True}),
+        generation=GenerationMetadata(source=source, beat_count=1, metadata={"deterministic_fallback_used": False}),
+        delivery=DeliveryMetadata(mode=DeliveryMode.BLOCKING, delivered_block_ids=(block_id,)),
+        metadata={"llm_prose_required": False},
+    ).with_content_hash()
+    projection = legacy_response_projection(response)
+    result.update(projection)
+    result["canonical_visible_response"] = dict(projection["visible_response"])
+    result["canonical_narrative_response"] = response.as_dict()
+    result["canonical_narrative_source"] = source
+    result["legacy_visible_prose_consumed"] = False
+    for nested_key in ("result", "resolved_result"):
+        nested = _mapping(result.get(nested_key))
+        if nested:
+            nested.update(projection)
+            nested["canonical_narrative_response"] = response.as_dict()
+            result[nested_key] = nested
+    return result
+
+
 def canonicalize_resolved_turn_result(
     result: dict[str, Any],
     *,

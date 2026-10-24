@@ -63,14 +63,16 @@ def test_an_ambiguous_command_asks_one_question(launch, world) -> None:
     play = launch(world)
     play.turn("go to Starfall Village")
     assert len(play.present()) >= 3
-    calls, count = len(play.model.calls), play.turn_count()
-    # The command grammar asks who is meant (RQ-3.1): a refusal carrying the question, as the dialogue
-    # clarification is, until the turn pipeline commits early answers as turns (RQ-1.4).
-    response = play.post_turn("I talk to him.")
-    assert response.status_code == 400
-    assert response.json()["detail"]["clarification"] == "Who are you speaking to?"
-    assert play.model.roles(calls) == []  # the game asks; no model picks someone
-    assert play.turn_count() == count
+    calls, count, before = len(play.model.calls), play.turn_count(), play.facts()
+    # The command grammar asks who is meant (RQ-3.1), and the turn pipeline commits the question as the turn's
+    # answer (RQ-1.4): a turn that changes nothing else and passes no time.
+    body = play.turn("I talk to him.")
+    assert body["visible_response"]["plain_text"].strip() == "Who are you speaking to?"
+    assert play.model.roles(calls) == []  # the game asks; no model picks someone or writes the question
+    assert play.turn_count() == count + 1
+    after = play.facts()
+    for fact in ("purse_copper", "inventory", "location_id", "hp", "quests", "party", "survival"):
+        assert after[fact] == before[fact], fact
 
 
 @pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(

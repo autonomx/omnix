@@ -24,8 +24,9 @@ from app.apps.rpg.session.turn.world_tick import world_tick
 # pipeline, and removed one release after that.
 LOOK_SETTING = "OMNIX_RPG_TURN_PIPELINE_LOOK"
 WAIT_SETTING = "OMNIX_RPG_TURN_PIPELINE_WAIT"
-_ACTION_TYPE = {"look": "observe", "wait": "ambient_wait"}
-_FAMILY = {"look": "observation", "wait": "ambient"}
+CLARIFY_SETTING = "OMNIX_RPG_TURN_PIPELINE_CLARIFY"
+_ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification"}
+_FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
@@ -34,6 +35,8 @@ def pipeline_enabled(mechanic: str) -> bool:
         return env_bool(LOOK_SETTING, True)
     if mechanic == "wait":
         return env_bool(WAIT_SETTING, True)
+    if mechanic == "clarify":
+        return env_bool(CLARIFY_SETTING, True)
     return False
 
 
@@ -72,17 +75,22 @@ def run_planned_turn(
     tick = int(simulation.get("tick") or 0)
     turn_index = int(_d(document.get("state")).get("turn_count") or 0)
     turn_id = f"turn:{tick}"
-    tick_changes, causal = world_tick(document, mechanic=planned.mechanic, ticks=planned.ticks,
-                                      turn_key=turn_id, turn=turn_index)
-    document, _ = reduce(document, tick_changes)
+    tick_changes: list[StateChange] = []
+    causal: dict[str, Any] = {}
+    if planned.ticks:  # the world moves on only when time passed
+        tick_changes, causal = world_tick(document, mechanic=planned.mechanic, ticks=planned.ticks,
+                                          turn_key=turn_id, turn=turn_index)
+        document, _ = reduce(document, tick_changes)
     lines = outcome_lines(planned, document)
-    journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
-    document, _ = reduce(document, [journal])
-    applied = [*changes, *tick_changes, journal]
+    applied = [*changes, *tick_changes]
+    if planned.mechanic != "clarify":  # a question back is no entry in the hero's journal
+        journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
+        document, _ = reduce(document, [journal])
+        applied.append(journal)
 
     resolved = {
         "ok": True,
-        "outcome": "success",
+        "outcome": "clarification_required" if planned.mechanic == "clarify" else "success",
         "action_type": _ACTION_TYPE[planned.mechanic],
         "semantic_action_type": _ACTION_TYPE[planned.mechanic],
         "semantic_family": _FAMILY[planned.mechanic],
@@ -93,7 +101,7 @@ def run_planned_turn(
         "tick": tick,
         "source": SOURCE,
     }
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "session": document,
         "turn_id": turn_id,
@@ -118,6 +126,17 @@ def run_planned_turn(
                         for change in applied],
         },
     }
+    if planned.mechanic == "clarify":
+        # The game asks; no model writes the question (the narrative engine adopts it as the turn's prose).
+        from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
+        from app.apps.rpg.session.narrative_engine_bridge import publish_fixed_narration
+
+        result["clarification"] = planned.question
+        result["response_mode"] = resolved["response_mode"] = "clarification"
+        result = publish_fixed_narration(result, session_id=request.session_id, text=planned.question,
+                                         kind=BeatKind.CLARIFICATION, purpose=BeatPurpose.CLARIFICATION,
+                                         source="rpg_turn_pipeline_clarification_v1")
+    return result
 
 
 def apply_planned_turn_stage(ctx: Any) -> Any:
@@ -133,8 +152,9 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     session = _select_session(ctx.session_id, session_override=ctx.session_override)
     if not session:
         return ctx
-    reading = read_command(_d(session.get("simulation_state")), ctx.player_input, _d(session.get("runtime_state")))
-    planned = plan_action(reading)
+    simulation = _d(session.get("simulation_state"))
+    reading = read_command(simulation, ctx.player_input, _d(session.get("runtime_state")))
+    planned = plan_action(reading, fighting=_d(simulation.get("combat_state")).get("active") is True)
     if planned is None or not pipeline_enabled(planned.mechanic):
         return ctx
     request = TurnRequest(kind="player_text", session_id=ctx.session_id, text=_s(ctx.player_input))
@@ -144,4 +164,5 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     return ctx
 
 
-__all__ = ["LOOK_SETTING", "WAIT_SETTING", "apply_planned_turn_stage", "pipeline_enabled", "run_planned_turn"]
+__all__ = ["CLARIFY_SETTING", "LOOK_SETTING", "WAIT_SETTING", "apply_planned_turn_stage", "pipeline_enabled",
+           "run_planned_turn"]

@@ -10,9 +10,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.apps.rpg.rules.intent.grammar import IntentCandidate
-from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE
+from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 
-PipelineMechanic = Literal["look", "wait"]
+# clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
+PipelineMechanic = Literal["look", "wait", "clarify"]
 
 
 class PlannedAction(BaseModel):
@@ -23,10 +24,17 @@ class PlannedAction(BaseModel):
     # How long it takes, in turns of the campaign clock.
     ticks: int = 1
     reason: str = ""
+    question: str = ""
 
 
-def plan_action(reading: IntentCandidate) -> PlannedAction | None:
-    """The plan for a confident, single-step reading of a mechanic the pipeline runs; else ``None``."""
+def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:
+    """The plan for a confident, single-step reading of a mechanic the pipeline runs; else ``None``.
+
+    In a fight a bare "attack" means the foe in front of the hero, so it is not asked about.
+    """
+    question = clarification(reading)
+    if question and not (fighting and reading.reason == "attack_without_target"):
+        return PlannedAction(mechanic="clarify", ticks=0, reason=reading.reason, question=question)
     if reading.confidence < SKIP_CONFIDENCE or len(reading.clauses) > 1:
         return None
     if reading.family == "look":
