@@ -27,3 +27,12 @@ resolved; haggling once.
 ## Out of scope
 
 Player-run shops, inflation, multiple currencies' exchange.
+
+## As built (restocking, with RQ-5.6 part 1)
+
+A sale records what the offer has left and the campaign day (`StockTaken.day`); `rules/economy/trade.py`
+`stock_left` grows it back by the offer's `restock_per_day` for each day since, up to its stock, so restocking needs
+no tick of its own. An offer the world gives no rate (a derived inn's rooms, the day's meals) is stocked afresh each
+day; an authored `restock_per_day` of 0 never restocks. Before this nothing restocked: an inn let six nights and was
+sold out for the rest of the campaign (the balance simulation's player, hurt and with coin, asked for a room until
+the end). Not yet: the price modifiers, haggling, the sell fraction as authored.

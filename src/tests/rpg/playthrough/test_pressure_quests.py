@@ -28,25 +28,29 @@ def test_a_side_quest_from_a_pressure_is_offered_done_and_eases_it(launch) -> No
     quest = _quest(play)
     assert quest["status"] == "available" and quest["offered_by"] == "npc:captain-rhea-sunward", quest
     hunt = quest["steps"][0]["all_of"][0]
-    assert quest["objective"] == "Defeat 3 Sky Mantas" and hunt == {"defeat": "creature:sky-manta", "count": 3}  # fits
+    assert quest["objective"] == "Defeat 3 Echo Wolves" and hunt == {"defeat": "creature:echo-wolf", "count": 3}  # fits
     assert 'Captain Rhea Sunward asks for your help: "Danger on the roads of Starfall March".' in play.model.told()
     play.turn(f"I accept the quest {TITLE}.")
     assert _quest(play)["status"] == "active"
     assert [row["quest_id"] for row in play.public()["quests"] if row["title"] == TITLE] == [FIRST]  # one at a time
 
-    for _ in range(3):
-        before = _severity(play)
-        play.turn("I attack the Sky Manta.")
+    for _ in range(8):  # a wolf may get away (encounters.md): hunt until three have fallen
+        before, felled = _severity(play), (_quest(play).get("progress") or {}).get("counts", {}).get("creature:echo-wolf", 0)
+        play.turn("I attack the Echo Wolf.")
         for _ in range(30):
             if not play.combat().get("active"):
                 break
-            play.turn("I attack the Sky Manta.")
-        assert _severity(play) < before + 8  # the manta felled pushed the danger back (the clock adds a little)
+            play.turn("I attack the Echo Wolf.")
+        if play.combat().get("ended_reason") == "enemy_side_defeated":
+            assert _severity(play) < before + 8  # the wolf felled pushed the danger back (the clock adds a little)
+        if (_quest(play).get("progress") or {}).get("stage") == 1:
+            break
+        assert felled <= 3
     quest = _quest(play)
     assert quest["progress"]["stage"] == 1 and quest["objective"] == "Tell Captain Rhea Sunward it is done", quest
 
     purse = play.purse()
-    play.turn("I tell Captain Rhea Sunward the mantas are dealt with.")
+    play.turn("I tell Captain Rhea Sunward the wolves are dealt with.")
     assert _quest(play)["status"] == "completed"
     assert play.purse() == purse + 100  # 10 silver
     if _severity(play) >= 60:  # the roads are still dangerous: the next one is offered

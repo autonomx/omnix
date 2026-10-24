@@ -269,8 +269,8 @@ def _authored_offer(canon: Mapping[str, Any], provider: Mapping[str, Any], offer
     priced = {"gold": offer.price.gold, "silver": offer.price.silver, "copper": offer.price.copper}
     built = _offer(provider, offer.service, offer.offer_key, offer.name, offer.description or offer.name,
                    priced, effects, stock=offer.stock)
-    if offer.restock_per_day:
-        built["restock_per_day"] = offer.restock_per_day
+    if offer.stock is not None:
+        built["restock_per_day"] = offer.restock_per_day  # as the world wrote it: 0 never restocks (economy.md)
     return built
 
 
@@ -436,8 +436,25 @@ _THREAT_ALIASES = {"minor": "low", "moderate": "medium", "severe": "high", "boss
                    "mythic": "extreme", "deadly": "extreme"}
 
 
+# A creature's behaviour as its lore tells it, where the world names none (encounters.md): the first that fits.
+_BEHAVIOUR_WORDS = (
+    ("guards", ("guard", "guardian", "sentinel", "warden", "oath", "oaths", "post", "territorial", "keeper")),
+    ("ambushes", ("ambush", "ambushes", "lurk", "lurks", "stalk", "stalks", "stolen face", "disguise", "camouflage")),
+    ("calls_allies", ("pack", "swarm", "horde", "splits", "summons", "calls", "hive", "brood")),
+    ("flees_when_hurt", ("wolf", "hound", "jackal", "fox", "docile", "skittish", "timid", "cowardly", "scavenger")),
+)
+
+
+def derived_behaviour(row: Mapping[str, Any]) -> str:
+    """How a creature fights, from its name and traits; ``fights`` when they say nothing of it."""
+    lore = " ".join([_text(row.get("name")), *map(_text, row.get("traits") or ())]).casefold()
+    words = f" {' '.join(re.findall(r'[a-z]+', lore))} "
+    return next((behaviour for behaviour, cues in _BEHAVIOUR_WORDS if any(f" {cue} " in words for cue in cues)), "fights")
+
+
 def bestiary_mechanics(revision: Any) -> dict[str, Any]:
-    """The world's creatures as combat definitions: numbers by threat, and its weakness stuns it for a turn."""
+    """The world's creatures as combat definitions: numbers by threat, its weakness stuns it for a turn, and it
+    behaves as the world says (else as its lore tells, ``derived_behaviour``)."""
 
     canon = _mapping(getattr(revision, "canon", None))
     played = {entry.id: entry for entry in parse_play_sections(canon)[0].bestiary}
@@ -467,7 +484,8 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
                 [{"trigger_tag": weakness, "aliases": aliases, "condition": "stunned", "duration_turns": 1, "magnitude": 1}]
                 if weakness else []
             ),
-            "behaviour": play.behaviour if play is not None else "fights",
+            "behaviour": play.behaviour if play is not None and row.get("behaviour") else derived_behaviour(row),
+            "threat": threat,
             "loot": [drop.model_dump() for drop in play.loot] if play is not None else [],
             "source": "published_world_bestiary",
         }

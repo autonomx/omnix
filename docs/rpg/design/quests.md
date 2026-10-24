@@ -62,8 +62,8 @@ is completed, each by its amount (`lower` or `raise`). After the quests have mov
 judges statuses, so a pressure eased below its resolution threshold resolves); `PressuresMoved` (49 types) carries the
 runtime the pull left. `pressure_offers` then raises a side quest for the pressure of the hero's region when it is at
 60 or more and no open quest answers it, offered by a person with the hero whose role fits (a guard, a captain, a
-watch, a guild's, an elder...): defeat the strongest of its `defeat:` lever creatures up to two levels above the
-hero (as many as push it back by 20, at most 3), then a word with the giver; 10 silver and the experience of its
+watch, a guild's, an elder...): defeat the strongest of its `defeat:` lever creatures below the hero's level, else
+one of their level, never a boss, none fitting no offer yet (encounters.md; as many as push it back by 20, at most 3), then a word with the giver; 10 silver and the experience of its
 steps. `QuestOffered` carries the new quest's row; accepting a title offered again takes the open offer. None of it
 runs on a refused turn, a question back or a rewind (`session/turn/run.py` `turn_consequences`). Before this nothing
 pulled a lever, so a pressure only ever rose. The starter world's levers were prose ("defeat the bandits at the

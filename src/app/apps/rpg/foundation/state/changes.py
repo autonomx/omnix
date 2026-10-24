@@ -414,11 +414,12 @@ class ServiceReserved(_Change):
 
 
 class StockTaken(_Change):
-    """What an offer has left after a sale."""
+    """What an offer has left after a sale, and the campaign day of it (stock grows back from there)."""
 
     type: Literal["stock_taken"] = "stock_taken"
     offer_id: str = Field(min_length=1)
     remaining: int = Field(ge=0)
+    day: int = Field(default=0, ge=0)
 
 
 class TradeRemembered(_Change):

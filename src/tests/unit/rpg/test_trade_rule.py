@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.apps.rpg.foundation.state.reducer import reduce
-from app.apps.rpg.rules.economy.trade import buy, coins, sell
+from app.apps.rpg.rules.economy.trade import buy, coins, sell, stock_left
 
 OFFERS = {
     "npc:orik": [
@@ -50,7 +50,7 @@ def test_buying_pays_takes_the_goods_and_the_stock_and_is_remembered() -> None:
     after = _after(campaign, outcome)
     assert after["player_state"]["currency"] == {"gold": 0, "silver": 7, "copper": 0}
     assert [item["item_id"] for item in after["player_state"]["inventory_state"]["items"]] == ["healing_potion"]
-    assert after["trade"]["stock"]["npc:brindle:healing-potion"] == 2
+    assert after["trade"]["stock"]["npc:brindle:healing-potion"] == {"remaining": 2, "day": 0}
     assert after["trade"]["ledger"][-1] == {"provider_id": "npc:brindle", "provider_name": "Brindle Gearwing",
                                            "deal": "bought", "what": "Healing Potion", "copper": 30, "tick": 4}
 
@@ -77,6 +77,22 @@ def test_what_cannot_be_bought_is_refused_and_an_unnamed_purchase_lists_the_offe
     sold_out["simulation_state"]["trade"] = {"stock": {"npc:orik:night": 0}}
     assert buy(sold_out["simulation_state"], "I rent a room from Orik.").lines == ["A night's lodging is sold out."]
     assert buy({"world_model": {}}, "buy bread") is None  # no economy section: the older path's
+
+
+def test_what_sold_out_comes_back_with_the_days() -> None:
+    campaign = _campaign()
+    simulation = campaign["simulation_state"]
+    simulation["trade"] = {"stock": {"npc:orik:night": {"remaining": 0, "day": 0}}}
+    simulation["environment"] = {"absolute_minutes": 23 * 60}
+    assert buy(simulation, "I rent a room from Orik.").lines == ["A night's lodging is sold out."]  # the same day
+    simulation["environment"] = {"absolute_minutes": 25 * 60}  # the next: the inn's rooms are free again
+    assert buy(simulation, "I rent a room from Orik.").kind == "bought"
+    offer = next(row for row in simulation["world_model"]["offers"]["npc:brindle"] if row["offer_id"].endswith("potion"))
+    offer["restock_per_day"] = 1  # as the world wrote it: one a day
+    simulation["trade"]["stock"]["npc:brindle:healing-potion"] = {"remaining": 0, "day": 0}
+    assert stock_left(simulation, offer) == 1
+    offer["restock_per_day"] = 0  # never
+    assert stock_left(simulation, offer) == 0
 
 
 def test_selling_pays_half_for_the_shops_own_goods_a_token_for_others_and_nothing_for_quest_rewards() -> None:

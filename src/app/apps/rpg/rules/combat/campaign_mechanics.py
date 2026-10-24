@@ -93,6 +93,7 @@ def instantiate_campaign_creature(
             definition.get("condition_immunities") or ()
         ),
         "vulnerabilities": deepcopy(list(definition.get("vulnerabilities") or ())),
+        "behaviour": _text(definition.get("behaviour")) or "fights",
         "status": "active",
         "status_effects": [],
         "mechanics_source": "campaign_mechanics_catalog",

@@ -35,6 +35,19 @@ def _blow(combat_state: dict[str, Any], attack: dict[str, Any]) -> str:
     return f"{actor} {verb} {target} for {safe_int(attack.get('damage_applied'), 0)} ({left} of {most} left)."
 
 
+def _act(combat_state: dict[str, Any], entry: dict[str, Any]) -> str:
+    """A turn in the exchange: a blow, or a creature acting as its kind does (encounters.md)."""
+    kind = safe_str(entry.get("kind"))
+    who = _name(combat_state, safe_str(entry.get("actor_id")), subject=True)
+    if kind == "foe_flee":
+        return f"{who} breaks away and flees." if entry.get("escaped") else f"{who} tries to flee, but cannot get clear."
+    if kind == "foe_call":
+        if safe_str(entry.get("ally_id")):
+            return f"{who} calls for help, and {_name(combat_state, safe_str(entry.get('ally_id')), subject=False)} joins the fight."
+        return f"{who} calls for help, but none comes."
+    return _blow(combat_state, entry)
+
+
 def _defeat_lines(defeat: dict[str, Any], foes: str) -> list[str]:
     """What a lost fight cost, as facts the narrator may not soften (RQ-5.1)."""
     by = " and ".join(name if name.casefold().startswith(("the ", "your ")) else f"the {name}"
@@ -69,7 +82,7 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
     foes = " and ".join(_name(combat_state, safe_str(foe), subject=False) for foe in safe_list(combat_result.get("foe_ids")))
     fell_fleeing = reason == "combat_fled" and safe_str(combat_state.get("ended_reason")) == "party_side_defeated"
     # In the order it happened: the blows before the hero's turn, the hero's turn, then everyone else's.
-    lines.extend(_blow(combat_state, safe_dict(attack)) for attack in safe_list(combat_result.get("earlier_turns")))
+    lines.extend(_act(combat_state, safe_dict(attack)) for attack in safe_list(combat_result.get("earlier_turns")))
     if reason == "combat_fled":
         blows = safe_list(combat_result.get("parting_blows"))
         lines.append(f"You break away from {foes or 'the fight'}; "
@@ -90,7 +103,7 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
             lines.append(f"{_name(combat_state, safe_str(combat_result.get('hindered_id')), subject=True)} is hindered.")
     if combat_result.get("hit") is not None:
         lines.append(_blow(combat_state, combat_result))
-    lines.extend(_blow(combat_state, safe_dict(attack)) for attack in safe_list(combat_result.get("other_turns")))
+    lines.extend(_act(combat_state, safe_dict(attack)) for attack in safe_list(combat_result.get("other_turns")))
     attacks = [
         *safe_list(combat_result.get("earlier_turns")),
         *([combat_result] if combat_result.get("hit") is not None else []),
@@ -104,6 +117,8 @@ def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
     ended = safe_str(combat_state.get("ended_reason"))
     if combat_state.get("active") is not True and ended == "enemy_side_defeated":
         lines.append("The fight is over.")
+    elif combat_state.get("active") is not True and ended == "enemy_fled":
+        lines.append("The fight is over; it yields you nothing.")
     elif combat_state.get("active") is not True and ended == "party_side_defeated":
         lines.extend(_defeat_lines(safe_dict(combat_state.get("defeat")), foes))
     return lines

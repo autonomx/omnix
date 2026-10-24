@@ -44,9 +44,10 @@ strength" (+2), "learn <ability>" (one the tree has, the level allows and the pr
 <skill> and <skill>" (a rank each, to 5); `LevelChoiceMade`; with no choice waiting, those words are the older
 path's. Skills: 50 x (rank + 1) to the next rank, 0 to 5; an hour's practice is 5. The balance simulation
 (`scripts/rpg_balance_sim.py`, `test_balance.py`) plays 500 turns of Aurelia and the starter world: level, fights won,
-defeats, time hurt and hunger stay inside their bands, and since the pressures' side quests (RQ-5.4) the purse and
-the quests completed too; the win rate does not yet (a fixed bestiary the hero outgrows, late everywhere and early in
-the starter world, RQ-5.6), tracked as a strict expected failure. The hero's level and attributes count in a fight (combat.md). Not yet:
+defeats, time hurt and hunger stay inside their bands, since the pressures' side quests (RQ-5.4) the purse and the
+quests completed, and since creatures act like themselves (RQ-5.6) the win rate; two not yet, each a strict expected
+failure: Aurelia's late purse (once the hero's region is safe nothing pays, RQ-5.5) and the starter world's early win
+rate (its first quests hunt creatures far below the hero). The hero's level and attributes count in a fight (combat.md). Not yet:
 the choice as clarification options on the play screen (RQ-7.3).
 
 ## Out of scope

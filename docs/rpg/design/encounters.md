@@ -27,3 +27,21 @@ A wolf flees at low HP; a bandit calls an ally; a guard does not pursue; a negot
 ## Out of scope
 
 Morale for groups, terrain-based tactics beyond the grid.
+
+## As built (RQ-5.6, part 1: behaviour)
+
+`rules/combat/fight.py` `_behaves`, on a creature's turn instead of a blow: `flees_when_hurt` tries once, below 30%
+of its health, on the hero's own rule to break away (a creature that gets away earns nothing; a fight whose foes are
+all gone without one falling ends `enemy_fled`, "it yields you nothing"); `calls_allies` calls once below 50%, and
+on a seeded even chance one more of its kind joins after it in the turn order (the ally calls no one); `guards`:
+breaking away from guardians alone always succeeds, with no parting blows; `ambushes`: first in the first round.
+The creature's behaviour reaches the fight from the catalog (`instantiate_campaign_creature`); a world that names
+none has one derived from the creature's name and traits (`published_world_setup.derived_behaviour`: Aurelia's Echo
+Wolf flees when hurt, its oath-bound Rootbound Knight guards, the face-stealing Glass Wight ambushes, the splitting
+Hollow Archon calls allies). The narration states each act ("The Wolf breaks away and flees."). With behaviour the
+balance simulation's win rates are inside their bands in Aurelia (0.71 after 100 turns, 0.87 after 500) and late in
+the starter world (0.85). Found with it: a pressure's side quest hunted the strongest lever creature up to the
+hero's level, which with allies called was more than a match (a level-2 hero fled Bandit Brutes eight times), and
+when none fitted it hunted the weakest anyway (level-9 Icefang Wolves for a level-2 hero), and at level 9 the world's
+boss (three Hollow Archons): a hunt now takes the strongest below the hero's level, else their equal, never a
+boss, and no fitting creature means no offer yet. Not yet: negotiation and stealth (part 2).

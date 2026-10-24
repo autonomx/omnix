@@ -463,7 +463,8 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
                            "consumed_tick": int(writer.get(("simulation_state", "tick")) or 0)}
         writer.set(("simulation_state", "active_services"), services)
     elif isinstance(change, StockTaken):
-        writer.set(("simulation_state", "trade", "stock", change.offer_id), change.remaining)
+        writer.set(("simulation_state", "trade", "stock", change.offer_id), {"remaining": change.remaining,
+                                                                            "day": change.day})
     elif isinstance(change, TradeRemembered):
         ledger = [dict(row) for row in writer.get(("simulation_state", "trade", "ledger")) or () if isinstance(row, dict)]
         ledger.append({"provider_id": change.provider_id, "provider_name": change.provider_name, "deal": change.deal,

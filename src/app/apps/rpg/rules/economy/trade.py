@@ -22,6 +22,8 @@ from app.apps.rpg.foundation.state.changes import (
     StockTaken,
     TradeRemembered,
 )
+from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.routines import MINUTES_PER_DAY
 
 COPPER = {"gold": 100, "silver": 10, "copper": 1}
 UNTRADED_GOODS_COPPER = 5  # what a shop pays for goods it does not sell itself: a token
@@ -81,12 +83,25 @@ def _offers(simulation: Mapping[str, Any], provider: Mapping[str, Any]) -> list[
     return [_d(offer) for offer in _l(offers)]
 
 
+def _today(simulation: Mapping[str, Any]) -> int:
+    return routines.clock(simulation) // MINUTES_PER_DAY
+
+
 def stock_left(simulation: Mapping[str, Any], offer: Mapping[str, Any]) -> int | None:
-    """How many of ``offer`` its seller has left; ``None`` when the world does not count it."""
+    """How many of ``offer`` its seller has left; ``None`` when the world does not count it.
+
+    What a sale left grows back by the offer's ``restock_per_day`` for each day since, up to its stock; an offer the
+    world gives no rate is stocked afresh each day (an inn's rooms, the day's meals: economy.md)."""
     if offer.get("stock") is None:
         return None  # unlimited
-    kept = _d(_d(simulation.get("trade")).get("stock"))
-    return int(kept.get(_s(offer.get("offer_id")), offer.get("stock")) or 0)
+    full = int(offer.get("stock") or 0)
+    kept = _d(_d(simulation.get("trade")).get("stock")).get(_s(offer.get("offer_id")))
+    if kept is None:
+        return full
+    sale = _d(kept) if isinstance(kept, Mapping) else {"remaining": kept, "day": 0}  # an older campaign's count
+    rate = full if offer.get("restock_per_day") is None else int(offer.get("restock_per_day") or 0)
+    days = max(0, _today(simulation) - int(sale.get("day") or 0))
+    return min(full, int(sale.get("remaining") or 0) + rate * days)
 
 
 def _score(offer: Mapping[str, Any], words: set[str]) -> int:
@@ -154,7 +169,7 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
                                        provider_id=_s(provider.get("provider_id")), provider_name=name, label=label,
                                        duration=_s(effects.get("duration")) or "one_night"))
     if left is not None:
-        changes.append(StockTaken(offer_id=_s(offer.get("offer_id")), remaining=left - 1))
+        changes.append(StockTaken(offer_id=_s(offer.get("offer_id")), remaining=left - 1, day=_today(simulation)))
     changes.append(TradeRemembered(provider_id=_s(provider.get("provider_id")), provider_name=name, deal="bought",
                                    what=label, copper=price))
     return TradeOutcome(changes=changes, lines=lines, kind="bought")

@@ -95,15 +95,20 @@ def _food_offer(session: Mapping[str, Any], place_id: str) -> tuple[str, str]:
     return "", ""
 
 
-def _lodging(session: Mapping[str, Any], place_id: str) -> str:
-    """The name of someone here who lets rooms ("" when no one does)."""
+def _lodging(session: Mapping[str, Any], place_id: str) -> tuple[str, int]:
+    """Someone here who lets rooms, and the cheapest room's price in copper (("", 0) when no one does)."""
     world = _world(session)
     for provider_id, offers in sorted(_d(world.get("offers")).items()):
         person = _d(_d(world.get("npcs")).get(provider_id))
-        if _s(person.get("location_id")) == place_id and any(
-                _s(_d(offer).get("service_kind") or _d(offer).get("kind")) in {"lodging", "room"} for offer in _l(offers)):
-            return _s(person.get("name"))
-    return ""
+        rooms = [_d(offer) for offer in _l(offers)
+                 if _s(_d(offer).get("service_kind") or _d(offer).get("kind")) in {"lodging", "room"}]
+        if _s(person.get("location_id")) == place_id and rooms:
+            return _s(person.get("name")), min(_copper(_d(room.get("price"))) for room in rooms)
+    return "", 0
+
+
+def _copper(price: Mapping[str, Any]) -> int:
+    return int(price.get("gold") or 0) * 100 + int(price.get("silver") or 0) * 10 + int(price.get("copper") or 0)
 
 
 def _command(session: Mapping[str, Any], turn: int) -> str:
@@ -130,12 +135,13 @@ def _command(session: Mapping[str, Any], turn: int) -> str:
         if any(_s(_d(row).get("service_kind")) == "lodging" and _s(_d(row).get("status")) == "active"
                for row in _l(simulation.get("active_services"))):
             return "I go to my room and sleep for the night."
-        keeper = _lodging(session, _here(session))
-        if keeper and _purse(session) >= 50:
+        keeper, price = _lodging(session, _here(session))
+        if keeper and _purse(session) >= price:
             return f"I rent a room for the night from {keeper}."
         if not keeper:
             return "I make camp and sleep for the night."
-        step = _path_to(session, {place for place in _d(_world(session).get("locations")) if not _lodging(session, place)})
+        # No coin for the room: out to where no one lets rooms, and camp there.
+        step = _path_to(session, {place for place in _d(_world(session).get("locations")) if not _lodging(session, place)[0]})
         if step:
             return f"go to {_name(session, step)}"
     if int(_player(session).get("level_choices_pending") or 0) > 0:  # a level's choice: strength, then dexterity

@@ -22,6 +22,7 @@ from app.apps.rpg.world.causal_runtime import pull_levers
 PRESSURE_QUEST_SEVERITY = 60.0
 PRESSURE_QUEST_REWARD = "10 silver"
 HUNT_EASES = 20.0  # a pressure quest's hunt pushes its pressure back by at least this much
+_UNIQUE = {"boss", "legendary", "mythic", "extreme", "deadly"}  # a world's boss is no side quest's quarry
 _FITTING = re.compile(r"\b(guard|guards|captain|watch|warden|guild|registrar|elder|mayor|sheriff|ranger|marshal)\b")
 _OPEN = {"available", "active"}
 
@@ -116,15 +117,17 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
         hunts = [(lever, campaign_creature_definition(simulation, _s(lever.get("action")).partition(":")[2]))
                  for lever in map(_d, _l(pressure.get("levers")))
                  if _s(lever.get("action")).startswith("defeat:") and _amount(lever) < 0]
-        hunts = [(lever, creature) for lever, creature in hunts if creature]
+        # The hunt fits the hero: the strongest of its creatures below their level, else one of it (none: no offer
+        # yet); never the world's boss.
+        level = int(_d(simulation.get("player_state")).get("level") or 1)
+        hunts = sorted(((lever, creature) for lever, creature in hunts if creature
+                        and _s(creature.get("threat")).casefold() not in _UNIQUE
+                        and int(creature.get("level") or 1) <= level), key=lambda hunt: int(hunt[1].get("level") or 1))
+        weaker = [hunt for hunt in hunts if int(hunt[1].get("level") or 1) < level]
         if not hunts:
             continue
         giver = fitting[0]
-        # The hunt fits the hero: the strongest of its creatures up to two levels above theirs, else the weakest.
-        level = int(_d(simulation.get("player_state")).get("level") or 1)
-        ranked = sorted(hunts, key=lambda hunt: int(hunt[1].get("level") or 1))
-        lever, creature = next((hunt for hunt in reversed(ranked) if int(hunt[1].get("level") or 1) <= level + 2),
-                               ranked[0])
+        lever, creature = (weaker or hunts)[-1]
         creature_id = _s(lever["action"]).partition(":")[2]
         count = min(3, max(1, math.ceil(HUNT_EASES / abs(_amount(lever)))))
         creature_name = _s(creature.get("name")) or creature_id

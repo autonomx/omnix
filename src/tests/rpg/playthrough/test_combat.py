@@ -23,15 +23,18 @@ def _fight(play, foe: str, *, limit: int = 40) -> int:
 def test_fight_to_victory(launch, world) -> None:
     play, foe = launch(world), FOES[world][0]
     play.turn("look around")
-    xp, turns = int(play.player_state().get("xp") or 0), play.turn_count()
+    for _ in range(3):  # a creature that flees when hurt may get away (encounters.md): then it earned nothing
+        xp, turns = int(play.player_state().get("xp") or 0), play.turn_count()
+        play.turn(f"I attack the {foe}.")
+        combat = play.combat()
+        assert combat["active"] is True and combat["current_actor_id"] == "player"
+        enemy = next(actor for actor in combat["participants"] if actor.startswith("enemy:"))
+        rounds = _fight(play, foe)
+        final = play.combat()
+        if final["ended_reason"] != "enemy_fled":
+            break
+        assert int(play.player_state().get("xp") or 0) == xp and "it yields you nothing" in play.model.told()
 
-    play.turn(f"I attack the {foe}.")
-    combat = play.combat()
-    assert combat["active"] is True and combat["current_actor_id"] == "player"
-    enemy = next(actor for actor in combat["participants"] if actor.startswith("enemy:"))
-    rounds = _fight(play, foe)
-
-    final = play.combat()
     assert final["participants"][enemy]["hp"] <= 0  # the creature fell, the hero did not
     assert play.hp() > 0 and play.hp() == final["participants"]["player"]["hp"]
     assert int(play.player_state().get("xp") or 0) > xp  # a won fight earns experience

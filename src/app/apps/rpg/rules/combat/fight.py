@@ -63,6 +63,9 @@ from app.apps.rpg.rules.interactions.equipment_runtime import project_equipment_
 SOURCE = "rpg_turn_pipeline_fight_v1"
 MINUTES_PER_TURN = 1
 GUARD_BONUS = 2  # defending: added to the hero's defence until their next turn
+# A creature acting as its kind does (encounters.md): one that flees when hurt tries once, below this share of its
+# health; one that calls allies does so once, below this share, and is answered on a seeded even chance.
+FLEE_SHARE, CALL_SHARE, CALL_CHANCE = 0.30, 0.50, 50
 # Attacking someone: how far they, and everyone who sees it, trust the hero less (combat.md).
 ATTACKED_REGARD, WITNESS_REGARD = -40, -15
 # pass: the hero's turn went on something else (a potion); ability: one of the hero's, its effect given
@@ -183,6 +186,8 @@ def _start(simulation: Mapping[str, Any], enemy: dict[str, Any], *, turn_key: st
     participants[_s(enemy["actor_id"])] = {**enemy, "status_effects": []}
     encounter_id = f"enc:{_s(enemy.get('definition_id'))}:{turn_key}"
     order = build_initiative_order(encounter_id=encounter_id, participants=participants)
+    if _s(enemy.get("behaviour")) == "ambushes":  # it strikes first in the first round
+        order.sort(key=lambda row: _s(_d(row).get("actor_id")) != _s(enemy["actor_id"]))
     return {"active": True, "encounter_id": encounter_id, "round": 1, "turn_index": 0,
             "current_actor_id": _s(_d(order[0]).get("actor_id")) if order else "player",
             "initiative_order": order, "participants": participants, "combat_log": [], "source": SOURCE}
@@ -239,9 +244,49 @@ def _advance(combat: dict[str, Any]) -> None:
     combat.update(holder["combat_state"])
 
 
+def _behaves(simulation: Mapping[str, Any], combat: dict[str, Any], actor_id: str) -> dict[str, Any] | None:
+    """A creature acting as its kind does on its turn instead of striking (encounters.md): trying once to flee when
+    badly hurt (the hero's own rule to break away), or calling an ally once; ``None`` when it simply fights."""
+    actor = participant(combat, actor_id)
+    behaviour = _s(actor.get("behaviour"))
+    hp, most = int(actor.get("hp") or 0), max(1, int(actor.get("max_hp") or 1))
+    entry: dict[str, Any] | None = None
+    if behaviour == "flees_when_hurt" and hp < most * FLEE_SHARE and not actor.get("tried_to_flee"):
+        actor["tried_to_flee"] = True
+        roll = deterministic_roll(combat_seed(combat, "flee", actor_id), 1, 20)
+        bar = 10 + 2 * max([int(participant(combat, ally).get("initiative_bonus") or 0)
+                            for ally in living_party_ids(combat)] or [0])
+        escaped = roll + int(actor.get("initiative_bonus") or 0) >= bar
+        if escaped:
+            actor["status"] = "fled"
+        entry = {"kind": "foe_flee", "actor_id": actor_id, "roll": roll, "needed": bar, "escaped": escaped}
+    elif behaviour == "calls_allies" and hp < most * CALL_SHARE and not actor.get("called"):
+        actor["called"] = True
+        entry = {"kind": "foe_call", "actor_id": actor_id,
+                 "answered": deterministic_roll(combat_seed(combat, "call", actor_id), 1, 100) <= CALL_CHANCE}
+        kin = sum(1 for row in _d(combat.get("participants")).values()
+                  if _s(_d(row).get("definition_id")) == _s(actor.get("definition_id")))
+        ally = instantiate_campaign_creature(simulation, _s(actor.get("definition_id")), instance_index=kin + 1)
+        if entry["answered"] and ally is not None:
+            ally_id = _s(ally["actor_id"])
+            combat["participants"][ally_id] = {**ally, "called": True, "status_effects": []}  # the ally calls no one
+            order = _l(combat.get("initiative_order"))
+            order.insert(int(combat.get("turn_index") or 0) + 1, {"actor_id": ally_id, "initiative": 0, "roll": 0,
+                                                                   "bonus": 0})
+            combat["initiative_order"] = order
+            entry["ally_id"] = ally_id
+    if entry is not None:
+        combat.setdefault("combat_log", []).append({"round": int(combat.get("round") or 1), **entry})
+    return entry
+
+
 def _settle(combat: dict[str, Any]) -> str:
-    """Whether the fight is over: '' while both sides stand."""
+    """Whether the fight is over: '' while both sides stand; the foes gone without one falling is no victory."""
     if not living_enemy_ids(combat):
+        if not any(_s(_d(row).get("side")) == "enemy" and int(_d(row).get("hp") or 0) <= 0
+                   for row in _d(combat.get("participants")).values()):
+            combat.update(active=False, ended_reason="enemy_fled")
+            return "foe_fled"
         combat.update(active=False, ended_reason="enemy_side_defeated")
         return "victory"
     if not living_party_ids(combat):
@@ -262,7 +307,8 @@ def _until_hero(simulation: Mapping[str, Any], combat: dict[str, Any], condition
         standing = _s(actor.get("status") or "active") == "active" and int(actor.get("hp") or 0) > 0
         target_id = default_target_for_actor(combat, actor_id)
         if standing and not stunned and target_id:
-            blows.append(_strike(simulation, combat, conditions, actor_id, target_id))
+            acted = _behaves(simulation, combat, actor_id) if _s(actor.get("side")) == "enemy" else None
+            blows.append(acted or _strike(simulation, combat, conditions, actor_id, target_id))
             ended = _settle(combat)
             if ended:
                 return blows, ended
@@ -304,7 +350,8 @@ def _spoils(simulation: Mapping[str, Any], combat: Mapping[str, Any]) -> tuple[l
     """What a won fight earns: each fallen creature's experience, and its drops on their seeded chances."""
     # A person beaten yields: no experience or spoils for beating people (combat.md).
     fallen = [participant(dict(combat), actor_id) for actor_id, row in _d(combat.get("participants")).items()
-              if _s(_d(row).get("side")) == "enemy" and _s(_d(row).get("kind")) != "person"]
+              if _s(_d(row).get("side")) == "enemy" and _s(_d(row).get("kind")) != "person"
+              and int(_d(row).get("hp") or 0) <= 0]  # one that got away earns nothing
     # Each creature's experience as the world rates it, or 25 a level where it gives none (combat.md).
     amount = sum(int(row.get("xp_value") or 0) or 25 * max(1, int(row.get("level") or 1)) for row in fallen)
     changes, lines = progression.gain(simulation, amount)  # the one curve, and the level's choice (progression.md)
@@ -470,13 +517,15 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
         roll = deterministic_roll(combat_seed(combat, "flee", "player"), 1, 20)
         total = roll + int(hero.get("initiative_bonus") or 0)
         bar = 10 + 2 * max([int(participant(combat, foe).get("initiative_bonus") or 0) for foe in foe_ids] or [0])
-        escaped = total >= bar
+        # Guardians never leave their post: from them the hero walks away, unpursued (encounters.md).
+        unpursued = bool(foe_ids) and all(_s(participant(combat, foe).get("behaviour")) == "guards" for foe in foe_ids)
+        escaped = unpursued or total >= bar
         combat.setdefault("combat_log", []).append({"kind": "flee", "round": int(combat.get("round") or 1),
                                                     "actor_id": "player", "roll": roll, "total": total,
                                                     "needed": bar, "escaped": escaped})
         report.update(reason="combat_fled" if escaped else "combat_flee_failed", escaped=escaped, foe_ids=foe_ids)
         if escaped:
-            for foe_id in foe_ids:
+            for foe_id in [] if unpursued else foe_ids:
                 if int(participant(combat, "player").get("hp") or 0) <= 0:
                     break
                 report["parting_blows"].append({**_strike(simulation, combat, conditions, foe_id, "player",
