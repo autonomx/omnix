@@ -20,7 +20,7 @@ from typing import Iterable, Literal
 Family = Literal[
     "look", "inspect", "move", "talk", "ask", "decline", "buy", "sell", "attack", "flee", "defend",
     "take", "drop", "give", "use_item", "equip", "unequip", "manipulate", "rest", "wait", "quest",
-    "practice", "party", "status", "order", "clarify", "ability",
+    "practice", "party", "status", "order", "clarify", "ability", "check",
 ]
 EntityKind = Literal["person", "creature", "item", "place", "offer", "quest", "skill", "group", "ability"]
 
@@ -103,6 +103,18 @@ _TYPOS = {
 _BARE_VERBS = (
     "attack", "buy", "take", "give", "drop", "use", "sell", "equip", "eat", "drink", "fight", "open", "move",
     "talk", "ask", "again", "hmm", "um", "uh", "what", "huh",
+)
+# What a check is (checks.md), by the words that ask for one; searching stays a manipulation of the scene.
+_CHECKS = (
+    ("persuade", ("persuade", "convince", "coax", "sweet talk", "win over", "talk him into", "talk her into",
+                  "talk them into")),
+    ("intimidate", ("intimidate", "threaten", "menace", "frighten", "scare")),
+    ("deceive", ("lie to", "deceive", "bluff", "mislead", "trick", "fool")),
+    ("sneak", ("sneak", "creep", "slip past", "steal past", "tiptoe", "hide from", "move quietly")),
+    ("climb", ("climb", "scale the", "clamber")),
+    ("pick_lock", ("pick the lock", "pick a lock", "pick its lock", "lockpick", "pick the door")),
+    ("recall_lore", ("recall", "what do i know about", "try to remember", "remember what i know")),
+    ("notice", ("listen for", "keep an eye out", "watch for", "look out for", "notice anything", "notice something")),
 )
 _VAGUE = ("same as before", "the thing", "the other one", "that one", "do that", "the usual", "you know what")
 _SOCIAL = (
@@ -419,6 +431,11 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
     if _starts(words, "practice", "train", "drill", "hone", "work on") or _has(words, "practice", "train my",
                                                                                 "practicing", "training"):
         return _candidate("practice", _first(words, scene, "skill"), 0.85, "practice")
+    kind = next((kind for kind, phrases in _CHECKS if _has(words, *phrases)), "")
+    if kind and not _has(words, "notice board"):
+        # A try decided by a roll (checks.md): persuading someone, sneaking past, climbing, picking a lock...
+        target = _first(words, scene, "person", "creature", "item", "place")
+        return _candidate("check", target, 0.85, f"check:{kind}")
 
     if _starts(words, "give", "hand", "offer", "pass", "lend") or _has(words, "give", "hand over"):
         item = _first(words, scene, "item")
@@ -489,7 +506,8 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
         return _candidate("look", None, 0.9, "looks")
     if _starts(words, "open", "close", "shut", "push", "pull", "lock", "unlock", "knock", "climb", "search",
                "light", "lift", "turn", "pry", "kick open"):
-        return _candidate("manipulate", _first(words, scene, "item", "place"), 0.75, "manipulates")
+        return _candidate("manipulate", _first(words, scene, "item", "place"), 0.75,
+                          "searches" if _starts(words, "search") else "manipulates")
 
     if _starts(words, "ask"):
         return _ask(words, scene, addressed)

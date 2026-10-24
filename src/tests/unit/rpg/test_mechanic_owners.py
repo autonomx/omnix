@@ -37,7 +37,7 @@ MECHANIC_OWNERS = {
     "practice": "app.apps.rpg.rules.player.requests", "status": "app.apps.rpg.rules.player.requests",
     "party": "app.apps.rpg.rules.player.requests", "order": "app.apps.rpg.rules.player.requests",
     "talk": "app.apps.rpg.rules.dialogue.plan", "fight": "app.apps.rpg.rules.combat.fight",
-    "ability": "app.apps.rpg.rules.ability_use",
+    "ability": "app.apps.rpg.rules.ability_use", "check": "app.apps.rpg.rules.checks",
 }
 # The world tick's own rules (step 6): people's days.
 TICK_OWNERS = ("app.apps.rpg.rules.routines",)
@@ -51,6 +51,7 @@ CHANGE_WRITES = {
     "regard_changed": {"npcs"},
     "resources_changed": {"player"},
     "ability_used": {"player"},
+    "check_resolved": {"player"},
 }
 
 
@@ -106,6 +107,7 @@ def _examples(doc: dict) -> list:
         (c.WhereaboutsChanged(people=(c.PersonWhereabouts(npc_id=npc, location_id=here),)), doc),
         (c.RegardChanged(npc_id=npc, delta=-5), doc), (c.ResourcesChanged(stamina=-1), doc),
         (c.AbilityUsed(ability_id="a:x", ready_at_turn=3), doc),
+        (c.CheckResolved(kind="persuade", target_id=npc, natural=12, band="success"), doc),
     ]
 
 

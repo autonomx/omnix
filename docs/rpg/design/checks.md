@@ -38,6 +38,19 @@ Persuade a shopkeeper for a discount (success at a cost: the price drops, relati
 (strong success); pick a lock and fail (noise raises a pressure); recall lore about a creature (success reveals its
 weakness).
 
+## As built (RQ-5.2 part 1)
+
+`rules/checks.py`, on the turn pipeline (mechanic `check`; the grammar's `check` family, and "search" as a
+manipulation of the scene). Skills: persuasion (persuade, deceive), intimidation, stealth (sneak, pick a lock),
+athletics (climb), investigation (recall lore, search, notice); attributes charisma, strength, dexterity,
+intelligence, wisdom (modifier (score - 10) // 2). A target's difficulty is its world record's `check_difficulty`
+(a label or a number, or one per kind). Consequences: persuade +10 / +5 / +2 / -5 regard by band; intimidate 0 / -3
+/ -5 / -10; deceive 0 / 0 / -2 / -15; sneak or a lock that fails costs those present 5 or 2 regard; a climb at a
+cost or failed costs 3 or 6 health; recalled lore tells a creature's tags and, on a success, its weakness; a search
+or notice tells what lies here. Each check takes 10 minutes (20 where it says so). `CheckResolved` keeps the last 20
+checks (`simulation_state.checks`), which a retry is judged against. Not yet: the shopkeeper's discount, the
+pressure a noise raises, lore as `KnowledgeShared`, the outcome card's roll (RQ-7.2).
+
 ## Out of scope
 
 Opposed checks between NPCs, group checks.

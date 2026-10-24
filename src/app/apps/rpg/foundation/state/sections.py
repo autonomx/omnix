@@ -112,7 +112,8 @@ PLAYER_STATE: Path = ("simulation_state", "player_state")
 class PlayerSection(Section):
     """The hero: who they are, their level and experience, health and abilities' scores, skills."""
 
-    PATHS = (PLAYER_STATE, ("state", "ability_state"))  # the hero's abilities: unlocked, ranks, cooldowns
+    PATHS = (PLAYER_STATE, ("state", "ability_state"),  # the hero's abilities: unlocked, ranks, cooldowns
+             ("simulation_state", "checks"))  # the hero's recent checks (checks.md)
     _TYPED: ClassVar[set[str]] = {"name", "level", "xp", "xp_to_next", "resources", "stats", "skills",
                                   # owned by other sections
                                   "inventory", "inventory_state", "currency", "party_state", "location_id",

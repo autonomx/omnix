@@ -56,6 +56,7 @@ from .changes import (
     TradeRemembered,
     TurnCounted,
     AbilityUsed,
+    CheckResolved,
     RegardChanged,
     ResourcesChanged,
     WhereaboutsChanged,
@@ -70,6 +71,9 @@ _STORE = _PLAYER + ("inventory_state",)
 # Where gear is worn (the store's slots, which combat reads) and what the play screen's sheet calls each.
 SLOT_LABELS = {"main_hand": "Weapon", "off_hand": "Shield", "body": "Armor", "head": "Helmet", "cloak": "Cloak",
                "ring": "Ring", "tool": "Tool"}
+
+
+CHECKS_KEPT = 20  # the recent checks a retry is judged against (checks.md)
 
 
 class ChangeRejected(ValueError):
@@ -366,6 +370,13 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         ready[change.ability_id] = change.ready_at_turn
         writer.set(("state", "ability_state", "ready_at"), ready)
         _show_cooldowns(writer)
+    elif isinstance(change, CheckResolved):
+        checks = writer.get(("simulation_state", "checks"))
+        checks = dict(checks) if isinstance(checks, dict) else {}
+        record = {**change.model_dump(mode="json", exclude={"type"}),
+                  "tick": int(writer.get(("simulation_state", "tick")) or 0)}
+        history = [row for row in checks.get("history") or () if isinstance(row, dict)]
+        writer.set(("simulation_state", "checks"), {"last": record, "history": [*history, record][-CHECKS_KEPT:]})
     elif isinstance(change, RegardChanged):
         kept = writer.get(("simulation_state", "relationship_state", change.npc_id))
         kept = dict(kept) if isinstance(kept, dict) else {}

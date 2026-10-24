@@ -207,6 +207,22 @@ class AbilityUsed(_Change):
     ready_at_turn: int = Field(ge=0)
 
 
+class CheckResolved(_Change):
+    """A check outside a fight (checks.md): the roll against the difficulty, and its band."""
+
+    type: Literal["check_resolved"] = "check_resolved"
+    kind: str = Field(min_length=1)
+    target_id: str = ""
+    location_id: str = ""
+    natural: int = Field(ge=1, le=20)
+    bonus: int = 0
+    total: int = 0
+    difficulty: int = 0
+    margin: int = 0
+    band: Literal["strong", "success", "cost", "failure"]
+    skill: str = ""
+
+
 class RegardChanged(_Change):
     """How far someone trusts the hero moved (an attack, seen or suffered), from -100 to 100."""
 
@@ -394,7 +410,7 @@ StateChange = Annotated[
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
-    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed,
+    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])
