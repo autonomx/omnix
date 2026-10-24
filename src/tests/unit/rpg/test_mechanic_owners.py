@@ -117,6 +117,9 @@ def _examples(doc: dict) -> list:
         (c.RevisionRestored(source_revision=0, document=json.loads(json.dumps(doc))), joined),
         (c.QuestStepCompleted(quest_id="quest:voices-in-the-phone", stage=1, next_objective="Go on"), doc),
         (c.QuestProgressed(quest_id="quest:voices-in-the-phone", counts={"creature:echo-wolf": 1}), doc),
+        (c.QuestOffered(quest_id="quest:pressure:roads:1", npc_id=npc, quest={"title": "Roads", "status": "available"}),
+         doc),
+        (c.PressuresMoved(moves=[], runtime={"pressure_plan": {}}), doc),
         (c.LevelChoiceMade(choice="attribute", attribute="strength", value=12),
          reduce(doc, [c.LevelReached(level=2, xp=0, xp_to_next=200, choices_pending=1)])[0]),
     ]
@@ -146,7 +149,7 @@ def test_every_pipeline_mechanic_has_one_owner_and_the_pipeline_uses_it() -> Non
 
 
 def test_every_change_has_an_example_here() -> None:
-    assert sorted(change.type for change, _ in _examples(_document())) == sorted(CHANGE_TYPES)
+    assert sorted({change.type for change, _ in _examples(_document())}) == sorted(CHANGE_TYPES)  # some have two
 
 
 @pytest.mark.parametrize("index", range(len(CHANGE_TYPES)))

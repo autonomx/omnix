@@ -870,13 +870,16 @@
           ],
           "removed": []
         },
+        "quests": {
+          "Danger on the roads of Starfall March": "available"
+        },
         "survival": {
           "fatigue": 2,
           "hunger": 2,
           "thirst": 3
         }
       },
-      "document_hash": "sha256:585e3a3943cb2b07cd38e2b75d04535f4e969e60da1a060e10a3a6eb3ca64b71",
+      "document_hash": "sha256:9a0141734609d6ebdc92789d87ecdd2836d2121e3782497848a2a1118028e352",
       "facts": {
         "combat": {
           "active": false,
@@ -906,6 +909,7 @@
         ],
         "purse_copper": 160,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1058,7 +1062,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0bccb36a8cb0b83f78b7173e1707edc734dc435c75c72ece52f297cbcd276683",
+      "document_hash": "sha256:e89054d7106b095225a9d53ac413be121c47d8eca8ccddf2201ff5dadec74729",
       "facts": {
         "combat": {
           "active": false,
@@ -1088,6 +1092,7 @@
         ],
         "purse_copper": 160,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1212,7 +1217,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ebb3a59157481cd09d3d7521d3c6f3125c085ae6881c293584f65eb330809b57",
+      "document_hash": "sha256:c39e0c1bd322264b0d0342282896908dcfbc24e121858ee38121ffe75054ed17",
       "facts": {
         "combat": {
           "active": false,
@@ -1242,6 +1247,7 @@
         ],
         "purse_copper": 160,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1370,7 +1376,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c7fd39ebe75ebbbace3ec344d5d79ed4f535a753755ecab6d29803e550355b60",
+      "document_hash": "sha256:64e4cd3cdc476490b67999acaccdd58f77edb58bd47e208579451a18b274eb0e",
       "facts": {
         "combat": {
           "active": false,
@@ -1400,6 +1406,7 @@
         ],
         "purse_copper": 160,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1527,7 +1534,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:450719e01ebeac076782a6291f3b9a09bf79dbbe20e7f222ec1ece54ebd0049e",
+      "document_hash": "sha256:82fe71aa0c697e2858468c1c7f9eb0cc5798b2189d54469c39661552f590d323",
       "facts": {
         "combat": {
           "active": false,
@@ -1558,6 +1565,7 @@
         ],
         "purse_copper": 130,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1689,7 +1697,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:df381366de9a2b378d7999f7ff82fb228e0f269848aca76a365989a87376fab0",
+      "document_hash": "sha256:3343fc89d59aaf5600a7479b32f4c54bd5538084e818f9738c1f7bc6a6597d05",
       "facts": {
         "combat": {
           "active": false,
@@ -1718,6 +1726,7 @@
         ],
         "purse_copper": 135,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -1842,7 +1851,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:df2a71d2e8b4a29976a7d1530ad514d4056dc7fc80fffb75abc0b3894aed7874",
+      "document_hash": "sha256:14515e02275356b2f645b8d285a371c92440fc18eb3eb2f97096ed90fe436178",
       "facts": {
         "combat": {
           "active": false,
@@ -1871,6 +1880,7 @@
         ],
         "purse_copper": 135,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2002,7 +2012,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:448935019461d9c15f994aab28c13045e81d8d2960da1a84411864f16a12a9d3",
+      "document_hash": "sha256:f4fe3f92a537b27b73c7aaab6afb1be466e018772546580347e12ef141eb09a6",
       "facts": {
         "combat": {
           "active": false,
@@ -2031,6 +2041,7 @@
         ],
         "purse_copper": 335,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2185,7 +2196,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:6078d585fd5c5470a4ab4b09685efaa5461d8e900d05f7b2b81f07a66952da74",
+      "document_hash": "sha256:dfb36647eafdf468f3dd609f3859d56821d2172edf9d786637f9f052cd6917c7",
       "facts": {
         "combat": {
           "active": false,
@@ -2214,6 +2225,7 @@
         ],
         "purse_copper": 335,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2351,7 +2363,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:0e20016ba158ebe9aceb49696b57a58da755ec0f5c7ffe278aec20265563f517",
+      "document_hash": "sha256:d81728f22fec63626edad0b7e477486e1cb4edc3d3bd9d1b8bbd0272e31ea47f",
       "facts": {
         "combat": {
           "active": false,
@@ -2381,6 +2393,7 @@
         ],
         "purse_copper": 335,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2523,7 +2536,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:e9dda904441b9e85c5eace792078913689cf0edf7d1bde968c861d00e4afda5c",
+      "document_hash": "sha256:69326a369dc20d65fecdb318528d3d9fc7cf3bddd64e1a6721f381c6d6081635",
       "facts": {
         "combat": {
           "active": false,
@@ -2553,6 +2566,7 @@
         ],
         "purse_copper": 335,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2663,7 +2677,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:d6072c7f654589e508cfff706ebaf0901fac1786f8f121bbc52aacc74ba0da0b",
+      "document_hash": "sha256:74fb0c33299451b8b42e8296043233e17a53de4846491d1543d2d4b4a57b4dff",
       "facts": {
         "combat": {
           "active": false,
@@ -2693,6 +2707,7 @@
         ],
         "purse_copper": 327,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2818,7 +2833,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:7e0373c75614c9329c7362b994882a95eab4a7fa1a7a5ebee78f216a6e3004de",
+      "document_hash": "sha256:f5937f263db9e7fdd781f0783191227ec70562ebd7822c9037c819a38c304936",
       "facts": {
         "combat": {
           "active": false,
@@ -2848,6 +2863,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -2975,7 +2991,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:7df972644ef20e41ba98e5b8c29a9b79b22fe6c1d4cd8382b0e4fcc9b84c39a7",
+      "document_hash": "sha256:a4adf6e3913b263b20738e4e7701b00bf83965d9886fe2c03a49b4d2b920e2cd",
       "facts": {
         "combat": {
           "active": false,
@@ -3005,6 +3021,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3133,7 +3150,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:8ce1f180edcf169e0295285cf66368f9aaa634682bf952205d07b47cfdfb6eac",
+      "document_hash": "sha256:a07de02095225d8ccce9348d3c41e50f8975bce62f38be0a3ce6971bb1991b53",
       "facts": {
         "combat": {
           "active": false,
@@ -3163,6 +3180,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3294,7 +3312,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f590405f2b5616d4206c44a722d21bad3282f3f8ea88a52f71755e4ae525320f",
+      "document_hash": "sha256:27e6616c1f8efed6dd5784e2b2e1121ba603539beb70cbbdb03848ee4d769dc8",
       "facts": {
         "combat": {
           "active": true,
@@ -3328,6 +3346,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3451,7 +3470,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:9840445e7fdcd4ac42a0c07e5a82bdb2c652acf20835d82aae36d61bd7b80593",
+      "document_hash": "sha256:e48a0efb6bf8875027c6b026aefebe797fc04a682144ff9c5925e1c486dc817e",
       "facts": {
         "combat": {
           "active": true,
@@ -3485,6 +3504,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3583,7 +3603,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0c23b3be3af96eb9f34d0cbd68f0cf276adaf1225219977509c25bae27b404f6",
+      "document_hash": "sha256:2bb2343fa3f5a79ba7a9754022b562e755062778a50192cd407ab712ee9d6ed9",
       "facts": {
         "combat": {
           "active": true,
@@ -3617,6 +3637,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3750,7 +3771,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b5e7c4757cec346ca6e22fdcc8d87b3194751ad0e93947a79b302c73b99ac0fe",
+      "document_hash": "sha256:e4729269c3a9c8f1fcfea9b4153a9173eed39b08b701e8d2f3205f3b88ec3885",
       "facts": {
         "combat": {
           "active": true,
@@ -3784,6 +3805,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -3921,7 +3943,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5a9f1311cb9c3160d062b73da1d142d0c690a3d519fe63cd57977fefb3119ada",
+      "document_hash": "sha256:20e756022772c145fb5ba1eab2b50c206b2510ab849164982fe8f1f741c550e0",
       "facts": {
         "combat": {
           "active": true,
@@ -3955,6 +3977,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4095,7 +4118,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:3b4b8cd01a7f518a5b0b324be952eb93261126fed1e9c3b955b212f0048e9972",
+      "document_hash": "sha256:6edaba9a688f6bf95035d1f9e75c04328f61056cd294a721407029525964e41e",
       "facts": {
         "combat": {
           "active": true,
@@ -4128,6 +4151,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4253,7 +4277,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:43509479e7c15ab7fc1b25e444f84b903fe3eb758c83d162ae7653f3f7b713d9",
+      "document_hash": "sha256:2897c27c78f1b74f3849fd9d883499de043dbd35d30ba088e3c82a3195e6c5f4",
       "facts": {
         "combat": {
           "active": true,
@@ -4286,6 +4310,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4383,7 +4408,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:514fcb4b80a01fe1f20d4b24a8dafd46bc4cad9aa50c50fe7b9bc1140aa0a351",
+      "document_hash": "sha256:156b7fa659c6125e9cee194b36a3c18d1ff81f043a3415d88effe51f061cb6b0",
       "facts": {
         "combat": {
           "active": true,
@@ -4416,6 +4441,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4509,7 +4535,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:24526fe508a6bb6d20f8e46cb0f2cc20b652aacf6786ec3a7692231fae7e8c58",
+      "document_hash": "sha256:7202285945de741e1f25eb2687fe3ab023156d52e59ef7bf8ea5f89021a80e79",
       "facts": {
         "combat": {
           "active": true,
@@ -4542,6 +4568,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4635,7 +4662,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:3738de00876553523f03b08b1e8c4d8e8378bc0955d5eb1371986f403e7f711b",
+      "document_hash": "sha256:37db4cbf4f824191ec18c9d76c47bc78c68510304ca77580fa4432b42a117221",
       "facts": {
         "combat": {
           "active": true,
@@ -4668,6 +4695,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"
@@ -4761,7 +4789,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:47f21886f1c33662835c5fc31483a784330f6b68304985f668615d55c27cb65d",
+      "document_hash": "sha256:13c3f76918853c1da014d8829555416d6802f210f2e609a312db3c221dcc10c8",
       "facts": {
         "combat": {
           "active": true,
@@ -4794,6 +4822,7 @@
         ],
         "purse_copper": 277,
         "quests": {
+          "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
           "The Hollow Meridian": "available",
           "Voices in the Phone": "active"

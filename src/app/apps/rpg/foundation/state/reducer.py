@@ -44,6 +44,7 @@ from .changes import (
     DialogueExchanged,
     KnowledgeShared,
     QuestOffered,
+    PressuresMoved,
     CombatAdvanced,
     CompanionHpChanged,
     LevelReached,
@@ -542,9 +543,17 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         if change.fact_id not in known:
             writer.set(("simulation_state", "dialogue", "known_facts", change.npc_id), [*known, change.fact_id])
     elif isinstance(change, QuestOffered):
+        quests = writer.get(("simulation_state", "quest_state", "quests"))
+        known = isinstance(quests, list) and any(
+            isinstance(row, dict) and change.quest_id in (row.get("quest_id"), row.get("id")) for row in quests)
+        if not known and change.quest:  # a new quest: its row joins the log
+            _write_quests(writer, [*(dict(row) for row in quests or ()), {**change.quest, "quest_id": change.quest_id}])
         rows, index = _quest_rows(writer, change.quest_id)
         rows[index] = {**rows[index], "offered_by": change.npc_id}
         _write_quests(writer, rows)
+    elif isinstance(change, PressuresMoved):
+        if change.runtime:
+            writer.set(("simulation_state", "causal_world_runtime"), change.runtime)
     elif isinstance(change, CombatStarted):
         combat = writer.get(("simulation_state", "combat_state"))
         if isinstance(combat, dict) and combat.get("active"):

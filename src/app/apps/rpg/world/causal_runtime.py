@@ -205,6 +205,65 @@ def advance_causal_runtime(
     return current, tuple(emitted)
 
 
+def pull_levers(
+    runtime: Mapping[str, Any],
+    pulls: Mapping[str, float],
+    *,
+    cause: str,
+) -> tuple[dict[str, Any], CausalWorldEvent | None]:
+    """What the hero did to the world's pressures (RQ-5.4): each pressure's severity moved by its pull (negative
+    eases it), as one replayable event at the runtime's current tick, after that tick's own events. The next pressure
+    tick judges the statuses (a pressure eased below its resolution threshold resolves)."""
+
+    current = copy.deepcopy(dict(runtime))
+    moves = {str(key): float(value) for key, value in pulls.items() if float(value)}
+    cells = dict(dict(current.get("state") or {}).get("cells") or {})
+    moves = {key: value for key, value in moves.items() if key in cells}
+    if not moves:
+        return current, None
+    existing = _events(current)
+    tick = int(current.get("last_tick") or 0)
+    at_tick = [event for event in existing if event.tick == tick]
+    pulled = sum(1 for event in at_tick if event.event_type == "lever_pulled")
+    event_id = f"world:event:causal:{tick}:lever:{pulled + 1}"
+    sequence = max((event.sequence for event in at_tick), default=-1) + 1
+    deltas = tuple(
+        WorldStateDelta(
+            delta_id=f"delta:lever:{tick}:{pulled + 1}:{pressure_id}",
+            tick=tick,
+            sequence=index,
+            target_id=pressure_id,
+            dimension_id="pressure_severity",
+            operation="decrease" if value < 0 else "increase",
+            value=abs(value),
+            source_event_id=event_id,
+            source_kind="lever_pulled",
+        )
+        for index, (pressure_id, value) in enumerate(sorted(moves.items()))
+    )
+    state = dict(current.get("state") or {})
+    before_hash = str(state.get("state_hash") or causal_state_hash(state))
+    next_state, _ = reduce_world_state(state, deltas)
+    event = CausalWorldEvent(
+        event_id=event_id,
+        tick=tick,
+        sequence=sequence,
+        event_type="lever_pulled",
+        deltas=deltas,
+        before_state_hash=before_hash,
+        after_state_hash=next_state["state_hash"],
+        payload={"cause": cause, "pulls": dict(sorted(moves.items()))},
+    )
+    current["state"] = next_state
+    current["events"] = [
+        _event_dict(row)
+        for row in sorted((*existing, event), key=lambda row: (row.tick, row.sequence, row.event_id))
+    ]
+    current["revision"] = int(current.get("revision") or 1) + 1
+    current["runtime_hash"] = _hash(current)
+    return current, event
+
+
 def replay_causal_events(
     initial_state: Mapping[str, Any],
     events: Sequence[CausalWorldEvent | Mapping[str, Any]],
@@ -296,5 +355,6 @@ __all__ = [
     "bootstrap_causal_runtime",
     "ensure_causal_runtime_installed",
     "initialize_causal_runtime",
+    "pull_levers",
     "replay_causal_events",
 ]

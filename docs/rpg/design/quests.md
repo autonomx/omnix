@@ -51,3 +51,23 @@ what the exchange led to is said after the person's line (`aftermath`). The star
 quests (the tavern rumor, ask Bran or Mira; the cellar rats, three then the report; Elara's job, with a day's
 deadline). A quest offered in conversation (RQ-2.2) fails against whoever offered it. Not yet: `fail_conditions`
 beyond the deadline, a pressure below a value, and pressure side quests (part 2).
+
+## As built (RQ-5.4, part 2)
+
+A pressure's `levers` have a grammar (`world_play_sections.PressureLever`, checked at release against the bestiary
+and the quests): `defeat:<creature id>` pulls once for each such creature felled, `quest:<quest id>` when that quest
+is completed, each by its amount (`lower` or `raise`). After the quests have moved, `rules/pressures.py`
+`lever_pulls` reads the turn's changes and `world.causal_runtime.pull_levers` moves the severities as one replayable
+`lever_pulled` event at the runtime's tick (the history still replays to the same state; the next pressure tick
+judges statuses, so a pressure eased below its resolution threshold resolves); `PressuresMoved` (49 types) carries the
+runtime the pull left. `pressure_offers` then raises a side quest for the pressure of the hero's region when it is at
+60 or more and no open quest answers it, offered by a person with the hero whose role fits (a guard, a captain, a
+watch, a guild's, an elder...): defeat the strongest of its `defeat:` lever creatures up to two levels above the
+hero (as many as push it back by 20, at most 3), then a word with the giver; 10 silver and the experience of its
+steps. `QuestOffered` carries the new quest's row; accepting a title offered again takes the open offer. None of it
+runs on a refused turn, a question back or a rewind (`session/turn/run.py` `turn_consequences`). Before this nothing
+pulled a lever, so a pressure only ever rose. The starter world's levers were prose ("defeat the bandits at the
+mill") and are now in the grammar (the quarry crate that raised its pressure had no deed behind it and is gone).
+The balance simulation does quests of steps and takes a conversation it cannot play (no model) as answered; with
+side quests the purse and the quests done are inside their bands. Not yet: a pressure below a value as a step
+condition, fail conditions beyond the deadline.

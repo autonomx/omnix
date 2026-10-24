@@ -117,7 +117,8 @@ class NpcKnowledge(_Section):
 
 
 class PressureLever(_Section):
-    action: str = Field(min_length=1, max_length=80)
+    # What pulls it (rules/pressures.py): each creature of a kind felled, or a quest completed.
+    action: str = Field(min_length=1, max_length=80, pattern=r"^(defeat|quest):\S+$")
     effect: Literal["lower", "raise"]
     amount: float = Field(gt=0, le=100)
 
@@ -267,9 +268,15 @@ def play_section_findings(
     for knowledge in sections.knowledge:
         if knowledge.npc_id not in npc_ids:
             unknown.append(f"play_section_unknown_person:knowledge:{knowledge.npc_id}")
+    creature_ids = {creature.id for creature in sections.bestiary}
+    quest_ids = {str(row.get("id") or "") for row in _rows(canon.get("quests")) if isinstance(row, Mapping)}
     for pressure in sections.pressures:
         if pressure.region_id not in region_ids and pressure.region_id not in location_ids:
             unknown.append(f"play_section_unknown_place:pressures:{pressure.region_id}")
+        for lever in pressure.levers:
+            kind, _, subject = lever.action.partition(":")
+            if subject not in (creature_ids if kind == "defeat" else quest_ids):
+                unknown.append(f"play_section_unknown_lever:pressures:{lever.action}")
     for creature in sections.bestiary:
         for drop in creature.loot:
             if drop.item_id not in item_ids:

@@ -28,7 +28,7 @@ from app.apps.rpg.rules import routines
 FAILED_REGARD = -10  # a quest failed costs its giver's trust (quests.md)
 
 
-def _victories(applied: Sequence[StateChange]) -> dict[str, int]:
+def victories(applied: Sequence[StateChange]) -> dict[str, int]:
     """The creatures this turn's won fight felled, by their bestiary id."""
     felled: dict[str, int] = {}
     for change in applied:
@@ -79,7 +79,7 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
     them) or failed, and how to say it."""
     changes: list[StateChange] = []
     lines: list[str] = []
-    felled = _victories(applied)
+    felled = victories(applied)
     now = routines.clock(simulation)
     people = _d(_d(simulation.get("world_model")).get("npcs"))
     for quest in map(_d, _l(_d(simulation.get("quest_state")).get("quests"))):
@@ -125,4 +125,4 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
     return changes, lines
 
 
-__all__ = ["FAILED_REGARD", "quest_progress"]
+__all__ = ["FAILED_REGARD", "quest_progress", "victories"]

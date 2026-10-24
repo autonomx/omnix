@@ -46,12 +46,12 @@
     {
       "blocks": [
         "narration||Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.",
-        "action||You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience.",
-        "choice||Offered choice: You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience."
+        "action||You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience. Captain Rhea Sunward asks for your help: \"Danger on the roads of Starfall March\". Defeat 3 Sky Mantas.",
+        "choice||Offered choice: You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience. Captain Rhea Sunward asks for your help: \"Danger on the roads of Starfall March\". Defeat 3 Sky Mantas."
       ],
       "step": "go to Starfall Village",
-      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience. You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience.",
-      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience."
+      "told": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade. You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience. Captain Rhea Sunward asks for your help: \"Danger on the roads of Starfall March\". Defeat 3 Sky Mantas. You travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience. Captain Rhea Sunward asks for your help: \"Danger on the roads of Starfall March\". Defeat 3 Sky Mantas.",
+      "visible": "Starfall Village. Starfall Village, in Starfall March: frontier farms, gate scars, and multicultural trade.\n\nYou travel to Starfall Village; the road takes 20 minutes. Here: Orik Stonewake, Brindle Gearwing, Captain Rhea Sunward, Liora Fen. Progress on First Night in Aurelia: 2 of 3 places reached. Progress on Voices in the Phone: 1 of 2 places reached. You gain 15 experience. Captain Rhea Sunward asks for your help: \"Danger on the roads of Starfall March\". Defeat 3 Sky Mantas."
     },
     {
       "blocks": [
@@ -235,11 +235,11 @@
     },
     {
       "blocks": [
-        "result||Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian."
+        "result||Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian, Danger on the roads of Starfall March."
       ],
       "step": "Check my quests",
       "told": "",
-      "visible": "Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian."
+      "visible": "Active quests: Voices in the Phone (Repair the protagonist's phone and identify the voice calling from Earth). Quests you could take on: The Hollow Meridian, Danger on the roads of Starfall March."
     },
     {
       "blocks": [

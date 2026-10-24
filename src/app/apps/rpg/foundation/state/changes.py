@@ -283,11 +283,13 @@ class KnowledgeShared(_Change):
 
 
 class QuestOffered(_Change):
-    """A quest put to the hero by someone; it names who offered it."""
+    """A quest put to the hero by someone; it names who offered it. A quest the log does not have yet (a side quest
+    a pressure raised, quests.md) comes with its row."""
 
     type: Literal["quest_offered"] = "quest_offered"
     quest_id: str = Field(min_length=1)
     npc_id: str = Field(min_length=1)
+    quest: dict[str, Any] = Field(default_factory=dict)
 
 
 class CombatStarted(_Change):
@@ -385,6 +387,20 @@ class WorldTicked(_Change):
         return self
 
 
+class PressuresMoved(_Change):
+    """What the hero did to the world's pressures (their levers, quests.md): each one's severity before and after, and
+    the causal runtime as the pull left it (one replayable event, ``cause``)."""
+
+    type: Literal["pressures_moved"] = "pressures_moved"
+    moves: list[dict[str, Any]] = Field(default_factory=list)
+    runtime: dict[str, Any] = Field(default_factory=dict)
+    cause: str = ""
+
+    def reported(self) -> "PressuresMoved":
+        """As a turn outcome reports it: the moves, without the runtime (the turn's patch has it)."""
+        return PressuresMoved(moves=self.moves, cause=self.cause)
+
+
 class ServiceReserved(_Change):
     """A service paid for and kept for later: a room for the night."""
 
@@ -454,7 +470,7 @@ StateChange = Annotated[
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
     | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved | LevelChoiceMade
-    | RevisionRestored | QuestStepCompleted | QuestProgressed,
+    | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

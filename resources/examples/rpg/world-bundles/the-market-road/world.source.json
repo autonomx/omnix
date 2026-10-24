@@ -1270,12 +1270,27 @@
      "trend": "escalating",
      "levers": [
       {
-       "action": "defeat the bandits at the mill",
+       "action": "defeat:creature:market-road:bandit",
+       "effect": "lower",
+       "amount": 8
+      },
+      {
+       "action": "defeat:creature:market-road:bandit-archer",
+       "effect": "lower",
+       "amount": 8
+      },
+      {
+       "action": "defeat:creature:market-road:bandit-brute",
+       "effect": "lower",
+       "amount": 12
+      },
+      {
+       "action": "quest:quest:market-road:bandit-trail",
        "effect": "lower",
        "amount": 25
       },
       {
-       "action": "escort a caravan",
+       "action": "quest:quest:market-road:merchant-job",
        "effect": "lower",
        "amount": 10
       }
@@ -1291,14 +1306,14 @@
      "trend": "volatile",
      "levers": [
       {
-       "action": "seal the quarry fissure",
+       "action": "quest:quest:market-road:quarry-lights",
        "effect": "lower",
        "amount": 30
       },
       {
-       "action": "deliver a sealed crate",
-       "effect": "raise",
-       "amount": 10
+       "action": "defeat:creature:market-road:quarry-husk",
+       "effect": "lower",
+       "amount": 8
       }
      ]
     },
@@ -1312,14 +1327,19 @@
      "trend": "escalating",
      "levers": [
       {
-       "action": "recover the Frostbound Relic",
+       "action": "quest:quest:market-road:frostbound-relic",
        "effect": "lower",
        "amount": 40
       },
       {
-       "action": "slay the Icefang Alpha",
+       "action": "defeat:creature:market-road:icefang-alpha",
        "effect": "lower",
-       "amount": 15
+       "amount": 20
+      },
+      {
+       "action": "defeat:creature:market-road:icefang-wolf",
+       "effect": "lower",
+       "amount": 5
       }
      ]
     }

@@ -12,7 +12,7 @@ from typing import Any
 
 from app.config.env import env_list
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
-from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, WorldTicked
+from app.apps.rpg.foundation.state.changes import JournalWritten, PressuresMoved, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_command
 from app.apps.rpg.rules.ability_use import known as known_abilities
@@ -67,20 +67,28 @@ def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int,
 
 def _reported(changes: list[StateChange]) -> list[dict[str, Any]]:
     """As the outcome reports them: a world tick's summary, not the sections it replaced (the patch has those)."""
-    return [(change.reported() if isinstance(change, WorldTicked) else change).model_dump(mode="json")
+    return [(change.reported() if isinstance(change, (WorldTicked, PressuresMoved)) else change).model_dump(mode="json")
             for change in changes]
 
 
-def _quests_advance(document: dict[str, Any], applied: list[StateChange]) -> tuple[dict[str, Any], list[StateChange],
-                                                                                   list[str]]:
-    """The quests of steps the turn moved on (rules/quest/progress.py): stages done, quests completed or failed."""
+def turn_consequences(document: dict[str, Any],
+                      applied: list[StateChange]) -> tuple[dict[str, Any], list[StateChange], list[str]]:
+    """What the turn led to: the quests of steps it moved on (rules/quest/progress.py), the pressures its deeds pushed
+    on, and the side quests a high pressure raises (rules/pressures.py)."""
+    from app.apps.rpg.rules.pressures import lever_pulls, pressure_offers
     from app.apps.rpg.rules.quest.arrival import quest_rewards
     from app.apps.rpg.rules.quest.progress import quest_progress
 
-    simulation = _d(document.get("simulation_state"))
-    changes, lines = quest_progress(simulation, applied, lambda quest: quest_rewards(simulation, quest))
-    if changes:
-        document, _ = reduce(document, changes)
+    changes: list[StateChange] = []
+    lines: list[str] = []
+    for step in (lambda simulation: quest_progress(simulation, applied, lambda quest: quest_rewards(simulation, quest)),
+                 lambda simulation: lever_pulls(simulation, [*applied, *changes]),
+                 pressure_offers):
+        made, said = step(_d(document.get("simulation_state")))
+        if made:
+            document, _ = reduce(document, made)
+        changes += made
+        lines += said
     return document, changes, lines
 
 
@@ -106,7 +114,10 @@ def run_planned_turn(
                                                 turn_key=turn_id, turn=turn_index)
         document, _ = reduce(document, tick_changes)
     applied = [*resolution.changes, *tick_changes]
-    document, quested, quest_lines = _quests_advance(document, applied)  # step 5: the quests the turn moved
+    quested: list[StateChange] = []
+    quest_lines: list[str] = []
+    if planned.mechanic not in {"clarify", "rewind"} and not resolution.refused:  # step 5: what the turn led to
+        document, quested, quest_lines = turn_consequences(document, applied)
     applied += quested
     lines = [*resolution.lines, *seen, *quest_lines]  # what the hero did, the comings and goings, what it led to
     if planned.mechanic != "clarify" and not resolution.refused:  # a question back or a refusal is no journal entry
@@ -210,7 +221,7 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
                                                 turn_key=turn_id, turn=tick)
         document, _ = reduce(document, tick_changes)
         changes.extend(tick_changes)
-        document, quested, quest_lines = _quests_advance(document, tick_changes)  # a deadline may run out away
+        document, quested, quest_lines = turn_consequences(document, tick_changes)  # a deadline may run out away
         changes.extend(quested)
         seen = [*seen, *quest_lines]
     place = outcome_lines(PlannedAction(mechanic="look"), document)[0].removeprefix("You look around ").rstrip(".")
@@ -469,4 +480,5 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     return ctx
 
 
-__all__ = ["OFF_SETTING", "apply_planned_turn_stage", "pipeline_enabled", "run_planned_turn", "run_world_tick_turn"]
+__all__ = ["OFF_SETTING", "apply_planned_turn_stage", "pipeline_enabled", "run_planned_turn", "run_world_tick_turn",
+           "turn_consequences"]

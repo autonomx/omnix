@@ -56,6 +56,10 @@ def accept_quest(simulation: Mapping[str, Any], quest_id: str) -> RequestOutcome
         quest = available[0] if len(available) == 1 else None
     if quest is None:
         return RequestOutcome(lines=["No such quest is offered to you."], refused=True, minutes=0)
+    if quest.get("status") != "available":
+        # A side quest offered again under its title (a pressure's next, quests.md): the offer is the one meant.
+        quest = next((row for row in quests if row.get("status") == "available"
+                      and _s(row.get("title")) == _s(quest.get("title"))), quest)
     title = _s(quest.get("title")) or _quest_id(quest)
     status = _s(quest.get("status"))
     if status in {"completed", "failed"}:
