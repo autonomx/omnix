@@ -135,17 +135,22 @@ def _write_items(writer: _Writer, items: list[dict[str, Any]]) -> None:
     writer.set(("state", "player", "inventory"), projected)
 
 
+def _counted(item: dict[str, Any], quantity: int) -> dict[str, Any]:
+    """The stack with ``quantity``: in ``qty``, and in ``quantity`` too where the stack also keeps the sheet's count."""
+    return {**item, "qty": quantity, **({"quantity": quantity} if "quantity" in item else {})}
+
+
 def _take(items: list[dict[str, Any]], item_id: str, quantity: int) -> dict[str, Any]:
     for index, item in enumerate(items):
         if _key(item) == item_id:
             held = _quantity(item)
             if held < quantity:
                 raise ChangeRejected(f"the pack holds {held} of {item_id}, not {quantity}")
-            taken = {**item, "qty": quantity}
+            taken = _counted(item, quantity)
             if held == quantity:
                 items.pop(index)
             else:
-                items[index] = {**item, "qty": held - quantity}
+                items[index] = _counted(item, held - quantity)
             return taken
     raise ChangeRejected(f"the pack holds no {item_id}")
 
@@ -153,7 +158,7 @@ def _take(items: list[dict[str, Any]], item_id: str, quantity: int) -> dict[str,
 def _put(items: list[dict[str, Any]], stack: dict[str, Any]) -> None:
     for index, item in enumerate(items):
         if _key(item) == _key(stack):
-            items[index] = {**item, "qty": _quantity(item) + _quantity(stack)}
+            items[index] = _counted(item, _quantity(item) + _quantity(stack))
             return
     items.append(stack)
 
@@ -175,6 +180,67 @@ def _quest_rows(writer: _Writer, quest_id: str) -> tuple[list[dict[str, Any]], i
 def _write_quests(writer: _Writer, rows: list[dict[str, Any]]) -> None:
     writer.set(("simulation_state", "quest_state", "quests"), rows)
     writer.set(("state", "quests"), deepcopy(rows))  # the play screen's projection
+
+
+def _move_hero(writer: _Writer, change: LocationChanged) -> None:
+    """Where the hero is, in every copy turn code and the play screen read (RQ-2.1: travel owns them all)."""
+    location_id = change.location_id
+    previous = str(writer.get(_PLAYER + ("location_id",)) or "")
+    for path in (_PLAYER + ("location_id",), _PLAYER + ("current_location_id",), ("simulation_state", "location_id"),
+                 ("simulation_state", "current_location_id"), ("simulation_state", "current_location")):
+        writer.set(path, location_id)
+    if previous and previous != location_id:
+        writer.set(("simulation_state", "previous_location"), previous)
+        visited = [str(place) for place in writer.get(("simulation_state", "visited_locations")) or ()]
+        writer.set(("simulation_state", "visited_locations"),
+                   [*visited, *(place for place in (previous, location_id) if place not in visited)])
+    travel = writer.get(("simulation_state", "travel_state"))
+    if isinstance(travel, dict):
+        writer.set(("simulation_state", "travel_state"), {**travel, "current_location_id": location_id})
+    party = writer.get(_PLAYER + ("party_state",))
+    if isinstance(party, dict) and party.get("companions"):  # the party travels with the hero
+        writer.set(_PLAYER + ("party_state",), {**party, "companions": [
+            {**companion, "location_id": location_id} if isinstance(companion, dict) else companion
+            for companion in party["companions"]]})
+    place = _world_place(writer, location_id)
+    if place:
+        exits = place.get("exits") if isinstance(place.get("exits"), dict) else {}
+        writer.set(("simulation_state", "location_state"), {"current_location_id": location_id,
+                                                             "current_location": deepcopy(place),
+                                                             "available_exits": dict(exits)})
+        writer.set(("simulation_state", "present_npcs"), deepcopy(list(place.get("present_npcs") or [])))
+    if not change.location_name:
+        return
+    name = change.location_name
+    old_name = str(writer.get(("state", "current_location_name")) or writer.get(("state", "location")) or "")
+    writer.set(("simulation_state", "current_location_name"), name)
+    writer.set(("simulation_state", "location_name"), name)
+    writer.set(("state", "current_location_id"), location_id)
+    for key in ("current_location_name", "current_location", "location"):
+        writer.set(("state", key), name)
+    title = str(writer.get(("state", "title")) or "")
+    if old_name and old_name != name and title.endswith(old_name):
+        writer.set(("state", "title"), title[: len(title) - len(old_name)] + name)
+    world = writer.get(("state", "world"))
+    if isinstance(world, dict):
+        world = {**world, "current_location_id": location_id, "current_location_name": name}
+        region = str(place.get("region_id") or "")
+        if region and isinstance(world.get("environment"), dict):
+            world["environment"] = {**world["environment"], "region_id": region,
+                                    "region_name": str(place.get("region_name") or "")}
+            world["region"] = str(place.get("region_name") or world.get("region") or "")
+        writer.set(("state", "world"), world)
+    context = writer.get(("state", "scene", "environment_context"))
+    if isinstance(context, dict):
+        writer.set(("state", "scene", "environment_context"), {
+            **context, "location_id": location_id, "location_label": name,
+            "region_id": str(place.get("region_id") or context.get("region_id") or "")})
+
+
+def _world_place(writer: _Writer, location_id: str) -> dict[str, Any]:
+    places = writer.get(("simulation_state", "world_model", "locations"))
+    place = places.get(location_id) if isinstance(places, dict) else None
+    return dict(place) if isinstance(place, dict) else {}
 
 
 def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one branch per change type
@@ -230,15 +296,21 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         skill.update(level=change.level, xp=change.xp, xp_to_next=change.xp_to_next)
         writer.set(_PLAYER + ("skills", change.skill_id), skill)
     elif isinstance(change, LocationChanged):
-        writer.set(_PLAYER + ("location_id",), change.location_id)
-        writer.set(("simulation_state", "location_id"), change.location_id)
-        if change.location_name:
-            writer.set(("state", "current_location_name"), change.location_name)
+        _move_hero(writer, change)
     elif isinstance(change, PresenceChanged):
         writer.set(("simulation_state", "present_npc_state"),
                    {**dict(writer.get(("simulation_state", "present_npc_state")) or {}),
                     "location_id": change.location_id, "present_npc_ids": list(change.present_npc_ids)})
         writer.set(("runtime_state", "current_scene", "present_npc_ids"), list(change.present_npc_ids))
+        place = _world_place(writer, change.location_id)
+        if place:  # the scene the narrator and the scene readers build on is the place the hero is in
+            scene = writer.get(("runtime_state", "current_scene"))
+            name = str(place.get("name") or change.location_id)
+            writer.set(("runtime_state", "current_scene"), {
+                **(scene if isinstance(scene, dict) else {}), "scene_id": f"scene:{change.location_id}",
+                "location_id": change.location_id, "location_name": name, "title": name,
+                "summary": str(place.get("description") or name), "present_npc_ids": list(change.present_npc_ids),
+                "actors": [str(npc.get("name") or "") for npc in place.get("present_npcs") or () if isinstance(npc, dict)]})
     elif isinstance(change, TimeAdvanced):
         writer.set(("simulation_state", "tick"), int(writer.get(("simulation_state", "tick")) or 0) + change.ticks)
     elif isinstance(change, TurnCounted):

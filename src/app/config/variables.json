@@ -1751,6 +1751,13 @@
   },
   {
     "default": "true",
+    "description": "Controls rpg turn pipeline travel for rpg.",
+    "feature": "rpg",
+    "name": "OMNIX_RPG_TURN_PIPELINE_TRAVEL",
+    "type": "boolean"
+  },
+  {
+    "default": "true",
     "description": "Controls rpg turn pipeline wait for rpg.",
     "feature": "rpg",
     "name": "OMNIX_RPG_TURN_PIPELINE_WAIT",

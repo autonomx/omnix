@@ -16,7 +16,7 @@ from app.apps.rpg.session.causal_turn_runtime import causal_tick
 from app.apps.rpg.world.environment_time import advance_environment_time
 
 # How hard each mechanic's turn presses on the hero's needs (the survival tick profiles); time away presses none.
-NEED_PROFILE = {"look": "wait", "wait": "wait"}
+NEED_PROFILE = {"look": "wait", "wait": "wait", "travel": "travel"}
 MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 DEFAULT_START_MINUTE = 9 * 60
 
