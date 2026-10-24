@@ -2,11 +2,11 @@
 
 A pressure (the causal runtime's: danger on the roads, a failing ward) rises by itself each tick. Its ``levers`` say
 what pushes it back: ``defeat:<creature id>`` for each such creature felled, ``quest:<quest id>`` when that quest is
-completed; each moves the severity by its amount (``lower`` or ``raise``). When the pressure of the hero's region runs high (at least
-``PRESSURE_QUEST_SEVERITY``) and no open quest answers it, a person whose work fits (a guard, a captain, a guild's)
-who is with the hero offers one: defeat its creatures, then report back. And a dangerous road is dangerous: a
-journey to a place where no one lives, in a region whose pressure has creatures, may meet one of them (``road_encounter``;
-encounters.md). Pure: it returns the changes.
+completed; each moves the severity by its amount (``lower`` or ``raise``). When a pressure runs high (at least
+``PRESSURE_QUEST_SEVERITY``), a person whose work fits (a guard, a captain, a guild's) who is with the hero offers a
+quest against it, one at a time (the hero's own region's first): defeat its creatures, then report back. And a
+dangerous road is dangerous: a journey to a place where no one lives, in a region whose pressure has creatures, may
+meet one of them (``road_encounter``; encounters.md). Pure: it returns the changes.
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from app.apps.rpg.world.causal_runtime import pull_levers
 
 PRESSURE_QUEST_SEVERITY = 60.0
 PRESSURE_QUEST_REWARD = "10 silver"
+PRESSURE_QUEST_EVERY = 24 * 60  # the world's troubles raise a new side quest at most once a day (on its clock)
 HUNT_EASES = 20.0  # a pressure quest's hunt pushes its pressure back by at least this much
 _UNIQUE = {"boss", "legendary", "mythic", "extreme", "deadly"}  # a world's boss is no side quest's quarry
 _FITTING = re.compile(r"\b(guard|guards|captain|watch|warden|guild|registrar|elder|mayor|sheriff|ranger|marshal)\b")
@@ -48,11 +49,14 @@ def _amount(lever: Mapping[str, Any]) -> float:
 
 
 def lever_pulls(simulation: Mapping[str, Any], applied: Sequence[StateChange]) -> tuple[list[StateChange], list[str]]:
-    """The pressures this turn's deeds moved (creatures felled, quests completed), and how to say it."""
+    """The pressures this turn's deeds moved, and how to say it: creatures felled push back the pressure of the region
+    they fell in (a wolf killed in one march does not make another's roads safe), a quest completed its own."""
     runtime = _runtime(simulation)
     pressures = _pressures(runtime)
     if not pressures:
         return [], []
+    world_model = _d(simulation.get("world_model"))
+    here = _region(world_model, routines.hero_location(simulation))
     felled = victories(applied)
     completed = {change.quest_id for change in applied
                  if isinstance(change, QuestStatusChanged) and change.status == "completed"}
@@ -60,7 +64,9 @@ def lever_pulls(simulation: Mapping[str, Any], applied: Sequence[StateChange]) -
     for pressure in pressures:
         for lever in map(_d, _l(pressure.get("levers"))):
             kind, _, subject = _s(lever.get("action")).partition(":")
-            times = felled.get(subject, 0) if kind == "defeat" else int(subject in completed) if kind == "quest" else 0
+            local = _pressure_region(world_model, pressure) in {here, ""}
+            times = (felled.get(subject, 0) if kind == "defeat" and local
+                     else int(subject in completed) if kind == "quest" else 0)
             if times:
                 key = _s(pressure["pressure_id"])
                 pulls[key] = pulls.get(key, 0.0) + _amount(lever) * times
@@ -95,8 +101,9 @@ def _pressure_region(world_model: Mapping[str, Any], pressure: Mapping[str, Any]
 
 
 def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], list[str]]:
-    """A side quest a high pressure of the hero's region raises: offered by a fitting person who is with the hero,
-    one open for each pressure."""
+    """A side quest a high pressure raises: offered by a fitting person who is with the hero, one from the world's
+    pressures open at a time and at most one a day, the pressure of the hero's region first, else the most severe
+    elsewhere."""
     runtime = _runtime(simulation)
     world_model = _d(simulation.get("world_model"))
     location = routines.hero_location(simulation)
@@ -109,13 +116,17 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
     companions = set(routines.companions(simulation))
     present = sorted(set(routines.present_at(simulation, location, routines.clock(simulation))) - companions)
     fitting = [npc_id for npc_id in present if _FITTING.search(_s(_d(people.get(npc_id)).get("role")).casefold())]
-    if not fitting:
+    if not fitting or any(_s(quest.get("pressure_id")) and _s(quest.get("status")) in _OPEN for quest in quests):
         return [], []
-    for pressure in (row for row in _pressures(runtime) if _pressure_region(world_model, row) == here):
+    now = routines.clock(simulation)
+    last = max((int(quest.get("offered_at_minute") or 0) for quest in quests if _s(quest.get("pressure_id"))), default=None)
+    if last is not None and now - last < PRESSURE_QUEST_EVERY:
+        return [], []
+    ordered = sorted(_pressures(runtime), key=lambda row: (_pressure_region(world_model, row) != here,
+                                                           -_severity(runtime, _s(row["pressure_id"]))))
+    for pressure in ordered:
         pressure_id = _s(pressure["pressure_id"])
         if (_s(statuses.get(pressure_id)) or "active") == "resolved" or _severity(runtime, pressure_id) < PRESSURE_QUEST_SEVERITY:
-            continue
-        if any(_s(quest.get("pressure_id")) == pressure_id and _s(quest.get("status")) in _OPEN for quest in quests):
             continue
         hunts = [(lever, campaign_creature_definition(simulation, _s(lever.get("action")).partition(":")[2]))
                  for lever in map(_d, _l(pressure.get("levers")))
@@ -145,7 +156,7 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
             "id": quest_id, "quest_id": quest_id, "title": title, "status": "available", "tier": "side",
             "objective": steps[0]["summary"], "hook": _s(pressure.get("summary")), "rewards": [PRESSURE_QUEST_REWARD],
             "locations": [], "visited_locations": [], "steps": steps, "giver_id": giver, "pressure_id": pressure_id,
-            "source": "pressure"})
+            "offered_at_minute": now, "source": "pressure"})
         return [offer], [f'{giver_name} asks for your help: "{title}". {steps[0]["summary"]}.']
     return [], []
 

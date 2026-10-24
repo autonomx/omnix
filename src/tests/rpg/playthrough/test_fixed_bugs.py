@@ -72,8 +72,9 @@ def test_every_turn_counts_and_the_narrator_is_told_the_purchase(play) -> None:
     play.turn("go to Starfall Village")
     play.turn("I buy a meal from Orik Stonewake.")
     assert play.turn_count() == 3 and play.stored()["manifest"]["turn_count"] == 3
-    assert "You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger." \
-        in play.model.told()
+    # Aurelia's roads choke its trade from the start: its prices carry the roads' fifth (economy.md).
+    assert ("You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. "
+            "It eases your hunger.") in play.model.told()
 
 
 def test_commands_the_game_resolves_itself_ask_no_model(play) -> None:
@@ -120,10 +121,10 @@ def test_trade_keeps_one_purse_and_sells_only_what_the_world_offers(play) -> Non
     assert "Brindle Gearwing offers:" in play.model.told() and play.purse() == purse
     play.turn("I buy a Healing Potion from Brindle Gearwing.")
     play.turn("I sell my Healing Potion to Brindle Gearwing.")
-    assert play.purse() == purse - 30 + 15
+    assert play.purse() == purse - 36 + 15  # bought at 30 and the roads' fifth, sold back at half the list price
     play.turn("I sell my Iron Dagger to Brindle Gearwing.")
     assert "You sell the Iron Dagger to Brindle Gearwing for 5 copper." in play.model.told()
-    assert play.purse() == purse - 30 + 15 + 5
+    assert play.purse() == purse - 36 + 15 + 5
     play.turn("go to Wayfarers' Guild")  # First Night in Aurelia pays 20 silver and the Wayfarer Sigil
     play.turn("go to Starfall Village")
     reward = play.purse()
@@ -167,7 +168,7 @@ def test_renting_a_room_is_buying_one(play) -> None:
     play.turn("go to Starfall Village")
     purse = play.purse()
     play.turn("I book a room for the night with Orik Stonewake.")
-    assert play.purse() == purse - 50
+    assert play.purse() == purse - 60  # 5 silver, and the roads' fifth
     tired = play.survival()["fatigue"]
     assert tired > 0
     play.turn("I go to my room and sleep for the night.")

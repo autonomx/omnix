@@ -114,3 +114,35 @@ def test_selling_pays_half_for_the_shops_own_goods_a_token_for_others_and_nothin
 
 def test_coins_read_as_the_play_screen_shows_them() -> None:
     assert (coins(208), coins(5), coins(0)) == ("2 gold, 8 copper", "5 copper", "nothing")
+
+
+def test_prices_answer_scarcity_the_roads_trust_and_a_haggle() -> None:
+    from app.apps.rpg.rules.checks import check
+    from app.apps.rpg.rules.economy.trade import price_of
+
+    campaign = _campaign(purse=1000)
+    simulation = campaign["simulation_state"]
+    brindle, potion = PROVIDERS["npc:brindle"], OFFERS["npc:brindle"][0]
+    assert price_of(simulation, brindle, potion) == (30, [])
+    simulation["trade"] = {"stock": {"npc:brindle:healing-potion": {"remaining": 0, "day": 0}}}
+    potion = {**potion, "stock": 5, "restock_per_day": 1}  # one of five back by the next day: nearly gone
+    simulation["environment"] = {"absolute_minutes": 25 * 60}
+    assert price_of(simulation, brindle, potion) == (38, ["it is nearly gone"])
+    simulation["trade"] = {}
+    simulation["world_model"]["locations"] = {"loc:village": {"region_id": "region:march"}}
+    simulation["causal_world_runtime"] = {"state": {"cells": {"region:march": {"values": {"trade_access": 30}}}}}
+    assert price_of(simulation, brindle, potion) == (36, ["the roads choke trade"])
+    simulation["relationship_state"] = {"npc:brindle": {"trust": 60}}
+    assert price_of(simulation, brindle, potion)[1] == ["the roads choke trade", "you are trusted"]
+
+    simulation["world_model"]["npcs"] = {"npc:brindle": {"name": "Brindle Gearwing"}}
+    simulation["player_state"]["stats"] = {"charisma": 30}  # a sure haggle
+    haggle = check(simulation, "haggle", "npc:brindle", turn_key="1")
+    assert haggle.band != "failure" and "Brindle Gearwing comes down on the price, for today." in haggle.lines
+    haggled, _ = reduce(campaign, haggle.changes)
+    after = haggled["simulation_state"]
+    assert price_of(after, brindle, potion)[1][-1] == "you haggled"
+    bought = buy(after, "I buy a Healing Potion from Brindle Gearwing.")
+    assert bought.lines[0].startswith("You pay ") and "(the roads choke trade, you are trusted, you haggled)" in bought.lines[0]
+    after["environment"] = {"absolute_minutes": 49 * 60}  # the next day: the haggle is spent
+    assert "you haggled" not in price_of(after, brindle, potion)[1]

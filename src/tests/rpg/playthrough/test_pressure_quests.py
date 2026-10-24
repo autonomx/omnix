@@ -53,5 +53,4 @@ def test_a_side_quest_from_a_pressure_is_offered_done_and_eases_it(launch) -> No
     play.turn("I tell Captain Rhea Sunward the wolves are dealt with.")
     assert _quest(play)["status"] == "completed"
     assert play.purse() == purse + 100  # 10 silver
-    if _severity(play) >= 60:  # the roads are still dangerous: the next one is offered
-        assert _quest(play, FIRST.replace(":1", ":2"))["status"] == "available"
+    assert not any(row["quest_id"] == FIRST.replace(":1", ":2") for row in play.public()["quests"])  # a day apart

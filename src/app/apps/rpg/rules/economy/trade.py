@@ -26,6 +26,12 @@ from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.routines import MINUTES_PER_DAY
 
 COPPER = {"gold": 100, "silver": 10, "copper": 1}
+# What moves a price (economy.md): an offer nearly gone, a region whose trade the roads choke, a seller who trusts the
+# hero, and a haggle won with them today.
+SCARCE_SHARE, SCARCE_MARKUP = 0.2, 1.25
+CHOKED_TRADE, CHOKED_MARKUP = 40.0, 1.20
+TRUSTED, TRUSTED_DISCOUNT = 50, 0.90
+HAGGLE_DISCOUNT = 0.90
 UNTRADED_GOODS_COPPER = 5  # what a shop pays for goods it does not sell itself: a token
 RELIEF = {"meal": ("hunger", -35), "drink": ("thirst", -30)}
 _WORD = re.compile(r"[a-z0-9']+")
@@ -71,6 +77,11 @@ def _providers_here(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
             if _s(_d(provider).get("location_id")) == location and (not present or provider_id in present)]
 
 
+def sellers_here(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The people here who sell something."""
+    return [provider for provider in _providers_here(simulation) if _offers(simulation, provider)]
+
+
 def _named(providers: list[dict[str, Any]], words: set[str], text: str) -> list[dict[str, Any]]:
     lowered = text.casefold()
     return [provider for provider in providers
@@ -104,6 +115,40 @@ def stock_left(simulation: Mapping[str, Any], offer: Mapping[str, Any]) -> int |
     return min(full, int(sale.get("remaining") or 0) + rate * days)
 
 
+def _trade_access(simulation: Mapping[str, Any], location_id: str) -> float | None:
+    """The causal runtime's trade access of the region a place is in; ``None`` where it keeps none."""
+    region = _s(_d(_d(_d(simulation.get("world_model")).get("locations")).get(location_id)).get("region_id"))
+    cell = _d(_d(_d(_d(simulation.get("causal_world_runtime")).get("state")).get("cells")).get(region))
+    value = _d(cell.get("values")).get("trade_access")
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def haggled(simulation: Mapping[str, Any], provider_id: str) -> bool:
+    """Whether a haggle with this seller was won today."""
+    today = _today(simulation)
+    return any(_s(_d(row).get("kind")) == "haggle" and _s(_d(row).get("target_id")) == provider_id
+               and _s(_d(row).get("band")) != "failure" and int(_d(row).get("minute") or -1) // MINUTES_PER_DAY == today
+               for row in _l(_d(simulation.get("checks")).get("history")))
+
+
+def price_of(simulation: Mapping[str, Any], provider: Mapping[str, Any], offer: Mapping[str, Any]) -> tuple[int, list[str]]:
+    """What ``offer`` costs now, in copper, and why it differs from its price (economy.md)."""
+    price = copper(_d(offer.get("price")))
+    factor, why = 1.0, []
+    left, full = stock_left(simulation, offer), int(offer.get("stock") or 0)
+    if left is not None and full and left <= full * SCARCE_SHARE:
+        factor, why = factor * SCARCE_MARKUP, [*why, "it is nearly gone"]
+    access = _trade_access(simulation, _s(provider.get("location_id")))
+    if access is not None and access < CHOKED_TRADE:
+        factor, why = factor * CHOKED_MARKUP, [*why, "the roads choke trade"]
+    provider_id = _s(provider.get("provider_id"))
+    if int(_d(_d(simulation.get("relationship_state")).get(provider_id)).get("trust") or 0) >= TRUSTED:
+        factor, why = factor * TRUSTED_DISCOUNT, [*why, "you are trusted"]
+    if haggled(simulation, provider_id):
+        factor, why = factor * HAGGLE_DISCOUNT, [*why, "you haggled"]
+    return (price if factor == 1.0 else max(1, round(price * factor))), why
+
+
 def _score(offer: Mapping[str, Any], words: set[str]) -> int:
     label = _words(_s(offer.get("label")))
     score = 10 * len(words & label)
@@ -120,8 +165,9 @@ def _purse(simulation: Mapping[str, Any]) -> int:
     return copper(_d(_d(player.get("inventory_state")).get("currency") or player.get("currency")))
 
 
-def _listing(provider: Mapping[str, Any], offers: list[dict[str, Any]], *, unnamed: bool) -> str:
-    listed = ", ".join(f"{_s(offer.get('label'))} ({coins(copper(_d(offer.get('price'))))})" for offer in offers)
+def _listing(simulation: Mapping[str, Any], provider: Mapping[str, Any], offers: list[dict[str, Any]], *,
+             unnamed: bool) -> str:
+    listed = ", ".join(f"{_s(offer.get('label'))} ({coins(price_of(simulation, provider, offer)[0])})" for offer in offers)
     return f"{_s(provider.get('provider_name'))} offers: {listed}." + (" Nothing is sold until you name one." if unnamed else "")
 
 
@@ -138,12 +184,13 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
                      for index, offer in enumerate(_offers(simulation, provider))), key=lambda row: (-row[0], row[1]))
     if not ranked or ranked[0][0] == 0 or words <= _GENERIC:
         if len(candidates) == 1:
-            return TradeOutcome(lines=[_listing(candidates[0], _offers(simulation, candidates[0]), unnamed=True)],
+            return TradeOutcome(lines=[_listing(simulation, candidates[0], _offers(simulation, candidates[0]),
+                                                unnamed=True)],
                                 kind="listed")
         return TradeOutcome(lines=["No one here sells that."], refused=True, kind="refused")
     _, _, provider, offer = ranked[0]
     name, label = _s(provider.get("provider_name")), _s(offer.get("label"))
-    price = copper(_d(offer.get("price")))
+    price, why = price_of(simulation, provider, offer)
     left = stock_left(simulation, offer)
     if left is not None and left <= 0:
         return TradeOutcome(lines=[f"{label} is sold out."], refused=True, kind="refused")
@@ -154,7 +201,8 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     kind = _s(offer.get("service_kind"))
     effects = _d(offer.get("effects"))
     changes: list[StateChange] = [PurseChanged(delta_copper=-price, reason=f"bought {label} from {name}")]
-    lines = [f"You pay {coins(price)} to {name} for {label}. The transaction is complete."]
+    lines = [f"You pay {coins(price)} to {name} for {label}" + (f" ({', '.join(why)})" if why else "")
+             + ". The transaction is complete."]
     for item in _l(effects.get("items_added")):
         item = _d(item)
         changes.append(ItemAdded(item_id=_s(item.get("item_id")), name=_s(item.get("name")) or label,
@@ -211,4 +259,4 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     ], lines=[f"You sell the {name} to {buyer} for {coins(paid)}."], kind="sold")
 
 
-__all__ = ["TradeOutcome", "buy", "coins", "copper", "sell", "stock_left"]
+__all__ = ["TradeOutcome", "buy", "coins", "copper", "haggled", "price_of", "sell", "sellers_here", "stock_left"]

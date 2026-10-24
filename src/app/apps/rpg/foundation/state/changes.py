@@ -262,6 +262,7 @@ class CheckResolved(_Change):
     margin: int = 0
     band: Literal["strong", "success", "cost", "failure"]
     skill: str = ""
+    minute: int = 0  # on the campaign clock: a haggle holds for its day (economy.md)
 
 
 class RegardChanged(_Change):

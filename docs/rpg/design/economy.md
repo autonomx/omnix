@@ -35,4 +35,21 @@ A sale records what the offer has left and the campaign day (`StockTaken.day`); 
 no tick of its own. An offer the world gives no rate (a derived inn's rooms, the day's meals) is stocked afresh each
 day; an authored `restock_per_day` of 0 never restocks. Before this nothing restocked: an inn let six nights and was
 sold out for the rest of the campaign (the balance simulation's player, hurt and with coin, asked for a room until
-the end). Not yet: the price modifiers, haggling, the sell fraction as authored.
+the end).
+
+## As built (RQ-5.5)
+
+`rules/economy/trade.py` `price_of`: an offer's price, then +25% when what is left is a fifth of its stock or less,
++20% when the trade access of the seller's region (the causal runtime's) is below 40, -10% from a seller who trusts
+the hero (50 or more), and -10% for the rest of the day after a haggle won with them; the purchase line says why
+("You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade, you haggled)"), and a
+seller's listing shows the prices as they stand. A haggle is a check of its own (`checks.py` kind `haggle`:
+persuasion and charisma, the seller's difficulty, else moderate; "haggle", "bargain with", "a better price"; with no
+one named, the one seller here); a failure costs a little of the seller's regard. A check now records the minute
+of the campaign clock it was made at, so the haggle holds for its day. Selling pays the shop's authored
+`buys.price_fraction` (0.5 by default) of its list price, as RQ-2.3 built it. The sources: the world's pressures now
+raise a side quest from anywhere once the hero's region is safe, one at a time and at most one a day (quests.md),
+and a felled creature pushes back only its own region's pressure (a wolf killed in one march no longer made every
+region's roads safe at once, which left nothing to pay for the rest of the campaign). With these the balance
+simulation's purse is inside its band in both worlds. Haggles are once a day per seller, not per offer.
+

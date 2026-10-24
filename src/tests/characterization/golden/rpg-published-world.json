@@ -879,7 +879,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:267b724ab6cc8ca76c5b64a9ae0fa199a1b518964eccbb99109535cbecf0ca33",
+      "document_hash": "sha256:8f8ad950b5303da3301b2dbd8cb2b0f17c1a866a25a5a22014776bdb9f4b926d",
       "facts": {
         "combat": {
           "active": false,
@@ -1062,7 +1062,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:8622890ae68a91e736f8cd0d36bb9b5140c4a56a06815bb3e11a4e6e3dd2c5f2",
+      "document_hash": "sha256:ab12702fb790698dfbfb9fda82758c99b82d61b2352dac49a1266eb7b721b4c8",
       "facts": {
         "combat": {
           "active": false,
@@ -1217,7 +1217,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:11ea17f6784383b040e2e3a84c5e5203ce76debe8a837ca3eac08cf34b8732ce",
+      "document_hash": "sha256:1d25022d5c56e7b8da8b695294710d977b7cf07d5df6c261b7fd80f653f38578",
       "facts": {
         "combat": {
           "active": false,
@@ -1376,7 +1376,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:85fb63d08c0c21c5b54f63f81c160e7044f4b3df80df6b79e766593e7a02ad67",
+      "document_hash": "sha256:f1b540764ef3fc2c0d2779596dcb3a98a91b320cc4cc9132c4fa798d5b0ab7de",
       "facts": {
         "combat": {
           "active": false,
@@ -1532,9 +1532,9 @@
         "inventory": {
           "Healing Potion": 1
         },
-        "purse_copper": -30
+        "purse_copper": -36
       },
-      "document_hash": "sha256:8bc4de3c49fc68a6f9ff0fc2adabde55517a4e166a1f102f24c835cc8d91bff2",
+      "document_hash": "sha256:3f4bb44c3ba34ce34c5ff1656e15a11ae47d0b437e28622752620251821e09ff",
       "facts": {
         "combat": {
           "active": false,
@@ -1563,7 +1563,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 130,
+        "purse_copper": 124,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
@@ -1697,7 +1697,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:15acabf2b2f465afe1b433f66849f1354b70d83d04bb5b490018fc6b20c52299",
+      "document_hash": "sha256:96c5f488d97d8297e6b2abcef5ab93d2a49b179a1cf356f901517df406118cd1",
       "facts": {
         "combat": {
           "active": false,
@@ -1724,7 +1724,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 135,
+        "purse_copper": 129,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
@@ -1851,7 +1851,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:83f970cfc2f829468ed1eb24bb236e3433f264bcec10bbb6075aab27c43299a7",
+      "document_hash": "sha256:ea72ebca170160b20fc9bcfa9c0c9f55b45170f1586c9acdcb6ed570d4ac7291",
       "facts": {
         "combat": {
           "active": false,
@@ -1878,7 +1878,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 135,
+        "purse_copper": 129,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "active",
@@ -2012,7 +2012,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:062229c8693a0105c4071258c94d80bc15aaa8c666671f42fd9a61081e0024c7",
+      "document_hash": "sha256:7fd5c308b873909a96d0f50fba8b0161fffc3ef169707d5401a1d2d83243a3cf",
       "facts": {
         "combat": {
           "active": false,
@@ -2039,7 +2039,7 @@
           "npc:miri-kestrel",
           "npc:seraphine-valecourt"
         ],
-        "purse_copper": 335,
+        "purse_copper": 329,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -2196,7 +2196,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:d324f12626939929b1b7c6b5b453caf18004d7dda81e567a1137b0003b3b6fe0",
+      "document_hash": "sha256:24707174fe41180d123c936303a39221a0025c4553e6f96ab84ee6e4543296d4",
       "facts": {
         "combat": {
           "active": false,
@@ -2223,7 +2223,7 @@
           "npc:miri-kestrel",
           "npc:seraphine-valecourt"
         ],
-        "purse_copper": 335,
+        "purse_copper": 329,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -2363,7 +2363,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:e9d7ccfaf9a4d65849821036874ae09886046730b9ca9db5e8e50e0289d93744",
+      "document_hash": "sha256:bb3010501c1bbdbaa9d782be2313e0928bbfbd827e2372b1ce1f8db5a2018974",
       "facts": {
         "combat": {
           "active": false,
@@ -2391,7 +2391,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 335,
+        "purse_copper": 329,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -2536,7 +2536,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:74fb74040d133701b222952558ce15a4600573fc4fd70dadf97e2cdf6617c678",
+      "document_hash": "sha256:6bb3e590c3bd3e6201418868b776ac9389412b5d7ff770f85d07ca3486cfafc6",
       "facts": {
         "combat": {
           "active": false,
@@ -2564,7 +2564,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 335,
+        "purse_copper": 329,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -2672,12 +2672,12 @@
     },
     {
       "changes": {
-        "purse_copper": -8,
+        "purse_copper": -10,
         "survival": {
           "hunger": -15
         }
       },
-      "document_hash": "sha256:fcd6c444afed38337aa7fce09fca62aa916a4b0426e046d4730ee9715b29390b",
+      "document_hash": "sha256:fea80c5308ea18da8704c089255ce3449cf8b407abab9201af0025f2698b1479",
       "facts": {
         "combat": {
           "active": false,
@@ -2705,7 +2705,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 327,
+        "purse_copper": 319,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -2831,9 +2831,9 @@
     },
     {
       "changes": {
-        "purse_copper": -50
+        "purse_copper": -60
       },
-      "document_hash": "sha256:fbb66d611397bd2c92706cf2185ae8654a344aaa71691e2e34884ceca6a7df59",
+      "document_hash": "sha256:9f6d29eff474b3943983aa042e529021b045e0d78cb733959d1893afdf71adac",
       "facts": {
         "combat": {
           "active": false,
@@ -2861,7 +2861,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -2991,7 +2991,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:727b9ea0669c726be2d1786a05018be0994408fb7bdef0621f6c8fa302d43b39",
+      "document_hash": "sha256:79209962da240eb7c59427dadad753a7f3414640778886225145f3cd3edef666",
       "facts": {
         "combat": {
           "active": false,
@@ -3019,7 +3019,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -3150,7 +3150,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1d46d0e02b36e9282432c4a700c05c4afed472e855aef7cac5620d6ae202b5f2",
+      "document_hash": "sha256:3539184edc84c7a4c44fdd63330003d9d77b2df31db9502a7fed60596b4bcc2a",
       "facts": {
         "combat": {
           "active": false,
@@ -3178,7 +3178,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -3312,7 +3312,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:de3d3d623e965431d65345caa345f1f44e8fba69ecb9eb87fd47ebb794028d9c",
+      "document_hash": "sha256:2d2664103955a199152c50805d80eaee3a75e7dfa369d225a8b8efcbc71f2e95",
       "facts": {
         "combat": {
           "active": true,
@@ -3344,7 +3344,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -3470,7 +3470,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:a0888d82ad574e6672a186f704ba3ff1590fdbefc2dd5dbea1c5371a2454024b",
+      "document_hash": "sha256:7bd2d83e96292d032c5013ac1a247790f125f5ceb7d72c6b6f74af7ea5f3e153",
       "facts": {
         "combat": {
           "active": true,
@@ -3502,7 +3502,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -3603,7 +3603,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f3af977fe7cde5c24438c5e3b7a9d3334056b8e42463fc396ba9c103624b50df",
+      "document_hash": "sha256:03afb993a25c055362d9ca7792e61bfd6dc155d63f50da8451d85c97a87609ec",
       "facts": {
         "combat": {
           "active": true,
@@ -3635,7 +3635,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -3771,7 +3771,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:5ae9e79cf210459d6db562659e7f39852ad0274fb30430d8d0ea67408e205b99",
+      "document_hash": "sha256:57ebb77dbb5af3b1cbadabd587e2586364dbd58f55f3c13857d73159fb708822",
       "facts": {
         "combat": {
           "active": true,
@@ -3803,7 +3803,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -3943,7 +3943,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:02e554830dd0abc5eaf01a18318a2f2a4afda34e1ca4f566729c081c4bf0bd06",
+      "document_hash": "sha256:f5a7efd89024d484413a82692d0c4bdcb56ed8db46f4c40011418cb3de1d02c2",
       "facts": {
         "combat": {
           "active": true,
@@ -3975,7 +3975,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -4118,7 +4118,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:69f4bf9f9f51e40effb34b064985193c8e825d1813700203e9e5f8223a049f15",
+      "document_hash": "sha256:d31050163a032594afac3d3754945b90405cc5f06134c39e827ac92c5c76e9ec",
       "facts": {
         "combat": {
           "active": true,
@@ -4149,7 +4149,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -4277,7 +4277,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:6f0403a677057ae1d5a388220f4be3022bd5a61bbb4d66cf915213a787791ccc",
+      "document_hash": "sha256:d3c6ba780284b9b44143de0a0145447d7de83f22a86a9c59c55948ef431d4f72",
       "facts": {
         "combat": {
           "active": true,
@@ -4308,7 +4308,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -4408,7 +4408,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:1dfdad62492379607cd53c8172115f56c3de48d5436f99a5166e65e535894731",
+      "document_hash": "sha256:ebd4c7898ec19722f22306984c7342961c69ac21aaaeaff53faa73278a93e08d",
       "facts": {
         "combat": {
           "active": true,
@@ -4439,7 +4439,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -4535,7 +4535,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:133d236bd42c7d2844938b57e59f8d04d1913136870cb73b2468cc3072c2b2c4",
+      "document_hash": "sha256:b2a2510b53ae9245acd79920124197a805c9b00ad272e155d76683d3cc2a1573",
       "facts": {
         "combat": {
           "active": true,
@@ -4566,7 +4566,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -4662,7 +4662,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:b80f4c4830b4460003fdae50d49e5d0c4490dad88b1bd91f270064a94e129b86",
+      "document_hash": "sha256:f75fc819729ddda1cf5b4f3deb6b4a1aa5c76c7bf9fd1740e7bd71d00dfeabbc",
       "facts": {
         "combat": {
           "active": true,
@@ -4693,7 +4693,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",
@@ -4789,7 +4789,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:31541dd81363abbb6948ae259146ada05261326801c6b4f217deeac16997dfea",
+      "document_hash": "sha256:40c2b1d48a5a260ca7ac7c16fa1e99b12a103866e09a05bb87269ca63fe1e58e",
       "facts": {
         "combat": {
           "active": true,
@@ -4820,7 +4820,7 @@
           "npc:liora-fen",
           "npc:orik-stonewake"
         ],
-        "purse_copper": 277,
+        "purse_copper": 259,
         "quests": {
           "Danger on the roads of Starfall March": "available",
           "First Night in Aurelia": "completed",

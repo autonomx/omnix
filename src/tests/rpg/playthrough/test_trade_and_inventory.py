@@ -10,10 +10,11 @@ pytestmark = POSTGRES
 NO_WORLD_MODEL = ("RQ-2.0: a lore-only world (Vesper-9) launches with an empty world model: no places, people, "
                   "offers or routes are derived from its topics")
 
-# Where each world's shop is, what it sells, and what the hero carries to drop.
+# Where each world's shop is, what it sells, and what the hero carries to drop. Aurelia's roads choke its trade from
+# the start (trade access 30), so its prices carry the roads' fifth (economy.md); a shop buys back at its list price.
 SHOP = {
     "aurelia": {"route": ["go to Starfall Village"], "merchant": "Brindle Gearwing", "ware": "Healing Potion",
-                "price": 30, "buys_back": 15, "elsewhere": "go to Wayfarers' Guild", "back": "go to Starfall Village",
+                "price": 36, "buys_back": 15, "elsewhere": "go to Wayfarers' Guild", "back": "go to Starfall Village",
                 "food": "Lantern Bread"},
     "starter": {"route": ["go to the market"], "merchant": "Elara", "ware": "Healing Potion", "price": 100,
                 "buys_back": 50, "elsewhere": "go to the tavern", "back": "go to the market", "food": "Torch"},
@@ -36,7 +37,7 @@ def test_trade_round_trip_keeps_the_purse_exact(launch, world) -> None:
 
     play.turn(f"I sell my {shop['ware']} to {shop['merchant']}.")
     assert shop["ware"] not in play.inventory()
-    assert play.purse() == purse - shop["price"] + shop["buys_back"]  # half the shop's price
+    assert play.purse() == purse - shop["price"] + shop["buys_back"]  # half the shop's list price
     assert len(set(play.purses().values())) == 1, play.purses()
 
     play.turn("look around")  # a later turn keeps both
@@ -79,7 +80,7 @@ def test_equip_through_loadout_survives_story_turns(launch, world) -> None:
 
 
 INN = {
-    "aurelia": {"route": ["go to Starfall Village"], "keeper": "Orik Stonewake", "room": 50, "meal": 8},
+    "aurelia": {"route": ["go to Starfall Village"], "keeper": "Orik Stonewake", "room": 60, "meal": 10},
     "starter": {"route": [], "keeper": "Bran", "room": 50, "meal": 15},
     "vesper": {"route": [], "keeper": "the bartender", "room": 10, "meal": 5},
 }
@@ -119,3 +120,15 @@ def test_a_second_night_of_lodging_is_used(launch, world) -> None:
         play.turn("I go to my room and sleep for the night.")
         services = play.simulation().get("active_services") or []
         assert [service.get("status") for service in services] == ["consumed"] * (night + 1), services
+
+
+@pytest.mark.parametrize("world", in_worlds("aurelia"))
+def test_a_haggle_won_takes_a_tenth_off_for_the_day(launch, world) -> None:
+    play = launch(world)
+    play.turn("go to Starfall Village")
+    haggled = play.turn("I haggle with Brindle Gearwing.")
+    assert "Brindle Gearwing comes down on the price, for today." in haggled["visible_response"]["plain_text"]
+    purse = play.purse()
+    bought = play.turn("I buy a Healing Potion from Brindle Gearwing.")
+    assert purse - play.purse() == 32  # 30, the roads' fifth, and a tenth off for the haggle
+    assert "(the roads choke trade, you haggled)" in str(bought)

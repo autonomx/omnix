@@ -71,3 +71,12 @@ mill") and are now in the grammar (the quarry crate that raised its pressure had
 The balance simulation does quests of steps and takes a conversation it cannot play (no model) as answered; with
 side quests the purse and the quests done are inside their bands. Not yet: a pressure below a value as a step
 condition, fail conditions beyond the deadline.
+
+## As built (with RQ-5.5)
+
+A side quest from the pressures is offered one at a time and at most one a campaign day (`PRESSURE_QUEST_EVERY`,
+from the last one's `offered_at_minute`): the hero's region's pressure first, else the most severe elsewhere, so a
+hero whose home is safe is still asked about the roads beyond it. A `defeat:` lever pulls only the pressure of the
+region the creature fell in (a world's derived pressures list every creature in every region); a `quest:` lever is
+the quest's, wherever it was done.
+

@@ -108,6 +108,8 @@ _ATTRIBUTE_NAMES = ("strength", "dexterity", "constitution", "intelligence", "wi
                     "endurance", "intellect", "perception", "presence")
 # What a check is (checks.md), by the words that ask for one; searching stays a manipulation of the scene.
 _CHECKS = (
+    ("haggle", ("haggle", "bargain with", "bargain for", "talk the price down", "a better price", "a lower price",
+                "beat the price down")),
     ("persuade", ("persuade", "convince", "coax", "sweet talk", "win over", "talk him into", "talk her into",
                   "talk them into", "reason with", "talk it down", "talk them down", "talk my way", "parley",
                   "negotiate with")),

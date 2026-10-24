@@ -130,7 +130,13 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return Resolution([_counted(session), *grown.changes], grown.lines, refused=grown.refused, told=False,
                           action_result={"kind": "level_choice", **grown.detail})
     if mechanic == "check":
-        tried = check(simulation, planned.reason, planned.target_id, turn_key=str(_counted(session).turn_count))
+        target = planned.target_id
+        if planned.reason == "haggle" and not target:  # haggling, unnamed: with the one who sells here
+            from app.apps.rpg.rules.economy.trade import sellers_here
+
+            sellers = sellers_here(simulation)
+            target = _s(sellers[0].get("provider_id")) if len(sellers) == 1 else ""
+        tried = check(simulation, planned.reason, target, turn_key=str(_counted(session).turn_count))
         return Resolution(_timed(session, tried.changes, tried.minutes), tried.lines, minutes=tried.minutes,
                           needs="standard_turn", action_result={"kind": "check", **tried.record})
     if mechanic in {"use_item", "drop", "take", "equip", "unequip"}:

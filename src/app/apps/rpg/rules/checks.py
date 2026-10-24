@@ -23,16 +23,17 @@ from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.combat.runtime_core import deterministic_roll
 from app.apps.rpg.rules.player import progression
 
-Kind = Literal["persuade", "intimidate", "deceive", "sneak", "climb", "pick_lock", "recall_lore", "search", "notice"]
-KINDS: tuple[str, ...] = ("persuade", "intimidate", "deceive", "sneak", "climb", "pick_lock", "recall_lore", "search",
-                          "notice")
+Kind = Literal["persuade", "intimidate", "deceive", "haggle", "sneak", "climb", "pick_lock", "recall_lore", "search",
+               "notice"]
+KINDS: tuple[str, ...] = ("persuade", "intimidate", "deceive", "haggle", "sneak", "climb", "pick_lock", "recall_lore",
+                          "search", "notice")
 DIFFICULTIES = {"trivial": 5, "easy": 10, "moderate": 13, "hard": 16, "very_hard": 19, "heroic": 22}
 RETRY_PENALTY, RETRY_WINDOW_TICKS = 2, 12  # the same try again, here, within two hours (a tick is 10 minutes)
 MINUTES = 10
 # The skill and the attribute each kind of check rests on.
 _RESTS_ON = {
     "persuade": ("persuasion", "charisma"), "intimidate": ("intimidation", "strength"),
-    "deceive": ("persuasion", "charisma"), "sneak": ("stealth", "dexterity"), "climb": ("athletics", "strength"),
+    "deceive": ("persuasion", "charisma"), "haggle": ("persuasion", "charisma"), "sneak": ("stealth", "dexterity"), "climb": ("athletics", "strength"),
     "pick_lock": ("stealth", "dexterity"), "recall_lore": ("investigation", "intelligence"),
     "search": ("investigation", "wisdom"), "notice": ("investigation", "wisdom"),
 }
@@ -85,7 +86,7 @@ def _bonus(simulation: Mapping[str, Any], kind: str, target_kind: str, target_id
     rank = int(_d(_d(player.get("skills")).get(skill)).get("level") or 0)
     modifier = (int(_d(player.get("stats")).get(attribute) or 10) - 10) // 2
     situation = 0
-    if target_kind == "person" and kind in {"persuade", "deceive", "intimidate"}:
+    if target_kind == "person" and kind in {"persuade", "deceive", "intimidate", "haggle"}:
         trust = int(_d(_d(simulation.get("relationship_state")).get(target_id)).get("trust") or 0)
         situation = 2 if trust >= 50 else -2 if trust < 0 else 0
     situation -= sum(int(_d(row).get("attack_penalty") or 0) for row in _l(player.get("conditions")))
@@ -114,6 +115,12 @@ def _consequence(simulation: Mapping[str, Any], kind: str, band: str, target_kin
     def regard(npc_id: str, delta: int, reason: str) -> RegardChanged:
         return RegardChanged(npc_id=npc_id, name=_name(_d(people.get(npc_id)), npc_id), delta=delta, reason=reason)
 
+    if kind == "haggle":  # a seller's prices, for the rest of the day (economy.md)
+        if target_kind != "person":
+            return [], ["There is no one to haggle with."], 0
+        if won:
+            return [], [f"{name} comes down on the price, for today."], 0
+        return [regard(target_id, -2, "haggle:failure")], [f"{name} will not budge, and is a little put out."], 0
     if kind in {"persuade", "intimidate", "deceive"} and target_kind == "person":
         delta = {"persuade": {"strong": 10, "success": 5, "cost": 2, "failure": -5},
                  "intimidate": {"strong": 0, "success": -3, "cost": -5, "failure": -10},
@@ -190,7 +197,8 @@ def check(simulation: Mapping[str, Any], kind: str, target_id: str = "", *, turn
         earned, hero_lines = progression.gain(simulation, progression.check_xp(difficulty))
         changes, lines = [*changes, *gained, *earned], [*lines, *xp_lines, *hero_lines]
     result = {"kind": kind, "target_id": target_id, "location_id": here, "natural": natural, "bonus": bonus,
-              "total": total, "difficulty": difficulty, "margin": margin, "band": band, "skill": skill}
+              "total": total, "difficulty": difficulty, "margin": margin, "band": band, "skill": skill,
+              "minute": routines.clock(simulation)}
     return CheckOutcome([CheckResolved(**result), *changes], [roll_line, *lines], minutes=MINUTES + extra, band=band,
                         record=result)
 

@@ -48,6 +48,11 @@ def test_felled_creatures_and_a_quest_done_pull_the_levers_as_a_replayable_event
     assert replay_causal_events(runtime["initial_state"], runtime["events"]) == runtime["state"]  # history still adds up
     advance_causal_runtime(runtime, tick=2)  # and the clock goes on from it
     assert lever_pulls(after["simulation_state"], [_won("creature:bat")]) == ([], [])  # nothing it answers to
+    away = _document()
+    away["simulation_state"]["player_state"]["location_id"] = "loc:far"
+    assert lever_pulls(away["simulation_state"], [_won("creature:wolf")]) == ([], [])  # felled in another region
+    changes, _ = lever_pulls(away["simulation_state"], [QuestStatusChanged(quest_id="quest:roads", status="completed")])
+    assert changes  # a quest's lever is the quest's, wherever it was done
 
 
 def test_a_high_pressure_raises_one_side_quest_from_someone_whose_work_fits() -> None:
@@ -67,3 +72,21 @@ def test_a_high_pressure_raises_one_side_quest_from_someone_whose_work_fits() ->
     alone = _document()
     alone["simulation_state"]["world_model"]["npcs"]["npc:rhea"]["location_id"] = "loc:far"
     assert pressure_offers(alone["simulation_state"]) == ([], [])  # the captain is elsewhere: only the innkeeper
+
+
+def test_one_side_quest_at_a_time_and_from_elsewhere_once_home_is_safe() -> None:
+    document = _document()
+    simulation = document["simulation_state"]
+    runtime = simulation["causal_world_runtime"]
+    far = {**ROADS, "pressure_id": "pressure:roads:far", "name": "Danger on the far roads",
+           "next_tick_delta": {**ROADS["next_tick_delta"], "target_id": "region:far"}}
+    runtime["pressure_plan"]["pressures"].append(far)
+    runtime["state"]["cells"]["pressure:roads:far"] = {"target_id": "pressure:roads:far", "target_kind": "pressure",
+                                                       "values": {"pressure_severity": 80.0}, "revision": 1}
+    changes, _ = pressure_offers(simulation)
+    assert [change.quest["pressure_id"] for change in changes] == ["pressure:roads:march"]  # home first, at 72
+    offered, _ = reduce(document, changes)
+    assert pressure_offers(offered["simulation_state"]) == ([], [])  # one open at a time
+    runtime["pressure_statuses"]["pressure:roads:march"] = "resolved"
+    changes, _ = pressure_offers(simulation)
+    assert [change.quest["pressure_id"] for change in changes] == ["pressure:roads:far"]  # home safe: elsewhere

@@ -79,13 +79,13 @@
     },
     {
       "blocks": [
-        "action||You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.",
-        "result||Consequence: You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.",
-        "choice||Offered choice: You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete."
+        "action||You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete.",
+        "result||Consequence: You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete.",
+        "choice||Offered choice: You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete."
       ],
       "step": "I buy a Healing Potion from Brindle Gearwing.",
-      "told": "You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete. You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete. You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.",
-      "visible": "You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.\n\nConsequence: You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete."
+      "told": "You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete. You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete. You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete.",
+      "visible": "You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete.\n\nConsequence: You pay 3 silver, 6 copper to Brindle Gearwing for Healing Potion (the roads choke trade). The transaction is complete."
     },
     {
       "blocks": [
@@ -145,23 +145,23 @@
     },
     {
       "blocks": [
-        "action||You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.",
-        "result||Consequence: You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.",
-        "choice||Offered choice: You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger."
+        "action||You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger.",
+        "result||Consequence: You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger.",
+        "choice||Offered choice: You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger."
       ],
       "step": "I buy a meal from Orik Stonewake.",
-      "told": "You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger. You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger. You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.",
-      "visible": "You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.\n\nConsequence: You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger."
+      "told": "You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger. You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger. You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger.",
+      "visible": "You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger.\n\nConsequence: You pay 1 silver to Orik Stonewake for A hot meal (the roads choke trade). The transaction is complete. It eases your hunger."
     },
     {
       "blocks": [
-        "action||You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
-        "result||Consequence: You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
-        "choice||Offered choice: You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete."
+        "action||You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete.",
+        "result||Consequence: You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete.",
+        "choice||Offered choice: You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete."
       ],
       "step": "I rent a room for the night from Orik Stonewake.",
-      "told": "You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete. You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete. You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
-      "visible": "You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.\n\nConsequence: You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete."
+      "told": "You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete. You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete. You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete.",
+      "visible": "You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete.\n\nConsequence: You pay 6 silver to Orik Stonewake for A night's lodging (the roads choke trade). The transaction is complete."
     },
     {
       "blocks": [
