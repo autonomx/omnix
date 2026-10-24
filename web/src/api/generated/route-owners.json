@@ -393,6 +393,7 @@
     "POST /api/rpg/sessions/{session_id}/maps/{map_id}/map-actions": "rpg",
     "GET /api/rpg/sessions/{session_id}/maps/{map_id}/overlay": "rpg",
     "POST /api/rpg/sessions/{session_id}/rename": "rpg",
+    "POST /api/rpg/sessions/{session_id}/resume": "rpg",
     "POST /api/rpg/sessions/{session_id}/turn": "rpg",
     "GET /api/rpg/sessions/{session_id}/turn-draft": "rpg",
     "GET /api/rpg/world-catalog": "rpg",

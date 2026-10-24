@@ -126,7 +126,7 @@ def build_turn_outcome(
     events = [event for event in root.get("world_events") or _mapping(root.get("authoritative")).get("world_events") or ()
               if isinstance(event, Mapping)]
     return TurnOutcome(
-        kind=kind,
+        kind=planned.get("kind") or kind,
         turn_id=_first(sources, "turn_id"),
         submission_id=submission_id or _first(sources, "submission_id"),
         revision=int(runtime["state_revision"]) if isinstance(runtime.get("state_revision"), int) else None,

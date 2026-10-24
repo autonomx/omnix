@@ -45,6 +45,7 @@ async def execute_foreground_rpg_turn(
     session_id: str,
     command: str,
     request: Request,
+    action: dict[str, Any] | None = None,
 ) -> Response:
     """Run the whole turn on a worker thread.
 
@@ -59,6 +60,7 @@ async def execute_foreground_rpg_turn(
             session_id=session_id,
             command=command,
             request=request,
+            action=action,
         )
     except RevisionConflict as exc:
         # Another write won the campaign revision, or the turn would rewrite
@@ -74,7 +76,14 @@ async def execute_foreground_rpg_turn(
         ) from exc
 
 
-def submit_rpg_turn(*, session_id: str, command: str, submission_id: str, source: str) -> dict[str, Any]:
+def submit_rpg_turn(
+    *,
+    session_id: str,
+    command: str,
+    submission_id: str,
+    source: str,
+    action: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """A turn submitted from inside Omnix (Hermes, RQ-1.6): the turn route's steps without HTTP, keyed by
     ``submission_id`` like the play screen's. A refused turn returns its detail, with ``status_code``."""
     from app.apps.rpg.foundation.model_calls import counting_model_calls
@@ -94,7 +103,7 @@ def submit_rpg_turn(*, session_id: str, command: str, submission_id: str, source
     ):
         try:
             return run_rpg_turn(session_id=session_id, command=command, submission_id=submission_id,
-                                delivery_mode=DeliveryMode.BLOCKING, trace=trace)
+                                delivery_mode=DeliveryMode.BLOCKING, trace=trace, action=action)
         except HTTPException as exc:
             detail = dict(exc.detail) if isinstance(exc.detail, dict) else {"error": str(exc.detail)}
             return {**detail, "ok": False, "status_code": exc.status_code}
@@ -136,6 +145,7 @@ def _execute_foreground_rpg_turn(
     session_id: str,
     command: str,
     request: Request,
+    action: dict[str, Any] | None = None,
 ) -> Response:
     submission_id = (
         str(request.headers.get("x-omnix-rpg-submission-id") or "").strip()
@@ -171,6 +181,7 @@ def _execute_foreground_rpg_turn(
             submission_id=submission_id,
             delivery_mode=delivery_mode,
             trace=trace,
+            action=action,
         )
         with rpg_pipeline_span("turn.response_send_prepare"):
             response = build_traced_json_response(payload)
@@ -186,11 +197,13 @@ def run_rpg_turn(
     submission_id: str,
     delivery_mode: Any,
     trace: Any,
+    action: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One player turn, from its gates to its response payload: what the turn route and Hermes both run (RQ-1.6).
 
     The caller holds the pipeline trace (``rpg_pipeline_trace``) and turns the payload into its own response; a
-    refused turn raises ``HTTPException`` with the detail the play screen reads.
+    refused turn raises ``HTTPException`` with the detail the play screen reads. ``action`` names a turn that is
+    not the player's text, such as a ``world_tick`` (RQ-2.7).
     """
     with rpg_pipeline_span("turn.campaign_genesis_gate") as span:
         from app.apps.rpg.genesis.forge.launch_readiness import (
@@ -285,6 +298,7 @@ def run_rpg_turn(
                         session_id,
                         command,
                         submission_id=submission_id,
+                        action=action,
                         performance_override={
                             "enable_live_narration_llm": True,
                             "narration_mode": "blocking",

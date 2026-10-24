@@ -1535,6 +1535,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/sessions/{session_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rpg Resume Session
+         * @description The player returns after time away: the world moves on, as a world_tick turn with a recap (RQ-2.7).
+         */
+        post: operations["rpg_resume_session_api_rpg_sessions__session_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/sessions/{session_id}/turn": {
         parameters: {
             query?: never;
@@ -3957,6 +3977,25 @@ export interface components {
          * @enum {string}
          */
         JobStatus: core["schemas"]["JobStatus"];
+        /**
+         * JournalWritten
+         * @description The turn in the player's journal and on the campaign calendar, as the journal keeper left them.
+         */
+        JournalWritten: {
+            /** Calendar */
+            calendar?: {
+                [key: string]: unknown;
+            };
+            /** Journal */
+            journal?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "journal_written";
+        };
         JsonValue: unknown;
         /** LegacyGenerateTitleRequest */
         LegacyGenerateTitleRequest: core["schemas"]["LegacyGenerateTitleRequest"];
@@ -6565,6 +6604,16 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RpgResumeRequestBody */
+        RpgResumeRequestBody: {
+            /**
+             * Elapsed Seconds
+             * @default 0
+             */
+            elapsed_seconds?: number;
+        } & {
+            [key: string]: unknown;
+        };
         /** RpgSaveCampaignSpatialGoalRequestBody */
         RpgSaveCampaignSpatialGoalRequestBody: {
             /** Actor Id */
@@ -9076,7 +9125,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;
@@ -9150,6 +9199,29 @@ export interface components {
         WorkerHealthSummary: core["schemas"]["WorkerHealthSummary"];
         /** WorkerPayloadPolicy */
         WorkerPayloadPolicy: core["schemas"]["WorkerPayloadPolicy"];
+        /**
+         * WorldTicked
+         * @description The world moved on: the sections the world tick owns, as it left them.
+         */
+        WorldTicked: {
+            /** Runtime */
+            runtime?: {
+                [key: string]: unknown;
+            };
+            /** Simulation */
+            simulation?: {
+                [key: string]: unknown;
+            };
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "world_ticked";
+        };
     };
     responses: never;
     parameters: never;
@@ -12085,6 +12157,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgSessionMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_resume_session_api_rpg_sessions__session_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgResumeRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The world_tick turn's rpg_turn_response_v2 contract. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgTurnResponse"];
                 };
             };
             /** @description Validation Error */

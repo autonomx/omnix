@@ -73,20 +73,26 @@ def test_waiting_passes_time_on_needs(launch, world) -> None:
     assert play.turn_count() == 4
 
 
-@pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(
-    "RQ-2.7: idle resume has no route (apply_resume_catchup is called by nothing), and its catch-up saves the "
-    "session outside a turn: a new revision with no turn row and no patch")))
+@pytest.mark.parametrize("world", in_worlds())
 def test_idle_resume_is_a_turn_with_a_recap(launch, world) -> None:
-    from app.apps.rpg.session.idle_narration_delivery import apply_resume_catchup
+    """RQ-2.7: the player returning after time away is a world_tick turn: committed with a patch, replayable like
+    the rest, the world's clock moved on, no turn of the player's counted, and a recap without a model call."""
+    from app.apps.rpg.narration.presentation.turn_outcome import TurnOutcome
 
     play = launch(world)
     play.turn("look around")
-    revision, rows = play.revision(), len(play.turn_rows())
-    resumed = apply_resume_catchup(play.session_id, elapsed_seconds=3600)
-    assert resumed["ok"] is True
-    assert play.revision() == revision + 1
+    revision, rows, turns, tick = play.revision(), len(play.turn_rows()), play.turn_count(), play.simulation()["tick"]
+    calls = len(play.model.calls)
+    resumed = play.client.post(f"/api/rpg/sessions/{play.session_id}/resume", json={"elapsed_seconds": 3600},
+                               headers={"x-omnix-rpg-submission-id": "resume-1"})
+    assert resumed.status_code == 200, resumed.text[:300]
+    outcome = TurnOutcome.model_validate(resumed.json()["outcome"])
+    assert outcome.kind == "world_tick" and play.model.roles(calls) == []
+    assert "while you were away" in resumed.json()["visible_response"]["plain_text"]
+    assert play.revision() == revision + 1 and play.turn_count() == turns
     assert len(play.turn_rows()) == rows + 1  # time away is a world_tick turn, replayable like the rest
     assert play.turn_rows()[-1]["state_delta"]
+    assert play.simulation()["tick"] == tick + 12  # an hour away is the most the world catches up on
 
 
 @pytest.mark.parametrize("world", in_worlds("aurelia", aurelia=(

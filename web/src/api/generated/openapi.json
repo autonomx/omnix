@@ -26177,6 +26177,33 @@
         "title": "JobStatus",
         "type": "string"
       },
+      "JournalWritten": {
+        "additionalProperties": false,
+        "description": "The turn in the player's journal and on the campaign calendar, as the journal keeper left them.",
+        "properties": {
+          "calendar": {
+            "additionalProperties": true,
+            "title": "Calendar",
+            "type": "object"
+          },
+          "journal": {
+            "additionalProperties": true,
+            "title": "Journal",
+            "type": "object"
+          },
+          "type": {
+            "const": "journal_written",
+            "default": "journal_written",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "JournalWritten",
+        "type": "object"
+      },
       "JsonValue": {},
       "KillSwitchChange": {
         "additionalProperties": false,
@@ -49050,6 +49077,20 @@
         "title": "RpgRestoreWorldTopicRequestBody",
         "type": "object"
       },
+      "RpgResumeRequestBody": {
+        "additionalProperties": true,
+        "properties": {
+          "elapsed_seconds": {
+            "default": 0,
+            "maximum": 31536000,
+            "minimum": 0,
+            "title": "Elapsed Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "RpgResumeRequestBody",
+        "type": "object"
+      },
       "RpgSaveCampaignSpatialGoalRequestBody": {
         "additionalProperties": true,
         "properties": {
@@ -66855,6 +66896,7 @@
                   "item_picked_up": "#/components/schemas/ItemPickedUp",
                   "item_removed": "#/components/schemas/ItemRemoved",
                   "item_unequipped": "#/components/schemas/ItemUnequipped",
+                  "journal_written": "#/components/schemas/JournalWritten",
                   "location_changed": "#/components/schemas/LocationChanged",
                   "needs_changed": "#/components/schemas/NeedsChanged",
                   "presence_changed": "#/components/schemas/PresenceChanged",
@@ -66863,7 +66905,8 @@
                   "quest_status_changed": "#/components/schemas/QuestStatusChanged",
                   "skill_progressed": "#/components/schemas/SkillProgressed",
                   "time_advanced": "#/components/schemas/TimeAdvanced",
-                  "turn_counted": "#/components/schemas/TurnCounted"
+                  "turn_counted": "#/components/schemas/TurnCounted",
+                  "world_ticked": "#/components/schemas/WorldTicked"
                 },
                 "propertyName": "type"
               },
@@ -66933,6 +66976,12 @@
                 },
                 {
                   "$ref": "#/components/schemas/CombatEnded"
+                },
+                {
+                  "$ref": "#/components/schemas/WorldTicked"
+                },
+                {
+                  "$ref": "#/components/schemas/JournalWritten"
                 }
               ]
             },
@@ -70839,6 +70888,38 @@
           "forbidden_paths"
         ],
         "title": "WorkspaceSpec",
+        "type": "object"
+      },
+      "WorldTicked": {
+        "additionalProperties": false,
+        "description": "The world moved on: the sections the world tick owns, as it left them.",
+        "properties": {
+          "runtime": {
+            "additionalProperties": true,
+            "title": "Runtime",
+            "type": "object"
+          },
+          "simulation": {
+            "additionalProperties": true,
+            "title": "Simulation",
+            "type": "object"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          },
+          "type": {
+            "const": "world_ticked",
+            "default": "world_ticked",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "WorldTicked",
         "type": "object"
       },
       "YahooGapperDiscoveryRequest": {
@@ -89514,6 +89595,60 @@
           }
         },
         "summary": "Rpg Rename Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/resume": {
+      "post": {
+        "description": "The player returns after time away: the world moves on, as a world_tick turn with a recap (RQ-2.7).",
+        "operationId": "rpg_resume_session_api_rpg_sessions__session_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgResumeRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgTurnResponse",
+                  "title": "Response Rpg Resume Session Api Rpg Sessions  Session Id  Resume Post"
+                }
+              }
+            },
+            "description": "The world_tick turn's rpg_turn_response_v2 contract."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Resume Session",
         "tags": [
           "rpg-session"
         ]

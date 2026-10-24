@@ -33,7 +33,7 @@ from app.apps.rpg.session.new_game import (
 from app.apps.rpg.session.service import list_session_summaries, load_session
 from app.apps.rpg.session.world_ability_integration import ensure_world_scale_abilities
 
-from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field
 from typing import Any as _TypedRequestAny
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 from app.apps.rpg.edge.api.web_contracts import (
@@ -61,6 +61,10 @@ class RpgApplyTurnRequestBody(_TypedRequestModel):
     player_input: str | dict[str, Any] | None = None
     text: str | dict[str, Any] | None = None
     message: str | dict[str, Any] | None = None
+
+class RpgResumeRequestBody(_TypedRequestModel):
+    elapsed_seconds: int = Field(default=0, ge=0, le=31_536_000)
+
 
 class RpgLocalDialogueFixtureRequestBody(_TypedRequestModel):
     case_id: _TypedRequestAny = None
@@ -384,6 +388,23 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             session_id=session_id,
             command=command,
             request=http_request,
+        )
+
+    @router.post(
+        "/api/rpg/sessions/{session_id}/resume",
+        tags=["rpg-session"],
+        responses={200: {"model": RpgTurnResponse, "description": "The world_tick turn's rpg_turn_response_v2 contract."}},
+    )
+    async def rpg_resume_session(
+        session_id: str,
+        http_request: Request, request_body: RpgResumeRequestBody,
+    ) -> Any:
+        """The player returns after time away: the world moves on, as a world_tick turn with a recap (RQ-2.7)."""
+        return await execute_foreground_rpg_turn(
+            session_id=session_id,
+            command="",
+            request=http_request,
+            action={"turn_kind": "world_tick", "elapsed_seconds": request_body.elapsed_seconds},
         )
 
     @router.get(

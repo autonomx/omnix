@@ -11,9 +11,10 @@ from typing import Any
 
 from app.config.env import env_bool
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
-from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, WorldTicked
+from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_command
+from app.apps.rpg.session.causal_turn_runtime import causal_tick
 from app.apps.rpg.session.command_reading import read_command, reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
@@ -139,8 +140,68 @@ def run_planned_turn(
     return result
 
 
+# Time away, in campaign ticks: one per five seconds away, at most twelve (the idle catch-up's bounds).
+SECONDS_PER_WORLD_TICK = 5
+MAX_WORLD_TICKS = 12
+
+
+def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dict[str, Any]:
+    """A ``world_tick`` turn (RQ-2.7): the world moves on for the time the player was away, and the recap says how.
+
+    The hero did nothing, so no turn is counted and their needs do not rise; the campaign's clock and its causal
+    pressures advance. The recap is the game's own line, with no model call.
+    """
+    seconds = int(request.action.get("elapsed_seconds") or request.elapsed_minutes * 60)
+    ticks = min(MAX_WORLD_TICKS, max(0, seconds // SECONDS_PER_WORLD_TICK))
+    changes: list[StateChange] = [TimeAdvanced(ticks=ticks)] if ticks else []
+    document, _ = reduce(session, changes)
+    simulation = _d(document.get("simulation_state"))
+    tick = int(simulation.get("tick") or 0)
+    turn_id = f"turn:{tick}:world"
+    causal: dict[str, Any] = {}
+    if ticks:
+        receipt = causal_tick(document, turn_key=turn_id, turn=tick) or {}
+        if receipt.get("applied"):
+            ticked = WorldTicked(simulation=receipt.pop("simulation"), runtime=receipt.pop("runtime"),
+                                 summary={"tick": receipt.get("tick"), "event_ids": list(receipt.get("event_ids") or ())})
+            document, _ = reduce(document, [ticked])
+            changes.append(ticked)
+        causal = {key: value for key, value in receipt.items() if key not in {"simulation", "runtime"}}
+    place = outcome_lines(PlannedAction(mechanic="look"), document)[0].removeprefix("You look around ").rstrip(".")
+    recap = (f"You return to {place}. The world went on while you were away." if ticks
+             else f"You return to {place}; little time has passed.")
+    resolved = {"ok": True, "outcome": "success", "action_type": "world_tick", "semantic_action_type": "world_tick",
+                "semantic_family": "world", "summary": recap, "outcome_lines": [recap], "turn_id": turn_id,
+                "tick": tick, "source": SOURCE, "response_mode": "world_tick"}
+    result: dict[str, Any] = {
+        "ok": True, "session": document, "turn_id": turn_id, "tick": tick, "player_input": request.text,
+        "action_type": "world_tick", "semantic_family": "world", "llm_called": False, "llm_purpose": "turn_pipeline",
+        "source": SOURCE, "response_mode": "world_tick", "resolved_result": resolved, "result": dict(resolved),
+        "causal_world_runtime": causal, "world_tick": {"elapsed_seconds": seconds, "ticks": ticks},
+        "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick",
+                          "changes": [(change.reported() if isinstance(change, WorldTicked) else change)
+                                      .model_dump(mode="json") for change in changes]},
+    }
+    from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
+    from app.apps.rpg.session.narrative_engine_bridge import publish_fixed_narration
+
+    return publish_fixed_narration(result, session_id=request.session_id, text=recap, kind=BeatKind.NARRATION,
+                                   purpose=BeatPurpose.CONTINUATION, source="rpg_turn_pipeline_world_tick_v1")
+
+
 def apply_planned_turn_stage(ctx: Any) -> Any:
     """The session pipeline's first stage: run the turn here when its mechanic has moved to the pipeline."""
+    if not ctx.resolved and _d(ctx.action).get("turn_kind") == "world_tick":
+        from app.apps.rpg.session.interactive_first_call_runtime import _select_session
+
+        session = _select_session(ctx.session_id, session_override=ctx.session_override)
+        if session:
+            request = TurnRequest(kind="world_tick", session_id=ctx.session_id, text=_s(ctx.player_input),
+                                  action=_d(ctx.action))
+            ctx.result = run_world_tick_turn(session, request=request)
+            ctx.result.setdefault("trace_id", ctx.trace_id)
+            ctx.resolved = True
+        return ctx
     if ctx.resolved or ctx.action or not _s(ctx.player_input).strip():
         return ctx
     # Read against no scene first: only a command that could be one the pipeline runs loads the campaign here.
@@ -165,4 +226,4 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
 
 
 __all__ = ["CLARIFY_SETTING", "LOOK_SETTING", "WAIT_SETTING", "apply_planned_turn_stage", "pipeline_enabled",
-           "run_planned_turn"]
+           "run_planned_turn", "run_world_tick_turn"]
