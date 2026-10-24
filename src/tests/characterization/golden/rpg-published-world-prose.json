@@ -167,12 +167,12 @@
     },
     {
       "blocks": [
-        "action||You use A night's lodging and rest for 23 hours. The reserved service is consumed.",
-        "choice||Offered choice: You use A night's lodging and rest for 23 hours. The reserved service is consumed."
+        "action||You use A night's lodging and rest for 22 hours. The reserved service is consumed.",
+        "choice||Offered choice: You use A night's lodging and rest for 22 hours. The reserved service is consumed."
       ],
       "step": "I go to my room and sleep for the night.",
-      "told": "You use A night's lodging and rest for 23 hours. The reserved service is consumed. You use A night's lodging and rest for 23 hours. The reserved service is consumed.",
-      "visible": "You use A night's lodging and rest for 23 hours. The reserved service is consumed."
+      "told": "You use A night's lodging and rest for 22 hours. The reserved service is consumed. You use A night's lodging and rest for 22 hours. The reserved service is consumed.",
+      "visible": "You use A night's lodging and rest for 22 hours. The reserved service is consumed."
     },
     {
       "blocks": [

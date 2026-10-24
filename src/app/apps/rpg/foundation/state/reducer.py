@@ -250,6 +250,13 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             writer.set(("simulation_state", key), value)
         for key, value in change.runtime.items():
             writer.set(("runtime_state", key), value)
+        environment = change.simulation.get("environment")
+        if isinstance(environment, dict) and isinstance(writer.get(("state", "world")), dict):
+            # The one clock is the simulation's environment; the play screen reads its copy and label.
+            minutes = max(0, int(environment.get("absolute_minutes") or 0))
+            writer.set(("state", "world", "environment"), environment)
+            writer.set(("state", "world", "time"),
+                       f"Day {minutes // 1440 + 1} • {minutes % 1440 // 60:02d}:{minutes % 60:02d}")
     elif isinstance(change, JournalWritten):
         writer.set(("runtime_state", "campaign_calendar"), change.calendar)
         writer.set(("runtime_state", "player_journal"), change.journal)

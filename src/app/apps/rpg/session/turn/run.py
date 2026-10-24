@@ -14,12 +14,11 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_command
-from app.apps.rpg.session.causal_turn_runtime import causal_tick
 from app.apps.rpg.session.command_reading import read_command, reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
-from app.apps.rpg.session.turn.world_tick import world_tick
+from app.apps.rpg.session.turn.world_tick import MINUTES_PER_TICK, world_tick
 
 # One setting per mechanic on the pipeline, for development and the operator: on once its scenarios pass on the
 # pipeline, and removed one release after that.
@@ -79,8 +78,8 @@ def run_planned_turn(
     tick_changes: list[StateChange] = []
     causal: dict[str, Any] = {}
     if planned.ticks:  # the world moves on only when time passed
-        tick_changes, causal = world_tick(document, mechanic=planned.mechanic, ticks=planned.ticks,
-                                          turn_key=turn_id, turn=turn_index)
+        tick_changes, causal = world_tick(document, mechanic=planned.mechanic,
+                                          minutes=planned.ticks * MINUTES_PER_TICK, turn_key=turn_id, turn=turn_index)
         document, _ = reduce(document, tick_changes)
     lines = outcome_lines(planned, document)
     applied = [*changes, *tick_changes]
@@ -153,20 +152,17 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
     """
     seconds = int(request.action.get("elapsed_seconds") or request.elapsed_minutes * 60)
     ticks = min(MAX_WORLD_TICKS, max(0, seconds // SECONDS_PER_WORLD_TICK))
-    changes: list[StateChange] = [TimeAdvanced(ticks=ticks)] if ticks else []
+    changes: list[StateChange] = [TimeAdvanced(ticks=ticks, minutes=ticks * MINUTES_PER_TICK)] if ticks else []
     document, _ = reduce(session, changes)
     simulation = _d(document.get("simulation_state"))
     tick = int(simulation.get("tick") or 0)
     turn_id = f"turn:{tick}:world"
     causal: dict[str, Any] = {}
     if ticks:
-        receipt = causal_tick(document, turn_key=turn_id, turn=tick) or {}
-        if receipt.get("applied"):
-            ticked = WorldTicked(simulation=receipt.pop("simulation"), runtime=receipt.pop("runtime"),
-                                 summary={"tick": receipt.get("tick"), "event_ids": list(receipt.get("event_ids") or ())})
-            document, _ = reduce(document, [ticked])
-            changes.append(ticked)
-        causal = {key: value for key, value in receipt.items() if key not in {"simulation", "runtime"}}
+        tick_changes, causal = world_tick(document, mechanic="world_tick", minutes=ticks * MINUTES_PER_TICK,
+                                          turn_key=turn_id, turn=tick)
+        document, _ = reduce(document, tick_changes)
+        changes.extend(tick_changes)
     place = outcome_lines(PlannedAction(mechanic="look"), document)[0].removeprefix("You look around ").rstrip(".")
     recap = (f"You return to {place}. The world went on while you were away." if ticks
              else f"You return to {place}; little time has passed.")

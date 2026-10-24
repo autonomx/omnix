@@ -96,13 +96,14 @@ def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> N
         assert outcome.planned_action == ("wait" if command == "wait" else "look"), (command, outcome)
         placed = [kind for kind in types if kind != "location_changed"]  # the starter town places the hero first
         assert placed[:2] == ["turn_counted", "time_advanced"] and types[-1] == "journal_written", types
-        assert ("world_ticked" in types) == (world == "aurelia"), types  # Aurelia's pressures run on a clock
+        assert "world_ticked" in types, types  # the clock moves with the turn's minutes
         replayed, _ = reduce(before, parse_changes([change.model_dump() for change in outcome.applied_changes]))
         after = play.stored()
         assert _facts(replayed) == _facts(after), command
-        if world == "aurelia":  # the outcome names what the tick replaced; the turn's patch carries it
-            [ticked] = [change for change in outcome.applied_changes if change.type == "world_ticked"]
-            assert "causal_world_runtime" in ticked.summary["sections"] and not ticked.simulation
+        [ticked] = [change for change in outcome.applied_changes if change.type == "world_ticked"]
+        assert not ticked.simulation  # the outcome names what the tick replaced; the turn's patch carries it
+        assert "environment" in ticked.summary["sections"]
+        assert ("causal_world_runtime" in ticked.summary["sections"]) == (world == "aurelia")  # pressures on a clock
         assert replayed["runtime_state"]["player_journal"] == after["runtime_state"]["player_journal"]
 
     monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_LOOK", "0")  # turned off, look takes the older path

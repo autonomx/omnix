@@ -12,6 +12,8 @@ from app.apps.rpg.foundation.state.changes import LocationChanged, StateChange, 
 from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.session.turn.planning import PlannedAction
 
+MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
+
 
 def resolve(planned: PlannedAction, document: Mapping[str, Any]) -> list[StateChange]:
     """The changes the action makes: the turn is counted and the time it took passes."""
@@ -24,7 +26,7 @@ def resolve(planned: PlannedAction, document: Mapping[str, Any]) -> list[StateCh
         # world begins, as the older turn path did on its first turn.
         changes.append(LocationChanged(location_id=current_location_id(dict(simulation))))
     if planned.ticks:
-        changes.append(TimeAdvanced(ticks=planned.ticks))
+        changes.append(TimeAdvanced(ticks=planned.ticks, minutes=planned.ticks * MINUTES_PER_TICK))
     return changes
 
 

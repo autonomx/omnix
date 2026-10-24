@@ -47,7 +47,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:e53bf7e5d53318e9091c9601f1a12ce2653fc1373b7df4c001f159ec6ca1629f",
+      "document_hash": "sha256:d97bad030d3438c0dd98a2f040e9146e862e0d5b88f6d99cf54142be20f43bd1",
       "facts": {
         "combat": {
           "active": false,
@@ -105,6 +105,7 @@
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/economy_state",
+        "simulation_state/environment",
         "simulation_state/faction_reputation",
         "simulation_state/merchant_state",
         "simulation_state/npc_presence",
@@ -113,7 +114,8 @@
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
@@ -147,7 +149,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:14ae84830bc7b382bff057b612063bc6408732096ea34617bbeeb90bb2e0e757",
+      "document_hash": "sha256:e20d68b40a8eb9e70fa07dd77c56d141cff3f4c7ac1ab11869106d2c9a15696f",
       "facts": {
         "combat": {
           "active": false,
@@ -202,7 +204,6 @@
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
         "simulation_state/conversation_thread_state",
-        "simulation_state/environment",
         "simulation_state/player_state",
         "simulation_state/quest_state",
         "state/current_turn",
@@ -248,7 +249,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:63c4fbe0554eb3456fe659235261a79e08e06c0a89a44bd50fa758a441d5df85",
+      "document_hash": "sha256:ac507a133d6614878299a77873da93af096de272d53fca0fe18ac7cfa3bc5336",
       "facts": {
         "combat": {
           "active": false,
@@ -405,7 +406,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:4af3bb211099190afc541f71315e2eee5ffb18f6a738e530067ca64ded16d126",
+      "document_hash": "sha256:c3b56e392a2024f474b4f8f5e274ddc74ccb0f490bf19d721edc59dcd34d2521",
       "facts": {
         "combat": {
           "active": false,
@@ -599,8 +600,7 @@
         "state/current_turn",
         "state/player",
         "state/quests",
-        "state/turn_count",
-        "state/world"
+        "state/turn_count"
       ],
       "response": {
         "changed_domains": [
@@ -644,7 +644,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:1d38342945fd638e892471a385527328a0e7fbfd6602c7b4eaf5c3ed645c4bb1",
+      "document_hash": "sha256:ee5cd2cdc4722a4c03184a3301bc2f8e917782af5b7a0fdedb28ce4a3efe5a95",
       "facts": {
         "combat": {
           "active": false,
@@ -829,7 +829,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:5789e8cae6b408517f5f9620ac80b8b5919216b4e55e26a7a7d0f894c34cafbe",
+      "document_hash": "sha256:9c4db7431b63eb3b720b280ec83e4de5c9699b555fc9f260a3b770754bb6f3cf",
       "facts": {
         "combat": {
           "active": false,
@@ -1029,7 +1029,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c1b7e3bd654c1ba49ddb9059d7ddc2c59b940e2f60bf7264956889006b3cfd8f",
+      "document_hash": "sha256:eb371f1c116eb5d9b7959269192055c08485422ad94c8bcfb188e5bfb15a7e6a",
       "facts": {
         "combat": {
           "active": false,
@@ -1133,13 +1133,15 @@
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/economy_state",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
@@ -1173,7 +1175,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:f833dcfa9bb66f12afaa8c7523bf71e225bad1d859e53ca9012ce29a8cd42053",
+      "document_hash": "sha256:b4381b118d11d4e5244a19fc2765c4b04fb3ba7f1922710dc78dad1196fbd0ab",
       "facts": {
         "combat": {
           "active": false,
@@ -1304,7 +1306,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:89f0a78103fafc5c947b51eeb3672a6943a29206c1d894530ec1664d40c02691",
+      "document_hash": "sha256:9ce9c91997d1873bda53bafe86237707158580fb6fa8126c59420d1508994502",
       "facts": {
         "combat": {
           "active": false,
@@ -1452,7 +1454,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:e113015ae72b19df092719c88996a4945c93ba5fe8b0cb36acd97421e41cfd37",
+      "document_hash": "sha256:d02d0180e7975e22c6d95d1bae2ff5167b420790329cd2fa744a8eee887249cc",
       "facts": {
         "combat": {
           "active": false,
@@ -1601,7 +1603,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:18d1b7eef0a8d48659e9515570ef38606bd1c02ee51227857f90e974e32dca80",
+      "document_hash": "sha256:3495624ef12b3216ff108487beb9b6d45b48b14186324977702a6af03a46a45e",
       "facts": {
         "combat": {
           "active": false,
@@ -1778,7 +1780,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:45e24ffe0425ebd89fb8a3696b1c1e25f49c0d14821fce03002d777173f69f40",
+      "document_hash": "sha256:a71ca846d612193c5af59b7120908eb838dd7ccfff97fd5fbbacd8820965f382",
       "facts": {
         "combat": {
           "active": false,
@@ -1978,7 +1980,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:b5fb500aa202b81905a3862e14e215fbd0be1d5fbc6723429b4049ca1ee542fc",
+      "document_hash": "sha256:151860a2938623c20378e8f99bbae639a64778b065004baea44c66f1f5b9d315",
       "facts": {
         "combat": {
           "active": false,
@@ -2180,7 +2182,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:68491ca8209f14da465cfa1f22043e6237320137ab1d947808e5a5ef9760a64b",
+      "document_hash": "sha256:e317e568016209da2b228ea62108aad493ec45e0ae69f1a171ea2d88bb249391",
       "facts": {
         "combat": {
           "active": false,
@@ -2284,13 +2286,15 @@
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/economy_state",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
@@ -2343,7 +2347,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f12bf67c35566ec36699caf3c2f74820b05aea04394a00b7783a06148f91353e",
+      "document_hash": "sha256:9c84572bc56ddb10d4452c260f9170361f29eb9d53c62ddf4b8c50f5548f53ad",
       "facts": {
         "combat": {
           "active": false,
@@ -2544,7 +2548,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:57d4e78a52a4d830e79ce79fea19b5c308d21780a666cf7f4c870f10b136230a",
+      "document_hash": "sha256:664499db2e8925a15778543a7e076e287bcf4df19343aa7123316d9028beebfd",
       "facts": {
         "combat": {
           "active": false,
@@ -2725,7 +2729,7 @@
           "hunger": -15
         }
       },
-      "document_hash": "sha256:41812f7f282780d7a461bcc93e1db46f1e7a5d0db4c7a4b5a8c79f6023036bd6",
+      "document_hash": "sha256:1137ae83e88fde1a15385856e02ba9f74e07f4c7e4ba28b86fef40cd6519bbd7",
       "facts": {
         "combat": {
           "active": false,
@@ -2875,7 +2879,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:3a524149e28b396e9331b0cc007217234504fe7a9c8b015c313d2871fa8e3052",
+      "document_hash": "sha256:2a25cb8eacaf47485fe2278cbd1071788470a437d3d3bf265eb9d01b17eddbe6",
       "facts": {
         "combat": {
           "active": false,
@@ -3018,7 +3022,7 @@
           "fatigue": -15
         }
       },
-      "document_hash": "sha256:48267e33c96357a071e02a99350fca49f5e0efe054d2590b7fbd3278c37f1a22",
+      "document_hash": "sha256:06274afcf70b6619f3d9c3a583caddb0eaafcbe511c236dc10e4121ccb468a59",
       "facts": {
         "combat": {
           "active": false,
@@ -3163,7 +3167,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f814ca709dc4c8a37e86e1721efda8b653cae047e7e161d5a5fd8f220a84527e",
+      "document_hash": "sha256:6d8680ad0f0814251eddb52bd9f74935cfbcf1a2b2a2352f79e3578f9788b738",
       "facts": {
         "combat": {
           "active": false,
@@ -3254,6 +3258,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -3262,15 +3269,24 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/economy_state",
+        "simulation_state/environment",
+        "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "time",
           "survival",
+          "world",
           "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
@@ -3279,6 +3295,7 @@
           "changed_domains": [
             "time",
             "survival",
+            "world",
             "narrative"
           ],
           "revision": 21
@@ -3312,7 +3329,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ab7116047b0c000c7d1ff9307fc80752903628a371c10971730e8e129ca25615",
+      "document_hash": "sha256:5952a49336c8f218e1c86c674c68000437466add81a3c7ac965711a802be2d28",
       "facts": {
         "combat": {
           "active": true,
@@ -3497,7 +3514,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:ab7116047b0c000c7d1ff9307fc80752903628a371c10971730e8e129ca25615",
+      "document_hash": "sha256:5952a49336c8f218e1c86c674c68000437466add81a3c7ac965711a802be2d28",
       "facts": {
         "combat": {
           "active": true,
@@ -3616,7 +3633,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:18d5957460a3f51361c2aacb1def8dc064af9e3a27ffa06bbb3c24df1fd96bbf",
+      "document_hash": "sha256:704ac473126d7a06b03784136631d3cb6149b75c7993d6aa7007b3b74befd485",
       "facts": {
         "combat": {
           "active": true,
@@ -3805,7 +3822,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f0fa3cf1655bb52140bfed2b446eee85fca5fdc038e42ae137b43d3db8e14808",
+      "document_hash": "sha256:8972f1db8b7a910e2310099277a40a251d6ce384883fb23caa4ec354816e15ac",
       "facts": {
         "combat": {
           "active": true,
@@ -3985,7 +4002,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ab03d7759a90081b9fff556fedd3daea246facc03d231f4c2fd515050ed52293",
+      "document_hash": "sha256:3dbdd92ea7535302d671ecb43997b9700b2461a0e6313a6cb3f9a8b0e51f3c17",
       "facts": {
         "combat": {
           "active": false,
@@ -4161,7 +4178,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:767ccc0cef0ddbfb61d5b7b3ed7f8f9d5295a4118c3ce7e9341a3efd6a5f58de",
+      "document_hash": "sha256:0de0f278a806f8c64e54757fb76a1bf319f7c6e375eb1cabab4d6ccb3c69f3c1",
       "facts": {
         "combat": {
           "active": false,
@@ -4312,7 +4329,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:11a9f18829e29d0ff1640c3b97a112a44c4fa71d4b5aaefa7c25460de9c9cc99",
+      "document_hash": "sha256:06cc176438013524002e2e324d723e1c90dc7ecc6a582e2bd1f36e112aa10d94",
       "facts": {
         "combat": {
           "active": false,
@@ -4493,7 +4510,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:4f2c62830f23d40eed24a6d4751d57f545e8437bf8db943fa5b84debad63dd64",
+      "document_hash": "sha256:452b37f5d904a449b5253659af8f405bb54b264736fec2a47e7a5ac8cc9fffa6",
       "facts": {
         "combat": {
           "active": false,
@@ -4700,7 +4717,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:07d5711b72d82dc2456eb6a727518a39c078a2a1dab5a912cd1aa869bc3db23e",
+      "document_hash": "sha256:8dbec5d298387955b3b5fba75a8b566d9e9167e68fc6df894f1e7c526cc5ddc0",
       "facts": {
         "combat": {
           "active": false,
@@ -4908,7 +4925,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:68a7ef2e9e9c30cfb46c1743ad41c27cac9d14a854f41dca01822bc0ef4b1bb2",
+      "document_hash": "sha256:299f40c724c8cba9bcec8d0fc293b330923133170c5087a218866fde3a5e9c5b",
       "facts": {
         "combat": {
           "active": false,
@@ -5103,7 +5120,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:9e682aa1af1077462702f31132083dbb32f52fcb956a65b01adbc9e365cdecb2",
+      "document_hash": "sha256:c5574d39d4fd8fc5e1df3ff2ab59d83571d428dd457087664e12d0ed132bcc37",
       "facts": {
         "combat": {
           "active": false,
@@ -5209,13 +5226,15 @@
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
         "simulation_state/economy_state",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
         "simulation_state/survival",
         "simulation_state/tick",
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [

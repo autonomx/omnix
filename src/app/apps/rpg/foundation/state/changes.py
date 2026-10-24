@@ -109,8 +109,11 @@ class PresenceChanged(_Change):
 
 
 class TimeAdvanced(_Change):
+    """The turn's ticks of the campaign clock, and the in-game minutes they took (the world tick moves the clock)."""
+
     type: Literal["time_advanced"] = "time_advanced"
     ticks: int = Field(default=1, ge=0)
+    minutes: int = Field(default=0, ge=0)
 
 
 class TurnCounted(_Change):
@@ -174,7 +177,7 @@ class CombatEnded(_Change):
 # bookkeeping. The tick replaces these whole until RQ-2.7 says what it changes in typed terms.
 WORLD_TICK_SECTIONS = frozenset({
     "causal_world_runtime", "causal_runtime_projection", "economy_state", "merchant_state", "travel_state",
-    "faction_reputation", "npc_presence", "world_event_state",
+    "faction_reputation", "npc_presence", "world_event_state", "environment",
 })
 WORLD_TICK_RUNTIME_KEYS = frozenset({
     "causal_applied_turn_keys", "causal_last_applied_turn_key", "causal_last_applied_tick",

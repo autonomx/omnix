@@ -40,7 +40,7 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
     if reading.family == "look":
         return PlannedAction(mechanic="look", target_id=reading.target_id or "", reason=reading.reason)
     if reading.family == "wait":
-        return PlannedAction(mechanic="wait", reason=reading.reason)
+        return PlannedAction(mechanic="wait", ticks=3, reason=reading.reason)  # a while: half an hour
     return None
 
 

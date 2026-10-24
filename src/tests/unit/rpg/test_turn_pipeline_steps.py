@@ -55,11 +55,22 @@ def test_a_hero_with_no_place_is_placed_where_the_world_begins() -> None:
     assert [change.type for change in resolve(PlannedAction(mechanic="wait"), campaign)][1] == "location_changed"
 
 
-def test_needs_rise_with_the_time_and_stop_at_their_ceiling() -> None:
-    changes, receipt = world_tick(_campaign(), mechanic="wait", ticks=1, turn_key="turn:6", turn=4)
+def test_needs_rise_once_a_turn_and_stop_at_their_ceiling() -> None:
+    changes, receipt = world_tick(_campaign(), mechanic="wait", minutes=0, turn_key="turn:6", turn=4)
     [needs] = changes
     assert (needs.hunger, needs.thirst, needs.fatigue) == (1, 1, 1) and receipt == {}  # thirst stops at 100
-    assert world_tick(_campaign(survival={"enabled": False}), mechanic="wait", ticks=1, turn_key="t", turn=1)[0] == []
+    assert world_tick(_campaign(survival={"enabled": False}), mechanic="wait", minutes=0, turn_key="t", turn=1)[0] == []
+    assert world_tick(_campaign(), mechanic="world_tick", minutes=0, turn_key="t", turn=1)[0] == []  # time away
+
+
+def test_the_one_clock_moves_by_the_turns_minutes_and_the_play_screen_shows_it() -> None:
+    campaign = _campaign()
+    campaign["state"]["world"] = {"environment": {"absolute_minutes": 9 * 60 + 50, "active_events": []}}
+    changes, _ = world_tick(campaign, mechanic="wait", minutes=30, turn_key="turn:6", turn=4)
+    document, _ = reduce(campaign, changes)
+    assert document["simulation_state"]["environment"]["absolute_minutes"] == 10 * 60 + 20
+    assert document["state"]["world"]["environment"]["absolute_minutes"] == 10 * 60 + 20
+    assert document["state"]["world"]["time"].endswith("10:20") and document["state"]["world"]["time"].startswith("Day 1")
 
 
 def test_the_world_tick_may_replace_only_the_sections_it_owns() -> None:
@@ -78,10 +89,11 @@ def test_a_planned_turn_is_its_changes_reduced_onto_the_turn_start_campaign() ->
                               planned=plan_action(reading), reading=reading)
     assert campaign["simulation_state"]["tick"] == 5  # the turn-start campaign is not touched
     document = result["session"]
-    assert document["simulation_state"]["tick"] == 6 and document["state"]["turn_count"] == 4
+    assert document["simulation_state"]["tick"] == 8 and document["state"]["turn_count"] == 4  # a while: 3 ticks
     assert document["simulation_state"]["survival"]["hunger"] == 11
+    assert document["simulation_state"]["environment"]["absolute_minutes"] == 9 * 60 + 30
     assert [change["type"] for change in result["turn_pipeline"]["changes"]] == [
-        "turn_counted", "time_advanced", "needs_changed", "journal_written"]
+        "turn_counted", "time_advanced", "needs_changed", "world_ticked", "journal_written"]
     assert result["resolved_result"]["outcome_lines"] == ["You wait a while in The Gate; time passes.", "Around you: Wren."]
     assert document["runtime_state"]["player_journal"]["entries"]
 
