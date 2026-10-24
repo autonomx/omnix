@@ -76,14 +76,14 @@ def test_new_game_response_includes_non_persisted_environment_snapshot(monkeypat
     assert contract == result["game"]["environment_narration_contract"]
     assert contract["authority"] == "read_only_environment_snapshot"
     assert "create_new_weather" in contract["forbidden"]
-    assert snapshot["region_id"] == "market_road"
+    assert snapshot["region_id"] == "region:market-road:town"
     assert snapshot["weather"]["condition"] == "rain"
     assert snapshot["context"]["exposure"] == "indoor"
 
     persisted = load_session(result["session_id"])
     assert "environment_snapshot" not in persisted["state"]
     assert "environment_narration_contract" not in persisted["state"]
-    assert persisted["state"]["world"]["environment"]["region_id"] == "market_road"
+    assert persisted["state"]["world"]["environment"]["region_id"] == "region:market-road:town"
 
 
 @pytest.mark.postgres

@@ -9,12 +9,6 @@ pytestmark = POSTGRES
 
 NO_WORLD_MODEL = ("RQ-2.0: a lore-only world (Vesper-9) launches with an empty world model: no places, people, "
                   "offers or routes are derived from its topics")
-STARTER_TRAVEL = ("RQ-2.8: the starter town names its tavern three ways (loc_tavern, rusty_flagon_tavern, "
-                  "location:rusty_flagon_tavern) and its travel graph knows only the last, so no route leaves the "
-                  "tavern (and the travel turn is not counted)")
-STARTER_TRADE = ("RQ-2.3: the starter town buys from its fallback merchant wherever the hero is: buying a potion "
-                 "from an absent Elara charges the sheet's purse, delivers nothing, and leaves the simulation's "
-                 "inventory purse at the old amount")
 
 # Where each world's shop is, what it sells, and what the hero carries to drop.
 SHOP = {
@@ -22,13 +16,13 @@ SHOP = {
                 "price": 30, "buys_back": 15, "elsewhere": "go to Wayfarers' Guild", "back": "go to Starfall Village",
                 "food": "Lantern Bread"},
     "starter": {"route": ["go to the market"], "merchant": "Elara", "ware": "Healing Potion", "price": 100,
-                "buys_back": 50, "elsewhere": "go outside", "back": "go back inside", "food": "Torch"},
+                "buys_back": 50, "elsewhere": "go to the tavern", "back": "go to the market", "food": "Torch"},
     "vesper": {"route": [], "merchant": "a vendor", "ware": "Stim Patch", "price": 10, "buys_back": 5,
                "elsewhere": "go to Tidebreak Docks", "back": "go to Black Rain Station", "food": "Iron Dagger"},
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL, starter=STARTER_TRADE))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
 def test_trade_round_trip_keeps_the_purse_exact(launch, world) -> None:
     play, shop = launch(world), SHOP[world]
     for step in shop["route"]:
@@ -50,7 +44,7 @@ def test_trade_round_trip_keeps_the_purse_exact(launch, world) -> None:
     assert play.purse() == purse - shop["price"] + shop["buys_back"]
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL, starter=STARTER_TRAVEL))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
 def test_inventory_round_trip_drop_leave_return_pick_up(launch, world) -> None:
     play, shop = launch(world), SHOP[world]
     for step in shop["route"]:
@@ -91,9 +85,7 @@ INN = {
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL, starter=(
-    "RQ-2.3: the starter town's innkeeper sells no meal asked for by name: 'I buy a meal from Bran' charges "
-    "nothing and eases no hunger")))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
 def test_lodging_and_needs_over_a_night(launch, world) -> None:
     play, inn = launch(world), INN[world]
     for step in inn["route"]:

@@ -149,6 +149,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.jobs import store as job_store
     from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.persistence.repository_registry import register_feature_repositories
     from app.providers import service as provider_service
     from app.apps.rpg.edge.api.feature_routes.rpg_session_routes import register_rpg_session_routes
     from app.apps.rpg.narration.narrative_engine import service as narrative_service
@@ -159,6 +160,7 @@ def test_rpg_production_turns_match_golden(monkeypatch) -> None:
     from tests.support.routers import include_router_registrar
 
     bootstrap_postgresql_runtime()
+    register_feature_repositories("rpg")  # as composition does: the classic new game installs the starter world
     jobs = PostgresJobStoreAdapter()
     job_store.install_default_job_store_factory(lambda: jobs)
     model = _ScriptedModel()

@@ -273,9 +273,9 @@ class SessionCampaignSessions:
         return RpgNewGameRequest.model_validate(payload)
 
     def create_new_game(self, request: Any) -> dict[str, Any]:
-        from app.apps.rpg.session.new_game import create_new_game_session
+        from app.apps.rpg.session.new_game import create_new_game_session_with_progress
 
-        return create_new_game_session(request)
+        return create_new_game_session_with_progress(request)
 
     def build_new_game(self, request: Any) -> dict[str, Any]:
         from app.apps.rpg.session.new_game import _build_new_game_session

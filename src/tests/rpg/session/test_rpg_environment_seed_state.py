@@ -110,7 +110,7 @@ def test_classic_fantasy_tavern_new_game_persists_authoritative_environment(monk
     scene_context = state["scene"]["environment_context"]
 
     assert environment["environment_version"] == 1
-    assert environment["region_id"] == "market_road"
+    assert environment["region_id"] == "region:market-road:town"
     assert environment["climate_profile_id"] == "temperate_hills"
     assert isinstance(environment["environment_seed"], int)
     assert environment["absolute_minutes"] == 480
@@ -123,7 +123,7 @@ def test_classic_fantasy_tavern_new_game_persists_authoritative_environment(monk
             "type": "weather",
             "condition": "rain",
             "started_at_minute": 480,
-            "region_id": "market_road",
+            "region_id": "region:market-road:town",
         }
     ]
     assert DERIVED_ENVIRONMENT_FIELDS.isdisjoint(environment)
@@ -144,12 +144,12 @@ def test_mountain_pass_new_game_persists_outdoor_scene_context(monkeypatch, tmp_
     scene_context = state["scene"]["environment_context"]
 
     assert environment["environment_version"] == 1
-    assert environment["region_id"] == "mountain_pass"
+    assert environment["region_id"] == "region:market-road:pass"
     assert environment["climate_profile_id"] == "northern_mountains"
     assert environment["absolute_minutes"] == 582
     assert environment["active_events"][0]["type"] == "weather"
     assert environment["active_events"][0]["condition"] == "windy"
-    assert environment["active_events"][0]["region_id"] == "mountain_pass"
+    assert environment["active_events"][0]["region_id"] == "region:market-road:pass"
     assert DERIVED_ENVIRONMENT_FIELDS.isdisjoint(environment)
 
     assert state["world"]["time"] == "Day 1 • 09:42"

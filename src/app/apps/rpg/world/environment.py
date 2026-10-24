@@ -73,6 +73,7 @@ def build_initial_environment_seed_state(
     campaign_contract: dict[str, Any] | None,
     location_id: str,
     location: dict[str, Any] | None = None,
+    place_environment: dict[str, Any] | None = None,
 ) -> EnvironmentSeedState:
     """Create E2.0.1 authoritative environment state plus scene context.
 
@@ -83,7 +84,8 @@ def build_initial_environment_seed_state(
     """
 
     normalized_location_id = _normalize_identifier(location_id, "starting_location")
-    location_defaults = _LOCATION_ENVIRONMENT_DEFAULTS.get(normalized_location_id, {})
+    # A world's place says how it is met (its region, climate and exposure); the table is the older starter town's.
+    location_defaults = place_environment or _LOCATION_ENVIRONMENT_DEFAULTS.get(normalized_location_id, {})
     region_id = str(location_defaults.get("region_id") or DEFAULT_REGION_ID)
     climate_profile_id = str(location_defaults.get("climate_profile_id") or DEFAULT_CLIMATE_PROFILE_ID)
     time_label = str((location or {}).get("time_label") or "Day 1 • 08:00")

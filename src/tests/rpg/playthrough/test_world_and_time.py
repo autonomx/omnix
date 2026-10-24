@@ -9,9 +9,6 @@ pytestmark = POSTGRES
 
 NO_WORLD_MODEL = ("RQ-2.0: a lore-only world (Vesper-9) launches with an empty world model: it has no routes to "
                   "travel")
-STARTER_TRAVEL = ("RQ-2.8: the starter town names its tavern three ways (loc_tavern, rusty_flagon_tavern, "
-                  "location:rusty_flagon_tavern) and its travel graph knows only the last, so no route leaves the "
-                  "tavern (and the travel turn is not counted)")
 JOURNEYS = {
     "aurelia": [("go to Starfall Village", "location:aurelia:starfall-village"),
                 ("go to Skybridge Pass", "location:aurelia:skybridge-pass"),
@@ -19,13 +16,14 @@ JOURNEYS = {
                 ("go to Skybridge Pass", "location:aurelia:skybridge-pass"),
                 ("go to Starfall Village", "location:aurelia:starfall-village"),
                 ("go to Starfall Grove", "location:aurelia:arrival-grove")],
-    "starter": [("go to the market", "loc_market"), ("go to the tavern", "loc_tavern")],
+    "starter": [("go to the market", "location:market-road:market-square"),
+                ("go to the tavern", "location:market-road:rusty-flagon")],
     "vesper": [("go to Tidebreak Docks", "ent:places:tidebreak-docks"),
                ("go to Black Rain Station", "ent:places:black-rain-station")],
 }
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL, starter=STARTER_TRAVEL))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
 def test_travel_across_three_places_and_back(launch, world) -> None:
     play = launch(world)
     for count, (command, place) in enumerate(JOURNEYS[world], start=1):

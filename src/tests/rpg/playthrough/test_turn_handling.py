@@ -39,9 +39,7 @@ def test_a_refused_action_changes_nothing_but_the_turn(launch, world) -> None:
 ASKED = {"aurelia": ("Liora Fen", "npc:liora-fen"), "starter": ("Bran", "npc:bran"), "vesper": ("someone", "")}
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_ONE_PRESENT, starter=(
-    "RQ-2.8: the starter tavern's scene lists no one present, so a question to Bran takes the long path (an NPC "
-    "dialogue call and then the narrative writer) instead of one short call")))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_ONE_PRESENT))
 def test_a_question_to_someone_present_is_one_short_call(launch, world) -> None:
     play = launch(world)
     name, npc_id = ASKED[world]

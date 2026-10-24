@@ -382,7 +382,8 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "location_id": location_id,
             "name": name,
             "short_name": name.casefold(),
-            "aliases": sorted({name.casefold(), _label_from_id(location_id).casefold()}),
+            "aliases": sorted({name.casefold(), _label_from_id(location_id).casefold(),
+                               *(_text(alias).casefold() for alias in row.get("aliases") or () if _text(alias))}),
             "description": row["description"],
             "region_id": row["region_id"],
             "region_name": row["region_name"],
@@ -391,6 +392,8 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "present_npcs": present,
             "services": services,
             "exits": exits,
+            # How the world says the place is met: its climate, its weather at an opening, indoors or out.
+            **({"environment": dict(_mapping(row.get("environment")))} if _mapping(row.get("environment")) else {}),
         }
     return {
         "schema_version": WORLD_MODEL_SCHEMA,
@@ -589,8 +592,12 @@ def opening_kit(
     }
 
 
-def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
-    """The quest log at the opening: the world's intro quests, then the quests the opening's story seeds lead to."""
+def opening_quests(revision: Any, scenario: Any, *, lead_seed_id: str = "") -> list[dict[str, Any]]:
+    """The quest log at the opening: the world's intro quests, then the quests the opening's story seeds lead to.
+
+    ``lead_seed_id`` names the seed the player chose to start with (a classic new game's opening hook): its quest
+    leads the log, and is the active one.
+    """
 
     canon = _mapping(getattr(revision, "canon", None))
     quests = {_text(row.get("id")): row for row in _rows(canon.get("quests")) if _text(row.get("id"))}
@@ -600,8 +607,15 @@ def opening_quests(revision: Any, scenario: Any) -> list[dict[str, Any]]:
         (quest, "") for quest in quests.values()
         if _text(quest.get("tier")) == "intro" and start in (quest.get("locations") or ())
     ]
-    for seed_id in getattr(scenario, "opening_seed_ids", ()) or ():
-        seed = _mapping(seeds.get(_text(seed_id)))
+    seed_ids = [_text(seed_id) for seed_id in getattr(scenario, "opening_seed_ids", ()) or ()]
+    if lead_seed_id in seeds:
+        seed_ids = [lead_seed_id, *(seed_id for seed_id in seed_ids if seed_id != lead_seed_id)]
+        lead = quests.get(_text(_mapping(seeds[lead_seed_id]).get("quest_id")))
+        if lead is not None:
+            ordered = [(quest, hook) for quest, hook in ordered if quest is not lead]
+            ordered.insert(0, (lead, _text(_mapping(seeds[lead_seed_id]).get("hook"))))
+    for seed_id in seed_ids:
+        seed = _mapping(seeds.get(seed_id))
         quest = quests.get(_text(seed.get("quest_id")))
         if quest and all(quest is not existing for existing, _ in ordered):
             ordered.append((quest, _text(seed.get("hook"))))

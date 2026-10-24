@@ -228,12 +228,19 @@ def build_world_bundle_archive(
         data_sha256=sha256_hex(payload_bytes),
         assets=tuple(asset for asset, _ in asset_rows),
     )
+    # Every entry is stamped with the export's time, not the clock's: the same world exported at the same time is
+    # the same archive, byte for byte (a built-in world's committed bundle is checked against its source).
+    stamp = datetime.fromisoformat(manifest.exported_at.replace("Z", "+00:00")).astimezone(timezone.utc)
+    date_time = (max(1980, stamp.year), stamp.month, stamp.day, stamp.hour, stamp.minute, stamp.second)
     output = io.BytesIO()
     with zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(WORLD_BUNDLE_MANIFEST_PATH, canonical_json_bytes(manifest))
-        archive.writestr(WORLD_BUNDLE_DATA_PATH, payload_bytes)
-        for asset, content in asset_rows:
-            archive.writestr(asset.archive_path, content)
+        entries = [(WORLD_BUNDLE_MANIFEST_PATH, canonical_json_bytes(manifest)), (WORLD_BUNDLE_DATA_PATH, payload_bytes),
+                   *((asset.archive_path, content) for asset, content in asset_rows)]
+        for path, content in entries:
+            info = zipfile.ZipInfo(path, date_time=date_time)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, content)
     content = output.getvalue()
     if len(content) > MAX_WORLD_BUNDLE_BYTES:
         raise ValueError("world_bundle_size_limit_exceeded")

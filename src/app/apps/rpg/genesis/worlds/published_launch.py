@@ -136,13 +136,21 @@ def _opening_environment(
 
     state = _record(session.get("state"))
     metadata = _record(state.get("metadata"))
+    region_id = str(location.get("region_id") or DEFAULT_REGION_ID)
+    authored = _record(location.get("environment"))
+    place_environment = {
+        "region_id": region_id,
+        "climate_profile_id": str(authored.get("climate_profile_id") or ""),
+        "scene": {"exposure": authored.get("exposure"), "shelter": authored.get("shelter"),
+                  "light_override": authored.get("light")},
+    } if authored else None
     seeded = build_initial_environment_seed_state(
         campaign_seed=int(metadata.get("seed") or 0),
         campaign_contract={"location_id": location_id},
         location_id=location_id,
-        location={"time_label": epoch, "location": location_name, "weather": "clear"},
+        location={"time_label": epoch, "location": location_name, "weather": str(authored.get("weather") or "clear")},
+        place_environment=place_environment,
     )
-    region_id = str(location.get("region_id") or DEFAULT_REGION_ID)
     environment = {
         **seeded["environment"],
         "region_id": region_id,
@@ -167,6 +175,7 @@ def _apply_published_opening_state(
     scenario: Any,
     world: Mapping[str, Any],
     present_at_start: tuple[str, ...],
+    lead_seed_id: str = "",
 ) -> None:
     """Replace the new-game bootstrap with the published world: its place, people, kit, quests and weather."""
 
@@ -185,6 +194,10 @@ def _apply_published_opening_state(
         equipment=[_record(item) for item in player.get("equipment") or ()],
         inventory=[_record(item) for item in player.get("inventory") or ()],
     )
+    if player.get("starter_gear"):
+        # The player chose their own starting gear and purse: they set out with that, not the opening's kit.
+        kit = {**kit, "inventory": [_record(item) for item in player.get("inventory") or ()],
+               "currency": dict(_record(player.get("currency")))}
     player.update(
         {
             "inventory": kit["inventory"],
@@ -223,7 +236,7 @@ def _apply_published_opening_state(
             "current_location_id": location_id,
             "current_location_name": location_name,
             "summary": description,
-            "quests": opening_quests(revision, scenario),
+            "quests": opening_quests(revision, scenario, lead_seed_id=lead_seed_id),
             "relationships": [],
             "party": [],
             "quick_actions": quick_actions,
@@ -233,8 +246,11 @@ def _apply_published_opening_state(
         }
     )
     state.pop("environment_snapshot", None)
+    authored_environment = _record(location.get("environment"))
     state["world"] = {
-        **_record(state.get("world")),
+        **{key: value for key, value in _record(state.get("world")).items() if key != "temperature"},
+        "weather": str(authored_environment.get("weather") or "Clear"),
+        **({"temperature": authored_environment["temperature"]} if "temperature" in authored_environment else {}),
         "time": epoch,
         "region": str(location.get("region_name") or ""),
         "environment": environment,
@@ -351,9 +367,15 @@ def launch_published_scenario(
     player: Mapping[str, Any] | None = None,
     gameplay: Mapping[str, Any] | None = None,
     features: Mapping[str, Any] | None = None,
+    new_game: Mapping[str, Any] | None = None,
+    lead_seed_id: str = "",
     database: Any | None = None,
 ) -> dict[str, Any]:
-    """Create a playable campaign without invoking World Forge or any model provider."""
+    """Create a playable campaign without invoking World Forge or any model provider.
+
+    ``new_game`` is the rest of a new game's request (the hero's class, stats and chosen gear), kept under what the
+    world decides; ``lead_seed_id`` is the opening's story seed the player chose to start with.
+    """
 
     revision, release, scenario = load_published_resources(
         world_id=world_id,
@@ -395,6 +417,7 @@ def launch_published_scenario(
     player_payload.setdefault("build", "balanced_adventurer")
     request = sessions.new_game_request(
         {
+            **dict(new_game or {}),
             "campaign_template": str(
                 canon.get("campaign_template") or "classic_fantasy"
             ),
@@ -417,7 +440,7 @@ def launch_published_scenario(
                 gameplay_payload.get("companions_enabled", True)
             ),
             "permadeath": bool(gameplay_payload.get("permadeath", False)),
-            "seed": int(world.get("seed") or 0),
+            "seed": int(dict(new_game or {}).get("seed") or world.get("seed") or 0),
             "features": dict(features or {}),
         }
     )
@@ -448,6 +471,7 @@ def launch_published_scenario(
         revision=revision,
         scenario=scenario,
         world=world,
+        lead_seed_id=lead_seed_id,
         present_at_start=tuple(
             actor.actor_id for actor in starting_snapshot.actors if actor.actor_id != protagonist_actor_id
         ),

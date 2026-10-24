@@ -846,11 +846,21 @@ def _create_new_game_session_base(request: RpgNewGameRequest) -> dict[str, Any]:
 
 
 def create_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
-    """Create a session with the progress envelope as the native contract."""
-    return create_new_game_session_with_progress(request)
+    """The classic new game: an opening of the starter world, The Market Road (roadmap §4.4), for the request's
+    starting place and opening hook, with the hero as the player made them; in the progress envelope."""
+    from app.apps.rpg.genesis.worlds.builtin_worlds import launch_starter
+
+    hook = _story_option(request, "opening_hook", "")
+    return _with_creation_progress(lambda: launch_starter(request, opening_hook=hook))
 
 
 def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[str, Any]:
+    """The campaign a world's launch fills in (its hero and sheet, before the world's opening), in the progress
+    envelope: what ``CampaignSessions.create_new_game`` creates."""
+    return _with_creation_progress(lambda: _create_new_game_session_base(request))
+
+
+def _with_creation_progress(create: Any) -> dict[str, Any]:
     """Create a new game and attach backend-authored progress/job status.
 
     Session creation must remain a fast launch path.  The creation job/progress
@@ -866,7 +876,7 @@ def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[st
     )
 
     timestamp = _utc_now()
-    result = _create_new_game_session_base(request)
+    result = create()
     session_id = str(result.get("session_id") or "")
     if result.get("ok") is not True:
         error = str(result.get("error") or "new_game_creation_failed")

@@ -103,7 +103,7 @@ def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> N
         [ticked] = [change for change in outcome.applied_changes if change.type == "world_ticked"]
         assert not ticked.simulation  # the outcome names what the tick replaced; the turn's patch carries it
         assert "environment" in ticked.summary["sections"]
-        assert ("causal_world_runtime" in ticked.summary["sections"]) == (world == "aurelia")  # pressures on a clock
+        assert ("causal_world_runtime" in ticked.summary["sections"]) == (world in {"aurelia", "starter"})  # pressures
         assert replayed["runtime_state"]["player_journal"] == after["runtime_state"]["player_journal"]
 
     monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_OFF", "look")  # kept off, look takes the older path

@@ -288,9 +288,11 @@ def main() -> None:
     os.environ.setdefault("OMNIX_RPG_TURNS_PER_HOUR", "0")
 
     from app.jobs import store as job_store
+    from app.persistence.repository_registry import register_feature_repositories
     from app.persistence.startup import bootstrap_postgresql_runtime
     from app.platform.chat.persistence.job_store import PostgresJobStoreAdapter
 
+    register_feature_repositories("rpg")  # as composition does: a classic new game installs the starter world
     bootstrap_postgresql_runtime()
     jobs = PostgresJobStoreAdapter()
     job_store.install_default_job_store_factory(lambda: jobs)

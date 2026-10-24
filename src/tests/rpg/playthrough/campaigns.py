@@ -111,7 +111,7 @@ def launch_vesper(tmp_path, monkeypatch, *, opening: str = "") -> tuple[str, str
 
 
 def new_starter_game(seed: int = 7) -> str:
-    """A classic new game in the starter town."""
+    """A classic new game: an opening of the starter world, The Market Road (installed on first use)."""
     from app.apps.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 
     return str(create_new_game_session(RpgNewGameRequest(seed=seed))["session_id"])

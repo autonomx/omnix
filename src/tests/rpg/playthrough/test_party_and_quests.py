@@ -10,13 +10,11 @@ pytestmark = POSTGRES
 NO_WORLD_MODEL = ("RQ-2.0: a lore-only world (Vesper-9) launches with an empty world model: no one is present at "
                   "its opening to ask")
 COMPANION = {"aurelia": ("Liora Fen", "npc:liora-fen", "go to Starfall Village"),
-             "starter": ("Mira", "npc:Mira", "go outside"),
+             "starter": ("Mira", "npc:mira", "go outside"),
              "vesper": ("Ines Vale", "npc:ines-vale", "go to Tidebreak Docks")}
 
 
-@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL, starter=(
-    "RQ-2.5: the starter town's companions are not present in its tavern scene, so asking Mira to join adds "
-    "no one")))
+@pytest.mark.parametrize("world", in_worlds(vesper=NO_WORLD_MODEL))
 def test_companion_joins_and_follows(launch, world) -> None:
     play = launch(world)
     name, npc_id, travel = COMPANION[world]

@@ -105,8 +105,8 @@ def test_a_v5_campaign_upgrades_once_as_a_system_turn_and_plays_on(launch, world
         assert artifacts["compiled_genesis"] == v5["setup_payload"]["compiled_genesis"]
         for section in ("setup_payload", "state", "runtime_state"):
             assert "bootstrap_snapshot" not in stored[section]
-    if world == "starter":
-        assert stored["state"]["world_binding"] == {"kind": "starter"}
+    if world == "starter":  # the classic new game is an opening of the starter world (RQ-2.8)
+        assert stored["state"]["world_binding"]["world_id"].startswith("world:the-market-road-")
 
     assert play.revision() == revision + 1  # opened again: upgraded once only
     play.turn("wait")
