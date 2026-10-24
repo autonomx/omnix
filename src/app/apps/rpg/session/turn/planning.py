@@ -14,7 +14,8 @@ from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
 PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "take", "rest",
-                           "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip"]
+                           "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip",
+                           "ability"]
 
 
 # What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).
@@ -31,6 +32,7 @@ class PlannedAction(BaseModel):
     ticks: int = 1
     reason: str = ""
     question: str = ""
+    second_target_id: str = ""  # an ability's target (the foe it is aimed at)
 
 
 def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedAction | None:
@@ -43,9 +45,16 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
         return PlannedAction(mechanic="clarify", ticks=0, reason=reading.reason, question=question)
     if len(reading.clauses) > 1:
         return None
+    if fighting and reading.reason == "attack_without_target":
+        return PlannedAction(mechanic="fight", ticks=0, reason="attack")  # "attack": the foe in front of the hero
     if reading.family == "attack" and (fighting or (reading.target_kind in {"creature", "person"} and reading.target_id)):
         # A creature the world knows or a person present, or in a fight the foe in front of the hero (combat.md).
         return PlannedAction(mechanic="fight", target_id=reading.target_id or "", ticks=0, reason="attack")
+    if reading.family == "ability" and reading.target_id and (fighting or reading.second_target_id):
+        # In a fight, or aimed at a foe present: what it does there is the ability rule's (combat.md).
+        return PlannedAction(mechanic="ability", target_id=reading.target_id, ticks=0,
+                             second_target_id=reading.second_target_id or "",
+                             reason="in_fight" if fighting else "opening")
     if reading.family == "defend" and fighting:
         return PlannedAction(mechanic="fight", ticks=0, reason="defend")
     if reading.family == "flee" and fighting:

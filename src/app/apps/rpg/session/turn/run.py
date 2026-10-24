@@ -15,6 +15,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_command
+from app.apps.rpg.rules.ability_use import known as known_abilities
 from app.apps.rpg.session.command_reading import read_command, reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
@@ -29,11 +30,11 @@ _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarifica
                 "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest",
                 "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
                 "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
-                "equip": "equip_item", "unequip": "unequip_item"}
+                "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
            "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
-           "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory"}
+           "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory", "ability": "combat"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
@@ -264,6 +265,26 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
     return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
 
 
+def _ability_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    """An ability from the play screen's hotbar in a fight: the ability rule's turn, its lines the game's own; what
+    cannot be used now refuses the request, with no turn taken."""
+    from dataclasses import replace
+
+    from app.apps.rpg.session.turn.resolution import resolve_turn
+
+    planned = PlannedAction(mechanic="ability", target_id=_s(action.get("ability")), ticks=0,
+                            second_target_id=_s(action.get("target")), reason="hotbar")
+    resolution = resolve_turn(planned, session, _s(ctx.player_input))
+    if resolution is None or resolution.refused:
+        detail = " ".join(resolution.lines) if resolution else "That ability does nothing in this fight."
+        return {"ok": False, "error": "ability_refused", "status_code": 409, "detail": detail}
+    resolution = replace(resolution, told=False, action_result={"kind": "ability", "ability": planned.target_id,
+                                                                "detail": " ".join(resolution.lines)})
+    reading = IntentCandidate(family="ability", target_id=planned.target_id, confidence=1.0, reason="hotbar")
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
 def _map_travel_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
     """A journey chosen on the world map: the travel rule's, its lines the game's own; a road that cannot be taken
     refuses the request, with no turn taken."""
@@ -305,6 +326,8 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
         return _loadout_turn(ctx, session, action, count)
     if action.get("type") == "map_travel":
         return _map_travel_turn(ctx, session, action)
+    if action.get("type") == "ability":
+        return _ability_turn(ctx, session, action)
     try:
         definition, snapshot = map_for_turn(_s(action.get("map_instance_id")), campaign_id=ctx.session_id)
         if action.get("type") == "tactical_move":
@@ -359,13 +382,16 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     possible = by_family.get(unseen.family) or (glance.mechanic if glance is not None else "")
     if not possible and "," in " ".join(_s(ctx.player_input).split()[:3]):
         possible = "order"  # someone named first ("Liora, keep watch") may be a companion given an order
+    if not possible and _s(ctx.player_input).casefold().split()[:1] in (["cast"], ["activate"], ["invoke"], ["unleash"]):
+        possible = "ability"  # the hero's abilities are their own names, which a reading against no scene lacks
     if not possible or not pipeline_enabled(possible):
         return ctx
     session = _load(ctx)
     if not session:
         return ctx
     simulation = _d(session.get("simulation_state"))
-    reading = read_command(simulation, ctx.player_input, _d(session.get("runtime_state")))
+    reading = read_command(simulation, ctx.player_input, _d(session.get("runtime_state")),
+                           abilities=tuple((_s(row.get("ability_id")), _s(row.get("name"))) for row in known_abilities(session)))
     planned = plan_action(reading, fighting=_d(simulation.get("combat_state")).get("active") is True)
     if planned is None or not pipeline_enabled(planned.mechanic):
         return ctx

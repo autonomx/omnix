@@ -20,9 +20,9 @@ from typing import Iterable, Literal
 Family = Literal[
     "look", "inspect", "move", "talk", "ask", "decline", "buy", "sell", "attack", "flee", "defend",
     "take", "drop", "give", "use_item", "equip", "unequip", "manipulate", "rest", "wait", "quest",
-    "practice", "party", "status", "order", "clarify",
+    "practice", "party", "status", "order", "clarify", "ability",
 ]
-EntityKind = Literal["person", "creature", "item", "place", "offer", "quest", "skill", "group"]
+EntityKind = Literal["person", "creature", "item", "place", "offer", "quest", "skill", "group", "ability"]
 
 # Families that change the campaign's state when carried out.
 STATEFUL_FAMILIES = frozenset(
@@ -333,6 +333,8 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
                           "declines")
     if words in (["yes"], ["yeah"], ["ok"], ["okay"], ["sure"], ["do", "it"], ["go"], ["yes", "please"]):
         return _clarify("bare_assent")
+    if len(words) == 1 and _starts(words, "attack", "fight", "strike"):
+        return _clarify("attack_without_target")  # in a fight, the foe in front of the hero
     if len(words) == 1 and _starts(words, *_BARE_VERBS):
         return _clarify("verb_without_object")
     if _starts(words, *_VAGUE) or (_has(words, "it", "them", "that") and len(words) <= 2):
@@ -435,6 +437,13 @@ def _parse_clause(text: str, scene: SceneView, *, original: str) -> IntentCandid
         return _candidate("equip", _first(words, scene, "item"), 0.85, "equips")
     if _starts(words, "take", "pick up", "grab", "collect", "loot", "snatch", "pocket") or _has(words, "pick up"):
         return _candidate("take", _first(words, scene, "item"), 0.8, "takes")
+    # One of the hero's abilities, by name after a verb ("use Aimed Shot on the wolf") or first ("Aimed Shot").
+    ability = _first(words, scene, "ability")
+    if ability and (ability.start == 0 or _starts(words, "use", "cast", "activate", "invoke", "unleash", "perform",
+                                                    "trigger", "channel", "fire off", "try")):
+        foe = _first(words, scene, "creature", "person", here=True)
+        return _candidate("ability", ability, 0.85, "uses_ability",
+                          second_target_id=foe.entity.entity_id if foe else None)
     if _starts(words, "eat", "drink", "consume", "use", "quaff", "apply", "swallow", "sip", "chew", "hold up",
                "have a bite", "take a bite", "nibble", "taste") or _has(words, "eat", "drink", "consume", "quaff"):
         item = _first(words, scene, "item")

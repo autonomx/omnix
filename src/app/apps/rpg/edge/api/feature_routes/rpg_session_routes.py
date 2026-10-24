@@ -185,6 +185,45 @@ def _attach_environment_snapshot_to_session(
 _LOADOUT_TURNS = {"use", "equip", "drop", "unequip"}
 
 
+def _in_a_fight(session_id: str) -> bool:
+    from app.apps.rpg.session.service import load_session
+
+    simulation = (load_session(session_id) or {}).get("simulation_state") or {}
+    return isinstance(simulation.get("combat_state"), dict) and simulation["combat_state"].get("active") is True
+
+
+def _ability_turn(session_id: str, request: Any) -> dict[str, Any]:
+    """An ability used from the hotbar in a fight (the older loadout's out of one, for its world effects): a
+    structured-action turn of the ability rule (RQ-2.6), answered as the loadout answers."""
+    import uuid
+
+    from app.apps.rpg.edge.api.payloads.player_view import player_session_view
+    from app.apps.rpg.edge.api.turn_pipeline import submit_rpg_turn
+    from app.apps.rpg.session.service import load_session
+
+    ability = str(request.ability_id or request.ability_name or request.hotbar_slot or "")
+    payload = submit_rpg_turn(
+        session_id=session_id, command=f"I use {request.ability_name or ability}.",
+        submission_id=f"ability:{uuid.uuid4().hex}", source="loadout",
+        action={"turn_kind": "structured_action", "type": "ability", "ability": ability,
+                "target": str(request.target or "")})
+    if payload.get("ok") is False:
+        detail = {key: value for key, value in payload.items() if key != "status_code"}
+        raise HTTPException(status_code=int(payload.get("status_code") or 400), detail=detail)
+    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
+    answer = outcome.get("action_result") if isinstance(outcome.get("action_result"), dict) else {}
+    saved = load_session(session_id)
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "status": "ready",
+        "event": {"title": f"Use {request.ability_name or ability}", "detail": str(answer.get("detail") or ""),
+                  "kind": "ability"},
+        "session": player_session_view(saved),
+        "game": saved.get("state", {}),
+    }
+
+
 def _loadout_turn(session_id: str, request: Any) -> dict[str, Any]:
     """A loadout pack action as a structured-action turn, answered as the loadout answers."""
     import uuid
@@ -531,6 +570,8 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
     ) -> dict[str, Any]:
         if request.action in _LOADOUT_TURNS and request.item_name:
             return _with_environment_snapshot(_loadout_turn(session_id, request))
+        if request.action in {"use_ability", "hotbar"} and _in_a_fight(session_id):
+            return _with_environment_snapshot(_ability_turn(session_id, request))
         return _with_environment_snapshot(
             _raise_for_error(
                 apply_loadout_action(session_id, request),

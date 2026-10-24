@@ -32,6 +32,7 @@ from app.apps.rpg.foundation.state.changes import (
     StateChange,
 )
 from app.apps.rpg.rules import routines
+from app.apps.rpg.rules.ability_use import FightEffect
 from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition, instantiate_campaign_creature
 from app.apps.rpg.rules.combat.exchange_lines import describe_combat_exchange
 from app.apps.rpg.rules.combat.runtime_core import (
@@ -65,7 +66,8 @@ MINUTES_PER_TURN = 1
 GUARD_BONUS = 2  # defending: added to the hero's defence until their next turn
 # Attacking someone: how far they, and everyone who sees it, trust the hero less (combat.md).
 ATTACKED_REGARD, WITNESS_REGARD = -40, -15
-Action = Literal["attack", "flee", "defend", "pass"]  # pass: the hero's turn went on something else (a potion)
+# pass: the hero's turn went on something else (a potion); ability: one of the hero's, its effect given
+Action = Literal["attack", "flee", "defend", "ability", "pass"]
 
 # A person's fighting numbers by what they do (the world rates its creatures, not its people): combat.md.
 _PERSON_NUMBERS = {
@@ -119,8 +121,9 @@ def _conditions(simulation: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]
 def _numbers(simulation: Mapping[str, Any], combat: Mapping[str, Any], actor_id: str) -> dict[str, int]:
     row = participant(dict(combat), actor_id)
     if _s(row.get("side")) == "enemy":
+        hindered = int(_d(row.get("hindered")).get("accuracy") or 0)  # an ability's hindrance, while it lasts
         return {"damage_min": max(1, int(row.get("damage_min") or 1)), "damage_max": max(1, int(row.get("damage_max") or 3)),
-                "accuracy_bonus": int(row.get("accuracy_bonus") or 0), "encumbrance_penalty": 0}
+                "accuracy_bonus": int(row.get("accuracy_bonus") or 0) - hindered, "encumbrance_penalty": 0}
     stats = _d(project_equipment_stats(dict(simulation), actor_id=actor_id).get("stats"))
     return {"damage_min": max(1, int(stats.get("damage_min") or 1)), "damage_max": max(1, int(stats.get("damage_max") or 2)),
             "accuracy_bonus": int(stats.get("accuracy_bonus") or 0),
@@ -178,9 +181,12 @@ def _penalty(conditions: Mapping[str, list[dict[str, Any]]], actor_id: str) -> i
 
 def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: dict[str, list[dict[str, Any]]],
             actor_id: str, target_id: str, *, kind: str = "attack", disadvantage: bool = False,
-            cover: int = 0) -> dict[str, Any]:
-    """One blow, applied to the combat section (and a heavy one's wound to ``conditions``)."""
+            cover: int = 0, sharper: int = 0, harder: int = 0) -> dict[str, Any]:
+    """One blow, applied to the combat section (and a heavy one's wound to ``conditions``); an ability's blow is
+    ``sharper`` (to hit) and ``harder`` (its damage)."""
     numbers = _numbers(simulation, combat, actor_id)
+    numbers = {**numbers, "accuracy_bonus": numbers["accuracy_bonus"] + sharper,
+               "damage_min": numbers["damage_min"] + harder, "damage_max": numbers["damage_max"] + harder}
     target = participant(combat, target_id)
     roll = deterministic_roll(combat_seed(combat, kind, actor_id, target_id), 1, 20)
     if disadvantage:
@@ -246,6 +252,13 @@ def _until_hero(simulation: Mapping[str, Any], combat: dict[str, Any], condition
             ended = _settle(combat)
             if ended:
                 return blows, ended
+        hindered = _d(actor.get("hindered"))
+        if hindered:  # an ability's hindrance wears off with the turns it lasts
+            left = int(hindered.get("turns") or 0) - 1
+            if left > 0:
+                actor["hindered"] = {**hindered, "turns": left}
+            else:
+                actor.pop("hindered", None)
         _advance(combat)
     return blows, ""
 
@@ -385,7 +398,7 @@ def _defeat(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
 
 # -- the turn -----------------------------------------------------------------------------------------------------------
 def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = "", turn_key: str = "",
-          cover: int = 0) -> FightTurn | None:
+          cover: int = 0, ability: FightEffect | None = None, ability_name: str = "") -> FightTurn | None:
     """One turn of a fight; ``None`` when the target is neither a creature the world knows nor a person present
     (the older path's).
 
@@ -428,6 +441,25 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
         participant(combat, "player")["guarding"] = True
         report["reason"] = "combat_defended"
         _advance(combat)
+    elif not ended and action == "ability":
+        effect = ability or FightEffect()
+        target_id = _named(combat, target_ref) or default_target_for_actor(combat, "player")
+        report.update(ability=ability_name, opening=report.get("reason") == "combat_started")
+        if effect.heal:
+            hero = participant(combat, "player")
+            before = int(hero.get("hp") or 0)
+            hero["hp"] = min(int(hero.get("max_hp") or before), before + effect.heal)
+            report["healed"] = int(hero["hp"]) - before
+        if effect.hinder and target_id:
+            participant(combat, target_id)["hindered"] = {"accuracy": effect.hinder, "turns": effect.hinder_turns}
+            report["hindered_id"] = target_id
+        if effect.strikes and target_id:
+            report.update(_strike(simulation, combat, conditions, "player", target_id, cover=cover,
+                                  sharper=effect.accuracy_bonus, harder=effect.damage_bonus))
+        report["reason"] = "combat_ability"
+        ended = _settle(combat)
+        if not ended:
+            _advance(combat)
     elif not ended and action == "attack":
         target_id = _named(combat, target_ref) or default_target_for_actor(combat, "player")
         blow = _strike(simulation, combat, conditions, "player", target_id, cover=cover)

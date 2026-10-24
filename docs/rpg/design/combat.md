@@ -33,8 +33,15 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
 - **The end.** Every foe down: victory; a person beaten yields (alive), for no experience or spoils; each creature
   earns the experience of each (its `xp_value`, or 25 a level where the
   world gives none), and each loot drop on its seeded chance into the pack. The party down: defeat (stakes.md). Fled: nothing.
-- **In a fight** the hero strikes, breaks away, defends (their defence +2 until their next turn), or uses something
-  carried (a potion), which spends their turn
+- **Abilities.** One of the hero's unlocked abilities, by name ("use Aimed Shot on the wolf", "cast Frost Arrow")
+  or from the hotbar, is ready once its cooldown (in the hero's turns) is over and paid for in stamina or mana. What
+  it does in a fight is its effects': a health-damage effect is a blow, +1 damage for every 4 points and sharper by
+  its attack check's bonus; a heal restores the hero's health; a negative check on an enemy hinders the target's
+  blows by that much for its turns. Aimed at a foe outside a fight, a striking ability opens the fight with it. An
+  ability that is not ready, or not paid for, is refused in the game's words. Out of a fight, an ability with only
+  world effects (a clue, a rumour) is the older path's until RQ-2.10.
+- **In a fight** the hero strikes ("attack" alone strikes the foe in front of them), breaks away, defends (their
+  defence +2 until their next turn), uses an ability, or uses something carried (a potion), which spends their turn
   before the others act; the party's health is the party's, so a heal between blows holds. Leaving, resting,
   waiting, trading, talking it over or picking things up is refused in the game's own words; the turn is counted
   and nothing else changes.
@@ -50,7 +57,8 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
 
 ## State it changes
 
-`CombatAdvanced` (the combat section as the turn leaves it), `RegardChanged` (attacking a person), `HpChanged`, `CompanionHpChanged`, `ConditionsChanged`
+`CombatAdvanced` (the combat section as the turn leaves it), `RegardChanged` (attacking a person), `AbilityUsed` and
+`ResourcesChanged` (an ability's cooldown and cost), `HpChanged`, `CompanionHpChanged`, `ConditionsChanged`
 (wounds; battered on defeat), `ExperienceGained` and `LevelReached`, `ItemAdded` (loot), and on defeat
 `DefeatRecorded`, `PurseChanged`, `ItemRemoved`, `LocationChanged`, `PresenceChanged`, or `CampaignEnded` in
 hardcore; `TurnCounted`, `TimeAdvanced`.
@@ -68,5 +76,5 @@ costs trust, and beaten they yield for nothing; a companion is not turned on; de
 
 ## Out of scope (RQ-2.6 part 2)
 
-Abilities and their costs, ammunition, companion commands mid-fight, reactions on the grid (a blow at a foe moving
+Ammunition, companion commands mid-fight, reactions on the grid (a blow at a foe moving
 out of reach), creatures placed on the grid when a fight starts, guards joining a fight in their town.

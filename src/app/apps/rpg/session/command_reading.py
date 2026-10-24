@@ -43,8 +43,10 @@ def _label(entity_id: str) -> str:
     return entity_id.rsplit(":", 1)[-1].replace("_", " ").replace("-", " ")
 
 
-def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, Any] | None = None) -> SceneView:
-    """The scene the player stands in, as the command grammar reads it (with whom they are talking to)."""
+def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, Any] | None = None,
+               abilities: tuple[tuple[str, str], ...] = ()) -> SceneView:
+    """The scene the player stands in, as the command grammar reads it (with whom they are talking to, and the
+    hero's abilities, as ``(ability_id, name)``)."""
     state = _d(simulation_state)
     world = _d(state.get("world_model"))
     location_id = _s(_d(state.get("player_state")).get("location_id") or state.get("location_id"))
@@ -92,6 +94,8 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
         quest = _d(quest)
         add(_s(quest.get("quest_id") or quest.get("id")), "quest", _names(quest.get("title")), True)
     focus = _s(_d(_d(runtime_state).get("dialogue_focus")).get("target_id"))
+    for ability_id, name in abilities:
+        add(ability_id, "ability", (name,), False)
     return SceneView(tuple(entities), focus_id=focus if focus in present else "")
 
 
@@ -99,8 +103,9 @@ def read_command(
     simulation_state: Mapping[str, Any],
     player_input: str,
     runtime_state: Mapping[str, Any] | None = None,
+    abilities: tuple[tuple[str, str], ...] = (),
 ) -> IntentCandidate:
-    return parse_command(player_input, scene_view(simulation_state, runtime_state))
+    return parse_command(player_input, scene_view(simulation_state, runtime_state, abilities))
 
 
 def skip_reason(reading: IntentCandidate) -> str:

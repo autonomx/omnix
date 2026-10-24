@@ -36,6 +36,8 @@ camp in the wild, restores the hero; a short rest takes the edge off.
 
   Where rooms are for rent and the hero has none, sleeping is refused with the offer: a bed costs coin here.
   A **full rest** makes the place the hero's rest point, ends `battered`, and brings a wound a night nearer healing.
+  Stamina and mana (what abilities spend) come back in full with a night's rest, and by health's share with a short
+  one (`ResourcesChanged`).
 - Needs rise once per turn for a rest's turn (the `rest` survival profile); time passes on the clock (time.md).
 
 ## State it changes

@@ -55,7 +55,9 @@ from .changes import (
     TimeAdvanced,
     TradeRemembered,
     TurnCounted,
+    AbilityUsed,
     RegardChanged,
+    ResourcesChanged,
     WhereaboutsChanged,
     WorldTicked,
 )
@@ -350,6 +352,21 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
                 "location_id": change.location_id, "location_name": name, "title": name,
                 "summary": str(place.get("description") or name), "present_npc_ids": list(change.present_npc_ids),
                 "actors": [person["name"] for person in here]})
+    elif isinstance(change, ResourcesChanged):
+        for name, delta in (("stamina", change.stamina), ("mana", change.mana)):
+            if not delta:
+                continue
+            pool = writer.get(_PLAYER + ("resources", name)) or writer.get(("state", "player", "resources", name))
+            pool = dict(pool) if isinstance(pool, dict) else {"current": 0, "max": 0}
+            pool["current"] = max(0, min(int(pool.get("max") or 0), int(pool.get("current") or 0) + delta))
+            writer.set(_PLAYER + ("resources", name), pool)
+            if isinstance(writer.get(("state", "player")), dict):  # the play screen's sheet shows it
+                writer.set(("state", "player", "resources", name), dict(pool))
+    elif isinstance(change, AbilityUsed):
+        ready = dict(writer.get(("state", "ability_state", "ready_at")) or {})
+        ready[change.ability_id] = change.ready_at_turn
+        writer.set(("state", "ability_state", "ready_at"), ready)
+        _show_cooldowns(writer)
     elif isinstance(change, RegardChanged):
         kept = writer.get(("simulation_state", "relationship_state", change.npc_id))
         kept = dict(kept) if isinstance(kept, dict) else {}
@@ -368,6 +385,8 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         for path in (("manifest", "turn_count"), ("manifest", "current_turn"), ("state", "turn_count"),
                      ("state", "current_turn")):
             writer.set(path, change.turn_count)
+        if writer.get(("state", "ability_state", "ready_at")):
+            _show_cooldowns(writer)  # each counted turn brings the hero's abilities nearer to ready
     elif isinstance(change, WorldTicked):
         for key, value in change.simulation.items():
             writer.set(("simulation_state", key), value)
@@ -515,6 +534,14 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             "tick": int(writer.get(("simulation_state", "tick")) or 0)})
     else:  # pragma: no cover - the vocabulary is closed
         raise ChangeRejected(f"unknown change {change!r}")
+
+
+def _show_cooldowns(writer: _Writer) -> None:
+    """The play screen's cooldowns: the hero's turns left before each ability is ready again."""
+    turn = int(writer.get(("state", "turn_count")) or 0)
+    ready = writer.get(("state", "ability_state", "ready_at")) or {}
+    writer.set(("state", "ability_state", "cooldowns"),
+               {str(ability_id): int(at) - turn - 1 for ability_id, at in ready.items() if int(at) - turn - 1 > 0})
 
 
 def _show_regard(writer: _Writer, name: str, trust: int) -> None:

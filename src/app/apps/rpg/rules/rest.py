@@ -15,6 +15,7 @@ from app.apps.rpg.foundation.state.changes import (
     ConditionsChanged,
     HpChanged,
     NeedsChanged,
+    ResourcesChanged,
     RestTaken,
     ServiceUsed,
     StateChange,
@@ -107,6 +108,12 @@ def rest(simulation: Mapping[str, Any], text: str) -> RestOutcome:
     changes: list[StateChange] = [NeedsChanged(fatigue=fatigue)]
     if restored > 0:
         changes.append(HpChanged(delta=restored))
+    # Stamina and mana (what the hero's abilities spend) come back in full with a night's rest, else by health's share.
+    pools = {name: _d(_d(player.get("resources")).get(name)) for name in ("stamina", "mana")}
+    back = {name: int((int(pool.get("max") or 0) - int(pool.get("current") or 0)) * (1 if full else share))
+            for name, pool in pools.items()}
+    if back["stamina"] > 0 or back["mana"] > 0:
+        changes.append(ResourcesChanged(stamina=back["stamina"], mana=back["mana"], reason="rest"))
     if room:
         changes.append(ServiceUsed(offer_id=_s(room.get("offer_id"))))
     if full:

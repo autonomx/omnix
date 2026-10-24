@@ -151,3 +151,31 @@ def test_a_companion_is_not_turned_on(launch) -> None:
     refused = play.turn("I attack Liora Fen.")
     assert "You will not turn on Liora Fen." in refused["visible_response"]["plain_text"]
     assert play.combat().get("active") is not True
+
+
+def test_abilities_in_a_fight_cost_cool_down_and_act(launch) -> None:
+    """RQ-2.6 part 2: an ability aimed at a foe opens the fight with it; it costs its stamina or mana and cools down
+    for its turns; a control ability hinders the foe; the hotbar uses the same rule in a fight; a rest restores the
+    pools; and a bare "attack" in a fight strikes the foe in front of the hero."""
+    play = launch("aurelia")
+    opened = play.turn("use Aimed Shot on the Echo Wolf")
+    text = opened["visible_response"]["plain_text"]
+    assert text.startswith("The fight begins: you against the Echo Wolf.") and "You use Aimed Shot." in text
+    assert play.public()["player"]["resources"]["stamina"]["current"] == 90
+    assert play.stored()["state"]["ability_state"]["cooldowns"] == {"recon_aimed_shot": 1}
+    again = play.turn("use Aimed Shot on the Echo Wolf")
+    assert again["visible_response"]["plain_text"] == "Aimed Shot is not ready yet (1 more turn)."
+    frost = play.client.post(f"/api/rpg/sessions/{play.session_id}/loadout-action",
+                             json={"action": "use_ability", "ability_name": "Frost Arrow"})
+    assert frost.status_code == 200, frost.text[:300]
+    assert "The Echo Wolf is hindered." in frost.json()["event"]["detail"]
+    assert play.public()["player"]["resources"]["mana"]["current"] == 18
+    struck = play.turn("attack")
+    assert struck["outcome"]["planned_action"] == "fight"
+    for _ in range(20):
+        if not play.combat().get("active"):
+            break
+        play.turn("attack")
+    play.turn("I make camp and sleep for the night.")
+    resources = play.public()["player"]["resources"]
+    assert resources["stamina"]["current"] == 100 and resources["mana"]["current"] == 30

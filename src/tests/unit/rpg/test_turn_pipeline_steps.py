@@ -113,14 +113,16 @@ def test_mechanics_can_be_kept_on_the_older_path(monkeypatch) -> None:
     assert not pipeline_enabled("wait") and not pipeline_enabled("rest") and pipeline_enabled("look")
 
 
-def test_an_unclear_command_is_planned_as_the_games_question_and_a_bare_attack_in_a_fight_is_not() -> None:
+def test_an_unclear_command_is_planned_as_the_games_question_and_a_bare_attack_in_a_fight_strikes() -> None:
     from app.apps.rpg.rules.intent.grammar import SceneView, parse_command
 
     unclear = parse_command("I talk to him.", SceneView(()))
     plan = plan_action(unclear)
     assert (plan.mechanic, plan.question, plan.ticks) == ("clarify", "Who are you speaking to?", 0)
     no_target = IntentCandidate("clarify", confidence=0.9, reason="attack_without_target")
-    assert plan_action(no_target).mechanic == "clarify" and plan_action(no_target, fighting=True) is None
+    assert plan_action(no_target).mechanic == "clarify"
+    assert (plan_action(no_target, fighting=True).mechanic, plan_action(no_target, fighting=True).reason) == (
+        "fight", "attack")  # the foe in front of the hero (combat.md)
 
 
 def test_a_question_back_is_a_counted_turn_in_which_no_time_passes() -> None:

@@ -189,6 +189,24 @@ class DialogueExchanged(_Change):
     npc_line: str = ""
 
 
+class ResourcesChanged(_Change):
+    """The hero's stamina and mana spent (an ability) or restored (a rest), within their pools."""
+
+    type: Literal["resources_changed"] = "resources_changed"
+    stamina: int = 0
+    mana: int = 0
+    reason: str = ""
+
+
+class AbilityUsed(_Change):
+    """An ability of the hero's used: ready again from ``ready_at_turn`` (its cooldown, in the hero's turns)."""
+
+    type: Literal["ability_used"] = "ability_used"
+    ability_id: str = Field(min_length=1)
+    name: str = ""
+    ready_at_turn: int = Field(ge=0)
+
+
 class RegardChanged(_Change):
     """How far someone trusts the hero moved (an attack, seen or suffered), from -100 to 100."""
 
@@ -376,7 +394,7 @@ StateChange = Annotated[
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
-    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged,
+    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

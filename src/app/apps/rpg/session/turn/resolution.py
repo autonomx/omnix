@@ -10,9 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from app.apps.rpg.foundation.safe_values import safe_dict as _d
+from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import StateChange, TimeAdvanced, TurnCounted
 from app.apps.rpg.foundation.state.reducer import reduce
+from app.apps.rpg.rules import ability_use
 from app.apps.rpg.rules.combat.fight import fight
 from app.apps.rpg.rules.interactions.items import drop_item, equip_item, pick_up, unequip_item, use_item
 from app.apps.rpg.rules.player.requests import accept_quest, join, leave, order, practise, status
@@ -48,6 +49,30 @@ def _timed(document: Mapping[str, Any], changes: list[StateChange], minutes: int
     return [_counted(document), *([TimeAdvanced(ticks=ticks, minutes=minutes)] if minutes else []), *changes]
 
 
+def _ability(planned: PlannedAction, session: Mapping[str, Any], simulation: Mapping[str, Any]) -> Resolution | None:
+    """One of the hero's abilities in a fight, or aimed at a foe to open one (combat.md); out of a fight, an ability
+    that is no blow (its world effects) is the older path's."""
+    ability = ability_use.find(session, planned.target_id)
+    if ability is None:
+        return None
+    effect = ability_use.in_fight(ability)
+    if _d(simulation.get("combat_state")).get("active") is not True and not effect.strikes:
+        return None
+    refusal = ability_use.not_ready(session, ability)
+    if refusal:
+        return Resolution([_counted(session)], [refusal], refused=True, told=False)
+    spent = ability_use.spend(session, ability)
+    paid, _ = reduce(dict(session), spent)
+    turn = fight(_d(paid.get("simulation_state")), action="ability", target_ref=planned.second_target_id,
+                 turn_key=str(_counted(session).turn_count), ability=effect, ability_name=_s(ability.get("name")))
+    if turn is None:
+        return None  # aimed at something that cannot be fought
+    if turn.refused:
+        return Resolution([_counted(session)], turn.lines, refused=True, told=False)
+    return Resolution(_timed(session, [*spent, *turn.changes], turn.minutes), turn.lines, minutes=turn.minutes,
+                      needs="standard_turn")
+
+
 def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) -> Resolution | None:
     mechanic = planned.mechanic
     if mechanic in {"look", "wait", "clarify"}:
@@ -76,6 +101,8 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return Resolution(_timed(session, turn.changes, turn.minutes), turn.lines, minutes=turn.minutes,
                           refused=turn.refused, needs=None if turn.refused else "standard_turn",
                           told=not turn.refused)
+    if mechanic == "ability":
+        return _ability(planned, session, simulation)
     if mechanic in {"use_item", "drop", "take", "equip", "unequip"}:
         rule = {"use_item": use_item, "drop": drop_item, "take": pick_up, "equip": equip_item,
                 "unequip": unequip_item}[mechanic]
