@@ -34,7 +34,8 @@ def _campaign(**simulation):
     (IntentCandidate("wait", confidence=0.9, reason="waits"), "wait"),
     (IntentCandidate("look", confidence=0.5), None),  # not confident: the older path decides
     (IntentCandidate("wait", confidence=0.9, clauses=("wait", "look")), None),  # two steps
-    (IntentCandidate("buy", target_id="offer:bread", target_kind="offer", confidence=0.9), None),  # not moved yet
+    (IntentCandidate("buy", target_id="offer:bread", target_kind="offer", confidence=0.9), "trade"),
+    (IntentCandidate("sell", target_id="item:dagger", target_kind="item", confidence=0.9), None),  # not moved yet
 ])
 def test_only_confident_single_step_look_and_wait_are_planned(reading, planned) -> None:
     plan = plan_action(reading)

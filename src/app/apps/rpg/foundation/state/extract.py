@@ -179,5 +179,5 @@ CHANGE_SECTIONS: dict[str, str] = {
     "time_advanced": "time", "turn_counted": "time", "needs_changed": "survival",
     "quest_status_changed": "quests", "quest_place_reached": "quests", "companion_joined": "party",
     "companion_left": "party", "combat_started": "combat", "combatant_hp_changed": "combat", "combat_ended": "combat",
-    "world_ticked": "world", "journal_written": "narrative",
+    "world_ticked": "world", "journal_written": "narrative", "trade_recorded": "economy",
 }

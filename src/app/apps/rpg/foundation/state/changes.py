@@ -205,6 +205,33 @@ class WorldTicked(_Change):
         return self
 
 
+# What a trade's living-world effects own (rules/economy, world/memory): who remembers it, how they feel about the
+# hero, the ledger, the offers' stock, a room reserved, the offer it closes, the event it makes. Replaced whole until
+# their mechanics say what they change in typed terms.
+TRADE_SECTIONS = frozenset({
+    "memory_state", "npc_emotion_state", "relationship_state", "transaction_history", "world_event_state",
+    "service_offer_state", "pending_interactions", "active_services",
+})
+
+
+class TradeRecorded(_Change):
+    """A trade's mark on the world: the sections its living-world effects own, as they left them."""
+
+    type: Literal["trade_recorded"] = "trade_recorded"
+    simulation: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _owned(self) -> "TradeRecorded":
+        stray = set(self.simulation) - TRADE_SECTIONS
+        if stray:
+            raise ValueError(f"a trade does not own {sorted(stray)}")
+        return self
+
+    def reported(self) -> "TradeRecorded":
+        return TradeRecorded(summary={**self.summary, "sections": sorted(self.simulation)})
+
+
 class JournalWritten(_Change):
     """The turn in the player's journal and on the campaign calendar, as the journal keeper left them."""
 
@@ -217,7 +244,7 @@ StateChange = Annotated[
     PurseChanged | ItemAdded | ItemRemoved | ItemDropped | ItemPickedUp | ItemEquipped | ItemUnequipped
     | HpChanged | ExperienceGained | SkillProgressed | LocationChanged | PresenceChanged | TimeAdvanced
     | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
-    | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten,
+    | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | TradeRecorded,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

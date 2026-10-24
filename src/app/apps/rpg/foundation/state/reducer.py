@@ -39,6 +39,7 @@ from .changes import (
     StateChange,
     JournalWritten,
     TimeAdvanced,
+    TradeRecorded,
     TurnCounted,
     WorldTicked,
 )
@@ -329,6 +330,9 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             writer.set(("state", "world", "environment"), environment)
             writer.set(("state", "world", "time"),
                        f"Day {minutes // 1440 + 1} • {minutes % 1440 // 60:02d}:{minutes % 60:02d}")
+    elif isinstance(change, TradeRecorded):
+        for key, value in change.simulation.items():
+            writer.set(("simulation_state", key), value)
     elif isinstance(change, JournalWritten):
         writer.set(("runtime_state", "campaign_calendar"), change.calendar)
         writer.set(("runtime_state", "player_journal"), change.journal)

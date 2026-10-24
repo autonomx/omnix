@@ -13,7 +13,7 @@ from app.apps.rpg.rules.intent.grammar import IntentCandidate
 from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
-PipelineMechanic = Literal["look", "wait", "clarify", "travel"]
+PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade"]
 
 
 class PlannedAction(BaseModel):
@@ -35,7 +35,11 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
     question = clarification(reading)
     if question and not (fighting and reading.reason == "attack_without_target"):
         return PlannedAction(mechanic="clarify", ticks=0, reason=reading.reason, question=question)
-    if reading.confidence < SKIP_CONFIDENCE or len(reading.clauses) > 1:
+    if len(reading.clauses) > 1:
+        return None
+    if reading.family == "buy":  # which offer is the economy's to say (the service resolver), so any reading
+        return PlannedAction(mechanic="trade", reason=reading.reason)
+    if reading.confidence < SKIP_CONFIDENCE:
         return None
     if reading.family == "look":
         return PlannedAction(mechanic="look", target_id=reading.target_id or "", reason=reading.reason)

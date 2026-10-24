@@ -83,7 +83,7 @@
     },
     {
       "blocks": [
-        "result||You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.",
+        "action||You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.",
         "result||Consequence: You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete.",
         "choice||Offered choice: You pay 3 silver to Brindle Gearwing for Healing Potion. The transaction is complete."
       ],
@@ -148,7 +148,7 @@
     },
     {
       "blocks": [
-        "result||You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.",
+        "action||You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.",
         "result||Consequence: You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger.",
         "choice||Offered choice: You pay 8 copper to Orik Stonewake for A hot meal. The transaction is complete. It eases your hunger."
       ],
@@ -159,20 +159,21 @@
     {
       "blocks": [
         "action||You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
+        "result||Consequence: You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
         "choice||Offered choice: You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete."
       ],
       "step": "I rent a room for the night from Orik Stonewake.",
-      "told": "You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete. You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
-      "visible": "You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete."
+      "told": "You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete. You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete. You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.",
+      "visible": "You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete.\n\nConsequence: You pay 5 silver to Orik Stonewake for A night's lodging. The transaction is complete."
     },
     {
       "blocks": [
-        "action||You use A night's lodging and rest for 22 hours. The reserved service is consumed.",
-        "choice||Offered choice: You use A night's lodging and rest for 22 hours. The reserved service is consumed."
+        "action||You use A night's lodging and rest for 21 hours. The reserved service is consumed.",
+        "choice||Offered choice: You use A night's lodging and rest for 21 hours. The reserved service is consumed."
       ],
       "step": "I go to my room and sleep for the night.",
-      "told": "You use A night's lodging and rest for 22 hours. The reserved service is consumed. You use A night's lodging and rest for 22 hours. The reserved service is consumed.",
-      "visible": "You use A night's lodging and rest for 22 hours. The reserved service is consumed."
+      "told": "You use A night's lodging and rest for 21 hours. The reserved service is consumed. You use A night's lodging and rest for 21 hours. The reserved service is consumed.",
+      "visible": "You use A night's lodging and rest for 21 hours. The reserved service is consumed."
     },
     {
       "blocks": [

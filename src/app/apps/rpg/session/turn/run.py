@@ -11,24 +11,27 @@ from typing import Any
 
 from app.config.env import env_bool
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
-from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, WorldTicked
+from app.apps.rpg.foundation.state.changes import JournalWritten, StateChange, TimeAdvanced, TradeRecorded, WorldTicked
 from app.apps.rpg.foundation.state.reducer import reduce
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, parse_command
 from app.apps.rpg.session.command_reading import read_command, reading_record
 from app.apps.rpg.session.turn.planning import PlannedAction, plan_action
 from app.apps.rpg.session.turn.request import TurnRequest
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
+from app.apps.rpg.session.turn.trade import TradeResolution, resolve_trade
 from app.apps.rpg.session.turn.travel import resolve_travel
 from app.apps.rpg.session.turn.world_tick import MINUTES_PER_TICK, world_tick
 
 # One setting per mechanic on the pipeline, for development and the operator: on once its scenarios pass on the
 # pipeline, and removed one release after that.
 TRAVEL_SETTING = "OMNIX_RPG_TURN_PIPELINE_TRAVEL"
+TRADE_SETTING = "OMNIX_RPG_TURN_PIPELINE_TRADE"
 LOOK_SETTING = "OMNIX_RPG_TURN_PIPELINE_LOOK"
 WAIT_SETTING = "OMNIX_RPG_TURN_PIPELINE_WAIT"
 CLARIFY_SETTING = "OMNIX_RPG_TURN_PIPELINE_CLARIFY"
-_ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel"}
-_FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel"}
+_ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
+                "trade": "service_purchase"}
+_FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel", "trade": "commerce"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
@@ -41,6 +44,8 @@ def pipeline_enabled(mechanic: str) -> bool:
         return env_bool(CLARIFY_SETTING, True)
     if mechanic == "travel":
         return env_bool(TRAVEL_SETTING, True)
+    if mechanic == "trade":
+        return env_bool(TRADE_SETTING, True)
     return False
 
 
@@ -71,11 +76,14 @@ def run_planned_turn(
     request: TurnRequest,
     planned: PlannedAction,
     reading: IntentCandidate,
+    trade: TradeResolution | None = None,
 ) -> dict[str, Any]:
     """Resolve, apply and tick one planned turn against the turn-start campaign; the result for the commit."""
     stated: list[str] | None = None
     refused = False
-    if planned.mechanic == "travel":
+    if trade is not None:
+        changes, stated, minutes, refused = trade.changes, trade.lines, trade.minutes, trade.refused
+    elif planned.mechanic == "travel":
         travel = resolve_travel(planned, session)
         changes, stated, minutes, refused = travel.changes, travel.lines, travel.minutes, travel.refused
     else:
@@ -93,8 +101,10 @@ def run_planned_turn(
         document, _ = reduce(document, tick_changes)
     lines = stated if stated is not None else outcome_lines(planned, document)
     applied = [*changes, *tick_changes]
-    answered = planned.mechanic == "clarify" or refused  # the game's own line: no journal entry, no model call
-    if not answered:
+    # The game's own line, with no model call: a question back, or a journey refused. A trade, refused or not, is
+    # told to the narrator, as the older path told it.
+    answered = planned.mechanic == "clarify" or (refused and trade is None)
+    if planned.mechanic != "clarify" and not refused:  # a question back or a refusal is no entry in the journal
         journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
         document, _ = reduce(document, [journal])
         applied.append(journal)
@@ -133,7 +143,7 @@ def run_planned_turn(
             "planned": planned.model_dump(mode="json"),
             "intent": reading_record(reading),
             # As the outcome reports them: a world tick's summary, not the sections it replaced (the patch has those).
-            "changes": [(change.reported() if isinstance(change, WorldTicked) else change).model_dump(mode="json")
+            "changes": [(change.reported() if isinstance(change, (WorldTicked, TradeRecorded)) else change).model_dump(mode="json")
                         for change in applied],
         },
     }
@@ -189,7 +199,7 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
         "source": SOURCE, "response_mode": "world_tick", "resolved_result": resolved, "result": dict(resolved),
         "causal_world_runtime": causal, "world_tick": {"elapsed_seconds": seconds, "ticks": ticks},
         "turn_pipeline": {"kind": "world_tick", "mechanic": "world_tick",
-                          "changes": [(change.reported() if isinstance(change, WorldTicked) else change)
+                          "changes": [(change.reported() if isinstance(change, (WorldTicked, TradeRecorded)) else change)
                                       .model_dump(mode="json") for change in changes]},
     }
     from app.apps.rpg.narration.narrative_engine import BeatKind, BeatPurpose
@@ -238,11 +248,14 @@ def apply_planned_turn_stage(ctx: Any) -> Any:
     if planned is None or not pipeline_enabled(planned.mechanic):
         return ctx
     request = TurnRequest(kind="player_text", session_id=ctx.session_id, text=_s(ctx.player_input))
-    ctx.result = run_planned_turn(session, request=request, planned=planned, reading=reading)
+    trade = resolve_trade(session, request.text) if planned.mechanic == "trade" else None
+    if planned.mechanic == "trade" and trade is None:
+        return ctx  # not a trade the pipeline makes: the older path answers
+    ctx.result = run_planned_turn(session, request=request, planned=planned, reading=reading, trade=trade)
     ctx.result.setdefault("trace_id", ctx.trace_id)
     ctx.resolved = True
     return ctx
 
 
-__all__ = ["CLARIFY_SETTING", "LOOK_SETTING", "TRAVEL_SETTING", "WAIT_SETTING", "apply_planned_turn_stage", "pipeline_enabled",
+__all__ = ["CLARIFY_SETTING", "LOOK_SETTING", "TRADE_SETTING", "TRAVEL_SETTING", "WAIT_SETTING", "apply_planned_turn_stage", "pipeline_enabled",
            "run_planned_turn", "run_world_tick_turn"]
