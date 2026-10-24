@@ -162,3 +162,31 @@ def test_a_hermes_command_is_a_committed_turn_and_a_retry_commits_once(launch, w
     again = hermes_rpg_canonical_submitter({"session_id": play.session_id, "command_text": "wait",
                                             "submission_id": submission})
     assert again["ok"] is True and play.revision() == revision + 1
+
+
+def test_a_view_the_campaign_has_moved_past_is_refused_with_how_it_stands(launch) -> None:
+    """RQ-8.9: a grid command from a view the campaign has moved past (another tab took a turn) is refused, taking
+    no turn, with a plain message and the campaign as it stands, so the play screen redraws; so is a map action
+    from an outdated map view."""
+    play = launch("aurelia")
+    play.turn("I attack the Echo Wolf.")
+    seen, instance = play.revision(), play.map_instance()
+    play.turn("attack")  # another tab's turn
+    hero = next(actor for actor in instance["snapshot"]["actors"] if actor["actor_id"].startswith("player:"))
+    stale = play.client.post(f"/api/rpg/map-instances/{instance['map_instance_id']}/tactical/move", json={
+        "submission_id": "stale-move", "command_id": "command:stale-move", "actor_id": hero["actor_id"],
+        "destination": [hero["cell"][0] - 1, hero["cell"][1]],
+        "expected_map_state_revision": int(instance["snapshot"]["map_state_revision"]),
+        "expected_campaign_revision": seen})
+    assert stale.status_code == 409, stale.text[:300]
+    detail = stale.json()["detail"]
+    assert detail["stale_view"] is True and detail["current_revision"] == seen + 1 == play.revision()
+    assert detail["message"].startswith("The fight moved on") and detail["session"]["state"]["turn_count"] == play.turn_count()
+
+    map_id = play.stored()["state"]["map_state"]["current_map_id"]
+    overlay = play.client.get(f"/api/rpg/sessions/{play.session_id}/maps/{map_id}/overlay").json()
+    outdated = play.client.post(f"/api/rpg/sessions/{play.session_id}/maps/{map_id}/map-actions", json={
+        "action": "inspect", "target_object_id": "anything", "definition_revision": overlay["definition_revision"],
+        "overlay_revision": int(overlay["overlay_revision"]) + 1})  # a view of another revision
+    assert outdated.status_code == 409, outdated.text[:300]
+    assert outdated.json()["detail"]["message"].startswith("The map changed") and outdated.json()["detail"]["session"]

@@ -65,7 +65,9 @@ def _grid_turn(map_instance_id: str, *, actor_id: str, submission_id: str, comma
                               source="tactical_grid",
                               action={"turn_kind": "structured_action", "map_instance_id": map_instance_id, **action})
     if payload.get("ok") is False:
-        detail = {key: value for key, value in payload.items() if key != "status_code"}
+        from app.apps.rpg.edge.api.stale_view import stale_refusal
+
+        detail = stale_refusal(campaign_id, {key: value for key, value in payload.items() if key != "status_code"})
         raise HTTPException(status_code=int(payload.get("status_code") or 409), detail=detail)
     outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
     answer = outcome.get("action_result") if isinstance(outcome.get("action_result"), dict) else {}

@@ -155,7 +155,10 @@ def register_rpg_map_routes(router: APIRouter, state) -> None:
         except MapDefinitionNotFound as exc:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         except MapActionError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=map_action_error_payload(exc, map_id)) from exc
+            from app.apps.rpg.edge.api.stale_view import stale_refusal
+
+            raise HTTPException(status_code=exc.status_code,
+                                detail=stale_refusal(session_id, map_action_error_payload(exc, map_id))) from exc
 
         action_result = dict(result.get("action_result") or {})
         world_places = ((session.get("simulation_state") or {}).get("world_model") or {}).get("locations") or {}
