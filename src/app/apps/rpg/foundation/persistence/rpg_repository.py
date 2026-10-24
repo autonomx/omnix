@@ -560,6 +560,109 @@ class PostgresRpgRepository:
         ).fetchone()
         return int(row[0] or 0), row[1]
 
+    def document_at_revision(self, context: TenantContext, campaign_id: str, revision: int) -> dict[str, Any] | None:
+        """The campaign's stored document as it stood at ``revision`` (RQ-5.7): the nearest snapshot at or before it,
+        then each turn's patch, every step checked against the turn's recorded hashes. None when the history cannot
+        rebuild it (a missing patch, a broken chain)."""
+        from app.apps.rpg.foundation.persistence.state_delta import apply_state_delta
+
+        snapshot = self.connection.execute(
+            """
+            SELECT revision, snapshot_jsonb, state_hash FROM omnix_rpg_snapshots
+             WHERE workspace_id = %s AND campaign_id = %s AND revision <= %s AND snapshot_jsonb IS NOT NULL
+             ORDER BY revision DESC LIMIT 1
+            """,
+            (context.workspace_id, campaign_id, int(revision)),
+        ).fetchone()
+        if snapshot is None or state_hash(dict(snapshot[1])) != str(snapshot[2]):
+            return None
+        state, at, digest = dict(snapshot[1]), int(snapshot[0]), str(snapshot[2])
+        for resulting, delta, before, after in self.connection.execute(
+            """
+            SELECT resulting_revision, state_delta_jsonb, state_hash_before, state_hash_after FROM omnix_rpg_turns
+             WHERE workspace_id = %s AND campaign_id = %s AND resulting_revision > %s AND resulting_revision <= %s
+             ORDER BY resulting_revision
+            """,
+            (context.workspace_id, campaign_id, at, int(revision)),
+        ).fetchall():
+            if int(resulting) != at + 1 or delta is None or str(before) != digest:
+                return None
+            state = apply_state_delta(state, list(delta))
+            digest = state_hash(state)
+            if digest != str(after):
+                return None
+            at = int(resulting)
+        return state if at == int(revision) else None
+
+    def keep_snapshot(self, context: TenantContext, *, campaign_id: str, revision: int, state: dict[str, Any],
+                      engine_version: str, schema_version: str) -> None:
+        """The document of a revision no turn row patches (a campaign's first, an edit outside a turn) kept as its
+        snapshot, so the campaign's history can rebuild every revision (rewind.md, the replay audit)."""
+        encoded = canonical_json(state)
+        self.connection.execute(
+            """
+            INSERT INTO omnix_rpg_snapshots (
+                id, workspace_id, campaign_id, revision, snapshot_jsonb, state_hash, engine_version, schema_version,
+                document_version
+            ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (f"snapshot:{campaign_id}:{int(revision)}", context.workspace_id, campaign_id, int(revision), encoded,
+             hashlib.sha256(encoded.encode("utf-8")).hexdigest(), engine_version, schema_version,
+             _document_version_of(state)),
+        )
+
+    def turn_history(self, context: TenantContext, campaign_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """The campaign's latest turns, newest first: each one's revisions and command (what an undo walks back)."""
+        rows = self.connection.execute(
+            """
+            SELECT resulting_revision, expected_revision, command_jsonb FROM omnix_rpg_turns
+             WHERE workspace_id = %s AND campaign_id = %s ORDER BY resulting_revision DESC LIMIT %s
+            """,
+            (context.workspace_id, campaign_id, max(1, int(limit))),
+        ).fetchall()
+        return [{"resulting_revision": int(row[0]), "expected_revision": int(row[1]), "command": dict(row[2] or {})}
+                for row in rows]
+
+    def put_save_point(self, context: TenantContext, *, campaign_id: str, name: str) -> dict[str, Any] | None:
+        """Name the campaign's current state a save point: pinned, so retention keeps it (RQ-5.7)."""
+        pinned = self.pin_current_state(context, campaign_id=campaign_id)
+        if pinned is None:
+            return None
+        self.connection.execute(
+            """
+            UPDATE omnix_rpg_snapshots SET save_point_name = NULL
+             WHERE workspace_id = %s AND campaign_id = %s AND save_point_name = %s AND id <> %s
+            """,
+            (context.workspace_id, campaign_id, name, pinned["id"]),
+        )
+        self.connection.execute(
+            "UPDATE omnix_rpg_snapshots SET save_point_name = %s WHERE workspace_id = %s AND id = %s",
+            (name, context.workspace_id, pinned["id"]),
+        )
+        return {"name": name, "revision": pinned["revision"]}
+
+    def save_points(self, context: TenantContext, campaign_id: str) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT save_point_name, revision, created_at FROM omnix_rpg_snapshots
+             WHERE workspace_id = %s AND campaign_id = %s AND save_point_name IS NOT NULL ORDER BY revision
+            """,
+            (context.workspace_id, campaign_id),
+        ).fetchall()
+        return [{"name": str(row[0]), "revision": int(row[1]), "created_at": row[2].isoformat()} for row in rows]
+
+    def delete_save_point(self, context: TenantContext, *, campaign_id: str, name: str) -> bool:
+        """Forget a save point: its snapshot loses its name and its pin (retention may then fold it away)."""
+        cursor = self.connection.execute(
+            """
+            UPDATE omnix_rpg_snapshots SET save_point_name = NULL, pinned = false
+             WHERE workspace_id = %s AND campaign_id = %s AND save_point_name = %s
+            """,
+            (context.workspace_id, campaign_id, name),
+        )
+        return cursor.rowcount == 1
+
     def pin_current_state(
         self,
         context: TenantContext,

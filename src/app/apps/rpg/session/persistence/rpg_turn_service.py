@@ -155,7 +155,7 @@ def persist_foreground_turn(
             submission_id=submission_id,
             interaction_id=interaction_record_id,
             expected_revision=expected_revision,
-            command={"player_input": player_input},
+            command={"player_input": player_input, **_command_marks(result)},
             next_state=session,
             canonical_effects=_canonical_effects(result),
             interaction_event=event,
@@ -276,6 +276,16 @@ def persist_foreground_turn(
         "narrative_atomic_with_turn": stored_narrative is not None,
         "transaction": "postgresql_unit_of_work",
     }
+
+
+def _command_marks(result: dict[str, Any]) -> dict[str, Any]:
+    """What the turn row records of the turn's kind beside the player's words: a world tick, a rewind and the
+    revision it restored (an undo walks these back, rewind.md)."""
+    pipeline = result.get("turn_pipeline") if isinstance(result.get("turn_pipeline"), dict) else {}
+    answer = pipeline.get("action_result") if isinstance(pipeline.get("action_result"), dict) else {}
+    if answer.get("kind") == "rewind":
+        return {"turn_kind": "rewind", "restored_revision": int(answer.get("restored_revision") or 0)}
+    return {"turn_kind": str(pipeline["kind"])} if pipeline.get("kind") else {}
 
 
 def _canonical_narrative_response(

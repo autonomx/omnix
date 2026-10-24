@@ -15,7 +15,7 @@ from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
 PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "take", "rest",
                            "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip",
-                           "ability", "check", "grow"]
+                           "ability", "check", "grow", "rewind"]
 
 
 # What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).

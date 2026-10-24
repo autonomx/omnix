@@ -38,7 +38,7 @@ MECHANIC_OWNERS = {
     "party": "app.apps.rpg.rules.player.requests", "order": "app.apps.rpg.rules.player.requests",
     "talk": "app.apps.rpg.rules.dialogue.plan", "fight": "app.apps.rpg.rules.combat.fight",
     "ability": "app.apps.rpg.rules.ability_use", "check": "app.apps.rpg.rules.checks",
-    "grow": "app.apps.rpg.rules.player.progression",
+    "grow": "app.apps.rpg.rules.player.progression", "rewind": "app.apps.rpg.session.turn.rewind",
 }
 # The world tick's own rules (step 6): people's days.
 TICK_OWNERS = ("app.apps.rpg.rules.routines",)
@@ -54,6 +54,10 @@ CHANGE_WRITES = {
     "ability_used": {"player"},
     "check_resolved": {"player"},
     "level_choice_made": {"player"},
+    # a rewind puts back the game of an earlier revision: the sheet and the simulation whole (paths above any one
+    # section), and every section in them
+    "revision_restored": {"player", "inventory", "location", "time", "party", "combat", "quests", "survival", "npcs",
+                          "world", "economy", "narrative", "meta", "(no section)"},
 }
 
 
@@ -110,6 +114,7 @@ def _examples(doc: dict) -> list:
         (c.RegardChanged(npc_id=npc, delta=-5), doc), (c.ResourcesChanged(stamina=-1), doc),
         (c.AbilityUsed(ability_id="a:x", ready_at_turn=3), doc),
         (c.CheckResolved(kind="persuade", target_id=npc, natural=12, band="success"), doc),
+        (c.RevisionRestored(source_revision=0, document=json.loads(json.dumps(doc))), joined),
         (c.LevelChoiceMade(choice="attribute", attribute="strength", value=12),
          reduce(doc, [c.LevelReached(level=2, xp=0, xp_to_next=200, choices_pending=1)])[0]),
     ]
@@ -146,7 +151,8 @@ def test_every_change_has_an_example_here() -> None:
 def test_each_change_writes_only_the_sections_it_owns(index: int) -> None:
     change, base = _examples(_document())[index]
     written = _written(change, base)
-    assert "(no section)" not in written, f"{change.type} writes a path no section owns"
+    assert "(no section)" not in written or "(no section)" in CHANGE_WRITES[change.type], (
+        f"{change.type} writes a path no section owns")
     assert written <= CHANGE_WRITES[change.type], f"{change.type} writes {sorted(written - CHANGE_WRITES[change.type])}"
 
 
@@ -155,6 +161,7 @@ def test_each_section_has_the_writers_declared_and_no_others() -> None:
     for kind, sections in CHANGE_WRITES.items():
         for section in sections:
             writers.setdefault(section, set()).add(kind)
-    assert set(writers) <= set(SECTION_PATHS)
-    assert writers["location"] == {"location_changed", "presence_changed"}
-    assert writers["combat"] == {"combat_started", "combatant_hp_changed", "combat_ended", "combat_advanced"}
+    assert set(writers) - {"(no section)"} <= set(SECTION_PATHS)
+    assert writers["location"] == {"location_changed", "presence_changed", "revision_restored"}
+    assert writers["combat"] == {"combat_started", "combatant_hp_changed", "combat_ended", "combat_advanced",
+                                 "revision_restored"}

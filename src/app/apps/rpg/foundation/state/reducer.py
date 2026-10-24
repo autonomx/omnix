@@ -59,6 +59,7 @@ from .changes import (
     CheckResolved,
     LevelChoiceMade,
     RegardChanged,
+    RevisionRestored,
     ResourcesChanged,
     WhereaboutsChanged,
     WorldTicked,
@@ -343,6 +344,8 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         _show_progression(writer, xp=change.xp, xp_to_next=change.xp_to_next, level=change.level)
     elif isinstance(change, LevelChoiceMade):
         _make_level_choice(writer, change)
+    elif isinstance(change, RevisionRestored):
+        _restore(writer, change)
     elif isinstance(change, SkillProgressed):
         skill = dict(writer.get(_PLAYER + ("skills", change.skill_id)) or {})
         skill.update(level=change.level, xp=change.xp, xp_to_next=change.xp_to_next)
@@ -559,6 +562,29 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             "tick": int(writer.get(("simulation_state", "tick")) or 0)})
     else:  # pragma: no cover - the vocabulary is closed
         raise ChangeRejected(f"unknown change {change!r}")
+
+
+def _restore(writer: _Writer, change: RevisionRestored) -> None:
+    """The earlier document's game, put back: the sheet and the simulation whole, the runtime sections a section
+    owns, and the turn count; the rest of the runtime (bookkeeping, narrations) is the campaign's as it is now."""
+    from app.apps.rpg.foundation.state.sections import SECTION_PATHS
+
+    earlier = change.document
+    for key in ("state", "simulation_state"):
+        if isinstance(earlier.get(key), dict):
+            writer.set((key,), deepcopy(earlier[key]))
+    game_runtime = {path[1] for paths in SECTION_PATHS.values() for path in paths if path[0] == "runtime_state"}
+    runtime = dict(writer.get(("runtime_state",)) or {})
+    before = earlier.get("runtime_state") if isinstance(earlier.get("runtime_state"), dict) else {}
+    for key in game_runtime:
+        runtime.pop(key, None)
+        if key in before:
+            runtime[key] = deepcopy(before[key])
+    writer.set(("runtime_state",), runtime)
+    manifest = earlier.get("manifest") if isinstance(earlier.get("manifest"), dict) else {}
+    for key in ("turn_count", "current_turn"):
+        if key in manifest:
+            writer.set(("manifest", key), manifest[key])
 
 
 def _make_level_choice(writer: _Writer, change: LevelChoiceMade) -> None:

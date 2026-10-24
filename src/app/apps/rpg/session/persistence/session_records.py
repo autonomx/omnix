@@ -123,6 +123,9 @@ def save_session_to_postgres(
                 """,
                 (campaign_id, context.user_id),
             )
+            # The campaign's first document: no turn row patches it, so it is kept whole (rewind.md).
+            work.rpg.keep_snapshot(context, campaign_id=campaign_id, revision=revision, state=session,
+                                   engine_version=engine_version, schema_version=schema_version)
         else:
             if revision < existing["revision"]:
                 raise RevisionConflict(
@@ -175,6 +178,10 @@ def save_session_to_postgres(
             )
             if cursor.rowcount != 1:
                 raise RevisionConflict(f"RPG session changed while saving: {campaign_id}")
+            # A revision written outside a turn has no patch: its document is kept whole, so history still
+            # rebuilds every revision (rewind.md, the replay audit).
+            work.rpg.keep_snapshot(context, campaign_id=campaign_id, revision=revision, state=session,
+                                   engine_version=engine_version, schema_version=schema_version)
         for kind, document in sorted(artifacts.items()):
             work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
         work.rpg.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)

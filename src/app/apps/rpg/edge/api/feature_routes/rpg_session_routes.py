@@ -62,6 +62,14 @@ class RpgApplyTurnRequestBody(_TypedRequestModel):
     text: str | dict[str, Any] | None = None
     message: str | dict[str, Any] | None = None
 
+class RpgRewindRequestBody(_TypedRequestModel):
+    save_point: str | None = Field(default=None, min_length=1, max_length=80)  # none: undo the last turn
+
+
+class RpgSavePointRequestBody(_TypedRequestModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
 class RpgResumeRequestBody(_TypedRequestModel):
     elapsed_seconds: int = Field(default=0, ge=0, le=31_536_000)
 
@@ -222,6 +230,47 @@ def _ability_turn(session_id: str, request: Any) -> dict[str, Any]:
         "session": player_session_view(saved),
         "game": saved.get("state", {}),
     }
+
+
+def _session_or_404(session_id: str) -> dict[str, Any]:
+    from app.apps.rpg.session.service import load_session
+
+    session = load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found"})
+    return session
+
+
+def _save_points(session_id: str) -> list[dict[str, Any]]:
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+
+    _session_or_404(session_id)
+    with unit_of_work() as work:
+        points = work.rpg.save_points(current_tenant(), session_id)
+        work.rollback()
+    return points
+
+
+def _create_save_point(session_id: str, name: str) -> dict[str, Any]:
+    """A save point (rewind.md): at most 20 a campaign, none in hardcore."""
+    from app.apps.rpg.rules.combat.stakes import is_hardcore
+    from app.apps.rpg.session.turn.rewind import MAX_SAVE_POINTS
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+
+    session = _session_or_404(session_id)
+    if is_hardcore(session.get("simulation_state") or {}):
+        raise HTTPException(status_code=409, detail={"ok": False, "error": "save_points_hardcore",
+                                                     "message": "There is no going back in a hardcore campaign."})
+    points = _save_points(session_id)
+    if len(points) >= MAX_SAVE_POINTS and name not in {point["name"] for point in points}:
+        raise HTTPException(status_code=409, detail={"ok": False, "error": "save_points_full",
+                                                     "message": f"A campaign keeps at most {MAX_SAVE_POINTS} save points."})
+    with unit_of_work() as work:
+        point = work.rpg.put_save_point(current_tenant(), campaign_id=session_id, name=name)
+        work.commit()
+    return {"ok": True, "session_id": session_id, "save_point": point, "save_points": _save_points(session_id)}
 
 
 def _loadout_turn(session_id: str, request: Any) -> dict[str, Any]:
@@ -484,6 +533,46 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             request=http_request,
             action={"turn_kind": "world_tick", "elapsed_seconds": request_body.elapsed_seconds},
         )
+
+    @router.post(
+        "/api/rpg/sessions/{session_id}/rewind",
+        tags=["rpg-session"],
+        responses={200: {"model": RpgTurnResponse, "description": "The rewind turn's rpg_turn_response_v2 contract."}},
+    )
+    async def rpg_rewind_session(
+        session_id: str,
+        http_request: Request, request_body: RpgRewindRequestBody,
+    ) -> Any:
+        """Undo the last turn, or return to a save point, as a new revision (rewind.md)."""
+        name = (request_body.save_point or "").strip()
+        return await execute_foreground_rpg_turn(
+            session_id=session_id,
+            command=f"I return to {name}." if name else "I undo my last turn.",
+            request=http_request,
+            action={"turn_kind": "structured_action", "type": "rewind", "save_point": name},
+        )
+
+    @router.get("/api/rpg/sessions/{session_id}/save-points", tags=["rpg-session"])
+    def rpg_list_save_points(session_id: str) -> dict[str, Any]:
+        return {"ok": True, "session_id": session_id, "save_points": _save_points(session_id)}
+
+    @router.post("/api/rpg/sessions/{session_id}/save-points", tags=["rpg-session"])
+    def rpg_create_save_point(session_id: str, request_body: RpgSavePointRequestBody) -> dict[str, Any]:
+        """Name this moment a save point: the campaign's current state, pinned (no turn, no change to the game)."""
+        return _create_save_point(session_id, request_body.name.strip())
+
+    @router.delete("/api/rpg/sessions/{session_id}/save-points/{name}", tags=["rpg-session"])
+    def rpg_delete_save_point(session_id: str, name: str) -> dict[str, Any]:
+        from app.persistence.unit_of_work import unit_of_work
+        from app.runtime.tenant_context import current_tenant
+
+        _session_or_404(session_id)
+        with unit_of_work() as work:
+            deleted = work.rpg.delete_save_point(current_tenant(), campaign_id=session_id, name=name)
+            work.commit()
+        if not deleted:
+            raise HTTPException(status_code=404, detail={"ok": False, "error": "save_point_not_found"})
+        return {"ok": True, "session_id": session_id, "save_points": _save_points(session_id)}
 
     @router.get(
         "/api/rpg/sessions/{session_id}/turn-draft",

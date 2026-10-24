@@ -9707,6 +9707,89 @@
         "title": "ChatUiAction",
         "type": "object"
       },
+      "CheckResolved": {
+        "additionalProperties": false,
+        "description": "A check outside a fight (checks.md): the roll against the difficulty, and its band.",
+        "properties": {
+          "band": {
+            "enum": [
+              "strong",
+              "success",
+              "cost",
+              "failure"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
+          "bonus": {
+            "default": 0,
+            "title": "Bonus",
+            "type": "integer"
+          },
+          "difficulty": {
+            "default": 0,
+            "title": "Difficulty",
+            "type": "integer"
+          },
+          "kind": {
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "location_id": {
+            "default": "",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "margin": {
+            "default": 0,
+            "title": "Margin",
+            "type": "integer"
+          },
+          "natural": {
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Natural",
+            "type": "integer"
+          },
+          "skill": {
+            "default": "",
+            "title": "Skill",
+            "type": "string"
+          },
+          "target_id": {
+            "default": "",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "type": {
+            "const": "check_resolved",
+            "default": "check_resolved",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "natural",
+          "band",
+          "type",
+          "target_id",
+          "location_id",
+          "bonus",
+          "total",
+          "difficulty",
+          "margin",
+          "skill"
+        ],
+        "title": "CheckResolved",
+        "type": "object"
+      },
       "CheckpointBundleRequest": {
         "additionalProperties": true,
         "description": "Extensible state bundle with explicit checkpoint control fields.",
@@ -26743,13 +26826,79 @@
         "title": "LegacySuccessResponse",
         "type": "object"
       },
+      "LevelChoiceMade": {
+        "additionalProperties": false,
+        "description": "A level's choice made (progression.md): an attribute raised, an ability learned, or two skills a rank.",
+        "properties": {
+          "ability_id": {
+            "default": "",
+            "title": "Ability Id",
+            "type": "string"
+          },
+          "attribute": {
+            "default": "",
+            "title": "Attribute",
+            "type": "string"
+          },
+          "choice": {
+            "enum": [
+              "attribute",
+              "ability",
+              "skills"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "skills": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "type": {
+            "const": "level_choice_made",
+            "default": "level_choice_made",
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "default": 0,
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "choice",
+          "type",
+          "attribute",
+          "value",
+          "ability_id",
+          "skills"
+        ],
+        "title": "LevelChoiceMade",
+        "type": "object"
+      },
       "LevelReached": {
         "additionalProperties": false,
         "description": "The hero rose a level (or several): where their progression now stands.",
         "properties": {
+          "choices_pending": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Choices Pending",
+            "type": "integer"
+          },
           "level": {
             "minimum": 1,
             "title": "Level",
+            "type": "integer"
+          },
+          "max_hp_gain": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Max Hp Gain",
             "type": "integer"
           },
           "type": {
@@ -26787,7 +26936,9 @@
           "xp_to_next",
           "type",
           "unspent_points",
-          "unspent_skill_points"
+          "unspent_skill_points",
+          "choices_pending",
+          "max_hp_gain"
         ],
         "title": "LevelReached",
         "type": "object"
@@ -44576,6 +44727,35 @@
         "title": "ReviseSpanAnnotation",
         "type": "object"
       },
+      "RevisionRestored": {
+        "additionalProperties": false,
+        "description": "The game as it stood at an earlier revision, restored as a new revision (rewind.md): the sheet, the simulation\nand the game's runtime sections are the earlier document's; the campaign's bookkeeping (its revision, its\ninteractions and narrations) goes on, so history is never rewritten.",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "source_revision": {
+            "minimum": 0,
+            "title": "Source Revision",
+            "type": "integer"
+          },
+          "type": {
+            "const": "revision_restored",
+            "default": "revision_restored",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_revision",
+          "document",
+          "type"
+        ],
+        "title": "RevisionRestored",
+        "type": "object"
+      },
       "RevisionedMemoryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -49448,6 +49628,42 @@
           }
         },
         "title": "RpgResumeRequestBody",
+        "type": "object"
+      },
+      "RpgRewindRequestBody": {
+        "additionalProperties": true,
+        "properties": {
+          "save_point": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Save Point"
+          }
+        },
+        "title": "RpgRewindRequestBody",
+        "type": "object"
+      },
+      "RpgSavePointRequestBody": {
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RpgSavePointRequestBody",
         "type": "object"
       },
       "RpgScenarioLifecycleResponse": {
@@ -66697,6 +66913,7 @@
                 "mapping": {
                   "ability_used": "#/components/schemas/AbilityUsed",
                   "campaign_ended": "#/components/schemas/CampaignEnded",
+                  "check_resolved": "#/components/schemas/CheckResolved",
                   "combat_advanced": "#/components/schemas/CombatAdvanced",
                   "combat_ended": "#/components/schemas/CombatEnded",
                   "combat_started": "#/components/schemas/CombatStarted",
@@ -66718,6 +66935,7 @@
                   "item_unequipped": "#/components/schemas/ItemUnequipped",
                   "journal_written": "#/components/schemas/JournalWritten",
                   "knowledge_shared": "#/components/schemas/KnowledgeShared",
+                  "level_choice_made": "#/components/schemas/LevelChoiceMade",
                   "level_reached": "#/components/schemas/LevelReached",
                   "location_changed": "#/components/schemas/LocationChanged",
                   "needs_changed": "#/components/schemas/NeedsChanged",
@@ -66729,6 +66947,7 @@
                   "regard_changed": "#/components/schemas/RegardChanged",
                   "resources_changed": "#/components/schemas/ResourcesChanged",
                   "rest_taken": "#/components/schemas/RestTaken",
+                  "revision_restored": "#/components/schemas/RevisionRestored",
                   "service_reserved": "#/components/schemas/ServiceReserved",
                   "service_used": "#/components/schemas/ServiceUsed",
                   "skill_progressed": "#/components/schemas/SkillProgressed",
@@ -66870,6 +67089,15 @@
                 },
                 {
                   "$ref": "#/components/schemas/AbilityUsed"
+                },
+                {
+                  "$ref": "#/components/schemas/CheckResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/LevelChoiceMade"
+                },
+                {
+                  "$ref": "#/components/schemas/RevisionRestored"
                 }
               ]
             },
@@ -89394,6 +89622,210 @@
           }
         },
         "summary": "Rpg Resume Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/rewind": {
+      "post": {
+        "description": "Undo the last turn, or return to a save point, as a new revision (rewind.md).",
+        "operationId": "rpg_rewind_session_api_rpg_sessions__session_id__rewind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgRewindRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgTurnResponse",
+                  "title": "Response Rpg Rewind Session Api Rpg Sessions  Session Id  Rewind Post"
+                }
+              }
+            },
+            "description": "The rewind turn's rpg_turn_response_v2 contract."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Rewind Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/save-points": {
+      "get": {
+        "operationId": "rpg_list_save_points_api_rpg_sessions__session_id__save_points_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg List Save Points Api Rpg Sessions  Session Id  Save Points Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg List Save Points",
+        "tags": [
+          "rpg-session"
+        ]
+      },
+      "post": {
+        "description": "Name this moment a save point: the campaign's current state, pinned (no turn, no change to the game).",
+        "operationId": "rpg_create_save_point_api_rpg_sessions__session_id__save_points_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgSavePointRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Create Save Point Api Rpg Sessions  Session Id  Save Points Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Create Save Point",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/save-points/{name}": {
+      "delete": {
+        "operationId": "rpg_delete_save_point_api_rpg_sessions__session_id__save_points__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Delete Save Point Api Rpg Sessions  Session Id  Save Points  Name  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Delete Save Point",
         "tags": [
           "rpg-session"
         ]

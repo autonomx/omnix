@@ -1507,6 +1507,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/sessions/{session_id}/rewind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rpg Rewind Session
+         * @description Undo the last turn, or return to a save point, as a new revision (rewind.md).
+         */
+        post: operations["rpg_rewind_session_api_rpg_sessions__session_id__rewind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/save-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg List Save Points */
+        get: operations["rpg_list_save_points_api_rpg_sessions__session_id__save_points_get"];
+        put?: never;
+        /**
+         * Rpg Create Save Point
+         * @description Name this moment a save point: the campaign's current state, pinned (no turn, no change to the game).
+         */
+        post: operations["rpg_create_save_point_api_rpg_sessions__session_id__save_points_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/save-points/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Rpg Delete Save Point */
+        delete: operations["rpg_delete_save_point_api_rpg_sessions__session_id__save_points__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/sessions/{session_id}/turn": {
         parameters: {
             query?: never;
@@ -2842,6 +2900,61 @@ export interface components {
          */
         ChatUiAction: core["schemas"]["ChatUiAction"];
         /**
+         * CheckResolved
+         * @description A check outside a fight (checks.md): the roll against the difficulty, and its band.
+         */
+        CheckResolved: {
+            /**
+             * Band
+             * @enum {string}
+             */
+            band: "strong" | "success" | "cost" | "failure";
+            /**
+             * Bonus
+             * @default 0
+             */
+            bonus: number;
+            /**
+             * Difficulty
+             * @default 0
+             */
+            difficulty: number;
+            /** Kind */
+            kind: string;
+            /**
+             * Location Id
+             * @default
+             */
+            location_id: string;
+            /**
+             * Margin
+             * @default 0
+             */
+            margin: number;
+            /** Natural */
+            natural: number;
+            /**
+             * Skill
+             * @default
+             */
+            skill: string;
+            /**
+             * Target Id
+             * @default
+             */
+            target_id: string;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "check_resolved";
+        };
+        /**
          * CheckpointBundleRequest
          * @description Extensible state bundle with explicit checkpoint control fields.
          */
@@ -4132,12 +4245,58 @@ export interface components {
         /** LegacySuccessResponse */
         LegacySuccessResponse: core["schemas"]["LegacySuccessResponse"];
         /**
+         * LevelChoiceMade
+         * @description A level's choice made (progression.md): an attribute raised, an ability learned, or two skills a rank.
+         */
+        LevelChoiceMade: {
+            /**
+             * Ability Id
+             * @default
+             */
+            ability_id: string;
+            /**
+             * Attribute
+             * @default
+             */
+            attribute: string;
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "attribute" | "ability" | "skills";
+            /**
+             * Skills
+             * @default []
+             */
+            skills: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "level_choice_made";
+            /**
+             * Value
+             * @default 0
+             */
+            value: number;
+        };
+        /**
          * LevelReached
          * @description The hero rose a level (or several): where their progression now stands.
          */
         LevelReached: {
+            /**
+             * Choices Pending
+             * @default 0
+             */
+            choices_pending: number;
             /** Level */
             level: number;
+            /**
+             * Max Hp Gain
+             * @default 0
+             */
+            max_hp_gain: number;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4681,6 +4840,25 @@ export interface components {
         RetryState: core["schemas"]["RetryState"];
         /** RetryState */
         "RetryState-Input": core["schemas"]["RetryState-Input"];
+        /**
+         * RevisionRestored
+         * @description The game as it stood at an earlier revision, restored as a new revision (rewind.md): the sheet, the simulation
+         *     and the game's runtime sections are the earlier document's; the campaign's bookkeeping (its revision, its
+         *     interactions and narrations) goes on, so history is never rewritten.
+         */
+        RevisionRestored: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Source Revision */
+            source_revision: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "revision_restored";
+        };
         /** RevokeSessionsRequest */
         RevokeSessionsRequest: core["schemas"]["RevokeSessionsRequest"];
         /** RevokeSessionsResponse */
@@ -6787,6 +6965,20 @@ export interface components {
              * @default 0
              */
             elapsed_seconds?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** RpgRewindRequestBody */
+        RpgRewindRequestBody: {
+            /** Save Point */
+            save_point?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** RpgSavePointRequestBody */
+        RpgSavePointRequestBody: {
+            /** Name */
+            name: string;
         } & {
             [key: string]: unknown;
         };
@@ -9095,7 +9287,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;
@@ -12068,6 +12260,145 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_rewind_session_api_rpg_sessions__session_id__rewind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgRewindRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The rewind turn's rpg_turn_response_v2 contract. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_list_save_points_api_rpg_sessions__session_id__save_points_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_create_save_point_api_rpg_sessions__session_id__save_points_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgSavePointRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_delete_save_point_api_rpg_sessions__session_id__save_points__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

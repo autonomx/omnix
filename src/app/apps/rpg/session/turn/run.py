@@ -31,12 +31,12 @@ _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarifica
                 "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
                 "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
                 "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "check": "skill_check",
-                "grow": "level_choice"}
+                "grow": "level_choice", "rewind": "rewind"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
            "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
            "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory", "ability": "combat",
-           "check": "check", "grow": "progression"}
+           "check": "check", "grow": "progression", "rewind": "meta"}
 SOURCE = "rpg_turn_pipeline_v1"
 
 
@@ -267,6 +267,46 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
     return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
 
 
+def _rewind_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    """An undo, or a return to a save point (rewind.md): the earlier revision's game, put back as a new revision;
+    what cannot be rewound refuses the request, with no turn taken."""
+    from app.apps.rpg.foundation.state.changes import RevisionRestored
+    from app.apps.rpg.rules.combat.stakes import is_hardcore
+    from app.apps.rpg.session.turn.resolution import Resolution
+    from app.apps.rpg.session.turn.rewind import undo_target
+    from app.persistence.unit_of_work import unit_of_work
+    from app.runtime.tenant_context import current_tenant
+
+    def refused(detail: str) -> dict[str, Any]:
+        return {"ok": False, "error": "rewind_refused", "status_code": 409, "detail": detail}
+
+    if is_hardcore(_d(session.get("simulation_state"))):
+        return refused("There is no going back in a hardcore campaign.")
+    revision = int(_d(session.get("runtime_state")).get("state_revision") or 0)
+    name = _s(action.get("save_point"))
+    context = current_tenant()
+    with unit_of_work() as work:
+        if name:
+            target = next((point["revision"] for point in work.rpg.save_points(context, ctx.session_id)
+                           if point["name"] == name), None)
+        else:
+            target = undo_target(work.rpg.turn_history(context, ctx.session_id), revision)
+        earlier = work.rpg.document_at_revision(context, ctx.session_id, target) if target is not None else None
+        work.rollback()
+    if target is None:
+        return refused(f'There is no save point named "{name}".' if name else "There is no turn to undo.")
+    if earlier is None:
+        return refused("That moment can no longer be rebuilt from the campaign's history.")
+    said = f'You return to the save point "{name}".' if name else "You return to the moment before your last turn."
+    resolution = Resolution([RevisionRestored(source_revision=target, document=earlier)], [said], told=False,
+                            action_result={"kind": "rewind", "restored_revision": target, "save_point": name,
+                                           "detail": said})
+    planned = PlannedAction(mechanic="rewind", ticks=0, reason="save_point" if name else "undo")
+    reading = IntentCandidate(family="status", confidence=1.0, reason="rewind")
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
 def _ability_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
     """An ability from the play screen's hotbar in a fight: the ability rule's turn, its lines the game's own; what
     cannot be used now refuses the request, with no turn taken."""
@@ -330,6 +370,8 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
         return _map_travel_turn(ctx, session, action)
     if action.get("type") == "ability":
         return _ability_turn(ctx, session, action)
+    if action.get("type") == "rewind":
+        return _rewind_turn(ctx, session, action)
     try:
         definition, snapshot = map_for_turn(_s(action.get("map_instance_id")), campaign_id=ctx.session_id)
         if action.get("type") == "tactical_move":

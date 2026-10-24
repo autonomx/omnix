@@ -207,6 +207,16 @@ class AbilityUsed(_Change):
     ready_at_turn: int = Field(ge=0)
 
 
+class RevisionRestored(_Change):
+    """The game as it stood at an earlier revision, restored as a new revision (rewind.md): the sheet, the simulation
+    and the game's runtime sections are the earlier document's; the campaign's bookkeeping (its revision, its
+    interactions and narrations) goes on, so history is never rewritten."""
+
+    type: Literal["revision_restored"] = "revision_restored"
+    source_revision: int = Field(ge=0)
+    document: dict[str, Any]
+
+
 class LevelChoiceMade(_Change):
     """A level's choice made (progression.md): an attribute raised, an ability learned, or two skills a rank."""
 
@@ -423,7 +433,8 @@ StateChange = Annotated[
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
-    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved | LevelChoiceMade,
+    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved | LevelChoiceMade
+    | RevisionRestored,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])
