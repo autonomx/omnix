@@ -137,6 +137,7 @@ def test_the_worlds_people_keep_their_day(launch) -> None:
     arrival = play.turn("go to the market")  # 08:05: Mira's day has her at the market now, Aldric out on the road
     assert play.present() == ["npc:mira", "npc:elara", "npc:tomas"]
     assert "Mira (listening to the stallholders)" in said(arrival) and "Aldric" not in said(arrival)
+    assert "Location:" not in said(arrival)  # the destination is no speaker, so no lore of a person named for it
     for _ in range(11):  # to 13:35
         play.turn("wait a while")
     assert "npc:aldric" not in play.present()

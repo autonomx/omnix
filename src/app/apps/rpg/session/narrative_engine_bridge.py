@@ -86,15 +86,21 @@ def _npc_identity(result: Mapping[str, Any]) -> tuple[str, str]:
     visible = _mapping(result.get("visible_response"))
     visible_npc = _mapping(visible.get("npc"))
     resolved = _mapping(result.get("resolved_result") or result.get("result"))
+    # The turn's target speaks only when it is a person: a journey's place, an item or an offer is no speaker.
+    target = _text(resolved.get("target_id"))
+    target_kind = _text(resolved.get("target_kind")).casefold()
+    typed_as = target.split(":", 1)[0].casefold() if ":" in target else ""
+    if (typed_as and typed_as != "npc") or target_kind not in {"", "npc", "person"}:
+        target = ""
     raw_id = _text(
         npc.get("speaker_id")
         or visible_npc.get("speaker_id")
-        or resolved.get("target_id")
+        or target
     )
     name = _text(
         npc.get("speaker")
         or visible_npc.get("speaker")
-        or resolved.get("target_name")
+        or (resolved.get("target_name") if target else "")
         or "NPC"
     )
     if raw_id and not raw_id.startswith("npc:"):
