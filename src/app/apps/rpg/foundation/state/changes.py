@@ -163,6 +163,33 @@ class CompanionOrdered(_Change):
     stance: str = ""
 
 
+class DialogueExchanged(_Change):
+    """What was said between the hero and someone, kept for the conversation's continuity; they are now the one the
+    hero is talking to."""
+
+    type: Literal["dialogue_exchanged"] = "dialogue_exchanged"
+    npc_id: str = Field(min_length=1)
+    name: str = ""
+    player_line: str = ""
+    npc_line: str = ""
+
+
+class KnowledgeShared(_Change):
+    """Something a person knows, now known to the hero."""
+
+    type: Literal["knowledge_shared"] = "knowledge_shared"
+    npc_id: str = Field(min_length=1)
+    fact_id: str = Field(min_length=1)
+
+
+class QuestOffered(_Change):
+    """A quest put to the hero by someone; it names who offered it."""
+
+    type: Literal["quest_offered"] = "quest_offered"
+    quest_id: str = Field(min_length=1)
+    npc_id: str = Field(min_length=1)
+
+
 class CombatStarted(_Change):
     """A fight begins, with each participant's health."""
 
@@ -280,7 +307,8 @@ StateChange = Annotated[
     | HpChanged | ExperienceGained | SkillProgressed | LocationChanged | PresenceChanged | TimeAdvanced
     | TurnCounted | NeedsChanged | QuestStatusChanged | QuestPlaceReached | CompanionJoined | CompanionLeft
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
-    | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered,
+    | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
+    | DialogueExchanged | KnowledgeShared | QuestOffered,
     Field(discriminator="type"),
 ]
 STATE_CHANGES: TypeAdapter[list[StateChange]] = TypeAdapter(list[StateChange])

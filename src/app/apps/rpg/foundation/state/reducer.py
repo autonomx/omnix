@@ -39,6 +39,9 @@ from .changes import (
     SkillProgressed,
     StateChange,
     ConditionsChanged,
+    DialogueExchanged,
+    KnowledgeShared,
+    QuestOffered,
     JournalWritten,
     RestTaken,
     ServiceReserved,
@@ -52,6 +55,7 @@ from .changes import (
 
 JsonPatch = list[dict[str, Any]]
 TRADE_LEDGER_KEPT = 50
+DIALOGUE_EXCHANGES_KEPT = 8
 _PLAYER = ("simulation_state", "player_state")
 _STORE = _PLAYER + ("inventory_state",)
 
@@ -421,6 +425,22 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
         party["companions"] = [{**row, "orders": change.order, "stance": change.stance or row.get("stance", "")}
                                if row.get("npc_id") == change.npc_id else row for row in companions]
         writer.set(_PLAYER + ("party_state",), party)
+    elif isinstance(change, DialogueExchanged):
+        exchanges = [dict(row) for row in writer.get(("simulation_state", "dialogue", "exchanges", change.npc_id)) or ()
+                     if isinstance(row, dict)]
+        exchanges.append({"player": change.player_line, "npc": change.npc_line,
+                          "tick": int(writer.get(("simulation_state", "tick")) or 0)})
+        writer.set(("simulation_state", "dialogue", "exchanges", change.npc_id), exchanges[-DIALOGUE_EXCHANGES_KEPT:])
+        writer.set(("runtime_state", "dialogue_focus"), {"target_id": change.npc_id, "target_name": change.name,
+                                                         "tick": int(writer.get(("simulation_state", "tick")) or 0)})
+    elif isinstance(change, KnowledgeShared):
+        known = [str(fact) for fact in writer.get(("simulation_state", "dialogue", "known_facts", change.npc_id)) or ()]
+        if change.fact_id not in known:
+            writer.set(("simulation_state", "dialogue", "known_facts", change.npc_id), [*known, change.fact_id])
+    elif isinstance(change, QuestOffered):
+        rows, index = _quest_rows(writer, change.quest_id)
+        rows[index] = {**rows[index], "offered_by": change.npc_id}
+        _write_quests(writer, rows)
     elif isinstance(change, CombatStarted):
         combat = writer.get(("simulation_state", "combat_state"))
         if isinstance(combat, dict) and combat.get("active"):

@@ -458,7 +458,8 @@ def _adopt_compact_provider_dialogue(
         or resolved.get("target_id")
         or f"npc:{speaker.casefold().replace(' ', '_')}"
     )
-    turn_id = _text(result.get("turn_id")) or "turn:0"
+    # Keyed by the committed interaction when there is one, as presentation keys every canonical response.
+    turn_id = _text(result.get("interaction_id")) or _text(result.get("turn_id")) or "turn:0"
     request_id = f"dialogue:{session_id}:{turn_id}"
     block_id = f"{request_id}:provider-line"
     response = CanonicalNarrativeResponse(
@@ -637,7 +638,8 @@ def publish_fixed_narration(
     source: str,
 ) -> dict[str, Any]:
     """Publish a line the game wrote itself (a clarifying question) as the turn's canonical prose: no model call."""
-    turn_id = _text(result.get("turn_id")) or "turn:0"
+    # Keyed by the committed interaction when there is one, as presentation keys every canonical response.
+    turn_id = _text(result.get("interaction_id")) or _text(result.get("turn_id")) or "turn:0"
     request_id = f"{purpose.value}:{session_id}:{turn_id}"
     block_id = f"{request_id}:line"
     response = CanonicalNarrativeResponse(

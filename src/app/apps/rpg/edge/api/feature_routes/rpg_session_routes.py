@@ -235,9 +235,12 @@ def _with_world_scale_abilities(
 def _with_rpg_response_surface(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    return _with_world_scale_abilities(
+    from app.apps.rpg.edge.api.payloads.player_view import with_player_session_view
+
+    # The campaign leaves the server as its player may see it (no world secrets, no private canon).
+    return with_player_session_view(_with_world_scale_abilities(
         _with_environment_snapshot(payload)
-    )
+    ))
 
 
 def _foreground_turn_command(payload: Any) -> str:

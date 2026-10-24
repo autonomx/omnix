@@ -71,13 +71,11 @@
     },
     {
       "blocks": [
-        "result||Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver).",
-        "result||Consequence: Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver).",
-        "choice||Offered choice: Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver)."
+        "dialogue|npc:brindle-gearwing|I have Lantern Bread for 8 copper, Healing Potion for 3 silver, Gear repair for 4 silver."
       ],
       "step": "I ask Brindle Gearwing what a Healing Potion costs.",
-      "told": "Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver). Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver). Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver).",
-      "visible": "Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver).\n\nConsequence: Brindle Gearwing offers: Lantern Bread (8 copper), Healing Potion (3 silver)."
+      "told": "",
+      "visible": "Brindle Gearwing: \"I have Lantern Bread for 8 copper, Healing Potion for 3 silver, Gear repair for 4 silver.\""
     },
     {
       "blocks": [

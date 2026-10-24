@@ -157,6 +157,12 @@ def _npc_homes(
     return homes
 
 
+def _rows_or_texts(value: Any) -> list[Any]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    return [row for row in value if row] if isinstance(value, list) else []
+
+
 def _role_services(role: str) -> list[str]:
     role = role.casefold()
     services: list[str] = []
@@ -319,6 +325,16 @@ def session_world_model(revision: Any, scenario: Any, *, present_at_start: Itera
             "role": _text(character.get("role")),
             "description": _text(character.get("biography") or character.get("description")),
             "location_id": homes.get(npc_id, ""),
+            # Who they are, as dialogue plays them (RQ-2.2): their voice and what they want, and what they keep to
+            # themselves, which stays on the server (edge/api/payloads/player_view.py).
+            **{key: value for key, value in {
+                "species": _text(character.get("species")),
+                "personality": [_text(trait) for trait in _rows_or_texts(character.get("personality"))],
+                "speech_style": _text(character.get("speech_style")),
+                "goals": [_text(goal) for goal in _rows_or_texts(character.get("goals"))],
+                "relationships": dict(_mapping(character.get("relationships"))),
+                "secrets": [_text(secret) for secret in _rows_or_texts(character.get("secrets"))],
+            }.items() if value},
         }
     routes: list[dict[str, Any]] = []
     for route in _rows(_mapping(getattr(revision, "topology", None)).get("routes")):

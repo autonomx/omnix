@@ -1,6 +1,7 @@
 """Cache-aware RPG map definition, overlay, and authoritative action routes."""
 
 from __future__ import annotations
+from app.apps.rpg.edge.api.payloads.player_view import player_session_view
 from fastapi import APIRouter
 
 import json
@@ -170,7 +171,7 @@ def register_rpg_map_routes(router: APIRouter, state) -> None:
             "session_turn_index": overlay.session_turn_index,
             "idempotent": bool(result.get("idempotent")),
             "action_result": result.get("action_result", {}),
-            "session": saved,
+            "session": player_session_view(saved),
             "game": saved.get("state", {}),
             "overlay": overlay_payload,
         }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL})

@@ -109,3 +109,17 @@ def test_look_and_wait_run_on_the_turn_pipeline(launch, world, monkeypatch) -> N
     monkeypatch.setenv("OMNIX_RPG_TURN_PIPELINE_OFF", "look")  # kept off, look takes the older path
     outcome = TurnOutcome.model_validate(play.turn("look around")["outcome"])
     assert outcome.planned_action is None
+
+
+def test_the_campaign_reaches_the_browser_without_the_worlds_secrets(launch) -> None:
+    """A person's secrets, the campaign bible and the world model stay on the server (RQ-2.2, RQ-8)."""
+    play = launch("aurelia")
+    play.turn("look around")
+    stored = play.stored()
+    liora = stored["simulation_state"]["world_model"]["npcs"]["npc:liora-fen"]
+    assert liora["secrets"] and liora["speech_style"]  # dialogue has them
+    shown = play.client.get(f"/api/rpg/sessions/{play.session_id}").json()["session"]
+    text = str(shown)
+    assert all(secret not in text for secret in liora["secrets"])
+    assert "world_model" not in shown["simulation_state"] and "campaign_bible" not in shown["state"]
+    assert "setup_payload" not in shown and shown["simulation_state"]["player_state"]

@@ -43,6 +43,7 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.apps.trading.screener_words",
     "app.apps.rpg.session.action_intelligence",
     "app.apps.rpg.session.compact_dialogue",
+    "app.apps.rpg.session.turn.dialogue",
     "app.apps.rpg.narration.ai.conversation_prompt_builder",
     "app.apps.rpg.narration.ai.grounding_soft_audit",
     "app.apps.rpg.narration.ai.llm_mind.npc_prompt_builder",

@@ -81,7 +81,8 @@ def _offers(simulation: Mapping[str, Any], provider: Mapping[str, Any]) -> list[
     return [_d(offer) for offer in _l(offers)]
 
 
-def _stock(simulation: Mapping[str, Any], offer: Mapping[str, Any]) -> int | None:
+def stock_left(simulation: Mapping[str, Any], offer: Mapping[str, Any]) -> int | None:
+    """How many of ``offer`` its seller has left; ``None`` when the world does not count it."""
     if offer.get("stock") is None:
         return None  # unlimited
     kept = _d(_d(simulation.get("trade")).get("stock"))
@@ -128,7 +129,7 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     _, _, provider, offer = ranked[0]
     name, label = _s(provider.get("provider_name")), _s(offer.get("label"))
     price = copper(_d(offer.get("price")))
-    left = _stock(simulation, offer)
+    left = stock_left(simulation, offer)
     if left is not None and left <= 0:
         return TradeOutcome(lines=[f"{label} is sold out."], refused=True, kind="refused")
     purse = _purse(simulation)
@@ -195,4 +196,4 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     ], lines=[f"You sell the {name} to {buyer} for {coins(paid)}."], kind="sold")
 
 
-__all__ = ["TradeOutcome", "buy", "coins", "copper", "sell"]
+__all__ = ["TradeOutcome", "buy", "coins", "copper", "sell", "stock_left"]

@@ -1,5 +1,6 @@
 """RPG session compatibility helpers for gateway bridge routes."""
 from __future__ import annotations
+from app.apps.rpg.edge.api.payloads.player_view import player_session_view
 
 from typing import Any
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
@@ -194,7 +195,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             "ok": True,
             "session_id": session_id,
             "status": "ready",
-            "session": saved,
+            "session": player_session_view(saved),
             "game": saved.get("state", {}),
             **result,
         }
@@ -233,7 +234,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             "ok": True,
             "session_id": session_id,
             "status": "ready",
-            "session": saved,
+            "session": player_session_view(saved),
             "game": saved.get("state", {}),
             **result,
         }
@@ -317,7 +318,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             "ok": True,
             "session_id": session_id,
             "status": "ready",
-            "session": saved,
+            "session": player_session_view(saved),
             "game": saved.get("state", {}),
             **result,
         }
@@ -352,7 +353,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
                 "ok": True,
                 "session_id": session_id,
                 "status": "ready",
-                "session": saved,
+                "session": player_session_view(saved),
                 "game": saved.get("state", {}),
                 "diagnostics": diagnostics,
             }
@@ -412,7 +413,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             "ok": maintenance.get("ok") is True,
             "session_id": session_id,
             "status": "ready",
-            "session": saved,
+            "session": player_session_view(saved),
             "game": saved.get("state", {}),
             "maintenance": maintenance,
         }
@@ -468,7 +469,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
                 "ok": scenario.get("ok") is True,
                 "session_id": session_id,
                 "status": "ready",
-                "session": saved,
+                "session": player_session_view(saved),
                 "game": saved.get("state", {}),
                 "scenario": scenario,
             }

@@ -1,6 +1,6 @@
 {
   "opening": {
-    "document_hash": "sha256:7f1a62bf1cb05887405fadb416f9253db5bfe0faeac5739171ffa301bbed7486",
+    "document_hash": "sha256:8c6460b0ef22b32d973d3d7f3331283a39a5961dad52bea1dd8c1ca7771d7038",
     "facts": {
       "combat": {
         "active": false,
@@ -89,7 +89,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:152f2e4bd9cc639bd9794248a37c4b46bc5343646f6d56a28c34db0947d9b095",
+      "document_hash": "sha256:11aa14f8ffcc1d1997376867616782a486b42ce49de3a39be8ca96a85c0b9c99",
       "facts": {
         "combat": {
           "active": false,
@@ -233,8 +233,14 @@
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:6f45b53e9be8c9413031252f7b097d5150c9c5aa750748be65467143e3f96791",
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:40973ef0067937cff1a4d05f36f0b6f3a013f08394ddc4c63638ddbe1e35312c",
       "facts": {
         "combat": {
           "active": false,
@@ -306,9 +312,9 @@
           }
         },
         "survival": {
-          "fatigue": 1,
-          "hunger": 1,
-          "thirst": 2
+          "fatigue": 2,
+          "hunger": 2,
+          "thirst": 4
         },
         "turn_count": 2
       },
@@ -318,32 +324,52 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "runtime_state/command_reading",
-        "runtime_state/conversation_thread_state",
+        "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/dialogue_focus",
-        "runtime_state/first_call_shortcuts_disabled",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/conversation_thread_state",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/dialogue",
+        "simulation_state/economy_state",
+        "simulation_state/environment",
+        "simulation_state/merchant_state",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "conversation",
-          "time"
+          "time",
+          "npcs",
+          "survival",
+          "world",
+          "narrative"
         ],
         "source": "compact_dialogue_provider_canonical_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "conversation",
-            "time"
+            "time",
+            "npcs",
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 3
         }
@@ -373,7 +399,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:6ea861aae91c01687cd9f5cff63b89a25226719c167b46c2103c2922e9a3db8b",
+      "document_hash": "sha256:ee330985003c3804ba07e4b58c9dff184fb8c7f3e3461b61d4f230ca29e7e7a7",
       "facts": {
         "combat": {
           "active": false,
@@ -447,9 +473,9 @@
           }
         },
         "survival": {
-          "fatigue": 2,
-          "hunger": 2,
-          "thirst": 4
+          "fatigue": 3,
+          "hunger": 3,
+          "thirst": 6
         },
         "turn_count": 3
       },
@@ -528,7 +554,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b80823af884324865d5e9408868452bfd12d493a7d4964acbe2df99c64317d21",
+      "document_hash": "sha256:b23e93b7172c15435224e7e685e35b925cba2e14836eb9ad7a9571d0e926390a",
       "facts": {
         "combat": {
           "active": false,
@@ -602,9 +628,9 @@
           }
         },
         "survival": {
-          "fatigue": 3,
-          "hunger": 3,
-          "thirst": 6
+          "fatigue": 4,
+          "hunger": 4,
+          "thirst": 8
         },
         "turn_count": 4
       },
@@ -687,7 +713,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:a4dcdfbfe2f0e1edccef5ae67a87a14eec13f3cb52940b119132b2dccb5b30fb",
+      "document_hash": "sha256:e7ddd1e311e5e021e7c60525039cd82f87d66295ed40df7c828798f4ba988cd1",
       "facts": {
         "combat": {
           "active": false,
@@ -761,9 +787,9 @@
           }
         },
         "survival": {
-          "fatigue": 4,
-          "hunger": 4,
-          "thirst": 8
+          "fatigue": 5,
+          "hunger": 5,
+          "thirst": 10
         },
         "turn_count": 5
       },
@@ -850,7 +876,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:0b31ee7cbccf47e9363f221f57665afee30e8a7e11036d9c1b9d0ca3712b1401",
+      "document_hash": "sha256:c3928d0abedc49feea9b71342649c78ab75b9f5bc70ebee3d841eb11257938d8",
       "facts": {
         "combat": {
           "active": false,
@@ -927,9 +953,9 @@
           }
         },
         "survival": {
-          "fatigue": 6,
-          "hunger": 6,
-          "thirst": 11
+          "fatigue": 7,
+          "hunger": 7,
+          "thirst": 13
         },
         "turn_count": 6
       },
@@ -1028,7 +1054,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:65ebaec16268d5884a12808bd12496a27df5aa546ab819c1adb15e28c90f681f",
+      "document_hash": "sha256:9c75b90bb41ee274dfbb39332c802b1ea6607da248966ea44b6a85938d0b20e8",
       "facts": {
         "combat": {
           "active": false,
@@ -1105,9 +1131,9 @@
           }
         },
         "survival": {
-          "fatigue": 7,
-          "hunger": 7,
-          "thirst": 13
+          "fatigue": 8,
+          "hunger": 8,
+          "thirst": 15
         },
         "turn_count": 7
       },
@@ -1173,8 +1199,14 @@
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:7b03d75badfacff281cd3a7efd05a4720ff5a018777a63153312e6b703f671fd",
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:4af55bb41af34a8aea63feaa69a46a7e830b21507423f81d5bada1997068e256",
       "facts": {
         "combat": {
           "active": false,
@@ -1251,9 +1283,9 @@
           }
         },
         "survival": {
-          "fatigue": 7,
-          "hunger": 7,
-          "thirst": 13
+          "fatigue": 9,
+          "hunger": 9,
+          "thirst": 17
         },
         "turn_count": 8
       },
@@ -1263,31 +1295,52 @@
       "patched_sections": [
         "manifest/current_turn",
         "manifest/turn_count",
-        "runtime_state/command_reading",
-        "runtime_state/conversation_thread_state",
+        "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/dialogue_focus",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
+        "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
-        "simulation_state/conversation_thread_state",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/dialogue",
+        "simulation_state/economy_state",
+        "simulation_state/environment",
+        "simulation_state/merchant_state",
+        "simulation_state/survival",
+        "simulation_state/tick",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
         "state/current_turn",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
           "conversation",
-          "time"
+          "time",
+          "npcs",
+          "survival",
+          "world",
+          "narrative"
         ],
         "source": "compact_dialogue_provider_canonical_v1",
         "state": {
           "changed": true,
           "changed_domains": [
             "conversation",
-            "time"
+            "time",
+            "npcs",
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 9
         }
@@ -1304,8 +1357,14 @@
       "turn_rows": 1
     },
     {
-      "changes": {},
-      "document_hash": "sha256:474b2026b20aae9e79dac69dbf39108543f55ea2081b78ba061413e8bef1f96d",
+      "changes": {
+        "survival": {
+          "fatigue": 1,
+          "hunger": 1,
+          "thirst": 2
+        }
+      },
+      "document_hash": "sha256:de42d78ff2d0bb9cced4774d824f6664c83da04b0a42760395e9524fd92baa49",
       "facts": {
         "combat": {
           "active": false,
@@ -1382,15 +1441,14 @@
           }
         },
         "survival": {
-          "fatigue": 7,
-          "hunger": 7,
-          "thirst": 13
+          "fatigue": 10,
+          "hunger": 10,
+          "thirst": 19
         },
         "turn_count": 9
       },
       "model_calls": [
-        "dialogue",
-        "narration"
+        "dialogue"
       ],
       "patched_sections": [
         "manifest/current_turn",
@@ -1399,41 +1457,48 @@
         "runtime_state/causal_applied_turn_keys",
         "runtime_state/causal_last_applied_tick",
         "runtime_state/causal_last_applied_turn_key",
+        "runtime_state/dialogue_focus",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
         "runtime_state/interaction_timeline",
         "runtime_state/last_interaction",
-        "runtime_state/narration_quality",
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
-        "runtime_state/response_soft_truth",
         "runtime_state/state_revision",
         "simulation_state/causal_runtime_projection",
         "simulation_state/causal_world_runtime",
+        "simulation_state/dialogue",
         "simulation_state/economy_state",
-        "simulation_state/journal_state",
-        "simulation_state/memory_state",
+        "simulation_state/environment",
         "simulation_state/merchant_state",
-        "simulation_state/npc_emotion_state",
-        "simulation_state/pending_interactions",
-        "simulation_state/relationship_state",
-        "simulation_state/response_soft_truth",
+        "simulation_state/survival",
+        "simulation_state/tick",
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/player",
-        "state/turn_count"
+        "state/turn_count",
+        "state/world"
       ],
       "response": {
         "changed_domains": [
-          "time"
+          "conversation",
+          "time",
+          "npcs",
+          "survival",
+          "world",
+          "narrative"
         ],
-        "source": "narrative_engine_resolved_turn_v1",
+        "source": "compact_dialogue_provider_canonical_v1",
         "state": {
           "changed": true,
           "changed_domains": [
-            "time"
+            "conversation",
+            "time",
+            "npcs",
+            "survival",
+            "world",
+            "narrative"
           ],
           "revision": 10
         }
@@ -1456,7 +1521,7 @@
         },
         "purse_copper": -30
       },
-      "document_hash": "sha256:491dd62921778487868d75f59443691807dff2a01c448bbe0b4cbd76b9097277",
+      "document_hash": "sha256:fd458fa048734bec0ebea6ba9935e2861ff4a3e5179a6a62fd2f24105a94f03d",
       "facts": {
         "combat": {
           "active": false,
@@ -1534,9 +1599,9 @@
           }
         },
         "survival": {
-          "fatigue": 7,
-          "hunger": 7,
-          "thirst": 13
+          "fatigue": 10,
+          "hunger": 10,
+          "thirst": 19
         },
         "turn_count": 10
       },
@@ -1547,6 +1612,9 @@
         "manifest/current_turn",
         "manifest/turn_count",
         "runtime_state/campaign_calendar",
+        "runtime_state/causal_applied_turn_keys",
+        "runtime_state/causal_last_applied_tick",
+        "runtime_state/causal_last_applied_turn_key",
         "runtime_state/interaction_id_by_turn",
         "runtime_state/interaction_lifecycles",
         "runtime_state/interaction_seq",
@@ -1555,10 +1623,16 @@
         "runtime_state/player_journal",
         "runtime_state/recent_interactions",
         "runtime_state/state_revision",
+        "simulation_state/causal_runtime_projection",
+        "simulation_state/causal_world_runtime",
+        "simulation_state/economy_state",
         "simulation_state/environment",
+        "simulation_state/merchant_state",
         "simulation_state/player_state",
         "simulation_state/tick",
         "simulation_state/trade",
+        "simulation_state/travel_state",
+        "simulation_state/world_event_state",
         "state/current_turn",
         "state/player",
         "state/turn_count",
@@ -1603,7 +1677,7 @@
         },
         "purse_copper": 5
       },
-      "document_hash": "sha256:b1c220bf2f7c5dae8d0428322893ae26482eebfe61a5ee0e0cbbb88a65444da6",
+      "document_hash": "sha256:d500df4137f8f76ba211c5e102c48759d56a106c793530081a6d6fb4500d60e5",
       "facts": {
         "combat": {
           "active": false,
@@ -1680,9 +1754,9 @@
           }
         },
         "survival": {
-          "fatigue": 7,
-          "hunger": 7,
-          "thirst": 13
+          "fatigue": 10,
+          "hunger": 10,
+          "thirst": 19
         },
         "turn_count": 11
       },
@@ -1757,7 +1831,7 @@
           "Lantern Bread": -1
         }
       },
-      "document_hash": "sha256:9998180a9cec1739ef5a3a73cf846ca7100d873f7d6149a3aaf03b0acf667c08",
+      "document_hash": "sha256:c4bcaec490a75f37ea29a9d171b0e97ac219f4d8b9132cf3bccbaaf1886c5c6a",
       "facts": {
         "combat": {
           "active": false,
@@ -1834,9 +1908,9 @@
           }
         },
         "survival": {
-          "fatigue": 7,
-          "hunger": 7,
-          "thirst": 13
+          "fatigue": 10,
+          "hunger": 10,
+          "thirst": 19
         },
         "turn_count": 12
       },
@@ -1917,7 +1991,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:187a01f955fa689ee4cd19f0230ff79cccbd160733431746b9ae996373a16127",
+      "document_hash": "sha256:bcf287fc03889c08c451a22e99590f93009d6a8d6219b895d1f3397e672c46a2",
       "facts": {
         "combat": {
           "active": false,
@@ -1994,9 +2068,9 @@
           }
         },
         "survival": {
-          "fatigue": 9,
-          "hunger": 9,
-          "thirst": 16
+          "fatigue": 12,
+          "hunger": 12,
+          "thirst": 22
         },
         "turn_count": 13
       },
@@ -2098,7 +2172,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:445c9ce88e627654a4869c6ce73f38b2c26f1aa9aa2bca8c1fcaad6c5747d436",
+      "document_hash": "sha256:3cf0dce4e1eebe23210d63e836aa89d50fd31c4a6760b789b0905694582d6817",
       "facts": {
         "combat": {
           "active": false,
@@ -2175,9 +2249,9 @@
           }
         },
         "survival": {
-          "fatigue": 10,
-          "hunger": 10,
-          "thirst": 18
+          "fatigue": 13,
+          "hunger": 13,
+          "thirst": 24
         },
         "turn_count": 14
       },
@@ -2263,7 +2337,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:a76a1267cc9cf8edace73235f75cc6fd12e88c3dd0941ce423693134e9377ab4",
+      "document_hash": "sha256:a193a9d4af30be0a2ed842ddeb5a66d1d15bf572c27f10e29968115a5ce879f9",
       "facts": {
         "combat": {
           "active": false,
@@ -2341,9 +2415,9 @@
           }
         },
         "survival": {
-          "fatigue": 12,
-          "hunger": 12,
-          "thirst": 21
+          "fatigue": 15,
+          "hunger": 15,
+          "thirst": 27
         },
         "turn_count": 15
       },
@@ -2435,7 +2509,7 @@
           "Lantern Bread": 1
         }
       },
-      "document_hash": "sha256:844b8be855e0b6bc74e617865a5c49b741602338ba4647db3803e4841da8c8d3",
+      "document_hash": "sha256:d0a9e034fa6928b9bd8e23224c468fd2a5d438a66ef6d903c92f4d9b4d2bf223",
       "facts": {
         "combat": {
           "active": false,
@@ -2513,9 +2587,9 @@
           }
         },
         "survival": {
-          "fatigue": 12,
-          "hunger": 12,
-          "thirst": 21
+          "fatigue": 15,
+          "hunger": 15,
+          "thirst": 27
         },
         "turn_count": 16
       },
@@ -2572,10 +2646,10 @@
       "changes": {
         "purse_copper": -8,
         "survival": {
-          "hunger": -12
+          "hunger": -15
         }
       },
-      "document_hash": "sha256:efb95c6717a72a2d5fe4f79ba415eb438b1e427327c80ea992da155ef300d0a1",
+      "document_hash": "sha256:0eac867e7af3d22afa27e96b546b55f8a31fee36dbee57d28b628840023840d9",
       "facts": {
         "combat": {
           "active": false,
@@ -2653,9 +2727,9 @@
           }
         },
         "survival": {
-          "fatigue": 12,
+          "fatigue": 15,
           "hunger": 0,
-          "thirst": 21
+          "thirst": 27
         },
         "turn_count": 17
       },
@@ -2731,7 +2805,7 @@
       "changes": {
         "purse_copper": -50
       },
-      "document_hash": "sha256:58f94f6f92b887adcfa46bb62b0cd1e826c698536ced34fa833e689ee02e7c7b",
+      "document_hash": "sha256:c85ab943f1462fce8f665abec334233aecfd659a78bbfe52a9a44070ff3b8263",
       "facts": {
         "combat": {
           "active": false,
@@ -2809,9 +2883,9 @@
           }
         },
         "survival": {
-          "fatigue": 12,
+          "fatigue": 15,
           "hunger": 0,
-          "thirst": 21
+          "thirst": 27
         },
         "turn_count": 18
       },
@@ -2884,12 +2958,12 @@
     {
       "changes": {
         "survival": {
-          "fatigue": -12,
+          "fatigue": -15,
           "hunger": 2,
           "thirst": 2
         }
       },
-      "document_hash": "sha256:b6342ebf7cb839a803d0dffb93c82fbdd60309c902cef3463d1d7e5ddf0dafa9",
+      "document_hash": "sha256:42ee491b34111d0c90b89af3be141bcd606d70d85424bb573f024ea6c5121491",
       "facts": {
         "combat": {
           "active": false,
@@ -2969,7 +3043,7 @@
         "survival": {
           "fatigue": 0,
           "hunger": 2,
-          "thirst": 23
+          "thirst": 29
         },
         "turn_count": 19
       },
@@ -3048,7 +3122,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:378dd0d0a6b768086b6a924ddbaa0dd27effa6d61ea68efafef744f898fd50ec",
+      "document_hash": "sha256:c0846ad43e855bd2a765d040d4691db1da7e01d08663d716cccfd8cb4c205d19",
       "facts": {
         "combat": {
           "active": false,
@@ -3128,7 +3202,7 @@
         "survival": {
           "fatigue": 1,
           "hunger": 3,
-          "thirst": 25
+          "thirst": 31
         },
         "turn_count": 20
       },
@@ -3210,7 +3284,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:9deaee6bdd04ec76186fc9c79415879c1f123001d5a06e305b1224568c3cbbe6",
+      "document_hash": "sha256:6026c9b021e7535cf59bcc6bafa2ca175bf150fbfce7cdb6f33a655ef3213ed6",
       "facts": {
         "combat": {
           "active": true,
@@ -3294,7 +3368,7 @@
         "survival": {
           "fatigue": 2,
           "hunger": 4,
-          "thirst": 27
+          "thirst": 33
         },
         "turn_count": 21
       },
@@ -3341,6 +3415,7 @@
         "runtime_state/recent_interactions",
         "runtime_state/recent_scene_beats",
         "runtime_state/recent_world_event_rows",
+        "runtime_state/response_soft_truth",
         "runtime_state/scene_beat_memory",
         "runtime_state/semantic_action_index",
         "runtime_state/semantic_action_records",
@@ -3381,6 +3456,7 @@
         "simulation_state/combat_state",
         "simulation_state/companion_presence_projection",
         "simulation_state/consequences",
+        "simulation_state/conversation_thread_state",
         "simulation_state/debug_meta",
         "simulation_state/economy_state",
         "simulation_state/event_history",
@@ -3398,6 +3474,7 @@
         "simulation_state/policy_reactions",
         "simulation_state/present_npc_state",
         "simulation_state/presentation_state",
+        "simulation_state/response_soft_truth",
         "simulation_state/sandbox_state",
         "simulation_state/sandbox_summary",
         "simulation_state/save_meta",
@@ -3446,7 +3523,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:9deaee6bdd04ec76186fc9c79415879c1f123001d5a06e305b1224568c3cbbe6",
+      "document_hash": "sha256:6026c9b021e7535cf59bcc6bafa2ca175bf150fbfce7cdb6f33a655ef3213ed6",
       "facts": {
         "combat": {
           "active": true,
@@ -3530,7 +3607,7 @@
         "survival": {
           "fatigue": 2,
           "hunger": 4,
-          "thirst": 27
+          "thirst": 33
         },
         "turn_count": 21
       },
@@ -3565,7 +3642,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:343364393b12773c0671465b29fd9f0a927ce00ae64b24c9c407d4a916a458d0",
+      "document_hash": "sha256:a34e88f5ebb9ec5f752accec184d424745d6f04908b401011d92c4dd22b9717a",
       "facts": {
         "combat": {
           "active": true,
@@ -3649,7 +3726,7 @@
         "survival": {
           "fatigue": 3,
           "hunger": 5,
-          "thirst": 29
+          "thirst": 35
         },
         "turn_count": 22
       },
@@ -3754,7 +3831,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f84befedcaa1e6235535285fd1b1adbff8b9b61e21c81703a543a1aaffca3844",
+      "document_hash": "sha256:d5cecb1bcea6e10f4293eaf48bd907bef977da11498022a28b50068586413cf1",
       "facts": {
         "combat": {
           "active": true,
@@ -3838,7 +3915,7 @@
         "survival": {
           "fatigue": 4,
           "hunger": 6,
-          "thirst": 31
+          "thirst": 37
         },
         "turn_count": 23
       },
@@ -3935,7 +4012,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:9200ef53728760470898ab090704176cfd257b714242ad196837a8f7f8160057",
+      "document_hash": "sha256:c5c02469f64efb35c9c329b49dc1117f6811ca7b7c89b4a0ce5956503d91b452",
       "facts": {
         "combat": {
           "active": false,
@@ -4019,7 +4096,7 @@
         "survival": {
           "fatigue": 5,
           "hunger": 7,
-          "thirst": 33
+          "thirst": 39
         },
         "turn_count": 24
       },
@@ -4117,7 +4194,7 @@
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:52862c695f97c0d7f1a2600a8a2183e5bb36c0b3af17f9bf89e3cb363809fab1",
+      "document_hash": "sha256:946b2414dec573fc14cac6022718eaa2041a40c50818e8f6b58852a493a12328",
       "facts": {
         "combat": {
           "active": false,
@@ -4200,7 +4277,7 @@
         "survival": {
           "fatigue": 5,
           "hunger": 7,
-          "thirst": 33
+          "thirst": 39
         },
         "turn_count": 25
       },
@@ -4270,7 +4347,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:eb7aa437f282058c0272a81e5aa13e1a6a9d1b5f1d565ea4a864c228f96f061d",
+      "document_hash": "sha256:b463c5082addbfe95c7a91ab3ac703a890ec302e165e4ebcab7073c965e20a88",
       "facts": {
         "combat": {
           "active": false,
@@ -4353,7 +4430,7 @@
         "survival": {
           "fatigue": 5,
           "hunger": 7,
-          "thirst": 33
+          "thirst": 39
         },
         "turn_count": 26
       },
@@ -4417,7 +4494,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:48660a5b6410ba63269aef99a6d0a6a8ad7be923ed6dd59993e617fffddd487b",
+      "document_hash": "sha256:a6a89f2f21d58bd4921400738643b7a73a0fd6fe12999c669284faba9e2d091c",
       "facts": {
         "combat": {
           "active": false,
@@ -4497,7 +4574,7 @@
         "survival": {
           "fatigue": 7,
           "hunger": 9,
-          "thirst": 36
+          "thirst": 42
         },
         "turn_count": 27
       },
@@ -4602,7 +4679,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:3c4a7e1241683de94588a7b18428de037e2f3b3ce0a0e6f19b1a88868a5486c7",
+      "document_hash": "sha256:a1872464fa4151a46ec2d0944516465b63e714a531ccfc79eeb60bdc156616b7",
       "facts": {
         "combat": {
           "active": false,
@@ -4685,7 +4762,7 @@
         "survival": {
           "fatigue": 9,
           "hunger": 11,
-          "thirst": 39
+          "thirst": 45
         },
         "turn_count": 28
       },
@@ -4789,7 +4866,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:e82c9dbb7a68193977a22c28f654bb3ed4d4a2abcaf5c8cc7c13fef583caacff",
+      "document_hash": "sha256:28af55dcfe4dc1fa36e99211b74487242284ed683e98f1cd0a6c6ba312496231",
       "facts": {
         "combat": {
           "active": false,
@@ -4869,7 +4946,7 @@
         "survival": {
           "fatigue": 11,
           "hunger": 13,
-          "thirst": 42
+          "thirst": 48
         },
         "turn_count": 29
       },
@@ -4963,7 +5040,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:f3186c1e5af9eba17c5dee403ff361b879715b2dce034bb8ed9bf0c12dc74c20",
+      "document_hash": "sha256:c853cf0092854f05bbddb7965cda802d3ce7be23af137f9257a807cc7aa1dc2d",
       "facts": {
         "combat": {
           "active": false,
@@ -5043,7 +5120,7 @@
         "survival": {
           "fatigue": 12,
           "hunger": 14,
-          "thirst": 44
+          "thirst": 50
         },
         "turn_count": 30
       },

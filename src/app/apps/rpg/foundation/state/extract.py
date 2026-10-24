@@ -182,4 +182,5 @@ CHANGE_SECTIONS: dict[str, str] = {
     "world_ticked": "world", "journal_written": "narrative", "service_reserved": "economy",
     "stock_taken": "economy", "trade_remembered": "economy", "conditions_changed": "player",
     "rest_taken": "player", "service_used": "economy", "companion_ordered": "party",
+    "dialogue_exchanged": "npcs", "knowledge_shared": "npcs", "quest_offered": "quests",
 }

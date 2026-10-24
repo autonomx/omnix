@@ -9,6 +9,68 @@
       "narrative": {
         "blocks": [
           {
+            "kind": "narration",
+            "purpose": "direct_answer",
+            "sequence": 1,
+            "speaker_id": null,
+            "text": "You take in your surroundings."
+          }
+        ],
+        "validation": {
+          "passed": true,
+          "status": null
+        }
+      },
+      "ok": true,
+      "result": {
+        "changed_domains": [
+          "time",
+          "survival",
+          "world",
+          "narrative"
+        ],
+        "llm_purpose": "canonical_dialogue_generation",
+        "narration_status": "not_requested",
+        "source": "narrative_engine_scene_turn_v1"
+      },
+      "session_summary": {
+        "interaction_seq": 1,
+        "location": "Rusty Flagon Tavern",
+        "player_level": 1,
+        "state_revision": 1,
+        "title": "Alyndra — Rusty Flagon Tavern"
+      },
+      "simulation_tick": 1,
+      "state": {
+        "changed": true,
+        "changed_domains": [
+          "time",
+          "survival",
+          "world",
+          "narrative"
+        ],
+        "revision": 1
+      },
+      "turn_id": "turn:1",
+      "visible_response": {
+        "format_version": "rpg_visible_response_v1",
+        "messages": [],
+        "narration": "You take in your surroundings.",
+        "npc": {},
+        "plain_text": "You take in your surroundings."
+      }
+    },
+    {
+      "command": "talk to the bartender",
+      "contract_version": "rpg_turn_response_v2",
+      "interaction_id": "interaction:2",
+      "model_calls": [
+        "semantic_intent",
+        "semantic_intent"
+      ],
+      "narrative": {
+        "blocks": [
+          {
             "kind": "action",
             "purpose": "resolved_action",
             "sequence": 1,
@@ -40,13 +102,13 @@
         "source": "narrative_engine_resolved_turn_v1"
       },
       "session_summary": {
-        "interaction_seq": 1,
+        "interaction_seq": 2,
         "location": "Rusty Flagon Tavern",
         "player_level": 1,
-        "state_revision": 1,
+        "state_revision": 2,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
-      "simulation_tick": 1,
+      "simulation_tick": 2,
       "state": {
         "changed": true,
         "changed_domains": [
@@ -54,83 +116,15 @@
           "location",
           "survival"
         ],
-        "revision": 1
+        "revision": 2
       },
-      "turn_id": "turn:1",
+      "turn_id": "turn:2",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [],
         "narration": "You take in your surroundings.",
         "npc": {},
         "plain_text": "You take in your surroundings."
-      }
-    },
-    {
-      "command": "talk to the bartender",
-      "contract_version": "rpg_turn_response_v2",
-      "interaction_id": "interaction:2",
-      "model_calls": [
-        "turn_narration"
-      ],
-      "narrative": {
-        "blocks": [
-          {
-            "kind": "dialogue",
-            "purpose": "direct_answer",
-            "sequence": 0,
-            "speaker_id": "npc:npc_innkeeper",
-            "text": "The moment passes quietly in the room."
-          }
-        ],
-        "validation": {
-          "passed": true,
-          "status": null
-        }
-      },
-      "ok": true,
-      "result": {
-        "changed_domains": [
-          "conversation",
-          "time"
-        ],
-        "llm_purpose": "compact_dialogue_generation",
-        "narration_status": "not_requested",
-        "source": "compact_dialogue_provider_canonical_v1"
-      },
-      "session_summary": {
-        "interaction_seq": 2,
-        "location": "Rusty Flagon Tavern",
-        "player_level": 1,
-        "state_revision": 2,
-        "title": "Alyndra — Rusty Flagon Tavern"
-      },
-      "simulation_tick": 1,
-      "state": {
-        "changed": true,
-        "changed_domains": [
-          "conversation",
-          "time"
-        ],
-        "revision": 2
-      },
-      "turn_id": "turn:1",
-      "visible_response": {
-        "format_version": "rpg_visible_response_v1",
-        "messages": [
-          {
-            "kind": "npc_dialogue",
-            "speaker": "Bran the Innkeeper",
-            "speaker_id": "npc:npc_innkeeper",
-            "text": "The moment passes quietly in the room."
-          }
-        ],
-        "narration": "",
-        "npc": {
-          "line": "The moment passes quietly in the room.",
-          "speaker": "Bran the Innkeeper",
-          "speaker_id": "npc:npc_innkeeper"
-        },
-        "plain_text": "Bran the Innkeeper: \"The moment passes quietly in the room.\""
       }
     },
     {
@@ -193,7 +187,7 @@
         "state_revision": 3,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
-      "simulation_tick": 2,
+      "simulation_tick": 3,
       "state": {
         "changed": true,
         "changed_domains": [
@@ -201,7 +195,7 @@
         ],
         "revision": 3
       },
-      "turn_id": "turn:2",
+      "turn_id": "turn:3",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [
@@ -317,7 +311,9 @@
       "result": {
         "changed_domains": [
           "time",
-          "survival"
+          "survival",
+          "world",
+          "narrative"
         ],
         "llm_purpose": "canonical_dialogue_generation",
         "narration_status": "not_requested",
@@ -330,16 +326,18 @@
         "state_revision": 5,
         "title": "Alyndra — Rusty Flagon Tavern"
       },
-      "simulation_tick": 3,
+      "simulation_tick": 6,
       "state": {
         "changed": true,
         "changed_domains": [
           "time",
-          "survival"
+          "survival",
+          "world",
+          "narrative"
         ],
         "revision": 5
       },
-      "turn_id": "turn:3",
+      "turn_id": "turn:6",
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [],

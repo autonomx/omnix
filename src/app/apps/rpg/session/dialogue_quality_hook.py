@@ -13,6 +13,10 @@ def apply_dialogue_quality_stage(ctx: Any) -> Any:
     result = ctx.result
     if not isinstance(result, dict) or result.get("ok") is not True:
         return ctx
+    if isinstance(result.get("turn_pipeline"), dict):
+        # The turn pipeline's line is checked against the speaker's plan (rules/dialogue/plan.py); the older
+        # path's rewrite to a word count, with its stock lines, does not apply to it.
+        return ctx
     session = result.get("session")
     if not isinstance(session, dict) and isinstance(ctx.session_override, dict):
         session = ctx.session_override

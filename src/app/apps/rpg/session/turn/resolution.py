@@ -32,6 +32,7 @@ class Resolution:
     refused: bool = False
     needs: str | None = None  # the survival profile of the turn, or none
     told: bool = True  # told to the narrator; else the lines are the game's own, with no model call
+    speech: dict[str, str] | None = None  # a person's spoken line, already written: speaker_id, speaker, line
 
 
 def _counted(document: Mapping[str, Any]) -> TurnCounted:
@@ -84,6 +85,16 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         quiet = mechanic in {"status", "order"} or asked.refused
         return Resolution(_timed(session, asked.changes, asked.minutes), asked.lines, minutes=asked.minutes,
                           refused=asked.refused, needs=None if quiet else "standard_turn", told=not quiet)
+    if mechanic == "talk":
+        from app.apps.rpg.session.turn.dialogue import resolve_dialogue
+
+        answer = resolve_dialogue(session, planned.target_id, text)
+        if answer is None:
+            return None
+        speech = ({"speaker_id": answer.speaker_id, "speaker": answer.speaker_name, "line": answer.line}
+                  if answer.line else None)
+        return Resolution(_timed(session, answer.changes, MINUTES_PER_TICK), answer.lines, minutes=MINUTES_PER_TICK,
+                          needs="standard_turn", speech=speech)
     if mechanic == "rest":
         outcome = rest(simulation, text)
         return Resolution(_timed(session, outcome.changes, outcome.minutes), outcome.lines, minutes=outcome.minutes,
