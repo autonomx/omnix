@@ -17,8 +17,9 @@ Per turn it records, from the request's start:
 
 - ``outcome_known_ms``: the end of the turn's ``planned_turn`` stage, when the deterministic outcome is known on the
   server (the tactical route resolves and commits in one step, so it is the whole request);
-- ``outcome_visible_ms``: when the play screen can show the outcome. Today that is the turn's response (the outcome
-  arrives with the narration), so it equals ``complete_ms``;
+- ``outcome_visible_ms``: when the play screen can show the outcome: the turn's response. Without ``--stream`` the
+  outcome arrives with the narration, so it equals ``complete_ms``; with ``--stream`` (the play screen's way, RQ-6.2)
+  the response comes at the commit, and the turn is complete when its stream's narration is final;
 - ``first_narration_ms``: the first non-empty narration draft the narrative writer publishes (what
   ``GET /api/rpg/sessions/{id}/turn-draft`` serves; the client adds up to its poll interval); null when the turn
   publishes no draft;
@@ -114,7 +115,9 @@ def _ms(mark: float | None, start: float) -> float | None:
 
 
 class Harness:
-    def __init__(self, provider: str) -> None:
+    def __init__(self, provider: str, *, stream: bool = False) -> None:
+        self.stream = stream  # the play screen's stream: the outcome at the commit, the narration after
+        self.answered = 0.0
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
@@ -141,8 +144,19 @@ class Harness:
         self.snapshots: dict[str, dict[str, Any]] = {}
 
     def turn(self, command: str) -> int:
+        submission = f"submit:latency:{uuid.uuid4().hex}"
+        headers = {"x-omnix-rpg-submission-id": submission, **({"x-omnix-rpg-turn-stream": "1"} if self.stream else {})}
         response = self.client.post(f"/api/rpg/sessions/{self.session_id}/turn", json={"command": command},
-                                    headers={"x-omnix-rpg-submission-id": f"submit:latency:{uuid.uuid4().hex}"})
+                                    headers=headers)
+        self.answered = time.perf_counter()
+        if self.stream and response.status_code == 200 and (response.json().get("narration") or {}).get("status") == "pending":
+            # The outcome is visible at the answer; the turn is complete when its narration is final (RQ-6.2).
+            with self.client.stream("GET", f"/api/rpg/sessions/{self.session_id}/submissions/{submission}/stream") as events:
+                for line in events.iter_lines():
+                    if line.startswith("event: narration.delta") and self.clock.first_draft is None:
+                        self.clock.first_draft = time.perf_counter()
+                    if line.startswith(("event: narration.final", "event: error")):
+                        break
         return response.status_code
 
     def restore(self, scene: str) -> None:
@@ -215,10 +229,11 @@ class Harness:
             calls = self.calls()[calls_before:]
             model_ms = round(sum(float(call.get("ms") or 0) for call in calls), 1)
             complete = _ms(done, start)
+            answered = _ms(self.answered, start) if spec["command"] is not None and self.stream else complete
             rows.append({
                 "http": status,
                 "outcome_known_ms": complete if spec["command"] is None else _ms(self.clock.resolve_done, start),
-                "outcome_visible_ms": complete,
+                "outcome_visible_ms": answered,
                 "first_narration_ms": _ms(self.clock.first_draft, start),
                 "complete_ms": complete,
                 "model_calls": len(calls),
@@ -271,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--provider", choices=("route", "scripted"), default="scripted")
     parser.add_argument("--runs", type=int, default=20)
+    parser.add_argument("--stream", action="store_true", help="follow each turn on its stream, as the play screen does")
     parser.add_argument("--classes", nargs="+", choices=tuple(CLASSES), default=list(CLASSES))
     parser.add_argument("--allow-database", default="", help="a disposable database whose name lacks 'test'/'bench'")
     parser.add_argument("--output", type=Path)
@@ -283,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
 
     database = worlds.require_disposable_database(args.allow_database)
     worlds.bootstrap()
-    harness = Harness(args.provider)
+    harness = Harness(args.provider, stream=args.stream)
     identity = worlds.provider_identity() if args.provider == "route" else {"provider": "scripted", "model": "scripted"}
     started = time.perf_counter()
     scenes = harness.prepare()

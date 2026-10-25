@@ -27,7 +27,7 @@ def commit_interaction(ctx: Any) -> Any:
     if not isinstance(session, dict):
         return ctx
 
-    from .interaction_timeline import commit_turn_interaction, mark_interaction_persisted
+    from .interaction_timeline import commit_turn_interaction
 
     submission_id = str(DIRECT_RPG_SUBMISSION_ID.get("") or "").strip()
     with rpg_pipeline_span("turn.interaction_append") as interaction_span:
@@ -43,6 +43,24 @@ def commit_interaction(ctx: Any) -> Any:
         interaction_span["stateful"] = event.get("stateful")
     result["session"] = session
 
+    from .narrative_engine_bridge import narration_needs_writer
+    from .turn.narration_timing import narrates_after_commit
+
+    if narrates_after_commit() and narration_needs_writer(result):
+        # Narrated after the commit (RQ-6.2): the turn commits with no response; its narration is inserted beside
+        # the campaign when the writer is done, with no campaign save.
+        from .interaction_lifecycle import initialize_interaction_lifecycle
+
+        initialize_interaction_lifecycle(session, result)
+        result["narration_after_commit"] = True
+    else:
+        result = _canonical_with_the_turn(ctx, session, result)
+
+    return _persist(ctx, session, result, event, submission_id)
+
+
+def _canonical_with_the_turn(ctx: Any, session: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """The turn's narration, written now and committed with it, its projection in the committed state."""
     from .narrative_engine_bridge import canonicalize_resolved_turn_result
 
     with rpg_pipeline_span("turn.canonical_after_interaction") as narrative_span:
@@ -70,7 +88,14 @@ def commit_interaction(ctx: Any) -> Any:
 
         initialize_interaction_lifecycle(session, result)
         narrative_span["session_projection_patched"] = patch_session_canonical_projection(result)
+    return result
 
+
+def _persist(ctx: Any, session: dict[str, Any], result: dict[str, Any], event: dict[str, Any],
+             submission_id: str) -> Any:
+    from .interaction_timeline import mark_interaction_persisted
+
+    session_override = ctx.session_override
     if isinstance(session_override, dict):
         session_override.clear()
         session_override.update(session)

@@ -7,6 +7,7 @@ import asyncio
 from typing import Any
 
 from fastapi import HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from .rpg_campaign_lore_routes import register_rpg_campaign_lore_routes
@@ -47,6 +48,7 @@ from app.apps.rpg.edge.api.web_contracts import (
     RpgTurnDraftResponse,
 )
 from app.apps.rpg.edge.api.route_contracts import (
+    TURN_STREAM,
     RpgAbilityCoverageResponse,
     RpgLocalDialogueFixtureResponse,
 )
@@ -84,6 +86,7 @@ class RpgLocalDialogueFixtureRequestBody(_TypedRequestModel):
 _ROUTE_SENTINEL = "_omnix_rpg_session_routes_registered"
 _GENESIS_CONTRACT_VERSION = "rpg_genesis_v2"
 _LOCAL_DIALOGUE_FIXTURE_HEADER = "x-omnix-rpg-live-smoke"
+STREAM_APPEAR_SECONDS = 2.0  # how long a stream route waits for the turn to be taken
 
 
 class _TruthyZero(int):
@@ -441,6 +444,9 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
                     "session_id": session_id,
                 },
             )
+        from app.apps.rpg.session.turn.narration_timing import with_narrations
+
+        session = dict(with_narrations(session))  # turns narrated after their commit read theirs from the table
         return _with_rpg_response_surface(
             {
                 "ok": True,
@@ -588,6 +594,44 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
         from app.apps.rpg.narration.narration_drafts import read_narration_draft
 
         return read_narration_draft(session_id, submission_id)
+
+    @router.get(
+        "/api/rpg/sessions/{session_id}/submissions/{submission_id}/stream",
+        tags=["rpg-session"],
+        include_in_schema=False,
+        responses=TURN_STREAM,
+    )
+    def rpg_turn_stream(session_id: str, submission_id: str, request: Request,
+                        after: int | None = Query(default=None, ge=-1)) -> StreamingResponse:
+        """The caller's own turn as it happens (RQ-6.2, roadmap §4.7): ``accepted``, ``committed``, ``outcome``,
+        ``narration.delta``, ``narration.final`` or ``error``; ``Last-Event-ID`` (or ``after``) resumes."""
+        from app.apps.rpg.foundation import turn_stream
+
+        header = str(request.headers.get("last-event-id") or "").strip()
+        try:
+            cursor = int(header) if header else int(after if after is not None else -1)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"ok": False, "error": "invalid_turn_stream_cursor"}) from exc
+        key = turn_stream.stream_key(session_id, submission_id)
+        if key is None:
+            raise HTTPException(status_code=404, detail={"ok": False, "error": "turn_stream_not_found"})
+
+        def frames():
+            import json
+            import time
+
+            deadline = time.monotonic() + STREAM_APPEAR_SECONDS
+            while not turn_stream.has_stream(key) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            if not turn_stream.has_stream(key):
+                # Another process took the turn, or its stream has expired: the campaign holds what happened.
+                yield "event: error\ndata: " + json.dumps({"error": "turn_stream_not_found"}) + "\n\n"
+                return
+            for index, name, data in turn_stream.events(key, cursor):
+                yield f"id: {index}\nevent: {name}\ndata: {json.dumps(data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+        return StreamingResponse(frames(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @router.post(
         "/api/rpg/local-qualification/dialogue-fixture",

@@ -87,9 +87,13 @@ def publish_narration_draft(text: str) -> None:
         return
     with _LOCK:
         draft = _DRAFTS.get(key)
-        if draft is not None and text != draft.text:
-            draft.text = text
-            draft.updated = time.monotonic()
+        if draft is None or text == draft.text:
+            return
+        draft.text = text
+        draft.updated = time.monotonic()
+    from app.apps.rpg.foundation import turn_stream
+
+    turn_stream.publish(key, "narration.delta", {"text": text})  # the stream's reader sees the draft too (RQ-6.2)
 
 
 def read_narration_draft(session_id: str, submission_id: str) -> dict[str, object]:

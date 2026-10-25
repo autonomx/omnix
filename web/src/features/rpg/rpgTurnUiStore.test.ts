@@ -241,6 +241,59 @@ describe('rpgTurnUiStore', () => {
     expect(draftUrls.length).toBe(polls); // polling stops with the turn's answer
   });
 
+  it('follows a turn on its stream: the outcome at the commit, then the narration as it is written', async () => {
+    class FakeEventSource {
+      static last: FakeEventSource | null = null;
+      listeners: Record<string, ((event: MessageEvent<string>) => void)[]> = {};
+      closed = false;
+      constructor(public url: string) {
+        FakeEventSource.last = this;
+      }
+      addEventListener(name: string, listener: (event: MessageEvent<string>) => void) {
+        (this.listeners[name] ||= []).push(listener);
+      }
+      emit(name: string, data: unknown) {
+        for (const listener of this.listeners[name] || []) listener({ data: JSON.stringify(data) } as MessageEvent<string>);
+      }
+      close() {
+        this.closed = true;
+      }
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const sent: Headers[] = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(new Headers(init?.headers));
+      return new Response(JSON.stringify({
+        ok: true, contract_version: 'rpg_turn_response_v2', session_id: 'session:bran', interaction_id: 'interaction:9',
+        visible_response: { plain_text: '', status: 'pending' },
+        narration: { status: 'pending', stream_path: '/api/rpg/sessions/session:bran/submissions/s/stream' },
+        outcome: { presentation: { facts: [{ kind: 'coin', text: 'You pay 5 copper.', tone: 'loss' }] } },
+      }), { status: 200 });
+    });
+    installRpgTurnUiFetchInterceptor(fetchImpl as typeof fetch);
+    try {
+      await pipelineFetch('/api/rpg/sessions/session%3Abran/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'Buy a meal' }),
+      });
+      expect(sent[0].get('X-Omnix-Rpg-Turn-Stream')).toBe('1');
+      const told = () => getRpgTurnUiEntries('session:bran').filter((entry) => entry.tone !== 'player');
+      expect(told().map((entry) => [entry.messageKind, entry.status])).toEqual([['narration', 'pending'], ['outcome', 'complete']]);
+      const source = FakeEventSource.last as FakeEventSource;
+      expect(source.url).toBe('/api/rpg/sessions/session:bran/submissions/s/stream');
+
+      source.emit('narration.delta', { text: 'Orik sets a bowl down.' });
+      expect(told()[0].text).toBe('Orik sets a bowl down.');
+      source.emit('narration.final', { visible_response: { narration: 'Orik sets a steaming bowl before you.' } });
+      expect(told().map((entry) => [entry.text, entry.status])).toEqual([
+        ['Orik sets a steaming bowl before you.', 'complete'], ['You pay 5 copper.', 'complete']]);
+      expect(source.closed).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("turns a refused turn's error code into words", async () => {
     const json = (detail: unknown, status = 400) => new Response(JSON.stringify({ detail }), { status });
     expect(await turnFailureMessage(json({ error: 'target_not_found' }))).toBe('There is no one or nothing by that name here.');

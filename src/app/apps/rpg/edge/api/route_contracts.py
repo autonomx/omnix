@@ -649,6 +649,15 @@ NARRATIVE_DELIVERY_STREAM: dict[int | str, dict[str, Any]] = {
 }
 
 
+TURN_STREAM: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "Server-sent turn events (``text/event-stream``): accepted, committed, outcome, "
+                       "narration.delta, narration.final, error (RQ-6.2).",
+        "content": {"text/event-stream": {"schema": {"type": "string"}}},
+    }
+}
+
+
 # -- debug logging -------------------------------------------------------------
 
 

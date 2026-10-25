@@ -683,6 +683,15 @@ def publish_fixed_narration(
     return result
 
 
+def narration_needs_writer(result: Mapping[str, Any]) -> bool:
+    """The turn has no words of its own yet: the narrative writer must write them (a person's line is adopted)."""
+    if not isinstance(result, Mapping) or result.get("ok") is not True:
+        return False
+    if isinstance(result.get("canonical_narrative_response"), Mapping):
+        return False
+    return _response_mode(dict(result)) not in _DIALOGUE_MODES
+
+
 def canonicalize_resolved_turn_result(
     result: dict[str, Any],
     *,

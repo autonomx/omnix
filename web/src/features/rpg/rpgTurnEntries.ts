@@ -14,14 +14,14 @@ export interface RpgTurnUiEntry extends RpgStoryMessagePreview {
   messageIndex?: number;
 }
 
-interface RpgVisibleMessageV2 {
+export interface RpgVisibleMessageV2 {
   kind?: string;
   speaker_id?: string;
   speaker?: string;
   text?: string;
 }
 
-interface RpgVisibleResponseV2 {
+export interface RpgVisibleResponseV2 {
   narration?: string;
   messages?: RpgVisibleMessageV2[];
   plain_text?: string;
@@ -48,6 +48,18 @@ export interface RpgTurnResponseV2 {
   outcome?: RpgTurnOutcome | null;
   /** What the player is told beside the turn: the storyteller unavailable (RQ-8.8). */
   notices?: { kind?: string; message?: string }[];
+  /** A turn followed on its stream returns at its commit: its narration comes on `stream_path` (RQ-6.2). */
+  narration?: { status?: string; stream_path?: string };
+}
+
+/** What the turn's narration says, as the stream's `narration.final` or the turn's response gives it. */
+export function rpgNarrationEntries(
+  sessionId: string,
+  submissionId: string,
+  interactionId: string,
+  visible: RpgVisibleResponseV2,
+): RpgTurnUiEntry[] {
+  return rpgTurnEntriesFromPayload(sessionId, submissionId, interactionId, { visible_response: visible });
 }
 
 export type RpgTurnOutcome = components['schemas']['TurnOutcome'];
@@ -119,6 +131,14 @@ export function rpgTurnEntriesFromPayload(
         messageIndex: 0,
       });
     }
+  }
+  if (payload.narration?.status === 'pending' && !entries.length) {
+    // The storyteller is still writing: the stream fills this in (RQ-6.2).
+    entries.push({
+      id: `${interactionId}:narration`, sessionId, submissionId, interactionId, status: 'pending', avatar: 'O',
+      speaker: 'Omnix (Narrator)', text: 'The storyteller is writing…', tone: 'narrator', messageKind: 'narration',
+      messageIndex: 0,
+    });
   }
   const facts = payload.outcome?.presentation?.facts ?? [];
   if (facts.length) {

@@ -15,6 +15,7 @@ Browser-facing JSON routes have typed request and response contracts in OpenAPI.
 | `src/app/platform/chat/live_chat_speculation_handshake.py` | POST | `/api/live/speculation/sessions/{session_id}/{generation_id}/stream` | Server-Sent Events |
 | `src/app/platform/chat/live_chat_speculation_inline_stream.py` | POST | `/api/live/speculation/sessions/{session_id}/start-stream` | Server-Sent Events |
 | `src/app/apps/rpg/edge/api/feature_routes/rpg_narrative_delivery_routes.py` | GET | `/api/rpg/narrative-responses/{response_id}/stream` | Server-Sent Events |
+| `src/app/apps/rpg/edge/api/feature_routes/rpg_session_routes.py` | GET | `/api/rpg/sessions/{session_id}/submissions/{submission_id}/stream` | Server-Sent Events |
 
 WebSocket routes are absent from OpenAPI by protocol definition. The gateway and feature routes are:
 

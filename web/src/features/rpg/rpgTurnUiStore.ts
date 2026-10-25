@@ -3,10 +3,12 @@ import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import { useEffect, useState } from 'react';
 import type { RpgStoryMessagePreview } from './rpgUiState';
 import {
+  rpgNarrationEntries,
   rpgTurnChangedDomains,
   rpgTurnEntriesFromPayload,
   type RpgTurnResponseV2,
   type RpgTurnUiEntry,
+  type RpgVisibleResponseV2,
 } from './rpgTurnEntries';
 import {
   beginRpgTurnDiagnostics,
@@ -283,10 +285,13 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
       new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
       headers.set('X-Omnix-Rpg-Submission-Id', submissionId);
       headers.set('X-Omnix-Rpg-Client-Started', new Date().toISOString());
+      // Followed on its stream, the turn answers at its commit and its narration comes after (RQ-6.2).
+      const streamed = typeof globalThis.EventSource === 'function';
+      if (streamed) headers.set('X-Omnix-Rpg-Turn-Stream', '1');
       beginRpgTurnDiagnostics(sessionId, submissionId, requestStartedMs);
       beginRpgTurnUiSubmission({ sessionId, submissionId, command });
-      const draftPolling = { active: true };
-      void pollTurnDraft(originalFetch, sessionId, submissionId, draftPolling);
+      const draftPolling = { active: !streamed };
+      if (!streamed) void pollTurnDraft(originalFetch, sessionId, submissionId, draftPolling);
       try {
         const response = await originalFetch(input, { ...init, headers }).finally(() => {
           draftPolling.active = false;
@@ -317,6 +322,10 @@ export function installRpgTurnUiFetchInterceptor(fetchImpl?: typeof fetch): () =
         });
         for (const path of refreshPathsForChangedDomains(sessionId, changedDomains)) {
           sessionResponseCache.delete(path);
+        }
+        const streamPath = parsed.payload.narration?.status === 'pending' ? parsed.payload.narration.stream_path : '';
+        if (streamPath) {
+          followTurnNarration(sessionId, submissionId, parsed.payload.interaction_id || parsed.payload.turn_id || submissionId, streamPath);
         }
         return response;
       } catch (error) {
@@ -385,6 +394,48 @@ function commandFromBody(body: BodyInit | null | undefined): string {
     // Non-JSON bodies are passed through without affecting the request.
   }
   return 'Continue the adventure.';
+}
+
+/** The turn's narration on its stream: the draft as it is written, then the narration it ends with (RQ-6.2). */
+function followTurnNarration(sessionId: string, submissionId: string, interactionId: string, streamPath: string): void {
+  const source = new globalThis.EventSource(streamPath);
+  const close = () => source.close();
+  source.addEventListener('narration.delta', (event) => {
+    const text = (JSON.parse((event as MessageEvent<string>).data) as { text?: unknown }).text;
+    if (typeof text === 'string') draftRpgTurnUiSubmission(sessionId, submissionId, text);
+  });
+  source.addEventListener('narration.final', (event) => {
+    const data = JSON.parse((event as MessageEvent<string>).data) as { visible_response?: RpgVisibleResponseV2 };
+    finishRpgTurnNarration(sessionId, submissionId, rpgNarrationEntries(sessionId, submissionId, interactionId, data.visible_response || {}));
+    close();
+  });
+  source.addEventListener('error', (event) => {
+    const raw = (event as MessageEvent<string>).data;
+    if (typeof raw === 'string' && raw) {
+      // The turn stands; only its narration failed. Reading the campaign later shows what it holds.
+      const message = (JSON.parse(raw) as { message?: unknown }).message;
+      finishRpgTurnNarration(sessionId, submissionId, [], typeof message === 'string' ? message : STORYTELLER_SILENT);
+    }
+    close();
+  });
+}
+
+const STORYTELLER_SILENT = 'The storyteller could not narrate this turn; what happened is in the outcome above.';
+
+/** The turn's pending narration replaced by what the stream ended with. */
+export function finishRpgTurnNarration(
+  sessionId: string,
+  submissionId: string,
+  narration: RpgTurnUiEntry[],
+  failure?: string,
+): void {
+  const current = getRpgTurnUiEntries(sessionId);
+  const at = current.findIndex((entry) => entry.submissionId === submissionId && entry.status === 'pending' && entry.tone !== 'player');
+  if (at < 0) return;
+  const replacement = narration.length
+    ? narration
+    : [{ ...current[at], status: 'complete' as const, text: failure || STORYTELLER_SILENT }];
+  setSessionEntries(sessionId, [...current.slice(0, at), ...replacement, ...current.slice(at + 1)]);
 }
 
 const TURN_DRAFT_POLL_MS = 500;
