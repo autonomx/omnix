@@ -59,7 +59,6 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.apps.rpg.genesis.forge.runtime_lore_materialization",
     "app.apps.rpg.genesis.forge.runtime_materialization",
     "app.apps.rpg.genesis.forge.world_forge_dossiers",
-    "app.apps.rpg.session.item_detail",
     "app.apps.rpg.narration.memory_prompt",
     "app.apps.rpg.genesis.worlds.generation_first_pass_provider",
     "app.apps.rpg.genesis.worlds.providers.single_pass",

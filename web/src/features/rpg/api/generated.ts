@@ -2459,6 +2459,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/worlds/{world_id}/play-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Read World Play Sections */
+        get: operations["rpg_read_world_play_sections_api_rpg_worlds__world_id__play_sections_get"];
+        /** Rpg Save World Play Sections */
+        put: operations["rpg_save_world_play_sections_api_rpg_worlds__world_id__play_sections_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/play-sections/draft-from-lore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Draft World Play Sections */
+        post: operations["rpg_draft_world_play_sections_api_rpg_worlds__world_id__play_sections_draft_from_lore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/worlds/{world_id}/prepare-openings-for-launch": {
         parameters: {
             query?: never;
@@ -2862,6 +2897,19 @@ export interface components {
         AuthSessionResponse: core["schemas"]["AuthSessionResponse"];
         /** AuthSessionSummary */
         AuthSessionSummary: core["schemas"]["AuthSessionSummary"];
+        /** BuyBack */
+        BuyBack: {
+            /**
+             * Item Types
+             * @default []
+             */
+            item_types: string[];
+            /**
+             * Price Fraction
+             * @default 0.5
+             */
+            price_fraction: number;
+        };
         /**
          * CampaignEnded
          * @description The campaign is over (a hardcore hero fell).
@@ -3155,6 +3203,45 @@ export interface components {
         CreateChatSessionRequest: core["schemas"]["CreateChatSessionRequest"];
         /** CreateJobRequest */
         CreateJobRequest: core["schemas"]["CreateJobRequest"];
+        /**
+         * CreaturePlay
+         * @description How one of the world's creatures fights; a field left out is taken from its lore.
+         */
+        CreaturePlay: {
+            /** Behaviour */
+            behaviour?: ("fights" | "flees_when_hurt" | "calls_allies" | "guards" | "ambushes") | null;
+            /** Id */
+            id: string;
+            /**
+             * Loot
+             * @default []
+             */
+            loot: components["schemas"]["LootDrop"][];
+            stats?: components["schemas"]["CreatureStats"] | null;
+        };
+        /** CreatureStats */
+        CreatureStats: {
+            /**
+             * Accuracy Bonus
+             * @default 0
+             */
+            accuracy_bonus: number;
+            /** Damage Max */
+            damage_max: number;
+            /** Damage Min */
+            damage_min: number;
+            /** Defense */
+            defense: number;
+            /** Hp */
+            hp: number;
+            /** Level */
+            level: number;
+            /**
+             * Xp Value
+             * @default 25
+             */
+            xp_value: number;
+        };
         /** DefaultChoice */
         DefaultChoice: core["schemas"]["DefaultChoice"];
         /** DefaultModels */
@@ -3220,6 +3307,14 @@ export interface components {
              * @enum {string}
              */
             type: "dialogue_exchanged";
+        };
+        /** EconomyDraft */
+        EconomyDraft: {
+            /**
+             * Providers
+             * @default []
+             */
+            providers: components["schemas"]["ProviderEconomy"][];
         };
         /** EmailChangeRequest */
         EmailChangeRequest: core["schemas"]["EmailChangeRequest"];
@@ -4238,6 +4333,30 @@ export interface components {
             type: "journal_written";
         };
         JsonValue: unknown;
+        /** KnowledgeFact */
+        KnowledgeFact: {
+            /** Fact Id */
+            fact_id: string;
+            price?: components["schemas"]["Price"] | null;
+            /**
+             * Shares
+             * @default freely
+             * @enum {string}
+             */
+            shares: "freely" | "for_price" | "when_trusted" | "never";
+            /** Text */
+            text: string;
+            /**
+             * Topics
+             * @default []
+             */
+            topics: string[];
+            /**
+             * Trust Needed
+             * @default 0
+             */
+            trust_needed: number;
+        };
         /**
          * KnowledgeShared
          * @description Something a person knows, now known to the hero.
@@ -4350,6 +4469,22 @@ export interface components {
         Live2DModelCatalogResponse: core["schemas"]["Live2DModelCatalogResponse"];
         /** LocalLoginRequest */
         LocalLoginRequest: core["schemas"]["LocalLoginRequest"];
+        /**
+         * LocalMapEntered
+         * @description The local map the hero now stands on (its instance, "" where the place has none): the play screen's grid.
+         */
+        LocalMapEntered: {
+            /**
+             * Map Instance Id
+             * @default
+             */
+            map_instance_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "local_map_entered";
+        };
         /** LocationChanged */
         LocationChanged: {
             /** Location Id */
@@ -4364,6 +4499,18 @@ export interface components {
              * @enum {string}
              */
             type: "location_changed";
+        };
+        /** LootDrop */
+        LootDrop: {
+            /** Chance */
+            chance: number;
+            /** Item Id */
+            item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
         };
         /** LoreDiscoveryRequest */
         LoreDiscoveryRequest: {
@@ -4575,6 +4722,53 @@ export interface components {
              */
             type: "needs_changed";
         };
+        /** NpcGoal */
+        NpcGoal: {
+            /** Goal Id */
+            goal_id: string;
+            /**
+             * Location Id
+             * @default
+             */
+            location_id: string;
+            /**
+             * Priority
+             * @default 1
+             */
+            priority: number;
+            /** Summary */
+            summary: string;
+            /**
+             * Topics
+             * @default []
+             */
+            topics: string[];
+        };
+        /** NpcKnowledge */
+        NpcKnowledge: {
+            /**
+             * Facts
+             * @default []
+             */
+            facts: components["schemas"]["KnowledgeFact"][];
+            /** Npc Id */
+            npc_id: string;
+        };
+        /** NpcRoutine */
+        NpcRoutine: {
+            /**
+             * Goals
+             * @default []
+             */
+            goals: components["schemas"]["NpcGoal"][];
+            /** Npc Id */
+            npc_id: string;
+            /**
+             * Schedule
+             * @default []
+             */
+            schedule: components["schemas"]["RoutineStep"][];
+        };
         /** OutcomeFact */
         OutcomeFact: {
             /**
@@ -4632,6 +4826,39 @@ export interface components {
             npc_id: string;
         };
         /**
+         * PlaySectionsDraft
+         * @description What a world's author wrote of how it plays, as the world editor keeps it. Once saved it is the whole of
+         *     it: a section left empty is played from the world's lore.
+         */
+        PlaySectionsDraft: {
+            /**
+             * Bestiary
+             * @default []
+             */
+            bestiary: components["schemas"]["CreaturePlay"][];
+            /**
+             * @default {
+             *       "providers": []
+             *     }
+             */
+            economy: components["schemas"]["EconomyDraft"];
+            /**
+             * Knowledge
+             * @default []
+             */
+            knowledge: components["schemas"]["NpcKnowledge"][];
+            /**
+             * Pressures
+             * @default []
+             */
+            pressures: components["schemas"]["WorldPressure"][];
+            /**
+             * Routines
+             * @default []
+             */
+            routines: components["schemas"]["NpcRoutine"][];
+        };
+        /**
          * PresenceChanged
          * @description Who is present where the hero is.
          */
@@ -4685,6 +4912,18 @@ export interface components {
              */
             suggestions: components["schemas"]["Suggestion"][];
         };
+        /** PressureLever */
+        PressureLever: {
+            /** Action */
+            action: string;
+            /** Amount */
+            amount: number;
+            /**
+             * Effect
+             * @enum {string}
+             */
+            effect: "lower" | "raise";
+        };
         /**
          * PressuresMoved
          * @description What the hero did to the world's pressures (their levers, quests.md): each one's severity before and after, and
@@ -4710,6 +4949,24 @@ export interface components {
              */
             type: "pressures_moved";
         };
+        /** Price */
+        Price: {
+            /**
+             * Copper
+             * @default 0
+             */
+            copper: number;
+            /**
+             * Gold
+             * @default 0
+             */
+            gold: number;
+            /**
+             * Silver
+             * @default 0
+             */
+            silver: number;
+        };
         /** PromptRenderRequest */
         PromptRenderRequest: core["schemas"]["PromptRenderRequest"];
         /** PromptTemplate */
@@ -4719,6 +4976,22 @@ export interface components {
          * @enum {string}
          */
         ProviderCapability: core["schemas"]["ProviderCapability"];
+        /** ProviderEconomy */
+        ProviderEconomy: {
+            buys?: components["schemas"]["BuyBack"] | null;
+            /**
+             * Location Id
+             * @default
+             */
+            location_id: string;
+            /** Provider Id */
+            provider_id: string;
+            /**
+             * Sells
+             * @default []
+             */
+            sells: components["schemas"]["ShopOffer"][];
+        };
         /** ProviderFacadePayload */
         ProviderFacadePayload: core["schemas"]["ProviderFacadePayload"];
         /**
@@ -4994,6 +5267,20 @@ export interface components {
         RevokeSessionsRequest: core["schemas"]["RevokeSessionsRequest"];
         /** RevokeSessionsResponse */
         RevokeSessionsResponse: core["schemas"]["RevokeSessionsResponse"];
+        /** RoutineStep */
+        RoutineStep: {
+            /**
+             * Activity
+             * @default
+             */
+            activity: string;
+            /** From Hour */
+            from_hour: number;
+            /** Location Id */
+            location_id: string;
+            /** To Hour */
+            to_hour: number;
+        };
         /**
          * RpgAbilityCoverage
          * @description ``RpgAbilityCoverageReport`` without its observations.
@@ -6780,6 +7067,104 @@ export interface components {
             /** Npc Id */
             npc_id: string;
         };
+        /**
+         * RpgPlaySectionsDraftResponse
+         * @description World Forge's first draft from the world's lore; not kept until the author saves it.
+         */
+        RpgPlaySectionsDraftResponse: {
+            document: components["schemas"]["PlaySectionsDraft"];
+            /** Ok */
+            ok: boolean;
+            /** World Id */
+            world_id: string;
+        };
+        /**
+         * RpgPlaySectionsReadiness
+         * @description Each section (economy, routines, knowledge, pressures, bestiary): written by the world, or inferred from its
+         *     lore at launch.
+         */
+        RpgPlaySectionsReadiness: {
+            /**
+             * Bestiary
+             * @enum {string}
+             */
+            bestiary: "authored" | "derived";
+            /**
+             * Economy
+             * @enum {string}
+             */
+            economy: "authored" | "derived";
+            /**
+             * Knowledge
+             * @enum {string}
+             */
+            knowledge: "authored" | "derived";
+            /**
+             * Pressures
+             * @enum {string}
+             */
+            pressures: "authored" | "derived";
+            /**
+             * Routines
+             * @enum {string}
+             */
+            routines: "authored" | "derived";
+        };
+        /** RpgPlaySectionsReadinessView */
+        RpgPlaySectionsReadinessView: {
+            draft: components["schemas"]["RpgPlaySectionsReadiness"];
+            published: components["schemas"]["RpgPlaySectionsReadiness"] | null;
+        };
+        /** RpgPlaySectionsReference */
+        RpgPlaySectionsReference: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * RpgPlaySectionsReferences
+         * @description What a section may name: the world's people, places, items, creatures, regions and quests.
+         */
+        RpgPlaySectionsReferences: {
+            /** Creatures */
+            creatures: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Items */
+            items: components["schemas"]["RpgPlaySectionsReference"][];
+            /** People */
+            people: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Places */
+            places: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Quests */
+            quests: components["schemas"]["RpgPlaySectionsReference"][];
+            /** Regions */
+            regions: components["schemas"]["RpgPlaySectionsReference"][];
+        };
+        /**
+         * RpgPlaySectionsResponse
+         * @description How a world plays, in the world editor (RQ-4.1): the author's draft (else what the latest revision carries),
+         *     the hash a save must name, whether a draft is kept and not yet published, readiness as published and as drafted,
+         *     the references the next publication would refuse, and what the sections may name.
+         */
+        RpgPlaySectionsResponse: {
+            /** Content Hash */
+            content_hash: string;
+            document: components["schemas"]["PlaySectionsDraft"];
+            /** Findings */
+            findings: string[];
+            /** Ok */
+            ok: boolean;
+            /** Published Revision */
+            published_revision: number | null;
+            readiness: components["schemas"]["RpgPlaySectionsReadinessView"];
+            references: components["schemas"]["RpgPlaySectionsReferences"];
+            /** Saved */
+            saved: boolean;
+            /** Unpublished */
+            unpublished: boolean;
+            /** World Id */
+            world_id: string;
+        };
         /** RpgPlayerOptions */
         RpgPlayerOptions: {
             /**
@@ -7150,6 +7535,15 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RpgSavePlaySectionsRequestBody */
+        RpgSavePlaySectionsRequestBody: {
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Expected Content Hash */
+            expected_content_hash: string;
+        };
         /**
          * RpgSavePoint
          * @description A named moment of a campaign to return to (rewind.md).
@@ -7424,6 +7818,7 @@ export interface components {
             document: {
                 [key: string]: unknown;
             };
+            play_sections?: components["schemas"]["RpgPlaySectionsReadiness"];
             /** Revision */
             revision: number;
             /** Workspace Id */
@@ -8985,6 +9380,7 @@ export interface components {
             document: {
                 [key: string]: unknown;
             };
+            play_sections?: components["schemas"]["RpgPlaySectionsReadiness"];
             /** Revision */
             revision: number;
         };
@@ -9337,6 +9733,36 @@ export interface components {
         SettingsProfileSaveRequest: core["schemas"]["SettingsProfileSaveRequest"];
         /** SettingsSaveResponse */
         SettingsSaveResponse: core["schemas"]["SettingsSaveResponse"];
+        /** ShopOffer */
+        ShopOffer: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Item Id
+             * @default
+             */
+            item_id: string;
+            /** Name */
+            name: string;
+            /** Offer Key */
+            offer_key: string;
+            price: components["schemas"]["Price"];
+            /**
+             * Restock Per Day
+             * @default 0
+             */
+            restock_per_day: number;
+            /**
+             * Service
+             * @enum {string}
+             */
+            service: "lodging" | "meal" | "drink" | "shop_goods" | "repair" | "paid_information";
+            /** Stock */
+            stock?: number | null;
+        };
         /**
          * SkillProgressed
          * @description A skill's progress as the rules computed it (level-ups are the rules' decision, not the reducer's).
@@ -9499,7 +9925,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"] | components["schemas"]["LocalMapEntered"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;
@@ -9586,6 +10012,52 @@ export interface components {
         WorkerHealthSummary: core["schemas"]["WorkerHealthSummary"];
         /** WorkerPayloadPolicy */
         WorkerPayloadPolicy: core["schemas"]["WorkerPayloadPolicy"];
+        /** WorldPressure */
+        WorldPressure: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Dimension
+             * @default political_stability
+             * @enum {string}
+             */
+            dimension: "political_stability" | "trade_access" | "resource_access" | "population_index";
+            /**
+             * Escalation Threshold
+             * @default 75
+             */
+            escalation_threshold: number;
+            /**
+             * Levers
+             * @default []
+             */
+            levers: components["schemas"]["PressureLever"][];
+            /** Name */
+            name: string;
+            /** Pressure Id */
+            pressure_id: string;
+            /** Region Id */
+            region_id: string;
+            /**
+             * Resolution Threshold
+             * @default 15
+             */
+            resolution_threshold: number;
+            /**
+             * Severity
+             * @default 40
+             */
+            severity: number;
+            /**
+             * Trend
+             * @default escalating
+             * @enum {string}
+             */
+            trend: "escalating" | "contained" | "volatile" | "stable";
+        };
         /**
          * WorldTicked
          * @description The world moved on: the sections the world tick owns, as it left them.
@@ -14395,6 +14867,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgMaterializationScheduleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_read_world_play_sections_api_rpg_worlds__world_id__play_sections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_save_world_play_sections_api_rpg_worlds__world_id__play_sections_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgSavePlaySectionsRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_draft_world_play_sections_api_rpg_worlds__world_id__play_sections_draft_from_lore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsDraftResponse"];
                 };
             };
             /** @description Validation Error */

@@ -16,6 +16,13 @@ from app.apps.rpg.genesis.worlds.entity_authoring import (
     regenerate_world_entity,
     update_world_entity,
 )
+from app.apps.rpg.genesis.worlds.play_section_authoring import (
+    PlaySectionsInvalidError,
+    draft_play_sections_from_lore,
+    publish_play_sections,
+    read_play_sections,
+    save_play_sections,
+)
 from app.apps.rpg.genesis.worlds.topic_authoring import (
     read_world_topic,
     restore_world_topic,
@@ -28,6 +35,8 @@ from app.apps.rpg.edge.api.web_contracts import (
     documented,
     RpgAuthoringEntityMutationResponse,
     RpgAuthoringManifestResponse,
+    RpgPlaySectionsDraftResponse,
+    RpgPlaySectionsResponse,
 )
 from app.apps.rpg.edge.api.route_contracts import (
     RpgAuthoringEntityDetailResponse,
@@ -62,6 +71,12 @@ class RpgRegenerateWorldEntityRequestBody(_TypedRequestModel):
 
 class RpgRestoreWorldTopicRequestBody(_TypedRequestModel):
     history_sequence: _TypedRequestAny = None
+
+class RpgSavePlaySectionsRequestBody(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="forbid")
+    expected_content_hash: str = _typed_field(min_length=1)
+    # Checked by the service, which names each error (play_section_invalid:<where>:<why>).
+    document: dict[str, Any]
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_authoring_routes_registered"
@@ -158,6 +173,63 @@ def register_rpg_world_authoring_routes(router: APIRouter, state) -> None:
                 expected_draft_revision=expected_revision,
                 changes=payload,
             )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @router.get(
+        "/api/rpg/worlds/{world_id}/play-sections",
+        tags=["rpg-world"],
+        responses=documented(RpgPlaySectionsResponse),
+    )
+    def rpg_read_world_play_sections(world_id: str) -> dict[str, Any]:
+        try:
+            return read_play_sections(world_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @router.put(
+        "/api/rpg/worlds/{world_id}/play-sections",
+        tags=["rpg-world"],
+        responses=documented(RpgPlaySectionsResponse),
+    )
+    def rpg_save_world_play_sections(world_id: str, request_body: RpgSavePlaySectionsRequestBody) -> dict[str, Any]:
+        try:
+            return save_play_sections(
+                world_id,
+                expected_content_hash=request_body.expected_content_hash,
+                document=request_body.document,
+            )
+        except PlaySectionsInvalidError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"ok": False, "error": "world_play_sections_invalid", "findings": list(exc.findings)},
+            ) from exc
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @router.post(
+        "/api/rpg/worlds/{world_id}/play-sections/publish",
+        tags=["rpg-world"],
+        responses=documented(RpgPlaySectionsResponse),
+    )
+    def rpg_publish_world_play_sections(world_id: str) -> dict[str, Any]:
+        try:
+            return publish_play_sections(world_id)
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @router.post(
+        "/api/rpg/worlds/{world_id}/play-sections/draft-from-lore",
+        tags=["rpg-world"],
+        responses=documented(RpgPlaySectionsDraftResponse),
+    )
+    def rpg_draft_world_play_sections(world_id: str) -> dict[str, Any]:
+        try:
+            return draft_play_sections_from_lore(world_id)
         except Exception as exc:
             _raise_domain_error(exc)
             raise

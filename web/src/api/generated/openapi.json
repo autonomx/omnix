@@ -6593,6 +6593,32 @@
         "title": "BrokerWorkspaceAuthorizationRequest",
         "type": "object"
       },
+      "BuyBack": {
+        "additionalProperties": false,
+        "properties": {
+          "item_types": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Item Types",
+            "type": "array"
+          },
+          "price_fraction": {
+            "default": 0.5,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Price Fraction",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item_types",
+          "price_fraction"
+        ],
+        "title": "BuyBack",
+        "type": "object"
+      },
       "CalendarEvent": {
         "properties": {
           "actual": {
@@ -12350,6 +12376,119 @@
         "title": "CreateSpeaker",
         "type": "object"
       },
+      "CreaturePlay": {
+        "additionalProperties": false,
+        "description": "How one of the world's creatures fights; a field left out is taken from its lore.",
+        "properties": {
+          "behaviour": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fights",
+                  "flees_when_hurt",
+                  "calls_allies",
+                  "guards",
+                  "ambushes"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Behaviour"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "loot": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LootDrop"
+            },
+            "title": "Loot",
+            "type": "array"
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreatureStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "loot"
+        ],
+        "title": "CreaturePlay",
+        "type": "object"
+      },
+      "CreatureStats": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy_bonus": {
+            "default": 0,
+            "maximum": 20,
+            "minimum": -5,
+            "title": "Accuracy Bonus",
+            "type": "integer"
+          },
+          "damage_max": {
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Damage Max",
+            "type": "integer"
+          },
+          "damage_min": {
+            "maximum": 200,
+            "minimum": 0,
+            "title": "Damage Min",
+            "type": "integer"
+          },
+          "defense": {
+            "maximum": 40,
+            "minimum": 1,
+            "title": "Defense",
+            "type": "integer"
+          },
+          "hp": {
+            "maximum": 1000,
+            "minimum": 1,
+            "title": "Hp",
+            "type": "integer"
+          },
+          "level": {
+            "maximum": 30,
+            "minimum": 1,
+            "title": "Level",
+            "type": "integer"
+          },
+          "xp_value": {
+            "default": 25,
+            "maximum": 10000,
+            "minimum": 0,
+            "title": "Xp Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "hp",
+          "defense",
+          "damage_min",
+          "damage_max",
+          "accuracy_bonus",
+          "xp_value"
+        ],
+        "title": "CreatureStats",
+        "type": "object"
+      },
       "CurrencyRateResponse": {
         "additionalProperties": false,
         "properties": {
@@ -15682,6 +15821,24 @@
           "source"
         ],
         "title": "EconomicCalendar",
+        "type": "object"
+      },
+      "EconomyDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProviderEconomy"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "EconomyDraft",
         "type": "object"
       },
       "EmailChangeRequest": {
@@ -26580,6 +26737,67 @@
         "title": "KillSwitchChange",
         "type": "object"
       },
+      "KnowledgeFact": {
+        "additionalProperties": false,
+        "properties": {
+          "fact_id": {
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Price"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shares": {
+            "default": "freely",
+            "enum": [
+              "freely",
+              "for_price",
+              "when_trusted",
+              "never"
+            ],
+            "title": "Shares",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "topics": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "trust_needed": {
+            "default": 0,
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Trust Needed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fact_id",
+          "text",
+          "shares",
+          "trust_needed",
+          "topics"
+        ],
+        "title": "KnowledgeFact",
+        "type": "object"
+      },
       "KnowledgeShared": {
         "additionalProperties": false,
         "description": "Something a person knows, now known to the hero.",
@@ -29440,6 +29658,29 @@
         "title": "LocalLoginRequest",
         "type": "object"
       },
+      "LocalMapEntered": {
+        "additionalProperties": false,
+        "description": "The local map the hero now stands on (its instance, \"\" where the place has none): the play screen's grid.",
+        "properties": {
+          "map_instance_id": {
+            "default": "",
+            "title": "Map Instance Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "local_map_entered",
+            "default": "local_map_entered",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "map_instance_id"
+        ],
+        "title": "LocalMapEntered",
+        "type": "object"
+      },
       "LocalWorkspacePickResponse": {
         "properties": {
           "cancelled": {
@@ -29504,6 +29745,36 @@
           "location_name"
         ],
         "title": "LocationChanged",
+        "type": "object"
+      },
+      "LootDrop": {
+        "additionalProperties": false,
+        "properties": {
+          "chance": {
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "title": "Chance",
+            "type": "number"
+          },
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "maximum": 99,
+            "minimum": 1,
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id",
+          "chance",
+          "quantity"
+        ],
+        "title": "LootDrop",
         "type": "object"
       },
       "LoreDiscoveryRequest": {
@@ -31984,6 +32255,108 @@
           "shadow_only"
         ],
         "title": "NoveltyShadowAnnotation",
+        "type": "object"
+      },
+      "NpcGoal": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "minLength": 1,
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "location_id": {
+            "default": "",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "priority": {
+            "default": 1,
+            "maximum": 5,
+            "minimum": 1,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "summary": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "topics": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Topics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goal_id",
+          "summary",
+          "priority",
+          "topics",
+          "location_id"
+        ],
+        "title": "NpcGoal",
+        "type": "object"
+      },
+      "NpcKnowledge": {
+        "additionalProperties": false,
+        "properties": {
+          "facts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeFact"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "npc_id",
+          "facts"
+        ],
+        "title": "NpcKnowledge",
+        "type": "object"
+      },
+      "NpcRoutine": {
+        "additionalProperties": false,
+        "properties": {
+          "goals": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NpcGoal"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "npc_id": {
+            "minLength": 1,
+            "title": "Npc Id",
+            "type": "string"
+          },
+          "schedule": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RoutineStep"
+            },
+            "title": "Schedule",
+            "type": "array"
+          }
+        },
+        "required": [
+          "npc_id",
+          "schedule",
+          "goals"
+        ],
+        "title": "NpcRoutine",
         "type": "object"
       },
       "OmnixRouteDecision": {
@@ -38747,6 +39120,59 @@
         "title": "PlanningSubmitRequest",
         "type": "object"
       },
+      "PlaySectionsDraft": {
+        "additionalProperties": false,
+        "description": "What a world's author wrote of how it plays, as the world editor keeps it. Once saved it is the whole of\nit: a section left empty is played from the world's lore.",
+        "properties": {
+          "bestiary": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CreaturePlay"
+            },
+            "title": "Bestiary",
+            "type": "array"
+          },
+          "economy": {
+            "$ref": "#/components/schemas/EconomyDraft",
+            "default": {
+              "providers": []
+            }
+          },
+          "knowledge": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NpcKnowledge"
+            },
+            "title": "Knowledge",
+            "type": "array"
+          },
+          "pressures": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorldPressure"
+            },
+            "title": "Pressures",
+            "type": "array"
+          },
+          "routines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NpcRoutine"
+            },
+            "title": "Routines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "economy",
+          "routines",
+          "knowledge",
+          "pressures",
+          "bestiary"
+        ],
+        "title": "PlaySectionsDraft",
+        "type": "object"
+      },
       "PortfolioEPerformance": {
         "additionalProperties": false,
         "properties": {
@@ -40451,6 +40877,39 @@
         "title": "PresentationHints",
         "type": "object"
       },
+      "PressureLever": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^(defeat|quest):\\S+$",
+            "title": "Action",
+            "type": "string"
+          },
+          "amount": {
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "title": "Amount",
+            "type": "number"
+          },
+          "effect": {
+            "enum": [
+              "lower",
+              "raise"
+            ],
+            "title": "Effect",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "effect",
+          "amount"
+        ],
+        "title": "PressureLever",
+        "type": "object"
+      },
       "PressuresMoved": {
         "additionalProperties": false,
         "description": "What the hero did to the world's pressures (their levers, quests.md): each one's severity before and after, and\nthe causal runtime as the pull left it (one replayable event, ``cause``).",
@@ -40485,6 +40944,36 @@
           "cause"
         ],
         "title": "PressuresMoved",
+        "type": "object"
+      },
+      "Price": {
+        "additionalProperties": false,
+        "properties": {
+          "copper": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Copper",
+            "type": "integer"
+          },
+          "gold": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Gold",
+            "type": "integer"
+          },
+          "silver": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Silver",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "gold",
+          "silver",
+          "copper"
+        ],
+        "title": "Price",
         "type": "object"
       },
       "PriceSource": {
@@ -41606,6 +42095,46 @@
           "runtime"
         ],
         "title": "ProviderDescriptor",
+        "type": "object"
+      },
+      "ProviderEconomy": {
+        "additionalProperties": false,
+        "properties": {
+          "buys": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BuyBack"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location_id": {
+            "default": "",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "sells": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ShopOffer"
+            },
+            "title": "Sells",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider_id",
+          "location_id",
+          "sells"
+        ],
+        "title": "ProviderEconomy",
         "type": "object"
       },
       "ProviderFacadePayload": {
@@ -45046,6 +45575,42 @@
           "content"
         ],
         "title": "RouteRequest",
+        "type": "object"
+      },
+      "RoutineStep": {
+        "additionalProperties": false,
+        "properties": {
+          "activity": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Activity",
+            "type": "string"
+          },
+          "from_hour": {
+            "maximum": 23,
+            "minimum": 0,
+            "title": "From Hour",
+            "type": "integer"
+          },
+          "location_id": {
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "to_hour": {
+            "maximum": 24,
+            "minimum": 1,
+            "title": "To Hour",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "from_hour",
+          "to_hour",
+          "location_id",
+          "activity"
+        ],
+        "title": "RoutineStep",
         "type": "object"
       },
       "RpgAbilityCoverage": {
@@ -49333,6 +49898,247 @@
         "title": "RpgPersonWhereabouts",
         "type": "object"
       },
+      "RpgPlaySectionsDraftResponse": {
+        "description": "World Forge's first draft from the world's lore; not kept until the author saves it.",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/PlaySectionsDraft"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "document"
+        ],
+        "title": "RpgPlaySectionsDraftResponse",
+        "type": "object"
+      },
+      "RpgPlaySectionsReadiness": {
+        "description": "Each section (economy, routines, knowledge, pressures, bestiary): written by the world, or inferred from its\nlore at launch.",
+        "properties": {
+          "bestiary": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Bestiary",
+            "type": "string"
+          },
+          "economy": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Economy",
+            "type": "string"
+          },
+          "knowledge": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Knowledge",
+            "type": "string"
+          },
+          "pressures": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Pressures",
+            "type": "string"
+          },
+          "routines": {
+            "enum": [
+              "authored",
+              "derived"
+            ],
+            "title": "Routines",
+            "type": "string"
+          }
+        },
+        "required": [
+          "economy",
+          "routines",
+          "knowledge",
+          "pressures",
+          "bestiary"
+        ],
+        "title": "RpgPlaySectionsReadiness",
+        "type": "object"
+      },
+      "RpgPlaySectionsReadinessView": {
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/RpgPlaySectionsReadiness"
+          },
+          "published": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RpgPlaySectionsReadiness"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "published",
+          "draft"
+        ],
+        "title": "RpgPlaySectionsReadinessView",
+        "type": "object"
+      },
+      "RpgPlaySectionsReference": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "RpgPlaySectionsReference",
+        "type": "object"
+      },
+      "RpgPlaySectionsReferences": {
+        "description": "What a section may name: the world's people, places, items, creatures, regions and quests.",
+        "properties": {
+          "creatures": {
+            "items": {
+              "$ref": "#/components/schemas/RpgPlaySectionsReference"
+            },
+            "title": "Creatures",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RpgPlaySectionsReference"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/RpgPlaySectionsReference"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "places": {
+            "items": {
+              "$ref": "#/components/schemas/RpgPlaySectionsReference"
+            },
+            "title": "Places",
+            "type": "array"
+          },
+          "quests": {
+            "items": {
+              "$ref": "#/components/schemas/RpgPlaySectionsReference"
+            },
+            "title": "Quests",
+            "type": "array"
+          },
+          "regions": {
+            "items": {
+              "$ref": "#/components/schemas/RpgPlaySectionsReference"
+            },
+            "title": "Regions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "people",
+          "places",
+          "items",
+          "creatures",
+          "regions",
+          "quests"
+        ],
+        "title": "RpgPlaySectionsReferences",
+        "type": "object"
+      },
+      "RpgPlaySectionsResponse": {
+        "description": "How a world plays, in the world editor (RQ-4.1): the author's draft (else what the latest revision carries),\nthe hash a save must name, whether a draft is kept and not yet published, readiness as published and as drafted,\nthe references the next publication would refuse, and what the sections may name.",
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "document": {
+            "$ref": "#/components/schemas/PlaySectionsDraft"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "published_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Revision"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/RpgPlaySectionsReadinessView"
+          },
+          "references": {
+            "$ref": "#/components/schemas/RpgPlaySectionsReferences"
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "boolean"
+          },
+          "unpublished": {
+            "title": "Unpublished",
+            "type": "boolean"
+          },
+          "world_id": {
+            "title": "World Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "world_id",
+          "document",
+          "content_hash",
+          "saved",
+          "unpublished",
+          "published_revision",
+          "readiness",
+          "findings",
+          "references"
+        ],
+        "title": "RpgPlaySectionsResponse",
+        "type": "object"
+      },
       "RpgPlayerOptions": {
         "properties": {
           "background": {
@@ -49974,6 +50780,27 @@
         "title": "RpgRewindRequestBody",
         "type": "object"
       },
+      "RpgSavePlaySectionsRequestBody": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "expected_content_hash": {
+            "minLength": 1,
+            "title": "Expected Content Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_content_hash",
+          "document"
+        ],
+        "title": "RpgSavePlaySectionsRequestBody",
+        "type": "object"
+      },
       "RpgSavePoint": {
         "description": "A named moment of a campaign to return to (rewind.md).",
         "properties": {
@@ -50591,6 +51418,9 @@
             "additionalProperties": true,
             "title": "Document",
             "type": "object"
+          },
+          "play_sections": {
+            "$ref": "#/components/schemas/RpgPlaySectionsReadiness"
           },
           "revision": {
             "title": "Revision",
@@ -54698,6 +55528,9 @@
             "title": "Document",
             "type": "object"
           },
+          "play_sections": {
+            "$ref": "#/components/schemas/RpgPlaySectionsReadiness"
+          },
           "revision": {
             "title": "Revision",
             "type": "number"
@@ -57800,6 +58633,79 @@
           "authorization_decision_at"
         ],
         "title": "ShadowPortfolioPosition",
+        "type": "object"
+      },
+      "ShopOffer": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "item_id": {
+            "default": "",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "offer_key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]*$",
+            "title": "Offer Key",
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "restock_per_day": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Restock Per Day",
+            "type": "integer"
+          },
+          "service": {
+            "enum": [
+              "lodging",
+              "meal",
+              "drink",
+              "shop_goods",
+              "repair",
+              "paid_information"
+            ],
+            "title": "Service",
+            "type": "string"
+          },
+          "stock": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock"
+          }
+        },
+        "required": [
+          "offer_key",
+          "service",
+          "name",
+          "price",
+          "description",
+          "item_id",
+          "restock_per_day"
+        ],
+        "title": "ShopOffer",
         "type": "object"
       },
       "SkillProgressed": {
@@ -67341,6 +68247,7 @@
                   "knowledge_shared": "#/components/schemas/KnowledgeShared",
                   "level_choice_made": "#/components/schemas/LevelChoiceMade",
                   "level_reached": "#/components/schemas/LevelReached",
+                  "local_map_entered": "#/components/schemas/LocalMapEntered",
                   "location_changed": "#/components/schemas/LocationChanged",
                   "needs_changed": "#/components/schemas/NeedsChanged",
                   "presence_changed": "#/components/schemas/PresenceChanged",
@@ -67514,6 +68421,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/PressuresMoved"
+                },
+                {
+                  "$ref": "#/components/schemas/LocalMapEntered"
                 }
               ]
             },
@@ -71446,6 +72356,98 @@
           "forbidden_paths"
         ],
         "title": "WorkspaceSpec",
+        "type": "object"
+      },
+      "WorldPressure": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Description",
+            "type": "string"
+          },
+          "dimension": {
+            "default": "political_stability",
+            "enum": [
+              "political_stability",
+              "trade_access",
+              "resource_access",
+              "population_index"
+            ],
+            "title": "Dimension",
+            "type": "string"
+          },
+          "escalation_threshold": {
+            "default": 75,
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Escalation Threshold",
+            "type": "number"
+          },
+          "levers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PressureLever"
+            },
+            "title": "Levers",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pressure_id": {
+            "minLength": 1,
+            "title": "Pressure Id",
+            "type": "string"
+          },
+          "region_id": {
+            "minLength": 1,
+            "title": "Region Id",
+            "type": "string"
+          },
+          "resolution_threshold": {
+            "default": 15,
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Resolution Threshold",
+            "type": "number"
+          },
+          "severity": {
+            "default": 40,
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Severity",
+            "type": "number"
+          },
+          "trend": {
+            "default": "escalating",
+            "enum": [
+              "escalating",
+              "contained",
+              "volatile",
+              "stable"
+            ],
+            "title": "Trend",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pressure_id",
+          "name",
+          "region_id",
+          "description",
+          "dimension",
+          "severity",
+          "trend",
+          "escalation_threshold",
+          "resolution_threshold",
+          "levers"
+        ],
+        "title": "WorldPressure",
         "type": "object"
       },
       "WorldTicked": {
@@ -92951,6 +93953,149 @@
           }
         },
         "summary": "Rpg Schedule World Materialization"
+      }
+    },
+    "/api/rpg/worlds/{world_id}/play-sections": {
+      "get": {
+        "operationId": "rpg_read_world_play_sections_api_rpg_worlds__world_id__play_sections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgPlaySectionsResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Read World Play Sections Api Rpg Worlds  World Id  Play Sections Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Read World Play Sections",
+        "tags": [
+          "rpg-world"
+        ]
+      },
+      "put": {
+        "operationId": "rpg_save_world_play_sections_api_rpg_worlds__world_id__play_sections_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgSavePlaySectionsRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgPlaySectionsResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Save World Play Sections Api Rpg Worlds  World Id  Play Sections Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Save World Play Sections",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/play-sections/draft-from-lore": {
+      "post": {
+        "operationId": "rpg_draft_world_play_sections_api_rpg_worlds__world_id__play_sections_draft_from_lore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgPlaySectionsDraftResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Draft World Play Sections Api Rpg Worlds  World Id  Play Sections Draft From Lore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Draft World Play Sections",
+        "tags": [
+          "rpg-world"
+        ]
       }
     },
     "/api/rpg/worlds/{world_id}/prepare-openings-for-launch": {

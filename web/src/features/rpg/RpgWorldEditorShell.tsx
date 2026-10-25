@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
@@ -18,6 +18,7 @@ import {
 } from './RpgWorldCompletionModels';
 import { RpgWorldGenerationDashboard } from './RpgWorldGenerationDashboard';
 import { RpgWorldImagesPanel } from './RpgWorldImagesPanel';
+import { RpgWorldPlaySectionsPanel } from './RpgWorldPlaySectionsPanel';
 import { RpgWorldScenarioAuthoringPanel } from './RpgWorldScenarioAuthoringPanel';
 import { RpgWorldVisualMapPanel } from './RpgWorldVisualMapPanel';
 import './RpgWorldFinalizedDesign.css';
@@ -41,7 +42,15 @@ const GROUPS: Array<{ id: RpgAuthoringGroup; label: string }> = [
   { id: 'game-master', label: 'Game Master' },
 ];
 
-const DEDICATED_SECTIONS = ['advanced', 'generation', 'images', 'map', 'scenarios'];
+const DEDICATED_SECTIONS = ['advanced', 'generation', 'images', 'map', 'play', 'scenarios'];
+
+// The dedicated pages that need only the world: images, the map, how it plays (RQ-4.1) and its scenarios.
+const WORLD_PANELS: Record<string, (worldId: string) => ReactNode> = {
+  images: (worldId) => <RpgWorldImagesPanel worldId={worldId} />,
+  map: (worldId) => <RpgWorldVisualMapPanel worldId={worldId} />,
+  play: (worldId) => <RpgWorldPlaySectionsPanel worldId={worldId} />,
+  scenarios: (worldId) => <RpgWorldScenarioAuthoringPanel worldId={worldId} />,
+};
 
 const SECTION_ICONS: Record<string, string> = {
   overview: '◉',
@@ -72,6 +81,7 @@ const SECTION_ICONS: Record<string, string> = {
   npcs: '♟',
   quests: '✎',
   scenarios: '▶',
+  play: '⚖',
   advanced: '⋯',
 };
 
@@ -384,12 +394,8 @@ export function RpgWorldEditorShell({
                 tokenUsage={manifestQuery.data?.token_usage}
                 worldId={worldId}
               />
-            ) : selectedSection.id === 'images' ? (
-              <RpgWorldImagesPanel worldId={worldId} />
-            ) : selectedSection.id === 'map' ? (
-              <RpgWorldVisualMapPanel worldId={worldId} />
-            ) : selectedSection.id === 'scenarios' ? (
-              <RpgWorldScenarioAuthoringPanel worldId={worldId} />
+            ) : WORLD_PANELS[selectedSection.id] ? (
+              WORLD_PANELS[selectedSection.id](worldId)
             ) : (
               <RpgWorldAuthoringPage
                 error={pageQuery.error instanceof Error ? pageQuery.error.message : undefined}

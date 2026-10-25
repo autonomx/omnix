@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from typing_extensions import NotRequired, Required, TypedDict
 
+from app.apps.rpg.genesis.worlds.world_play_sections import PlaySectionsDraft
+
 
 def documented(model: Any) -> dict[int | str, dict[str, Any]]:
     """The ``responses`` entry that publishes ``model`` as a route's 200 response."""
@@ -793,11 +795,72 @@ class RpgMapBlueprintRevision(TypedDict, total=False):
     created_at: Required[str]
 
 
+RpgPlaySectionSource = Literal["authored", "derived"]
+
+
+class RpgPlaySectionsReadiness(TypedDict):
+    """Each section (economy, routines, knowledge, pressures, bestiary): written by the world, or inferred from its
+    lore at launch."""
+
+    economy: RpgPlaySectionSource
+    routines: RpgPlaySectionSource
+    knowledge: RpgPlaySectionSource
+    pressures: RpgPlaySectionSource
+    bestiary: RpgPlaySectionSource
+
+
 class RpgWorldRevision(TypedDict, total=False):
     revision: Required[float]
     document: Required[dict[str, Any]]
     content_hash: Required[str]
     created_at: Required[str]
+    play_sections: NotRequired[RpgPlaySectionsReadiness]  # in the world's detail
+
+
+class RpgPlaySectionsReadinessView(TypedDict):
+    published: RpgPlaySectionsReadiness | None
+    draft: RpgPlaySectionsReadiness
+
+
+class RpgPlaySectionsReference(TypedDict):
+    id: str
+    name: str
+
+
+class RpgPlaySectionsReferences(TypedDict):
+    """What a section may name: the world's people, places, items, creatures, regions and quests."""
+
+    people: list[RpgPlaySectionsReference]
+    places: list[RpgPlaySectionsReference]
+    items: list[RpgPlaySectionsReference]
+    creatures: list[RpgPlaySectionsReference]
+    regions: list[RpgPlaySectionsReference]
+    quests: list[RpgPlaySectionsReference]
+
+
+class RpgPlaySectionsResponse(TypedDict):
+    """How a world plays, in the world editor (RQ-4.1): the author's draft (else what the latest revision carries),
+    the hash a save must name, whether a draft is kept and not yet published, readiness as published and as drafted,
+    the references the next publication would refuse, and what the sections may name."""
+
+    ok: bool
+    world_id: str
+    document: PlaySectionsDraft
+    content_hash: str
+    saved: bool
+    unpublished: bool
+    published_revision: int | None
+    readiness: RpgPlaySectionsReadinessView
+    findings: list[str]
+    references: RpgPlaySectionsReferences
+
+
+class RpgPlaySectionsDraftResponse(TypedDict):
+    """World Forge's first draft from the world's lore; not kept until the author saves it."""
+
+    ok: bool
+    world_id: str
+    document: PlaySectionsDraft
 
 
 class RpgWorldRelease(TypedDict, total=False):

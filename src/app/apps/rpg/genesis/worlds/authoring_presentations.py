@@ -11,6 +11,7 @@ SYSTEM_SECTIONS: tuple[dict[str, Any], ...] = (
     {"id": "images", "label": "Images", "group": "workspace", "page_kind": "collection"},
     {"id": "map", "label": "Map", "group": "world", "page_kind": "document"},
     {"id": "scenarios", "label": "Scenarios", "group": "game-master", "page_kind": "collection"},
+    {"id": "play", "label": "How It Plays", "group": "game-master", "page_kind": "document"},
     {"id": "map_blueprints", "label": "Map Blueprints", "group": "game-master", "page_kind": "collection"},
     {"id": "validation", "label": "Validation", "group": "game-master", "page_kind": "document"},
     {"id": "releases", "label": "Releases", "group": "game-master", "page_kind": "collection"},

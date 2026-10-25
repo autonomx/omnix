@@ -237,7 +237,7 @@ def _service_offers(canon: Mapping[str, Any], provider: Mapping[str, Any]) -> li
         offers.append(_offer(provider, "drink", "drink", "A drink", "A drink of the house.",
                              _typical_price(canon, ("drink", "ale"), {"copper": 8}), {"drink_consumed": True}))
     if "shop_goods" in kinds:
-        for item in _rows(canon.get("items")):
+        for item in lore_rows(canon, "items"):
             item_id, kind = _text(item.get("id")), _text(item.get("type")).casefold()
             if not item_id or _text(item.get("rarity")).casefold() not in {"", "common"}:
                 continue
@@ -277,7 +277,7 @@ _SERVICE_EFFECTS: dict[str, dict[str, Any]] = {
 def _authored_offer(canon: Mapping[str, Any], provider: Mapping[str, Any], offer: ShopOffer) -> dict[str, Any]:
     effects: dict[str, Any] = dict(_SERVICE_EFFECTS.get(offer.service, {}))
     if offer.service == "shop_goods":
-        item = next((row for row in _rows(canon.get("items")) if _text(row.get("id")) == offer.item_id), {})
+        item = next((row for row in lore_rows(canon, "items") if _text(row.get("id")) == offer.item_id), {})
         effects = {"items_added": [{"item_id": offer.item_id, "name": offer.name, "quantity": 1,
                                     "type": _text(item.get("type")).casefold() or "goods",
                                     "description": _text(item.get("effect") or item.get("description"))}]}
@@ -454,6 +454,12 @@ _THREAT_ALIASES = {"minor": "low", "moderate": "medium", "severe": "high", "boss
                    "dangerous": "medium", "elite": "high"}
 
 
+def threat_stats(threat: str) -> dict[str, int]:
+    """A creature's fighting numbers for the world's threat rating of it (an unknown rating is a medium threat)."""
+    threat = threat.casefold()
+    return dict(_THREAT_STATS.get(_THREAT_ALIASES.get(threat, threat), _THREAT_STATS["medium"]))
+
+
 # A creature's behaviour as its lore tells it, where the world names none (encounters.md): the first that fits.
 _BEHAVIOUR_WORDS = (
     ("guards", ("guard", "guardian", "sentinel", "warden", "oath", "oaths", "post", "territorial", "keeper")),
@@ -495,7 +501,7 @@ def bestiary_mechanics(revision: Any) -> dict[str, Any]:
         if not creature_id:
             continue
         threat = _text(row.get("threat")).casefold()
-        stats = _THREAT_STATS.get(_THREAT_ALIASES.get(threat, threat), _THREAT_STATS["medium"])
+        stats = threat_stats(threat)
         play = played.get(creature_id)
         if play is not None and play.stats is not None:
             stats = play.stats.model_dump()

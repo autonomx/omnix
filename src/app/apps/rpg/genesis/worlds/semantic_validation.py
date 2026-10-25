@@ -124,20 +124,21 @@ def release_launch_findings(
         readiness = str(requirement.get("simulation_readiness") or "semantic")
         if readiness in {"stub", "semantic", "failed"} or map_id not in bound:
             findings.append(f"map_not_launch_ready:{map_id}")
-    findings.extend(_play_section_findings(world_revision))
+    findings.extend(play_section_release_findings(world_revision))
     return tuple(sorted(set(findings)))
 
 
-def _play_section_findings(world_revision: WorldRevisionDocument) -> tuple[str, ...]:
+def play_section_release_findings(world_revision: WorldRevisionDocument) -> tuple[str, ...]:
     """How the world says it plays (economy, routines, knowledge, pressures, bestiary) must be valid and refer to
     people, places and items it has (RQ-2.0); a world without those sections is played from its lore."""
+    from .lore_sections import lore_rows
     from .published_world_setup import published_locations
     from .world_play_sections import play_section_findings
 
     canon = dict(world_revision.canon or {})
     manifest = dict(world_revision.entity_manifest or {})
     locations = published_locations(canon, dict(world_revision.topology or {}), manifest.get("locations") or ())
-    regions = {str(row.get("id") or "") for row in canon.get("regions") or () if isinstance(row, Mapping)} - {""}
+    regions = {str(row.get("id") or "") for row in lore_rows(canon, "regions")} - {""}
     return play_section_findings(
         canon,
         location_ids={str(row["id"]) for row in locations},

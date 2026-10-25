@@ -13,12 +13,19 @@ launch readiness can say so.
 
 Older bundles carry none of these and import as before; the sections ride inside canon, so a
 bundle that has them needs no new bundle version.
+
+A world of the library is written in the world editor (RQ-4.1): its author's sections are a draft kept with the
+world (``play_section_authoring``) that each publication writes into the new revision's canon
+(``with_play_sections``). People, places, items, quests and creatures are the world's own as launch reads them
+(``lore_sections.lore_rows``: the section where the world wrote one, else the entities of its kinds).
 """
 from __future__ import annotations
 
 from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from .lore_sections import lore_rows
 
 SECTIONS = ("economy", "routines", "knowledge", "pressures", "bestiary")
 ServiceKind = Literal["lodging", "meal", "drink", "shop_goods", "repair", "paid_information"]
@@ -200,6 +207,14 @@ def _error_code(error: ValidationError) -> str:
     return f"{location}:{message}" if location else message
 
 
+_BESTIARY_PLAY = ("stats", "behaviour", "loot")
+
+
+def _plays(row: Mapping[str, Any]) -> bool:
+    """A bestiary row that says how its creature fights (numbers, behaviour or loot), beside its lore."""
+    return any(row.get(key) for key in _BESTIARY_PLAY)
+
+
 def parse_play_sections(canon: Mapping[str, Any]) -> tuple[WorldPlaySections, tuple[str, ...]]:
     """The world's play sections and what is wrong with them (``play_section_invalid:...``); absent ones are empty."""
 
@@ -228,9 +243,13 @@ def parse_play_sections(canon: Mapping[str, Any]) -> tuple[WorldPlaySections, tu
             authored.append(section)
     bestiary = [row for row in _rows(canon.get("bestiary")) if isinstance(row, Mapping)]
     parsed["bestiary"] = parse("bestiary", BestiaryPlay, bestiary)
-    if any(isinstance(row, Mapping) and (row.get("stats") or row.get("loot")) for row in bestiary):
+    if any(_plays(row) for row in bestiary):
         authored.append("bestiary")
     return WorldPlaySections(**parsed, authored=tuple(authored)), tuple(findings)
+
+
+def _ids(canon: Mapping[str, Any], section: str) -> set[str]:
+    return {str(row.get("id") or "") for row in lore_rows(canon, section)} - {""}
 
 
 def play_section_findings(
@@ -243,8 +262,8 @@ def play_section_findings(
 
     sections, findings = parse_play_sections(canon)
     canon = _mapping(canon)
-    npc_ids = {str(_mapping(row).get("id") or "") for row in _rows(canon.get("characters"))} - {""}
-    item_ids = {str(_mapping(row).get("id") or "") for row in _rows(canon.get("items"))} - {""}
+    npc_ids = _ids(canon, "characters")
+    item_ids = _ids(canon, "items")
     unknown: list[str] = []
 
     def place(section: str, location_id: str) -> None:
@@ -268,8 +287,8 @@ def play_section_findings(
     for knowledge in sections.knowledge:
         if knowledge.npc_id not in npc_ids:
             unknown.append(f"play_section_unknown_person:knowledge:{knowledge.npc_id}")
-    creature_ids = {creature.id for creature in sections.bestiary}
-    quest_ids = {str(row.get("id") or "") for row in _rows(canon.get("quests")) if isinstance(row, Mapping)}
+    creature_ids = _ids(canon, "bestiary")
+    quest_ids = _ids(canon, "quests")
     for pressure in sections.pressures:
         if pressure.region_id not in region_ids and pressure.region_id not in location_ids:
             unknown.append(f"play_section_unknown_place:pressures:{pressure.region_id}")
@@ -289,20 +308,124 @@ def authorship(sections: WorldPlaySections) -> dict[str, str]:
     return {section: ("authored" if section in sections.authored else "derived") for section in SECTIONS}
 
 
+class EconomyDraft(_Section):
+    providers: tuple[ProviderEconomy, ...] = ()
+
+
+class CreaturePlay(_Section):
+    """How one of the world's creatures fights; a field left out is taken from its lore."""
+
+    id: str = Field(min_length=1)
+    stats: CreatureStats | None = None
+    behaviour: Literal["fights", "flees_when_hurt", "calls_allies", "guards", "ambushes"] | None = None
+    loot: tuple[LootDrop, ...] = ()
+
+
+class PlaySectionsDraft(_Section):
+    """What a world's author wrote of how it plays, as the world editor keeps it. Once saved it is the whole of
+    it: a section left empty is played from the world's lore."""
+
+    economy: EconomyDraft = EconomyDraft()
+    routines: tuple[NpcRoutine, ...] = ()
+    knowledge: tuple[NpcKnowledge, ...] = ()
+    pressures: tuple[WorldPressure, ...] = ()
+    bestiary: tuple[CreaturePlay, ...] = ()
+
+
+def draft_findings(document: Any) -> tuple[PlaySectionsDraft | None, tuple[str, ...]]:
+    """The draft, or what is wrong with it (``play_section_invalid:<where>:<why>``, one per error)."""
+    try:
+        return PlaySectionsDraft.model_validate(document), ()
+    except ValidationError as error:
+        findings = []
+        for detail in error.errors():
+            location = ".".join(str(part) for part in detail.get("loc") or ())
+            message = str(detail.get("msg") or "invalid").removeprefix("Value error, ")
+            findings.append(f"play_section_invalid:{location}:{message}")
+        return None, tuple(findings)
+
+
+def _dump(model: BaseModel) -> dict[str, Any]:
+    return model.model_dump(mode="json", exclude_none=True)
+
+
+def play_sections_document(canon: Mapping[str, Any]) -> dict[str, Any]:
+    """The sections a revision's canon carries, as the editor's draft (the rows that are valid)."""
+    sections, _findings = parse_play_sections(canon)
+    plays = []
+    for row in _rows(_mapping(canon).get("bestiary")):
+        if isinstance(row, Mapping) and _plays(row):
+            candidate = {key: row[key] for key in ("id", *_BESTIARY_PLAY) if row.get(key)}
+            try:
+                plays.append(_dump(CreaturePlay.model_validate(candidate)))
+            except ValidationError:
+                continue
+    return {
+        "economy": {"providers": [_dump(row) for row in sections.providers]},
+        "routines": [_dump(row) for row in sections.routines],
+        "knowledge": [_dump(row) for row in sections.knowledge],
+        "pressures": [_dump(row) for row in sections.pressures],
+        "bestiary": plays,
+    }
+
+
+def with_play_sections(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> dict[str, Any]:
+    """``canon`` with the author's sections in place of its own: a section the draft leaves empty is removed (played
+    from the lore), and each creature keeps its lore with the draft's numbers, behaviour and loot beside it."""
+    canon = dict(canon)
+    economy = {key: value for key, value in _mapping(canon.get("economy")).items() if key != "providers"}
+    if draft.economy.providers:
+        economy["providers"] = [_dump(row) for row in draft.economy.providers]
+    if economy:
+        canon["economy"] = economy
+    else:
+        canon.pop("economy", None)
+    for section in ("routines", "knowledge", "pressures"):
+        rows = getattr(draft, section)
+        if rows:
+            canon[section] = [_dump(row) for row in rows]
+        else:
+            canon.pop(section, None)
+    plays = {row.id: row for row in draft.bestiary}
+    if plays or "bestiary" in canon:
+        creatures = []
+        for row in lore_rows(canon, "bestiary"):
+            lore = {key: value for key, value in row.items() if key not in _BESTIARY_PLAY}
+            play = plays.pop(str(row.get("id") or ""), None)
+            creatures.append({**lore, **({key: value for key, value in _dump(play).items() if key != "id"}
+                                         if play is not None else {})})
+        canon["bestiary"] = creatures  # a creature the world lacks is left out (unknown_creatures names it)
+    return canon
+
+
+def unknown_creatures(canon: Mapping[str, Any], draft: PlaySectionsDraft) -> tuple[str, ...]:
+    """The draft's creatures ``canon`` does not have (``play_section_unknown_creature:bestiary:<id>``)."""
+    known = _ids(canon, "bestiary")
+    return tuple(sorted(f"play_section_unknown_creature:bestiary:{row.id}" for row in draft.bestiary
+                        if row.id not in known))
+
+
 __all__ = [
     "SECTIONS",
     "BestiaryPlay",
+    "CreaturePlay",
     "CreatureStats",
+    "EconomyDraft",
     "KnowledgeFact",
     "NpcGoal",
     "NpcKnowledge",
     "NpcRoutine",
+    "PlaySectionsDraft",
     "ProviderEconomy",
     "RoutineStep",
     "ShopOffer",
     "WorldPlaySections",
     "WorldPressure",
     "authorship",
+    "draft_findings",
     "parse_play_sections",
     "play_section_findings",
+    "play_sections_document",
+    "unknown_creatures",
+    "with_play_sections",
 ]

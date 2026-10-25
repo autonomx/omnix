@@ -19,6 +19,7 @@ mechanic (§4.3) returns `StateChange` values; the narrator only phrases the out
 | [encounters.md](encounters.md) | RQ-5.6 Creature behaviour, negotiation, stealth | stretch |
 | [rewind.md](rewind.md) | RQ-5.7 Undo and save points | yes |
 | [world-forge-campaigns.md](world-forge-campaigns.md) | RQ-2.8 A World Forge campaign plays from a world | yes |
+| [world-authoring.md](world-authoring.md) | RQ-4.1 An author writes how a world plays | yes |
 
 ## Note template
 

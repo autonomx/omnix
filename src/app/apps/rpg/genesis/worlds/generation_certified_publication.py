@@ -28,6 +28,7 @@ from .map_blueprint_authoring import (
     materialize_generated_location_blueprints,
 )
 from .map_blueprint_publication import merge_authored_blueprints
+from .play_section_publication import authored_play_sections, merge_authored_play_sections
 from .service import compile_world_release
 from .world_image_bindings import approved_world_asset_bindings
 
@@ -227,6 +228,11 @@ def publish_certified_world_generation(
             compiled.world_revision,
             compiled.world_release,
             requirements,
+        )
+        revision_document, release_document = merge_authored_play_sections(
+            revision_document,
+            release_document,
+            authored_play_sections(world),
         )
         assembled_certification = {
             **dict(artifact.certification),

@@ -267,6 +267,23 @@ class PostgresRpgWorldScenarioRepository:
         ).fetchone()
         return _revision_row(row, kind="world") if row is not None else None
 
+    def latest_world_revision(self, context: TenantContext, world_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT workspace_id, world_id, revision, document_jsonb, "
+            "content_hash, created_at FROM omnix_rpg_world_revisions "
+            "WHERE workspace_id = %s AND world_id = %s ORDER BY revision DESC LIMIT 1",
+            (context.workspace_id, world_id),
+        ).fetchone()
+        return _revision_row(row, kind="world") if row is not None else None
+
+    def replace_world_metadata(self, context: TenantContext, world_id: str, metadata: Mapping[str, Any]) -> None:
+        """The world's metadata, whole; the caller holds the row (``get_world(for_update=True)``)."""
+        self.connection.execute(
+            "UPDATE omnix_rpg_worlds SET metadata_jsonb = %s::jsonb, updated_at = CURRENT_TIMESTAMP "
+            "WHERE workspace_id = %s AND id = %s",
+            (canonical_json(dict(metadata)), context.workspace_id, world_id),
+        )
+
     def publish_world_release(
         self,
         context: TenantContext,

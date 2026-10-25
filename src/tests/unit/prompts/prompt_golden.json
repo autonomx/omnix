@@ -435,10 +435,6 @@
     "sha256": "bed7276d64b7354c2ef38e3aca8b45075860f546a979d2be5bdb9a42c74203b7",
     "version": "1"
   },
-  "rpg.session_item_detail.prompt": {
-    "sha256": "9243fed112427e8e33f669a84293e4e5495b3883eb1db0ce363474f0bf858140",
-    "version": "1"
-  },
   "rpg.session_memory_prompt.build_relevant_memory_prompt_block": {
     "sha256": "46772309d6d3c5beb486093cfea4f6fa967cb4c44fbfba4d0037d9953c6b7197",
     "version": "1"

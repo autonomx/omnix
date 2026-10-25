@@ -15,6 +15,8 @@ _KINDS = {
     "characters": frozenset({"npc", "actor", "person", "character"}),
     "regions": frozenset({"region"}),
     "bestiary": frozenset({"creature", "monster", "beast", "threat"}),
+    "items": frozenset({"item", "equipment", "gear", "weapon", "armor", "armour", "consumable", "augmentation"}),
+    "quests": frozenset({"quest"}),
 }
 _PLACE_KINDS = frozenset({"location", "place", "settlement", "site"})
 DERIVED_TRAVEL_TIME = "30 minutes"
@@ -80,11 +82,24 @@ def _creature(entity: Mapping[str, Any]) -> dict[str, Any]:
             "weakness": ", ".join(_texts(entity.get("weaknesses") or entity.get("weakness")))}
 
 
-_SHAPES = {"characters": _character, "regions": _region, "bestiary": _creature}
+def _item(entity: Mapping[str, Any]) -> dict[str, Any]:
+    return {"id": _text(entity.get("id")), "name": _text(entity.get("name")),
+            "type": _text(entity.get("item_type") or entity.get("category") or entity.get("kind")),
+            "rarity": _text(entity.get("rarity")),
+            "effect": _text(entity.get("effect") or entity.get("short_summary") or entity.get("description"))}
+
+
+def _quest(entity: Mapping[str, Any]) -> dict[str, Any]:
+    return {"id": _text(entity.get("id")), "name": _text(entity.get("name") or entity.get("title")),
+            "summary": _text(entity.get("short_summary") or entity.get("description"))}
+
+
+_SHAPES = {"characters": _character, "regions": _region, "bestiary": _creature, "items": _item, "quests": _quest}
 
 
 def lore_rows(canon: Mapping[str, Any], section: str) -> list[dict[str, Any]]:
-    """The world's ``section`` (``characters``, ``regions`` or ``bestiary``): as authored, else from its lore."""
+    """The world's ``section`` (``characters``, ``regions``, ``bestiary``, ``items`` or ``quests``): as authored,
+    else from its lore."""
     authored = [dict(row) for row in canon.get(section) or () if isinstance(row, Mapping)]
     if authored:
         return authored

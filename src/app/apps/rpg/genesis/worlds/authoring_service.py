@@ -328,6 +328,12 @@ def _system_status(section_id: str, detail: Mapping[str, Any]) -> tuple[str, int
     if section_id == "validation":
         releases = list(detail.get("releases") or [])
         return ("complete" if releases else "waiting"), len(releases)
+    if section_id == "play":  # how the latest revision plays: the sections its world wrote (RQ-4.1)
+        revisions = list(detail.get("revisions") or [])
+        if not revisions:
+            return "waiting", 0
+        sources = _record(_record(revisions[0]).get("play_sections")).values()
+        return "complete", sum(1 for source in sources if source == "authored")
     return "empty", 0
 
 

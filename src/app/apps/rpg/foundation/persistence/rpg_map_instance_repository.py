@@ -64,6 +64,14 @@ class PostgresRpgMapInstanceRepository:
             return current
         return _definition_row(row)
 
+    def next_definition_revision(self, context: TenantContext, map_id: str) -> int:
+        row = self.connection.execute(
+            "SELECT COALESCE(MAX(definition_revision), 0) + 1 FROM omnix_rpg_map_definitions "
+            "WHERE workspace_id = %s AND map_id = %s",
+            (context.workspace_id, map_id),
+        ).fetchone()
+        return int(row[0])
+
     def get_definition(
         self,
         context: TenantContext,
