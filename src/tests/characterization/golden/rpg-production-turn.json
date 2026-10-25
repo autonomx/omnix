@@ -152,20 +152,6 @@
             "sequence": 1,
             "speaker_id": null,
             "text": "You take in your surroundings."
-          },
-          {
-            "kind": "result",
-            "purpose": "consequence",
-            "sequence": 2,
-            "speaker_id": null,
-            "text": "Consequence: You take in your surroundings."
-          },
-          {
-            "kind": "choice",
-            "purpose": "offered_choice",
-            "sequence": 3,
-            "speaker_id": null,
-            "text": "Offered choice: You take in your surroundings."
           }
         ],
         "validation": {
@@ -211,9 +197,9 @@
       "visible_response": {
         "format_version": "rpg_visible_response_v1",
         "messages": [],
-        "narration": "You take in your surroundings.\n\nConsequence: You take in your surroundings.",
+        "narration": "You take in your surroundings.",
         "npc": {},
-        "plain_text": "You take in your surroundings.\n\nConsequence: You take in your surroundings."
+        "plain_text": "You take in your surroundings."
       }
     },
     {
@@ -236,13 +222,6 @@
             "sequence": 2,
             "speaker_id": null,
             "text": "Resolved action: You take in your surroundings."
-          },
-          {
-            "kind": "choice",
-            "purpose": "offered_choice",
-            "sequence": 3,
-            "speaker_id": null,
-            "text": "Offered choice: You take in your surroundings."
           }
         ],
         "validation": {

@@ -325,11 +325,24 @@ def _prose(record: EvidenceRecord) -> bool:
     return not _CODE.match(record.content.strip())
 
 
-def _evidence_text(beat: NarrativeBeat, evidence: Mapping[str, EvidenceRecord], word_limit: int = 0) -> str:
+def _sentences(text: str) -> list[str]:
+    return [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+|\n+", text) if sentence.strip()]
+
+
+def _evidence_text(beat: NarrativeBeat, evidence: Mapping[str, EvidenceRecord], word_limit: int = 0,
+                   told: set[str] | None = None) -> str:
+    """The beat's grounded text: its first speakable evidence, less the sentences an earlier beat already told
+    (``told``, which this adds to), so two beats citing one outcome do not repeat it."""
+    told = told if told is not None else set()
     for ref in beat.evidence_refs:
         record = evidence.get(ref)
         if record and record.content.strip() and _prose(record) and (not beat.speaker_id or _speakable(record)):
-            return _within_words(record.content.strip(), word_limit)
+            fresh = [sentence for sentence in _sentences(record.content) if sentence.casefold() not in told]
+            if not fresh:
+                continue
+            text = _within_words(" ".join(fresh), word_limit)
+            told.update(sentence.casefold() for sentence in _sentences(text))
+            return text
     return ""
 
 
@@ -357,8 +370,9 @@ def _deterministic_text(
     request: TurnPresentationRequest,
     evidence: Mapping[str, EvidenceRecord],
     word_limit: int = 0,
+    told: set[str] | None = None,
 ) -> str:
-    grounded = _evidence_text(beat, evidence, word_limit)
+    grounded = _evidence_text(beat, evidence, word_limit, told)
     target = beat.speaker_id or request.target_actor_id or "The nearby figure"
     name = target.split(":")[-1].replace("_", " ").replace("-", " ").title()
     if beat.purpose is BeatPurpose.PHYSICAL_REACTION:
@@ -384,6 +398,22 @@ def _deterministic_text(
     return grounded or "The moment advances without adding any unconfirmed fact."
 
 
+def _repeats(text: str, blocks: Sequence[NarrativeBlock]) -> bool:
+    """Whether ``text`` says nothing an earlier block has not (a filler line in place of grounded text counts)."""
+    return not text.strip() or text in _FILLER or any(block.text == text for block in blocks)
+
+
+# The lines a beat falls back to when its evidence has nothing left to tell.
+_FILLER = frozenset({
+    "The changed scene settles into view, its immediate paths and occupants becoming clear.",
+    "A meaningful change in the surroundings draws immediate notice.",
+    "A relevant piece of history gives the exchange greater weight.",
+    "The resolved action takes effect exactly as determined.",
+    "The immediate consequence leaves the next situation clear.",
+    "The moment advances without adding any unconfirmed fact.",
+})
+
+
 class DeterministicNarrativeWriter:
     """Provider-free canonical writer used for CI and outage fallback."""
 
@@ -396,14 +426,20 @@ class DeterministicNarrativeWriter:
         by_id = {record.evidence_id: record for record in evidence}
         # Each beat's fair share of the plan's maximum, so the fallback always fits the budget it is checked against.
         share = max(12, int(plan.word_budget[1]) // max(1, len(plan.beats))) if plan.word_budget[1] else 0
-        blocks = tuple(
-            NarrativeBlock(
+        told: set[str] = set()  # each sentence of the evidence is told once, by the first beat that cites it
+        blocks: list[NarrativeBlock] = []
+        for beat in sorted(plan.beats, key=lambda planned: planned.sequence):
+            grounded_before = len(told)
+            text = _deterministic_text(beat, request, by_id, share, told)
+            if not beat.required and beat.evidence_refs and len(told) == grounded_before and _repeats(text, blocks):
+                continue  # an optional beat with nothing new to tell is left out, not padded
+            blocks.append(NarrativeBlock(
                 block_id=f"block:{beat.beat_id}",
                 beat_id=beat.beat_id,
                 sequence=beat.sequence,
                 kind=beat.kind,
                 purpose=beat.purpose,
-                text=_deterministic_text(beat, request, by_id, share),
+                text=text,
                 speaker_id=beat.speaker_id,
                 evidence_refs=beat.evidence_refs,
                 claim_refs=beat.required_claim_refs,
@@ -412,7 +448,5 @@ class DeterministicNarrativeWriter:
                     "evidence_scope": str(beat.metadata.get("evidence_scope") or "player"),
                     "claim_source": "pending_inference",
                 },
-            )
-            for beat in plan.beats
-        )
-        return WriterResult(blocks=blocks, source="deterministic_writer")
+            ))
+        return WriterResult(blocks=tuple(blocks), source="deterministic_writer")

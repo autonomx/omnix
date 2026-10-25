@@ -16,19 +16,19 @@ const tabs: Array<{ id: RpgNarrativeTab; label: string }> = [
   { id: 'journal', label: 'Journal' },
   { id: 'lore', label: 'Lore' },
   { id: 'dialogue', label: 'Dialogue log' },
-  { id: 'turns', label: 'Turn history' },
+  { id: 'turns', label: 'What you did' },
 ];
 
 const emptyDialogueRow: RpgJournalEntryPreview = {
   time: 'Dialogue',
-  title: 'No dialogue captured yet',
-  detail: 'Dialogue appears here after NPC, narrator, or player messages are recorded for this campaign.',
+  title: 'No conversations yet',
+  detail: 'What people say to you is kept here.',
 };
 
 const emptyTurnRow: RpgJournalEntryPreview = {
   time: 'Turn history',
-  title: 'No replayed turns yet',
-  detail: 'Submit a command to start recording replay-safe turn history for this campaign.',
+  title: 'Nothing done yet',
+  detail: 'What you do is kept here, turn by turn.',
 };
 
 export function RpgNarrativeTabs({ journalEntries, logEntries, journalDetail, recentEvents }: RpgNarrativeTabsProps) {
@@ -128,9 +128,11 @@ function JournalPanel({
         <ul>
           {journalDetail.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
         </ul>
-        <div className="rpg-chip-row">
-          {journalDetail.tags.map((tag) => <span key={tag}>{tag}</span>)}
-        </div>
+        {journalDetail.tags.length ? (
+          <div className="rpg-chip-row">
+            {journalDetail.tags.map((tag) => <span key={tag}>{tag}</span>)}
+          </div>
+        ) : null}
       </article>
     </div>
   );
@@ -149,9 +151,8 @@ function DialoguePanel({ dialogueRows }: { dialogueRows: RpgJournalEntryPreview[
       </div>
       <article className="rpg-journal-detail">
         <h3>Dialogue log</h3>
-        <p>Conversation-facing messages from the selected RPG session. Setup notes and ambient world events stay in the Journal tab.</p>
+        <p>What people have said to you.</p>
         <ul>{dialogueRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
-        <div className="rpg-chip-row"><span>Conversation</span><span>Messages only</span><span>Replay-safe</span></div>
       </article>
     </div>
   );
@@ -169,10 +170,9 @@ function TurnHistoryPanel({ turnRows }: { turnRows: RpgJournalEntryPreview[] }) 
         ))}
       </div>
       <article className="rpg-journal-detail">
-        <h3>Turn history</h3>
-        <p>Replay-safe player commands and queued turn requests for the selected RPG session.</p>
+        <h3>What you did</h3>
+        <p>Your latest turns, newest first.</p>
         <ul>{turnRows.map((row) => <li key={`${row.time}:${row.detail}`}>{row.detail}</li>)}</ul>
-        <div className="rpg-chip-row"><span>Deterministic</span><span>Commands only</span><span>Checkpoint aware</span></div>
       </article>
     </div>
   );

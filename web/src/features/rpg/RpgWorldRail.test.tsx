@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgWorldRail } from './RpgWorldRail';
-import { npcRelationships, previewEncounter, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiState';
+import { npcRelationships, previewJobs, previewSessionSummary, previewWorldStateRows } from './rpgUiState';
 import { renderWithProviders } from '../../test/renderWithProviders';
 
 
@@ -9,7 +9,7 @@ const baseProps = {
   autoplayRunning: false,
   autoplayStatusLabel: 'Autoplay off',
   checkpointSummary: { label: 'Latest checkpoint', detail: 'checkpoint-001.json', source: 'live' as const },
-  encounter: previewEncounter,
+  developerTools: true, // the jobs card is a developer panel
   isAutoplayPending: false,
   isRefreshingJobs: false,
   jobCards: previewJobs,
@@ -28,11 +28,11 @@ describe('RpgWorldRail', () => {
   it('keeps world information without restoring the Autoplay & reports section', () => {
     renderWithProviders(<RpgWorldRail {...baseProps} />);
 
-    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'World and places' })).toBeInTheDocument();
     expect(screen.getByLabelText('Glimmerdeep Pass travel map')).toBeInTheDocument();
     expect(screen.getByText('Calendar / Season')).toBeInTheDocument();
     expect(screen.getByText('Hazards')).toBeInTheDocument();
-    expect(screen.getByText('NPC relationships')).toBeInTheDocument();
+    expect(screen.getByText('People you know')).toBeInTheDocument();
     expect(screen.getByText('RPG jobs')).toBeInTheDocument();
 
     expect(screen.queryByText('Autoplay & reports')).not.toBeInTheDocument();
@@ -90,5 +90,12 @@ describe('RpgWorldRail', () => {
     expect(screen.getByText('rpg.report.last10')).toBeInTheDocument();
     expect(screen.getByText('Reason: Last 10 turn report failed before ZIP creation.')).toBeInTheDocument();
     expect(screen.queryByText('rpg.turn.4')).not.toBeInTheDocument();
+  });
+
+  it('keeps the jobs card for developers', () => {
+    renderWithProviders(<RpgWorldRail {...baseProps} developerTools={false} />);
+    expect(screen.queryByText('RPG jobs')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start autoplay' })).not.toBeInTheDocument();
+    expect(screen.getByText('People you know')).toBeInTheDocument();
   });
 });

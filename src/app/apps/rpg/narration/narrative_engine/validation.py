@@ -205,6 +205,9 @@ class NarrativeRepairer:
             text = _WHITESPACE.sub(" ", _LABEL_PREFIX.sub("", block.text)).strip()
             normalized = " ".join(text.casefold().split())
             if normalized in seen_text:
+                if not beat.required:  # an optional beat that only repeats another says nothing: it is left out
+                    history.append(f"removed_duplicate:{block.block_id}")
+                    continue
                 purpose = beat.purpose.value.replace("_", " ").capitalize()
                 text = f"{purpose}: {text}"
                 normalized = " ".join(text.casefold().split())

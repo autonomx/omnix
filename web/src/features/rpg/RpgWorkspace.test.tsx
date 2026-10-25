@@ -263,7 +263,7 @@ describe('RpgWorkspace', () => {
 
     expect(await screen.findByRole('heading', { name: 'Your turn' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: 'rpg-session-1' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'rpg_checkpoint / rpg' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'rpg_checkpoint / rpg' })).not.toBeInTheDocument(); // a developer panel
     await waitFor(() => expect(screen.getByLabelText('Session')).toHaveValue('rpg-session-1'));
 
     fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
@@ -663,7 +663,8 @@ describe('RpgWorkspace', () => {
     // Saving is the campaign's own save points (the Campaign Menu), not a platform checkpoint.
     expect(screen.queryByRole('button', { name: 'Create checkpoint' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start autoplay' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Developer tools' })); // autoplay is a developer's tool
+    fireEvent.click(await screen.findByRole('button', { name: 'Start autoplay' }));
 
     await waitFor(() => {
       const autoplayCall = fetchMock.mock.calls.find(
@@ -684,17 +685,17 @@ describe('RpgWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Hide header' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(await screen.findByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
-    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'World and places' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Contain player rail' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Contain world rail' })).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toHaveClass('rpg-rail-expanded');
-    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toHaveClass('rpg-rail-expanded');
+    expect(screen.getByRole('complementary', { name: 'World and places' })).toHaveClass('rpg-rail-expanded');
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide player rail' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hide world rail' }));
 
     expect(screen.queryByRole('complementary', { name: 'Player, party, and quests' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('complementary', { name: 'World, jobs, and reports' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'World and places' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show player rail' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Show world rail' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('heading', { name: 'Your turn' })).toBeInTheDocument();
@@ -703,7 +704,7 @@ describe('RpgWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show world rail' }));
 
     expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
-    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'World and places' })).toBeInTheDocument();
   });
 
   it('keeps campaign and layout controls in one header while runtime context can be hidden', async () => {

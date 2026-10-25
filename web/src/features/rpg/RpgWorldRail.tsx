@@ -6,7 +6,6 @@ import { RpgMapDialog } from './RpgMapDialog';
 import { RpgTacticalGrid } from './RpgTacticalGrid';
 import type {
   RpgCheckpointSummaryPreview,
-  RpgEncounterPreview,
   RpgJobCardPreview,
   RpgNpcRelationshipPreview,
   RpgSessionSummaryPreview,
@@ -29,7 +28,8 @@ interface RpgWorldRailProps {
   className?: string;
   checkpointSummary: RpgCheckpointSummaryPreview;
   currentMapId?: string | null;
-  encounter: RpgEncounterPreview;
+  /** The jobs, autoplay and assets card shows with Developer tools on. */
+  developerTools?: boolean;
   isAutoplayPending: boolean;
   isRefreshingJobs: boolean;
   jobCards: RpgJobCardPreview[];
@@ -50,7 +50,7 @@ export function RpgWorldRail({
   className,
   checkpointSummary,
   currentMapId,
-  encounter,
+  developerTools = false,
   isAutoplayPending,
   isRefreshingJobs,
   jobCards,
@@ -85,7 +85,7 @@ export function RpgWorldRail({
 
   return (
     <>
-      <aside className={railClassName} aria-label="World, jobs, and reports">
+      <aside className={railClassName} aria-label="World and places">
         <section className="rpg-card rpg-map-card">
           <div className="rpg-section-heading">
             <p className="eyebrow">World & location</p>
@@ -118,17 +118,10 @@ export function RpgWorldRail({
               </div>
             ))}
           </div>
-          <div role="group" className="rpg-encounter-card" aria-label={`${encounter.title} encounter state`}>
-            <p className="eyebrow">Encounter</p>
-            <span aria-hidden="true">{encounter.icon}</span>
-            <strong>{encounter.title}</strong>
-            <p>{encounter.detail}</p>
-            <small>{encounter.source === 'live' ? 'Live encounter state' : 'Preview encounter state'}</small>
-          </div>
         </section>
 
         <section className="rpg-card">
-          <p className="eyebrow">NPC relationships</p>
+          <p className="eyebrow">People you know</p>
           <div className="rpg-list-stack">
             {npcRelationships.length ? (
               npcRelationships.map((npc) => (
@@ -141,11 +134,12 @@ export function RpgWorldRail({
                 </article>
               ))
             ) : (
-              <p className="rpg-empty-state">No NPC relationships recorded.</p>
+              <p className="rpg-empty-state">No one here knows you well yet.</p>
             )}
           </div>
         </section>
 
+        {developerTools ? (
         <section className="rpg-card rpg-jobs-card">
           <div className="rpg-section-heading">
             <p className="eyebrow">RPG jobs</p>
@@ -186,6 +180,7 @@ export function RpgWorldRail({
             </article>
           ))}
         </section>
+        ) : null}
       </aside>
       {canOpenLiveMap ? (
         <RpgMapDialog

@@ -292,6 +292,7 @@ def _action_beats(
                 claim_refs=claims,
                 instructions="Present the immediate consequence and current actionable situation using only resolved facts.",
                 evidence_scope="player",
+                required=False,  # it cites the action's own facts: when it would only restate them, it is left out
             )
         )
     if policy.allow_forward_hook and len(beats) < policy.maximum_beats:

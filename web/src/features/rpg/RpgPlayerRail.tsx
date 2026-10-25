@@ -103,10 +103,6 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
             <span>Gold</span>
             <strong>{heroSummary.gold}</strong>
           </div>
-          <div>
-            <span>Renown</span>
-            <strong>{heroSummary.renown}</strong>
-          </div>
         </div>
       </section>
 
@@ -149,7 +145,7 @@ export function RpgPlayerRail(props: RpgPlayerRailProps) {
             </button>
           ))}
         </div>
-        <small>Actions prepare a deterministic turn command.</small>
+        <small>Each fills in your next turn; send it when you are ready.</small>
       </section>
 
       <section className="rpg-card" aria-label="Active quests">

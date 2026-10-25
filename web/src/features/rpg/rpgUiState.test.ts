@@ -76,7 +76,7 @@ describe('rpg UI state', () => {
 
     expect(state.sessions).toHaveLength(2);
     expect(state.sessionSummaries[0]).toMatchObject({ id: 'session:live', title: 'Live campaign', location: 'Rusty Flagon Tavern', turnLabel: 'Turn 12', updatedAt: '2026-06-16 00:00 UTC' });
-    expect(state.worldStateRows[0]).toMatchObject({ label: 'Calendar / Season', value: 'Not tracked yet' });
+    expect(state.worldStateRows.some((row) => row.label === 'Calendar / Season')).toBe(false); // unknown, so left out
     expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'session.json' });
     expect(state.rpgJobs).toHaveLength(1);
     expect(state.rpgAssets).toHaveLength(1);
@@ -244,7 +244,6 @@ describe('rpg UI state', () => {
     expect(rows.Temperature).toBe('7C');
     expect(rows.Reputation).toBeUndefined();
     expect(state.npcRelationships[0]).toEqual({ name: 'Bran', stance: 'Ally', score: 82 });
-    expect(state.encounter).toMatchObject({ icon: '⚔', source: 'live', title: 'Road encounter', detail: 'Combatants: Lookout' });
   });
 
   it('derives player rail content from live session state when available', () => {
@@ -291,7 +290,7 @@ describe('rpg UI state', () => {
 
     const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'player-live' });
 
-    expect(state.heroSummary).toMatchObject({ source: 'live', avatar: 'M', name: 'Mira Vale', subtitle: 'Level 4 • Scout', origin: 'Caravan outrider', xpLabel: '350 / 500', xpPercent: 70, gold: '17g 5s 2c', renown: 'Trusted' });
+    expect(state.heroSummary).toMatchObject({ source: 'live', avatar: 'M', name: 'Mira Vale', subtitle: 'Level 4 • Scout', origin: 'Caravan outrider', xpLabel: '350 / 500', xpPercent: 70, gold: '17g 5s 2c' });
     expect(state.heroStats).toEqual([
       { label: 'HP', value: '42 / 50', percent: 84, tone: 'danger' },
       { label: 'Stamina', value: '31 / 40', percent: 78, tone: 'success' },
@@ -363,7 +362,6 @@ describe('rpg UI state', () => {
     expect(state.inventoryItems).toEqual([{ count: '3', icon: '🥩', label: 'Trail rations' }]);
     expect(state.hotbarAbilities).toEqual([{ abilityId: 'recon_aimed_shot', description: undefined, icon: '✦', key: '1', label: 'Aimed Shot' }]);
     expect(state.npcRelationships).toEqual([]);
-    expect(state.encounter).toMatchObject({ source: 'live', title: 'No active combat', detail: 'All quiet for now.' });
     expect(state.jobCards).toEqual([]);
   });
 

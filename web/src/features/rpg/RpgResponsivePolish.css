@@ -111,7 +111,6 @@
   }
 
   .rpg-world-state,
-  .rpg-encounter-card,
   .rpg-world-state-row {
     min-width: 0;
     overflow-wrap: normal;
@@ -123,10 +122,7 @@
   }
 
   .rpg-world-state-row > span:nth-child(2),
-  .rpg-world-state-row strong,
-  .rpg-encounter-card strong,
-  .rpg-encounter-card p,
-  .rpg-encounter-card small {
+  .rpg-world-state-row strong {
     overflow-wrap: normal;
     word-break: normal;
   }
@@ -143,15 +139,6 @@
     justify-self: end;
     max-width: 100%;
     text-align: right;
-  }
-
-  .rpg-encounter-card {
-    padding: 0.75rem;
-  }
-
-  .rpg-encounter-card p,
-  .rpg-encounter-card small {
-    line-height: 1.35;
   }
 
   .rpg-dashboard-grid-left-collapsed {
@@ -192,8 +179,7 @@
   .rpg-world-grid-card,
   .rpg-world-grid-card .rpg-card,
   .rpg-world-state,
-  .rpg-world-state-row,
-  .rpg-encounter-card {
+  .rpg-world-state-row {
     overflow-wrap: normal;
   }
 

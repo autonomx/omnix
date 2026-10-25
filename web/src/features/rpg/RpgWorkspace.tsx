@@ -27,7 +27,7 @@ import { RpgPlayerRail } from './RpgPlayerRail';
 import { RpgStoryScene } from './RpgStoryScene';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
-import { createRpgCombatSurfaceState } from './rpgCombatState';
+import { buildRpgFight } from './rpgCombatState';
 import { rpgAssistStateFromItems } from './rpgAssistState';
 import { hermesSequencePreviewModel } from './hermesSequencePreviewModel';
 import { buildHermesSequenceReviewRequest } from './hermesSequenceReviewRequest';
@@ -358,7 +358,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     hotbarAbilities,
     worldStateRows,
     npcRelationships,
-    encounter,
     sessionSummaries,
     selectedSessionSummary,
     checkpointSummary,
@@ -374,7 +373,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     selectedSessionId,
     selectedSession: selectedSessionQuery.data?.session,
   });
-  const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
+  const fight = buildRpgFight(selectedSessionQuery.data?.session, heroSummary.name);
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
   const selectedLiveSessionIsIndexed = Boolean(
     selectedLiveSessionId && sessionSummaries.some((session) => session.source === 'live' && session.id === selectedLiveSessionId),
@@ -858,6 +857,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         {/* A section, not <main>: the app shell's canvas is the page's main region (RQ-7.6, axe). */}
         <section className="rpg-center-stage" aria-label="Story scene and actions">
           <RpgStoryScene
+            developerTools={developerTools}
             heroSummary={heroSummary}
             recentEvents={recentEvents}
             selectedSessionSummary={selectedSessionSummary}
@@ -913,7 +913,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             />
           ) : null}
 
-          <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />
+          <RpgCombatSurface fight={fight} />
 
           <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} logEntries={narrativeLogEntries} recentEvents={recentEvents} />
 
@@ -938,11 +938,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
         {isWorldRailCollapsed ? null : (
           <RpgWorldRail
+            developerTools={developerTools}
             autoplayRunning={Boolean(activeAutoplayJob)}
             autoplayStatusLabel={autoplayStatusLabel}
             className="rpg-rail-expanded"
             checkpointSummary={checkpointSummary}
-            encounter={encounter}
             isAutoplayPending={autoplayMutation.isPending}
             isRefreshingJobs={isRefreshingRpgQueries}
             jobCards={jobCards}

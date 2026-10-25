@@ -15,18 +15,20 @@ const SCENE_ART_SRC = '/rpg/glimmerdeep-pass-scene.svg';
 
 interface RpgStorySceneProps {
   children: ReactNode;
+  /** Developer tools on: the turn's diagnostics show under the story. */
+  developerTools?: boolean;
   heroSummary: RpgHeroSummaryPreview;
   recentEvents: string[];
   selectedSessionSummary: RpgSessionSummaryPreview;
   storyMessages?: RpgStoryMessagePreview[];
 }
 
-export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
+export function RpgStoryScene({ children, developerTools = false, heroSummary, recentEvents, selectedSessionSummary, storyMessages = [] }: RpgStorySceneProps) {
   const isPreview = selectedSessionSummary.source === 'preview';
   const [recentEventsExpanded, setRecentEventsExpanded] = useState(false);
   const visibleStoryMessages = useRpgTurnUiMessages(selectedSessionSummary.id, [...storyMessages]);
   const diagnostics = useLatestRpgTurnDiagnostics(selectedSessionSummary.id);
-  const showDiagnostics = rpgDiagnosticsEnabled();
+  const showDiagnostics = developerTools || rpgDiagnosticsEnabled();
   const dialogueRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeight = useRef(0);
   const interactionIds = useMemo(
@@ -76,7 +78,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
           </div>
         ) : null}
       </div>
-      <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
+      {selectedSessionSummary.summary ? <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p> : null}
       {/* Focusable, so the story can be scrolled from the keyboard (RQ-7.6). */}
       <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite" tabIndex={0}>
         {isPreview ? (

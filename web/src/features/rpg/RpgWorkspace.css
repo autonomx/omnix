@@ -282,7 +282,6 @@
   .rpg-journal-detail h3,
   .rpg-map-card strong,
   .rpg-world-state-row strong,
-  .rpg-encounter-card strong,
   .rpg-relationship-row strong,
   .rpg-job-row strong,
   .rpg-report-row strong {
@@ -1304,8 +1303,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
   }
 
-  .rpg-world-state,
-  .rpg-encounter-card {
+  .rpg-world-state {
     display: grid;
     gap: 0.55rem;
   }
@@ -1323,31 +1321,6 @@
   .rpg-world-state-row strong {
     justify-self: end;
     text-align: right;
-  }
-
-  .rpg-encounter-card {
-    align-content: center;
-    background: color-mix(in srgb, var(--bg-slate-130) 38%, transparent);
-    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 12%, transparent);
-    border-radius: 0.7rem;
-    justify-items: center;
-    min-height: 9rem;
-    text-align: center;
-  }
-
-  .rpg-encounter-card > span {
-    align-items: center;
-    border: 1px solid color-mix(in srgb, var(--accent-violet-660) 22%, transparent);
-    border-radius: 999px;
-    color: var(--fg-slate-730);
-    display: inline-flex;
-    height: 3rem;
-    justify-content: center;
-    width: 3rem;
-  }
-
-  .rpg-encounter-card p {
-    color: var(--fg-slate-730);
   }
 
   .rpg-relationship-row {

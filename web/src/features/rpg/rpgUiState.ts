@@ -9,7 +9,6 @@ export interface RpgHeroSummaryPreview {
   xpLabel: string;
   xpPercent: number;
   gold: string;
-  renown: string;
   source: 'live' | 'preview';
 }
 
@@ -107,13 +106,6 @@ export interface RpgNpcRelationshipPreview {
   score: number;
 }
 
-export interface RpgEncounterPreview {
-  icon: string;
-  title: string;
-  detail: string;
-  source: 'live' | 'preview';
-}
-
 export interface RpgJobCardPreview {
   id: string;
   title: string;
@@ -186,7 +178,6 @@ export interface RpgWorkspaceState {
   hotbarAbilities: RpgHotbarAbilityPreview[];
   worldStateRows: RpgWorldStateRowPreview[];
   npcRelationships: RpgNpcRelationshipPreview[];
-  encounter: RpgEncounterPreview;
   sessionSummaries: RpgSessionSummaryPreview[];
   selectedSessionSummary: RpgSessionSummaryPreview;
   checkpointSummary: RpgCheckpointSummaryPreview;
@@ -225,7 +216,6 @@ export const previewHeroSummary: RpgHeroSummaryPreview = {
   xpLabel: '7,450 / 12,000',
   xpPercent: 62,
   gold: '1,248',
-  renown: 'Honored (35)',
   source: 'preview',
 };
 
@@ -308,7 +298,7 @@ export const previewSurvival: RpgSurvivalPreview = {
     { label: 'Drink', icon: 'D', command: 'I drink water' },
     { label: 'Rest', icon: 'R', command: 'I rest' },
   ],
-  detail: 'Needs rise with authoritative turns. Food, water, and rest provide deterministic relief.',
+  detail: 'Hunger, thirst and fatigue rise as time passes; eat, drink and rest to ease them.',
   needs: [
     { id: 'hunger', label: 'Hunger', percent: 24, severity: 'stable', value: '24 / 100' },
     { id: 'thirst', label: 'Thirst', percent: 18, severity: 'stable', value: '18 / 100' },
@@ -339,13 +329,6 @@ export const npcRelationships: RpgNpcRelationshipPreview[] = [
   { name: 'Kael', stance: 'Ally', score: 52 },
   { name: 'Captain Bryn', stance: 'Neutral', score: 10 },
 ];
-
-export const previewEncounter: RpgEncounterPreview = {
-  icon: '⚔',
-  title: 'No active combat',
-  detail: 'All quiet for now.',
-  source: 'preview',
-};
 
 export const previewJobs: RpgJobCardPreview[] = [
   { id: 'preview-turn', title: 'rpg.turn', status: 'Running', progress: 68, detail: 'Load / Apply turn / Narrate / Checkpoint', source: 'preview' },
@@ -428,7 +411,6 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     hotbarAbilities: buildHotbarAbilities(selectedSession),
     worldStateRows,
     npcRelationships: buildNpcRelationships(selectedSession),
-    encounter: buildEncounter(selectedSession),
     sessionSummaries,
     selectedSessionSummary,
     checkpointSummary,
@@ -506,9 +488,10 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     state?.location,
     payload?.location
   ) ?? NOT_TRACKED;
+  // The place as the scene describes it now (the sheet's summary is the opening's); nothing rather than filler.
   const summary =
-    firstString(latestTimeline?.detail, session.summary, session.description, session.last_event, metadata?.summary, metadata?.last_event, state?.summary, payload?.summary) ??
-    'Live replay-persistence session indexed by the backend.';
+    firstString(recordValue(recordValue(session.runtime_state)?.current_scene)?.summary, latestTimeline?.detail, session.summary,
+      session.description, session.last_event, metadata?.summary, metadata?.last_event, state?.summary, payload?.summary) ?? '';
 
   return {
     id,
@@ -543,13 +526,11 @@ function buildHeroSummary(session: RpgSession | undefined): RpgHeroSummaryPrevie
       xpLabel: NOT_TRACKED,
       xpPercent: 0,
       gold: NOT_TRACKED,
-      renown: NOT_TRACKED,
       source: 'live',
     };
   }
   const stats = recordValue(player.stats);
   const resources = recordValue(player.resources);
-  const reputation = recordValue(player.reputation);
   const name = firstString(player.name, player.character_name, player.characterName, player.hero_name, player.id) ?? 'Unnamed hero';
   const level = firstNumber(player.level, stats?.level);
   const role = firstString(player.class, player.role, player.archetype, player.job) ?? 'Adventurer';
@@ -559,12 +540,7 @@ function buildHeroSummary(session: RpgSession | undefined): RpgHeroSummaryPrevie
   const xpLabel = xpMetric ? metricLabel(xpMetric.current, xpMetric.max) : xpCurrent !== undefined ? formatNumber(xpCurrent) : NOT_TRACKED;
   const xpPercent = xpMetric ? metricPercent(xpMetric.current, xpMetric.max) : 0;
   const gold = formatCurrency(player.currency, player.gold, player.money, resources?.gold, resources?.currency);
-  const renown =
-    firstString(player.renown, player.reputation, player.reputation_label, reputation?.label, reputation?.standing, reputation?.name) ??
-    (firstNumber(player.renown, player.reputation_score, reputation?.score) !== undefined
-      ? `Renown ${formatNumber(firstNumber(player.renown, player.reputation_score, reputation?.score) ?? 0)}`
-      : NOT_TRACKED);
-  return { avatar: initialFor(name), name, subtitle: [level !== undefined ? `Level ${level}` : undefined, role].filter(Boolean).join(' • '), origin, xpLabel, xpPercent, gold, renown, source: 'live' };
+  return { avatar: initialFor(name), name, subtitle: [level !== undefined ? `Level ${level}` : undefined, role].filter(Boolean).join(' • '), origin, xpLabel, xpPercent, gold, source: 'live' };
 }
 
 function buildHeroStats(session: RpgSession | undefined): RpgStatPreview[] {
@@ -630,7 +606,7 @@ function buildSurvivalState(session: RpgSession | undefined): RpgSurvivalPreview
       ? 'Immediate survival relief is recommended.'
       : status === 'Warning'
         ? 'One or more needs are creating survival pressure.'
-        : 'Needs rise with authoritative turns. Relief actions are resolved deterministically.',
+        : 'Hunger, thirst and fatigue rise as time passes; eat, drink and rest to ease them.',
     needs: [need('hunger', 'Hunger'), need('thirst', 'Thirst'), need('fatigue', 'Fatigue')],
     source: 'live',
     status,
@@ -803,20 +779,10 @@ function buildJournalEntries(selectedSession: RpgSessionSummaryPreview, session:
 function buildJournalDetail(selectedSession: RpgSessionSummaryPreview, entries: RpgJournalEntryPreview[]): RpgJournalDetailPreview {
   if (selectedSession.source === 'preview') return previewJournalDetail;
   const latest = entries[0];
-  if (latest) {
-    return {
-      title: latest.title,
-      detail: latest.detail,
-      bullets: [`Session id: ${selectedSession.id}`, `Location: ${selectedSession.location}`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`, `Checkpoint: ${selectedSession.checkpointLabel}`],
-      tags: ['Player perspective', 'Daily journal', 'Character voice'],
-    };
-  }
-  return {
-    title: `Live session: ${selectedSession.title}`,
-    detail: selectedSession.summary,
-    bullets: [`Session id: ${selectedSession.id}`, `Location: ${selectedSession.location}`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`, `Checkpoint: ${selectedSession.checkpointLabel}`],
-    tags: ['Player perspective', 'Daily journal', 'Character voice'],
-  };
+  const bullets = [`Where: ${selectedSession.location}`, selectedSession.turnLabel];
+  return latest
+    ? { title: latest.title, detail: latest.detail, bullets: [`When: ${latest.time}`, ...bullets], tags: [] }
+    : { title: 'My journal', detail: selectedSession.summary, bullets, tags: [] };
 }
 
 function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session: RpgSession | undefined): RpgWorldStateRowPreview[] {
@@ -841,24 +807,26 @@ function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session:
     light: firstString(display?.light, snapshot.light_level),
     terrain: firstString(display?.terrain, snapshot.terrain_condition),
     context: firstString(display?.context, context?.label, context?.exposure),
-    hazards: hazards.length ? hazards.map((hazard) => firstString(recordValue(hazard)?.id, hazard)).filter(Boolean).join(', ') : undefined,
+    hazards: hazards.length ? hazards.map((hazard) => firstString(recordValue(hazard)?.label, recordValue(hazard)?.name, recordValue(hazard)?.id, hazard)).filter(Boolean).join(', ') : undefined,
   });
 }
 
+/** The world as the campaign knows it now: what it does not know is left out, not shown as missing. */
 function environmentRowsFromValues(values: Record<string, string | undefined>): RpgWorldStateRowPreview[] {
-  return [
-    { icon: '☀', label: 'Calendar / Season', value: values.season ?? NOT_TRACKED },
-    { icon: '◷', label: 'Day / Time', value: values.dayTime ?? NOT_TRACKED },
-    { icon: '⌖', label: 'Region', value: values.region ?? NOT_TRACKED },
-    { icon: '≋', label: 'Weather', value: values.weather ?? NOT_TRACKED },
-    { icon: '❄', label: 'Temperature', value: values.temperature ?? NOT_TRACKED },
-    { icon: '↝', label: 'Wind', value: values.wind ?? NOT_TRACKED },
-    { icon: '◌', label: 'Visibility', value: values.visibility ?? NOT_TRACKED },
-    { icon: '✦', label: 'Light', value: values.light ?? NOT_TRACKED },
-    { icon: '▧', label: 'Terrain', value: values.terrain ?? NOT_TRACKED },
-    { icon: '⌂', label: 'Context', value: values.context ?? NOT_TRACKED },
-    { icon: '⚠', label: 'Hazards', value: values.hazards ?? NOT_TRACKED },
+  const rows: Array<[string, string, string | undefined]> = [
+    ['☀', 'Calendar / Season', values.season],
+    ['◷', 'Day / Time', values.dayTime],
+    ['⌖', 'Region', values.region],
+    ['≋', 'Weather', values.weather],
+    ['❄', 'Temperature', values.temperature],
+    ['↝', 'Wind', values.wind],
+    ['◌', 'Visibility', values.visibility],
+    ['✦', 'Light', values.light],
+    ['▧', 'Terrain', values.terrain],
+    ['⌂', 'Context', values.context],
+    ['⚠', 'Hazards', values.hazards],
   ];
+  return rows.filter((row): row is [string, string, string] => Boolean(row[2])).map(([icon, label, value]) => ({ icon, label, value }));
 }
 
 function getEnvironmentSnapshot(session: RpgSession | undefined): Record<string, unknown> | undefined {
@@ -886,25 +854,6 @@ function buildNpcRelationships(session: RpgSession | undefined): RpgNpcRelations
     const stance = firstString(record.stance, record.status, record.relationship_label, record.label) ?? stanceForScore(score);
     return { name, stance, score };
   });
-}
-
-function buildEncounter(session: RpgSession | undefined): RpgEncounterPreview {
-  const roots = getSessionRecords(session);
-  const encounter = firstRecord(...roots.flatMap((root) => [root.encounter, root.encounter_state, root.current_encounter, root.combat, root.combat_state, recordValue(root.state)?.combat]));
-  if (!encounter) {
-    return session
-      ? { icon: '◇', title: 'No encounter data', detail: 'The live session does not currently expose encounter state.', source: 'live' }
-      : previewEncounter;
-  }
-  const status = firstString(encounter.status, encounter.state, encounter.phase, encounter.mode);
-  const enemies = firstArray(encounter.enemies, encounter.opponents, encounter.hostiles, encounter.combatants)
-    .map((enemy, index) => firstString(recordValue(enemy)?.name, recordValue(enemy)?.id, enemy) ?? `Combatant ${index + 1}`)
-    .slice(0, 3);
-  const statusText = String(status ?? '').toLowerCase();
-  const active = Boolean(status && !['none', 'idle', 'inactive', 'resolved', 'complete', 'completed'].some((token) => statusText.includes(token)));
-  const title = firstString(encounter.title, encounter.name, encounter.label) ?? (active ? 'Active encounter' : 'Encounter indexed');
-  const detail = firstString(encounter.summary, encounter.detail, encounter.description, encounter.objective) ?? (enemies.length ? `Combatants: ${enemies.join(', ')}` : status ? `Status: ${status}` : 'Encounter state indexed from live session.');
-  return { icon: active ? '⚔' : '◇', title, detail, source: 'live' };
 }
 
 function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionSummaryPreview): RpgCheckpointSummaryPreview {
