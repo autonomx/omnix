@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import inspect
 import json
 import os
 import re
@@ -76,7 +77,9 @@ class TurnPathPlugin:
             setattr(module, attribute, self._measured(getattr(module, attribute)))
 
     def _profile(self, frame, event, arg) -> None:
-        if event == "call":
+        # A function's code only: a module's top level (run by an import the turn makes) or a class body is no call
+        # into the module, though the profile sees both as "call".
+        if event == "call" and frame.f_code.co_flags & inspect.CO_OPTIMIZED:
             filename = frame.f_code.co_filename
             if filename not in self.files and filename.casefold().startswith(self._rpg):
                 self.files.add(filename)

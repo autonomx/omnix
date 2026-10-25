@@ -1,8 +1,8 @@
 {
   "date": "2026-10-25",
   "method": "python scripts/rpg_turn_path.py --write: coverage.py over src/tests/rpg/playthrough, src/tests/characterization/test_rpg_published_world_golden.py; a module is executed when any of its lines ran during the suite",
-  "rpg_modules": 775,
-  "turn_path_modules": 196,
+  "rpg_modules": 778,
+  "turn_path_modules": 174,
   "never_imported": [
     "app.apps.rpg.edge.dialogue_quality_benchmark",
     "app.apps.rpg.edge.hermes.candidate",

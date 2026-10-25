@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "a807173c5547665a46ce9cb17982c17374f5e80fc9a25e28673473f1a9eb3131",
+  "policy_digest": "8596b1a41b593f29b13d61a498b064512cc75397e0da42e5d95b845140a58c68",
   "rules": [
     "AL001",
     "AL002",
@@ -57,33 +57,6 @@
       "rule": "AL015"
     },
     {
-      "count": 5,
-      "fingerprint": "runtime_state",
-      "lines": [
-        68,
-        69,
-        127,
-        185,
-        203
-      ],
-      "path": "src/app/apps/rpg/narration/ai/conversation_threads.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 6,
-      "fingerprint": "runtime_state",
-      "lines": [
-        222,
-        241,
-        491,
-        492,
-        493,
-        494
-      ],
-      "path": "src/app/apps/rpg/narration/ai/npc_reaction_layer.py",
-      "rule": "AL019"
-    },
-    {
       "count": 2,
       "fingerprint": "runtime_state",
       "lines": [
@@ -91,33 +64,6 @@
         653
       ],
       "path": "src/app/apps/rpg/narration/campaign_journal_runtime.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation_state",
-      "lines": [
-        48
-      ],
-      "path": "src/app/apps/rpg/narration/presentation/personality_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation_state",
-      "lines": [
-        226
-      ],
-      "path": "src/app/apps/rpg/narration/presentation/visual_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation_state",
-      "lines": [
-        12
-      ],
-      "path": "src/app/apps/rpg/rules/items/world_items.py",
       "rule": "AL019"
     },
     {
@@ -137,46 +83,12 @@
       "rule": "AL019"
     },
     {
-      "count": 6,
-      "fingerprint": "runtime_state",
-      "lines": [
-        50,
-        58,
-        74,
-        78,
-        188,
-        211
-      ],
-      "path": "src/app/apps/rpg/session/companion_turn_runtime.py",
-      "rule": "AL019"
-    },
-    {
       "count": 1,
       "fingerprint": "session",
       "lines": [
         352
       ],
       "path": "src/app/apps/rpg/session/durable_store.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "runtime_state",
-      "lines": [
-        53,
-        56
-      ],
-      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "simulation_state",
-      "lines": [
-        85,
-        118
-      ],
-      "path": "src/app/apps/rpg/session/narration_queue_runtime.py",
       "rule": "AL019"
     },
     {
@@ -286,35 +198,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "player_state",
-      "lines": [
-        223
-      ],
-      "path": "src/app/apps/rpg/session/state_normalization.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "runtime_state",
-      "lines": [
-        195,
-        197
-      ],
-      "path": "src/app/apps/rpg/session/state_normalization.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "simulation_state",
-      "lines": [
-        204,
-        224
-      ],
-      "path": "src/app/apps/rpg/session/state_normalization.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
       "fingerprint": "session",
       "lines": [
         310
@@ -368,42 +251,6 @@
         259
       ],
       "path": "src/app/apps/rpg/world/map_world_integration.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation_state",
-      "lines": [
-        64
-      ],
-      "path": "src/app/apps/rpg/world/memory/actor_memory_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation_state",
-      "lines": [
-        41
-      ],
-      "path": "src/app/apps/rpg/world/memory/memory_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation_state",
-      "lines": [
-        48
-      ],
-      "path": "src/app/apps/rpg/world/memory/world_memory_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "player_state",
-      "lines": [
-        446
-      ],
-      "path": "src/app/apps/rpg/world/travel_graph.py",
       "rule": "AL019"
     },
     {

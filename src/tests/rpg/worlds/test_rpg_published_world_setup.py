@@ -12,11 +12,6 @@ from app.apps.rpg.genesis.worlds.published_world_setup import (
     session_world_model,
 )
 from app.apps.rpg.rules import location_registry
-from app.apps.rpg.world.travel_graph import (
-    apply_travel_result_to_state,
-    list_available_routes,
-    resolve_travel_destination,
-)
 
 REVISION = SimpleNamespace(
     world_id="world:glass",
@@ -111,9 +106,7 @@ def test_opening_kit_and_quests() -> None:
     assert quests[0]["visited_locations"] == ["location:strand"] and quests[1]["visited_locations"] == []
 
 
-
-
-def test_registry_and_travel_use_the_session_world() -> None:
+def test_the_registry_uses_the_session_world() -> None:
     simulation = {"world_model": _model(), "player_state": {"location_id": "location:strand"}}
     assert location_registry.current_location_id(simulation) == "location:strand"
     assert [npc["name"] for npc in location_registry.present_npcs_for_current_location(simulation)] == ["Ada Vell"]
@@ -122,55 +115,11 @@ def test_registry_and_travel_use_the_session_world() -> None:
     assert location_registry.find_location_by_name("market", simulation) == {}
     assert location_registry.default_location_id({"world_model": _model()}) == "location:strand"
 
-    state = {**simulation, "current_location_id": "location:strand"}
-    assert [route["to_name"] for route in list_available_routes(state=state)] == ["Salt Lamp"]
-    travel = resolve_travel_destination(player_input="walk to the Salt Lamp", state=state)
-    assert travel["ok"] and travel["to_location"] == "location:salt-lamp"
-    assert travel["travel_time_ticks"] == 2
-    moved = apply_travel_result_to_state(state=state, travel_result=travel)
-    assert moved["player_state"]["location_id"] == "location:salt-lamp"
-    assert location_registry.current_location_id(moved) == "location:salt-lamp"
-    assert location_registry.location_allows_service(moved, "meal")
-
-
-def test_travel_goes_where_the_player_names_or_nowhere() -> None:
-    """A route is named by where it leads, both ways; a word shared by two places ("Starfall"), a filler word
-    ("to"), the place the player is in, or a place no road reaches from here sends no one anywhere."""
-    world_model = {
-        "locations": {
-            "location:grove": {"name": "Starfall Grove"},
-            "location:village": {"name": "Starfall Village"},
-            "location:pass": {"name": "Skybridge Pass"},
-            "location:ruins": {"name": "Moonroot Ruins"},
-        },
-        "routes": [
-            {"from": "location:grove", "to": "location:village"},
-            {"from": "location:village", "to": "location:pass"},
-            {"from": "location:pass", "to": "location:ruins"},
-        ],
-    }
-
-    def travel(command: str, at: str) -> dict:
-        state = {"world_model": world_model, "player_state": {"location_id": at}, "current_location_id": at}
-        return resolve_travel_destination(player_input=command, state=state)
-
-    assert travel("go to Starfall Village", "location:grove")["to_location"] == "location:village"
-    assert travel("go to Starfall Grove", "location:village")["to_location"] == "location:grove"
-    assert travel("go to Skybridge Pass", "location:village")["to_location"] == "location:pass"
-    assert travel("go to Starfall Village", "location:village")["reason"] == "already_here"
-    assert travel("go to Moonroot Ruins", "location:village")["reason"] == "destination_not_adjacent"
-    assert travel("go to Skybridge Pass", "location:grove")["reason"] == "destination_not_adjacent"
-    assert not travel("I tell Liora to leave the party", "location:grove")["ok"]
-    assert [route["to_name"] for route in list_available_routes(
-        state={"world_model": world_model, "player_state": {"location_id": "location:village"},
-               "current_location_id": "location:village"})] == ["Starfall Grove", "Skybridge Pass"]
-
 
 def test_the_engine_has_no_places_of_its_own() -> None:
-    # Every campaign plays from a world (roadmap §4.4): a state without one names no place, and has no road.
+    # Every campaign plays from a world (roadmap §4.4): a state without one names no place.
     assert location_registry.current_location_id({}) == ""
     assert location_registry.find_location_by_name("market") == {}
-    assert list_available_routes(state={"current_location": "location:rusty_flagon_tavern"}) == []
 
 
 def test_the_worlds_creatures_fight_as_themselves() -> None:

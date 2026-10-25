@@ -1571,6 +1571,42 @@
       "max_entries": 256,
       "ttl_seconds": 3600.0,
       "invalidation": "output_schema_text.cache_clear"
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/turn_stream.py",
+      "symbol": "_STREAMS",
+      "category": "coordination",
+      "reason": "A submitted turn's events (accepted, committed, the outcome, narration drafts, the final narration) kept for the stream route's subscribers on this replica, 600 s after the last event and 256 streams at most; the turn's durable record is its commit, and a stream on another replica is open (RQ-6.2 follow-up)."
+    },
+    {
+      "path": "src/app/apps/rpg/foundation/turn_stream.py",
+      "symbol": "_CHANGED",
+      "category": "coordination",
+      "reason": "Condition variable waking this replica's stream subscribers when a turn's event is published; it carries no state of its own."
+    },
+    {
+      "path": "src/app/apps/rpg/narration/narration_drafts.py",
+      "symbol": "_DRAFTS",
+      "category": "coordination",
+      "reason": "The narration writer's partial drafts for a turn being narrated after its commit, relayed to the turn's stream on this replica (600 s, 256 at most); the response itself is inserted durably when the writer is done."
+    },
+    {
+      "path": "src/app/apps/rpg/narration/narration_drafts.py",
+      "symbol": "_LOCK",
+      "category": "coordination",
+      "reason": "Process-local mutex around the drafts map; it carries no durable state."
+    },
+    {
+      "path": "src/app/apps/rpg/session/persistence/turn_order.py",
+      "symbol": "_IDLE",
+      "category": "per-connection",
+      "reason": "Open PostgreSQL connections kept for the campaign turn lock (session advisory locks), by database, so a turn does not pay a connect; the lock itself lives in PostgreSQL."
+    },
+    {
+      "path": "src/app/apps/rpg/session/persistence/turn_order.py",
+      "symbol": "_IDLE_LOCK",
+      "category": "per-connection",
+      "reason": "Process-local mutex around the idle lock-connection pool; it carries no durable state."
     }
   ]
 }

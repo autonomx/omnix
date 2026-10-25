@@ -39,3 +39,26 @@ def test_the_recorded_turn_path_names_rpg_modules_that_exist() -> None:
     sources = turn_path.rpg_sources()
     assert [name for name in modules if name not in sources] == []
     assert "app.apps.rpg.edge.api.turn_pipeline" in modules
+
+
+def test_an_import_during_a_turn_is_no_call_into_the_module(tmp_path) -> None:
+    import sys
+
+    plugin = turn_path.TurnPathPlugin()
+    plugin._rpg = str(tmp_path).casefold()
+    module = tmp_path / "imported_lazily.py"
+    module.write_text("X = 1\n\n\nclass C:\n    Y = 2\n\n\ndef f():\n    return X\n", encoding="utf-8")
+    code = compile(module.read_text(encoding="utf-8"), str(module), "exec")
+    namespace: dict = {}
+    sys.setprofile(plugin._profile)
+    try:
+        exec(code, namespace)  # the module's top level and its class body run: no function of it is called
+    finally:
+        sys.setprofile(None)
+    assert plugin.files == set()
+    sys.setprofile(plugin._profile)
+    try:
+        namespace["f"]()
+    finally:
+        sys.setprofile(None)
+    assert plugin.files == {str(module)}
