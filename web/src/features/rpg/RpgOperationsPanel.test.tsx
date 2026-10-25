@@ -10,7 +10,7 @@ afterEach(() => {
 
 describe('RpgOperationsPanel', () => {
   it("shows each day's turns, failures, degraded stages and the slowest turn class", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async () => new Response(JSON.stringify({
       ok: true,
       days: [{
         day: '2026-10-25', turns: 40, failed: 1, degraded: 2, failure_rate: 0.025, degraded_rate: 0.05,
