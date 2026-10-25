@@ -99,7 +99,9 @@ def import_campaign(package: Any) -> dict[str, Any]:
             if (work.world_scenarios.get_world_revision(context, world_id, revision) is None
                     or work.world_scenarios.get_world_release(context, world_id, revision, release) is None):
                 raise CampaignTransferRefused(f"rpg_campaign_world_not_installed:{world_id}")
-        save_session_to_postgres(document, work=work)
+        from app.apps.rpg.session.upgrades.hero_record import hydrate_hero
+
+        save_session_to_postgres(hydrate_hero(document), work=work)
         for kind, artifact in sorted(_mapping(transfer.get("creation_artifacts")).items()):
             work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=_mapping(artifact))
         if bible:

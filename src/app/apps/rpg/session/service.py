@@ -5,10 +5,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.apps.rpg.foundation.core.determinism import rng_seed_from_session_id
 from app.apps.rpg.world.map_persistence import ensure_session_map_state
-from app.apps.rpg.session.ambient_builder import (
-    ensure_ambient_runtime_state,
-    normalize_ambient_state,
-)
 from app.apps.rpg.session.durable_store import (
     archive_session_on_disk,
     list_sessions_from_disk,
@@ -65,11 +61,6 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
     session["simulation_state"] = simulation_state
     session = normalize_session_survival_for_persistence(session, owned=owned)
     session = ensure_session_map_state(session)
-    # Living-world: ensure ambient runtime state exists and is bounded
-    runtime_state = _safe_dict(_sections.runtime_state_of(session))
-    runtime_state = ensure_ambient_runtime_state(runtime_state)
-    runtime_state = normalize_ambient_state(runtime_state)
-    session["runtime_state"] = runtime_state
     return session
 
 

@@ -293,22 +293,16 @@ def keeping_turn_start() -> Iterator[dict[str, Any]]:
 
 
 def _load(ctx: Any) -> dict[str, Any]:
-    """Step 1: the turn-start campaign (a copy of the caller's, when it hands one in), normalized: its simulation
-    filled in from the play screen's sheet, and the hero's progression (level, skills) given its defaults."""
+    """Step 1: the turn-start campaign (a copy of the caller's, when it hands one in), as stored: the hero's simulation
+    record was filled from the sheet when the campaign was created (``upgrades/hero_record.py``)."""
     from copy import deepcopy
 
-    from app.apps.rpg.rules.player.player_progression_state import ensure_player_progression_state
-    from app.apps.rpg.session.public_state_bridge import hydrate_simulation_player
     from app.apps.rpg.session.session_runtime_store import load_runtime_session
 
     override = _d(ctx.session_override)
     session = deepcopy(override) if override else _d(load_runtime_session(ctx.session_id))
     if not session:
         return session
-    session = hydrate_simulation_player(session)
-    simulation = _d(_sections.simulation_state_of(session))
-    simulation["player_state"] = ensure_player_progression_state(_d(_sections.player_state_of(simulation)))
-    session["simulation_state"] = simulation
     holder = _TURN_START.get()
     if holder is not None and "document" not in holder:
         holder["document"] = session  # the turn reduces copies of it: it stays as the turn found it

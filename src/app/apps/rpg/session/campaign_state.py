@@ -252,11 +252,13 @@ def _to_v8_one_gear_record(document: dict[str, Any]) -> dict[str, Any]:
 def _to_v9_given_once(document: dict[str, Any]) -> dict[str, Any]:
     """Version 9 (RQ-1.5): what every load used to add when it was missing, added once: the environment's seed state
     (``upgrades/environment_seed.py``) and a published opening's quest and first actions
-    (``upgrades/opening_progress.py``). A current document loads as stored."""
+    (``upgrades/opening_progress.py``), and the hero's simulation record filled from the sheet, which each turn's load
+    used to do (``upgrades/hero_record.py``). A current document loads as stored."""
     from app.apps.rpg.session.upgrades.environment_seed import ensure_session_environment_seed_state
+    from app.apps.rpg.session.upgrades.hero_record import hydrate_hero
     from app.apps.rpg.session.upgrades.opening_progress import ensure_published_opening_progress
 
-    return ensure_published_opening_progress(ensure_session_environment_seed_state(document))
+    return hydrate_hero(ensure_published_opening_progress(ensure_session_environment_seed_state(document)))
 
 
 # (target version, upcaster), in order. Version 5 marks the interaction

@@ -624,6 +624,9 @@ def _setup_payload_with_identity(request: RpgNewGameRequest, identity: dict[str,
 
 
 def _save_created_session(session: dict[str, Any]) -> dict[str, Any]:
+    from app.apps.rpg.session.upgrades.hero_record import hydrate_hero
+
+    session = hydrate_hero(session)  # the hero's simulation record, from the sheet, once (a turn reads it as stored)
     state = raw_state if isinstance(raw_state := session.get("state"), dict) else None
     if state is not None:
         write_ability_coverage_snapshot(state)

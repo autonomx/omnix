@@ -175,13 +175,12 @@
       "rule": "AL019"
     },
     {
-      "count": 4,
+      "count": 3,
       "fingerprint": "session",
       "lines": [
-        48,
-        68,
-        76,
-        136
+        41,
+        61,
+        123
       ],
       "path": "src/app/apps/rpg/session/service.py",
       "rule": "AL019"
@@ -194,24 +193,6 @@
         135
       ],
       "path": "src/app/apps/rpg/session/service.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "session",
-      "lines": [
-        310
-      ],
-      "path": "src/app/apps/rpg/session/turn/run.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "simulation",
-      "lines": [
-        309
-      ],
-      "path": "src/app/apps/rpg/session/turn/run.py",
       "rule": "AL019"
     },
     {
