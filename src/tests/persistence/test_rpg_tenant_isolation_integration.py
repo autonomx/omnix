@@ -159,3 +159,18 @@ def test_two_users_in_two_workspaces_cannot_see_or_play_each_others_campaigns(da
     # Naming another workspace never widens access.
     denied = _client(app, *tokens["bob"], **{"X-Omnix-Workspace": alice.workspace_id}).get("/api/rpg/sessions")
     assert denied.status_code == 403
+
+    # A turn's stream is its submitter's (RQ-6.2, RQ-8.3): another user asking for it reads nothing of it.
+    played = alice_client.post(f"/api/rpg/sessions/{alice_game}/turn", json={"command": "look around"},
+                               headers={"x-omnix-rpg-submission-id": "alice-stream", "x-omnix-rpg-turn-stream": "1"})
+    assert played.status_code == 200, played.text[:300]
+
+    def stream_events(client: TestClient) -> list[str]:
+        path = f"/api/rpg/sessions/{alice_game}/submissions/alice-stream/stream"
+        with client.stream("GET", path) as response:
+            if response.status_code != 200:
+                return [f"http:{response.status_code}"]
+            return [line[7:] for line in response.iter_lines() if line.startswith("event: ")]
+
+    assert stream_events(bob_client) in (["error"], ["http:403"], ["http:404"])
+    assert stream_events(alice_client)[:3] == ["accepted", "committed", "outcome"]
