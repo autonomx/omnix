@@ -238,7 +238,11 @@ _RPG_STATE_NAMES = frozenset({"session", "state", "simulation", "simulation_stat
 _RPG_SECTION_KEYS = frozenset({"simulation_state", "runtime_state", "player_state", "inventory_state",
                                "combat_state", "quest_state", "party_state", "survival", "world_model",
                                "npc_index", "present_npc_state", "travel_state", "economy_state"})
-_RPG_STATE_OWNERS = ("app.apps.rpg.foundation.state",)
+# Where a campaign's state may be written: the reducer (``foundation.state``), and the document's upgrade, which
+# reshapes an older version's document once, outside any turn, as a system turn with a pinned backup
+# (``session.campaign_state`` and the interaction timeline it migrates; operator-notes.md "Upgrades").
+_RPG_STATE_OWNERS = ("app.apps.rpg.foundation.state", "app.apps.rpg.session.campaign_state",
+                     "app.apps.rpg.session.legacy_interaction_migration")
 
 
 def _root_name(node: ast.AST) -> str:

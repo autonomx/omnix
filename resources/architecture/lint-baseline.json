@@ -292,36 +292,6 @@
       "rule": "AL019"
     },
     {
-      "count": 1,
-      "fingerprint": "player_state",
-      "lines": [
-        193
-      ],
-      "path": "src/app/apps/rpg/session/campaign_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 3,
-      "fingerprint": "simulation",
-      "lines": [
-        194,
-        272,
-        273
-      ],
-      "path": "src/app/apps/rpg/session/campaign_state.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 2,
-      "fingerprint": "state",
-      "lines": [
-        197,
-        231
-      ],
-      "path": "src/app/apps/rpg/session/campaign_state.py",
-      "rule": "AL019"
-    },
-    {
       "count": 6,
       "fingerprint": "runtime_state",
       "lines": [
@@ -409,40 +379,6 @@
         92
       ],
       "path": "src/app/apps/rpg/session/interaction_timeline.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 13,
-      "fingerprint": "runtime",
-      "lines": [
-        35,
-        48,
-        68,
-        69,
-        73,
-        77,
-        78,
-        79,
-        369,
-        370,
-        371,
-        372,
-        373
-      ],
-      "path": "src/app/apps/rpg/session/legacy_interaction_migration.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 5,
-      "fingerprint": "session",
-      "lines": [
-        24,
-        27,
-        42,
-        55,
-        87
-      ],
-      "path": "src/app/apps/rpg/session/legacy_interaction_migration.py",
       "rule": "AL019"
     },
     {
