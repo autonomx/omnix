@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .turn_outcome import TurnOutcome
 from .turn_response_budget import enforce_turn_response_budget
 from .visible_response import build_visible_response
+from app.apps.rpg.foundation.state import access as _sections
 
 TURN_RESPONSE_CONTRACT_VERSION = "rpg_turn_response_v2"
 TURN_RESPONSE_MAX_BYTES = 50_000
@@ -214,10 +215,10 @@ def _compact_timing(sources: tuple[dict[str, Any], ...]) -> dict[str, Any]:
 def _session_summary(session: dict[str, Any]) -> dict[str, Any]:
     manifest = _dict(session.get("manifest"))
     state = _dict(session.get("state"))
-    simulation = _dict(session.get("simulation_state")) or state
-    runtime = _dict(session.get("runtime_state"))
+    simulation = _dict(_sections.simulation_state_of(session)) or state
+    runtime = _dict(_sections.runtime_state_of(session))
     scene = _dict(state.get("scene")) or _dict(simulation.get("scene"))
-    player = _dict(state.get("player")) or _dict(simulation.get("player_state"))
+    player = _dict(state.get("player")) or _dict(_sections.player_state_of(simulation))
     return _drop_none(
         {
             "id": _text(manifest.get("session_id") or manifest.get("id")) or None,
@@ -290,7 +291,7 @@ def _changed_domains(sources: tuple[dict[str, Any], ...], *, stateful: bool | No
 
 
 def _state_revision(session: dict[str, Any] | None, sources: tuple[dict[str, Any], ...]) -> int | None:
-    runtime = _dict((session or {}).get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session or {}))
     value = runtime.get("state_revision")
     if value is None:
         for source in sources:

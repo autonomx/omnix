@@ -25,6 +25,7 @@ from app.apps.rpg.rules.quest.arrival import arrival_changes
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.world_tick import clock_minute
 from app.apps.rpg.world.travel_graph import _edge_is_available, travel_graph_for_state
+from app.apps.rpg.foundation.state import access as _sections
 
 MINUTES_PER_TICK = 10
 DEFAULT_ROAD_MINUTES = 30  # a road the world gives no time for
@@ -57,13 +58,13 @@ def _routes_line(graph: Any, simulation: Mapping[str, Any], current: str) -> str
 
 def resolve_travel(planned: PlannedAction, document: Mapping[str, Any]) -> TravelResolution:
     """The journey's changes and the facts the narrator is told, or a refusal (a counted turn; nothing else changes)."""
-    simulation = _d(document.get("simulation_state"))
-    world = _d(simulation.get("world_model"))
+    simulation = _d(_sections.simulation_state_of(document))
+    world = _d(_sections.world_model_of(simulation))
     locations = _d(world.get("locations"))
     state, manifest = _d(document.get("state")), _d(document.get("manifest"))
     counted = TurnCounted(turn_count=int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1)
     graph = travel_graph_for_state(simulation)
-    current = _s(_d(simulation.get("player_state")).get("location_id")) or _s(world.get("start_location_id"))
+    current = _s(_d(_sections.player_state_of(simulation)).get("location_id")) or _s(world.get("start_location_id"))
     target = planned.target_id
     name = _s(_d(locations.get(target)).get("name")) or target
     if target == current:

@@ -22,6 +22,7 @@ from app.apps.rpg.foundation.state.changes import StateChange
 from app.apps.rpg.foundation.state.changes import parse_changes
 from app.apps.rpg.foundation.state.extract import CHANGE_SECTIONS, changes_between
 from app.apps.rpg.narration.presentation.outcome_facts import OutcomeFact, Suggestion, outcome_facts
+from app.apps.rpg.foundation.state import access as _sections
 
 TURN_OUTCOME_FORMAT = "rpg_turn_outcome_v1"
 TurnKind = Literal["player_text", "structured_action", "world_tick", "system"]
@@ -128,7 +129,7 @@ def build_turn_outcome(
     ))
     after_doc = _mapping(after)
     manifest = _mapping(after_doc.get("manifest"))
-    runtime = _mapping(after_doc.get("runtime_state"))
+    runtime = _mapping(_sections.runtime_state_of(after_doc))
     calls = {str(key): int(value) for key, value in sorted(_mapping(model_calls).items()) if value}
     outcome = _first(sources, "outcome")
     events = [event for event in root.get("world_events") or _mapping(root.get("authoritative")).get("world_events") or ()

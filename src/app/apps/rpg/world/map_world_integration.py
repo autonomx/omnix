@@ -25,6 +25,7 @@ from app.apps.rpg.world.map_repository import MapDefinitionRepository, default_m
 from app.apps.rpg.world.map_serialization import with_definition_revision
 from app.apps.rpg.world.map_settlement_assembler import assemble_settlement_map
 from app.apps.rpg.world.world_graph import RpgLocationNode, RpgRegionGraph, RpgRoute
+from app.apps.rpg.foundation.state import access as _sections
 
 WORLD_GRAPH_SCHEMA_VERSION = 1
 _REGION_WIDTH = 12000
@@ -60,12 +61,12 @@ def world_graph_source(session: Mapping[str, Any]) -> dict[str, Any]:
     kept = _mapping(state.get("world_graph"))
     if kept:
         return dict(kept)
-    simulation = _mapping(session.get("simulation_state"))
-    world = _mapping(simulation.get("world_model"))
+    simulation = _mapping(_sections.simulation_state_of(session))
+    world = _mapping(_sections.world_model_of(simulation))
     places = _mapping(world.get("locations"))
     if not places:
         return {}
-    here = _first_text(_mapping(simulation.get("player_state")).get("location_id"), simulation.get("location_id"))
+    here = _first_text(_mapping(_sections.player_state_of(simulation)).get("location_id"), simulation.get("location_id"))
     return {
         "schema_version": WORLD_GRAPH_SCHEMA_VERSION,
         "seed": _int(simulation.get("seed"), fallback=0),

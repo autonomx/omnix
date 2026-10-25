@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Mapping
+from app.apps.rpg.foundation.state import access as _sections
 
 
 class CampaignLaunchBlockedError(RuntimeError):
@@ -21,7 +22,7 @@ def _world_forge_enabled(session: Mapping[str, Any]) -> bool:
 
 
 def campaign_launch_readiness(session: Mapping[str, Any]) -> dict[str, Any]:
-    runtime = _mapping(session.get("runtime_state"))
+    runtime = _mapping(_sections.runtime_state_of(session))
     gate = _mapping(runtime.get("campaign_launch_gate"))
     enabled = _world_forge_enabled(session)
     if not enabled:

@@ -14,6 +14,7 @@ from app.apps.rpg.narration.presentation.personality_state import ensure_persona
 from app.apps.rpg.narration.presentation.visual_state import ensure_visual_state
 from app.apps.rpg.world.conversation_settings import normalize_conversation_settings
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.state import access as _sections
 
 _ALLOWED_IDLE_SECONDS = (15, 30, 60, 300, 600)
 _ALLOWED_REACTION_STYLES = ("minimal", "normal", "lively")
@@ -217,9 +218,9 @@ def _ensure_simulation_state(simulation_state: dict[str, Any]) -> dict[str, Any]
     simulation_state = ensure_world_item_state(simulation_state)
     simulation_state = _ensure_active_interactions(simulation_state)
 
-    player_state = _safe_dict(simulation_state.get("player_state"))
+    player_state = _safe_dict(_sections.player_state_of(simulation_state))
     player_state = ensure_player_progression_state(player_state)
-    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
+    inventory_state = normalize_inventory_state(_safe_dict(_sections.inventory_state_of(player_state)))
     player_state["inventory_state"] = inventory_state
     simulation_state["player_state"] = player_state
     return simulation_state

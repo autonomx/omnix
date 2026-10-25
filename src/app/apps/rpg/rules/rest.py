@@ -21,6 +21,7 @@ from app.apps.rpg.foundation.state.changes import (
     StateChange,
 )
 from app.apps.rpg.rules.combat.stakes import BATTERED, WOUND_RESTS, WOUNDED, conditions
+from app.apps.rpg.foundation.state import access as _sections
 
 _SLEEP = re.compile(r"\b(sleep|slumber|bed|night|room)\b")
 _CAMP = re.compile(r"\b(camp|bedroll|tent)\b")
@@ -39,7 +40,7 @@ class RestOutcome:
 
 def _room(simulation: Mapping[str, Any], location: str) -> dict[str, Any]:
     """A room the hero paid for from someone who rents rooms here."""
-    providers = _d(_d(simulation.get("world_model")).get("providers"))
+    providers = _d(_d(_sections.world_model_of(simulation)).get("providers"))
     for service in reversed(_l(simulation.get("active_services"))):
         service = _d(service)
         provider = _d(providers.get(_s(service.get("provider_id"))))
@@ -50,7 +51,7 @@ def _room(simulation: Mapping[str, Any], location: str) -> dict[str, Any]:
 
 
 def _rooms_for_rent(simulation: Mapping[str, Any], location: str) -> list[str]:
-    world = _d(simulation.get("world_model"))
+    world = _d(_sections.world_model_of(simulation))
     lines = []
     for provider_id, provider in _d(world.get("providers")).items():
         provider = _d(provider)
@@ -65,9 +66,9 @@ def _rooms_for_rent(simulation: Mapping[str, Any], location: str) -> list[str]:
 
 def _full_rest(simulation: Mapping[str, Any]) -> list[StateChange]:
     """Each of the party: battered ends, and a wound is a night nearer healing."""
-    player = _d(simulation.get("player_state"))
+    player = _d(_sections.player_state_of(simulation))
     party = [("player", player), *((_s(_d(row).get("npc_id")), _d(row))
-                                   for row in _l(_d(player.get("party_state")).get("companions")) if _d(row).get("npc_id"))]
+                                   for row in _l(_d(_sections.party_state_of(player)).get("companions")) if _d(row).get("npc_id"))]
     changes: list[StateChange] = []
     for actor_id, actor in party:
         held = conditions(actor)
@@ -87,7 +88,7 @@ def _full_rest(simulation: Mapping[str, Any]) -> list[StateChange]:
 
 
 def rest(simulation: Mapping[str, Any], text: str) -> RestOutcome:
-    player = _d(simulation.get("player_state"))
+    player = _d(_sections.player_state_of(simulation))
     location = _s(player.get("location_id"))
     lowered = text.casefold()
     room = _room(simulation, location)

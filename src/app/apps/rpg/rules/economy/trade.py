@@ -24,6 +24,7 @@ from app.apps.rpg.foundation.state.changes import (
 )
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.routines import MINUTES_PER_DAY
+from app.apps.rpg.foundation.state import access as _sections
 
 COPPER = {"gold": 100, "silver": 10, "copper": 1}
 # What moves a price (economy.md): an offer nearly gone, a region whose trade the roads choke, a seller who trusts the
@@ -70,9 +71,9 @@ def _words(text: str) -> set[str]:
 
 
 def _providers_here(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
-    world = _d(simulation.get("world_model"))
-    location = _s(_d(simulation.get("player_state")).get("location_id"))
-    present = set(_l(_d(simulation.get("present_npc_state")).get("present_npc_ids")))
+    world = _d(_sections.world_model_of(simulation))
+    location = _s(_d(_sections.player_state_of(simulation)).get("location_id"))
+    present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
     return [_d(provider) for provider_id, provider in _d(world.get("providers")).items()
             if _s(_d(provider).get("location_id")) == location and (not present or provider_id in present)]
 
@@ -90,7 +91,7 @@ def _named(providers: list[dict[str, Any]], words: set[str], text: str) -> list[
 
 
 def _offers(simulation: Mapping[str, Any], provider: Mapping[str, Any]) -> list[dict[str, Any]]:
-    offers = _d(_d(simulation.get("world_model")).get("offers")).get(_s(provider.get("provider_id")))
+    offers = _d(_d(_sections.world_model_of(simulation)).get("offers")).get(_s(provider.get("provider_id")))
     return [_d(offer) for offer in _l(offers)]
 
 
@@ -117,7 +118,7 @@ def stock_left(simulation: Mapping[str, Any], offer: Mapping[str, Any]) -> int |
 
 def _trade_access(simulation: Mapping[str, Any], location_id: str) -> float | None:
     """The causal runtime's trade access of the region a place is in; ``None`` where it keeps none."""
-    region = _s(_d(_d(_d(simulation.get("world_model")).get("locations")).get(location_id)).get("region_id"))
+    region = _s(_d(_d(_d(_sections.world_model_of(simulation)).get("locations")).get(location_id)).get("region_id"))
     cell = _d(_d(_d(_d(simulation.get("causal_world_runtime")).get("state")).get("cells")).get(region))
     value = _d(cell.get("values")).get("trade_access")
     return float(value) if isinstance(value, (int, float)) else None
@@ -161,8 +162,8 @@ def _score(offer: Mapping[str, Any], words: set[str]) -> int:
 
 
 def _purse(simulation: Mapping[str, Any]) -> int:
-    player = _d(simulation.get("player_state"))
-    return copper(_d(_d(player.get("inventory_state")).get("currency") or player.get("currency")))
+    player = _d(_sections.player_state_of(simulation))
+    return copper(_d(_d(_sections.inventory_state_of(player)).get("currency") or player.get("currency")))
 
 
 def _listing(simulation: Mapping[str, Any], provider: Mapping[str, Any], offers: list[dict[str, Any]], *,
@@ -173,7 +174,7 @@ def _listing(simulation: Mapping[str, Any], provider: Mapping[str, Any], offers:
 
 def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     """Buying what the player names from someone here who sells it; their offers when it names none of them."""
-    if not _d(_d(simulation.get("world_model")).get("offers")):
+    if not _d(_d(_sections.world_model_of(simulation)).get("offers")):
         return None
     words = _words(text)
     here = _providers_here(simulation)
@@ -226,11 +227,11 @@ def buy(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
 def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
     """Selling one of something the hero carries to a shopkeeper here: half the price of goods they sell
     themselves, a token for other goods, and nothing for what a quest gave."""
-    world = _d(simulation.get("world_model"))
+    world = _d(_sections.world_model_of(simulation))
     if not _d(world.get("providers")):
         return None
     lowered = text.casefold()
-    store = _d(_d(simulation.get("player_state")).get("inventory_state"))
+    store = _d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation))))
     carried = sorted((_d(item) for item in _l(store.get("items")) if _s(_d(item).get("name")).casefold() in lowered),
                      key=lambda item: len(_s(item.get("name"))), reverse=True)
     if not carried:
@@ -243,7 +244,7 @@ def sell(simulation: Mapping[str, Any], text: str) -> TradeOutcome | None:
         return TradeOutcome(lines=[f"No one here trades in goods to buy the {name}."], refused=True, kind="refused")
     shop = shops[0]
     buyer = _s(shop.get("provider_name"))
-    rewards = {_s(reward) for quest in _l(_d(simulation.get("quest_state")).get("quests"))
+    rewards = {_s(reward) for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests"))
                for reward in _l(_d(quest).get("rewards"))}
     item_id = _s(item.get("item_id") or item.get("id"))
     if item_id in rewards:

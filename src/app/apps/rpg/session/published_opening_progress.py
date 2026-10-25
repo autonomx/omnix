@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Mapping
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -152,8 +153,8 @@ def ensure_published_opening_progress(
             entities=entities,
         )
 
-    simulation = _dict(session.get("simulation_state"))
-    quest_state = _dict(simulation.get("quest_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
+    quest_state = _dict(_sections.quest_state_of(simulation))
     if not _list(quest_state.get("quests")):
         quest_state["quests"] = deepcopy(_list(state.get("quests")))
         simulation["quest_state"] = quest_state

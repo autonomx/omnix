@@ -18,6 +18,7 @@ from .dialogue_quality_session import (
     as_text as _text,
 )
 from .visible_response import build_visible_response
+from app.apps.rpg.foundation.state import access as _sections
 
 DIALOGUE_QUALITY_VERSION = "rpg_dialogue_quality_v2"
 TARGET_MIN_WORDS = 45
@@ -462,8 +463,8 @@ def build_canonical_dialogue_quality_context(
         _dict(result.get("first_call_grounding_diagnostics")).get("source")
     ) == "fast_visible_dialogue_v1"
     nested = _dict(result.get("result"))
-    runtime_state = _dict(session.get("runtime_state")) or _dict(
-        result.get("runtime_state")
+    runtime_state = _dict(_sections.runtime_state_of(session)) or _dict(
+        _sections.runtime_state_of(result)
     )
     performance = _dict(runtime_state.get("performance"))
     llm_prose_required = bool(
@@ -722,7 +723,7 @@ def _relationship_trust(session: dict[str, Any], profile: dict[str, Any]) -> str
     npc_id = _text(profile.get("npc_id") or profile.get("id"))
     name = _normalize(profile.get("name"))
     state = _dict(session.get("state"))
-    simulation = _dict(session.get("simulation_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
     candidates: list[Any] = []
     for container in (
         _dict(state.get("relationship_index")),
@@ -972,13 +973,13 @@ def _addressed_profile(
     message = _npc_message(visible)
     speaker_id = _text(message.get("speaker_id"))
     speaker = _text(message.get("speaker"))
-    simulation = _dict(session.get("simulation_state"))
-    runtime = _dict(session.get("runtime_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
+    runtime = _dict(_sections.runtime_state_of(session))
     candidates: list[dict[str, Any]] = []
     containers = (
-        _dict(simulation.get("npc_index")),
+        _dict(_sections.npc_index_of(simulation)),
         _dict(simulation.get("npcs")),
-        _dict(runtime.get("npc_index")),
+        _dict(_sections.npc_index_of(runtime)),
         _dict(_dict(simulation.get("social_state")).get("profiles")),
         _dict(_dict(runtime.get("social_state")).get("profiles")),
     )

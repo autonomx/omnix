@@ -6,6 +6,7 @@ from app.runtime.clock import utc_now
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.foundation.state import access as _sections
 
 INTERACTION_LIFECYCLE_VERSION = "rpg_interaction_lifecycle_v1"
 _MAX_LIFECYCLES = 64
@@ -20,7 +21,7 @@ def initialize_interaction_lifecycle(
     interaction_id = _text(result.get("interaction_id"))
     if not interaction_id:
         return {}
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     turn_id = _first_text(result, "turn_id")
     stateful = _first_bool(result, "stateful")
     record = {
@@ -65,7 +66,7 @@ def apply_narration_result_to_interaction(
     session = load_runtime_session(session_id)
     if not isinstance(session, dict):
         return worker_result
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     turn_id = _text(worker_result.get("turn_id"))
     interaction_id = _text(worker_result.get("interaction_id")) or _text(
         _dict(runtime.get("interaction_id_by_turn")).get(turn_id)
@@ -113,7 +114,7 @@ def apply_narration_result_to_interaction(
 
 
 def recover_pending_interaction_narration(session_id: str, session: dict[str, Any]) -> int:
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     lifecycles = _dict(runtime.get("interaction_lifecycles"))
     pending = [
         lifecycle
@@ -150,7 +151,7 @@ def _update_interaction_event(
     interaction_id: str,
     lifecycle: dict[str, Any],
 ) -> None:
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     timeline = _dict(runtime.get("interaction_timeline"))
     events = []
     for value in timeline.get("events", []) if isinstance(timeline.get("events"), list) else []:

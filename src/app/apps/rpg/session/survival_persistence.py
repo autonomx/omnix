@@ -12,6 +12,7 @@ from typing import Any
 from app.apps.rpg.rules.survival import SURVIVAL_STATE_KEY, normalize_survival_state
 from app.apps.rpg.foundation.safe_values import mapping_copy as _safe_dict
 from app.apps.rpg.foundation.safe_values import copy_state
+from app.apps.rpg.foundation.state import access as _sections
 
 
 _NEED_KEYS: tuple[str, str, str] = ("hunger", "thirst", "fatigue")
@@ -23,15 +24,15 @@ def _has_any_need(value: Mapping[str, Any]) -> bool:
 
 def _legacy_survival_candidate(simulation_state: Mapping[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
-    player_state = _safe_dict(simulation_state.get("player_state"))
+    player_state = _safe_dict(_sections.player_state_of(simulation_state))
     climate = _safe_dict(simulation_state.get("climate_survival"))
     player_climate = _safe_dict(player_state.get("climate_survival"))
 
     candidates = (
-        _safe_dict(climate.get("survival")),
+        _safe_dict(_sections.survival_of(climate)),
         _safe_dict(simulation_state.get("needs")),
         _safe_dict(player_state.get("needs")),
-        _safe_dict(player_climate.get("survival")),
+        _safe_dict(_sections.survival_of(player_climate)),
     )
     for candidate in candidates:
         if _has_any_need(candidate):
@@ -62,6 +63,6 @@ def normalize_session_survival_for_persistence(session: Mapping[str, Any], *, ow
     normalized_session = _safe_dict(session) if owned else copy_state(_safe_dict(session))
     # The copy owns its simulation state: normalize it in place rather than copying it again.
     normalized_session["simulation_state"] = _normalize_owned_simulation_state(
-        _safe_dict(normalized_session.get("simulation_state"))
+        _safe_dict(_sections.simulation_state_of(normalized_session))
     )
     return normalized_session

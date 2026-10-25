@@ -30,6 +30,7 @@ from app.apps.rpg.genesis.forge.turn_grounding import (
     narrative_grounding_footer,
 )
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
+from app.apps.rpg.foundation.state import access as _sections
 
 _SCENE_MODES = {"observation", "investigation", "travel"}
 _DIALOGUE_MODES = {"dialogue", "conversation", "social"}
@@ -128,7 +129,7 @@ def _response_mode(result: Mapping[str, Any]) -> str:
 
 def _profile(result: Mapping[str, Any], default: PresentationProfile) -> PresentationProfile:
     session = _mapping(result.get("session"))
-    runtime = _mapping(session.get("runtime_state") or result.get("runtime_state"))
+    runtime = _mapping(_sections.runtime_state_of(session) or _sections.runtime_state_of(result))
     settings = _mapping(runtime.get("runtime_settings") or runtime.get("settings"))
     value = _text(
         result.get("presentation_profile")

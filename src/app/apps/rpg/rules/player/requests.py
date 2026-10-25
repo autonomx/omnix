@@ -17,6 +17,7 @@ from app.apps.rpg.foundation.state.changes import (
     QuestStatusChanged,
     StateChange,
 )
+from app.apps.rpg.foundation.state import access as _sections
 
 PRACTICE_XP = 5  # an hour's practice, on the skill curve (progression.md)
 PARTY_SIZE = 3
@@ -41,7 +42,7 @@ class RequestOutcome:
 
 
 def _quests(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [_d(quest) for quest in _l(_d(simulation.get("quest_state")).get("quests"))]
+    return [_d(quest) for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests"))]
 
 
 def _quest_id(quest: Mapping[str, Any]) -> str:
@@ -73,7 +74,7 @@ def accept_quest(simulation: Mapping[str, Any], quest_id: str) -> RequestOutcome
 
 def practise(simulation: Mapping[str, Any], skill_id: str) -> RequestOutcome:
     skill_id = skill_id.removeprefix("skill:")
-    skills = _d(_d(simulation.get("player_state")).get("skills"))
+    skills = _d(_d(_sections.player_state_of(simulation)).get("skills"))
     if skill_id not in skills:
         return RequestOutcome(lines=["You have no such skill to practise."], refused=True, minutes=0)
     from app.apps.rpg.rules.player.progression import SKILL_RANK_MAX, skill_gain
@@ -99,7 +100,7 @@ def status(simulation: Mapping[str, Any], text: str) -> RequestOutcome:
     """Where the hero stands, from the campaign, when they ask: nothing changes and no time passes."""
     lowered = text.casefold()
     topics = [topic for topic, pattern in _STATUS_TOPICS.items() if pattern.search(lowered)] or ["inventory", "health"]
-    player = _d(simulation.get("player_state"))
+    player = _d(_sections.player_state_of(simulation))
     lines = []
     if "health" in topics:
         hp = _d(_d(player.get("resources")).get("hp"))
@@ -110,7 +111,7 @@ def status(simulation: Mapping[str, Any], text: str) -> RequestOutcome:
         lines.append(f"You are level {int(player.get('level') or 1)}, with {int(player.get('xp') or 0)} of "
                      f"{int(player.get('xp_to_next') or 100)} experience toward the next level.")
     if "inventory" in topics:
-        store = _d(player.get("inventory_state"))
+        store = _d(_sections.inventory_state_of(player))
         items = [_d(item) for item in _l(store.get("items")) if _d(item).get("name")]
         carried = ", ".join(f"{_count(item)} {item['name']}" if _count(item) > 1 else _s(item["name"]) for item in items)
         lines.append(f"You carry {carried or 'nothing'}; your purse holds "
@@ -133,18 +134,18 @@ def status(simulation: Mapping[str, Any], text: str) -> RequestOutcome:
 
 
 def _companions(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [_d(row) for row in _l(_d(_d(simulation.get("player_state")).get("party_state")).get("companions"))]
+    return [_d(row) for row in _l(_d(_sections.party_state_of(_d(_sections.player_state_of(simulation)))).get("companions"))]
 
 
 def _person(simulation: Mapping[str, Any], npc_id: str) -> dict[str, Any]:
-    world = _d(simulation.get("world_model"))
-    return {**_d(_d(world.get("npcs")).get(npc_id)), **_d(_d(simulation.get("npc_index")).get(npc_id))}
+    world = _d(_sections.world_model_of(simulation))
+    return {**_d(_d(world.get("npcs")).get(npc_id)), **_d(_d(_sections.npc_index_of(simulation)).get(npc_id))}
 
 
 def join(simulation: Mapping[str, Any], npc_id: str) -> RequestOutcome:
     person = _person(simulation, npc_id)
     name = _s(person.get("name")) or npc_id
-    present = set(_l(_d(simulation.get("present_npc_state")).get("present_npc_ids")))
+    present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
     companions = _companions(simulation)
     if any(row.get("npc_id") == npc_id for row in companions):
         return RequestOutcome(lines=[f"{name} already travels with you."], refused=True, minutes=0)

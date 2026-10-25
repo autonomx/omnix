@@ -10,6 +10,7 @@ from app.apps.rpg.foundation.state.sections import read_path
 from app.apps.rpg.world.npc_biography_registry import find_npc_biography
 
 from .campaign_lore_store import _mapping, _text, current_location_identity
+from app.apps.rpg.foundation.state import access as _sections
 
 _VISIBLE = {"public", "player_known", "learned", "partially_known", "disputed"}
 _VISIBLE_STATUSES = {"public_at_campaign_start", "learned", "partially_known", "disputed"}
@@ -46,8 +47,8 @@ def _first(*values: Any) -> str:
 
 def _tick(session: Mapping[str, Any]) -> int:
     state = _mapping(session.get("state"))
-    simulation = _mapping(session.get("simulation_state"))
-    runtime = _mapping(session.get("runtime_state"))
+    simulation = _mapping(_sections.simulation_state_of(session))
+    runtime = _mapping(_sections.runtime_state_of(session))
     for value in (
         simulation.get("tick"),
         simulation.get("turn"),
@@ -80,14 +81,14 @@ def encountered_npc_ids(
     for value in explicit_npc_ids:
         _add(output, value)
     state = _mapping(session.get("state"))
-    simulation = _mapping(session.get("simulation_state"))
-    runtime = _mapping(session.get("runtime_state"))
+    simulation = _mapping(_sections.simulation_state_of(session))
+    runtime = _mapping(_sections.runtime_state_of(session))
     location_id = _text((current_location_identity(session) or {}).get("id"))
 
     for row in _mapping(simulation.get("scene_population_state")).get("present_npcs") or ():
         value = cast(Any, row.get("npc_id") or row.get("id") if isinstance(row, Mapping) else row)
         _add(output, value)
-    present = _mapping(simulation.get("present_npc_state"))
+    present = _mapping(_sections.present_npc_state_of(simulation))
     for value in present.get(location_id) or ():
         _add(output, value)
     for row in _mapping(present.get("by_location")).values():
@@ -108,20 +109,20 @@ def encountered_npc_ids(
             for row in scene.get(key) or ():
                 value = cast(Any, row.get("npc_id") or row.get("id") if isinstance(row, Mapping) else row)
                 _add(output, value)
-    for value in _mapping(simulation.get("player_state")).get("nearby_npc_ids") or ():
+    for value in _mapping(_sections.player_state_of(simulation)).get("nearby_npc_ids") or ():
         _add(output, value)
     return tuple(output)
 
 
 def _profile_containers(session: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
     state = _mapping(session.get("state"))
-    simulation = _mapping(session.get("simulation_state"))
-    runtime = _mapping(session.get("runtime_state"))
+    simulation = _mapping(_sections.simulation_state_of(session))
+    runtime = _mapping(_sections.runtime_state_of(session))
     return (
         _mapping(state.get("npc_dossiers")),
-        _mapping(simulation.get("npc_index")),
+        _mapping(_sections.npc_index_of(simulation)),
         _mapping(simulation.get("npcs")),
-        _mapping(runtime.get("npc_index")),
+        _mapping(_sections.npc_index_of(runtime)),
         _mapping(_mapping(simulation.get("social_state")).get("profiles")),
         _mapping(_mapping(runtime.get("social_state")).get("profiles")),
     )

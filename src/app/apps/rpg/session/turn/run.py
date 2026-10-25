@@ -23,6 +23,7 @@ from app.apps.rpg.session.turn.request import TurnRequest
 from app.apps.rpg.session.turn.resolution import MINUTES_PER_TICK, Resolution, free_action, resolve_turn
 from app.apps.rpg.session.turn.resolvers import outcome_lines
 from app.apps.rpg.session.turn.world_tick import world_tick
+from app.apps.rpg.foundation.state import access as _sections
 
 # Each mechanic as the turn's outcome names it: its action type and family.
 _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarification", "travel": "travel",
@@ -46,7 +47,7 @@ def _journal(document: dict[str, Any], *, request: TurnRequest, turn_index: int,
 
     state = _d(document.get("state"))
     runtime_state = advance_campaign_journal_for_turn(
-        runtime_state=_d(document.get("runtime_state")),
+        runtime_state=_d(_sections.runtime_state_of(document)),
         turn_index=turn_index,
         player_input=request.text,
         # The game's own lines are the day's record (the journal reads a resolved result's summary).
@@ -97,7 +98,7 @@ def turn_consequences(document: dict[str, Any],
                  lambda simulation: lever_pulls(simulation, [*applied, *changes],
                                                 pull=lambda runtime, pulls: pull_levers(runtime, pulls, cause="hero")),
                  pressure_offers):
-        made, said = step(_d(document.get("simulation_state")))
+        made, said = step(_d(_sections.simulation_state_of(document)))
         if made:
             document, _ = reduce(document, made)
         changes += made
@@ -115,7 +116,7 @@ def run_planned_turn(
 ) -> dict[str, Any]:
     """Apply one resolved turn to the turn-start campaign and let the world tick; the result for the commit."""
     document, _ = reduce(session, resolution.changes)
-    simulation = _d(document.get("simulation_state"))
+    simulation = _d(_sections.simulation_state_of(document))
     tick = int(simulation.get("tick") or 0)
     turn_index = int(_d(document.get("state")).get("turn_count") or 0)
     turn_id = f"turn:{tick}"
@@ -238,7 +239,7 @@ def run_world_tick_turn(session: dict[str, Any], *, request: TurnRequest) -> dic
     ticks = min(MAX_WORLD_TICKS, max(0, asked or seconds // SECONDS_PER_WORLD_TICK))
     changes: list[StateChange] = [TimeAdvanced(ticks=ticks, minutes=ticks * MINUTES_PER_TICK)] if ticks else []
     document, _ = reduce(session, changes)
-    simulation = _d(document.get("simulation_state"))
+    simulation = _d(_sections.simulation_state_of(document))
     tick = int(simulation.get("tick") or 0)
     turn_id = f"turn:{tick}:world"
     causal: dict[str, Any] = {}
@@ -305,8 +306,8 @@ def _load(ctx: Any) -> dict[str, Any]:
     if not session:
         return session
     session = hydrate_simulation_player(session)
-    simulation = _d(session.get("simulation_state"))
-    simulation["player_state"] = ensure_player_progression_state(_d(simulation.get("player_state")))
+    simulation = _d(_sections.simulation_state_of(session))
+    simulation["player_state"] = ensure_player_progression_state(_d(_sections.player_state_of(simulation)))
     session["simulation_state"] = simulation
     holder = _TURN_START.get()
     if holder is not None and "document" not in holder:
@@ -326,8 +327,8 @@ def _loadout_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], cou
 
     mechanic = _LOADOUT[_s(action.get("action"))]
     rule = {"use_item": use_item, "equip": equip_item, "drop": drop_item, "unequip": unequip_item}[mechanic]
-    simulation = _d(session.get("simulation_state"))
-    if mechanic == "use_item" and _d(simulation.get("combat_state")).get("active") is True:
+    simulation = _d(_sections.simulation_state_of(session))
+    if mechanic == "use_item" and _d(_sections.combat_state_of(simulation)).get("active") is True:
         return {"ok": False, "error": "loadout_in_a_fight", "status_code": 409,
                 "detail": "In a fight, say what you use: the others act after it."}
     outcome = rule(simulation, "", _s(action.get("item_name")))
@@ -359,9 +360,9 @@ def _rewind_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> d
     def refused(detail: str) -> dict[str, Any]:
         return {"ok": False, "error": "rewind_refused", "status_code": 409, "detail": detail}
 
-    if is_hardcore(_d(session.get("simulation_state"))):
+    if is_hardcore(_d(_sections.simulation_state_of(session))):
         return refused("There is no going back in a hardcore campaign.")
-    revision = int(_d(session.get("runtime_state")).get("state_revision") or 0)
+    revision = int(_d(_sections.runtime_state_of(session)).get("state_revision") or 0)
     name = _s(action.get("save_point"))
     context = current_tenant()
     with unit_of_work() as work:
@@ -477,11 +478,11 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
     session = _load(ctx)
     if not session:
         return {"ok": False, "error": "session_not_found"}
-    revision = int(_d(session.get("runtime_state")).get("state_revision") or 0)
+    revision = int(_d(_sections.runtime_state_of(session)).get("state_revision") or 0)
     if action.get("expected_campaign_revision") is not None and int(action["expected_campaign_revision"]) != revision:
         return {"ok": False, "error": "stale_tactical_campaign_revision", "status_code": 409,
                 "message": f"expected={action['expected_campaign_revision']}:current={revision}"}
-    simulation = _d(session.get("simulation_state"))
+    simulation = _d(_sections.simulation_state_of(session))
     state, manifest = _d(session.get("state")), _d(session.get("manifest"))
     count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
     if action.get("type") == "loadout":
@@ -572,10 +573,10 @@ def plan_player_text(session: Mapping[str, Any], text: str) -> tuple[PlannedActi
     from app.apps.rpg.session.command_reading import scene_view
     from app.apps.rpg.session.turn.intent import read_with_model
 
-    simulation = _d(session.get("simulation_state"))
-    runtime = _d(session.get("runtime_state"))
+    simulation = _d(_sections.simulation_state_of(session))
+    runtime = _d(_sections.runtime_state_of(session))
     abilities = tuple((_s(row.get("ability_id")), _s(row.get("name"))) for row in known_abilities(session))
-    fighting = _d(simulation.get("combat_state")).get("active") is True
+    fighting = _d(_sections.combat_state_of(simulation)).get("active") is True
     reading = read_command(simulation, text, runtime, abilities=abilities)
     planned = plan_action(reading, fighting=fighting)
     if planned is not None:

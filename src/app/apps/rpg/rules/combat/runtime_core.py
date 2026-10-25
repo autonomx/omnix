@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from typing import Any, Dict, List
+from app.apps.rpg.foundation.state import access as _sections
 
 
 SOURCE = "deterministic_combat_runtime"
@@ -35,11 +36,11 @@ def deterministic_roll(seed: str, low: int, high: int) -> int:
 
 
 def get_combat_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    return safe_dict(simulation_state.get("combat_state"))
+    return safe_dict(_sections.combat_state_of(simulation_state))
 
 
 def player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = safe_dict(simulation_state.get("player_state"))
+    state = safe_dict(_sections.player_state_of(simulation_state))
     simulation_state["player_state"] = state
     return state
 
@@ -119,7 +120,7 @@ def sync_participant_hp_to_actor_state(
         return
 
     state = player_state(simulation_state)
-    party_state = safe_dict(state.get("party_state"))
+    party_state = safe_dict(_sections.party_state_of(state))
     companions = safe_list(party_state.get("companions"))
     for companion in companions:
         companion = safe_dict(companion)

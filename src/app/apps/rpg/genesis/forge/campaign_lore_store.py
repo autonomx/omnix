@@ -15,6 +15,7 @@ from app.apps.rpg.foundation.llm_app_gateway import build_app_llm_gateway
 from app.apps.rpg.genesis.worlds.published_canon_projection import project_published_canon
 from app.prompts import prompt_template
 from app.apps.rpg.foundation.safe_values import copy_state
+from app.apps.rpg.foundation.state import access as _sections
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -116,8 +117,8 @@ def current_location_identity(session: Mapping[str, Any]) -> dict[str, str] | No
     state = _mapping(session.get("state"))
     player = _mapping(state.get("player"))
     world = _mapping(state.get("world"))
-    simulation = _mapping(session.get("simulation_state"))
-    runtime = _mapping(session.get("runtime_state"))
+    simulation = _mapping(_sections.simulation_state_of(session))
+    runtime = _mapping(_sections.runtime_state_of(session))
     map_state = _mapping(state.get("map") or session.get("map_state"))
 
     explicit_id = _text(
@@ -500,7 +501,7 @@ def _hydrate_session(
     }
     hydrated["state"] = state
 
-    runtime = _mapping(hydrated.get("runtime_state"))
+    runtime = _mapping(_sections.runtime_state_of(hydrated))
     runtime["campaign_bible_revision"] = revision
     runtime["campaign_bible_content_hash"] = content_hash
     hydrated["runtime_state"] = runtime
@@ -509,7 +510,7 @@ def _hydrate_session(
         state = _mapping(hydrated.get("state"))
         state["campaign_mechanics"] = mechanics_catalog
         hydrated["state"] = state
-        simulation = _mapping(hydrated.get("simulation_state"))
+        simulation = _mapping(_sections.simulation_state_of(hydrated))
         simulation["campaign_mechanics"] = mechanics_catalog
         hydrated["simulation_state"] = simulation
     manifest = _mapping(hydrated.get("manifest"))

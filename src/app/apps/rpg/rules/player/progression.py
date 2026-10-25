@@ -20,6 +20,7 @@ from app.apps.rpg.foundation.state.changes import (
     SkillProgressed,
     StateChange,
 )
+from app.apps.rpg.foundation.state import access as _sections
 
 XP_PER_LEVEL = 100
 HP_PER_LEVEL = 5
@@ -57,7 +58,7 @@ def check_xp(difficulty: int) -> int:
 
 
 def _player(simulation: Mapping[str, Any]) -> dict[str, Any]:
-    return _d(simulation.get("player_state"))
+    return _d(_sections.player_state_of(simulation))
 
 
 def gain(simulation: Mapping[str, Any], amount: int) -> tuple[list[StateChange], list[str]]:
@@ -106,7 +107,7 @@ def skill_gain(simulation: Mapping[str, Any], skill: str, amount: int) -> tuple[
 def _learnable(document: Mapping[str, Any]) -> list[dict[str, Any]]:
     state = _d(document.get("state"))
     unlocked = {_s(ability_id) for ability_id in _l(_d(state.get("ability_state")).get("unlocked"))}
-    level = max(1, int(_player(_d(document.get("simulation_state"))).get("level") or 1))
+    level = max(1, int(_player(_d(_sections.simulation_state_of(document))).get("level") or 1))
     return [_d(row) for row in _l(_d(state.get("ability_tree")).get("abilities"))
             if _s(_d(row).get("ability_id")) not in unlocked and int(_d(row).get("level_required") or 1) <= level
             and all(_s(need) in unlocked for need in _l(_d(row).get("prerequisites")))]
@@ -114,7 +115,7 @@ def _learnable(document: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def choose(document: Mapping[str, Any], text: str) -> Growth:
     """The level's choice the player makes in their words: an attribute raised, an ability learned, or two skills."""
-    simulation = _d(document.get("simulation_state"))
+    simulation = _d(_sections.simulation_state_of(document))
     player = _player(simulation)
     if int(player.get("level_choices_pending") or 0) <= 0:
         return Growth([], ["You have no level's choice to make yet."], refused=True)

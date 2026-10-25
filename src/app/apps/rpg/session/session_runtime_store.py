@@ -23,6 +23,7 @@ from typing import (
     Any as Any, Dict as Dict, List as List,
 )
 import re
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _mentions(text: str, words: Any) -> bool:
@@ -205,7 +206,7 @@ def load_runtime_session(session_id: str) -> dict[str, Any] | None:
 
 
 def save_runtime_session(session: dict[str, Any]) -> dict[str, Any]:
-    compact = _runtime_compact_save_enabled(_safe_dict(session.get("runtime_state")))
+    compact = _runtime_compact_save_enabled(_safe_dict(_sections.runtime_state_of(session)))
     return save_canonical_session(session, compact=compact)
 
 

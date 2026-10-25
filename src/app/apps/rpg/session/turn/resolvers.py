@@ -13,6 +13,7 @@ from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.world_tick import clock_minute
+from app.apps.rpg.foundation.state import access as _sections
 
 MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 
@@ -22,8 +23,8 @@ def resolve(planned: PlannedAction, document: Mapping[str, Any]) -> list[StateCh
     state, manifest = _d(document.get("state")), _d(document.get("manifest"))
     count = int(state.get("turn_count") or manifest.get("turn_count") or 0) + 1
     changes: list[StateChange] = [TurnCounted(turn_count=count)]
-    simulation = _d(document.get("simulation_state"))
-    if not _s(_d(simulation.get("player_state")).get("location_id")):
+    simulation = _d(_sections.simulation_state_of(document))
+    if not _s(_d(_sections.player_state_of(simulation)).get("location_id")):
         # A campaign created without placing the hero (the starter town until RQ-2.8) stands them where its
         # world begins, as the older turn path did on its first turn.
         changes.append(LocationChanged(location_id=current_location_id(dict(simulation))))
@@ -36,9 +37,9 @@ def outcome_lines(planned: PlannedAction, document: Mapping[str, Any]) -> list[s
     """What the hero perceives, as plain facts for the narration."""
     if planned.mechanic == "clarify":
         return [planned.question]
-    simulation = _d(document.get("simulation_state"))
-    world = _d(simulation.get("world_model"))
-    location_id = _s(_d(simulation.get("player_state")).get("location_id") or simulation.get("location_id"))
+    simulation = _d(_sections.simulation_state_of(document))
+    world = _d(_sections.world_model_of(simulation))
+    location_id = _s(_d(_sections.player_state_of(simulation)).get("location_id") or simulation.get("location_id"))
     location = _d(_d(world.get("locations")).get(location_id))
     name = _s(location.get("name")) or _s(_d(document.get("state")).get("current_location_name")) or "this place"
     present = routines.described(simulation, routines.present_now(simulation)[1], clock_minute(document))

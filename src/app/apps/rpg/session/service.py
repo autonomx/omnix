@@ -35,6 +35,7 @@ from app.apps.rpg.foundation.persistence.rpg_session_save_policy import (
     turn_persisted_rng_seed,
 )
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.state import access as _sections
 
 if TYPE_CHECKING:
     from app.apps.rpg.genesis.contracts import CampaignSessions
@@ -48,7 +49,7 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
     session["manifest"] = manifest
     session.setdefault("installed_packs", [])
     session.setdefault("simulation_state", {})
-    simulation_state = dict(_safe_dict(session.get("simulation_state")))
+    simulation_state = dict(_safe_dict(_sections.simulation_state_of(session)))
     rng_seed = simulation_state.get("rng_seed")
     if (
         not isinstance(rng_seed, int)
@@ -70,7 +71,7 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
     session = normalize_session_survival_for_persistence(session, owned=owned)
     session = ensure_session_map_state(session)
     # Living-world: ensure ambient runtime state exists and is bounded
-    runtime_state = _safe_dict(session.get("runtime_state"))
+    runtime_state = _safe_dict(_sections.runtime_state_of(session))
     runtime_state = ensure_ambient_runtime_state(runtime_state)
     runtime_state = normalize_ambient_state(runtime_state)
     session["runtime_state"] = runtime_state
@@ -93,7 +94,7 @@ def save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str,
         saved = _save_session(session, compact=compact)
         if span is not None:
             saved_manifest = _safe_dict(saved.get("manifest"))
-            runtime_state = _safe_dict(saved.get("runtime_state"))
+            runtime_state = _safe_dict(_sections.runtime_state_of(saved))
             span["session_id"] = str(
                 saved_manifest.get("session_id")
                 or saved_manifest.get("id")
@@ -124,7 +125,7 @@ def _save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str
                 or not 0 <= previous_seed < 2**64
             ):
                 previous_seed = rng_seed_from_session_id(session_id)
-            simulation_state = dict(_safe_dict(session.get("simulation_state")))
+            simulation_state = dict(_safe_dict(_sections.simulation_state_of(session)))
             submitted_seed = simulation_state.get("rng_seed")
             if (
                 isinstance(submitted_seed, int)
@@ -185,7 +186,7 @@ def load_session(session_id: str) -> dict[str, Any]:
                 span["pending_narration_recovered"] = recovered
         if span is not None:
             manifest = _safe_dict(session.get("manifest"))
-            runtime_state = _safe_dict(session.get("runtime_state"))
+            runtime_state = _safe_dict(_sections.runtime_state_of(session))
             span["session_id"] = str(
                 manifest.get("session_id")
                 or manifest.get("id")

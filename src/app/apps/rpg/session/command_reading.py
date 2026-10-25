@@ -13,6 +13,7 @@ from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneEntity, SceneView, parse_command
+from app.apps.rpg.foundation.state import access as _sections
 
 # Families the game resolves with its own rules, so a confident reading needs no intent model call.
 # Speech (talk, ask) still goes to the dialogue call, which chooses who answers and writes their line;
@@ -75,9 +76,9 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
     """The scene the player stands in, as the command grammar reads it (with whom they are talking to, and the
     hero's abilities, as ``(ability_id, name)``)."""
     state = _d(simulation_state)
-    world = _d(state.get("world_model"))
-    location_id = _s(_d(state.get("player_state")).get("location_id") or state.get("location_id"))
-    present = set(_l(_d(state.get("present_npc_state")).get("present_npc_ids")))
+    world = _d(_sections.world_model_of(state))
+    location_id = _s(_d(_sections.player_state_of(state)).get("location_id") or state.get("location_id"))
+    present = set(_l(_d(_sections.present_npc_state_of(state)).get("present_npc_ids")))
     entities: list[SceneEntity] = []
     seen: set[str] = set()
 
@@ -86,7 +87,7 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
             seen.add(entity_id)
             entities.append(SceneEntity(entity_id, kind, names, here=here))  # type: ignore[arg-type]
 
-    people = {**{str(key): _d(value) for key, value in _d(state.get("npc_index")).items()},
+    people = {**{str(key): _d(value) for key, value in _d(_sections.npc_index_of(state)).items()},
               **{str(key): _d(value) for key, value in _d(world.get("npcs")).items()}}
     for npc_id, npc in people.items():
         name = _s(npc.get("name"))
@@ -95,7 +96,7 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
                                      *_role_names(role.casefold())), npc_id in present)
     for creature_id, creature in _d(_d(state.get("campaign_mechanics")).get("creatures")).items():
         add(str(creature_id), "creature", _names(_d(creature).get("name"), _label(str(creature_id))), True)
-    inventory = _d(_d(state.get("player_state")).get("inventory_state"))
+    inventory = _d(_sections.inventory_state_of(_d(_sections.player_state_of(state))))
     for item in _l(inventory.get("items")):
         item = _d(item)
         item_id = _s(item.get("item_id") or item.get("id"))
@@ -118,9 +119,9 @@ def scene_view(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, 
             offer = _d(offer)
             add(_s(offer.get("offer_id")), "offer", _names(offer.get("label")),
                 _s(provider.get("location_id")) == location_id)
-    for skill_id in _d(_d(state.get("player_state")).get("skills")):
+    for skill_id in _d(_d(_sections.player_state_of(state)).get("skills")):
         add(f"skill:{skill_id}", "skill", _names(str(skill_id).replace("_", " ")), True)
-    for quest in _l(_d(state.get("quest_state")).get("quests")):
+    for quest in _l(_d(_sections.quest_state_of(state)).get("quests")):
         quest = _d(quest)
         add(_s(quest.get("quest_id") or quest.get("id")), "quest", _names(quest.get("title")), True)
     focus = _s(_d(_d(runtime_state).get("dialogue_focus")).get("target_id"))

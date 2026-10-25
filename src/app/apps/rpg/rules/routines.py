@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
+from app.apps.rpg.foundation.state import access as _sections
 
 MINUTES_PER_DAY = 24 * 60
 
@@ -43,7 +44,7 @@ def _schedules(world_model: Mapping[str, Any]) -> dict[str, list[Any]]:
 
 
 def companions(simulation: Mapping[str, Any]) -> list[str]:
-    party = _d(_d(simulation.get("player_state")).get("party_state"))
+    party = _d(_sections.party_state_of(_d(_sections.player_state_of(simulation))))
     return [npc for npc in (_s(_d(companion).get("npc_id")) for companion in _l(party.get("companions"))) if npc]
 
 
@@ -53,13 +54,13 @@ def visited(simulation: Mapping[str, Any]) -> list[str]:
 
 
 def hero_location(simulation: Mapping[str, Any]) -> str:
-    return _s(_d(simulation.get("player_state")).get("location_id")) or _s(simulation.get("location_id"))
+    return _s(_d(_sections.player_state_of(simulation)).get("location_id")) or _s(simulation.get("location_id"))
 
 
 def is_wild(simulation: Mapping[str, Any], location_id: str = "") -> bool:
     """Whether no one lives at the place (the hero's, by default): where the world's creatures are met (encounters.md)."""
     here = location_id or hero_location(simulation)
-    people = _d(_d(simulation.get("world_model")).get("npcs"))
+    people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
     return bool(here) and not any(_s(_d(person).get("location_id")) == here for person in people.values())
 
 
@@ -78,8 +79,8 @@ def whereabouts(simulation: Mapping[str, Any], minute: int, *, since: int | None
     recorded where the hero is) stays there until their day turns to its next part, and then goes. The hero's
     companions are with the hero.
     """
-    world = _d(simulation.get("world_model"))
-    people, index = _d(world.get("npcs")), _d(simulation.get("npc_index"))
+    world = _d(_sections.world_model_of(simulation))
+    people, index = _d(world.get("npcs")), _d(_sections.npc_index_of(simulation))
     if not people:
         return {}
     since = int(minute) if since is None else int(since)
@@ -123,7 +124,7 @@ def present_at(simulation: Mapping[str, Any], location_id: str, minute: int, *, 
 def described(simulation: Mapping[str, Any], npc_ids: list[str], minute: int, *, since: int | None = None,
               hero_at: str = "") -> list[str]:
     """The people named as the hero sees them: "Bran (keeping the tavern)"."""
-    people = {**_d(simulation.get("npc_index")), **_d(_d(simulation.get("world_model")).get("npcs"))}
+    people = {**_d(_sections.npc_index_of(simulation)), **_d(_d(_sections.world_model_of(simulation)).get("npcs"))}
     found = whereabouts(simulation, minute, since=since, hero_at=hero_at)
     seen = []
     for npc_id in npc_ids:
@@ -136,7 +137,7 @@ def described(simulation: Mapping[str, Any], npc_ids: list[str], minute: int, *,
 
 def moves(simulation: Mapping[str, Any], minute: int, *, since: int) -> dict[str, Whereabouts]:
     """The people whose whereabouts at ``minute`` differ from what the index last recorded."""
-    index = _d(simulation.get("npc_index"))
+    index = _d(_sections.npc_index_of(simulation))
     return {npc_id: where for npc_id, where in whereabouts(simulation, minute, since=since).items()
             if where.location_id and (where.location_id, where.activity)
             != (_s(_d(index.get(npc_id)).get("location_id")), _s(_d(index.get(npc_id)).get("activity")))}
@@ -144,7 +145,7 @@ def moves(simulation: Mapping[str, Any], minute: int, *, since: int) -> dict[str
 
 def present_now(simulation: Mapping[str, Any]) -> tuple[str, list[str]]:
     """Where the presence last recorded is (an older campaign's names no place: the hero's), and who it names."""
-    presence = _d(simulation.get("present_npc_state"))
+    presence = _d(_sections.present_npc_state_of(simulation))
     return (_s(presence.get("location_id")) or hero_location(simulation),
             [_s(npc) for npc in _l(presence.get("present_npc_ids")) if _s(npc)])
 

@@ -19,6 +19,7 @@ from .world_forge_dossiers import (
     validate_entity_dossier,
 )
 from app.prompts import prompt_template
+from app.apps.rpg.foundation.state import access as _sections
 
 _PROMPT_1 = prompt_template('rpg.session_genesis_runtime_lore_materialization.prompt', "1", (
     "Return one JSON object that materializes durable, player-safe RPG canon "
@@ -302,8 +303,8 @@ def _scene_containers(
     session: Mapping[str, Any],
 ) -> tuple[Mapping[str, Any], ...]:
     state = _mapping(session.get("state"))
-    simulation = _mapping(session.get("simulation_state"))
-    runtime = _mapping(session.get("runtime_state"))
+    simulation = _mapping(_sections.simulation_state_of(session))
+    runtime = _mapping(_sections.runtime_state_of(session))
     return (
         _mapping(result.get("scene")),
         _mapping(result.get("resolved_result") or result.get("result")),

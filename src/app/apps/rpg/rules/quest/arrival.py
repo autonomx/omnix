@@ -16,6 +16,7 @@ from app.apps.rpg.foundation.state.changes import (
     QuestStatusChanged,
     StateChange,
 )
+from app.apps.rpg.foundation.state import access as _sections
 
 _COINS = {"gold": 100, "silver": 10, "copper": 1}
 
@@ -45,7 +46,7 @@ def quest_rewards(simulation_state: Mapping[str, Any], quest: Mapping[str, Any])
     places, progression.md), and how to say what the hero receives."""
     from app.apps.rpg.rules.player import progression
 
-    world_items = {_s(item.get("id")): _d(item) for item in _l(_d(simulation_state.get("world_model")).get("items"))
+    world_items = {_s(item.get("id")): _d(item) for item in _l(_d(_sections.world_model_of(simulation_state)).get("items"))
                    if isinstance(item, Mapping)}
     rewards = [_s(reward) for reward in _l(quest.get("rewards"))]
     coins = _reward_coins(rewards)
@@ -70,11 +71,11 @@ def arrival_changes(simulation_state: Mapping[str, Any], location_id: str, *,
     from app.apps.rpg.rules.player import progression
 
     earned = discovery_xp
-    world_items = {_s(item.get("id")): _d(item) for item in _l(_d(simulation_state.get("world_model")).get("items"))
+    world_items = {_s(item.get("id")): _d(item) for item in _l(_d(_sections.world_model_of(simulation_state)).get("items"))
                    if isinstance(item, Mapping)}
     changes: list[StateChange] = []
     lines: list[str] = []
-    for quest in _l(_d(simulation_state.get("quest_state")).get("quests")):
+    for quest in _l(_d(_sections.quest_state_of(simulation_state)).get("quests")):
         quest = _d(quest)
         quest_id = _s(quest.get("quest_id") or quest.get("id"))
         places = [_s(place) for place in _l(quest.get("locations"))]

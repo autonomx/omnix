@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
+from app.apps.rpg.foundation.state import access as _sections
 
 TURN_NARRATION_KEYS = ("narration_artifacts", "narration_artifacts_by_turn")
 
@@ -19,7 +20,7 @@ def split_turn_narrations(document: dict[str, Any]) -> tuple[dict[str, Any], dic
 
     A narration is in the document twice, in the list and by turn; the turn's entry wins.
     """
-    runtime = document.get("runtime_state")
+    runtime = _sections.runtime_state_of(document)
     if not isinstance(runtime, dict) or not any(key in runtime for key in TURN_NARRATION_KEYS):
         return document, {}
     narrations: dict[str, dict[str, Any]] = {}
@@ -37,7 +38,7 @@ def with_turn_narrations(document: dict[str, Any], narrations: list[tuple[str, d
     """The document as its readers expect it, with its kept turn narrations (oldest first) back in place."""
     if not narrations:
         return document
-    runtime = _safe_dict(document.get("runtime_state"))
+    runtime = _safe_dict(_sections.runtime_state_of(document))
     kept = dict(narrations)
     by_turn = {**_safe_dict(runtime.get("narration_artifacts_by_turn")), **kept}
     listed = [artifact for artifact in runtime.get("narration_artifacts") or ()

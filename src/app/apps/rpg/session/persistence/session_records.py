@@ -12,6 +12,7 @@ from app.apps.rpg.foundation.persistence.rpg_session_save_policy import session_
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import register_repository_specs
 from app.runtime.pagination import MAX_PAGE_SIZE
+from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def _campaign_id(session: dict[str, Any]) -> str:
 
 
 def _revision(session: dict[str, Any]) -> int:
-    runtime = raw_runtime_state if isinstance(raw_runtime_state := session.get("runtime_state"), dict) else {}
+    runtime = raw_runtime_state if isinstance(raw_runtime_state := _sections.runtime_state_of(session), dict) else {}
     manifest = raw_manifest if isinstance(raw_manifest := session.get("manifest"), dict) else {}
     return max(0, int(runtime.get("state_revision") or manifest.get("turn_count") or 0))
 
@@ -176,7 +177,7 @@ def _write_session(
             # An edit outside a turn (rename, lore, settings): the session
             # was loaded at this revision, so the edit is the next one.
             revision = existing["revision"] + 1
-            runtime = session.get("runtime_state")
+            runtime = _sections.runtime_state_of(session)
             if not isinstance(runtime, dict):
                 runtime = {}
                 session["runtime_state"] = runtime

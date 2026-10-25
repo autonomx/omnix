@@ -5,6 +5,7 @@ from app.runtime.clock import utc_now
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.foundation.state import access as _sections
 
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"
 MAX_RECENT_INTERACTIONS = 50
@@ -22,7 +23,7 @@ def commit_turn_interaction(
 
     session = session if isinstance(session, dict) else {}
     result = result if isinstance(result, dict) else {}
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     timeline = _dict(runtime.get("interaction_timeline"))
     events = [deepcopy(item) for item in _list(timeline.get("events")) if isinstance(item, dict)]
     resolved_submission_id = _text(submission_id or result.get("submission_id"))

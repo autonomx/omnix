@@ -13,6 +13,7 @@ from typing import Any
 
 from app.apps.rpg.world.environment_memory import RECENT_CONDITION_KEYS
 from app.apps.rpg.world.environment_weather import generate_weather_event
+from app.apps.rpg.foundation.state import access as _sections
 
 ENVIRONMENT_VERSION = 1
 DAYS_PER_YEAR = 360
@@ -138,7 +139,7 @@ def ensure_session_environment_seed_state(session: dict[str, Any]) -> dict[str, 
 
 def _session_seed(session: dict[str, Any], state: dict[str, Any]) -> int:
     metadata = raw_metadata if isinstance(raw_metadata := state.get("metadata"), dict) else {}
-    simulation_state = raw_simulation_state if isinstance(raw_simulation_state := session.get("simulation_state"), dict) else {}
+    simulation_state = raw_simulation_state if isinstance(raw_simulation_state := _sections.simulation_state_of(session), dict) else {}
     for value in (metadata.get("seed"), simulation_state.get("seed"), state.get("seed")):
         coerced = _coerce_int(value)
         if coerced is not None:

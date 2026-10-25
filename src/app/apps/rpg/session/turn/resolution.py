@@ -24,6 +24,7 @@ from app.apps.rpg.session.turn.planning import PlannedAction
 from app.apps.rpg.session.turn.resolvers import outcome_lines, resolve
 from app.apps.rpg.session.turn.trade import resolve_trade
 from app.apps.rpg.session.turn.travel import resolve_travel
+from app.apps.rpg.foundation.state import access as _sections
 
 MINUTES_PER_TICK = 10  # docs/rpg/design/time.md
 
@@ -61,7 +62,7 @@ def _ability(planned: PlannedAction, session: Mapping[str, Any], simulation: Map
     if ability is None:
         return None
     effect = ability_use.in_fight(ability)
-    fighting = _d(simulation.get("combat_state")).get("active") is True
+    fighting = _d(_sections.combat_state_of(simulation)).get("active") is True
     if not fighting and effect.strikes and not planned.second_target_id:
         return Resolution([_counted(session)], [f"{_s(ability.get('name'))} needs a foe to aim at."], refused=True,
                           told=False)
@@ -76,7 +77,7 @@ def _ability(planned: PlannedAction, session: Mapping[str, Any], simulation: Map
         return Resolution([_counted(session)], [refusal], refused=True, told=False)
     spent = ability_use.spend(session, ability)
     paid, _ = reduce(dict(session), spent)
-    turn = fight(_d(paid.get("simulation_state")), action="ability", target_ref=planned.second_target_id,
+    turn = fight(_d(_sections.simulation_state_of(paid)), action="ability", target_ref=planned.second_target_id,
                  turn_key=str(_counted(session).turn_count), ability=effect, ability_name=_s(ability.get("name")))
     if turn is None:
         return None  # aimed at something that cannot be fought
@@ -92,7 +93,7 @@ def met_on_the_road(session: Mapping[str, Any], travel: Any) -> tuple[list[State
     from app.apps.rpg.rules.pressures import road_encounter
 
     arrived, _ = reduce(dict(session), travel.changes)
-    arrived_at = _d(arrived.get("simulation_state"))
+    arrived_at = _d(_sections.simulation_state_of(arrived))
     turn_key = str(_counted(session).turn_count)
     foe = road_encounter(arrived_at, turn_key=turn_key)
     met = fight(arrived_at, action="confront", target_ref=foe, turn_key=turn_key) if foe else None
@@ -144,7 +145,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         if trade is None:
             return None
         return Resolution(trade.changes, trade.lines, minutes=trade.minutes, refused=trade.refused)
-    simulation = _d(session.get("simulation_state"))
+    simulation = _d(_sections.simulation_state_of(session))
     if mechanic == "fight" and planned.reason == "busy":
         return Resolution([_counted(session)], ["You are in a fight: strike, break away, or use something you carry."],
                           refused=True, told=False)
@@ -161,7 +162,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
     if mechanic == "ability":
         return _ability(planned, session, simulation)
     if mechanic == "grow":
-        if int(_d(simulation.get("player_state")).get("level_choices_pending") or 0) <= 0:
+        if int(_d(_sections.player_state_of(simulation)).get("level_choices_pending") or 0) <= 0:
             return None  # no level's choice is waiting: "learn to swim" is an attempt, told as one
         grown = progression.choose(session, text)
         return Resolution([_counted(session), *grown.changes], grown.lines, refused=grown.refused, told=False,
@@ -183,7 +184,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         if planned.reason == "in_fight" and not outcome.refused:
             # The hero's turn spent on it; then everyone whose turn comes before the hero's next acts.
             used, _ = reduce(dict(session), outcome.changes)
-            turn = fight(_d(used.get("simulation_state")), action="pass", turn_key=str(_counted(session).turn_count))
+            turn = fight(_d(_sections.simulation_state_of(used)), action="pass", turn_key=str(_counted(session).turn_count))
             if turn is not None:
                 return Resolution(_timed(session, [*outcome.changes, *turn.changes], turn.minutes),
                                   [*outcome.lines, *turn.lines], minutes=turn.minutes, needs="standard_turn")
@@ -212,8 +213,8 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
 
         answer = resolve_dialogue(session, planned.target_id, text)
         if answer is None:
-            person = _d(_d(_d(simulation.get("world_model")).get("npcs")).get(planned.target_id))
-            present = set(_l(_d(simulation.get("present_npc_state")).get("present_npc_ids")))
+            person = _d(_d(_d(_sections.world_model_of(simulation)).get("npcs")).get(planned.target_id))
+            present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
             if person and planned.target_id not in present:
                 # Someone the world knows, but not here: the game says so, and where their day has them; no time
                 # passes.
@@ -221,7 +222,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
 
                 name = _s(person.get("name")) or "They"
                 place_id = getattr(whereabouts(simulation, clock(simulation)).get(planned.target_id), "location_id", "")
-                place = _s(_d(_d(_d(simulation.get("world_model")).get("locations")).get(place_id)).get("name"))
+                place = _s(_d(_d(_d(_sections.world_model_of(simulation)).get("locations")).get(place_id)).get("name"))
                 line = f"{name} is not here: at this hour, {_called(name)} is at {place}." if place else f"{name} is not here."
                 return Resolution([_counted(session)], [line], refused=True, told=False)
             return None

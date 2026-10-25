@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict
 from app.errors import DependencyUnavailable
+from app.apps.rpg.foundation.state import access as _sections
 
 CURRENT_SCHEMA_VERSION = 8
 
@@ -71,7 +72,7 @@ def schema_version(document: Any) -> int:
 
 def _to_v4_ambient_runtime(document: dict[str, Any]) -> dict[str, Any]:
     """Versions 1-3 predate ambient narration: give the runtime its queue and counters."""
-    runtime = _safe_dict(document.get("runtime_state"))
+    runtime = _safe_dict(_sections.runtime_state_of(document))
     runtime.setdefault("ambient_queue", [])
     runtime.setdefault("ambient_seq", 0)
     runtime.setdefault("last_idle_tick_at", "")
@@ -149,9 +150,9 @@ def merge_inventories(document: dict[str, Any]) -> tuple[dict[str, Any], list[di
     is the one the turns write and the play screen shows, ``player_state.currency``; the store's own copy
     and the sheet's follow it. Before the first turn there is no store yet and nothing is merged.
     """
-    simulation = _safe_dict(document.get("simulation_state"))
-    player_state = _safe_dict(simulation.get("player_state"))
-    store = _safe_dict(player_state.get("inventory_state"))
+    simulation = _safe_dict(_sections.simulation_state_of(document))
+    player_state = _safe_dict(_sections.player_state_of(simulation))
+    store = _safe_dict(_sections.inventory_state_of(player_state))
     if not isinstance(store.get("items"), list):
         return document, []
     state = _safe_dict(document.get("state"))
@@ -268,11 +269,11 @@ def _normalize(document: dict[str, Any]) -> dict[str, Any]:
     if not manifest.get("session_id") and manifest.get("id") != "session:unknown":
         manifest["session_id"] = manifest.get("id")
     document["manifest"] = manifest
-    simulation = _safe_dict(document.get("simulation_state"))
+    simulation = _safe_dict(_sections.simulation_state_of(document))
     simulation["presentation_state"] = _safe_dict(simulation.get("presentation_state"))
     simulation["memory_state"] = _safe_dict(simulation.get("memory_state"))
     document["simulation_state"] = simulation
-    document["runtime_state"] = _safe_dict(document.get("runtime_state"))
+    document["runtime_state"] = _safe_dict(_sections.runtime_state_of(document))
     return migrate_legacy_interactions(document)
 
 

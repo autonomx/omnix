@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.apps.rpg.rules.combat.runtime_core import participant, safe_dict, safe_int, safe_list, safe_str
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _name(combat_state: dict[str, Any], actor_id: str, *, subject: bool) -> str:
@@ -69,7 +70,7 @@ def _defeat_lines(defeat: dict[str, Any], foes: str) -> list[str]:
 def describe_combat_exchange(combat_result: dict[str, Any]) -> list[str]:
     """The blows struck this turn, in the order they fell, and how the fight stands after them."""
     combat_result = safe_dict(combat_result)
-    combat_state = safe_dict(combat_result.get("combat_state"))
+    combat_state = safe_dict(_sections.combat_state_of(combat_result))
     if not combat_state:
         return []
     lines: list[str] = []

@@ -13,10 +13,11 @@ from typing import Any, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_str as _s
 from app.apps.rpg.foundation.state.changes import CombatAdvanced, LocalMapEntered, StateChange
 from app.apps.rpg.rules import routines
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _location_map_id(simulation: Mapping[str, Any], location_id: str) -> str:
-    locations = _d(simulation.get("world_model")).get("locations")
+    locations = _d(_sections.world_model_of(simulation)).get("locations")
     if isinstance(locations, Mapping):
         return _s(_d(locations.get(location_id)).get("map_id"))
     if isinstance(locations, list):
@@ -78,8 +79,8 @@ def on_the_local_map(
     from app.apps.rpg.world.map_instance_runtime import CampaignMapInstanceSnapshot
     from app.apps.rpg.world.tactical_spatial import foes_take_the_field, hero_on_map
 
-    simulation = _d(document.get("simulation_state"))
-    if not _d(simulation.get("world_model")).get("locations"):
+    simulation = _d(_sections.simulation_state_of(document))
+    if not _d(_sections.world_model_of(simulation)).get("locations"):
         return [], []  # a campaign of no published world has no local maps
     here = routines.hero_location(simulation)
     current = _s(_d(document.get("state")).get("current_map_instance_id"))
@@ -104,7 +105,7 @@ def on_the_local_map(
         changes.append(LocalMapEntered(map_instance_id=""))  # a place with no grid: no other place's grid either
         current = ""
 
-    combat = _d(simulation.get("combat_state"))
+    combat = _d(_sections.combat_state_of(simulation))
     if current and combat.get("active") is True:
         if pending_map_event and _s(pending_map_event.get("map_instance_id")) == current:
             definition = (loaded or _existing(session_id, current) or (None, None))[0]

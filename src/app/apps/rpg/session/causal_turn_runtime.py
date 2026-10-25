@@ -12,6 +12,7 @@ from app.apps.rpg.world.causal_runtime_projection import (
     project_causal_runtime_to_subsystems,
 )
 from app.apps.rpg.foundation.safe_values import copy_state
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -19,7 +20,7 @@ def _dict(value: Any) -> dict[str, Any]:
 
 
 def _bootstrap_from_session(session: Mapping[str, Any]) -> dict[str, Any]:
-    simulation = _dict(session.get("simulation_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
     public_state = _dict(session.get("state"))
     for candidate in (
         simulation.get("campaign_bible"),
@@ -41,8 +42,8 @@ def causal_tick(session: Mapping[str, Any], *, turn_key: str, turn: int) -> dict
     The world tick (RQ-1.4 step 6) turns the sections into a ``WorldTicked`` change.
     """
     session = copy_state(dict(session))
-    simulation = _dict(session.get("simulation_state"))
-    runtime_state = _dict(session.get("runtime_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
+    runtime_state = _dict(_sections.runtime_state_of(session))
     runtime = simulation.get("causal_world_runtime")
     if not isinstance(runtime, Mapping):
         bootstrap = _bootstrap_from_session(session)

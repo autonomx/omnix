@@ -19,6 +19,7 @@ from app.apps.rpg.foundation.state.changes import PressuresMoved, QuestOffered, 
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.combat.campaign_mechanics import campaign_creature_definition
 from app.apps.rpg.rules.quest.progress import victories
+from app.apps.rpg.foundation.state import access as _sections
 
 # The causal runtime's pull: (the runtime, each pressure's pull) -> (the runtime as it leaves it, its event or None).
 Pull = Callable[[Mapping[str, Any], Mapping[str, float]], tuple[dict[str, Any], Any]]
@@ -59,7 +60,7 @@ def lever_pulls(simulation: Mapping[str, Any], applied: Sequence[StateChange], *
     pressures = _pressures(runtime)
     if not pressures:
         return [], []
-    world_model = _d(simulation.get("world_model"))
+    world_model = _d(_sections.world_model_of(simulation))
     here = _region(world_model, routines.hero_location(simulation))
     felled = victories(applied)
     completed = {change.quest_id for change in applied
@@ -109,12 +110,12 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
     pressures open at a time and at most one a day, the pressure of the hero's region first, else the most severe
     elsewhere."""
     runtime = _runtime(simulation)
-    world_model = _d(simulation.get("world_model"))
+    world_model = _d(_sections.world_model_of(simulation))
     location = routines.hero_location(simulation)
     here = _region(world_model, location)
     if not here or not _pressures(runtime):
         return [], []
-    quests = [_d(row) for row in _l(_d(simulation.get("quest_state")).get("quests"))]
+    quests = [_d(row) for row in _l(_d(_sections.quest_state_of(simulation)).get("quests"))]
     statuses = _d(runtime.get("pressure_statuses"))
     people = _d(world_model.get("npcs"))
     companions = set(routines.companions(simulation))
@@ -137,7 +138,7 @@ def pressure_offers(simulation: Mapping[str, Any]) -> tuple[list[StateChange], l
                  if _s(lever.get("action")).startswith("defeat:") and _amount(lever) < 0]
         # The hunt fits the hero: the strongest of its creatures below their level, else one of it (none: no offer
         # yet); never the world's boss.
-        level = int(_d(simulation.get("player_state")).get("level") or 1)
+        level = int(_d(_sections.player_state_of(simulation)).get("level") or 1)
         hunts = sorted(((lever, creature) for lever, creature in hunts if creature
                         and _s(creature.get("threat")).casefold() not in _UNIQUE
                         and int(creature.get("level") or 1) <= level), key=lambda hunt: int(hunt[1].get("level") or 1))
@@ -171,13 +172,13 @@ def road_encounter(simulation: Mapping[str, Any], *, turn_key: str) -> str:
     pressure's creatures no stronger than a level above the hero, never the world's boss."""
     from app.apps.rpg.rules.combat.runtime_core import deterministic_roll
 
-    world_model = _d(simulation.get("world_model"))
+    world_model = _d(_sections.world_model_of(simulation))
     here = routines.hero_location(simulation)
     region = _region(world_model, here)
     if not region or not routines.is_wild(simulation, here):
         return ""
     runtime = _runtime(simulation)
-    level = int(_d(simulation.get("player_state")).get("level") or 1)
+    level = int(_d(_sections.player_state_of(simulation)).get("level") or 1)
     for pressure in _pressures(runtime):
         pressure_id = _s(pressure["pressure_id"])
         severity = _severity(runtime, pressure_id)

@@ -19,6 +19,7 @@ from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l
 from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_data
 from app.apps.rpg.rules.intent.grammar import IntentCandidate, SceneView, hypothetical
 from app.prompts import prompt_template
+from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 INTENT_TIMEOUT_SECONDS = 10.0
@@ -136,7 +137,7 @@ def read_with_model(simulation: Mapping[str, Any], scene: SceneView, text: str) 
     if gateway is None:
         return ModelReading(unavailable=True)
     context = {"FAMILIES": {family: meaning for family, (meaning, _) in FAMILIES.items()}, "SCENE": _scene_rows(scene),
-               "location": _s(_d(simulation.get("player_state")).get("location_id"))}
+               "location": _s(_d(_sections.player_state_of(simulation)).get("location_id"))}
     prompt = _PROMPT.format(v0=text[:500]) + world_data(context)
     try:
         raw = gateway.generate(prompt, timeout_s=INTENT_TIMEOUT_SECONDS,

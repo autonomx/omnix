@@ -8,6 +8,7 @@ from .certification import certify_narrative_persistence_and_delivery
 from .projections import canonical_consumer_bundle, legacy_response_projection
 from .publisher_guard import CANONICAL_PUBLISHER
 from .serialization import canonical_response_from_dict
+from app.apps.rpg.foundation.state import access as _sections
 
 
 class NarrativeProductionPathError(RuntimeError):
@@ -81,7 +82,7 @@ def retire_legacy_presentation_ownership(result: dict[str, Any]) -> dict[str, An
 
 def _latest_interaction(result: Mapping[str, Any]) -> dict[str, Any]:
     session = _mapping(result.get("session"))
-    runtime = _mapping(session.get("runtime_state"))
+    runtime = _mapping(_sections.runtime_state_of(session))
     interactions = runtime.get("recent_interactions")
     if not isinstance(interactions, list):
         return {}

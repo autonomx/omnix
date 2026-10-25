@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from app.apps.rpg.foundation.state import access as _sections
 
 LEGACY_INTERACTION_MIGRATION_VERSION = "rpg_legacy_interaction_migration_v1"
 INTERACTION_TIMELINE_VERSION = "rpg_interaction_timeline_v1"
@@ -14,7 +15,7 @@ def migrate_legacy_interactions(session: dict[str, Any]) -> dict[str, Any]:
     """Add a modern interaction timeline without deleting legacy transcript data."""
 
     session = session if isinstance(session, dict) else {}
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     timeline = _dict(runtime.get("interaction_timeline"))
     existing_events = _dict_rows(timeline.get("events"))
     marker = _dict(runtime.get("legacy_interaction_migration"))
@@ -89,9 +90,9 @@ def migrate_legacy_interactions(session: dict[str, Any]) -> dict[str, Any]:
 
 
 def _find_legacy_rows(session: dict[str, Any]) -> tuple[list[Any], str]:
-    runtime = _dict(session.get("runtime_state"))
+    runtime = _dict(_sections.runtime_state_of(session))
     state = _dict(session.get("state"))
-    simulation = _dict(session.get("simulation_state"))
+    simulation = _dict(_sections.simulation_state_of(session))
     presentation = _dict(simulation.get("presentation_state"))
     candidates = (
         ("runtime_state.recent_interactions", runtime.get("recent_interactions")),

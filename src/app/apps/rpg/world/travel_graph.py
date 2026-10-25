@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from app.apps.rpg.foundation.state import access as _sections
 
 
 @dataclass(frozen=True)
@@ -143,7 +144,7 @@ def _edge_is_available(edge: TravelEdge, state: Mapping[str, Any]) -> bool:
 
 
 def _world_model(state: Mapping[str, Any]) -> Mapping[str, Any]:
-    world_model = state.get("world_model") if isinstance(state, Mapping) else None
+    world_model = _sections.world_model_of(state) if isinstance(state, Mapping) else None
     return world_model if isinstance(world_model, Mapping) and world_model.get("locations") else {}
 
 
@@ -195,7 +196,7 @@ def travel_graph_for_state(state: Mapping[str, Any]) -> TravelGraph:
 
 
 def get_current_location(state: Mapping[str, Any]) -> str:
-    player_state = state.get("player_state") if isinstance(state.get("player_state"), Mapping) else {}
+    player_state = _sections.player_state_of(state) if isinstance(_sections.player_state_of(state), Mapping) else {}
     return str(
         state.get("current_location")
         or state.get("current_location_id")
@@ -354,7 +355,7 @@ def apply_travel_result_to_state(
 
     if _world_model(next_state):
         # The location registry reads the player's place; keep it with the route the party took.
-        player_state = dict(next_state.get("player_state") or {})
+        player_state = dict(_sections.player_state_of(next_state) or {})
         player_state["location_id"] = to_location
         next_state["player_state"] = player_state
         next_state["location_id"] = to_location

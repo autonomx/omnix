@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 from app.apps.rpg.world.social.conversation_presentation import build_conversation_payload
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.state import access as _sections
 
 # ── Hard caps (Phase 0.3) ──────────────────────────────────────────────────
 _MAX_AMBIENT_QUEUE = 32
@@ -194,13 +195,13 @@ def normalize_ambient_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
 
 def _get_player_location(simulation_state: Dict[str, Any]) -> str:
     """Get the player's current location_id."""
-    player = _safe_dict(simulation_state.get("player_state"))
+    player = _safe_dict(_sections.player_state_of(simulation_state))
     return _safe_str(player.get("location_id")).strip()
 
 
 def _nearby_npc_ids(simulation_state: Dict[str, Any]) -> List[str]:
     """Get IDs of NPCs near the player."""
-    player = _safe_dict(simulation_state.get("player_state"))
+    player = _safe_dict(_sections.player_state_of(simulation_state))
     return [_safe_str(nid) for nid in _safe_list(player.get("nearby_npc_ids")) if _safe_str(nid)]
 
 
@@ -299,7 +300,7 @@ def build_ambient_updates(
     # ── NPC decisions (arrivals, departures, actions) ──
     before_decisions = _safe_dict(before_state.get("npc_decisions"))
     after_decisions = _safe_dict(after_state.get("npc_decisions"))
-    npc_index = _safe_dict(after_state.get("npc_index"))
+    npc_index = _safe_dict(_sections.npc_index_of(after_state))
 
     for npc_id, decision in sorted(after_decisions.items()):
         decision = _safe_dict(decision)
@@ -510,8 +511,8 @@ def is_player_visible_update(update: Dict[str, Any], session: Dict[str, Any]) ->
     """
     update = _safe_dict(update)
     session = _safe_dict(session)
-    sim = _safe_dict(session.get("simulation_state"))
-    runtime = _safe_dict(session.get("runtime_state"))
+    sim = _safe_dict(_sections.simulation_state_of(session))
+    runtime = _safe_dict(_sections.runtime_state_of(session))
 
     kind = _safe_str(update.get("kind"))
     player_loc = _get_player_location(sim) or _safe_str(_safe_dict(runtime.get("current_scene")).get("location_id"))
@@ -654,7 +655,7 @@ def enqueue_ambient_updates(runtime_state: Dict[str, Any], updates: List[Dict[st
 def get_pending_ambient_updates(session: Dict[str, Any], after_seq: int = 0, limit: int = 8) -> List[Dict[str, Any]]:
     """Return pending queue items after a given sequence number."""
     session = _safe_dict(session)
-    runtime = _safe_dict(session.get("runtime_state"))
+    runtime = _safe_dict(_sections.runtime_state_of(session))
     queue = _safe_list(runtime.get("ambient_queue"))
     limit = min(max(1, limit), _MAX_AMBIENT_BATCH_PER_DELIVERY)
 

@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import KnowledgeShared, QuestOffered, StateChange
 from app.apps.rpg.rules.economy.trade import stock_left
+from app.apps.rpg.foundation.state import access as _sections
 
 _WORD = re.compile(r"[a-z0-9']+")
 _STOP = frozenset("a an the and or of to in on at for with about from is are was were be you your me my i we "
@@ -81,7 +82,7 @@ def _stem(word: str) -> str:
 
 
 def _trust(simulation: Mapping[str, Any], npc_id: str) -> int:
-    for row in _l(_d(_d(simulation.get("player_state")).get("party_state")).get("companions")):
+    for row in _l(_d(_sections.party_state_of(_d(_sections.player_state_of(simulation)))).get("companions")):
         if _d(row).get("npc_id") == npc_id:
             return max(FRIENDLY_TRUST, int(_d(row).get("trust") or FRIENDLY_TRUST))
     relation = _d(_d(simulation.get("relationship_state")).get(npc_id))
@@ -122,8 +123,8 @@ def _goal_words(goal: Mapping[str, Any]) -> set[str]:
 
 def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> DialoguePlan | None:
     """The plan for ``speaker_id``'s answer to ``text``; ``None`` when the world does not know them."""
-    world = _d(simulation.get("world_model"))
-    npc = {**_d(_d(simulation.get("npc_index")).get(speaker_id)), **_d(_d(world.get("npcs")).get(speaker_id))}
+    world = _d(_sections.world_model_of(simulation))
+    npc = {**_d(_d(_sections.npc_index_of(simulation)).get(speaker_id)), **_d(_d(world.get("npcs")).get(speaker_id))}
     if not npc:
         return None
     name = _s(npc.get("name")) or speaker_id
@@ -150,7 +151,7 @@ def build_plan(simulation: Mapping[str, Any], speaker_id: str, text: str) -> Dia
     quest_offer: dict[str, str] = {}
     here = _s(npc.get("location_id"))
     offerable = []
-    for quest in _l(_d(simulation.get("quest_state")).get("quests")):
+    for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests")):
         quest = _d(quest)
         places = [_s(place) for place in _l(quest.get("locations"))]
         giver = _s(quest.get("giver_id") or quest.get("offered_by"))

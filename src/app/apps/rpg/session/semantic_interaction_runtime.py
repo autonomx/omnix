@@ -7,11 +7,12 @@ import hashlib as hashlib
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _find_npc_target_by_name(simulation_state: dict[str, Any], text: str) -> str:
     simulation_state = _safe_dict(simulation_state)
-    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    npc_index = _safe_dict(_sections.npc_index_of(simulation_state))
     text_lc = _safe_str(text).strip().lower()
     if not text_lc:
         return ""

@@ -24,6 +24,7 @@ from app.apps.rpg.foundation.state.changes import (
     StateChange,
 )
 from app.apps.rpg.rules import routines
+from app.apps.rpg.foundation.state import access as _sections
 
 FAILED_REGARD = -10  # a quest failed costs its giver's trust (quests.md)
 
@@ -56,7 +57,7 @@ def _holds(condition: Mapping[str, Any], simulation: Mapping[str, Any], applied:
     if condition.get("hold"):
         wanted = _s(condition["hold"])
         return any(_s(_d(item).get("item_id") or _d(item).get("id")) == wanted
-                   for item in _l(_d(_d(simulation.get("player_state")).get("inventory_state")).get("items")))
+                   for item in _l(_d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation)))).get("items")))
     if condition.get("defeat"):
         return counts.get(_s(condition["defeat"]), 0) >= max(1, int(condition.get("count") or 1))
     if condition.get("check"):
@@ -81,8 +82,8 @@ def quest_progress(simulation: Mapping[str, Any], applied: Sequence[StateChange]
     lines: list[str] = []
     felled = victories(applied)
     now = routines.clock(simulation)
-    people = _d(_d(simulation.get("world_model")).get("npcs"))
-    for quest in map(_d, _l(_d(simulation.get("quest_state")).get("quests"))):
+    people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
+    for quest in map(_d, _l(_d(_sections.quest_state_of(simulation)).get("quests"))):
         steps = [_d(step) for step in _l(quest.get("steps"))]
         quest_id = _s(quest.get("quest_id") or quest.get("id"))
         if not steps or quest.get("status") != "active" or not quest_id:

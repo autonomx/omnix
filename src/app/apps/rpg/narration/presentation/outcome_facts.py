@@ -29,6 +29,7 @@ from app.apps.rpg.foundation.state.changes import (
     RegardChanged,
     StateChange,
 )
+from app.apps.rpg.foundation.state import access as _sections
 
 FactKind = Literal["coin", "item", "health", "condition", "experience", "level", "quest", "offer", "check", "regard",
                    "fight"]
@@ -61,14 +62,14 @@ def _coins(copper: int) -> str:
 
 
 def _quest_titles(document: Mapping[str, Any]) -> dict[str, str]:
-    rows = _l(_d(_d(document.get("simulation_state")).get("quest_state")).get("quests"))
+    rows = _l(_d(_sections.quest_state_of(_d(_sections.simulation_state_of(document)))).get("quests"))
     return {_s(_d(row).get("quest_id") or _d(row).get("id")): _s(_d(row).get("title")) for row in rows}
 
 
 def _item_names(document: Mapping[str, Any]) -> dict[str, str]:
-    simulation = _d(document.get("simulation_state"))
-    carried = _l(_d(_d(simulation.get("player_state")).get("inventory_state")).get("items"))
-    known = _l(_d(simulation.get("world_model")).get("items"))
+    simulation = _d(_sections.simulation_state_of(document))
+    carried = _l(_d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation)))).get("items"))
+    known = _l(_d(_sections.world_model_of(simulation)).get("items"))
     names = {_s(_d(row).get("id")): _s(_d(row).get("name")) for row in known}
     names.update({_s(_d(row).get("item_id")): _s(_d(row).get("name")) for row in carried})
     return {key: value for key, value in names.items() if key and value}

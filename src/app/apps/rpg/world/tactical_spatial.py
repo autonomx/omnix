@@ -16,6 +16,7 @@ from app.apps.rpg.world.map_effective_geometry import effective_is_walkable
 from app.apps.rpg.world.map_grid_contracts import GridActorPlacement, GridMapDefinition, GridPoint
 from app.apps.rpg.world.map_instance_runtime import CampaignMapInstanceSnapshot, FrozenRuntimeModel
 from app.apps.rpg.world.map_observer_runtime import has_line_of_sight
+from app.apps.rpg.foundation.state import access as _sections
 
 
 class TacticalSpatialError(ValueError):
@@ -58,7 +59,7 @@ def movement_left(combat_state: Mapping[str, Any], policy: TacticalSpatialPolicy
 
 def grid_turn_summary(simulation_state: Mapping[str, Any], campaign_id: str, observer_actor_id: str) -> dict[str, Any]:
     """What the player's grid shows of the fight: whose turn it is, the hero's movement left, who can be attacked."""
-    combat = simulation_state.get("combat_state") if isinstance(simulation_state.get("combat_state"), Mapping) else {}
+    combat = _sections.combat_state_of(simulation_state) if isinstance(_sections.combat_state_of(simulation_state), Mapping) else {}
     if not combat or combat.get("active") is not True:
         return {"combat_active": False}
     hero = hero_on_map(campaign_id)

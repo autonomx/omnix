@@ -23,6 +23,7 @@ from app.apps.rpg.foundation.state.changes import (
     StateChange,
 )
 from app.apps.rpg.rules.combat.stakes import WOUNDED, conditions, healing
+from app.apps.rpg.foundation.state import access as _sections
 
 HEAL_SHARE = 0.30
 MIN_HEAL = 10
@@ -39,7 +40,7 @@ class ItemOutcome:
 
 
 def _pack(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [_d(item) for item in _l(_d(_d(simulation.get("player_state")).get("inventory_state")).get("items"))]
+    return [_d(item) for item in _l(_d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation)))).get("items"))]
 
 
 def _id(item: Mapping[str, Any]) -> str:
@@ -63,7 +64,7 @@ def _find(stacks: list[dict[str, Any]], item_id: str, text: str) -> dict[str, An
 
 
 def _kind(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> str:
-    world = {_s(_d(row).get("id")): _d(row) for row in _l(_d(simulation.get("world_model")).get("items"))}
+    world = {_s(_d(row).get("id")): _d(row) for row in _l(_d(_sections.world_model_of(simulation)).get("items"))}
     kind = (_s(item.get("category") or item.get("type")) or _s(world.get(_id(item), {}).get("type"))).casefold()
     healing_named = "heal" in _id(item).casefold() or "healing" in _s(item.get("name")).casefold()
     if kind == "potion" or (kind in {"", "consumable", "misc"} and healing_named):
@@ -87,7 +88,7 @@ def use_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutc
     name, kind = _s(item.get("name")) or _id(item), _kind(simulation, item)
     used: list[StateChange] = [ItemRemoved(item_id=_id(item), quantity=1)]
     if kind == "potion":
-        player = _d(simulation.get("player_state"))
+        player = _d(_sections.player_state_of(simulation))
         hp = _d(_d(player.get("resources")).get("hp"))
         maximum, current = int(hp.get("max") or 0), int(hp.get("current") or 0)
         restored = min(max(0, maximum - current), healing(dict(simulation), "player", max(MIN_HEAL, int(maximum * HEAL_SHARE))))
@@ -111,7 +112,7 @@ def drop_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOut
     item = _find(_pack(simulation), item_id, text)
     if not item:
         return ItemOutcome(lines=["You carry nothing like that."], refused=True)
-    location = _s(_d(simulation.get("player_state")).get("location_id"))
+    location = _s(_d(_sections.player_state_of(simulation)).get("location_id"))
     quantity = _quantity(text, _count(item))
     name = _s(item.get("name")) or _id(item)
     return ItemOutcome([ItemDropped(item_id=_id(item), quantity=quantity, location_id=location)],
@@ -120,7 +121,7 @@ def drop_item(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOut
 
 
 def pick_up(simulation: Mapping[str, Any], item_id: str, text: str) -> ItemOutcome:
-    location = _s(_d(simulation.get("player_state")).get("location_id"))
+    location = _s(_d(_sections.player_state_of(simulation)).get("location_id"))
     ground = [_d(item) for item in _l(_d(_d(simulation.get("world_items")).get("by_location")).get(location))]
     item = _find(ground, item_id, text)
     if not item:
@@ -152,7 +153,7 @@ def _slot(simulation: Mapping[str, Any], item: Mapping[str, Any]) -> str:
 
 
 def _worn(simulation: Mapping[str, Any]) -> dict[str, str]:
-    store = _d(_d(simulation.get("player_state")).get("inventory_state"))
+    store = _d(_sections.inventory_state_of(_d(_sections.player_state_of(simulation))))
     return {_s(slot): _s(item_id) for slot, item_id in _d(store.get("equipment")).items() if _s(item_id)}
 
 

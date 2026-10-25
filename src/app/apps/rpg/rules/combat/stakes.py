@@ -12,6 +12,7 @@ from app.apps.rpg.foundation.core.determinism import deterministic_rng
 from app.apps.rpg.foundation.safe_values import safe_dict, safe_list, safe_str
 from app.apps.rpg.rules.combat.runtime_core import participant, safe_int, sync_participant_hp_to_actor_state
 from app.apps.rpg.rules.location_registry import default_location_id, get_location, set_current_location
+from app.apps.rpg.foundation.state import access as _sections
 
 DEFEAT_HOURS = 8
 DEFEAT_HP_SHARE = 0.25
@@ -135,7 +136,7 @@ def apply_defeat(simulation_state: dict[str, Any], combat_state: dict[str, Any])
 
 
 def _player(simulation_state: dict[str, Any]) -> dict[str, Any]:
-    player = simulation_state.get("player_state")
+    player = _sections.player_state_of(simulation_state)
     if not isinstance(player, dict):
         player = simulation_state["player_state"] = {}
     return player
@@ -145,7 +146,7 @@ def _party(simulation_state: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]
     """The hero and the companions with them, as stored (mutable)."""
     player = _player(simulation_state)
     members: list[tuple[str, dict[str, Any]]] = [("player", player)]
-    for companion in safe_list(safe_dict(player.get("party_state")).get("companions")):
+    for companion in safe_list(safe_dict(_sections.party_state_of(player)).get("companions")):
         if isinstance(companion, dict) and safe_str(companion.get("npc_id")):
             members.append((safe_str(companion.get("npc_id")), companion))
     return members
@@ -201,7 +202,7 @@ def _purse(copper: int) -> dict[str, int]:
 def _lose_coin(simulation_state: dict[str, Any]) -> int:
     """A fifth of the purse, rounded down, at least a copper while there is any (the one purse, RQ-2.0)."""
     player = _player(simulation_state)
-    raw_store = player.get("inventory_state")
+    raw_store = _sections.inventory_state_of(player)
     store: dict[str, Any] = raw_store if isinstance(raw_store, dict) else {}
     total = _copper(store.get("currency") or player.get("currency"))
     if total <= 0:
@@ -217,7 +218,7 @@ def _lose_item(simulation_state: dict[str, Any]) -> dict[str, Any]:
     """On a seeded even chance, the most valuable thing carried that is neither worn nor wanted by a quest."""
     if deterministic_rng("defeat.item_loss", safe_int(_player(simulation_state).get("defeats"), 0)).random() >= DEFEAT_ITEM_LOSS_CHANCE:
         return {}
-    store = safe_dict(_player(simulation_state).get("inventory_state"))
+    store = safe_dict(_sections.inventory_state_of(_player(simulation_state)))
     items = [item for item in safe_list(store.get("items")) if isinstance(item, dict)]
     worn = {safe_str(item_id) for item_id in safe_dict(store.get("equipment")).values() if safe_str(item_id)}
     candidates = [item for item in items if _losable(item, worn)]

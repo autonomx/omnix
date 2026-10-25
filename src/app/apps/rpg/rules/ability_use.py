@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
 from app.apps.rpg.foundation.state.changes import AbilityUsed, HotbarChanged, HpChanged, ResourcesChanged, StateChange
+from app.apps.rpg.foundation.state import access as _sections
 
 DAMAGE_PER_BONUS = 4  # an ability's health damage is on the hero's 100-point scale: every 4 is +1 to the blow
 
@@ -71,7 +72,7 @@ def not_ready(document: Mapping[str, Any], ability: Mapping[str, Any]) -> str:
         left = ready_at - _turn(document)
         return f"{name} is not ready yet ({left} more turn{'s' if left != 1 else ''})."
     resources = {**_d(_d(_d(document.get("state")).get("player")).get("resources")),
-                 **_d(_d(_d(document.get("simulation_state")).get("player_state")).get("resources"))}
+                 **_d(_d(_sections.player_state_of(_d(_sections.simulation_state_of(document)))).get("resources"))}
     for resource, amount in costs(ability).items():
         have = int(_d(resources.get(resource)).get("current") or 0)
         if have < amount:
@@ -127,7 +128,7 @@ def out_of_fight(document: Mapping[str, Any], ability: Mapping[str, Any]) -> Out
         return Outcome([], [refusal], refused=True)
     name = _s(ability.get("name"))
     changes = spend(document, ability)
-    player = _d(_d(document.get("simulation_state")).get("player_state"))
+    player = _d(_sections.player_state_of(_d(_sections.simulation_state_of(document))))
     pool = _d(_d(player.get("resources")).get("hp"))  # as the fight rule reads it
     maximum = int(pool.get("max") or player.get("max_hp") or 20)
     current = int(pool.get("current") if pool.get("current") is not None else player.get("hp") or maximum)

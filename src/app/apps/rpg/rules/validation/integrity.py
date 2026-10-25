@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Set, Tuple
 
 from app.apps.rpg.rules.survival import SURVIVAL_EVENT_LIMIT
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
+from app.apps.rpg.foundation.state import access as _sections
 
 MAX_VISUAL_REQUESTS = 100
 MAX_VISUAL_ASSETS = 200
@@ -185,7 +186,7 @@ def validate_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 
 def validate_survival_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
-    survival = _safe_dict(simulation_state.get("survival"))
+    survival = _safe_dict(_sections.survival_of(simulation_state))
     errors: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
 
@@ -288,7 +289,7 @@ def validate_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
 def validate_session_integrity(session: Dict[str, Any]) -> Dict[str, Any]:
     session = _safe_dict(session)
     manifest_result = validate_session_manifest(session)
-    simulation_result = validate_simulation_state(_safe_dict(session.get("simulation_state")))
+    simulation_result = validate_simulation_state(_safe_dict(_sections.simulation_state_of(session)))
 
     errors = list(manifest_result["errors"]) + list(simulation_result["errors"])
     warnings = list(manifest_result["warnings"]) + list(simulation_result["warnings"])
@@ -304,7 +305,7 @@ def validate_session_integrity(session: Dict[str, Any]) -> Dict[str, Any]:
 def validate_package_integrity(package_payload: Dict[str, Any]) -> Dict[str, Any]:
     package_payload = _safe_dict(package_payload)
     session_manifest = _safe_dict(package_payload.get("session_manifest"))
-    simulation_state = _safe_dict(package_payload.get("simulation_state"))
+    simulation_state = _safe_dict(_sections.simulation_state_of(package_payload))
 
     session_like = {
         "manifest": session_manifest,

@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import Any, Dict, List
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -120,7 +121,7 @@ def build_interaction_reaction_context(
     elif interaction_class in {"competition", "performance"}:
         signals.append("public_activity")
 
-    location_id = _safe_str(simulation_state.get("location_id")) or _safe_str(next((npc.get("location_id") for npc in simulation_state.get("npc_index", {}).values() if npc.get("location_id")), None))
+    location_id = _safe_str(simulation_state.get("location_id")) or _safe_str(next((npc.get("location_id") for npc in (_sections.npc_index_of(simulation_state) or {}).values() if npc.get("location_id")), None))
     return {
         "interaction_id": _safe_str(interaction.get("id")),
         "semantic_action_id": _safe_str(interaction.get("semantic_action_id")),
@@ -249,7 +250,7 @@ def build_npc_reaction_candidates(
 ) -> List[Dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     context = _safe_dict(context)
-    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    npc_index = _safe_dict(_sections.npc_index_of(simulation_state))
     location_id = _safe_str(context.get("location_id"))
     participants = set(_safe_list(context.get("participants")))
     interaction_class = _safe_str(context.get("interaction_class"))

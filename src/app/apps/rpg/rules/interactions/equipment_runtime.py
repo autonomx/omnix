@@ -6,6 +6,7 @@ from typing import Any, Dict
 from app.apps.rpg.rules.interactions.item_catalog import get_item_definition, infer_definition_id_from_name
 from app.apps.rpg.rules.interactions.item_model import normalize_item_instance
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
+from app.apps.rpg.foundation.state import access as _sections
 
 DEFAULT_STATS = {
     "damage_min": 0,
@@ -28,7 +29,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _store(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     """The hero's one store: the pack and what is worn (RQ-2.4)."""
-    return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory_state"))
+    return _safe_dict(_sections.inventory_state_of(_safe_dict(_sections.player_state_of(simulation_state))))
 
 
 def _inventory_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
@@ -37,7 +38,7 @@ def _inventory_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dic
         store = _store(simulation_state)
         return {"items": list(_safe_list(store.get("items"))), "equipment": dict(_safe_dict(store.get("equipment")))}
 
-    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    party_state = _safe_dict(_sections.party_state_of(_safe_dict(_sections.player_state_of(simulation_state))))
     for companion in _safe_list(party_state.get("companions")):
         companion = _safe_dict(companion)
         if _safe_str(companion.get("npc_id")) == actor_id:

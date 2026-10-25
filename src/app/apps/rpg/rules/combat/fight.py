@@ -59,6 +59,7 @@ from app.apps.rpg.rules.combat.stakes import (
     is_hardcore,
 )
 from app.apps.rpg.rules.interactions.equipment_runtime import project_equipment_stats
+from app.apps.rpg.foundation.state import access as _sections
 
 SOURCE = "rpg_turn_pipeline_fight_v1"
 MINUTES_PER_TURN = 1
@@ -101,7 +102,7 @@ class FightTurn:
 
 # -- the party as the fight sees it -------------------------------------------------------------------------------------
 def _player(simulation: Mapping[str, Any]) -> dict[str, Any]:
-    return _d(simulation.get("player_state"))
+    return _d(_sections.player_state_of(simulation))
 
 
 def _hero_hp(simulation: Mapping[str, Any]) -> tuple[int, int]:
@@ -112,7 +113,7 @@ def _hero_hp(simulation: Mapping[str, Any]) -> tuple[int, int]:
 
 
 def _companions(simulation: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [_d(row) for row in _l(_d(_player(simulation).get("party_state")).get("companions")) if _s(_d(row).get("npc_id"))]
+    return [_d(row) for row in _l(_d(_sections.party_state_of(_player(simulation))).get("companions")) if _s(_d(row).get("npc_id"))]
 
 
 def _conditions(simulation: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -151,7 +152,7 @@ def _modifier(simulation: Mapping[str, Any], attribute: str) -> int:
 
 def _person(simulation: Mapping[str, Any], target_ref: str) -> tuple[str, dict[str, Any]]:
     """The person present the hero means to fight, by id or name: (id, their world record), or ("", {})."""
-    people = _d(_d(simulation.get("world_model")).get("npcs"))
+    people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
     here = routines.present_now(simulation)[1]
     wanted = target_ref.casefold().removeprefix("the ").strip()
     for npc_id in here:
@@ -248,7 +249,7 @@ def _strike(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
 def _advance(combat: dict[str, Any]) -> None:
     holder = {"combat_state": combat}
     advance_combat_turn(holder)  # the turn order, the round, and start-of-turn conditions, on the section alone
-    combat.update(holder["combat_state"])
+    combat.update(_sections.combat_state_of(holder))
 
 
 def _behaves(simulation: Mapping[str, Any], combat: dict[str, Any], actor_id: str) -> dict[str, Any] | None:
@@ -362,7 +363,7 @@ def _spoils(simulation: Mapping[str, Any], combat: Mapping[str, Any]) -> tuple[l
     # Each creature's experience as the world rates it, or 25 a level where it gives none (combat.md).
     amount = sum(int(row.get("xp_value") or 0) or 25 * max(1, int(row.get("level") or 1)) for row in fallen)
     changes, lines = progression.gain(simulation, amount)  # the one curve, and the level's choice (progression.md)
-    items = {_s(row.get("id")): row for row in _l(_d(simulation.get("world_model")).get("items")) if _s(_d(row).get("id"))}
+    items = {_s(row.get("id")): row for row in _l(_d(_sections.world_model_of(simulation)).get("items")) if _s(_d(row).get("id"))}
     for row in fallen:
         definition = campaign_creature_definition(simulation, _s(row.get("definition_id"))) or {}
         for index, drop in enumerate(_l(definition.get("loot"))):
@@ -408,7 +409,7 @@ def _defeat(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
             rows.append({"kind": BATTERED, "attack_penalty": BATTERED_PENALTY, "check_penalty": BATTERED_PENALTY,
                          "until": "full_rest", "source": "defeat", "actor_id": actor_id})
         battered.append(actor_id)
-    store = _d(player.get("inventory_state"))
+    store = _d(_sections.inventory_state_of(player))
     total = _copper(store.get("currency") or player.get("currency"))
     lost = max(1, int(total * DEFEAT_PURSE_SHARE)) if total > 0 else 0
     if lost:
@@ -427,7 +428,7 @@ def _defeat(simulation: Mapping[str, Any], combat: dict[str, Any], conditions: d
             item_id = _s(pick.get("item_id") or pick.get("id"))
             changes.append(ItemRemoved(item_id=item_id, quantity=1))
             item_lost = {"item_id": item_id, "name": _s(pick.get("name")) or item_id}
-    world = _d(simulation.get("world_model"))
+    world = _d(_sections.world_model_of(simulation))
     places = _d(world.get("locations"))
     here = _s(player.get("location_id") or simulation.get("location_id"))
     woke_at = next((place for place in (_s(player.get("rest_point")), _s(world.get("start_location_id")), here)
@@ -494,7 +495,7 @@ def _met_here(simulation: Mapping[str, Any], enemy: Mapping[str, Any]) -> bool:
         return True
     here = routines.hero_location(simulation)
     kind = _s(enemy.get("definition_id"))
-    for quest in _l(_d(simulation.get("quest_state")).get("quests")):
+    for quest in _l(_d(_sections.quest_state_of(simulation)).get("quests")):
         quest = _d(quest)
         if quest.get("status") != "active" or here not in {_s(place) for place in _l(quest.get("locations"))}:
             continue
@@ -512,7 +513,7 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
 
     ``cover`` is what the target's cover adds to its defence against the hero's blow (the grid's, combat.md);
     ``parley`` is how the hero talks a foe down."""
-    existing = _d(simulation.get("combat_state"))
+    existing = _d(_sections.combat_state_of(simulation))
     fighting = existing.get("active") is True
     conditions = _conditions(simulation)
     report: dict[str, Any] = {"earlier_turns": [], "other_turns": [], "parting_blows": [], "foe_ids": []}
@@ -536,7 +537,7 @@ def fight(simulation: Mapping[str, Any], *, action: Action, target_ref: str = ""
             if npc_id in {_s(row.get("npc_id")) for row in _companions(simulation)}:
                 return FightTurn([], [f"You will not turn on {name}."], refused=True, minutes=0)
             enemy = _person_foe(npc_id, person)
-            people = _d(_d(simulation.get("world_model")).get("npcs"))
+            people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
             regard = [RegardChanged(npc_id=npc_id, name=name, delta=ATTACKED_REGARD, reason="attacked")]
             regard += [RegardChanged(npc_id=other, name=_s(_d(people.get(other)).get("name")) or other,
                                      delta=WITNESS_REGARD, reason="saw_an_attack")

@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Iterator, Mapping
+from app.apps.rpg.foundation.state import access as _sections
 
 _AFTER_COMMIT: ContextVar[bool] = ContextVar("RPG_NARRATE_AFTER_COMMIT", default=False)
 
@@ -33,7 +34,7 @@ RECENT = 12  # the interactions the play screen shows of the story so far
 def with_narrations(session: Mapping[str, Any]) -> Mapping[str, Any]:
     """``session`` with each recent turn narrated after its commit given its narration, from the response table:
     the campaign document keeps none (roadmap §4.1, "Narration is outside the campaign document")."""
-    runtime = session.get("runtime_state") if isinstance(session.get("runtime_state"), Mapping) else {}
+    runtime = _sections.runtime_state_of(session) if isinstance(_sections.runtime_state_of(session), Mapping) else {}
     rows = runtime.get("recent_interactions") if isinstance(runtime.get("recent_interactions"), list) else []
     campaign_id = str((session.get("manifest") or {}).get("session_id") or "") if isinstance(session.get("manifest"), Mapping) else ""
     missing = [index for index, row in enumerate(rows) if index >= len(rows) - RECENT and isinstance(row, Mapping)

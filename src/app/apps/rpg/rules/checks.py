@@ -22,6 +22,7 @@ from app.apps.rpg.foundation.state.changes import (
 from app.apps.rpg.rules import routines
 from app.apps.rpg.rules.combat.runtime_core import deterministic_roll
 from app.apps.rpg.rules.player import progression
+from app.apps.rpg.foundation.state import access as _sections
 
 DIFFICULTIES = {"trivial": 5, "easy": 10, "moderate": 13, "hard": 16, "very_hard": 19, "heroic": 22}
 RETRY_PENALTY, RETRY_WINDOW_TICKS = 2, 12  # the same try again, here, within two hours (a tick is 10 minutes)
@@ -57,7 +58,7 @@ def _band(margin: int, natural: int) -> str:
 
 def _target(simulation: Mapping[str, Any], target_id: str) -> tuple[str, dict[str, Any]]:
     """The target's kind (person, creature, place, item, or "" for the scene) and its world record."""
-    world = _d(simulation.get("world_model"))
+    world = _d(_sections.world_model_of(simulation))
     if target_id in _d(world.get("npcs")):
         return "person", _d(_d(world.get("npcs")).get(target_id))
     creatures = _d(_d(simulation.get("campaign_mechanics")).get("creatures"))
@@ -77,7 +78,7 @@ def _difficulty(record: Mapping[str, Any], kind: str) -> int:
 
 
 def _bonus(simulation: Mapping[str, Any], kind: str, target_kind: str, target_id: str) -> tuple[int, str]:
-    player = _d(simulation.get("player_state"))
+    player = _d(_sections.player_state_of(simulation))
     skill, attribute = _RESTS_ON[kind]
     rank = int(_d(_d(player.get("skills")).get(skill)).get("level") or 0)
     modifier = (int(_d(player.get("stats")).get(attribute) or 10) - 10) // 2
@@ -105,7 +106,7 @@ def _consequence(simulation: Mapping[str, Any], kind: str, band: str, target_kin
     """What the try leads to: its changes, the facts the narrator is told, and any extra minutes."""
     name = _name(record, "them")
     present = [npc for npc in routines.present_now(simulation)[1] if npc != target_id]
-    people = _d(_d(simulation.get("world_model")).get("npcs"))
+    people = _d(_d(_sections.world_model_of(simulation)).get("npcs"))
     won = band in {"strong", "success", "cost"}
 
     def regard(npc_id: str, delta: int, reason: str) -> RegardChanged:

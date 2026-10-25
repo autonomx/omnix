@@ -6,6 +6,7 @@ from typing import Any, Mapping
 from .projections import canonical_consumer_bundle
 from .publisher_guard import CANONICAL_PUBLISHER, publish_canonical_bundle
 from .serialization import canonical_response_from_dict
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -23,7 +24,7 @@ def _patch_latest_interaction(
     grounding_footer: Mapping[str, Any],
 ) -> bool:
     """Write the canonical projection into the turn's interaction; False when it was already there."""
-    runtime = _mapping(session.get("runtime_state"))
+    runtime = _mapping(_sections.runtime_state_of(session))
     interactions = runtime.get("recent_interactions")
     if not isinstance(interactions, list) or not interactions:
         return False

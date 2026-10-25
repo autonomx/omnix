@@ -23,13 +23,14 @@ from app.apps.rpg.rules.survival import SURVIVAL_MAX
 from app.apps.rpg.rules.survival_tick_runtime import SURVIVAL_TICK_RATE_PROFILES
 from app.apps.rpg.session.causal_turn_runtime import causal_tick
 from app.apps.rpg.world.environment_time import advance_environment_time
+from app.apps.rpg.foundation.state import access as _sections
 
 DEFAULT_START_MINUTE = 9 * 60
 
 
 def _environment(document: Mapping[str, Any]) -> dict[str, Any]:
     """The clock: the simulation's environment, or the play screen's copy a campaign started with."""
-    simulation = _d(document.get("simulation_state"))
+    simulation = _d(_sections.simulation_state_of(document))
     return dict(_d(simulation.get("environment")) or _d(_d(_d(document.get("state")).get("world")).get("environment"))
                 or {"absolute_minutes": DEFAULT_START_MINUTE, "active_events": []})
 
@@ -40,7 +41,7 @@ def clock_minute(document: Mapping[str, Any]) -> int:
 
 
 def _needs(document: Mapping[str, Any], *, ticks: int, profile: str) -> NeedsChanged | None:
-    survival = _d(_d(document.get("simulation_state")).get("survival"))
+    survival = _d(_sections.survival_of(_d(_sections.simulation_state_of(document))))
     if survival.get("enabled") is False or ticks <= 0:
         return None
     rates = SURVIVAL_TICK_RATE_PROFILES.get(profile, SURVIVAL_TICK_RATE_PROFILES["standard_turn"])
@@ -55,7 +56,7 @@ def _needs(document: Mapping[str, Any], *, ticks: int, profile: str) -> NeedsCha
 def _people(document: Mapping[str, Any], environment: Mapping[str, Any]) -> tuple[list[StateChange], list[str]]:
     """Where the world's people are at the clock's new time, who is present where the hero stands, and what the hero
     sees of the comings and goings."""
-    simulation = _d(document.get("simulation_state"))
+    simulation = _d(_sections.simulation_state_of(document))
     minute, since = int(environment.get("absolute_minutes") or 0), clock_minute(document)
     moved = routines.moves(simulation, minute, since=since)
     changes: list[StateChange] = []
@@ -69,7 +70,7 @@ def _people(document: Mapping[str, Any], environment: Mapping[str, Any]) -> tupl
     if not here or (last_at == here and after == before):
         return changes, []
     changes.append(PresenceChanged(location_id=here, present_npc_ids=tuple(after)))
-    seen = routines.comings_and_goings(_d(simulation.get("world_model")), before, after, moved) if last_at == here else []
+    seen = routines.comings_and_goings(_d(_sections.world_model_of(simulation)), before, after, moved) if last_at == here else []
     return changes, seen
 
 
@@ -124,8 +125,8 @@ def world_tick(
     runtime: dict[str, Any] = {}
     events: list[str] = []
     for hour in range(min(MAX_PRESSURE_TICKS, max(0, after // 60 - before // 60))):
-        ticking = {**dict(document), "runtime_state": {**_d(document.get("runtime_state")), **runtime},
-                   "simulation_state": {**_d(document.get("simulation_state")), **sections}}
+        ticking = {**dict(document), "runtime_state": {**_d(_sections.runtime_state_of(document)), **runtime},
+                   "simulation_state": {**_d(_sections.simulation_state_of(document)), **sections}}
         receipt = causal_tick(ticking, turn_key=turn_key if hour == 0 else f"{turn_key}:{hour}", turn=0) or {}
         if not receipt.get("applied"):
             break
@@ -133,8 +134,8 @@ def world_tick(
         runtime.update(receipt.pop("runtime"))
         events += [str(event) for event in receipt.get("event_ids") or ()]
     if events:
-        simulation = _d(document.get("simulation_state"))
-        place = _d(_d(_d(simulation.get("world_model")).get("locations")).get(routines.hero_location(simulation)))
+        simulation = _d(_sections.simulation_state_of(document))
+        place = _d(_d(_d(_sections.world_model_of(simulation)).get("locations")).get(routines.hero_location(simulation)))
         seen = [*seen, *_word(events, _d(sections.get("causal_world_runtime")), str(place.get("region_id") or ""))]
     receipt.pop("simulation", None)
     receipt.pop("runtime", None)

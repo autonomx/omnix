@@ -30,6 +30,7 @@ from app.apps.rpg.world.tactical_spatial import (
     hero_on_map,
     movement_left,
 )
+from app.apps.rpg.foundation.state import access as _sections
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,7 @@ def map_for_turn(map_instance_id: str, *, campaign_id: str) -> tuple[GridMapDefi
 
 
 def _the_heros_turn(simulation: Mapping[str, Any]) -> dict[str, Any]:
-    combat = _d(simulation.get("combat_state"))
+    combat = _d(_sections.combat_state_of(simulation))
     if combat.get("active") is not True:
         raise TacticalSpatialError("tactical_combat_not_active")
     if current_actor_id(combat) != "player":

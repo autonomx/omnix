@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 from typing import Any, Mapping
+from app.apps.rpg.foundation.state import access as _sections
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -108,7 +109,7 @@ def _project_economy(
         8000,
         15000,
     )
-    economy = _dict(simulation_state.get("economy_state"))
+    economy = _dict(_sections.economy_state_of(simulation_state))
     economy.update(
         {
             "causal_price_multiplier_bps": multiplier_bps,
@@ -156,7 +157,7 @@ def _project_travel(
         8000,
         16000,
     )
-    travel = _dict(simulation_state.get("travel_state"))
+    travel = _dict(_sections.travel_state_of(simulation_state))
     travel.update(
         {
             "causal_cost_multiplier_bps": multiplier_bps,

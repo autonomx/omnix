@@ -16,6 +16,7 @@ from app.apps.rpg.foundation.state.changes import DialogueExchanged, StateChange
 from app.apps.rpg.narration.world_data import RULE as WORLD_DATA_RULE, world_data
 from app.apps.rpg.rules.dialogue.plan import DialoguePlan, build_plan, line_keeps_the_plan, plan_changes
 from app.prompts import prompt_template
+from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 _LINE_PROMPT = prompt_template(
@@ -67,7 +68,7 @@ def _write_line(plan: DialoguePlan, exchanges: list[dict[str, Any]], text: str) 
 
 
 def _speaker(simulation: Mapping[str, Any], runtime: Mapping[str, Any], target_id: str) -> str:
-    present = set(_l(_d(simulation.get("present_npc_state")).get("present_npc_ids")))
+    present = set(_l(_d(_sections.present_npc_state_of(simulation)).get("present_npc_ids")))
     if target_id and target_id in present:
         return target_id
     focus = _s(_d(runtime.get("dialogue_focus")).get("target_id"))
@@ -81,8 +82,8 @@ def _speaker(simulation: Mapping[str, Any], runtime: Mapping[str, Any], target_i
 
 def resolve_dialogue(session: Mapping[str, Any], target_id: str, text: str) -> DialogueResolution | None:
     """The answer of the person spoken to; ``None`` when no one present is clearly spoken to (the older path's)."""
-    simulation = _d(session.get("simulation_state"))
-    speaker_id = _speaker(simulation, _d(session.get("runtime_state")), target_id)
+    simulation = _d(_sections.simulation_state_of(session))
+    speaker_id = _speaker(simulation, _d(_sections.runtime_state_of(session)), target_id)
     plan = build_plan(simulation, speaker_id, text) if speaker_id else None
     if plan is None:
         return None

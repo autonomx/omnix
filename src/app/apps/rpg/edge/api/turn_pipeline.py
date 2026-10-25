@@ -20,6 +20,7 @@ from app.apps.rpg.foundation.performance_trace import (
 )
 from app.apps.rpg.narration.presentation.turn_response import build_turn_response_v2
 from app.apps.rpg.foundation.response_trace_headers import finalize_rpg_trace_headers
+from app.apps.rpg.foundation.state import access as _sections
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +299,7 @@ def _run_rpg_turn(
         # A hardcore campaign ends when the hero falls; it plays no more turns (RQ-5.1).
         from app.apps.rpg.rules.combat.stakes import campaign_ended
 
-        ended = campaign_ended(launch_session.get("simulation_state") or {})
+        ended = campaign_ended(_sections.simulation_state_of(launch_session) or {})
         span["ended"] = bool(ended)
         if ended:
             raise HTTPException(
