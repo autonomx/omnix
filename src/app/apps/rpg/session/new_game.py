@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.runtime.clock import utc_now
 from app.apps.rpg.session.ability_coverage import write_ability_coverage_snapshot
-from app.apps.rpg.session.ability_system import build_progression_package
+from app.apps.rpg.session.ability_tree import build_progression_package
 from app.apps.rpg.session.new_game_settings import build_new_game_setup_effects
 from app.apps.rpg.session.service import archive_session, load_session, save_session
 

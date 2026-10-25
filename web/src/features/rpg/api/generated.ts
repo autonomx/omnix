@@ -4183,6 +4183,24 @@ export interface components {
             response?: string;
         };
         /**
+         * HotbarChanged
+         * @description A hotbar slot set to one of the hero's abilities, or cleared (``ability_id`` empty): the play screen's.
+         */
+        HotbarChanged: {
+            /**
+             * Ability Id
+             * @default
+             */
+            ability_id: string;
+            /** Slot */
+            slot: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hotbar_changed";
+        };
+        /**
          * HpChanged
          * @description The hero's health, kept between 0 and its maximum.
          */
@@ -6349,21 +6367,11 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "inspect" | "use" | "equip" | "unequip" | "drop" | "salvage" | "craft" | "modify" | "use_ability" | "hotbar" | "unlock_ability" | "upgrade_ability" | "assign_hotbar" | "remove_hotbar";
+            action: "use" | "equip" | "unequip" | "drop" | "use_ability" | "hotbar" | "unlock_ability" | "assign_hotbar" | "remove_hotbar";
             /** Hotbar Slot */
             hotbar_slot?: string | number | null;
             /** Item Name */
             item_name?: string | null;
-            /** Mod Id */
-            mod_id?: string | null;
-            /** Mod Name */
-            mod_name?: string | null;
-            /** Recipe Id */
-            recipe_id?: string | null;
-            /** Recipe Name */
-            recipe_name?: string | null;
-            /** Station */
-            station?: string | null;
             /** Target */
             target?: string | null;
         };
@@ -7002,7 +7010,7 @@ export interface components {
             seed?: number | null;
             /**
              * Starting Location
-             * @default rusty_flagon_tavern
+             * @default
              */
             starting_location?: string;
             /**
@@ -10008,7 +10016,7 @@ export interface components {
              * Applied Changes
              * @default []
              */
-            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"] | components["schemas"]["LocalMapEntered"])[];
+            applied_changes: (components["schemas"]["PurseChanged"] | components["schemas"]["ItemAdded"] | components["schemas"]["ItemRemoved"] | components["schemas"]["ItemDropped"] | components["schemas"]["ItemPickedUp"] | components["schemas"]["ItemEquipped"] | components["schemas"]["ItemUnequipped"] | components["schemas"]["HpChanged"] | components["schemas"]["ExperienceGained"] | components["schemas"]["SkillProgressed"] | components["schemas"]["LocationChanged"] | components["schemas"]["PresenceChanged"] | components["schemas"]["TimeAdvanced"] | components["schemas"]["TurnCounted"] | components["schemas"]["NeedsChanged"] | components["schemas"]["QuestStatusChanged"] | components["schemas"]["QuestPlaceReached"] | components["schemas"]["CompanionJoined"] | components["schemas"]["CompanionLeft"] | components["schemas"]["CombatStarted"] | components["schemas"]["CombatantHpChanged"] | components["schemas"]["CombatEnded"] | components["schemas"]["WorldTicked"] | components["schemas"]["JournalWritten"] | components["schemas"]["ServiceReserved"] | components["schemas"]["StockTaken"] | components["schemas"]["TradeRemembered"] | components["schemas"]["ConditionsChanged"] | components["schemas"]["RestTaken"] | components["schemas"]["ServiceUsed"] | components["schemas"]["CompanionOrdered"] | components["schemas"]["DialogueExchanged"] | components["schemas"]["KnowledgeShared"] | components["schemas"]["QuestOffered"] | components["schemas"]["CombatAdvanced"] | components["schemas"]["CompanionHpChanged"] | components["schemas"]["LevelReached"] | components["schemas"]["DefeatRecorded"] | components["schemas"]["CampaignEnded"] | components["schemas"]["WhereaboutsChanged"] | components["schemas"]["RegardChanged"] | components["schemas"]["ResourcesChanged"] | components["schemas"]["AbilityUsed"] | components["schemas"]["HotbarChanged"] | components["schemas"]["CheckResolved"] | components["schemas"]["LevelChoiceMade"] | components["schemas"]["RevisionRestored"] | components["schemas"]["QuestStepCompleted"] | components["schemas"]["QuestProgressed"] | components["schemas"]["PressuresMoved"] | components["schemas"]["LocalMapEntered"])[];
             /** Dialogue Plan */
             dialogue_plan?: {
                 [key: string]: unknown;

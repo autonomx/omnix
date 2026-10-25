@@ -57,4 +57,5 @@ rent a room and sleep, twice on two nights; camp in the wild; try to sleep in th
 
 ## Out of scope
 
-Crafting, salvage, modifications and abilities in the loadout (still its own), waterskin charges, spoilage.
+Crafting, salvage and modifications (the loadout's older crafting had no world catalog and no caller on the play
+screen; it was deleted in RQ-2.4 part 3), waterskin charges, spoilage.

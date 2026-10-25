@@ -41,8 +41,11 @@ creatures. A won fight earns the creatures' experience and whatever they drop; a
   it does in a fight is its effects': a health-damage effect is a blow, +1 damage for every 4 points and sharper by
   its attack check's bonus; a heal restores the hero's health; a negative check on an enemy hinders the target's
   blows by that much for its turns. Aimed at a foe outside a fight, a striking ability opens the fight with it. An
-  ability that is not ready, or not paid for, is refused in the game's words. Out of a fight, an ability with only
-  world effects (a clue, a rumour) is the older path's until RQ-2.10.
+  ability that is not ready, or not paid for, is refused in the game's words. Out of a fight an ability is paid for and
+  begins its cooldown the same way; its heal heals, what it restores of the hero's own stamina or mana comes back, and
+  the rest of what it does (a clue, a rumour) no rule keeps, so the story tells it; a striking one needs a foe to aim
+  at. The hotbar holds the hero's active abilities, one to a slot (1 to 10): setting a slot is a turn that takes no
+  time and writes no journal entry (`HotbarChanged`).
 - **In a fight** the hero strikes ("attack" alone strikes the foe in front of them), breaks away, defends (their
   defence +2 until their next turn), uses an ability, or uses something carried (a potion), which spends their turn
   before the others act; the party's health is the party's, so a heal between blows holds. Leaving, resting,

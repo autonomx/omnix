@@ -29,12 +29,14 @@ _ACTION_TYPE = {"look": "observe", "wait": "ambient_wait", "clarify": "clarifica
                 "trade": "trade", "use_item": "use_item", "drop": "drop_item", "take": "pick_up_item", "rest": "rest",
                 "quest": "quest_accept", "practice": "skill_practice", "status": "status_report", "party": "party",
                 "order": "companion_order", "talk": "npc_interpretive_dialogue", "fight": "attack",
-                "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "check": "skill_check",
+                "equip": "equip_item", "unequip": "unequip_item", "ability": "use_ability", "hotbar": "hotbar_slot",
+                "check": "skill_check",
                 "grow": "level_choice", "rewind": "rewind", "act": "free_action"}
 _FAMILY = {"look": "observation", "wait": "ambient", "clarify": "clarification", "travel": "travel",
            "trade": "commerce", "use_item": "inventory", "drop": "inventory", "take": "inventory", "rest": "survival",
            "quest": "quest", "practice": "progression", "status": "status", "party": "party", "order": "party",
            "talk": "social", "fight": "combat", "equip": "inventory", "unequip": "inventory", "ability": "combat",
+           "hotbar": "loadout",
            "check": "check", "grow": "progression", "rewind": "meta", "act": "action"}
 SOURCE = "rpg_turn_pipeline_v1"
 
@@ -142,7 +144,8 @@ def run_planned_turn(
             document, _ = reduce(document, grounded)
             applied += grounded
     lines = [*resolution.lines, *seen, *quest_lines]  # what the hero did, the comings and goings, what it led to
-    if planned.mechanic != "clarify" and not resolution.refused:  # a question back or a refusal is no journal entry
+    # A question back, a refusal or a hotbar slot (the play screen's, not the hero's doing) is no journal entry.
+    if planned.mechanic not in {"clarify", "hotbar"} and not resolution.refused:
         journal = _journal(document, request=request, turn_index=turn_index, summary=" ".join(lines))
         document, _ = reduce(document, [journal])
         applied.append(journal)
@@ -384,8 +387,8 @@ def _rewind_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> d
 
 
 def _ability_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
-    """An ability from the play screen's hotbar in a fight: the ability rule's turn, its lines the game's own; what
-    cannot be used now refuses the request, with no turn taken."""
+    """An ability from the play screen's hotbar or ability tree, in a fight or not: the ability rule's turn, its lines
+    the game's own; what cannot be used now refuses the request, with no turn taken."""
     from dataclasses import replace
 
     from app.apps.rpg.session.turn.resolution import resolve_turn
@@ -399,6 +402,46 @@ def _ability_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> 
     resolution = replace(resolution, told=False, action_result={"kind": "ability", "ability": planned.target_id,
                                                                 "detail": " ".join(resolution.lines)})
     reading = IntentCandidate(family="ability", target_id=planned.target_id, confidence=1.0, reason="hotbar")
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
+def _hotbar_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    """A hotbar slot given an ability, or cleared, from the play screen: no time passes; what cannot go on the hotbar
+    refuses the request, with no turn taken."""
+    from app.apps.rpg.rules.ability_use import set_hotbar
+    from app.apps.rpg.session.turn.resolution import Resolution
+
+    outcome = set_hotbar(session, _s(action.get("slot")), _s(action.get("ability")))
+    if outcome.refused:
+        return {"ok": False, "error": "hotbar_refused", "status_code": 409, "detail": " ".join(outcome.lines)}
+    resolution = Resolution(outcome.changes, outcome.lines, told=False,
+                            action_result={"kind": "hotbar", "slot": _s(action.get("slot")),
+                                           "ability": _s(action.get("ability")), "detail": " ".join(outcome.lines)})
+    planned = PlannedAction(mechanic="hotbar", ticks=0, reason="hotbar")
+    reading = IntentCandidate(family="status", confidence=1.0, reason="hotbar")
+    request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
+    return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
+
+
+def _learn_turn(ctx: Any, session: dict[str, Any], action: dict[str, Any], count: int) -> dict[str, Any]:
+    """An ability learned from the play screen's ability tree: a level's choice (progression.md), so only when one is
+    waiting; what cannot be learned now refuses the request, with no turn taken."""
+    from app.apps.rpg.foundation.state.changes import TurnCounted
+    from app.apps.rpg.rules.player.progression import choose
+    from app.apps.rpg.session.turn.resolution import Resolution
+
+    wanted = _s(action.get("ability"))
+    tree = [_d(row) for row in _d(_d(session.get("state")).get("ability_tree")).get("abilities") or ()]
+    name = next((_s(row.get("name")) for row in tree if wanted in {_s(row.get("ability_id")), _s(row.get("name"))}),
+                wanted)
+    grown = choose(session, f"learn {name}")
+    if grown.refused:
+        return {"ok": False, "error": "level_choice_refused", "status_code": 409, "detail": " ".join(grown.lines)}
+    resolution = Resolution([TurnCounted(turn_count=count), *grown.changes], grown.lines, told=False,
+                            action_result={"kind": "level_choice", **grown.detail, "detail": " ".join(grown.lines)})
+    planned = PlannedAction(mechanic="grow", ticks=0, reason="level_choice")
+    reading = IntentCandidate(family="grow", confidence=1.0, reason="learn")
     request = TurnRequest(kind="structured_action", session_id=ctx.session_id, text=_s(ctx.player_input), action=action)
     return run_planned_turn(session, request=request, planned=planned, reading=reading, resolution=resolution)
 
@@ -447,6 +490,10 @@ def _structured_turn(ctx: Any, action: dict[str, Any]) -> dict[str, Any]:
         return _map_travel_turn(ctx, session, action)
     if action.get("type") == "ability":
         return _ability_turn(ctx, session, action)
+    if action.get("type") == "hotbar":
+        return _hotbar_turn(ctx, session, action)
+    if action.get("type") == "learn":
+        return _learn_turn(ctx, session, action, count)
     if action.get("type") == "rewind":
         return _rewind_turn(ctx, session, action)
     try:

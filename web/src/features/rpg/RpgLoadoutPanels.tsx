@@ -177,10 +177,7 @@ export function AbilitiesPanel({ abilityOverview, activeAbility, activeAbilityIn
             ]
           : []),
         ...(!activeAbility.isUnlocked && activeAbility.isAvailable
-          ? [{ label: 'Unlock', command: `Unlock ${activeAbility.name} with an ability point.`, apply: () => applyAbilityAction({ action: 'unlock_ability', ability_id: activeAbility.id }, `Unlock ${activeAbility.name} with an ability point.`) }]
-          : []),
-        ...(activeAbility.isUnlocked && activeAbility.rank < activeAbility.maxRank && abilityOverview.abilityPoints > 0
-          ? [{ label: 'Upgrade', command: `Upgrade ${activeAbility.name} to the next rank.`, apply: () => applyAbilityAction({ action: 'upgrade_ability', ability_id: activeAbility.id }, `Upgrade ${activeAbility.name} to the next rank.`) }]
+          ? [{ label: 'Learn', command: `Learn ${activeAbility.name}.`, apply: () => applyAbilityAction({ action: 'unlock_ability', ability_id: activeAbility.id, ability_name: activeAbility.name }, `Learn ${activeAbility.name}.`) }]
           : []),
       ]
     : [];
@@ -222,7 +219,7 @@ export function AbilitiesPanel({ abilityOverview, activeAbility, activeAbilityIn
       <LoadoutDetailCard
         eyebrow={activeAbility ? `${titleCase(activeAbility.kind)} ability` : 'Selected ability'}
         title={activeAbility?.name ?? 'No ability selected'}
-        detail={activeAbility ? abilityDetail(activeAbility) : 'Select a tree node to inspect, unlock, upgrade, assign, or use it.'}
+        detail={activeAbility ? abilityDetail(activeAbility) : 'Select a tree node to inspect, learn, assign, or use it.'}
         actions={actions}
         disabled={isApplyingLoadoutAction}
         onSelectCommand={onSelectCommand}

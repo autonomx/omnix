@@ -62,6 +62,7 @@ from .changes import (
     TurnCounted,
     AbilityUsed,
     CheckResolved,
+    HotbarChanged,
     LevelChoiceMade,
     LocalMapEntered,
     RegardChanged,
@@ -391,6 +392,15 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             writer.set(_PLAYER + ("resources", name), pool)
             if isinstance(writer.get(("state", "player")), dict):  # the play screen's sheet shows it
                 writer.set(("state", "player", "resources", name), dict(pool))
+    elif isinstance(change, HotbarChanged):
+        # The hotbar is the sheet's (``state.hotbar``), mirrored in the ability state the play screen also reads.
+        hotbar = {str(slot): str(ability) for slot, ability in dict(writer.get(("state", "hotbar")) or {}).items()}
+        if change.ability_id:
+            hotbar[change.slot] = change.ability_id
+        else:
+            hotbar.pop(change.slot, None)
+        writer.set(("state", "hotbar"), hotbar)
+        writer.set(("state", "ability_state", "hotbar"), dict(hotbar))
     elif isinstance(change, AbilityUsed):
         ready = dict(writer.get(("state", "ability_state", "ready_at")) or {})
         ready[change.ability_id] = change.ready_at_turn

@@ -58,8 +58,6 @@ ALLOWED_EFFECT_OPS = {
     "grant_temp_affordance",
 }
 ALLOWED_COST_RESOURCES = {"hp", "stamina", "mana", "gold", "silver", "copper", "renown"}
-ALLOWED_XP_SOURCES = {"quest", "objective", "kill"}
-DEFAULT_SKILL_XP_PER_ABILITY_USE = 5
 
 
 class RpgCharacterIdentity(BaseModel):
@@ -127,33 +125,3 @@ class RpgAbilityDefinition(BaseModel):
 class RpgAbilityValidationResult(BaseModel):
     ok: bool
     errors: list[str] = Field(default_factory=list)
-
-
-class RpgAbilityUseResult(BaseModel):
-    ok: bool
-    ability_id: str | None = None
-    name: str | None = None
-    detail: str
-    error: str | None = None
-    effects: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class RpgAbilityStateResult(BaseModel):
-    ok: bool
-    ability_id: str | None = None
-    detail: str
-    error: str | None = None
-    slot: str | None = None
-    ability_state: dict[str, Any] = Field(default_factory=dict)
-
-
-class RpgProgressionResult(BaseModel):
-    ok: bool
-    detail: str
-    error: str | None = None
-    xp_gained: int = 0
-    source: str | None = None
-    level_ups: list[dict[str, Any]] = Field(default_factory=list)
-    ability_points_granted: int = 0
-    skill_awards: dict[str, dict[str, int]] = Field(default_factory=dict)
-    skill_level_ups: list[dict[str, Any]] = Field(default_factory=list)

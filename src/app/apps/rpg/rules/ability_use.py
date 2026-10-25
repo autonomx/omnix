@@ -3,7 +3,9 @@
 An ability is the hero's own (``state.ability_tree``), used once it is unlocked (``state.ability_state``), ready
 (its cooldown, counted in the hero's turns, is over) and paid for (its stamina or mana). In a fight its effect
 operations say what it does there: a blow made sharper and harder (``resource_delta`` on the target's health, with an
-attack check's bonus), a heal of the hero, or a target hindered (a negative check on an enemy, for its turns).
+attack check's bonus), a heal of the hero, or a target hindered (a negative check on an enemy, for its turns). Out
+of a fight it is paid for and begins its cooldown the same way, and its heal heals; what else it does there no rule of
+the game keeps, so the story tells it. The hotbar holds the hero's active abilities, one to a slot (1 to 10).
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.apps.rpg.foundation.safe_values import safe_dict as _d, safe_list as _l, safe_str as _s
-from app.apps.rpg.foundation.state.changes import AbilityUsed, ResourcesChanged, StateChange
+from app.apps.rpg.foundation.state.changes import AbilityUsed, HotbarChanged, HpChanged, ResourcesChanged, StateChange
 
 DAMAGE_PER_BONUS = 4  # an ability's health damage is on the hero's 100-point scale: every 4 is +1 to the blow
 
@@ -107,9 +109,67 @@ def in_fight(ability: Mapping[str, Any]) -> FightEffect:
                        hinder_turns=turns)
 
 
+@dataclass(frozen=True)
+class Outcome:
+    """A use, or a hotbar change: the changes, the game's lines, and whether it was refused (nothing changes)."""
+
+    changes: list[StateChange]
+    lines: list[str]
+    refused: bool = False
+
+
+def out_of_fight(document: Mapping[str, Any], ability: Mapping[str, Any]) -> Outcome:
+    """The ability used with no fight on: paid for and its cooldown begun; its heal heals the hero, up to their
+    maximum health, and what it restores of their own stamina or mana comes back (the pools keep their maximum).
+    Refused, in the game's words, when it is not ready or not paid for."""
+    refusal = not_ready(document, ability)
+    if refusal:
+        return Outcome([], [refusal], refused=True)
+    name = _s(ability.get("name"))
+    changes = spend(document, ability)
+    player = _d(_d(document.get("simulation_state")).get("player_state"))
+    pool = _d(_d(player.get("resources")).get("hp"))  # as the fight rule reads it
+    maximum = int(pool.get("max") or player.get("max_hp") or 20)
+    current = int(pool.get("current") if pool.get("current") is not None else player.get("hp") or maximum)
+    healed = min(in_fight(ability).heal, max(0, maximum - current))
+    restored = {resource: 0 for resource in ("stamina", "mana")}
+    for op in map(_d, _l(ability.get("effect_ops"))):
+        resource, amount = _s(op.get("resource")), int(op.get("amount") or 0)
+        if _s(op.get("op")) == "resource_delta" and _s(op.get("target")) == "self" and resource in restored and amount > 0:
+            restored[resource] += amount
+    lines = [f"You use {name}."]
+    if healed:
+        changes.append(HpChanged(delta=healed))
+        lines = [f"You use {name}, and {healed} health comes back to you."]
+    if any(restored.values()):
+        changes.append(ResourcesChanged(stamina=restored["stamina"], mana=restored["mana"],
+                                        reason=f"{_s(ability.get('ability_id'))}:restored"))
+        lines.append(" and ".join(f"{amount} {resource}" for resource, amount in restored.items() if amount)
+                     .capitalize() + " comes back to you.")
+    return Outcome(changes, lines)
+
+
+def set_hotbar(document: Mapping[str, Any], slot: str, ability_ref: str = "") -> Outcome:
+    """A hotbar slot given one of the hero's active abilities (by id or name), or cleared when none is named."""
+    slot = _s(slot).strip()
+    if slot not in {str(number) for number in range(1, 11)}:
+        return Outcome([], ["The hotbar has slots 1 to 10."], refused=True)
+    if not _s(ability_ref).strip():
+        return Outcome([HotbarChanged(slot=slot)], [f"Hotbar slot {slot} is empty now."])
+    ability = find(document, ability_ref)
+    if ability is None:
+        return Outcome([], ["You do not know that ability."], refused=True)
+    if _s(ability.get("kind") or "active") != "active":
+        return Outcome([], [f"{_s(ability.get('name'))} is always with you: there is nothing to put on the hotbar."],
+                       refused=True)
+    return Outcome([HotbarChanged(slot=slot, ability_id=_s(ability.get("ability_id")))],
+                   [f"{_s(ability.get('name'))} is on hotbar slot {slot}."])
+
+
 def acts_in_a_fight(ability: Mapping[str, Any]) -> bool:
     effect = in_fight(ability)
     return effect.strikes or effect.heal > 0 or effect.hinder > 0
 
 
-__all__ = ["FightEffect", "acts_in_a_fight", "costs", "find", "in_fight", "known", "not_ready", "spend"]
+__all__ = ["FightEffect", "Outcome", "acts_in_a_fight", "costs", "find", "in_fight", "known", "not_ready",
+           "out_of_fight", "set_hotbar", "spend"]

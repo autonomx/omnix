@@ -97,7 +97,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
           <strong>{abilityOverview.source === 'live' ? abilityOverview.className : 'Sample loadout'}</strong>
           <span>
             {abilityOverview.source === 'live'
-              ? `Level ${abilityOverview.playerLevel} • ${abilityOverview.abilityPoints} ability point${abilityOverview.abilityPoints === 1 ? '' : 's'} • ${coveragePercent}% dimension coverage`
+              ? `Level ${abilityOverview.playerLevel} • ${abilityOverview.levelChoices} level's choice${abilityOverview.levelChoices === 1 ? '' : 's'} waiting • ${coveragePercent}% dimension coverage`
               : 'Start or load a campaign to see your character’s own abilities.'}
           </span>
         </div>

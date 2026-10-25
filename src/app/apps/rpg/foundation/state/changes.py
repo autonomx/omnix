@@ -207,6 +207,14 @@ class AbilityUsed(_Change):
     ready_at_turn: int = Field(ge=0)
 
 
+class HotbarChanged(_Change):
+    """A hotbar slot set to one of the hero's abilities, or cleared (``ability_id`` empty): the play screen's."""
+
+    type: Literal["hotbar_changed"] = "hotbar_changed"
+    slot: str = Field(pattern=r"^([1-9]|10)$")
+    ability_id: str = ""
+
+
 class QuestStepCompleted(_Change):
     """A stage of a quest of steps done (quests.md): the quest now stands at ``stage``, the way it was done (the
     branch, when the stage had more than one), and what it asks next."""
@@ -478,7 +486,8 @@ StateChange = Annotated[
     | CombatStarted | CombatantHpChanged | CombatEnded | WorldTicked | JournalWritten | ServiceReserved
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
-    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | CheckResolved | LevelChoiceMade
+    | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | HotbarChanged
+    | CheckResolved | LevelChoiceMade
     | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved | LocalMapEntered,
     Field(discriminator="type"),
 ]

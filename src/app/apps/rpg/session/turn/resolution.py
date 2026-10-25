@@ -51,15 +51,26 @@ def _timed(document: Mapping[str, Any], changes: list[StateChange], minutes: int
     return [_counted(document), *([TimeAdvanced(ticks=ticks, minutes=minutes)] if minutes else []), *changes]
 
 
+ABILITY_MINUTES = 5  # an ability used with no fight on: a few minutes
+
+
 def _ability(planned: PlannedAction, session: Mapping[str, Any], simulation: Mapping[str, Any]) -> Resolution | None:
-    """One of the hero's abilities in a fight, or aimed at a foe to open one (combat.md); out of a fight, an ability
-    that is no blow (its world effects) is the older path's."""
+    """One of the hero's abilities in a fight, or aimed at a foe to open one (combat.md); out of a fight, one that is
+    no blow is paid for and its heal heals, and the story tells the rest (``ability_use.out_of_fight``)."""
     ability = ability_use.find(session, planned.target_id)
     if ability is None:
         return None
     effect = ability_use.in_fight(ability)
-    if _d(simulation.get("combat_state")).get("active") is not True and not effect.strikes:
-        return None
+    fighting = _d(simulation.get("combat_state")).get("active") is True
+    if not fighting and effect.strikes and not planned.second_target_id:
+        return Resolution([_counted(session)], [f"{_s(ability.get('name'))} needs a foe to aim at."], refused=True,
+                          told=False)
+    if not fighting and not effect.strikes:
+        used = ability_use.out_of_fight(session, ability)
+        if used.refused:
+            return Resolution([_counted(session)], used.lines, refused=True, told=False)
+        return Resolution(_timed(session, used.changes, ABILITY_MINUTES), used.lines, minutes=ABILITY_MINUTES,
+                          needs="standard_turn")
     refusal = ability_use.not_ready(session, ability)
     if refusal:
         return Resolution([_counted(session)], [refusal], refused=True, told=False)
@@ -151,7 +162,7 @@ def resolve_turn(planned: PlannedAction, session: Mapping[str, Any], text: str) 
         return _ability(planned, session, simulation)
     if mechanic == "grow":
         if int(_d(simulation.get("player_state")).get("level_choices_pending") or 0) <= 0:
-            return None  # no level's choice is waiting: the older path's (its unspent points)
+            return None  # no level's choice is waiting: "learn to swim" is an attempt, told as one
         grown = progression.choose(session, text)
         return Resolution([_counted(session), *grown.changes], grown.lines, refused=grown.refused, told=False,
                           action_result={"kind": "level_choice", **grown.detail})

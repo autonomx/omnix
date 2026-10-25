@@ -47,8 +47,11 @@ path's. Skills: 50 x (rank + 1) to the next rank, 0 to 5; an hour's practice is 
 defeats, time hurt and hunger stay inside their bands, since the pressures' side quests (RQ-5.4) the purse and the
 quests completed, since creatures act like themselves (RQ-5.6) the win rate, and since the economy (RQ-5.5) the
 purse late too: every one of Aurelia's; the starter world's win rate not yet, a strict expected failure (its bestiary
-has little between levels 2 and 9, so a hero who grows wins nearly every fight there is). The hero's level and attributes count in a fight (combat.md). Not yet:
-the choice as clarification options on the play screen (RQ-7.3).
+has little between levels 2 and 9, so a hero who grows wins nearly every fight there is). The hero's level and attributes count in a fight (combat.md). On the play screen
+the ability tree's Learn is the same choice (`unlock_ability`, a structured-action turn): only an ability the tree has,
+the level allows and the prerequisites open, and only while a choice waits; abilities have no ranks to raise (the older
+ability points and Upgrade are gone, RQ-2.4 part 3). Not yet: the choice as clarification options on the play screen
+(RQ-7.3).
 
 ## Out of scope
 

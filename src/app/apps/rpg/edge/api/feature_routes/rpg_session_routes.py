@@ -20,7 +20,7 @@ from app.apps.rpg.session.ability_coverage import summarize_ability_coverage
 from app.apps.rpg.world.environment_narration import build_environment_narration_contract
 from app.apps.rpg.world.environment_regions import derive_active_region_snapshot
 from app.apps.rpg.genesis.forge.pipeline_adapter import create_new_game_from_genesis_payload
-from app.apps.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
+from app.apps.rpg.session.loadout import RpgLoadoutActionRequest
 from app.apps.rpg.session.new_game import (
     RpgNewGameRequest,
     RpgRenameSessionRequest,
@@ -32,7 +32,6 @@ from app.apps.rpg.session.new_game import (
     start_rpg_preset,
 )
 from app.apps.rpg.session.service import list_session_summaries, load_session
-from app.apps.rpg.session.world_ability_integration import ensure_world_scale_abilities
 
 from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field
 from typing import Any as _TypedRequestAny
@@ -194,33 +193,18 @@ def _attach_environment_snapshot_to_session(
     return session
 
 
-# Pack actions that are turns through the turn pipeline (RQ-2.4); the rest (crafting, abilities, inspecting) are
-# still the loadout's own.
-_LOADOUT_TURNS = {"use", "equip", "drop", "unequip"}
-
-
-def _in_a_fight(session_id: str) -> bool:
-    from app.apps.rpg.session.service import load_session
-
-    simulation = (load_session(session_id) or {}).get("simulation_state") or {}
-    return isinstance(simulation.get("combat_state"), dict) and simulation["combat_state"].get("active") is True
-
-
-def _ability_turn(session_id: str, request: Any) -> dict[str, Any]:
-    """An ability used from the hotbar in a fight (the older loadout's out of one, for its world effects): a
-    structured-action turn of the ability rule (RQ-2.6), answered as the loadout answers."""
+def _loadout_as_turn(session_id: str, *, command: str, action: dict[str, Any], prefix: str, title: str,
+                     kind: str) -> dict[str, Any]:
+    """A loadout action as a structured-action turn through the turn pipeline (RQ-2.4), answered as the loadout
+    answers: its event, and the campaign as the turn left it. What the rule refuses is a 409 with its words."""
     import uuid
 
     from app.apps.rpg.edge.api.payloads.player_view import player_session_view
     from app.apps.rpg.edge.api.turn_pipeline import submit_rpg_turn
     from app.apps.rpg.session.service import load_session
 
-    ability = str(request.ability_id or request.ability_name or request.hotbar_slot or "")
-    payload = submit_rpg_turn(
-        session_id=session_id, command=f"I use {request.ability_name or ability}.",
-        submission_id=f"ability:{uuid.uuid4().hex}", source="loadout",
-        action={"turn_kind": "structured_action", "type": "ability", "ability": ability,
-                "target": str(request.target or "")})
+    payload = submit_rpg_turn(session_id=session_id, command=command, submission_id=f"{prefix}:{uuid.uuid4().hex}",
+                              source="loadout", action={"turn_kind": "structured_action", **action})
     if payload.get("ok") is False:
         detail = {key: value for key, value in payload.items() if key != "status_code"}
         raise HTTPException(status_code=int(payload.get("status_code") or 400), detail=detail)
@@ -231,11 +215,44 @@ def _ability_turn(session_id: str, request: Any) -> dict[str, Any]:
         "ok": True,
         "session_id": session_id,
         "status": "ready",
-        "event": {"title": f"Use {request.ability_name or ability}", "detail": str(answer.get("detail") or ""),
-                  "kind": "ability"},
+        "event": {"title": title, "detail": str(answer.get("detail") or ""), "kind": kind},
         "session": player_session_view(saved),
         "game": saved.get("state", {}),
     }
+
+
+_PACK_VERBS = {"use": "use", "equip": "equip", "drop": "drop", "unequip": "take off"}
+
+
+def _loadout_turn(session_id: str, request: Any) -> dict[str, Any]:
+    """The play screen's loadout action as its turn: a pack action (the item rule's), an ability used (the ability
+    rule's, in a fight or not), one learned (a level's choice), or a hotbar slot set or cleared."""
+    action = request.action
+    if action in _PACK_VERBS:
+        if not request.item_name:
+            raise HTTPException(status_code=422, detail={"ok": False, "error": "item_name_required"})
+        return _loadout_as_turn(
+            session_id, command=f"I {_PACK_VERBS[action]} the {request.item_name}.", prefix="loadout",
+            action={"type": "loadout", "action": action, "item_name": request.item_name},
+            title=f"{action.title()} {request.item_name}", kind="inventory")
+    ability = str(request.ability_id or request.ability_name or "")
+    name = str(request.ability_name or ability)
+    if action in {"use_ability", "hotbar"}:
+        ability = ability or str(request.hotbar_slot or "")
+        return _loadout_as_turn(
+            session_id, command=f"I use {name or ability}.", prefix="ability",
+            action={"type": "ability", "ability": ability, "target": str(request.target or "")},
+            title=f"Use {name or ability}", kind="ability")
+    if action == "unlock_ability":
+        return _loadout_as_turn(
+            session_id, command=f"I learn {name}.", prefix="learn", action={"type": "learn", "ability": ability},
+            title=f"Learn {name}", kind="ability_progression")
+    slot = str(request.hotbar_slot or "1")
+    cleared = action == "remove_hotbar"
+    return _loadout_as_turn(
+        session_id, command=f"Hotbar slot {slot}: {'empty' if cleared else name}.", prefix="hotbar",
+        action={"type": "hotbar", "slot": slot, "ability": "" if cleared else ability},
+        title=f"Hotbar slot {slot}", kind="ability_progression")
 
 
 def _session_or_404(session_id: str) -> dict[str, Any]:
@@ -279,37 +296,6 @@ def _create_save_point(session_id: str, name: str) -> dict[str, Any]:
     return {"ok": True, "session_id": session_id, "save_point": point, "save_points": _save_points(session_id)}
 
 
-def _loadout_turn(session_id: str, request: Any) -> dict[str, Any]:
-    """A loadout pack action as a structured-action turn, answered as the loadout answers."""
-    import uuid
-
-    from app.apps.rpg.edge.api.payloads.player_view import player_session_view
-    from app.apps.rpg.edge.api.turn_pipeline import submit_rpg_turn
-    from app.apps.rpg.session.service import load_session
-
-    verbs = {"use": "use", "equip": "equip", "drop": "drop", "unequip": "take off"}
-    payload = submit_rpg_turn(
-        session_id=session_id, command=f"I {verbs[request.action]} the {request.item_name}.",
-        submission_id=f"loadout:{uuid.uuid4().hex}", source="loadout",
-        action={"turn_kind": "structured_action", "type": "loadout", "action": request.action,
-                "item_name": request.item_name})
-    if payload.get("ok") is False:
-        detail = {key: value for key, value in payload.items() if key != "status_code"}
-        raise HTTPException(status_code=int(payload.get("status_code") or 400), detail=detail)
-    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
-    answer = outcome.get("action_result") if isinstance(outcome.get("action_result"), dict) else {}
-    saved = load_session(session_id)
-    return {
-        "ok": True,
-        "session_id": session_id,
-        "status": "ready",
-        "event": {"title": f"{request.action.title()} {request.item_name}", "detail": str(answer.get("detail") or ""),
-                  "kind": "inventory"},
-        "session": player_session_view(saved),
-        "game": saved.get("state", {}),
-    }
-
-
 def _with_environment_snapshot(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
@@ -337,7 +323,7 @@ def _with_environment_snapshot(
     return payload
 
 
-def _with_world_scale_abilities(
+def _with_ability_coverage(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     session = (
@@ -350,7 +336,6 @@ def _with_world_scale_abilities(
     )
     if not state:
         return payload
-    ensure_world_scale_abilities(state)
     coverage = _ability_coverage_payload(state)
     mechanics = (
         raw_mechanics if isinstance(raw_mechanics := state.get("mechanics"), dict) else {}
@@ -368,7 +353,7 @@ def _with_rpg_response_surface(
     from app.apps.rpg.edge.api.payloads.player_view import with_player_session_view
 
     # The campaign leaves the server as its player may see it (no world secrets, no private canon).
-    return with_player_session_view(_with_world_scale_abilities(
+    return with_player_session_view(_with_ability_coverage(
         _with_environment_snapshot(payload)
     ))
 
@@ -477,7 +462,6 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
         state = (
             raw_state if isinstance(raw_state := session.get("state"), dict) else {}
         )
-        ensure_world_scale_abilities(state)
         return {
             "ok": True,
             "session_id": session_id,
@@ -753,13 +737,4 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
         session_id: str,
         request: RpgLoadoutActionRequest,
     ) -> dict[str, Any]:
-        if request.action in _LOADOUT_TURNS and request.item_name:
-            return _with_environment_snapshot(_loadout_turn(session_id, request))
-        if request.action in {"use_ability", "hotbar"} and _in_a_fight(session_id):
-            return _with_environment_snapshot(_ability_turn(session_id, request))
-        return _with_environment_snapshot(
-            _raise_for_error(
-                apply_loadout_action(session_id, request),
-                not_found_errors={"session_not_found"},
-            )
-        )
+        return _with_environment_snapshot(_loadout_turn(session_id, request))

@@ -15,7 +15,7 @@ from app.apps.rpg.session.command_reading import SKIP_CONFIDENCE, clarification
 # clarify: the command is unclear whatever is going on, so the turn ends with the game's question (step 3).
 PipelineMechanic = Literal["look", "wait", "clarify", "travel", "trade", "use_item", "drop", "take", "rest",
                            "quest", "practice", "status", "party", "order", "talk", "fight", "equip", "unequip",
-                           "ability", "check", "grow", "rewind", "act"]
+                           "ability", "hotbar", "check", "grow", "rewind", "act"]
 
 
 # What cannot be done while a fight is on: leaving, resting, trading, talking it over (combat.md).
@@ -51,11 +51,11 @@ def plan_action(reading: IntentCandidate, *, fighting: bool = False) -> PlannedA
     if reading.family == "attack" and (fighting or (reading.target_kind in {"creature", "person"} and reading.target_id)):
         # A creature the world knows or a person present, or in a fight the foe in front of the hero (combat.md).
         return PlannedAction(mechanic="fight", target_id=reading.target_id or "", ticks=0, reason="attack")
-    if reading.family == "ability" and reading.target_id and (fighting or reading.second_target_id):
-        # In a fight, or aimed at a foe present: what it does there is the ability rule's (combat.md).
+    if reading.family == "ability" and reading.target_id:
+        # In a fight, aimed at a foe present (to open one), or with no fight on: the ability rule's (combat.md).
         return PlannedAction(mechanic="ability", target_id=reading.target_id, ticks=0,
                              second_target_id=reading.second_target_id or "",
-                             reason="in_fight" if fighting else "opening")
+                             reason="in_fight" if fighting else "opening" if reading.second_target_id else "out_of_fight")
     if not fighting and reading.family == "grow":
         return PlannedAction(mechanic="grow", ticks=0, reason="level_choice")  # a level's choice (progression.md)
     if not fighting and reading.family == "check" and reading.reason.startswith("check:"):

@@ -19,6 +19,7 @@ from app.apps.rpg.foundation.state.changes import (
     CompanionJoined,
     CompanionLeft,
     ExperienceGained,
+    HotbarChanged,
     HpChanged,
     ItemAdded,
     ItemDropped,
@@ -48,13 +49,23 @@ def _document(shape: str = "aurelia") -> dict:
 
 
 def test_the_vocabulary_is_closed_and_serializes() -> None:
-    assert len(CHANGE_TYPES) == len(set(CHANGE_TYPES)) == 50
+    assert len(CHANGE_TYPES) == len(set(CHANGE_TYPES)) == 51
     changes = [PurseChanged(delta_copper=-30), ItemAdded(item_id="item:potion", name="Healing Potion")]
     assert parse_changes([change.model_dump() for change in changes]) == changes
     with pytest.raises(ValidationError):
         parse_changes([{"type": "gold_from_nowhere", "amount": 1000}])
     with pytest.raises(ValidationError):
         PurseChanged(delta_copper=1, extra="no")
+
+
+def test_a_hotbar_slot_is_set_and_cleared_on_the_sheet_and_its_mirror() -> None:
+    document = _document()
+    after, _ = reduce(document, [HotbarChanged(slot="7", ability_id="survival_make_camp")])
+    assert after["state"]["hotbar"]["7"] == "survival_make_camp" == after["state"]["ability_state"]["hotbar"]["7"]
+    cleared, _ = reduce(after, [HotbarChanged(slot="7")])
+    assert "7" not in cleared["state"]["hotbar"] and "7" not in cleared["state"]["ability_state"]["hotbar"]
+    with pytest.raises(ValidationError):
+        HotbarChanged(slot="11", ability_id="survival_make_camp")
 
 
 def test_a_purchase_reduces_purse_and_pack_and_the_screen_shows_it() -> None:

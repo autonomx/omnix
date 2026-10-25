@@ -171,28 +171,6 @@ def synchronize_player_projections(session: Dict[str, Any]) -> Dict[str, Any]:
     return project_authoritative_player(hydrate_simulation_player(session))
 
 
-def adopt_public_inventory(session: Dict[str, Any]) -> Dict[str, Any]:
-    """Make the player sheet's inventory and purse the simulation's, after an action changed the sheet directly
-    (dropping, using, equipping or crafting an item); otherwise the next projection would restore the old ones."""
-
-    session = session if isinstance(session, dict) else {}
-    public_player = _dict(_dict(session.get("state")).get("player"))
-    simulation = _dict(session.get("simulation_state"))
-    player_state = _dict(simulation.get("player_state"))
-    inventory_state = _dict(player_state.get("inventory_state"))
-    if isinstance(public_player.get("inventory"), list):
-        inventory_state["items"] = [
-            _normalize_public_item(item) for item in public_player["inventory"] if isinstance(item, dict)
-        ]
-    if isinstance(public_player.get("currency"), dict):
-        inventory_state["currency"] = deepcopy(public_player["currency"])
-        player_state["currency"] = deepcopy(public_player["currency"])
-    player_state["inventory_state"] = inventory_state
-    simulation["player_state"] = player_state
-    session["simulation_state"] = simulation
-    return session
-
-
 _SHEET_SLOTS = {"weapon": "main_hand", "main hand": "main_hand", "off hand": "off_hand", "shield": "off_hand",
                 "armor": "body", "helmet": "head"}
 

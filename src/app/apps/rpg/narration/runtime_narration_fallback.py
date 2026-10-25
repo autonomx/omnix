@@ -34,8 +34,6 @@ def _recent_npc_lines(simulation_state: Dict[str, Any], speaker: str, *, limit: 
     return lines[-limit:]
 
 
-
-
 def _build_dialogue_state_update_payload(
     *,
     simulation_state: Dict[str, Any],
@@ -57,11 +55,6 @@ def _build_dialogue_state_update_payload(
         return _safe_dict(state.get("dialogue_state"))
     except Exception:
         return {}
-
-
-def _line_was_recently_used(line: str, recent_lines: List[str]) -> bool:
-    wanted = _norm(line)
-    return any(_norm(row) == wanted for row in recent_lines)
 
 
 def _known_facts_for_npc_reply(

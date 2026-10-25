@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "3ec9e67fde414bb028263aa431107cfb1c1c9b24e3210fe87c644cd165d759f5",
+  "policy_digest": "a3ec59a5d01a1430022d7701fdf2c9deae186c854759627b2bcd03c0651b9ac9",
   "rules": [
     "AL001",
     "AL002",
@@ -55,15 +55,6 @@
       ],
       "path": "src/app/persistence/",
       "rule": "AL015"
-    },
-    {
-      "count": 1,
-      "fingerprint": "save_session",
-      "lines": [
-        554
-      ],
-      "path": "src/app/apps/rpg/session/loadout.py",
-      "rule": "AL018"
     },
     {
       "count": 1,
@@ -575,83 +566,6 @@
       "rule": "AL019"
     },
     {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        37
-      ],
-      "path": "src/app/apps/rpg/session/item_diagnostics.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        63
-      ],
-      "path": "src/app/apps/rpg/session/item_loadout_hooks.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        37,
-        43,
-        63,
-        142
-      ],
-      "path": "src/app/apps/rpg/session/item_market_session.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        47,
-        91,
-        105
-      ],
-      "path": "src/app/apps/rpg/session/item_pickups.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        34
-      ],
-      "path": "src/app/apps/rpg/session/item_report_session.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        238
-      ],
-      "path": "src/app/apps/rpg/session/item_state_audit.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        23
-      ],
-      "path": "src/app/apps/rpg/session/item_state_maintenance.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        39
-      ],
-      "path": "src/app/apps/rpg/session/item_turn_hooks.py",
-      "rule": "AL019"
-    },
-    {
       "count": 13,
       "fingerprint": "runtime",
       "lines": [
@@ -683,34 +597,6 @@
         87
       ],
       "path": "src/app/apps/rpg/session/legacy_interaction_migration.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "session",
-      "lines": [
-        80
-      ],
-      "path": "src/app/apps/rpg/session/loadout.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 11,
-      "fingerprint": "state",
-      "lines": [
-        86,
-        129,
-        133,
-        134,
-        135,
-        141,
-        214,
-        215,
-        275,
-        276,
-        277
-      ],
-      "path": "src/app/apps/rpg/session/loadout.py",
       "rule": "AL019"
     },
     {
@@ -780,27 +666,23 @@
       "rule": "AL019"
     },
     {
-      "count": 4,
+      "count": 2,
       "fingerprint": "inventory_state",
       "lines": [
         35,
-        37,
-        184,
-        188
+        37
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL019"
     },
     {
-      "count": 6,
+      "count": 4,
       "fingerprint": "player_state",
       "lines": [
         27,
         30,
         39,
-        189,
-        190,
-        219
+        197
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL019"
@@ -815,27 +697,25 @@
       "rule": "AL019"
     },
     {
-      "count": 5,
+      "count": 4,
       "fingerprint": "session",
       "lines": [
         48,
         97,
         119,
-        132,
-        192
+        132
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL019"
     },
     {
-      "count": 5,
+      "count": 4,
       "fingerprint": "simulation",
       "lines": [
         43,
         45,
         47,
-        118,
-        191
+        118
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL019"
@@ -876,24 +756,6 @@
         149
       ],
       "path": "src/app/apps/rpg/session/published_opening_progress.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        206
-      ],
-      "path": "src/app/apps/rpg/session/recipe_discovery.py",
-      "rule": "AL019"
-    },
-    {
-      "count": 1,
-      "fingerprint": "state",
-      "lines": [
-        23
-      ],
-      "path": "src/app/apps/rpg/session/recipe_discovery_session.py",
       "rule": "AL019"
     },
     {
@@ -2582,13 +2444,12 @@
       "rule": "AL020"
     },
     {
-      "count": 4,
+      "count": 3,
       "fingerprint": "inventory_state",
       "lines": [
         33,
         62,
-        182,
-        202
+        180
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL020"
@@ -2603,14 +2464,13 @@
       "rule": "AL020"
     },
     {
-      "count": 5,
+      "count": 4,
       "fingerprint": "player_state",
       "lines": [
         22,
         57,
         106,
-        140,
-        181
+        140
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL020"
@@ -2644,12 +2504,11 @@
       "rule": "AL020"
     },
     {
-      "count": 3,
+      "count": 2,
       "fingerprint": "simulation_state",
       "lines": [
         21,
-        56,
-        180
+        56
       ],
       "path": "src/app/apps/rpg/session/public_state_bridge.py",
       "rule": "AL020"

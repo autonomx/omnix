@@ -37,7 +37,8 @@ MECHANIC_OWNERS = {
     "practice": "app.apps.rpg.rules.player.requests", "status": "app.apps.rpg.rules.player.requests",
     "party": "app.apps.rpg.rules.player.requests", "order": "app.apps.rpg.rules.player.requests",
     "talk": "app.apps.rpg.rules.dialogue.plan", "fight": "app.apps.rpg.rules.combat.fight",
-    "ability": "app.apps.rpg.rules.ability_use", "check": "app.apps.rpg.rules.checks",
+    "ability": "app.apps.rpg.rules.ability_use", "hotbar": "app.apps.rpg.rules.ability_use",
+    "check": "app.apps.rpg.rules.checks",
     "grow": "app.apps.rpg.rules.player.progression", "rewind": "app.apps.rpg.session.turn.rewind",
     "act": "app.apps.rpg.session.turn.resolution",  # a free action: no rule of the game decides it
 }
@@ -53,6 +54,7 @@ CHANGE_WRITES = {
     "regard_changed": {"npcs"},
     "resources_changed": {"player"},
     "ability_used": {"player"},
+    "hotbar_changed": {"player"},
     "check_resolved": {"player"},
     "level_choice_made": {"player"},
     # a rewind puts back the game of an earlier revision: the sheet and the simulation whole (paths above any one
@@ -114,7 +116,7 @@ def _examples(doc: dict) -> list:
         (c.DefeatRecorded(defeats=1), doc), (c.CampaignEnded(reason="hardcore"), doc),
         (c.WhereaboutsChanged(people=(c.PersonWhereabouts(npc_id=npc, location_id=here),)), doc),
         (c.RegardChanged(npc_id=npc, delta=-5), doc), (c.ResourcesChanged(stamina=-1), doc),
-        (c.AbilityUsed(ability_id="a:x", ready_at_turn=3), doc),
+        (c.AbilityUsed(ability_id="a:x", ready_at_turn=3), doc), (c.HotbarChanged(slot="2", ability_id="a:x"), doc),
         (c.CheckResolved(kind="persuade", target_id=npc, natural=12, band="success"), doc),
         (c.RevisionRestored(source_revision=0, document=json.loads(json.dumps(doc))), joined),
         (c.QuestStepCompleted(quest_id="quest:voices-in-the-phone", stage=1, next_objective="Go on"), doc),

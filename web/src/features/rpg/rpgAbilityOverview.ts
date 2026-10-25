@@ -74,7 +74,8 @@ export interface AbilityCoveragePreview {
 export interface AbilityOverview {
   className: string;
   treeId: string;
-  abilityPoints: number;
+  /** The level's choices waiting (progression.md): each can teach an ability the tree has. */
+  levelChoices: number;
   playerLevel: number;
   categories: AbilityCategoryPreview[];
   allAbilities: AbilityPreview[];
@@ -97,9 +98,9 @@ export function formatAbilityCost(cost: Record<string, unknown> | undefined): st
     .join(' • ');
 }
 
-/** XP a skill needs for its next rank (ability_runtime.grant_skill_xp): its XP counts within the current rank. */
+/** XP a skill needs for its next rank, where the sheet does not say (progression.md: 50 × (rank + 1)). */
 function skillRankThreshold(rank: number): number {
-  return Math.max(25, rank * 100);
+  return 50 * (rank + 1);
 }
 
 export function buildAbilityOverview(
@@ -125,7 +126,7 @@ export function buildAbilityOverview(
     return {
       className: hasLiveSession ? 'Session hotbar' : 'Preview ability kit',
       treeId: hasLiveSession ? 'session-hotbar' : 'preview-hotbar',
-      abilityPoints: 0,
+      levelChoices: 0,
       playerLevel: 1,
       categories: [
         {
@@ -150,10 +151,10 @@ export function buildAbilityOverview(
   const unlocked = new Set(firstArray(abilityState?.unlocked).map(String));
   const ranks = recordValue(abilityState?.ranks) ?? {};
   const cooldowns = recordValue(abilityState?.cooldowns) ?? {};
-  const abilityPoints = firstNumber(abilityState?.ability_points) ?? 0;
+  const levelChoices = firstNumber(player?.level_choices_pending) ?? 0;
   const playerLevel = firstNumber(player?.level) ?? 1;
   const categoryLookup = buildCategoryLookup(tree);
-  const abilities = rawAbilities.map((rawAbility) => buildAbilityPreview(rawAbility, categoryLookup, unlocked, ranks, cooldowns, abilityPoints, playerLevel));
+  const abilities = rawAbilities.map((rawAbility) => buildAbilityPreview(rawAbility, categoryLookup, unlocked, ranks, cooldowns, levelChoices, playerLevel));
   const abilityById = new Map(abilities.map((ability) => [ability.id, ability]));
   const categories = firstArray(tree.categories).map((rawCategory, index) => buildCategoryPreview(rawCategory, index, abilities, abilityById));
   const fallbackCategory = categories.length ? categories : [{ id: 'abilities', name: 'Abilities', capability: String(tree.primary_capability ?? 'custom'), dimensions: unique(abilities.flatMap((ability) => ability.dimensions)), abilities }];
@@ -177,7 +178,7 @@ export function buildAbilityOverview(
   return {
     className: firstString(tree.class_name) ?? 'Ability tree',
     treeId: firstString(tree.tree_id) ?? 'ability-tree',
-    abilityPoints,
+    levelChoices,
     playerLevel,
     categories: fallbackCategory,
     allAbilities: abilities,
@@ -226,7 +227,7 @@ function buildCoveragePreview(payload: Record<string, unknown> | undefined, stat
   };
 }
 
-function buildAbilityPreview(rawAbility: unknown, categoryLookup: Map<string, string>, unlocked: Set<string>, ranks: Record<string, unknown>, cooldowns: Record<string, unknown>, abilityPoints: number, playerLevel: number): AbilityPreview {
+function buildAbilityPreview(rawAbility: unknown, categoryLookup: Map<string, string>, unlocked: Set<string>, ranks: Record<string, unknown>, cooldowns: Record<string, unknown>, levelChoices: number, playerLevel: number): AbilityPreview {
   const record = recordValue(rawAbility) ?? {};
   const id = firstString(record.ability_id, record.id, record.name) ?? 'ability';
   const kind = firstString(record.kind) ?? 'active';
@@ -234,7 +235,7 @@ function buildAbilityPreview(rawAbility: unknown, categoryLookup: Map<string, st
   const missingPrerequisites = prerequisites.filter((prerequisite) => !unlocked.has(prerequisite));
   const levelRequired = firstNumber(record.level_required) ?? 1;
   const isUnlocked = unlocked.has(id);
-  const isAvailable = !isUnlocked && playerLevel >= levelRequired && missingPrerequisites.length === 0 && abilityPoints > 0;
+  const isAvailable = !isUnlocked && playerLevel >= levelRequired && missingPrerequisites.length === 0 && levelChoices > 0;
   const status: AbilityStatus = isUnlocked ? 'unlocked' : isAvailable ? 'available' : 'locked';
   const rank = firstNumber(ranks[id], record.rank) ?? 1;
   const maxRank = firstNumber(record.max_rank) ?? 1;
@@ -262,7 +263,7 @@ function buildAbilityPreview(rawAbility: unknown, categoryLookup: Map<string, st
     isAvailable,
     missingPrerequisites,
     status,
-    statusLabel: abilityStatusLabel(status, levelRequired, playerLevel, missingPrerequisites, rank, maxRank, cooldown, abilityPoints),
+    statusLabel: abilityStatusLabel(status, levelRequired, playerLevel, missingPrerequisites, cooldown, levelChoices),
   };
 }
 
@@ -354,9 +355,9 @@ function previewAbilityFromHotbar(ability: RpgHotbarAbilityPreview): AbilityPrev
   };
 }
 
-function abilityStatusLabel(status: AbilityStatus, levelRequired: number, playerLevel: number, missingPrerequisites: string[], rank: number, maxRank: number, cooldown: number, abilityPoints: number): string {
+function abilityStatusLabel(status: AbilityStatus, levelRequired: number, playerLevel: number, missingPrerequisites: string[], cooldown: number, levelChoices: number): string {
   if (status === 'unlocked') {
-    return cooldown > 0 ? `Cooldown ${cooldown} turn(s) • rank ${rank}/${maxRank}` : `Unlocked • rank ${rank}/${maxRank}`;
+    return cooldown > 0 ? `Cooldown ${cooldown} turn(s)` : 'Unlocked';
   }
   if (playerLevel < levelRequired) {
     return `Locked • level ${levelRequired}`;
@@ -364,7 +365,7 @@ function abilityStatusLabel(status: AbilityStatus, levelRequired: number, player
   if (missingPrerequisites.length) {
     return `Locked • requires ${missingPrerequisites.map(titleCase).join(', ')}`;
   }
-  return abilityPoints > 0 ? 'Available • costs 1 point' : 'Locked • needs ability point';
+  return levelChoices > 0 ? "Available • a level's choice" : "Locked • learned at a level's choice";
 }
 
 export function abilityDetail(ability: AbilityPreview): string {
