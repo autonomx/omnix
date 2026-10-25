@@ -8,9 +8,9 @@ from app.apps.rpg.narration.narrative_engine import (
     PresentationProfile,
     StructuredNarrativeWriter,
     TurnPresentationRequest,
-    bran_fixture_evidence,
     writer_payload,
 )
+from tests.support.narrative_evidence_fixtures import bran_fixture_evidence
 
 
 def _request() -> TurnPresentationRequest:

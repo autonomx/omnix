@@ -12,8 +12,8 @@ from app.apps.rpg.narration.narrative_engine import (
     NarrativeResponseConflict,
     PresentationProfile,
     TurnPresentationRequest,
-    bran_fixture_evidence,
 )
+from tests.support.narrative_evidence_fixtures import bran_fixture_evidence
 
 
 def _service(repository=None) -> NarrativeEngineService:

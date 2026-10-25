@@ -33,7 +33,6 @@ from .contracts import (
 )
 from .delivery import InMemoryNarrativeDeliveryRepository, NarrativeDeliveryConflict, NarrativeDeliveryCoordinator
 from .evidence import EvidenceAccessContext, EvidenceBroker, EvidenceGrantSet, EvidenceQuery, InMemoryEvidenceSource
-from .fixtures import bran_fixture_evidence, narrative_fixture_evidence, vexira_fixture_evidence
 from .hermes_research import (
     HermesResearchPolicy,
     HermesResearchRequest,
@@ -104,19 +103,16 @@ __all__ = [
     "WriterResult",
     "apply_world_forge_proposal",
     "audit_world_forge_proposal",
-    "bran_fixture_evidence",
     "campaign_bible_evidence",
     "canonical_consumer_bundle",
     "canonical_response_from_dict",
     "detect_scene_changes",
     "legacy_response_projection",
-    "narrative_fixture_evidence",
     "normalize_hermes_research",
     "run_bounded_hermes_research",
     "stable_hash",
     "transcript_projection",
     "tts_projection",
-    "vexira_fixture_evidence",
     "write_validate_repair",
     "writer_payload",
 ]

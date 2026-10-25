@@ -6,7 +6,6 @@ from app.caching.bounded_cache import bounded_lru_cache
 from typing import Iterable
 
 from app.apps.rpg.world.map_contracts import MapContractError, MapDefinition
-from app.apps.rpg.world.map_hierarchy_fixtures import hierarchical_starter_map_definitions
 from app.apps.rpg.world.map_serialization import with_definition_revision
 
 
@@ -63,4 +62,5 @@ class MapDefinitionRepository:
 
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_map_repository() -> MapDefinitionRepository:
-    return MapDefinitionRepository(hierarchical_starter_map_definitions())
+    """The maps outside any campaign: none. A campaign's maps are its world's (``map_world_integration.py``)."""
+    return MapDefinitionRepository()

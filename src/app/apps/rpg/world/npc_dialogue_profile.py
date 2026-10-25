@@ -90,7 +90,7 @@ def build_npc_dialogue_profile(
     runtime_state = _safe_dict(runtime_state)
     topic = _safe_dict(topic)
 
-    biography = get_npc_biography(npc_id)
+    biography = get_npc_biography(npc_id, simulation_state)
     evolution = get_npc_evolution(simulation_state, npc_id=_safe_str(biography.get("npc_id")))
     base_biography = biography
     biography = merged_npc_identity(base_profile=biography, evolution=evolution)

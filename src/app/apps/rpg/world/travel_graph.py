@@ -142,94 +142,6 @@ def _edge_is_available(edge: TravelEdge, state: Mapping[str, Any]) -> bool:
     return True
 
 
-def build_default_travel_graph(seed: Optional[str] = None) -> TravelGraph:
-    """Small deterministic starter graph for 100-turn readiness.
-
-    Keep this intentionally compact. Future bundles can load this from scenario packs.
-    """
-    graph = TravelGraph()
-
-    graph.add_location(
-        "location:rusty_flagon_tavern",
-        name="The Rusty Flagon Tavern",
-        aliases=["tavern", "rusty flagon", "inn", "bran's tavern"],
-        kind="settlement",
-    )
-    graph.add_location(
-        "location:village_square",
-        name="Village Square",
-        aliases=["square", "village", "market square", "outside"],
-        kind="settlement",
-    )
-    graph.add_location(
-        "location:north_road",
-        name="North Road",
-        aliases=["road", "north road", "trail", "path"],
-        kind="road",
-    )
-    graph.add_location(
-        "location:old_mill",
-        name="Old Mill",
-        aliases=["mill", "old mill", "haunted mill", "abandoned mill"],
-        kind="quest_site",
-    )
-    graph.add_location(
-        "location:forest_edge",
-        name="Forest Edge",
-        aliases=["forest", "woods", "forest edge", "tree line"],
-        kind="wilderness",
-    )
-    graph.add_location(
-        "location:river_crossing",
-        name="River Crossing",
-        aliases=["river", "crossing", "bridge", "ford"],
-        kind="road",
-    )
-
-    graph.add_edge(
-        "location:rusty_flagon_tavern",
-        "location:village_square",
-        label="step outside to the village square",
-        direction="outside",
-        aliases=["outside", "leave tavern", "village square", "square"],
-        travel_time_ticks=1,
-    )
-    graph.add_edge(
-        "location:village_square",
-        "location:north_road",
-        label="take the north road",
-        direction="north",
-        aliases=["north", "north road", "road", "follow the road"],
-        travel_time_ticks=1,
-    )
-    graph.add_edge(
-        "location:north_road",
-        "location:old_mill",
-        label="follow the track to the old mill",
-        direction="east",
-        aliases=["mill", "old mill", "haunted mill", "track"],
-        travel_time_ticks=2,
-    )
-    graph.add_edge(
-        "location:north_road",
-        "location:forest_edge",
-        label="turn toward the forest edge",
-        direction="west",
-        aliases=["forest", "woods", "west", "tree line"],
-        travel_time_ticks=1,
-    )
-    graph.add_edge(
-        "location:forest_edge",
-        "location:river_crossing",
-        label="follow the game trail to the river crossing",
-        direction="north",
-        aliases=["river", "crossing", "bridge", "ford"],
-        travel_time_ticks=2,
-    )
-
-    return graph
-
-
 def _world_model(state: Mapping[str, Any]) -> Mapping[str, Any]:
     world_model = state.get("world_model") if isinstance(state, Mapping) else None
     return world_model if isinstance(world_model, Mapping) and world_model.get("locations") else {}
@@ -245,11 +157,11 @@ def _travel_ticks(travel_time: str) -> int:
 
 
 def travel_graph_for_state(state: Mapping[str, Any]) -> TravelGraph:
-    """The session's own routes (a published world's) when it has them, else the starter graph."""
+    """The campaign's routes: its world model's (every campaign plays from a world; the engine has none of its own)."""
     world_model = _world_model(state)
-    if not world_model:
-        return build_default_travel_graph()
     graph = TravelGraph()
+    if not world_model:
+        return graph
     for location_id, location in dict(world_model.get("locations") or {}).items():
         if isinstance(location, Mapping):
             graph.add_location(
@@ -290,7 +202,7 @@ def get_current_location(state: Mapping[str, Any]) -> str:
         or (_world_model(state) and player_state.get("location_id"))
         or state.get("location")
         or _world_model(state).get("start_location_id")
-        or "location:rusty_flagon_tavern"
+        or ""
     )
 
 

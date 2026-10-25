@@ -129,10 +129,10 @@ _REPOSITORY_LOCK = threading.Lock()
 _MAX_REPOSITORIES = 64
 
 
-def _repository_key(session: Mapping[str, Any], from_world: bool) -> str:
+def _repository_key(session: Mapping[str, Any]) -> str:
     raw = world_graph_source(session)
     inputs = {key: raw.get(key) for key in ("schema_version", "seed", "locations", "routes", "map_bindings")}
-    text = json.dumps({"inputs": inputs, "from_world": from_world}, sort_keys=True, default=str, separators=(",", ":"))
+    text = json.dumps({"inputs": inputs}, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -141,14 +141,12 @@ def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepos
     if model is None:
         return default_map_repository()
 
-    # A published world's maps are its own; the built-in fixture maps serve only a generated campaign's graph.
-    from_world = not _mapping(_mapping(session.get("state")).get("world_graph"))
-    key = _repository_key(session, from_world)
+    key = _repository_key(session)
     with _REPOSITORY_LOCK:
         cached = _REPOSITORIES.get(key)
     if cached is not None:
         return cached
-    repository = _build_repository(model, from_world)
+    repository = _build_repository(model)
     with _REPOSITORY_LOCK:
         _REPOSITORIES[key] = repository
         while len(_REPOSITORIES) > _MAX_REPOSITORIES:
@@ -156,9 +154,10 @@ def map_repository_for_session(session: Mapping[str, Any]) -> MapDefinitionRepos
     return repository
 
 
-def _build_repository(model: CanonicalWorldMapModel, from_world: bool) -> MapDefinitionRepository:
-    definitions = [] if from_world else list(default_map_repository().list())
-    existing_ids = {definition.map_id for definition in definitions}
+def _build_repository(model: CanonicalWorldMapModel) -> MapDefinitionRepository:
+    """The campaign's maps: its world's own, region and settlement maps drawn from its graph where it has none."""
+    definitions: list[MapDefinition] = []
+    existing_ids: set[str] = set()
     region_ids = sorted({node.region_id for node in model.graph.locations.values()})
     for region_id in region_ids:
         map_id = _region_map_id(region_id)

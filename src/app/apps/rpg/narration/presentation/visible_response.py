@@ -374,18 +374,6 @@ def _direct_dialogue_fallback(player_input: str) -> dict[str, Any] | None:
     target = _direct_npc_name(player_input)
     if not target:
         return None
-    if target.casefold() == "bran":
-        return {
-            "narration": "Bran glances around the Rusty Flagon before answering.",
-            "npc": {
-                "speaker_id": "npc:bran",
-                "speaker": "Bran",
-                "line": (
-                    "Steady enough. Rooms, food, and rumors keep the doors open, "
-                    "though the road has been strange lately."
-                ),
-            },
-        }
     return {
         "narration": f"{target} considers the question before answering.",
         "npc": {

@@ -8,7 +8,6 @@ from app.apps.rpg.narration.narrative_engine import (
 from app.apps.rpg.genesis.forge import turn_grounding
 from app.apps.rpg.genesis.forge import npc_lore_projection
 from app.apps.rpg.genesis.forge.npc_lore_projection import ensure_encountered_npc_lore
-from app.apps.rpg.world import npc_biography_registry
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 
 
@@ -18,6 +17,15 @@ def _session() -> dict:
         "state": {"current_location": "Rusty Flagon Tavern"},
         "simulation_state": {
             "tick": 7,
+            # The world's people (published_world_setup.py): Bran is this world's, not the engine's.
+            "world_model": {"npcs": {"npc:Bran": {
+                "id": "npc:Bran",
+                "name": "Bran",
+                "role": "Tavern keeper",
+                "description": ("Bran keeps the tavern running, watches debts carefully, and treats rumors "
+                                "as useful only when they come from reliable mouths."),
+                "secrets": ["Bran may know more about old mill debts than he admits."],
+            }}},
             "present_npc_state": {
                 "location:rusty-flagon-tavern": ["npc:Bran"],
             },
@@ -36,7 +44,6 @@ def _empty_bible() -> dict:
 
 def test_encountered_bran_gets_one_player_known_bio_and_dossier(monkeypatch) -> None:
     monkeypatch.setattr(npc_lore_projection, "load_npc_profile", lambda _npc_id: {})
-    monkeypatch.setattr(npc_biography_registry, "get_file_npc_profile", None)
     updated, ensured, created, changed = ensure_encountered_npc_lore(
         _empty_bible(),
         _session(),
@@ -79,7 +86,6 @@ def test_encountered_bran_gets_one_player_known_bio_and_dossier(monkeypatch) -> 
 
 def test_encountered_npc_bio_is_searchable_gameplay_evidence(monkeypatch) -> None:
     monkeypatch.setattr(npc_lore_projection, "load_npc_profile", lambda _npc_id: {})
-    monkeypatch.setattr(npc_biography_registry, "get_file_npc_profile", None)
     bible, _ensured, _created, _changed = ensure_encountered_npc_lore(
         _empty_bible(),
         _session(),

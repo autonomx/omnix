@@ -8,9 +8,8 @@ from app.apps.rpg.narration.narrative_engine import (
     PresentationProfile,
     SceneChange,
     TurnPresentationRequest,
-    bran_fixture_evidence,
-    vexira_fixture_evidence,
 )
+from tests.support.narrative_evidence_fixtures import bran_fixture_evidence, vexira_fixture_evidence
 
 
 def test_ordinary_dialogue_plans_reaction_then_direct_answer() -> None:

@@ -1,53 +1,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List
 
 from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
-MAX_GOALS_PER_NPC = 4
 MAX_RECENT_GOAL_EVENTS = 20
-
-
-DEFAULT_NPC_GOALS = {
-    "npc:Bran": [
-        {
-            "goal_id": "goal:bran:keep_tavern_orderly",
-            "kind": "maintain_order",
-            "priority": 3,
-            "location_id": "loc_tavern",
-            "status": "active",
-            "summary": "Keep the tavern calm, paid, and orderly.",
-        },
-        {
-            "goal_id": "goal:bran:gather_road_rumors",
-            "kind": "gather_rumors",
-            "priority": 2,
-            "location_id": "loc_tavern",
-            "status": "active",
-            "summary": "Listen for reliable news from the roads.",
-        },
-    ],
-    "npc:Mira": [
-        {
-            "goal_id": "goal:mira:learn_local_trouble",
-            "kind": "gather_rumors",
-            "priority": 3,
-            "location_id": "loc_tavern",
-            "status": "active",
-            "summary": "Collect useful rumors without drawing too much attention.",
-        },
-        {
-            "goal_id": "goal:mira:avoid_trouble",
-            "kind": "avoid_trouble",
-            "priority": 1,
-            "location_id": "loc_tavern",
-            "status": "active",
-            "summary": "Avoid being pulled into open trouble.",
-        },
-    ],
-}
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -85,47 +44,15 @@ def _goal_active_at(goal: Dict[str, Any], *, tick: int, location_id: str = "") -
     return True
 
 
-def seed_default_npc_goals(
-    simulation_state: Dict[str, Any],
-    *,
-    tick: int = 0,
-    location_id: str = "",
-) -> Dict[str, Any]:
+def refresh_npc_goal_state(simulation_state: Dict[str, Any], *, tick: int = 0) -> Dict[str, Any]:
+    """The goal state as of ``tick``: the people pursue the goals the story gives them (the engine seeds none)."""
     state = ensure_npc_goal_state(simulation_state)
-    goals_root = _safe_dict(state.get("goals"))
-    created: List[str] = []
-    active_location = location_id or current_location_id(simulation_state)
-    for npc_id, goals in DEFAULT_NPC_GOALS.items():
-        existing = _safe_list(goals_root.get(npc_id))
-        existing_ids = {_safe_str(goal.get("goal_id")) for goal in existing if isinstance(goal, dict)}
-        for goal in goals:
-            goal = dict(goal)
-            if active_location and goal.get("location_id") and goal.get("location_id") != active_location:
-                continue
-            if goal["goal_id"] in existing_ids:
-                continue
-            goal.setdefault("created_tick", int(tick or 0))
-            goal.setdefault("expires_tick", int(tick or 0) + 200)
-            existing.append(goal)
-            created.append(cast(str, goal["goal_id"]))
-        goals_root[npc_id] = existing[-MAX_GOALS_PER_NPC:]
-    state["goals"] = goals_root
-    if created:
-        events = _safe_list(state.get("recent_goal_events"))
-        events.append({
-            "kind": "default_goals_seeded",
-            "goal_ids": created,
-            "tick": int(tick or 0),
-            "location_id": active_location,
-            "source": "deterministic_npc_goal_state",
-        })
-        state["recent_goal_events"] = events[-MAX_RECENT_GOAL_EVENTS:]
     state["debug"] = {
         **_safe_dict(state.get("debug")),
         "last_seed_tick": int(tick or 0),
-        "last_created_goal_count": len(created),
+        "last_created_goal_count": 0,
     }
-    return {"created_goal_ids": created, "npc_goal_state": deepcopy(state)}
+    return {"created_goal_ids": [], "npc_goal_state": deepcopy(state)}
 
 
 def active_goals_for_npc(

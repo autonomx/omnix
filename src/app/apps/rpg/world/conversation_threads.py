@@ -37,7 +37,7 @@ from app.apps.rpg.world.npc_dialogue_recall import (
     player_input_requests_recall,
 )
 from app.apps.rpg.world.npc_goal_state import (
-    seed_default_npc_goals,
+    refresh_npc_goal_state,
 )
 from app.apps.rpg.world.npc_history_state import (
     prune_npc_history_state,
@@ -121,7 +121,7 @@ def maybe_advance_conversation_thread(
             return companion_acceptance_attempt
 
     location_id = current_location_id(simulation_state)
-    location = get_location(location_id)
+    location = get_location(location_id, simulation_state)
 
     forced_invite_payload = {}
 
@@ -285,7 +285,7 @@ def maybe_advance_conversation_thread(
             "conversation_thread_state": get_conversation_thread_state(simulation_state),
         }
 
-    seed_default_npc_goals(simulation_state, tick=tick, location_id=location_id)
+    refresh_npc_goal_state(simulation_state, tick=tick)
 
     # QRS: Prune NPC history before starting a new conversation beat.
     prune_npc_history_state(
@@ -306,8 +306,8 @@ def maybe_advance_conversation_thread(
     if director_intent.get("selected"):
         speaker_npc_id = _safe_str(director_intent.get("speaker_id"))
         listener_npc_id = _safe_str(director_intent.get("listener_id"))
-        speaker_bio = get_npc_biography(speaker_npc_id)
-        listener_bio = get_npc_biography(listener_npc_id)
+        speaker_bio = get_npc_biography(speaker_npc_id, simulation_state)
+        listener_bio = get_npc_biography(listener_npc_id, simulation_state)
         participants = [
             {
                 "id": speaker_npc_id,

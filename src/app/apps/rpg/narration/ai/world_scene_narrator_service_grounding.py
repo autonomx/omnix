@@ -600,14 +600,14 @@ def _ground_action_result_text(
                 return grounded
 
         lower_service_text = text.lower()
+        provider = _safe_str(service_result.get("provider_name")).strip()
         repeats_service_action = (
             lower_service_text.startswith("you ")
             or "you ask" in lower_service_text
             or "you inquire" in lower_service_text
             or "you request" in lower_service_text
             or "renting a room" in lower_service_text
-            or "from bran" in lower_service_text
-            or "from elara" in lower_service_text
+            or bool(provider and f"from {provider.casefold()}" in lower_service_text)
             or "what she sells" in lower_service_text
             or "heard any rumors" in lower_service_text
         )
@@ -633,7 +633,8 @@ def _ground_action_result_text(
     )
 
     if repeats_player_action and _is_accommodation_request(narration_context):
-        return "Bran considers your request."
+        provider = _safe_str(service_result.get("provider_name")).strip()
+        return f"{provider} considers your request." if provider else "Your request is considered."
 
     return text
 

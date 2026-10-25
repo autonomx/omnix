@@ -1,8 +1,8 @@
-"""Handcrafted evidence fixtures used to prove the engine before World Forge."""
+"""Handcrafted evidence for the narrative engine's tests (a tavern keeper, a villain): test data, not engine content."""
 from __future__ import annotations
 
-from .authority import AuthorityClass, VisibilityClass
-from .contracts import EvidenceRecord
+from app.apps.rpg.narration.narrative_engine.authority import AuthorityClass, VisibilityClass
+from app.apps.rpg.narration.narrative_engine.contracts import EvidenceRecord
 
 
 def bran_fixture_evidence() -> tuple[EvidenceRecord, ...]:

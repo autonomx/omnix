@@ -24,7 +24,7 @@ def build_scene_population_state(
 
     present: List[Dict[str, Any]] = []
     for npc_id in present_npcs_at_location(simulation_state, location_id=location_id):
-        bio = get_npc_biography(npc_id)
+        bio = get_npc_biography(npc_id, simulation_state)
         schedule = active_schedule_for_npc(simulation_state, npc_id=npc_id, tick=tick)
         present.append(
             {

@@ -5,13 +5,14 @@ import logging
 
 from typing import Any, Dict, List, cast
 
-from app.apps.rpg.narration.dialogue_state import get_dialogue_context, update_dialogue_state
+from app.apps.rpg.narration.dialogue_state import update_dialogue_state
 from app.apps.rpg.narration.npc_dialogue.intelligence import (
     build_npc_intelligence_prompt,
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,
 )
 from app.apps.rpg.foundation.provider_access import get_provider  # RPG's route, its calls counted
+from app.apps.rpg.foundation.state.people import world_people
 
 from .runtime_narration_common import NARRATION_FORMAT_VERSION, _norm, _safe_str
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list
@@ -56,98 +57,6 @@ def _build_dialogue_state_update_payload(
         return _safe_dict(state.get("dialogue_state"))
     except Exception:
         return {}
-
-
-def _dialogue_aware_bran_line(
-    *,
-    player_action: str,
-    dialogue_context: Dict[str, Any],
-    recent_lines: List[str],
-) -> str:
-    text = _norm(player_action)
-    repeat_count = int(_safe_dict(dialogue_context).get("repeat_count") or 0)
-    is_repeat = bool(_safe_dict(dialogue_context).get("is_repeat"))
-    last_answer = _safe_str(_safe_dict(dialogue_context).get("last_npc_answer"))
-
-    def choose(candidates: List[str]) -> str:
-        for line in candidates:
-            if not _line_was_recently_used(line, recent_lines):
-                return line
-        return candidates[-1] if candidates else ""
-
-    if is_repeat and repeat_count >= 2:
-        if "report" in text and ("trail" in text or "road" in text or "danger" in text):
-            return choose(
-                [
-                    "Bran exhales through his nose. “You have told me that already. If the trail points to the road, stop reporting it to me and follow it before the mud dries.”",
-                    "Bran’s patience thins. “Same answer: the road is the danger. You will learn more outside than by repeating the report.”",
-                    "Bran glances toward the door. “I heard you. Road, trail, danger. Now act on it.”",
-                ]
-            )
-        if "cloaked traveler" in text or "witness" in text or "side door" in text:
-            return choose(
-
-            [
-                "Bran frowns. “I already told you the useful part: the cloaked traveler left by the side door. Stop asking me in circles and check the street before the trail goes cold.”",
-                "Bran taps the bar once. “Same answer: side door, then the road. If you want proof, look for tracks instead of another reply from me.”",
-                "Bran lowers his voice. “You keep asking the same thing. The lead is outside now: door, street, road.”",
-            ]
-        )
-        return choose(
-            [
-                "Bran studies you for a moment. “You have asked that already. Ask me something sharper, or act on what you know.”",
-                "Bran shakes his head. “Repeating the question will not change the answer.”",
-            ]
-        )
-
-    if "what" in text and ("saw" in text or "personally saw" in text) and "cloaked traveler" in text:
-        return choose(
-            [
-                "Bran leans closer. “I saw the traveler avoid the common room, keep their hood low, and slip out through the side door. If you want the truth, check the threshold and the street.”",
-                "Bran’s jaw tightens. “They did not leave like a guest. They left like someone being followed. Side door first, road second.”",
-            ]
-        )
-
-    if "where" in text and ("cloaked traveler" in text or "witness" in text or "side door" in text):
-        return choose(
-            [
-                "The cloaked traveler left through the side door and angled toward the road.",
-                "Check the side door first. If there are tracks, the street will tell you more than I can.",
-                "They went out fast, toward the road. Follow that before the trail goes cold.",
-            ]
-        )
-
-    if "report" in text and ("trail" in text or "road" in text or "witness" in text):
-        return choose(
-            [
-                "Bran goes still. “Then it is the road. That is what I feared.”",
-                "Bran nods once. “That fits. The road trouble is not rumor anymore.”",
-                "Bran’s face hardens. “If the trail points to the road, you have your next step.”",
-            ]
-        )
-
-    if "side door" in text or "boot prints" in text or "mud" in text or "torn cloth" in text:
-        return choose(
-            [
-                "Look low near the threshold. Travelers hide faces, not footprints.",
-                "The side door sticks in wet weather. Anyone leaving in a hurry may have left a mark.",
-            ]
-        )
-
-    if last_answer:
-        return choose(
-            [
-                f"Bran answers carefully. “Remember what I said: {last_answer} Now decide what you are doing with it.”",
-                "Bran narrows his eyes. “I can help with facts, not fog. Ask about the traveler, the side door, or the road.”",
-            ]
-        )
-
-    return choose(
-        [
-            "Bran watches you over the rim of a cup. “Ask plainly. Are you looking for the traveler, the road, or the person who frightened them?”",
-            "Bran lowers his voice. “If this is about the trouble outside, ask the question you are avoiding.”",
-        ]
-    )
 
 
 def _line_was_recently_used(line: str, recent_lines: List[str]) -> bool:
@@ -206,128 +115,24 @@ def classify_player_action(player_action: str) -> str:
 
 
 def infer_npc_speaker(player_action: str, simulation_state: Dict[str, Any] | None = None) -> str:
+    """The person the player addresses by name: one of the world's people (the engine names nobody of its own)."""
     text = _norm(player_action)
-    aliases = {
-        "bran": "Bran",
-        "innkeeper": "Bran",
-        "mira": "Mira",
-        "cloaked traveler": "Cloaked Traveler",
-        "traveler": "Cloaked Traveler",
-        "patron": "Local Patron",
-        "guard": "Guard",
-        "merchant": "Merchant",
-    }
-    for key, value in aliases.items():
-        if key in text:
-            return value
-
     simulation_state = _safe_dict(simulation_state)
-    profiles = _safe_dict(_safe_dict(simulation_state.get("npc_profile_state")).get("profiles"))
-    for profile in profiles.values():
-        profile = _safe_dict(profile)
-        name = _safe_str(profile.get("name"))
+    rows = [
+        *world_people(simulation_state).values(),
+        *_safe_dict(_safe_dict(simulation_state.get("npc_profile_state")).get("profiles")).values(),
+    ]
+    for row in rows:
+        name = _safe_str(_safe_dict(row).get("name"))
         if name and _norm(name) in text:
             return name
     return ""
 
 
-def _fallback_npc_line(
-    *,
-    speaker: str,
-    player_action: str,
-    action_type: str,
-    simulation_state: Dict[str, Any] | None = None,
-) -> str:
-    text = _norm(player_action)
+def _fallback_npc_line(*, speaker: str) -> str:
+    """A reply that claims nothing: the fallback is presentation only and knows no one's story."""
     if not speaker:
         return ""
-    recent = _recent_npc_lines(_safe_dict(simulation_state), speaker)
-    dialogue_context = get_dialogue_context(
-        _safe_dict(simulation_state),
-        npc_id=speaker,
-        player_action=player_action,
-    )
-
-    def choose(candidates: List[str]) -> str:
-        for line in candidates:
-            if not _line_was_recently_used(line, recent):
-                return line
-        return candidates[-1] if candidates else ""
-
-    if speaker == "Bran":
-        smart_line = _dialogue_aware_bran_line(
-            player_action=player_action,
-            dialogue_context=dialogue_context,
-            recent_lines=recent,
-        )
-        if smart_line:
-            return smart_line
-
-        if "where" in text and ("witness" in text or "cloaked traveler" in text or "side door" in text):
-            return choose([
-                "The cloaked traveler left through the side door and kept their face turned from the room.",
-                "Check the side door first. If there are tracks, the street will tell you more than I can.",
-                "They went out fast, toward the road. Ask less broadly and follow that trail before it goes cold.",
-            ])
-        if "current objective" in text or "anything that can help" in text:
-            return choose([
-                "Be specific. Are you asking about the witness, the road, or the person who left by the side door?",
-                "If you mean the witness, stop circling it. The side door and the road are your next leads.",
-                "I can help with facts, not fog. Ask me about the traveler or check the exit.",
-            ])
-        if "report" in text and ("witness" in text or "trail" in text or "road" in text):
-            return choose([
-                "Then it is the road. If the traveler's trail points that way, this is bigger than tavern fear.",
-                "That matches what I feared. The road has been wrong for days, and now we have a witness thread.",
-                "Good. If you have the trail, follow it carefully. Bandits do not leave witnesses twice.",
-            ])
-        if "side door" in text or "boot prints" in text or "mud" in text or "torn cloth" in text:
-            return choose([
-                "The side door sticks in wet weather. Anyone leaving in a hurry would have left a mark there.",
-                "Look low, near the threshold. Travelers hide faces, not footprints.",
-                "If the street caught mud from their boots, you may still have a trail.",
-            ])
-        if "bandit" in text or "road" in text:
-            return choose([
-                "If the road is involved, then this is bigger than tavern gossip. Be careful how loudly you ask.",
-                "The road has been wrong for days. People come in pale, then pretend they saw nothing.",
-                "Bandits do not leave witnesses twice. If you go, go prepared.",
-            ])
-        if "witness" in text or "traveler" in text or "found" in text:
-            return choose([
-                "Slow down and tell me what you know. Around here, one witness can change the whole story.",
-                "The cloaked traveler is the thread you want. They left fast and kept their face turned away.",
-                "Find that traveler, then come back to me. I will know whether the story fits.",
-            ])
-        if "room" in text or "rent" in text:
-            return choose([
-                "I have rooms, but tonight I am more worried about what followed people here than where they sleep.",
-                "A bed is easy. Explaining why travelers are afraid of the road is not.",
-                "I can rent you a room, but if you are chasing this trouble, you will not stay in it long.",
-            ])
-        return choose([
-            "Say what you need to say. I am listening, even if the rest of the room is pretending not to.",
-            "Be specific. I can help with facts, not fog.",
-            "If this is about the trouble outside, ask the question you are avoiding.",
-        ])
-    if speaker == "Mira":
-        return choose([
-            "I notice the things people try to hide. Ask plainly, and I will tell you what I saw.",
-            "The side door matters. People used it tonight who did not want attention.",
-            "If Bran is being careful, it is because someone in this room is listening.",
-        ])
-    if speaker == "Cloaked Traveler":
-        return choose([
-            "I did not want to be noticed. That should tell you enough about how dangerous this is.",
-            "I saw the road trouble, and I left before it could follow me inside.",
-            "Do not ask me loudly. The men on the road have friends who listen.",
-        ])
-    if speaker == "Local Patron":
-        return choose([
-            "People saw more than they are admitting. Fear has a way of keeping mugs close and mouths shut.",
-            "The traveler came in like a hunted animal. That is all I will say with everyone listening.",
-            "If you want answers, watch who refuses to look toward the door.",
-        ])
     return "The reply comes cautiously, shaped by the pressure in the room."
 
 
@@ -372,12 +177,7 @@ def build_deterministic_narration_payload(
             logger.debug("suppressed error in %s", "build_deterministic_narration_payload", exc_info=True)
 
         if not npc_line:
-            npc_line = _fallback_npc_line(
-                speaker=speaker,
-                player_action=player_action,
-                action_type=action_type,
-                simulation_state=simulation_state,
-            )
+            npc_line = _fallback_npc_line(speaker=speaker)
     elif action_type == "exploration":
         narration = "The search draws out grounded details from the scene: small marks, watchful faces, and signs of recent tension."
         npc_line = ""
@@ -387,8 +187,7 @@ def build_deterministic_narration_payload(
     elif action_type == "combat":
         narration = "The hostile motion sharpens the moment, but the actual outcome remains bound to the combat result."
         npc_line = ""
-    elif action_type == "service":
-        speaker = speaker or "Bran"
+    elif action_type == "service" and speaker:
         narration = "The practical request lands against the unease of the room, making ordinary business feel less ordinary."
         recent_lines = _recent_npc_lines(simulation_state, speaker)
         try:
@@ -409,12 +208,7 @@ def build_deterministic_narration_payload(
             logger.debug("suppressed error in %s", "build_deterministic_narration_payload", exc_info=True)
 
         if not npc_line:
-            npc_line = _fallback_npc_line(
-                speaker=speaker,
-                player_action=player_action,
-                action_type=action_type,
-                simulation_state=simulation_state,
-            )
+            npc_line = _fallback_npc_line(speaker=speaker)
     else:
         narration = "The moment responds without producing a major new consequence."
         npc_line = ""

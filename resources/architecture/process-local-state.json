@@ -1207,15 +1207,6 @@
       "invalidation": "unload_image_provider_cache"
     },
     {
-      "path": "src/app/apps/rpg/world/npc_profile_loader.py",
-      "symbol": "load_all_file_npc_profiles.__cache__",
-      "category": "cache",
-      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
-      "max_entries": 1,
-      "ttl_seconds": 3600.0,
-      "invalidation": "load_all_file_npc_profiles.cache_clear"
-    },
-    {
       "path": "src/app/apps/rpg/genesis/worlds/generation_coordinator.py",
       "symbol": "_reconcile_lock",
       "category": "cache",

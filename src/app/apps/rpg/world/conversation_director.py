@@ -13,15 +13,6 @@ from app.apps.rpg.world.npc_presence_runtime import (
 from app.apps.rpg.world.scene_continuity_state import scene_continuity_for_location
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
-DEFAULT_LOCATION_NPCS = {
-    # Conservative fallbacks only. Do not introduce authority/guest NPCs such
-    # as GuardCaptain unless the current scene/presence state explicitly lists
-    # them as present.
-    "loc_tavern": ["npc:Bran", "npc:Mira"],
-    "loc_market": ["npc:Merchant"],
-}
-
-
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -98,9 +89,6 @@ def present_npcs_for_location(simulation_state: Dict[str, Any], *, location_id: 
         add_many(_extract_npc_ids_from_value(thread.get("participants")))
 
     # 4. Conservative scene fallback.
-    if not ordered:
-        add_many(DEFAULT_LOCATION_NPCS.get(location_id, []))
-
     return ordered
 
 
@@ -119,7 +107,7 @@ def _topic_score_for_npc(
 ) -> int:
     topic = _safe_dict(topic)
     topic_type = _safe_str(topic.get("topic_type"))
-    bio = get_npc_biography(npc_id)
+    bio = get_npc_biography(npc_id, simulation_state)
     role = _safe_str(bio.get("role")).lower()
     knowledge = _safe_dict(bio.get("knowledge_boundaries"))
     knows_about = " ".join(_safe_str(v).lower() for v in _safe_list(knowledge.get("knows_about")))

@@ -8,7 +8,7 @@ from app.apps.rpg.world.conversation_settings import normalize_conversation_sett
 from app.apps.rpg.world.conversation_topics import select_conversation_topic
 from app.apps.rpg.rules.location_registry import current_location_id
 from app.apps.rpg.world.npc_biography_registry import get_npc_biography
-from app.apps.rpg.world.npc_goal_state import dominant_goal_for_npc, seed_default_npc_goals
+from app.apps.rpg.world.npc_goal_state import dominant_goal_for_npc, refresh_npc_goal_state
 from app.apps.rpg.world.npc_presence_runtime import (
     present_npcs_at_location,
     update_present_npcs_for_location,
@@ -49,29 +49,17 @@ def ensure_scene_activity_state(simulation_state: Dict[str, Any]) -> Dict[str, A
 def _present_npcs(simulation_state: Dict[str, Any], *, tick: int) -> List[Dict[str, str]]:
     location_id = current_location_id(simulation_state)
     update_present_npcs_for_location(simulation_state, location_id=location_id, tick=tick)
-    npc_ids = present_npcs_at_location(simulation_state, location_id=location_id)
-    if npc_ids:
-        result = []
-        for npc_id in npc_ids:
-            bio = get_npc_biography(npc_id)
-            result.append(
-                {
-                    "npc_id": npc_id,
-                    "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
-                    "role": _safe_str(bio.get("role")),
-                }
-            )
-        return result
-    # Conservative fallback
-    if location_id == "loc_tavern":
-        return [
-            {"npc_id": "npc:Bran", "name": "Bran", "role": "tavern_keeper"},
-            {"npc_id": "npc:Mira", "name": "Mira", "role": "regular"},
-        ]
-    return [
-        {"npc_id": "npc:Bran", "name": "Bran", "role": "local"},
-        {"npc_id": "npc:Mira", "name": "Mira", "role": "local"},
-    ]
+    result = []
+    for npc_id in present_npcs_at_location(simulation_state, location_id=location_id):
+        bio = get_npc_biography(npc_id, simulation_state)
+        result.append(
+            {
+                "npc_id": npc_id,
+                "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
+                "role": _safe_str(bio.get("role")),
+            }
+        )
+    return result  # only who is here: the world's people, never stand-ins
 
 
 def _cooldown_key(*, npc_id: str, location_id: str, kind: str) -> str:
@@ -148,7 +136,7 @@ def maybe_schedule_scene_activity(
     settings = normalize_conversation_settings(settings or {})
     state = ensure_scene_activity_state(simulation_state)
     location_id = current_location_id(simulation_state)
-    seed_default_npc_goals(simulation_state, tick=tick, location_id=location_id)
+    refresh_npc_goal_state(simulation_state, tick=tick)
 
     if not settings.get("allow_scene_activities", True) and not force:
         return {"scheduled": False, "reason": "scene_activities_disabled", "scene_activity_state": deepcopy(state)}

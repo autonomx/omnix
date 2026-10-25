@@ -33,7 +33,6 @@ _LOGGER_NAMES = (
     "app.composition.gateway.rpg",
     "app.apps.rpg.edge.api.feature_routes.rpg_session_routes",
     "app.composition.gateway.rpg_direct_turn_routes",
-    "app.apps.rpg.session.jobs.turn_job_mirror",
 )
 _STANDARD_LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 _REDACTED_KEY_PARTS = (

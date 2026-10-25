@@ -24,39 +24,6 @@ EnvironmentSeedState = dict[str, Any]
 
 _RECENT_CONDITION_DEFAULTS: dict[str, int] = dict(RECENT_CONDITION_KEYS)
 
-_LOCATION_ENVIRONMENT_DEFAULTS: dict[str, dict[str, Any]] = {
-    "rusty_flagon_tavern": {
-        "region_id": "market_road",
-        "climate_profile_id": "temperate_hills",
-        "weather_condition": "rain",
-        "scene": {"exposure": "indoor", "shelter": "sheltered", "light_override": "tavern_lit"},
-    },
-    "market_district": {
-        "region_id": "town",
-        "climate_profile_id": "temperate_hills",
-        "weather_condition": "cloudy",
-        "scene": {"exposure": "outdoor", "shelter": "partly_sheltered"},
-    },
-    "northern_road": {
-        "region_id": "trade_road",
-        "climate_profile_id": "road_lowlands",
-        "weather_condition": "overcast",
-        "scene": {"exposure": "outdoor", "shelter": "exposed"},
-    },
-    "glimmerdeep_pass": {
-        "region_id": "mountain_pass",
-        "climate_profile_id": "northern_mountains",
-        "weather_condition": "windy",
-        "scene": {"exposure": "outdoor", "shelter": "exposed"},
-    },
-    "old_quarry": {
-        "region_id": "abandoned_works",
-        "climate_profile_id": "quarry_hills",
-        "weather_condition": "overcast",
-        "scene": {"exposure": "outdoor", "shelter": "exposed"},
-    },
-}
-
 _CONDITION_ALIASES: dict[str, str] = {
     "rainy": "rain",
     "raining": "rain",
@@ -84,8 +51,8 @@ def build_initial_environment_seed_state(
     """
 
     normalized_location_id = _normalize_identifier(location_id, "starting_location")
-    # A world's place says how it is met (its region, climate and exposure); the table is the older starter town's.
-    location_defaults = place_environment or _LOCATION_ENVIRONMENT_DEFAULTS.get(normalized_location_id, {})
+    # A world's place says how it is met (its region, climate and exposure); the engine has no places of its own.
+    location_defaults = place_environment or {}
     region_id = str(location_defaults.get("region_id") or DEFAULT_REGION_ID)
     climate_profile_id = str(location_defaults.get("climate_profile_id") or DEFAULT_CLIMATE_PROFILE_ID)
     time_label = str((location or {}).get("time_label") or "Day 1 • 08:00")

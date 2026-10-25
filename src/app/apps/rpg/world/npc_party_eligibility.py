@@ -29,16 +29,11 @@ def evaluate_npc_party_join_eligibility(
             "source": "deterministic_npc_party_eligibility",
         }
 
-    bio = get_npc_biography(npc_id)
+    bio = get_npc_biography(npc_id, simulation_state)
     evo = get_npc_evolution(simulation_state, npc_id=npc_id)
     rep = get_npc_reputation(simulation_state, npc_id=npc_id)
 
     party = _safe_dict(evo.get("party_join_eligibility"))
-    # A published world's people are named in the session's own index, not the starter biographies (whose
-    # stand-in for an unknown id is named by its slug: "liora-fen").
-    indexed = _safe_dict(_safe_dict(_safe_dict(simulation_state).get("npc_index")).get(npc_id))
-    if _safe_str(indexed.get("name")):
-        bio = {**bio, "name": _safe_str(indexed.get("name")), "role": _safe_str(indexed.get("role") or bio.get("role"))}
     required_trust = _safe_int(party.get("requires_player_trust"), 0)
     trust = _safe_int(rep.get("trust"), 0)
 

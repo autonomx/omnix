@@ -18,7 +18,7 @@ from app.apps.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
     goal_topic_bias,
     record_goal_influence,
-    seed_default_npc_goals,
+    refresh_npc_goal_state,
 )
 from app.apps.rpg.foundation.safe_values import safe_dict as _safe_dict, safe_list as _safe_list, safe_str as _safe_str
 
@@ -195,20 +195,6 @@ def select_conversation_participants(
 
 
 def _topic_for_location(location_id: str) -> Dict[str, str]:
-    if location_id == "loc_tavern":
-        return {
-            "topic_id": "tavern_evening_rumors",
-            "topic": "the mood in the tavern",
-            "signal_kind": "rumor_interest",
-            "summary": "The tavern staff trade quiet observations about travelers and local rumors.",
-        }
-    if location_id == "loc_market":
-        return {
-            "topic_id": "market_trade_pressure",
-            "topic": "market traffic",
-            "signal_kind": "market_pressure",
-            "summary": "Market workers comment on stock, traffic, and the day's trade.",
-        }
     return {
         "topic_id": "local_activity",
         "topic": "local activity",
@@ -223,14 +209,6 @@ def _line_for_participant(
     location_id: str,
     beat_index: int,
 ) -> str:
-    if location_id == "loc_tavern":
-        if beat_index % 2 == 1:
-            return "The room has been busier than usual tonight."
-        return "Travelers always bring more stories than coin."
-    if location_id == "loc_market":
-        if beat_index % 2 == 1:
-            return "The market crowd is moving quickly today."
-        return "Busy stalls mean both opportunity and trouble."
     if beat_index % 2 == 1:
         return "The mood nearby is shifting."
     return "Best keep the exchange grounded in what is happening here."
@@ -365,7 +343,7 @@ def _apply_goal_bias_to_player_inclusion(
     """Adjust player_inclusion_chance_percent based on the dominant NPC goal."""
     if not settings.get("allow_npc_goal_influence", True):
         return {"settings": settings, "goal_bias": 0, "goal": {}}
-    seed_default_npc_goals(simulation_state, tick=tick, location_id=location_id)
+    refresh_npc_goal_state(simulation_state, tick=tick)
     speaker = _safe_dict(participants[0] if participants else {})
     npc_id = _safe_str(speaker.get("id"))
     goal = dominant_goal_for_npc(simulation_state, npc_id, tick=tick, location_id=location_id)

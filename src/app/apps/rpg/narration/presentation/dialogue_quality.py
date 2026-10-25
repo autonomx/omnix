@@ -782,14 +782,6 @@ def _recent_npc_line(interaction: dict[str, Any]) -> str:
 
 
 def _scene_action(speaker: str, topic: str, location: str) -> str:
-    if _normalize(speaker) == "bran":
-        if topic == "business":
-            return "Bran rests the polishing rag on the counter and surveys the quiet common room."
-        if topic == "wellbeing":
-            return "Bran sets the glass down and rolls one tired shoulder before answering."
-        if topic == "combat":
-            return "Bran plants one broad hand on the counter, his old road scars catching the firelight."
-        return "Bran glances toward the tavern window before answering in his plain, measured way."
     return f"{speaker} considers the question, briefly taking in {location} before answering."
 
 

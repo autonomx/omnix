@@ -166,11 +166,11 @@ def test_travel_goes_where_the_player_names_or_nowhere() -> None:
                "current_location_id": "location:village"})] == ["Starfall Grove", "Skybridge Pass"]
 
 
-def test_sessions_without_a_world_keep_the_starter_town() -> None:
-    assert location_registry.current_location_id({}) == "loc_tavern"
-    assert location_registry.find_location_by_name("market")["location_id"] == "loc_market"
-    routes = list_available_routes(state={"current_location": "location:rusty_flagon_tavern"})
-    assert routes and routes[0]["from_location"] == "location:rusty_flagon_tavern"
+def test_the_engine_has_no_places_of_its_own() -> None:
+    # Every campaign plays from a world (roadmap §4.4): a state without one names no place, and has no road.
+    assert location_registry.current_location_id({}) == ""
+    assert location_registry.find_location_by_name("market") == {}
+    assert list_available_routes(state={"current_location": "location:rusty_flagon_tavern"}) == []
 
 
 def test_the_worlds_creatures_fight_as_themselves() -> None:

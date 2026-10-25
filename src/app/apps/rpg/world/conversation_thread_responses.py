@@ -102,8 +102,6 @@ def _consume_recall_request_as_conversation_reply(
 
     location_id = current_location_id(simulation_state)
     candidate_npcs = present_npcs_at_location(simulation_state, location_id=location_id)
-    if not candidate_npcs:
-        candidate_npcs = ["npc:Bran", "npc:Mira"]
 
     # Prefer a current/recent topic when available, but recall selection can
     # work without topic overlap because the player explicitly asked to recall.
@@ -129,7 +127,7 @@ def _consume_recall_request_as_conversation_reply(
         }
 
     responder_id = _safe_str(recall_choice.get("npc_id"))
-    responder_bio = get_npc_biography(responder_id)
+    responder_bio = get_npc_biography(responder_id, simulation_state)
     responder_name = _safe_str(responder_bio.get("name")) or responder_id.replace("npc:", "")
 
     # Force the profile to see the recall request text.

@@ -56,40 +56,8 @@ def _topic(
 
 def _location_topic(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     location_id = current_location_id(simulation_state)
-    location = get_location(location_id)
+    location = get_location(location_id, simulation_state)
     name = _safe_str(location.get("name") or location_id)
-    if location_id == "loc_tavern":
-        return _topic(
-            topic_id="topic:location:loc_tavern:mood",
-            topic_type="location_smalltalk",
-            title="The tavern's mood",
-            summary="The tavern is busy with travelers, food, and low conversation.",
-            source_id=location_id,
-            source_kind="location",
-            location_id=location_id,
-            priority=1,
-            allowed_facts=[
-                "The tavern is busy with travelers.",
-                "The room has been busier than usual.",
-            ],
-            allowed_signal_kinds=["rumor_interest", "ambient_interest"],
-        )
-    if location_id == "loc_market":
-        return _topic(
-            topic_id="topic:location:loc_market:trade",
-            topic_type="location_smalltalk",
-            title="Market traffic",
-            summary="The market is busy with stalls, porters, and customers.",
-            source_id=location_id,
-            source_kind="location",
-            location_id=location_id,
-            priority=1,
-            allowed_facts=[
-                "The market crowd is moving quickly.",
-                "Busy stalls can mean both opportunity and trouble.",
-            ],
-            allowed_signal_kinds=["market_pressure", "ambient_interest"],
-        )
     return _topic(
         topic_id=f"topic:location:{location_id}:ambient",
         topic_type="location_smalltalk",

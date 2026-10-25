@@ -503,9 +503,6 @@ def _desystemify_text(text: str) -> str:
             text = text.replace("The target ", "", 1)
 
     # normalize various internal id patterns
-    text = text.replace("npc_bran", "Bran")
-    text = text.replace("npc:0", "Bran")
-    text = text.replace("np:bran", "Bran")
     text = text.replace("np:", "")
     text = text.replace("npc_", "")
 

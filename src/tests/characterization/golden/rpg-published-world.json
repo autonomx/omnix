@@ -2879,7 +2879,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:cdddbba086dbeec24df58291d4f52af0dc305b784cee49b20f6dfed287403d88",
+      "document_hash": "sha256:6e8b4f3d1b5efc90196016a6b94cf619de8365f5b4369c30816ec039a3e84a6a",
       "facts": {
         "combat": {
           "active": false,
@@ -3038,7 +3038,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:01ee0aba59a67560dd675e272c2c726d3c1869899b1d15d6d61a9ac1fe1cc0f1",
+      "document_hash": "sha256:8563c345b597970eeace5b8504f9af8327026ede9f845a6c61fc3a1f8d1d5fe9",
       "facts": {
         "combat": {
           "active": false,
@@ -3199,7 +3199,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:bc1647d484cd56611020ae63d4c6404fd77505ccdcbb7e7f2f33c2fc8c793dc2",
+      "document_hash": "sha256:eb8037e3dd165c8e8fa6be2160def5243193fd829c1834f6559d20c63c7961f9",
       "facts": {
         "combat": {
           "active": true,
@@ -3391,7 +3391,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:0650f2eabac3fca505c05d55cc536b2b5eb102fa53731fbbfc0464e0e49c7d21",
+      "document_hash": "sha256:ee3f4d40708d117c0160f03ee008c7e2ae9aa5a14ef94712ca1e3409fd110795",
       "facts": {
         "combat": {
           "active": true,
@@ -3538,7 +3538,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:08d7a4a72514b50936f428d8a122325380291c572a5c8504c4925e985d97d6ca",
+      "document_hash": "sha256:4c92464fd57308fb24121007fbe6aa45d9473bce5b5e1c114e30ddf0691f6fed",
       "facts": {
         "combat": {
           "active": true,
@@ -3670,7 +3670,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:769925abfa8e4e3b73fe724c4885e1cce57823a53ba623a3d8c89bc1d79f0f2e",
+      "document_hash": "sha256:91505a698235b9d94810baf218b19e1385f4bc02331ab927118dc1c37031dff6",
       "facts": {
         "combat": {
           "active": true,
@@ -3830,7 +3830,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:453b56e739599d5252080e999615b913e3118503ef322c5209c3ab27c3f741ec",
+      "document_hash": "sha256:00cbddda4914cd567346567f45f656c253347855e5c00403c59cd48c15ff0932",
       "facts": {
         "combat": {
           "active": true,
@@ -3991,7 +3991,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:c82544cbef7b44f90db96d8e595a294fb2c68eb9c4f714767c6757b0176fee6d",
+      "document_hash": "sha256:742e9694b4813cfa2de5eb677b7a892d9b48771835364d1ed3b72d00d9318d48",
       "facts": {
         "combat": {
           "active": false,
@@ -4142,7 +4142,7 @@
           "Healing Potion": -1
         }
       },
-      "document_hash": "sha256:b96905218cd50a12a0825f372b67f018d31bcbb45493057693291aa4528abbf4",
+      "document_hash": "sha256:dd6eb7948180ab20ee7d470c2c587945b0a566d6024720c104486584527178ec",
       "facts": {
         "combat": {
           "active": false,
@@ -4292,7 +4292,7 @@
     },
     {
       "changes": {},
-      "document_hash": "sha256:6e5ac6878d5d11a58db24ad74c5bca4b636754fa60f6f782018047a9f14daeb9",
+      "document_hash": "sha256:bb947711c8d7b5f13869dd721cb8f29701e686c6a343f3ee2b313208bef0e778",
       "facts": {
         "combat": {
           "active": false,
@@ -4436,7 +4436,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:49e6113dac3a401e3a50fdb6ea066f3f2b263980b980fe11605f756adbec9bb3",
+      "document_hash": "sha256:08abe81ec8640c56b609a0f8736e364cc7f9bcc8b168db579421e92a76f8e4b5",
       "facts": {
         "combat": {
           "active": false,
@@ -4625,7 +4625,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:95c1420cbd5a003a4fc267fa18ca667e319816edf66b7414e67ea6f6dba76c0a",
+      "document_hash": "sha256:2e46b0846dedffd18d0d1e353e4ada57f9e500d1c73c8507fbd894a0553e43ee",
       "facts": {
         "combat": {
           "active": false,
@@ -4795,7 +4795,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:ae5c752ed88dcdcfadbfff304a121626d8078ff70d8452946727f715e6c1a031",
+      "document_hash": "sha256:d46008267ae8345c397646e29b089fd6e1f9a438d387c922d244bdc5878d5059",
       "facts": {
         "combat": {
           "active": false,

@@ -53,7 +53,7 @@ class RpgNewGameRequest(BaseModel):
     genre: str | None = None
     tone: str = "heroic adventure"
     background: str | None = None
-    starting_location: str = "rusty_flagon_tavern"
+    starting_location: str = ""  # the world opening's starting-place key; "" is the world's default opening
     player: RpgPlayerOptions = Field(default_factory=RpgPlayerOptions)
     primary_capability: str | None = None
     secondary_capabilities: list[str] = Field(default_factory=list)
@@ -122,123 +122,32 @@ CORE_STAT_MAP = {
 }
 RPG_ONLY_STAT_KEYS = ("archery", "survival")
 
-STARTING_LOCATIONS: dict[str, dict[str, Any]] = {
-    "rusty_flagon_tavern": {
-        "title": "Rusty Flagon Tavern",
-        "region": "Market Road",
-        "location": "Rusty Flagon Tavern",
-        "time_label": "Day 1 • 08:00",
-        "weather": "Rainy",
-        "summary": (
-            "You sit near the hearth of the Rusty Flagon Tavern as rain taps against the shutters. "
-            "Bran, the innkeeper, polishes a cup behind the counter while Elara the merchant argues quietly "
-            "with a road-worn guard near the door. A notice board beside the stairs lists work for caravan guards, "
-            "rat catchers, and anyone willing to investigate strange lights near the old quarry."
-        ),
-        "timeline": [
-            {"turn": 0, "time": "Day 1 • 08:00", "title": "New campaign started", "detail": "You arrived at the Rusty Flagon Tavern.", "kind": "new_game"},
-            {"turn": 0, "time": "Day 1 • 08:00", "title": "Services available", "detail": "Bran is available for rooms, food, and rumors.", "kind": "service"},
-            {"turn": 0, "time": "Day 1 • 08:00", "title": "Merchant nearby", "detail": "Elara is available for trade.", "kind": "economy"},
-        ],
-        "quick_actions": ["Talk to Bran", "Check the notice board", "Buy supplies", "Rent a room", "Leave for the market"],
-    },
-    "market_district": {
-        "title": "Market District",
-        "region": "Town",
-        "location": "Market District",
-        "time_label": "Day 1 • 09:00",
-        "weather": "Cloudy",
-        "summary": "Market stalls crowd the square, and voices rise over the smell of bread, rain, and horse leather.",
-        "timeline": [
-            {"turn": 0, "time": "Day 1 • 09:00", "title": "New campaign started", "detail": "You arrived at the Market District.", "kind": "new_game"},
-            {"turn": 0, "time": "Day 1 • 09:00", "title": "Open market", "detail": "Merchants are setting out supplies, tools, and caravan notices.", "kind": "economy"},
-        ],
-        "quick_actions": ["Browse the stalls", "Talk to a merchant", "Look for rumors", "Check caravan notices", "Travel to the tavern"],
-    },
-    "northern_road": {
-        "title": "Northern Road",
-        "region": "Trade Road",
-        "location": "Northern Road",
-        "time_label": "Day 1 • 10:15",
-        "weather": "Overcast",
-        "summary": (
-            "The Northern Road cuts between wet pines and wagon-rutted mud. A broken milestone leans beside the ditch, "
-            "and fresh hoofprints lead toward the pass while older tracks vanish into the brush."
-        ),
-        "timeline": [
-            {"turn": 0, "time": "Day 1 • 10:15", "title": "New campaign started", "detail": "You started on the Northern Road.", "kind": "new_game"},
-            {"turn": 0, "time": "Day 1 • 10:15", "title": "Road signs", "detail": "Fresh hoofprints and a damaged milestone point toward recent trouble.", "kind": "discovery"},
-        ],
-        "quick_actions": ["Inspect the hoofprints", "Follow the road north", "Search the brush", "Check supplies", "Return to town"],
-    },
-    "glimmerdeep_pass": {
-        "title": "Glimmerdeep Pass",
-        "region": "Mountain Pass",
-        "location": "Glimmerdeep Pass",
-        "time_label": "Day 1 • 09:42",
-        "weather": "Cold, Windy",
-        "temperature": -12,
-        "summary": "The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both sides, and an ancient stone archway stands ahead, half-buried in drifts.",
-        "timeline": [
-            {"turn": 0, "time": "Day 1 • 09:42", "title": "New campaign started", "detail": "You arrived at Glimmerdeep Pass.", "kind": "new_game"},
-            {"turn": 0, "time": "Day 1 • 09:42", "title": "Ancient archway", "detail": "A half-buried stone archway blocks part of the pass.", "kind": "discovery"},
-        ],
-        "quick_actions": ["Inspect the archway", "Look for tracks", "Listen to the wind", "Check your gear", "Travel back down the pass"],
-    },
-    "old_quarry": {
-        "title": "Old Quarry",
-        "region": "Abandoned Works",
-        "location": "Old Quarry",
-        "time_label": "Day 1 • 16:20",
-        "weather": "Grey and still",
-        "summary": (
-            "The old quarry yawns open beneath a rim of cracked stone. Rusted pulleys creak in the breeze, and pale light "
-            "glows from a fissure that should have gone dark years ago."
-        ),
-        "timeline": [
-            {"turn": 0, "time": "Day 1 • 16:20", "title": "New campaign started", "detail": "You arrived at the Old Quarry.", "kind": "new_game"},
-            {"turn": 0, "time": "Day 1 • 16:20", "title": "Strange lights", "detail": "A pale glow seeps from a deep quarry fissure.", "kind": "mystery"},
-        ],
-        "quick_actions": ["Inspect the fissure", "Search the quarry floor", "Check the old pulley", "Light a torch", "Return to the road"],
-    },
-}
+# The hero's campaign before a world's opening fills it in (``genesis/worlds/published_launch.py``): the engine has
+# no places, people or quests of its own (roadmap §4.4). The opening gives the place, its story, the quests, the people
+# and the first actions; what is chosen here (a hook, a pace, a relationship) is the player's choice, by key.
+_BEFORE_THE_OPENING: dict[str, Any] = {"time_label": "Day 1 • 08:00", "weather": "Clear", "quick_actions": []}
 
-
+# The hooks a player can lead with; a world's story seed names the one it answers (``adventure_seeds[].opening_hook``).
 OPENING_HOOKS: dict[str, dict[str, Any]] = {
     "tavern_rumor": {
         "label": "Tavern Rumor",
         "summary": "A fresh rumor is already moving through the room, giving the first turn an immediate social lead.",
-        "quest": {"id": "tavern_rumor", "title": "Rumor at the Rusty Flagon", "status": "active", "objective": "Ask Bran or the tavern regulars which rumor is true."},
-        "timeline": {"title": "Rumor overheard", "detail": "A low conversation near the hearth hints at trouble outside town.", "kind": "rumor"},
-        "quick_actions": ["Ask Bran about the rumor", "Listen to the hearth-side conversation", "Check the notice board"],
     },
     "bandit_trail": {
         "label": "Bandit Trail",
         "summary": "A witness points to fresh tracks and missing supplies, pushing the first objective toward recon and danger.",
-        "quest": {"id": "bandit_trail", "title": "Bandit Trail", "status": "active", "objective": "Question the witness and inspect the tracks before the trail goes cold."},
-        "timeline": {"title": "Bandit trail reported", "detail": "A road-worn witness describes raiders and fresh hoofprints beyond the market road.", "kind": "danger"},
-        "quick_actions": ["Question the witness", "Inspect the tracks", "Prepare for a road fight"],
     },
     "missing_person": {
         "label": "Missing Person",
         "summary": "A local disappearance creates an investigation-forward start with clear stakes and witnesses.",
-        "quest": {"id": "missing_person", "title": "Missing Person", "status": "active", "objective": "Find out who vanished and collect the first clue."},
-        "timeline": {"title": "Missing person reported", "detail": "A worried local asks for help finding someone who failed to return by dawn.", "kind": "investigation"},
-        "quick_actions": ["Speak to the worried local", "Search for the first clue", "Ask who saw them last"],
     },
     "guard_trouble": {
         "label": "Guard Trouble",
         "summary": "The watch is already paying attention, turning the opening toward authority, consequences, and guarded choices.",
-        "quest": {"id": "guard_trouble", "title": "Trouble with the Watch", "status": "active", "objective": "Learn why the guards are watching you and avoid escalating the scene."},
-        "timeline": {"title": "Guard attention", "detail": "A watch captain studies you from the doorway while a patrol blocks the street outside.", "kind": "faction"},
-        "quick_actions": ["Approach the watch captain", "Keep a low profile", "Ask Bran why the guards are tense"],
     },
     "merchant_job": {
         "label": "Merchant Job",
         "summary": "A merchant needs something moved or found, making prices, supplies, and trade pressure useful immediately.",
-        "quest": {"id": "merchant_job", "title": "Merchant Job", "status": "active", "objective": "Meet the merchant, confirm payment, and decide whether to accept the job."},
-        "timeline": {"title": "Merchant request", "detail": "A merchant asks for help with a job that involves goods, payment, and a short route.", "kind": "economy"},
-        "quick_actions": ["Ask about payment", "Inspect the goods", "Negotiate terms"],
     },
 }
 
@@ -248,33 +157,13 @@ OPENING_PACE_LABELS = {
     "immediate_action": "Immediate action",
 }
 
-RELATIONSHIP_PRESETS: dict[str, dict[str, Any]] = {
-    "unknown_outsider": {"label": "Unknown outsider", "relationships": []},
-    "local_regular": {
-        "label": "Local regular",
-        "relationships": [{"name": "Bran", "stance": "Familiar", "score": 18}],
-        "timeline": {"title": "Familiar face", "detail": "Bran recognizes you well enough to use your name.", "kind": "relationship"},
-    },
-    "known_contact": {
-        "label": "Known contact nearby",
-        "relationships": [{"name": "Elara", "stance": "Contact", "score": 22}],
-        "timeline": {"title": "Known contact", "detail": "Elara may be willing to help if approached carefully.", "kind": "relationship"},
-    },
-    "known_contact_nearby": {
-        "label": "Known contact nearby",
-        "relationships": [{"name": "Elara", "stance": "Contact", "score": 22}],
-        "timeline": {"title": "Known contact", "detail": "Elara may be willing to help if approached carefully.", "kind": "relationship"},
-    },
-    "owes_favor": {
-        "label": "Owes someone a favor",
-        "relationships": [{"name": "Bran", "stance": "Owed favor", "score": 12}],
-        "timeline": {"title": "Debt remembered", "detail": "Someone nearby has not forgotten an old favor.", "kind": "relationship"},
-    },
-    "guard_suspicion": {
-        "label": "Guard suspicion",
-        "relationships": [{"name": "Captain Aldric", "stance": "Suspicious", "score": -10}],
-        "timeline": {"title": "Guard suspicion", "detail": "Captain Aldric has heard enough to watch you closely.", "kind": "faction"},
-    },
+RELATIONSHIP_PRESETS: dict[str, str] = {
+    "unknown_outsider": "Unknown outsider",
+    "local_regular": "Local regular",
+    "known_contact": "Known contact nearby",
+    "known_contact_nearby": "Known contact nearby",
+    "owes_favor": "Owes someone a favor",
+    "guard_suspicion": "Guard suspicion",
 }
 
 STARTER_GEAR_CATALOG: dict[str, dict[str, Any]] = {
@@ -346,7 +235,8 @@ def _resolve_opening_hook(request: RpgNewGameRequest, seed: int) -> str:
     return keys[seed % len(keys)]
 
 
-def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], seed: int) -> dict[str, Any]:
+def _build_story_setup(request: RpgNewGameRequest, seed: int) -> dict[str, Any]:
+    """The player's choices for the opening, before a world's opening gives its story (its quests, people, actions)."""
     hook_key = _resolve_opening_hook(request, seed)
     pace_key = _story_option(request, "opening_pace", "balanced")
     if pace_key not in OPENING_PACE_LABELS:
@@ -354,32 +244,19 @@ def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], see
     relationship_key = _story_option(request, "relationship_preset", "unknown_outsider")
     if relationship_key not in RELATIONSHIP_PRESETS:
         relationship_key = "unknown_outsider"
-    relationship = RELATIONSHIP_PRESETS[relationship_key]
     hook = OPENING_HOOKS[hook_key]
-    time_label = str(location.get("time_label") or "Day 1 • 08:00")
-    timeline = [{"turn": 0, "time": time_label, **hook["timeline"]}]
-    if relationship.get("timeline"):
-        timeline.append({"turn": 0, "time": time_label, **relationship["timeline"]})
-    base_actions = list(hook["quick_actions"])
-    location_actions = list(location.get("quick_actions") or [])
-    if pace_key == "slow_roleplay":
-        quick_actions = ["Take in the scene", *location_actions[:2], *base_actions[:2]]
-    elif pace_key == "immediate_action":
-        quick_actions = [base_actions[0], *base_actions[1:], "Check supplies"]
-    else:
-        quick_actions = [base_actions[0], *location_actions[:2], *base_actions[1:]]
     return {
         "opening_hook": hook_key,
         "opening_hook_label": hook["label"],
         "opening_pace": pace_key,
         "opening_pace_label": OPENING_PACE_LABELS[pace_key],
         "relationship_preset": relationship_key,
-        "relationship_label": relationship["label"],
+        "relationship_label": RELATIONSHIP_PRESETS[relationship_key],
         "summary": hook["summary"],
-        "quests": [dict(hook["quest"])],
-        "relationships": [dict(entry) for entry in relationship.get("relationships", [])],
-        "timeline": timeline,
-        "quick_actions": list(dict.fromkeys(quick_actions))[:6],
+        "quests": [],
+        "relationships": [],
+        "timeline": [],
+        "quick_actions": [],
     }
 
 
@@ -606,27 +483,27 @@ def _base_manifest(session_id: str, title: str, now: str, *, source_template_id:
 
 def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> dict[str, Any]:
     build = STARTING_BUILDS.get(request.player.build, STARTING_BUILDS["balanced_adventurer"])
-    location = STARTING_LOCATIONS.get(request.starting_location, STARTING_LOCATIONS["rusty_flagon_tavern"])
+    location = _BEFORE_THE_OPENING
     features = request.features.model_dump(mode="json")
     seed = int(request.seed if request.seed is not None else secrets.randbits(64))
     request_payload = request.model_dump(mode="json")
     level = starting_level(request)
     progression = build_progression_package(request_payload, build_id=request.player.build, level=level, seed=seed)
     identity = progression["character_identity"]
-    story_setup = _build_story_setup(request, location, seed)
+    story_setup = _build_story_setup(request, seed)
     loadout = _starter_loadout(request)
     stat_profile = _player_stat_profile(request, build)
     setting_effects = build_new_game_setup_effects(request, loadout, story_setup, location)
     loadout = setting_effects["loadout"]
     quick_actions = setting_effects["quick_actions"]
-    timeline = [*location["timeline"], *story_setup["timeline"], *setting_effects["timeline"]]
+    timeline = [*story_setup["timeline"], *setting_effects["timeline"]]
     return {
         "contract_version": NEW_GAME_CONTRACT_VERSION,
         "session_id": session_id,
-        "title": f"{request.player.name} — {location['title']}",
-        "location": location["location"],
-        "current_location": location["location"],
-        "summary": f"{location['summary']} {story_setup['summary']}",
+        "title": request.player.name,
+        "location": "",
+        "current_location": "",
+        "summary": story_setup["summary"],
         "current_turn": 0,
         "turn_count": 0,
         "updated_at": now,

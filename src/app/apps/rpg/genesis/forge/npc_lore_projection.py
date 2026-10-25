@@ -6,7 +6,8 @@ from copy import deepcopy
 from typing import Any, Mapping, Sequence, cast
 
 from app.apps.rpg.foundation.dynamic_npc_profiles import load_npc_profile
-from app.apps.rpg.world.npc_biography_registry import get_npc_biography
+from app.apps.rpg.foundation.state.sections import read_path
+from app.apps.rpg.world.npc_biography_registry import find_npc_biography
 
 from .campaign_lore_store import _mapping, _text, current_location_identity
 
@@ -296,7 +297,7 @@ def ensure_encountered_npc_lore(
 
         session_profile = _session_profile(session, runtime_id)
         dynamic = _mapping(load_npc_profile(runtime_id))
-        registry = _mapping(get_npc_biography(runtime_id.split(":", 1)[-1]))
+        registry = _mapping(find_npc_biography(runtime_id, _mapping(read_path(session, ("simulation_state",)))))
         profiles = (existing, session_profile, dynamic, registry)
         name = _first(
             existing.get("name"),

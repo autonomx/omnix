@@ -10,5 +10,4 @@ def current_player_location_id(simulation_state: Dict[str, Any]) -> str:
         _safe_str(player_state.get("location_id"))
         or _safe_str(simulation_state.get("location_id"))
         or _safe_str(simulation_state.get("current_location_id"))
-        or "loc_tavern"
     )
