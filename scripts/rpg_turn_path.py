@@ -5,8 +5,8 @@
 Runs the playthrough suite (``src/tests/rpg/playthrough`` and the published-world golden by default) in this
 process under coverage.py. A module of ``app.apps.rpg`` is on the turn path when one of its functions is
 called while a state-changing request is handled: the turn route
-(``turn_pipeline._execute_foreground_rpg_turn``), the tactical move and attack routes and the loadout action
-(a profile hook on the request's thread; work the request hands to another thread is not counted).
+(``turn_pipeline._execute_foreground_rpg_turn``, which the loadout's actions and the tactical move and attack take
+too; a profile hook on the request's thread: work the request hands to another thread is not counted).
 Coverage records which lines of each module ran anywhere in the suite.
 
 With ``--write`` it stores the list as ``[rpg_turn_path] modules`` in resources/architecture/layers.toml and
@@ -32,9 +32,6 @@ DEFAULT_SUITE = ("src/tests/rpg/playthrough", "src/tests/characterization/test_r
 # Where a state-changing request is handled: (module, attribute) wrapped to record the turn path.
 TURN_ENTRY_POINTS = (
     ("app.apps.rpg.edge.api.turn_pipeline", "_execute_foreground_rpg_turn"),
-    ("app.apps.rpg.edge.api.feature_routes.rpg_tactical_spatial_routes", "move_actor_tactically"),
-    ("app.apps.rpg.edge.api.feature_routes.rpg_tactical_spatial_routes", "attack_tactically"),
-    ("app.apps.rpg.edge.api.feature_routes.rpg_session_routes", "apply_loadout_action"),
 )
 
 
