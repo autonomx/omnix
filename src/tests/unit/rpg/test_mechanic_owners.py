@@ -122,6 +122,7 @@ def _examples(doc: dict) -> list:
          doc),
         (c.InteractionPresented(fields={"narration": "Rain."}), doc),
         (c.InteractionsReplayed(events=[{"interaction_id": "interaction:901", "sequence": 901}]), doc),
+        (c.MapStateProjected(map_state={"schema_version": 1, "current_map_id": "map:x"}, location_id=here), doc),
         (c.CheckResolved(kind="persuade", target_id=npc, natural=12, band="success"), doc),
         (c.RevisionRestored(source_revision=0, document=json.loads(json.dumps(doc))), joined),
         (c.QuestStepCompleted(quest_id="quest:voices-in-the-phone", stage=1, next_objective="Go on"), doc),
@@ -177,6 +178,7 @@ def test_each_section_has_the_writers_declared_and_no_others() -> None:
         for section in sections:
             writers.setdefault(section, set()).add(kind)
     assert set(writers) - {"(no section)"} <= set(SECTION_PATHS)
-    assert writers["location"] == {"location_changed", "presence_changed", "revision_restored", "local_map_entered"}
+    assert writers["location"] == {"location_changed", "presence_changed", "revision_restored", "local_map_entered",
+                                   "map_state_projected"}
     assert writers["combat"] == {"combat_started", "combatant_hp_changed", "combat_ended", "combat_advanced",
                                  "revision_restored"}

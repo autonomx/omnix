@@ -144,6 +144,12 @@ def run_planned_turn(
         if grounded:
             document, _ = reduce(document, grounded)
             applied += grounded
+    from app.apps.rpg.world.map_world_integration import projected_map_state
+
+    projected = projected_map_state(document)  # the world map the play screen shows, from where the hero now is
+    if projected is not None:
+        document, _ = reduce(document, [projected])
+        applied.append(projected)
     lines = [*resolution.lines, *seen, *quest_lines]  # what the hero did, the comings and goings, what it led to
     # A question back, a refusal or a hotbar slot (the play screen's, not the hero's doing) is no journal entry.
     if planned.mechanic not in {"clarify", "hotbar"} and not resolution.refused:

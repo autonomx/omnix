@@ -19,7 +19,10 @@ def _run(campaign, text, reading):
 
 
 def _campaign(**simulation):
-    return {
+    """A campaign as its creation leaves it: with the world map it opens on (``projected_map_state``)."""
+    from app.apps.rpg.world.map_world_integration import projected_map_state
+
+    campaign = {
         "manifest": {"session_id": "rpg_test", "turn_count": 3},
         "state": {"turn_count": 3, "current_location_name": "Gate"},
         "runtime_state": {"tick": 5},
@@ -34,6 +37,8 @@ def _campaign(**simulation):
             **simulation,
         },
     }
+    projected = projected_map_state(campaign)
+    return reduce(campaign, [projected])[0] if projected is not None else campaign
 
 
 @pytest.mark.parametrize(("reading", "planned"), [

@@ -26,6 +26,7 @@ from app.apps.rpg.world.map_serialization import with_definition_revision
 from app.apps.rpg.world.map_settlement_assembler import assemble_settlement_map
 from app.apps.rpg.world.world_graph import RpgLocationNode, RpgRegionGraph, RpgRoute
 from app.apps.rpg.foundation.state import access as _sections
+from app.apps.rpg.foundation.state.changes import MapStateProjected
 
 WORLD_GRAPH_SCHEMA_VERSION = 1
 _REGION_WIDTH = 12000
@@ -211,17 +212,21 @@ def canonical_route_id_for_locations(
     return routes[0].id if routes else None
 
 
-def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, Any]:
+def projected_map_state(session: Mapping[str, Any]) -> MapStateProjected | None:
+    """The world map the play screen shows, from where the hero stands in the campaign's world graph: the map of
+    their place, what is discovered and visible on it, and the roads' states; ``None`` when the campaign has no world
+    map or the projection it keeps is already this one. The turn (``session/turn/run.py``) and a campaign's creation
+    apply it as a change, so the reducer is its one writer."""
     model = canonical_world_map_model(session)
     if model is None or not model.current_location_id:
-        return session
+        return None
     repository = map_repository_for_session(session)
     map_id = resolve_map_id_for_location(session, model.current_location_id, repository)
     if not map_id:
-        return session
+        return None
 
-    state = raw_state if isinstance(raw_state := session.get("state"), dict) else {}
-    current = raw_map_state if isinstance(raw_map_state := state.get("map_state"), dict) else {}
+    state = _mapping(session.get("state"))
+    current = _mapping(state.get("map_state"))
     definition = repository.get(map_id)
     discovered_locations = set(model.discovered_location_ids)
     visible_object_ids = {
@@ -253,13 +258,11 @@ def integrate_canonical_world_map_state(session: dict[str, Any]) -> dict[str, An
         "map_history": _append_unique(_string_sequence(current.get("map_history")), map_id),
         "source": "canonical_world_graph",
     }
-    state["map_state"] = map_state
-    state["current_location_id"] = model.current_location_id
-    player = raw_player if isinstance(raw_player := state.get("player"), dict) else {}
-    player["location_id"] = model.current_location_id
-    state["player"] = player
-    session["state"] = state
-    return session
+    player = _mapping(state.get("player"))
+    if (map_state == current and state.get("current_location_id") == model.current_location_id
+            and (not player or player.get("location_id") == model.current_location_id)):
+        return None
+    return MapStateProjected(map_state=map_state, location_id=model.current_location_id)
 
 
 def _canonical_settlement_definition(

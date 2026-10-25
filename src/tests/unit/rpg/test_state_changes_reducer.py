@@ -49,7 +49,7 @@ def _document(shape: str = "aurelia") -> dict:
 
 
 def test_the_vocabulary_is_closed_and_serializes() -> None:
-    assert len(CHANGE_TYPES) == len(set(CHANGE_TYPES)) == 55
+    assert len(CHANGE_TYPES) == len(set(CHANGE_TYPES)) == 56
     changes = [PurseChanged(delta_copper=-30), ItemAdded(item_id="item:potion", name="Healing Potion")]
     assert parse_changes([change.model_dump() for change in changes]) == changes
     with pytest.raises(ValidationError):

@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from app.apps.rpg.foundation.core.determinism import rng_seed_from_session_id
-from app.apps.rpg.world.map_persistence import ensure_session_map_state
 from app.apps.rpg.session.durable_store import (
     archive_session_on_disk,
     list_sessions_from_disk,
@@ -60,7 +59,6 @@ def create_or_normalize_session(session: dict[str, Any], *, owned: bool = False)
         simulation_state["rng_seed"] = rng_seed
     session["simulation_state"] = simulation_state
     session = normalize_session_survival_for_persistence(session, owned=owned)
-    session = ensure_session_map_state(session)
     return session
 
 

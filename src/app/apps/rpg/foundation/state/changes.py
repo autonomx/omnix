@@ -215,6 +215,15 @@ class HotbarChanged(_Change):
     ability_id: str = ""
 
 
+class MapStateProjected(_Change):
+    """The world map the play screen shows, projected from where the hero stands (``map_world_integration``): the
+    sheet's map state, and its place on the sheet."""
+
+    type: Literal["map_state_projected"] = "map_state_projected"
+    map_state: dict[str, Any]
+    location_id: str = Field(min_length=1)
+
+
 class InteractionRecorded(_Change):
     """The turn's interaction on the campaign's timeline (its bookkeeping, roadmap §4.1 step 9): the event appended
     (the timeline keeps the last 50), the sequence and state revision it carries the campaign's, the recent
@@ -524,7 +533,7 @@ StateChange = Annotated[
     | StockTaken | TradeRemembered | ConditionsChanged | RestTaken | ServiceUsed | CompanionOrdered
     | DialogueExchanged | KnowledgeShared | QuestOffered | CombatAdvanced | CompanionHpChanged | LevelReached
     | DefeatRecorded | CampaignEnded | WhereaboutsChanged | RegardChanged | ResourcesChanged | AbilityUsed | HotbarChanged
-    | InteractionRecorded | InteractionsReplayed | LifecycleRecorded | InteractionPresented | CheckResolved | LevelChoiceMade
+    | MapStateProjected | InteractionRecorded | InteractionsReplayed | LifecycleRecorded | InteractionPresented | CheckResolved | LevelChoiceMade
     | RevisionRestored | QuestStepCompleted | QuestProgressed | PressuresMoved | LocalMapEntered,
     Field(discriminator="type"),
 ]

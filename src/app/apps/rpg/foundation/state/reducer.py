@@ -67,6 +67,7 @@ from .changes import (
     InteractionRecorded,
     InteractionsReplayed,
     LifecycleRecorded,
+    MapStateProjected,
     LevelChoiceMade,
     LocalMapEntered,
     RegardChanged,
@@ -396,6 +397,11 @@ def _apply(writer: _Writer, change: StateChange) -> None:  # noqa: C901 - one br
             writer.set(_PLAYER + ("resources", name), pool)
             if isinstance(writer.get(("state", "player")), dict):  # the play screen's sheet shows it
                 writer.set(("state", "player", "resources", name), dict(pool))
+    elif isinstance(change, MapStateProjected):
+        writer.set(("state", "map_state"), deepcopy(change.map_state))
+        writer.set(("state", "current_location_id"), change.location_id)
+        if isinstance(writer.get(("state", "player")), dict):
+            writer.set(("state", "player", "location_id"), change.location_id)
     elif isinstance(change, InteractionRecorded):
         _record_interaction(writer, change.event)
     elif isinstance(change, InteractionsReplayed):

@@ -627,6 +627,12 @@ def _save_created_session(session: dict[str, Any]) -> dict[str, Any]:
     from app.apps.rpg.session.upgrades.hero_record import hydrate_hero
 
     session = hydrate_hero(session)  # the hero's simulation record, from the sheet, once (a turn reads it as stored)
+    from app.apps.rpg.foundation.state.reducer import reduce
+    from app.apps.rpg.world.map_world_integration import projected_map_state
+
+    projected = projected_map_state(session)  # the world map the play screen opens on
+    if projected is not None:
+        session, _ = reduce(session, [projected], owned=True)
     state = raw_state if isinstance(raw_state := session.get("state"), dict) else None
     if state is not None:
         write_ability_coverage_snapshot(state)

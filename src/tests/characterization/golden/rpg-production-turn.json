@@ -300,6 +300,7 @@
           "time",
           "survival",
           "world",
+          "location",
           "narrative"
         ],
         "llm_purpose": "turn_pipeline",
@@ -320,6 +321,7 @@
           "time",
           "survival",
           "world",
+          "location",
           "narrative"
         ],
         "revision": 5

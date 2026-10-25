@@ -189,5 +189,5 @@ CHANGE_SECTIONS: dict[str, str] = {
     "lifecycle_recorded": "interactions", "interaction_presented": "interactions",
     "check_resolved": "player", "level_choice_made": "player", "revision_restored": "meta",
     "quest_step_completed": "quests", "quest_progressed": "quests", "pressures_moved": "world",
-    "local_map_entered": "location",
+    "local_map_entered": "location", "map_state_projected": "location",
 }

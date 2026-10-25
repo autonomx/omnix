@@ -840,7 +840,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:98a156c8bf3b8c0f056162f252be398499ca67010763e2b7222e6c9023be5e38",
+      "document_hash": "sha256:2105a33840c342bb868ac010eeeb13000042bd6f89afd52c93b1a4c2d1c507ca",
       "facts": {
         "combat": {
           "active": false,
@@ -971,6 +971,7 @@
         "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
+        "state/map_state",
         "state/player",
         "state/quests",
         "state/scene",
@@ -1127,8 +1128,6 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
-        "state/map_state",
-        "state/player",
         "state/turn_count",
         "state/world"
       ],
@@ -1929,7 +1928,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:389302f009064d46dd937e33dcbb9d66d79e92a0a738178b90a81ff3a4ddb53d",
+      "document_hash": "sha256:01cc815e2bf32c7c710faef47046e826384c5bc4528d48b413743dab213ffe46",
       "facts": {
         "combat": {
           "active": false,
@@ -2051,6 +2050,7 @@
         "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
+        "state/map_state",
         "state/player",
         "state/quests",
         "state/scene",
@@ -2217,8 +2217,6 @@
         "simulation_state/travel_state",
         "simulation_state/world_event_state",
         "state/current_turn",
-        "state/map_state",
-        "state/player",
         "state/turn_count",
         "state/world"
       ],
@@ -2273,7 +2271,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:2df866f2394c31381b22722a2224a00139375c816d32d48270bb4f212f214280",
+      "document_hash": "sha256:fe759bbaa63cffc2ef53af44b441955ee223400c969c5bdca31554838299c2dd",
       "facts": {
         "combat": {
           "active": false,
@@ -2394,6 +2392,8 @@
         "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
+        "state/map_state",
+        "state/player",
         "state/scene",
         "state/title",
         "state/turn_count",
@@ -2541,7 +2541,6 @@
         "simulation_state/player_state",
         "simulation_state/world_items",
         "state/current_turn",
-        "state/map_state",
         "state/player",
         "state/turn_count"
       ],
@@ -3196,7 +3195,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:8418b59fd6c4c479cf2b4760101b1cbee86fc2c0301453c1bed0b7f44dd4c3f1",
+      "document_hash": "sha256:b4722853f3769e8e4e6d2e8778f52ec72eae7a83450e31988cc92ec7203180f7",
       "facts": {
         "combat": {
           "active": true,
@@ -3328,6 +3327,7 @@
         "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
+        "state/map_state",
         "state/player",
         "state/scene",
         "state/title",
@@ -3388,7 +3388,7 @@
           "thirst": 2
         }
       },
-      "document_hash": "sha256:740c53101f7f9f99fa0e511db6639c34e3b6aa90d23889e49cf2cf1a597f3df7",
+      "document_hash": "sha256:3ab88e6969d106365479fec176595f436f2e1147a4069f44960dfd7a6993441e",
       "facts": {
         "combat": {
           "active": true,
@@ -3506,6 +3506,7 @@
           "player",
           "survival",
           "world",
+          "location",
           "narrative"
         ],
         "source": "narrative_engine_resolved_turn_v1",
@@ -3517,6 +3518,7 @@
             "player",
             "survival",
             "world",
+            "location",
             "narrative"
           ],
           "revision": 22
@@ -3635,7 +3637,6 @@
         "runtime_state/state_revision",
         "simulation_state/combat_state",
         "state/current_turn",
-        "state/map_state",
         "state/turn_count"
       ],
       "response": {
@@ -4433,7 +4434,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:f8917ad576f8ab5719dacf574557c913d63f04e62800ce2759b13cf701c051b4",
+      "document_hash": "sha256:2a2631750fe2dd1a0beb3d56d88f35cfab143c876c6cf0781e9ffe9945575e23",
       "facts": {
         "combat": {
           "active": false,
@@ -4565,6 +4566,8 @@
         "state/current_map_instance_id",
         "state/current_turn",
         "state/location",
+        "state/map_state",
+        "state/player",
         "state/scene",
         "state/title",
         "state/turn_count",
@@ -4622,7 +4625,7 @@
           "thirst": 3
         }
       },
-      "document_hash": "sha256:00a503ee0fe88579618f14b5ab6b681e987f2e593a15942d8ff65f377ef0e869",
+      "document_hash": "sha256:6dd9a668b2a3aa90f3638cb3948181690fc1ae88117e5aa41d4ca315a7e7dfbe",
       "facts": {
         "combat": {
           "active": false,
@@ -4893,8 +4896,6 @@
         "simulation_state/survival",
         "simulation_state/tick",
         "state/current_turn",
-        "state/map_state",
-        "state/player",
         "state/turn_count",
         "state/world"
       ],
