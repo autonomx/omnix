@@ -19,6 +19,8 @@ export type RpgSessionListResponse = components['schemas']['RpgSessionListRespon
 
 export type RpgPresetListResponse = components['schemas']['RpgPresetListResponse'];
 
+export type RpgCampaignImportResponse = components['schemas']['RpgCampaignImportResponse'];
+
 /** How the client reached the launch route; added to the launch response for diagnostics, never sent by the gateway. */
 export interface RpgLaunchRequestTraceEvent {
   endpoint: string;
@@ -139,6 +141,18 @@ export const rpgSessionClient = {
 
   async getRpgOperations(days = 14): Promise<RpgOperationsResponse> {
     return await unwrap(api.GET('/api/rpg/operations', { params: { query: { days } } })) as RpgOperationsResponse;
+  },
+
+  /** The campaign as a file to keep, or to carry to another Omnix (RQ-8.6). */
+  async exportRpgSession(sessionId: string): Promise<Record<string, unknown>> {
+    return await unwrap(api.GET('/api/rpg/sessions/{session_id}/export', {
+      params: { path: { session_id: sessionId } },
+    })) as Record<string, unknown>;
+  },
+
+  /** A campaign file exported from an Omnix, back in this library under its own id (RQ-8.6). */
+  async importRpgSession(campaignPackage: Record<string, unknown>): Promise<RpgCampaignImportResponse> {
+    return await unwrap(api.POST('/api/rpg/sessions/import', { body: campaignPackage })) as RpgCampaignImportResponse;
   },
 
   /** Undo the hero's last turn, or return to a save point by name: a turn of its own (rewind.md). */

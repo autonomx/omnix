@@ -1252,6 +1252,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/sessions/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Import Session */
+        post: operations["rpg_import_session_api_rpg_sessions_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/sessions/{session_id}": {
         parameters: {
             query?: never;
@@ -1331,6 +1348,23 @@ export interface paths {
         put?: never;
         /** Rpg Delete Session */
         post: operations["rpg_delete_session_api_rpg_sessions__session_id__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Export Session */
+        get: operations["rpg_export_session_api_rpg_sessions__session_id__export_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2488,6 +2522,23 @@ export interface paths {
         put?: never;
         /** Rpg Draft World Play Sections */
         post: operations["rpg_draft_world_play_sections_api_rpg_worlds__world_id__play_sections_draft_from_lore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/worlds/{world_id}/play-sections/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Publish World Play Sections */
+        post: operations["rpg_publish_world_play_sections_api_rpg_worlds__world_id__play_sections_publish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5810,6 +5861,20 @@ export interface components {
             storage: components["schemas"]["RpgLoreStorage"];
         };
         /**
+         * RpgCampaignImportResponse
+         * @description A campaign imported from a save package (RQ-8.6), as it now loads.
+         */
+        RpgCampaignImportResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Session */
+            session: {
+                [key: string]: unknown;
+            };
+            /** Session Id */
+            session_id: string;
+        };
+        /**
          * RpgCampaignLoreResponse
          * @description The campaign bible: the lore panel reads the documents and dossiers, the world editor the cards.
          */
@@ -5845,6 +5910,24 @@ export interface components {
             factions?: components["schemas"]["RpgAuthoringEntityCard"][];
             /** Locations */
             locations?: components["schemas"]["RpgAuthoringEntityCard"][];
+        };
+        /**
+         * RpgCampaignPackage
+         * @description A campaign as a save package (format 8) with its ``transfer`` section (RQ-8.6): a file to keep or carry.
+         */
+        RpgCampaignPackage: {
+            /** Campaign */
+            campaign: {
+                [key: string]: unknown;
+            };
+            /** Package Type */
+            package_type: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Transfer */
+            transfer: {
+                [key: string]: unknown;
+            };
         };
         /**
          * RpgCampaignWorldBindingResponse
@@ -12457,6 +12540,41 @@ export interface operations {
             };
         };
     };
+    rpg_import_session_api_rpg_sessions_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgCampaignImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_read_session_api_rpg_sessions__session_id__get: {
         parameters: {
             query?: never;
@@ -12599,6 +12717,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgSessionMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_export_session_api_rpg_sessions__session_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgCampaignPackage"];
                 };
             };
             /** @description Validation Error */
@@ -14964,6 +15113,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RpgPlaySectionsDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_publish_world_play_sections_api_rpg_worlds__world_id__play_sections_publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fields the RPG web client reads; the response is not filtered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RpgPlaySectionsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -882,6 +882,14 @@ class RpgScenarioSummary(TypedDict, total=False):
     updated_at: Required[str]
 
 
+class RpgCampaignImportResponse(TypedDict):
+    """A campaign imported from a save package (RQ-8.6), as it now loads."""
+
+    ok: bool
+    session_id: str
+    session: dict[str, Any]
+
+
 class RpgWorldDetailResponse(TypedDict, total=False):
     ok: Required[bool]
     world: Required[RpgWorldSummary]

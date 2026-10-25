@@ -7,7 +7,7 @@ import asyncio
 from typing import Any
 
 from fastapi import HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
 from .rpg_campaign_lore_routes import register_rpg_campaign_lore_routes
@@ -39,6 +39,7 @@ from typing import Any as _TypedRequestAny
 from app.apps.rpg.session.service import SESSION_CAMPAIGN_SESSIONS
 from app.apps.rpg.edge.api.web_contracts import (
     documented,
+    RpgCampaignImportResponse,
     RpgLaunchResponse,
     RpgLoadoutActionResponse,
     RpgPresetListResponse,
@@ -50,6 +51,7 @@ from app.apps.rpg.edge.api.web_contracts import (
 from app.apps.rpg.edge.api.route_contracts import (
     TURN_STREAM,
     RpgAbilityCoverageResponse,
+    RpgCampaignPackage,
     RpgLocalDialogueFixtureResponse,
 )
 
@@ -695,6 +697,52 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
             delete_rpg_session(session_id),
             not_found_errors={"session_not_found"},
         )
+
+    @router.get(
+        "/api/rpg/sessions/{session_id}/export",
+        tags=["rpg-session"],
+        responses=documented(RpgCampaignPackage),
+    )
+    def rpg_export_session(session_id: str) -> JSONResponse:
+        from app.apps.rpg.session.persistence.campaign_transfer import export_campaign
+
+        try:
+            package = export_campaign(session_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404, detail={"ok": False, "error": "session_not_found", "session_id": session_id},
+            ) from exc
+        title = str(dict(dict(package.get("campaign") or {}).get("document") or {}).get("manifest", {}).get("title")
+                    or session_id)
+        filename = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in title).strip() or "campaign"
+        return JSONResponse(package, headers={
+            "Content-Disposition": f'attachment; filename="{filename}.omnix-campaign.json"',
+        })
+
+    @router.post(
+        "/api/rpg/sessions/import",
+        tags=["rpg-session"],
+        responses=documented(RpgCampaignImportResponse),
+    )
+    def rpg_import_session(package: dict[str, Any]) -> dict[str, Any]:
+        from app.apps.rpg.session.persistence.campaign_transfer import CampaignTransferRefused, import_campaign
+
+        try:
+            return import_campaign(package)
+        except CampaignTransferRefused as exc:
+            code, _, subject = str(exc).partition(":")
+            message = {
+                "rpg_campaign_already_in_library": "This campaign is already in your library.",
+                "rpg_campaign_world_not_installed": "Its world is not installed here: import the world first.",
+                "rpg_campaign_package_without_campaign": "This file holds no campaign.",
+            }.get(code, "This campaign could not be imported.")
+            raise HTTPException(
+                status_code=409, detail={"ok": False, "error": code, "subject": subject, "message": message},
+            ) from exc
+        except ValueError as exc:  # not a save package this Omnix reads
+            raise HTTPException(status_code=422, detail={
+                "ok": False, "error": "rpg_campaign_package_invalid", "message": "This file is not an Omnix campaign.",
+            }) from exc
 
     @router.post(
         "/api/rpg/sessions/{session_id}/loadout-action",

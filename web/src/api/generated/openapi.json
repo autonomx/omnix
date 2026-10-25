@@ -46950,6 +46950,31 @@
         "title": "RpgCampaignGenesisResponse",
         "type": "object"
       },
+      "RpgCampaignImportResponse": {
+        "description": "A campaign imported from a save package (RQ-8.6), as it now loads.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session": {
+            "additionalProperties": true,
+            "title": "Session",
+            "type": "object"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "session_id",
+          "session"
+        ],
+        "title": "RpgCampaignImportResponse",
+        "type": "object"
+      },
       "RpgCampaignLoreResponse": {
         "description": "The campaign bible: the lore panel reads the documents and dossiers, the world editor the cards.",
         "properties": {
@@ -47044,6 +47069,37 @@
           }
         },
         "title": "RpgCampaignLoreResponseDossierCards",
+        "type": "object"
+      },
+      "RpgCampaignPackage": {
+        "description": "A campaign as a save package (format 8) with its ``transfer`` section (RQ-8.6): a file to keep or carry.",
+        "properties": {
+          "campaign": {
+            "additionalProperties": true,
+            "title": "Campaign",
+            "type": "object"
+          },
+          "package_type": {
+            "title": "Package Type",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "transfer": {
+            "additionalProperties": true,
+            "title": "Transfer",
+            "type": "object"
+          }
+        },
+        "required": [
+          "package_type",
+          "schema_version",
+          "campaign",
+          "transfer"
+        ],
+        "title": "RpgCampaignPackage",
         "type": "object"
       },
       "RpgCampaignWorldBindingResponse": {
@@ -90260,6 +90316,52 @@
         ]
       }
     },
+    "/api/rpg/sessions/import": {
+      "post": {
+        "operationId": "rpg_import_session_api_rpg_sessions_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Package",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgCampaignImportResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Import Session Api Rpg Sessions Import Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Import Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
     "/api/rpg/sessions/{session_id}": {
       "get": {
         "operationId": "rpg_read_session_api_rpg_sessions__session_id__get",
@@ -90480,6 +90582,48 @@
           }
         },
         "summary": "Rpg Delete Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/export": {
+      "get": {
+        "operationId": "rpg_export_session_api_rpg_sessions__session_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgCampaignPackage"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Export Session",
         "tags": [
           "rpg-session"
         ]
@@ -94093,6 +94237,51 @@
           }
         },
         "summary": "Rpg Draft World Play Sections",
+        "tags": [
+          "rpg-world"
+        ]
+      }
+    },
+    "/api/rpg/worlds/{world_id}/play-sections/publish": {
+      "post": {
+        "operationId": "rpg_publish_world_play_sections_api_rpg_worlds__world_id__play_sections_publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "world_id",
+            "required": true,
+            "schema": {
+              "title": "World Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpgPlaySectionsResponse",
+                  "additionalProperties": true,
+                  "title": "Response Rpg Publish World Play Sections Api Rpg Worlds  World Id  Play Sections Publish Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The fields the RPG web client reads; the response is not filtered."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Publish World Play Sections",
         "tags": [
           "rpg-world"
         ]

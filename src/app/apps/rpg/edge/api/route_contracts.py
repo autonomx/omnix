@@ -67,6 +67,15 @@ class RpgScenarioLifecycleResponse(TypedDict):
     idempotent: bool
 
 
+class RpgCampaignPackage(TypedDict, total=False):
+    """A campaign as a save package (format 8) with its ``transfer`` section (RQ-8.6): a file to keep or carry."""
+
+    package_type: Required[str]
+    schema_version: Required[int]
+    campaign: Required[dict[str, Any]]
+    transfer: Required[dict[str, Any]]
+
+
 class RpgStoredWorldRevision(RpgWorldRevision):
     workspace_id: str
     world_id: str

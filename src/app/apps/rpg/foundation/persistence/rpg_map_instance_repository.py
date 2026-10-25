@@ -168,6 +168,18 @@ class PostgresRpgMapInstanceRepository:
         ).fetchone()
         return _instance_row(row) if row is not None else None
 
+    def list_instances(self, context: TenantContext, campaign_id: str) -> list[dict[str, Any]]:
+        """A campaign's local maps as they stand, in id order (a campaign exported with them, RQ-8.6)."""
+        rows = self.connection.execute(
+            "SELECT map_instance_id, campaign_id, location_id, map_id, "
+            "map_definition_revision, definition_hash, map_state_revision, "
+            "applied_event_sequence, snapshot_jsonb, created_at, updated_at "
+            "FROM omnix_rpg_campaign_map_instances WHERE workspace_id = %s "
+            "AND campaign_id = %s ORDER BY map_instance_id",
+            (context.workspace_id, campaign_id),
+        ).fetchall()
+        return [_instance_row(row) for row in rows]
+
     def append_event(
         self,
         context: TenantContext,

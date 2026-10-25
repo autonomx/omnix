@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { rpgSessionClient, type RpgLaunchResponse } from './api/rpgSessionClient';
+import { downloadCampaign, readCampaignFile } from './rpgCampaignTransfer';
 import { rpgPlayerMessage } from './rpgPlayerMessage';
 import { RpgSavePointsPanel } from './RpgSavePointsPanel';
 import { setRpgLauncherDialog, setRpgLauncherHomeGrid, useRpgLauncherView } from './rpgLauncherSlots';
@@ -161,6 +162,19 @@ export function RpgCampaignMenu({
     }, 'The campaign could not be deleted.');
   };
 
+  const exportSession = (session: RpgSessionSummaryPreview) => void run('Saving to a file…', async () => {
+    await downloadCampaign(session.id, session.title);
+    return `${session.title} saved to a file.`;
+  }, 'The campaign could not be saved to a file.');
+
+  const importCampaign = (file: File) => void run('Importing…', async () => {
+    const response = await rpgSessionClient.importRpgSession(await readCampaignFile(file));
+    applySelectedSessionId(response.session_id);
+    await refreshRpgWorkspace();
+    closeLauncher();
+    return 'Campaign imported.';
+  }, 'The campaign could not be imported.');
+
   const busy = isLaunching || isPending;
   const launcherTitle = LAUNCHER_TITLES[launcherView];
   const backHome = (
@@ -217,9 +231,9 @@ export function RpgCampaignMenu({
                   <strong>Demo Session</strong>
                   <span>A level 14 hero at Glimmerdeep Pass.</span>
                 </button>
-                <button className="rpg-launcher-card" type="button" disabled={busy || !liveSessionSummaries.length} onClick={() => setLauncherView('load_game')}>
+                <button className="rpg-launcher-card" type="button" disabled={busy} onClick={() => setLauncherView('load_game')}>
                   <strong>Load Game</strong>
-                  <span>Open, rename or delete a campaign.</span>
+                  <span>Open, rename, save or delete a campaign, or import one from a file.</span>
                 </button>
               </div>
             ) : null}
@@ -246,8 +260,17 @@ export function RpgCampaignMenu({
                     <p className="eyebrow">Load Game</p>
                     <h4>Your campaigns</h4>
                   </div>
+                  <Button component="label" size="xs" variant="subtle" disabled={busy}>
+                    Import a campaign file
+                    <input accept=".json,application/json" hidden type="file" onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = '';
+                      if (file) importCampaign(file);
+                    }} />
+                  </Button>
                   {backHome}
                 </div>
+                {!liveSessionSummaries.length ? <p>No campaigns yet. Start one, or import a campaign file.</p> : null}
                 <div className="rpg-load-game-list">
                   {liveSessionSummaries.map((session) => (
                     <div key={session.id} className="rpg-load-game-card">
@@ -258,6 +281,9 @@ export function RpgCampaignMenu({
                       <div className="rpg-load-game-actions">
                         <Button size="xs" variant="subtle" type="button" disabled={busy} onClick={() => renameSession(session)}>
                           Rename
+                        </Button>
+                        <Button size="xs" variant="subtle" type="button" disabled={busy} onClick={() => exportSession(session)}>
+                          Save to file
                         </Button>
                         <Button size="xs" variant="outline" type="button" disabled={busy} onClick={() => deleteSession(session)}>
                           Delete

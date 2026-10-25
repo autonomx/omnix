@@ -63,7 +63,10 @@ def save_session_to_postgres(
     session: dict[str, Any],
     *,
     compact: bool = False,
+    work: Any | None = None,
 ) -> dict[str, Any]:
+    """Save a campaign document outside a turn. With ``work`` it is written in the caller's unit of work, which
+    commits it (a campaign imported with its records, RQ-8.6); otherwise in its own."""
     del compact
     if session_save_deferred():
         return session
@@ -88,103 +91,131 @@ def save_session_to_postgres(
     schema_version = str(session.get("save_version") or "rpg-session-v1")
     seed = str(manifest.get("seed") or session.get("seed") or campaign_id)
     title = str(manifest.get("title") or campaign_id)
+    written = dict(campaign_id=campaign_id, session=session, artifacts=artifacts, narrations=narrations,
+                   revision=revision, digest=digest, manifest=manifest, engine_version=engine_version,
+                   schema_version=schema_version, seed=seed, title=title)
+    if work is not None:
+        return _write_session(work, context, owned=False, **written)
+    with unit_of_work(database) as owned_work:
+        return _write_session(owned_work, context, owned=True, **written)
 
-    with unit_of_work(database) as work:
-        existing = work.rpg.get_campaign(context, campaign_id, for_update=True)
-        if existing is None:
-            work.connection.execute(
-                """
-                INSERT INTO omnix_rpg_campaigns (
-                    id, workspace_id, owner_user_id, title, revision, state_jsonb,
-                    state_hash, engine_version, schema_version, seed, status, metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s::jsonb)
-                """,
-                (
-                    campaign_id,
-                    context.workspace_id,
-                    context.user_id,
-                    title,
-                    revision,
-                    canonical_json(session),
-                    digest,
-                    engine_version,
-                    schema_version,
-                    seed,
-                    "archived" if manifest.get("archived") else "active",
-                    canonical_json({"compatibility_save": True}),
-                ),
+
+def _write_session(
+    work: Any,
+    context: Any,
+    *,
+    owned: bool,
+    campaign_id: str,
+    session: dict[str, Any],
+    artifacts: dict[str, dict[str, Any]],
+    narrations: Any,
+    revision: int,
+    digest: str,
+    manifest: dict[str, Any],
+    engine_version: str,
+    schema_version: str,
+    seed: str,
+    title: str,
+) -> dict[str, Any]:
+    """The save's writes; an owned unit of work is committed here, a caller's by the caller."""
+    existing = work.rpg.get_campaign(context, campaign_id, for_update=True)
+    if existing is None:
+        work.connection.execute(
+            """
+            INSERT INTO omnix_rpg_campaigns (
+                id, workspace_id, owner_user_id, title, revision, state_jsonb,
+                state_hash, engine_version, schema_version, seed, status, metadata
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s::jsonb)
+            """,
+            (
+                campaign_id,
+                context.workspace_id,
+                context.user_id,
+                title,
+                revision,
+                canonical_json(session),
+                digest,
+                engine_version,
+                schema_version,
+                seed,
+                "archived" if manifest.get("archived") else "active",
+                canonical_json({"compatibility_save": True}),
+            ),
+        )
+        work.connection.execute(
+            """
+            INSERT INTO omnix_rpg_participants
+                (campaign_id, user_id, role, permissions)
+            VALUES (%s, %s, 'owner', ARRAY['read', 'write', 'admin'])
+            ON CONFLICT DO NOTHING
+            """,
+            (campaign_id, context.user_id),
+        )
+        # The campaign's first document: no turn row patches it, so it is kept whole (rewind.md).
+        work.rpg.keep_snapshot(context, campaign_id=campaign_id, revision=revision, state=session,
+                               engine_version=engine_version, schema_version=schema_version)
+    else:
+        if revision < existing["revision"]:
+            raise RevisionConflict(
+                f"RPG session {campaign_id} attempted to save stale revision {revision}; "
+                f"current {existing['revision']}"
             )
-            work.connection.execute(
-                """
-                INSERT INTO omnix_rpg_participants
-                    (campaign_id, user_id, role, permissions)
-                VALUES (%s, %s, 'owner', ARRAY['read', 'write', 'admin'])
-                ON CONFLICT DO NOTHING
-                """,
-                (campaign_id, context.user_id),
-            )
-            # The campaign's first document: no turn row patches it, so it is kept whole (rewind.md).
-            work.rpg.keep_snapshot(context, campaign_id=campaign_id, revision=revision, state=session,
-                                   engine_version=engine_version, schema_version=schema_version)
-        else:
-            if revision < existing["revision"]:
-                raise RevisionConflict(
-                    f"RPG session {campaign_id} attempted to save stale revision {revision}; "
-                    f"current {existing['revision']}"
-                )
-            if revision == existing["revision"] and digest == existing["state_hash"]:
-                if not artifacts and not narrations:
+        if revision == existing["revision"] and digest == existing["state_hash"]:
+            if not artifacts and not narrations:
+                if owned:
                     work.rollback()
-                    return existing["state"]
-                for kind, document in sorted(artifacts.items()):
-                    work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
-                work.rpg.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
-                work.commit()
                 return existing["state"]
-            if revision == existing["revision"] and digest != existing["state_hash"]:
-                _refuse_rewrite_inside_turn(campaign_id, revision)
-                # An edit outside a turn (rename, lore, settings): the session
-                # was loaded at this revision, so the edit is the next one.
-                revision = existing["revision"] + 1
-                runtime = session.get("runtime_state")
-                if not isinstance(runtime, dict):
-                    runtime = {}
-                    session["runtime_state"] = runtime
-                runtime["state_revision"] = revision
-                digest = state_hash(session)
-            cursor = work.connection.execute(
-                """
-                UPDATE omnix_rpg_campaigns
-                   SET title = %s, revision = %s, state_jsonb = %s::jsonb,
-                       state_hash = %s, engine_version = %s, schema_version = %s,
-                       seed = %s, status = %s, updated_at = CURRENT_TIMESTAMP,
-                       metadata = metadata || %s::jsonb
-                 WHERE id = %s AND workspace_id = %s AND revision = %s
-                """,
-                (
-                    title,
-                    revision,
-                    canonical_json(session),
-                    digest,
-                    engine_version,
-                    schema_version,
-                    seed,
-                    "archived" if manifest.get("archived") else "active",
-                    canonical_json({"compatibility_save": True}),
-                    campaign_id,
-                    context.workspace_id,
-                    existing["revision"],
-                ),
-            )
-            if cursor.rowcount != 1:
-                raise RevisionConflict(f"RPG session changed while saving: {campaign_id}")
-            # A revision written outside a turn has no patch: its document is kept whole, so history still
-            # rebuilds every revision (rewind.md, the replay audit).
-            work.rpg.keep_snapshot(context, campaign_id=campaign_id, revision=revision, state=session,
-                                   engine_version=engine_version, schema_version=schema_version)
-        for kind, document in sorted(artifacts.items()):
-            work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
-        work.rpg.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
+            for kind, document in sorted(artifacts.items()):
+                work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
+            work.rpg.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
+            if owned:
+                work.commit()
+            return existing["state"]
+        if revision == existing["revision"] and digest != existing["state_hash"]:
+            _refuse_rewrite_inside_turn(campaign_id, revision)
+            # An edit outside a turn (rename, lore, settings): the session
+            # was loaded at this revision, so the edit is the next one.
+            revision = existing["revision"] + 1
+            runtime = session.get("runtime_state")
+            if not isinstance(runtime, dict):
+                runtime = {}
+                session["runtime_state"] = runtime
+            runtime["state_revision"] = revision
+            digest = state_hash(session)
+        cursor = work.connection.execute(
+            """
+            UPDATE omnix_rpg_campaigns
+               SET title = %s, revision = %s, state_jsonb = %s::jsonb,
+                   state_hash = %s, engine_version = %s, schema_version = %s,
+                   seed = %s, status = %s, updated_at = CURRENT_TIMESTAMP,
+                   metadata = metadata || %s::jsonb
+             WHERE id = %s AND workspace_id = %s AND revision = %s
+            """,
+            (
+                title,
+                revision,
+                canonical_json(session),
+                digest,
+                engine_version,
+                schema_version,
+                seed,
+                "archived" if manifest.get("archived") else "active",
+                canonical_json({"compatibility_save": True}),
+                campaign_id,
+                context.workspace_id,
+                existing["revision"],
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise RevisionConflict(f"RPG session changed while saving: {campaign_id}")
+        # A revision written outside a turn has no patch: its document is kept whole, so history still
+        # rebuilds every revision (rewind.md, the replay audit).
+        work.rpg.keep_snapshot(context, campaign_id=campaign_id, revision=revision, state=session,
+                               engine_version=engine_version, schema_version=schema_version)
+    for kind, document in sorted(artifacts.items()):
+        work.rpg.put_campaign_artifact(context, campaign_id=campaign_id, kind=kind, document=document)
+    work.rpg.put_turn_narrations(context, campaign_id=campaign_id, narrations=narrations)
+    if owned:
         work.commit()
     return session
 

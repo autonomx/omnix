@@ -96,4 +96,35 @@ describe('RpgCampaignMenu', () => {
 
     expect(await screen.findByText('A campaign keeps at most 20 save points.')).toBeInTheDocument();
   });
+  it('saves a campaign to a file, and imports one into an empty library', async () => {
+    const exported = { package_type: 'rpg_save_package', campaign: {}, transfer: {} };
+    const exportSpy = vi.spyOn(rpgSessionClient, 'exportRpgSession').mockResolvedValue(exported);
+    const importSpy = vi.spyOn(rpgSessionClient, 'importRpgSession').mockResolvedValue({ ok: true, session_id: 'session-imported', session: {} });
+    const createUrl = vi.fn(() => 'blob:campaign');
+    const revokeUrl = vi.fn();
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: createUrl, revokeObjectURL: revokeUrl }));
+    const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const session = { id: 'session-a', title: 'Wren: Starfall Grove', location: 'Starfall Grove', summary: '', turnLabel: 'Turn 3',
+      updatedAt: 'today', checkpointLabel: '', sortRank: 1, source: 'live' as const };
+    const view = renderMenu({ sessionSummaries: [session] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Campaign Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Load Game/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save to file' }));
+    expect(await screen.findByText('Wren: Starfall Grove saved to a file.')).toBeInTheDocument();
+    expect(exportSpy).toHaveBeenCalledWith('session-a');
+    expect(clicked).toHaveBeenCalledTimes(1);
+    expect(revokeUrl).toHaveBeenCalledWith('blob:campaign');
+
+    view.unmount();
+    renderMenu();
+    fireEvent.click(screen.getByRole('button', { name: 'Campaign Menu' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Load Game/ }));  // open with no campaigns, to import one
+    expect(screen.getByText('No campaigns yet. Start one, or import a campaign file.')).toBeInTheDocument();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([JSON.stringify(exported)], 'campaign.omnix-campaign.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await vi.waitFor(() => expect(importSpy).toHaveBeenCalledWith(exported));
+    vi.unstubAllGlobals();
+  });
 });

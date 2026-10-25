@@ -50,6 +50,7 @@ needs a row here, with a turn kind or an exemption.
 | `POST /api/rpg/narrative-responses/{response_id}/cancel` | `edge/api/feature_routes/rpg_narrative_delivery_routes.py`, `narration/narrative_engine/delivery.py` | `omnix_rpg_narrative_deliveries` (cursor cancelled before publication) | The response's `semantic_hash` | Exemption, narration transport |
 | `POST /api/rpg/sessions/{session_id}/rename` | `session/new_game.py` (`rename_rpg_session`) | Campaign document (manifest and state title) by out-of-turn `save_session` | Loaded revision | Exemption, admin (title). Should write the title column without a document revision |
 | `POST /api/rpg/sessions/{session_id}/delete` | `session/persistence/session_records.py` (`archive_session_in_postgres`) | `omnix_rpg_campaigns.status = 'archived'`, `revision + 1`, `manifest.archived` set in the document by SQL | None (unconditional `UPDATE`) | Exemption, admin (archive). Should not bump the document revision |
+| `POST /api/rpg/sessions/import` | `session/persistence/campaign_transfer.py` (`import_campaign`) | A new campaign under the package's id: document, creation artifacts, bible, world binding, local maps, narrative responses, in one transaction | Refused when the campaign is in the library or its world is not installed | Exemption, admin (a campaign brought from a file, RQ-8.6) |
 
 ## Campaign creation and binding
 
